@@ -1249,7 +1249,17 @@ pub fn searches(p: &Profile, max: usize) -> Vec<(String, String)> {
     if places.is_empty() {
         places.push(p.country()); // nowhere in particular: the whole country
     }
-    places.iter().flat_map(|w| titles.iter().map(move |t| (t.clone(), w.clone()))).take(max).collect()
+    // Searching "Business Analyst" finds senior ones too, but a page of results can be full before they
+    // show; so where there's room, "Senior Business Analyst" is searched as well, after every title.
+    const LEVELS: [&str; 8] = ["senior", "sr", "lead", "principal", "staff", "head", "chief", "director"];
+    let senior: Vec<String> = titles.iter()
+        .filter(|t| !t.to_lowercase().split(|c: char| !c.is_alphanumeric()).any(|w| LEVELS.contains(&w)))
+        .map(|t| format!("Senior {t}"))
+        .filter(|s| !titles.iter().any(|x| x.eq_ignore_ascii_case(s)))
+        .collect();
+    let mut out: Vec<(String, String)> = places.iter().flat_map(|w| titles.iter().map(move |t| (t.clone(), w.clone()))).collect();
+    out.extend(places.iter().flat_map(|w| senior.iter().map(move |t| (t.clone(), w.clone()))));
+    out.into_iter().take(max).collect()
 }
 
 pub struct Fetched {
@@ -1458,7 +1468,8 @@ mod tests {
         let mut p = crate::profile::Profile { remote_ok: true, ..Default::default() };
         p.tracks = vec![crate::profile::Track { name: "a".into(), titles: vec!["Program Manager".into()], ..Default::default() }];
         p.sources.adzuna_country = "qa".into();
-        assert_eq!(searches(&p, 5), vec![("Program Manager".to_string(), "Qatar".to_string())], "no places: the whole country");
+        assert_eq!(searches(&p, 5), vec![("Program Manager".to_string(), "Qatar".to_string()), ("Senior Program Manager".to_string(), "Qatar".to_string())], "no places: the whole country; senior ones too");
+        assert_eq!(searches(&p, 1).len(), 1, "senior searches only use room that's left");
         p.locations = vec!["Doha".into()];
         let l = linkedin_searches(&p, 5);
         assert!(l.contains(&("Program Manager".into(), "Doha".into(), false)) && l.contains(&("Program Manager".into(), "Qatar".into(), true)), "{l:?}");
@@ -1691,7 +1702,10 @@ mod tests {
         let q = searches(&p, 50);
         assert!(q.len() > 2 && q.len() < 50);
         // The GTA cities are one search around Toronto; every title there comes first.
-        let places: Vec<&str> = q.iter().map(|(_, w)| w.as_str()).collect();
+        // Senior versions come after every regular search.
+        let first_senior = q.iter().position(|(t, _)| t.starts_with("Senior ") && !p.tracks.iter().any(|x| x.titles.contains(t))).unwrap();
+        assert!(q[first_senior..].iter().all(|(t, _)| t.starts_with("Senior ")), "{q:?}");
+        let places: Vec<&str> = q[..first_senior].iter().map(|(_, w)| w.as_str()).collect();
         let first_other = places.iter().position(|w| *w != "Toronto, ON").unwrap();
         assert!(first_other > 0 && places[first_other..].iter().all(|w| *w == "Ontario"), "{places:?}");
         assert_eq!(searches(&p, 3).len(), 3);

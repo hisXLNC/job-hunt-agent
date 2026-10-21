@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.42.2",
+    "date": "2026-10-21",
+    "title": "Senior roles searched too",
+    "changes": [
+      "Each job title is also searched as its senior version (Business Analyst and Senior Business Analyst), after the regular searches, so senior roles aren't crowded out of a page of results. Senior, Sr., Lead, Principal and II versions of a title all count as a match, as before."
+    ]
+  },
+  {
     "version": "1.42.1",
     "date": "2026-10-21",
     "title": "Neutral examples",

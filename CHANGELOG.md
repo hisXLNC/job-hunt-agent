@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [1.42.2] - 2026-10-21
+
+Senior roles searched too.
+
+### Changes
+
+- Each job title is also searched as its senior version (Business Analyst and Senior Business Analyst), after the regular searches, so senior roles aren't crowded out of a page of results. Senior, Sr., Lead, Principal and II versions of a title all count as a match, as before.
+
 ## [1.42.1] - 2026-10-21
 
 Neutral examples.
@@ -589,6 +597,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[1.42.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.42.2
 [1.42.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.42.1
 [1.42.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.42.0
 [1.41.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.41.1

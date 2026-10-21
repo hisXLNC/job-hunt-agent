@@ -144,6 +144,9 @@ mod tests {
         assert!(!title_matches("Product Manager", "Program Manager"));
         assert!(!title_matches("Software Engineer", "Technical Program Manager"));
         assert!(!title_matches("Anything", "Senior"), "a target of only filler words matches nothing");
+        for t in ["Senior Business Analyst", "Sr. Business Analyst", "Lead Business Analyst", "Business Analyst II", "Principal Business Analyst"] {
+            assert!(title_matches(t, "Business Analyst"), "{t}");
+        }
     }
 
     #[test]
