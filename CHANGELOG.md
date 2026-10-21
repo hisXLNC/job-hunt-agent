@@ -10,6 +10,7 @@ CV & career up front, and senior roles searched too.
 
 ### Changes
 
+- Fix: Indeed through your Claude account didn't work even when connected: Job Hunt started Claude Code with every tool switched off, which also hid your claude.ai connectors. It now refuses only the risky built-in tools by name.
 - When Indeed (through your Claude account) doesn't work, Job Hunt now checks why and says so: Claude Code signed in with a token or API key, the connector not connected, or just not answering this time. Source tests say they try one sample title; real searches use all of them.
 - Career paths help you choose a direction, not just your next job: each path shows where it leads now and in 3, 5 and 10 years, with the title and pay at each step, the top of the path and the most it can pay. A table compares the paths side by side, and Claude's advice weighs where they lead. Its job titles (to add to your search) are folded away under Look for this role now, with the CV they go to labelled.
 - CV & career has its own place in the menu, second after Overview: your CVs, the experience Claude found, the job titles they search for, and your career options, all in one page. It used to be a tab inside Settings.

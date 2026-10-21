@@ -239,6 +239,10 @@ pub struct Ask<'a> {
     pub limit: Duration,
 }
 
+/// Built-in tools refused when a request uses your connectors (see `args`).
+pub const CONNECTOR_DENIED: &[&str] = &["Bash", "BashOutput", "KillShell", "Edit", "MultiEdit", "Write", "NotebookEdit",
+    "WebFetch", "WebSearch", "Task", "Agent", "TodoWrite", "SlashCommand", "Skill"];
+
 /// The arguments for one request. Separate so tests can check them.
 pub fn args(ask: &Ask, system_file: &Path) -> Vec<String> {
     let mut a: Vec<String> = vec![
@@ -249,24 +253,26 @@ pub fn args(ask: &Ask, system_file: &Path) -> Vec<String> {
         ask.schema.to_string(),
         "--system-prompt-file".into(),
         system_file.to_string_lossy().to_string(),
-        "--tools".into(),
-        {
-            let mut t: Vec<&str> = vec![];
-            if !ask.files.is_empty() {
-                t.push("Read");
-            }
-            if ask.web {
-                t.extend(["WebSearch", "WebFetch"]);
-            }
-            t.join(",")
-        },
         "--disable-slash-commands".into(),
         "--no-session-persistence".into(),
         "--max-turns".into(),
         if !ask.connectors.is_empty() { "60".into() } else if ask.web { "30".into() } else if ask.files.is_empty() { "3".into() } else { "6".into() },
     ];
     if ask.connectors.is_empty() {
-        a.push("--strict-mcp-config".into());
+        // Only the built-in tools this request needs (none, usually), and no MCP servers.
+        let mut t: Vec<&str> = vec![];
+        if !ask.files.is_empty() {
+            t.push("Read");
+        }
+        if ask.web {
+            t.extend(["WebSearch", "WebFetch"]);
+        }
+        a.extend(["--tools".into(), t.join(","), "--strict-mcp-config".into()]);
+    } else {
+        // With connectors, "--tools" left empty also hides your claude.ai connectors, so instead the
+        // built-in tools that could change or reach anything are refused by name. It runs in an empty
+        // folder, and only the connector tools in --allowedTools may run.
+        a.extend(["--disallowedTools".into(), CONNECTOR_DENIED.join(",")]);
     }
     // Your claude.ai connectors load, but only these tools may run; anything else is refused.
     let mut allowed: Vec<&str> = ask.connectors.to_vec();
@@ -416,7 +422,10 @@ mod tests {
         let c = args(&Ask { system: "s", prompt: "p", schema: &schema, model: "", effort: "", files: &[], connectors: &["mcp__x__a", "mcp__x__b"], web: false, limit: Duration::from_secs(1) }, Path::new("/tmp/i.txt"));
         assert!(!c.contains(&"--strict-mcp-config".to_string()), "connectors need your account's MCP servers");
         assert_eq!(c[c.iter().position(|x| x == "--allowedTools").unwrap() + 1], "mcp__x__a,mcp__x__b");
-        assert_eq!(c[c.iter().position(|x| x == "--tools").unwrap() + 1], "", "still no built-in tools");
+        // An empty --tools hides claude.ai connectors too, so the risky built-ins are refused by name instead.
+        assert!(!c.contains(&"--tools".to_string()));
+        let denied = &c[c.iter().position(|x| x == "--disallowedTools").unwrap() + 1];
+        assert!(["Bash", "Write", "Edit", "WebFetch"].iter().all(|t| denied.split(',').any(|d| d == *t)));
         let w = args(&Ask { system: "s", prompt: "p", schema: &schema, model: "", effort: "", files: &[], connectors: &[], web: true, limit: Duration::from_secs(1) }, Path::new("/tmp/i.txt"));
         assert_eq!(w[w.iter().position(|x| x == "--tools").unwrap() + 1], "WebSearch,WebFetch");
         assert_eq!(w[w.iter().position(|x| x == "--allowedTools").unwrap() + 1], "WebSearch,WebFetch");
