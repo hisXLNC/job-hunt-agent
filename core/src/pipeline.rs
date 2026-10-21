@@ -2070,7 +2070,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             let (ok, detail, at) = seen("indeed", "Indeed");
             let fixing = ok == Some(false);
             out.push(row("indeed", "Indeed (through your Claude account)", "Job listings", match ok { Some(true) => "ok", Some(false) => "problem", None => "unknown" },
-                if fixing { format!("{detail} To fix: at claude.ai → Settings → Connectors, connect Indeed with the same account Claude Code uses on this PC, then Test.") } else if detail.is_empty() { "On; not tested yet.".into() } else { detail },
+                if fixing { detail.clone() } else if detail.is_empty() { "On; not tested yet.".into() } else { detail },
                 at, json!(if fixing { json!(["test", "link:https://claude.ai/settings/connectors", "off"]) } else { json!(["test", "off"]) })));
         }
         // LinkedIn: its signed-out search, or a scraper on Apify
@@ -2241,7 +2241,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             let at = if place.is_empty() { p.country() } else { place.clone() };
             timed(format!("Indeed \u{201c}{t}\u{201d} in {at}"), "search",
                 &|| self.llm().indeed(&[(t.clone(), at.clone())], &p.sources.adzuna_country.to_uppercase(), 2).map(|l| l.into_iter().map(indeed_posting).collect()).map_err(|e| e.0),
-                "Connect Indeed at claude.ai \u{2192} Settings \u{2192} Connectors, and make sure Claude Code on this PC is signed in with that same account.")
+                "")
         } else {
             json!({ "name": "Indeed", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
         }); }
@@ -4498,7 +4498,9 @@ mod tests {
             { "name": "Jooble", "kind": "search", "ok": false, "skipped": true, "error": "No Jooble key." }] }).to_string()).unwrap();
         let row = indeed(&s);
         assert_eq!(row["status"], "problem");
-        assert!(row["detail"].as_str().unwrap().contains("claude.ai"), "{row}");
+        // The error explains itself (Claude Code's own diagnosis); the row offers the claude.ai connectors page.
+        assert_eq!(row["detail"], "The Indeed connector isn't connected.", "{row}");
+        assert!(row["actions"].as_array().unwrap().iter().any(|a| a.as_str().unwrap_or("").starts_with("link:https://claude.ai")), "{row}");
         s.agent.test_sources_only(Some("indeed")).unwrap();
         let t: Value = serde_json::from_str(&s.agent.secret("sources.test")).unwrap();
         let names: Vec<&str> = t["results"].as_array().unwrap().iter().filter_map(|r| r["name"].as_str()).collect();

@@ -1362,7 +1362,7 @@ impl Llm for Claude {
         })?;
         let found: FoundJobs = serde_json::from_value(v).map_err(|e| Error(format!("Claude's answer wasn't in the expected shape ({e}).")))?;
         if !found.tools_available {
-            return Err(Error("the Indeed connector isn't available to Claude Code. Connect Indeed at claude.ai → Settings → Connectors, then make sure Claude Code is signed in with that same account.".into()));
+            return Err(Error(crate::claude_code::connector_diagnosis(cc, "Indeed")));
         }
         Ok(found.jobs.into_iter().filter(|j| !j.title.trim().is_empty() && !j.company.trim().is_empty()).collect())
     }

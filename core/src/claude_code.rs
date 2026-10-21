@@ -192,6 +192,37 @@ pub fn setup_script(install: bool, custom: &str) -> String {
     s
 }
 
+/// Why a claude.ai connector (like Indeed) isn't reaching Claude Code here, in plain words, from how
+/// Claude Code is signed in and what `claude mcp list` shows.
+pub fn connector_diagnosis(cc: &ClaudeCode, name: &str) -> String {
+    let mut a = command(cc);
+    a.args(["auth", "status"]);
+    let method = run_capture(a, "", Duration::from_secs(30)).ok()
+        .and_then(|(_, out, _)| serde_json::from_str::<Value>(out.trim()).ok())
+        .and_then(|v| v.get("authMethod").and_then(|m| m.as_str()).map(String::from)).unwrap_or_default();
+    let mut l = command(cc);
+    l.args(["mcp", "list"]);
+    let listed = run_capture(l, "", Duration::from_secs(90)).map(|(_, out, err)| format!("{out}\n{err}")).unwrap_or_default();
+    explain_connector(name, &method, &listed)
+}
+
+/// The words for `connector_diagnosis`, from the sign-in method and the `claude mcp list` output.
+pub fn explain_connector(name: &str, method: &str, listed: &str) -> String {
+    if method == "api_key" || method == "oauth_token" {
+        return format!("Claude Code on this computer is signed in with {}, which doesn't bring your claude.ai connectors. \
+Sign it in with your Claude account instead (Settings → Accounts → Sign in to Claude), then Test {name} again.",
+            if method == "api_key" { "an API key" } else { "a token" });
+    }
+    let line = listed.lines().find(|l| l.to_lowercase().contains(&name.to_lowercase())).map(|l| l.to_lowercase());
+    match line {
+        None => format!("Claude Code on this computer doesn't see a {name} connector. At claude.ai → Settings → Connectors, connect \
+{name} with the same Claude account Claude Code is signed in with here, then Test again."),
+        Some(l) if l.contains("auth") || l.contains("✗") || l.contains("fail") || l.contains("error") => format!("Claude Code sees your \
+{name} connector, but it isn't connected right now. Reconnect {name} at claude.ai → Settings → Connectors, then Test again."),
+        Some(_) => format!("Claude Code sees your {name} connector, but it didn't answer this time. Test again in a few minutes."),
+    }
+}
+
 pub struct Ask<'a> {
     pub system: &'a str,
     pub prompt: &'a str,
@@ -391,6 +422,14 @@ mod tests {
         assert_eq!(w[w.iter().position(|x| x == "--allowedTools").unwrap() + 1], "WebSearch,WebFetch");
         assert!(w.contains(&"--strict-mcp-config".to_string()), "no MCP servers for web research");
         assert_eq!(b[b.iter().position(|x| x == "--model").unwrap() + 1], "sonnet");
+    }
+
+    #[test]
+    fn connector_problems_in_plain_words() {
+        assert!(explain_connector("Indeed", "oauth_token", "").contains("signed in with a token"));
+        assert!(explain_connector("Indeed", "claude.ai", "claude.ai Gmail: ✓ Connected").contains("doesn't see a Indeed") || explain_connector("Indeed", "claude.ai", "").contains("doesn't see"));
+        assert!(explain_connector("Indeed", "claude.ai", "claude.ai Indeed: https://x - ! Needs authentication").contains("isn't connected right now"));
+        assert!(explain_connector("Indeed", "claude.ai", "claude.ai Indeed: https://x - ✓ Connected").contains("didn't answer"));
     }
 
     #[test]
