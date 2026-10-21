@@ -232,6 +232,7 @@ fn from_ld(t: &Target, j: &Value, base: &url::Url) -> Option<Posting> {
     let pay = ld_pay(j).or_else(|| salary_from_text(&description));
     let own_id = text(&j["identifier"]["value"]);
     Some(Posting {
+        apply_url: None,
         source: t.id.clone(),
         external_id: if own_id.is_empty() { id_from_url(&link) } else { own_id },
         company: Some(text(&j["hiringOrganization"])).filter(|c| !c.is_empty()).unwrap_or_else(|| t.name.clone()),
@@ -263,6 +264,7 @@ fn phenom_jobs(t: &Target, html: &str, base: &url::Url) -> Vec<Posting> {
         let teaser = html_to_text(&text(&j["descriptionTeaser"]));
         let pay = salary_from_text(&teaser);
         Some(Posting {
+            apply_url: None,
             source: t.id.clone(),
             external_id: id.clone(),
             company: t.name.clone(),
@@ -438,6 +440,7 @@ pub fn parse_robert_half(t: &Target, v: &Value) -> Vec<Posting> {
         }).or_else(|| salary_from_text(&description));
         let remote = text(&j["remote"]).eq_ignore_ascii_case("yes") || is_remote(&[&place, &title]);
         Some(Posting {
+            apply_url: None,
             source: t.id.clone(),
             external_id: id,
             company: "Robert Half (client not named)".into(),

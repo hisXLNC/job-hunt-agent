@@ -506,7 +506,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
                     "job": job, "history": history, "progress": agent.tracker(Some(id))?.pop(),
-                    "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")),
+                    "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
                     "cv_pdf": pdf(&job.cv_path), "letter_pdf": pdf(&job.letter_path),
                     "revising": agent.is_running(&format!("revise:{id}")),
                     "undo": { "cv": agent.can_undo(id, "cv"), "letter": agent.can_undo(id, "letter") },
@@ -605,12 +605,15 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     if job.status == "ready" {
                         agent.db().set_status(id, "approved", "approved; filling in the form on the company site")?;
                     }
-                    host.fill_application(id, &job.url)?;
+                    host.fill_application(id, job.apply_url.as_deref().unwrap_or(&job.url))?;
                     ok()
                 }
                 "approve" => {
                     let outcome = agent.approve(id)?;
                     agent.after_stage(id, outcome, "", true);
+                    if outcome == "approved" {
+                        agent.find_company_apply_later(id);
+                    }
                     Ok(Resp::json(&json!({ "outcome": outcome })))
                 }
                 "status" => {
@@ -655,6 +658,13 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         }
                     });
                     Ok(Resp::json(&json!({ "started": true })))
+                }
+                "apply-link" => {
+                    if agent.is_running(&format!("apply-link:{id}")) {
+                        return Err(Error("Job Hunt is already looking for it.".into()));
+                    }
+                    let _g = agent.claim(&format!("apply-link:{id}"))?;
+                    Ok(Resp::json(&json!({ "url": agent.find_company_apply(id)? })))
                 }
                 "prep" => {
                     let key = format!("prep:{id}");
@@ -788,6 +798,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     let what = s(&b, "what");
                     match what {
                         "posting" if job.url.starts_with("http") => give_url(host, req, &job.url),
+                        "company" => match job.apply_url.as_deref().filter(|u| u.starts_with("http")) {
+                            Some(u) => give_url(host, req, u),
+                            None => Err(Error("There's no link to this job on the company's own site yet.".into())),
+                        },
                         "folder" if req.remote => Err(Error("Folders open only on the computer running Job Hunt. Use the CV, letter and PDF buttons to download the files.".into())),
                         "folder" => {
                             let dir = agent.application_dir(&job);

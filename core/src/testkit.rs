@@ -95,6 +95,11 @@ impl Llm for FakeLlm {
         Ok(FoundJob { title: "Senior Program Manager".into(), company: "Maple Bank".into(), location: "Toronto, ON".into(),
             description: "Lead program delivery across finance systems, UAT and vendor management.".into(), ..Default::default() })
     }
+    fn company_apply(&self, job: &Job) -> R<Option<String>> {
+        self.calls.lock().unwrap().push(format!("company_apply:{}", job.id));
+        let n = job.id.rsplit(':').next().unwrap_or("");
+        Ok(Some(format!("https://careers.example.com/jobs/{n}")).filter(|_| n != "2"))
+    }
     fn follow_up(&self, c: &str, job: &Job, applied_on: &str) -> R<FollowUp> {
         self.calls.lock().unwrap().push("follow_up".into());
         Ok(FollowUp { subject: format!("Following up: {} application", job.title), body: format!("Hello, I applied on {applied_on}. {c}") })

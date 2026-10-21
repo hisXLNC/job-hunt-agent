@@ -228,6 +228,9 @@ impl Llm for Metered {
     fn follow_up(&self, candidate: &str, job: &Job, applied_on: &str) -> R<FollowUp> {
         self.run("followup", |l| l.follow_up(candidate, job, applied_on))
     }
+    fn company_apply(&self, job: &Job) -> R<Option<String>> {
+        self.run("apply-link", |l| l.company_apply(job))
+    }
 }
 
 #[cfg(test)]

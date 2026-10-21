@@ -24,6 +24,18 @@ pub struct Posting {
     pub salary_max: Option<f64>,
     pub remote: bool,
     pub apply_email: Option<String>,
+    /// The company's own application page, when the source gives it (Google for Jobs' direct
+    /// option, LinkedIn's "Apply on company website").
+    pub apply_url: Option<String>,
+}
+
+/// Job boards and aggregators: a link to one of these isn't the company's own application page.
+pub fn is_job_board(url: &str) -> bool {
+    let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default();
+    ["linkedin.", "indeed.", "glassdoor.", "ziprecruiter.", "jooble.", "adzuna.", "google.", "monster.", "simplyhired.",
+     "talent.com", "workopolis.", "jobbank.gc.ca", "guichetemplois.", "eluta.", "bayt.", "naukri", "gulftalent.", "careerbuilder.",
+     "jobs.ca", "dice.com", "wellfound.", "builtin.", "lensa.", "jobrapido.", "careerjet.", "neuvoo.", "seek.", "reed.co.uk", "totaljobs."]
+        .iter().any(|b| host.contains(b))
 }
 
 impl Posting {
@@ -43,6 +55,8 @@ impl Posting {
             description: self.description.clone(),
             salary: self.salary.clone(),
             posted_at: self.posted_at.clone(),
+            // A company's own board (Greenhouse, Workday...) is the application page itself.
+            apply_url: self.apply_url.clone().or_else(|| Some(self.url.clone()).filter(|u| u.starts_with("http") && !is_job_board(u))),
             ..Job::default()
         }
     }
@@ -260,6 +274,7 @@ pub fn parse_lever(company: &str, body: &Value) -> Vec<Posting> {
             .and_then(chrono::DateTime::from_timestamp_millis)
             .map(|d| d.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
         out.push(Posting {
+            apply_url: None,
             source: "lever".into(),
             external_id: format!("{company}-{}", id_str(j)),
             company: company.to_string(),
@@ -291,6 +306,7 @@ pub fn parse_ashby(board: &str, body: &Value) -> Vec<Posting> {
         let loc = s(j, "location");
         let url = Some(s(j, "jobUrl")).filter(|x| !x.is_empty()).unwrap_or_else(|| s(j, "applyUrl"));
         out.push(Posting {
+            apply_url: None,
             source: "ashby".into(),
             external_id: format!("{board}-{}", id_str(j)),
             company: board.to_string(),
@@ -319,6 +335,7 @@ pub fn parse_adzuna(body: &Value, currency: &str) -> Vec<Posting> {
         let company = j.get("company").map(|c| s(c, "display_name")).filter(|x| !x.is_empty()).unwrap_or_else(|| "Unknown".into());
         let head: String = desc.chars().take(300).collect();
         out.push(Posting {
+            apply_url: None,
             source: "adzuna".into(),
             external_id: id_str(j).trim_matches('"').to_string(),
             company: unescape(&company),
@@ -878,6 +895,16 @@ pub fn linkedin(c: &reqwest::blocking::Client, title: &str, place: &str, remote:
     Ok(list)
 }
 
+/// The company's own application page from a LinkedIn posting that says "Apply on company website":
+/// LinkedIn keeps it, wrapped in its own redirect, in a hidden element.
+pub fn linkedin_offsite_apply(html: &str) -> Option<String> {
+    static APPLY: Lazy<Regex> = Lazy::new(|| Regex::new(r#"id="applyUrl"[^>]*>\s*<!--\s*"([^"]+)""#).unwrap());
+    let raw = APPLY.captures(html)?.get(1)?.as_str().replace("&amp;", "&");
+    let u = url::Url::parse(&raw).ok()?;
+    let target = u.query_pairs().find(|(k, _)| k == "url").map(|(_, v)| v.to_string()).unwrap_or(raw);
+    Some(target).filter(|t| t.starts_with("http") && !is_job_board(t))
+}
+
 /// Fill in the descriptions of new LinkedIn postings, at most `max`, a couple of seconds apart.
 /// Returns how many were read.
 pub fn linkedin_details(c: &reqwest::blocking::Client, postings: &mut [&mut Posting], max: usize) -> usize {
@@ -900,6 +927,7 @@ pub fn linkedin_details(c: &reqwest::blocking::Client, postings: &mut [&mut Post
                     }
                     p.apply_email = find_apply_email(&d);
                     p.description = d;
+                    p.apply_url = linkedin_offsite_apply(&html).or(p.apply_url.take());
                     n += 1;
                 }
             }
@@ -1113,6 +1141,7 @@ pub fn parse_apify_linkedin(v: &Value) -> Vec<Posting> {
         let workplace = pick(j, &["workplaceType", "workType", "workplace", "remote"]).to_lowercase();
         let remote_flag = j.get("remoteAllowed").or(j.get("workRemoteAllowed")).and_then(|x| x.as_bool()).unwrap_or(false);
         out.push(Posting {
+            apply_url: None,
             source: "linkedin".into(),
             external_id: id.clone(),
             company: Some(pick(j, &["companyName", "company", "company_name", "companyTitle"])).filter(|x| !x.is_empty()).unwrap_or_else(|| "Unknown".into()),
@@ -1154,7 +1183,13 @@ pub fn parse_jsearch(body: &Value) -> Vec<Posting> {
         if title.is_empty() {
             continue;
         }
+        // Google for Jobs lists where to apply, marking the employer's own page as direct.
+        let direct = j.get("apply_options").and_then(|o| o.as_array()).into_iter().flatten()
+            .filter(|o| o.get("is_direct").and_then(|d| d.as_bool()) == Some(true))
+            .map(|o| s(o, "apply_link")).find(|l| l.starts_with("http") && !is_job_board(l))
+            .or_else(|| Some(s(j, "job_apply_link")).filter(|l| l.starts_with("http") && !is_job_board(l) && j.get("job_apply_is_direct").and_then(|d| d.as_bool()) == Some(true)));
         out.push(Posting {
+            apply_url: direct,
             source: "jsearch".into(),
             external_id: Some(s(j, "job_id")).filter(|x| !x.is_empty()).unwrap_or_else(|| crate::util::short_hash(&format!("{title}|{}", s(j, "employer_name")))),
             company: Some(s(j, "employer_name")).filter(|x| !x.is_empty()).unwrap_or_else(|| "Unknown".into()),
@@ -1620,6 +1655,25 @@ mod tests {
         assert!(parse_jobbank_posting(partner).unwrap().starts_with("We are hiring"));
         assert!(parse_jobbank_posting("<html>Not found</html>").is_none());
         assert!(jobbank_search_url("Tax Manager", "Toronto, ON").contains("searchstring=Tax+Manager&locationstring=Toronto%2C+ON&sort=D&fage=30"));
+    }
+
+    #[test]
+    fn company_apply_links() {
+        assert!(is_job_board("https://ca.linkedin.com/jobs/view/1"));
+        assert!(is_job_board("https://ca.indeed.com/viewjob?jk=1"));
+        assert!(!is_job_board("https://careers.acme.example/job/1"));
+        assert!(!is_job_board("https://acme.wd3.myworkdayjobs.com/en-US/Careers/job/1"));
+        let page = r#"<code id="applyUrl" style="display: none"><!--"https://www.linkedin.com/jobs/view/externalApply/1?url=https%3A%2F%2Fcareers%2Eacme%2Eexample%2Fjob%2F1%3Fsrc%3Dli&amp;urlHash=x"--></code>"#;
+        assert_eq!(linkedin_offsite_apply(page).as_deref(), Some("https://careers.acme.example/job/1?src=li"));
+        assert_eq!(linkedin_offsite_apply("<html>Easy Apply</html>"), None);
+        let body = serde_json::json!({"data": [{
+            "job_id": "a1", "job_title": "Analyst", "employer_name": "Acme", "job_city": "Toronto",
+            "job_apply_link": "https://ca.linkedin.com/jobs/view/1", "job_apply_is_direct": false,
+            "apply_options": [{"publisher": "LinkedIn", "apply_link": "https://ca.linkedin.com/jobs/view/1", "is_direct": false},
+                              {"publisher": "Acme", "apply_link": "https://careers.acme.example/job/1", "is_direct": true}]}]});
+        let p = parse_jsearch(&body);
+        assert_eq!(p[0].apply_url.as_deref(), Some("https://careers.acme.example/job/1"));
+        assert_eq!(p[0].to_job().apply_url.as_deref(), Some("https://careers.acme.example/job/1"));
     }
 
     #[test]

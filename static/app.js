@@ -183,7 +183,7 @@ function eventText(e) {
   if (k.startsWith('email:')) return `Email: ${esc((CATEGORY[k.slice(6)] || [k.slice(6)])[0])} · ${esc(e.detail)}`;
   if (k.endsWith(':error')) return `<span style="color:var(--crit)">Problem</span> · ${esc(e.detail)}`;
   if (k === 'backup' && e.detail.startsWith('saved ')) return 'Backup saved';
-  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', care: 'Interview reminders' };
+  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', care: 'Interview reminders', 'apply-link': 'Company site' };
   return `${esc(names[k] || k)} · ${esc(e.detail)}`;
 }
 const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">${esc(e.company)} – ${esc(e.title)}</a> · ` : '';
@@ -586,6 +586,7 @@ async function showJob(id) {
       ${j.status === 'ready' ? `<button class="btn primary" data-act="approve" data-email="${esc(j.apply_email || '')}">${svg('check')}${j.apply_email ? `Approve and email to ${esc(j.apply_email)}` : 'Approve and apply'}</button>` : ''}
       ${j.status === 'queued' && !tailoring ? `<button class="btn primary" data-act="tailorPicked" data-job="${esc(j.id)}">Tailor my CV for this role</button>` : ''}
       ${j.status === 'approved' ? `<button class="btn" data-act="stage" data-status="applied">Mark applied</button>` : ''}
+      ${j.apply_url ? `<button class="btn" data-act="open" data-what="company">${svg('open')}On the company's site</button>` : ''}
       ${j.url ? `<button class="btn" data-act="open" data-what="posting">${svg('open')}Open posting</button>` : ''}
 
       ${['ready', 'approved', 'queued'].includes(j.status) ? `<button class="btn" data-act="stage" data-status="saved">Save for later</button><button class="btn danger" data-act="stage" data-status="dismissed">Not interested</button>` : ''}
@@ -1090,11 +1091,14 @@ async function showApply(id) {
       <p class="muted">${done ? 'You\'ve applied to this one.' : can_fill && j.url ? 'Job Hunt can fill in the form for you, or use the files and answers below yourself.' : 'Four steps. Your files and answers are ready below.'}</p></div></div>
     <ol class="apply-steps">
       ${can_fill && j.url && !done ? `<li class="card"><h2>Let Job Hunt fill it in</h2>
-        <p class="muted">Opens the posting in a Job Hunt window. Use the company's Apply button (sign in or make an account if it asks); when the form appears, Job Hunt fills it in from your CV, letter and facts, and attaches your files. It never presses Submit: check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>I submitted it</b> in that window (or <b>Mark applied</b> here) to do it yourself.</p>
-        <div class="row"><button class="btn primary" data-act="fillForm" data-job="${esc(j.id)}">${svg('check')}Fill it in for me</button><button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}">${svg('open')}Open in my browser instead</button></div>
+        <p class="muted">Opens ${j.apply_url ? 'the job on the company\'s own site' : 'the posting'} in a Job Hunt window. Use the company's Apply button (sign in or make an account if it asks); when the form appears, Job Hunt fills it in from your CV, letter and facts, and attaches your files. It never presses Submit: check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>I submitted it</b> in that window (or <b>Mark applied</b> here) to do it yourself.</p>
+        <div class="row"><button class="btn primary" data-act="fillForm" data-job="${esc(j.id)}">${svg('check')}Fill it in for me</button><button class="btn ghost" data-act="open" data-what="${j.apply_url ? 'company' : 'posting'}" data-job="${esc(j.id)}">${svg('open')}Open in my browser instead</button></div>
         <p class="muted small">The steps below are there if you'd rather do it yourself, or for anything it couldn't fill.</p></li>` : ''}
-      <li class="card"><h2>Open the posting</h2><p class="muted">Use the company's Apply button. If it asks you to sign in or make an account, do that first.</p>
-        ${j.url ? `<button class="btn ${can_fill ? '' : 'primary'}" data-act="open" data-what="posting" data-job="${esc(j.id)}">${svg('open')}Open the posting</button>` : '<p class="muted">No link saved for this posting.</p>'}</li>
+      <li class="card"><h2>${j.apply_url ? 'Open it on the company\'s site' : 'Open the posting'}</h2><p class="muted">${j.apply_url ? 'Applying on the company\'s own site goes straight to them, not through a job board.' : 'Use the company\'s Apply button.'} If it asks you to sign in or make an account, do that first.</p>
+        <div class="row">${j.apply_url ? `<button class="btn ${can_fill ? '' : 'primary'}" data-act="open" data-what="company" data-job="${esc(j.id)}">${svg('open')}Apply on the company's site</button>` : ''}
+        ${j.url ? `<button class="btn ${j.apply_url ? 'ghost' : can_fill ? '' : 'primary'}" data-act="open" data-what="posting" data-job="${esc(j.id)}">${svg('open')}${j.apply_url ? 'The job board posting' : 'Open the posting'}</button>` : ''}
+        ${!j.apply_url && j.url && !done ? `<button class="btn ghost" data-act="findApply" data-job="${esc(j.id)}" title="Claude searches the company's careers site for this job">${svg('search')}Find it on the company's site</button>` : ''}</div>
+        ${j.url || j.apply_url ? '' : '<p class="muted">No link saved for this posting.</p>'}</li>
       <li class="card"><h2>Attach your CV and cover letter</h2><p class="muted">Most sites take PDF; use Word only if they ask for it. <b>Show files</b> opens the folder so you can drag them in.</p>
         <div class="row">
           <button class="btn" data-act="open" data-what="cv-pdf" data-job="${esc(j.id)}">${svg('doc')}CV (PDF)</button>
@@ -2009,7 +2013,7 @@ const CONN_ACT = {
   phoneTest: () => ['Send a test', 'phoneTest'], syncNow: () => ['Sync now', 'syncNow'], backupNow: () => ['Back up now', 'backupNow'],
 };
 let connPoll;
-const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
+const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', 'apply-link': "Finding companies' own postings", cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
 async function renderUsage() {
   const box = $('#usageCard'); if (!box) return;
   let u;
@@ -2566,6 +2570,13 @@ async function act(el) {
     });
   }
   if (a === 'open') return busy(async () => follow(await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/open`, { method: 'POST', body: { what: el.dataset.what } })));
+  if (a === 'findApply') {
+    return busy(async () => {
+      const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/apply-link`, { method: 'POST' });
+      toast(r.url ? 'Found it on the company\'s site.' : 'Couldn\'t find it on the company\'s own site; apply through the posting.', !r.url);
+      route();
+    }, 'Looking on the company\'s site (a minute or two)…');
+  }
   if (a === 'saveLetter') return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/letter`, { method: 'POST', body: { text: $('#letter').value } }); route(); }, 'Cover letter saved.');
   if (a === 'saveNotes') return busy(() => api(`/api/jobs/${encodeURIComponent(jobId)}/notes`, { method: 'POST', body: { text: $('#notes').value } }), 'Notes saved.');
   if (a === 'retailor') {

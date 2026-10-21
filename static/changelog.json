@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.43.0",
+    "date": "2026-10-21",
+    "title": "Apply on the company's own site",
+    "changes": [
+      "When a role is on the company's own site, Apply goes there instead of LinkedIn, Indeed or another job board. Job Hunt picks up the company link from Google for Jobs and LinkedIn, and after you approve a role it asks Claude to find the posting on the company's careers site.",
+      "On the Apply page, \"Find it on the company's site\" looks for it on demand; the job board posting stays as a fallback."
+    ]
+  },
+  {
     "version": "1.42.2",
     "date": "2026-10-21",
     "title": "CV & career up front, and senior roles searched too",

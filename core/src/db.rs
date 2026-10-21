@@ -160,6 +160,8 @@ pub struct Job {
     pub closed_at: Option<String>,
     /// The last day to apply, when the posting gives one (YYYY-MM-DD).
     pub deadline: Option<String>,
+    /// The company's own application page, when known (see sources::Posting::apply_url).
+    pub apply_url: Option<String>,
     /// The fit score of the tailored CV (`score` is your CV before tailoring).
     pub score_after: Option<i64>,
 }
@@ -276,6 +278,7 @@ impl Job {
             notes: r.get("notes")?,
             closed_at: r.get("closed_at")?,
             deadline: r.get("deadline")?,
+            apply_url: r.get("apply_url").ok().flatten(),
             score_after: r.get("score_after")?,
         })
     }
@@ -353,7 +356,7 @@ impl Db {
             let n: i64 = con.query_row("SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name = ?1", [col], |r| r.get(0))?;
             Ok(n > 0)
         };
-        for (col, kind) in [("closed_at", "TEXT"), ("deadline", "TEXT"), ("score_after", "INTEGER"), ("dupe_key", "TEXT"), ("url_key", "TEXT")] {
+        for (col, kind) in [("closed_at", "TEXT"), ("deadline", "TEXT"), ("score_after", "INTEGER"), ("dupe_key", "TEXT"), ("url_key", "TEXT"), ("apply_url", "TEXT")] {
             if !has(col)? {
                 con.execute_batch(&format!("ALTER TABLE jobs ADD COLUMN {col} {kind}"))?;
             }
@@ -493,12 +496,12 @@ impl Db {
         let stamp = now();
         self.con.execute(
             "INSERT OR IGNORE INTO jobs (id, source, company, title, location, url, apply_email, description, salary,
-                posted_at, found_at, updated_at, status, score, track, reasoning, red_flags, keywords, deadline, dupe_key, url_key)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+                posted_at, found_at, updated_at, status, score, track, reasoning, red_flags, keywords, deadline, dupe_key, url_key, apply_url)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![
                 j.id, j.source, j.company, j.title, j.location, j.url, j.apply_email, j.description, j.salary,
                 j.posted_at, stamp, j.status, j.score, j.track, j.reasoning,
-                serde_json::to_string(&j.red_flags)?, serde_json::to_string(&j.keywords)?, j.deadline, dupe_key(&j.company, &j.title), url_key(&j.url)
+                serde_json::to_string(&j.red_flags)?, serde_json::to_string(&j.keywords)?, j.deadline, dupe_key(&j.company, &j.title), url_key(&j.url), j.apply_url
             ],
         )?;
         Ok(())
@@ -512,10 +515,10 @@ impl Db {
     }
 
     pub fn update_job(&self, id: &str, fields: &[(&str, Value)]) -> R<()> {
-        const ALLOWED: [&str; 20] = [
+        const ALLOWED: [&str; 21] = [
             "status", "score", "track", "reasoning", "red_flags", "keywords", "coverage_before", "coverage_after",
             "keyword_gaps", "cv_changes", "cv_path", "letter_path", "cover_letter", "email_subject", "applied_at",
-            "notes", "apply_email", "closed_at", "deadline", "score_after",
+            "notes", "apply_email", "closed_at", "deadline", "score_after", "apply_url",
         ];
         let mut sets = vec![];
         let mut vals: Vec<rusqlite::types::Value> = vec![];

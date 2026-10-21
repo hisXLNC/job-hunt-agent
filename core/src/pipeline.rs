@@ -3449,6 +3449,42 @@ replies and interviews, and a little lower for kinds that got none from several 
         Ok(())
     }
 
+    // --- the company's own posting ----------------------------------------------------------------
+
+    /// Look for the posting on the company's own site and keep the link, so Apply goes there
+    /// rather than to the job board. None when Claude couldn't find it.
+    pub fn find_company_apply(&self, job_id: &str) -> R<Option<String>> {
+        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        if job.apply_url.is_some() {
+            return Ok(job.apply_url);
+        }
+        let found = self.llm().company_apply(&job)?;
+        match &found {
+            Some(u) => {
+                self.db().update_job(job_id, &[("apply_url", u.clone().into())])?;
+                self.db().log(Some(job_id), "apply-link", &format!("found on the company's site: {u}"))?;
+            }
+            None => self.db().log(Some(job_id), "apply-link", "not found on the company's own site; apply through the posting")?,
+        }
+        Ok(found)
+    }
+
+    /// After approval, look for the company's own posting in the background, when the posting
+    /// is on a job board and Claude Code is set up.
+    pub fn find_company_apply_later(self: &Arc<Self>, job_id: &str) {
+        let Ok(Some(job)) = self.db().job(job_id) else { return };
+        if job.apply_url.is_some() || job.apply_email.is_some() || job.url.trim().is_empty() || !crate::sources::is_job_board(&job.url) || self.engine_name() != "code" || !self.claude_ready() {
+            return;
+        }
+        let (a, id) = (self.clone(), job_id.to_string());
+        std::thread::spawn(move || {
+            let Ok(_g) = a.claim(&format!("apply-link:{id}")) else { return };
+            if let Err(e) = a.find_company_apply(&id) {
+                let _ = a.db().log(Some(&id), "apply-link:error", &e.0);
+            }
+        });
+    }
+
     // --- approval ---------------------------------------------------------------------------------
 
     /// Your go-ahead. Email applications are sent from your Gmail; anything else waits for you to
@@ -5086,6 +5122,19 @@ mod tests {
         let s = setup();
         std::fs::remove_file(s.agent.cv_path("program")).unwrap();
         assert!(s.agent.search(Some(vec![])).unwrap_err().0.contains("No CV"));
+    }
+
+    #[test]
+    fn finds_the_company_posting_once() {
+        let s = setup();
+        let board = |t: &str, id: &str| Posting { url: format!("https://www.linkedin.com/jobs/view/{id}/"), ..posting(t, id) };
+        s.agent.search(Some(vec![board("Technical Program Manager", "1"), board("Senior Program Manager", "2")])).unwrap();
+        assert_eq!(s.agent.db().job("test:1").unwrap().unwrap().apply_url, None, "a job board isn't the company's site");
+        assert_eq!(s.agent.find_company_apply("test:1").unwrap().as_deref(), Some("https://careers.example.com/jobs/1"));
+        assert_eq!(s.agent.db().job("test:1").unwrap().unwrap().apply_url.as_deref(), Some("https://careers.example.com/jobs/1"));
+        assert_eq!(s.agent.find_company_apply("test:1").unwrap().as_deref(), Some("https://careers.example.com/jobs/1"), "kept, not asked again");
+        assert_eq!(s.agent.find_company_apply("test:2").unwrap(), None);
+        assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().apply_url, None);
     }
 
     #[test]
