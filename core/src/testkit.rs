@@ -85,7 +85,8 @@ impl Llm for FakeLlm {
     fn career_paths(&self, _c: &str, cvs: &str, _evidence: &str) -> R<crate::claude::CareerPlan> {
         Ok(crate::claude::CareerPlan { advice: "Lead with delivery.".into(), paths: vec![crate::claude::CareerPath { title: "Data Engineering Manager".into(), kind: "now".into(), fit: 80, pay: "$110k–135k".into(),
             pay_min: Some(110000.0), pay_max: Some(135000.0), currency: "CAD".into(), pros: vec!["Steady demand".into()], cons: vec!["Narrow field".into()],
-            titles: vec!["Data Engineering Manager".into(), "Data Systems Lead".into()], why: format!("{} chars of CV", cvs.len()), ..Default::default() }] })
+            titles: vec!["Data Engineering Manager".into(), "Data Systems Lead".into()], why: format!("{} chars of CV", cvs.len()),
+            hours: Some(45.0), balance: "mixed".into(), balance_note: "Release weeks run late; mostly hybrid.".into(), ..Default::default() }] })
     }
     fn read_posting(&self, url: &str, page: &str) -> R<FoundJob> {
         self.calls.lock().unwrap().push(format!("read_posting:{url}"));

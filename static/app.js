@@ -2683,10 +2683,13 @@ function careerHtml(career, thinking, tracks) {
   const range = (lo, hi, c) => lo && hi ? `${money(lo, c)}–${money(hi, c).replace(cur(c), '')}` : money(hi || lo, c);
   const step = (c, when) => (c.ladder || []).find(x => x.when.toLowerCase().includes(when)) || null;
   const top = Math.max(1, ...paths.map(c => c.ceiling_pay || c.pay_max || 0));
-  const compare = paths.some(c => (c.ladder || []).length) ? `<table class="career-compare"><thead><tr><th>Path</th><th class="num">Now</th><th class="num">In 5 years</th><th class="num">In 10 years</th><th class="num">Ceiling</th></tr></thead><tbody>
+  const balanceName = { good: 'Good balance', mixed: 'Mixed balance', demanding: 'Demanding' };
+  const balance = c => [c.hours ? `<span class="small">~${Math.round(c.hours)} h/week</span>` : '', c.balance ? `<span class="pill ${{ good: 'good', mixed: 'warn', demanding: 'crit' }[c.balance] || 'info'}" style="white-space:nowrap"${c.balance_note ? ` title="${esc(c.balance_note)}"` : ''}>${esc(balanceName[c.balance] || c.balance)}</span>` : ''].filter(Boolean).join(' ') || '–';
+  const compare = paths.some(c => (c.ladder || []).length) ? `<table class="career-compare"><thead><tr><th>Path</th><th class="num">Now</th><th class="num">In 5 years</th><th class="num">In 10 years</th><th class="num">Ceiling</th><th>Hours and balance</th></tr></thead><tbody>
       ${paths.map(c => { const n = step(c, 'now'), f = step(c, '5'), t = step(c, '10'); return `<tr><td><a href="#path-${esc(c.title)}" data-act="careerJump" data-i="${paths.indexOf(c)}">${esc(c.title)}</a><br><span class="muted small">${esc(kindName[c.kind] || c.kind)}</span></td>
         <td class="num">${n ? range(n.pay_min, n.pay_max, c) : range(c.pay_min, c.pay_max, c)}</td><td class="num">${f ? range(f.pay_min, f.pay_max, c) : '–'}</td><td class="num">${t ? range(t.pay_min, t.pay_max, c) : '–'}</td>
-        <td class="num"><b>${money(c.ceiling_pay, c)}</b><div class="ceilbar"><span style="width:${(c.ceiling_pay || 0) / top * 100}%"></span></div></td></tr>`; }).join('')}</tbody></table>` : '';
+        <td class="num"><b>${money(c.ceiling_pay, c)}</b><div class="ceilbar"><span style="width:${(c.ceiling_pay || 0) / top * 100}%"></span></div></td>
+        <td>${balance(c)}</td></tr>`; }).join('')}</tbody></table>` : '';
   const ladder = c => (c.ladder || []).length ? `<ol class="ladder">${c.ladder.map(x => `<li><span class="when">${esc(x.when)}</span><b>${esc(x.title)}</b><span class="muted small">${range(x.pay_min, x.pay_max, c)}</span></li>`).join('')}
       ${c.ceiling_title ? `<li class="ceiling"><span class="when">Ceiling</span><b>${esc(c.ceiling_title)}</b><span class="small">up to <b>${money(c.ceiling_pay, c)}</b></span></li>` : ''}</ol>` : '';
   const list = (label, xs, cls) => xs?.length ? `<div class="small ${cls}"><b>${label}</b><ul>${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
@@ -2696,17 +2699,18 @@ function careerHtml(career, thinking, tracks) {
   return `<section class="card" id="careerCard"><header><h2>Your career paths</h2>
     ${thinking ? '<span class="muted small"><span class="spin"></span>Claude is thinking… (a minute or two)</span>' : `<button class="btn" data-act="career">${career ? 'Think again' : 'Map my career paths'}</button>`}</header>
     ${career ? `${career.advice ? `<div class="advice"><b>Claude's advice</b><p>${esc(career.advice)}</p></div>` : ''}
-      ${compare ? `<h3 class="sub">Where each path leads</h3>${compare}<p class="muted small">Typical yearly base pay where you search, with steady progress. The ceiling is the most the path usually pays, at its top role. Claude's estimates from ${esc(fmtDate(career.at))}: use them to compare paths, not as offers.</p>` : ''}
+      ${compare ? `<h3 class="sub">Where each path leads</h3>${compare}<p class="muted small">Typical yearly base pay where you search, with steady progress. The ceiling is the most the path usually pays, at its top role. Hours are a typical week in the role, all in. Claude's estimates from ${esc(fmtDate(career.at))}: use them to compare paths, not as offers.</p>` : ''}
       <div class="paths">${paths.map((c, i) => `<div class="path" id="path-${i}">
         <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><span><b>${esc(c.title)}</b><br><span class="small muted">${esc(kindName[c.kind] || c.kind)} · fit ${c.fit}</span></span>${c.ceiling_pay ? `<span class="pill good" style="white-space:nowrap" title="The most this path usually pays">up to ${money(c.ceiling_pay, c)}</span>` : `<span class="pill good" style="white-space:nowrap">${esc(c.pay)}</span>`}</div>
         <p class="small">${esc(c.why)}</p>
         ${ladder(c)}
+        ${c.hours || c.balance ? `<p class="small"><b>Work-life balance:</b> ${balance(c)}${c.balance_note ? ` ${esc(c.balance_note)}` : ''}</p>` : ''}
         <div class="proscons">${list('For', c.pros, 'pro')}${list('Against', c.cons, 'con')}</div>
         ${(c.gaps || []).length ? `<p class="small"><b>What it takes:</b> ${c.gaps.map(esc).join('; ')}</p>` : ''}
         ${c.first_step ? `<p class="small"><b>First step this month:</b> ${esc(c.first_step)}</p>` : ''}
         ${searchFor(c, i)}
       </div>`).join('')}</div>`
-    : `<p class="muted">Claude reads your whole CV and maps every direction it supports: where each leads in 3, 5 and 10 years, the pay at each step and the most the path can pay, with pros and cons and its advice on which to choose.${thinking ? '' : ' It does this by itself when you add a CV.'}</p>`}
+    : `<p class="muted">Claude reads your whole CV and maps every direction it supports: where each leads in 3, 5 and 10 years, the pay at each step and the most the path can pay, the usual hours and work-life balance, with pros and cons and its advice on which to choose.${thinking ? '' : ' It does this by itself when you add a CV.'}</p>`}
   </section>`;
 }
 

@@ -29,6 +29,8 @@ impl Llm for DemoLlm {
                 when: w.to_string(), title: [title.to_string(), format!("Senior {title}"), format!("Lead {title}"), format!("Head of {}", title.split(' ').last().unwrap_or(""))][i].clone(),
                 pay_min: Some(pay.0 * (1.0 + 0.18 * i as f64)), pay_max: Some(pay.1 * (1.0 + 0.2 * i as f64)) }).collect(),
             ceiling_title: format!("Director, {title}"), ceiling_pay: Some(pay.1 * 1.9),
+            hours: Some([45.0, 50.0, 40.0][fit as usize % 3]), balance: ["mixed", "demanding", "good"][fit as usize % 3].into(),
+            balance_note: ["Go-live weeks run late; mostly hybrid.", "Year-end and audits mean long weeks.", "Steady hours, often remote."][fit as usize % 3].into(),
         };
         Ok(jobhunt_core::claude::CareerPlan { advice: "Your strongest case is regulated delivery: lead with it. Digital transformation pays about the same and grows faster, but asks you to show adoption, not just delivery. A move into process improvement pays less at first; keep it as a second string.".into(), paths: vec![
             p("Senior Technical Program Manager", "now", 86, (125000.0, 150000.0), &[], &["Senior Technical Program Manager", "Program Manager, Payments"], "Apply to five bank programmes this week.", &["Many openings in banks", "Your record fits as it is"], &["Long hiring loops", "Pay tops out without a Director title"]),

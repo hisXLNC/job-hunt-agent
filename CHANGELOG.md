@@ -6,12 +6,13 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [1.43.0] - 2026-10-21
 
-Apply on the company's own site.
+Apply on the company's own site, and work-life balance in career paths.
 
 ### Changes
 
 - When a role is on the company's own site, Apply goes there instead of LinkedIn, Indeed or another job board. Job Hunt picks up the company link from Google for Jobs and LinkedIn, and after you approve a role it asks Claude to find the posting on the company's careers site.
 - On the Apply page, "Find it on the company's site" looks for it on demand; the job board posting stays as a fallback.
+- Career paths now show the usual hours a week and the work-life balance of each role (good, mixed or demanding, and why: on-call, travel, busy seasons, remote), so you can weigh pay against time. Press Think again on CV & career to add them.
 
 ## [1.42.2] - 2026-10-21
 

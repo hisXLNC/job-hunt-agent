@@ -615,6 +615,12 @@ pub struct CareerPath {
     /// The top of this path as people usually reach it, and the most it typically pays (yearly).
     pub ceiling_title: String,
     pub ceiling_pay: Option<f64>,
+    /// Typical hours a week in this role, all in (paid or not).
+    pub hours: Option<f64>,
+    /// Work-life balance: "good", "mixed" or "demanding", and why in a sentence (on-call, travel,
+    /// busy seasons, how much is remote).
+    pub balance: String,
+    pub balance_note: String,
 }
 
 /// One step on a career path: when, the role, and its typical yearly pay.
@@ -637,7 +643,7 @@ latest title), then suggest the 5-7 best, ordered by how good a bet each is: \
 at least two they could get now with the CV as it is (kind \"now\"), at least one step up or sideways that needs \
 a little (\"stretch\"), and at least one real change of direction that builds on their experience (\"switch\"). \
 advice: 4-6 sentences of frank career advice across the directions: where their strongest case is, the main \
-trade-offs between the paths (pay against growth, stability against speed, specialist against general), and what \
+trade-offs between the paths (pay against growth, pay against work-life balance, stability against speed, specialist against general), and what \
 to prioritise in the next three months. Weigh where each path leads in 5-10 years and its pay ceiling, not only the \
 next job.\n\
 For each direction:\n\
@@ -657,6 +663,10 @@ Business Analyst or Product Owner, Head of Business Analysis), with that role's 
 where they search, assuming steady progress;\n\
 - ceiling_title and ceiling_pay: the top of this path as people usually reach it (e.g. Director of Business Analysis) \
 and the most it typically pays as a yearly number, not counting rare outliers.\n\
+- hours: the typical hours a week people in this role actually work, all in (e.g. 40, 45, 55), for where they search;\n\
+- balance: work-life balance in this role, \"good\", \"mixed\" or \"demanding\", and balance_note: one sentence on why \
+(on-call, travel, busy seasons such as year-end or tax season, deadlines, how often it's remote or hybrid), and \
+whether it changes higher up the ladder.\n\
 Be honest about pay that's lower than what they make now, and about directions their search shows aren't working. \
 Never invent experience.")
 }
@@ -1341,6 +1351,7 @@ impl Llm for Claude {
             "currency": {"type": "string"}, "pros": strings(), "cons": strings(),
             "ladder": {"type": "array", "items": obj(json!({"when": {"type": "string"}, "title": {"type": "string"}, "pay_min": {"type": "number"}, "pay_max": {"type": "number"}}))},
             "ceiling_title": {"type": "string"}, "ceiling_pay": {"type": "number"},
+            "hours": {"type": "number"}, "balance": {"type": "string", "enum": ["good", "mixed", "demanding"]}, "balance_note": {"type": "string"},
             "gaps": strings(), "titles": strings(), "first_step": {"type": "string"},
         }));
         self.call(&career_system(), &user, obj(json!({"advice": {"type": "string"}, "paths": {"type": "array", "items": path}})), "medium")
