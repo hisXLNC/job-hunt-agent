@@ -605,10 +605,27 @@ pub struct CareerPath {
     pub titles: Vec<String>,
     /// One concrete thing to do this month.
     pub first_step: String,
+    /// Where the path leads: now, in about 3, 5 and 10 years, each with its typical title and pay.
+    pub ladder: Vec<CareerStep>,
+    /// The top of this path as people usually reach it, and the most it typically pays (yearly).
+    pub ceiling_title: String,
+    pub ceiling_pay: Option<f64>,
+}
+
+/// One step on a career path: when, the role, and its typical yearly pay.
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct CareerStep {
+    /// "Now", "In 3 years", "In 5 years", "In 10 years".
+    pub when: String,
+    pub title: String,
+    pub pay_min: Option<f64>,
+    pub pay_max: Option<f64>,
 }
 
 fn career_system() -> String {
-    format!("You are a frank career coach for an experienced professional looking for work.\n\n{UNTRUSTED}\n\n{YOU}\n\n\
+    format!("You are a frank career coach helping an experienced professional choose a career direction, not just their next \
+application. For each path, show where it leads over ten years and how far its pay goes.\n\n{UNTRUSTED}\n\n{YOU}\n\n\
 You get their CVs, where they search, and the evidence from their own search: replies and interviews by kind of \
 role and pay band, and what the roles they find pay. First brainstorm every direction their whole CV supports (every field they have real experience in, not just their \
 latest title), then suggest the 5-7 best, ordered by how good a bet each is: \
@@ -616,7 +633,8 @@ at least two they could get now with the CV as it is (kind \"now\"), at least on
 a little (\"stretch\"), and at least one real change of direction that builds on their experience (\"switch\"). \
 advice: 4-6 sentences of frank career advice across the directions: where their strongest case is, the main \
 trade-offs between the paths (pay against growth, stability against speed, specialist against general), and what \
-to prioritise in the next three months.\n\
+to prioritise in the next three months. Weigh where each path leads in 5-10 years and its pay ceiling, not only the \
+next job.\n\
 For each direction:\n\
 - title: the role to aim for;\n\
 - fit: 0-100, how well their CV supports it today;\n\
@@ -627,7 +645,13 @@ stated in the roles they found; otherwise your best estimate, ending with \" (es
 - pros: 2-3 short points in its favour; cons: 2-3 short points against it (pay, risk, time to get there, what they'd give up);\n\
 - gaps: up to 3 things they'd need to show or get first (a certification, a kind of project, a tool), empty if none;\n\
 - titles: 3-5 job titles to search for it;\n\
-- first_step: one concrete thing to do this month.\n\
+- first_step: one concrete thing to do this month;\n\
+- ladder: exactly 4 steps, with when \"Now\", \"In 3 years\", \"In 5 years\" and \"In 10 years\": the title someone \
+following this path from their position typically holds then (e.g. Business Analyst, Senior Business Analyst, Lead \
+Business Analyst or Product Owner, Head of Business Analysis), with that role's typical yearly base pay_min and pay_max \
+where they search, assuming steady progress;\n\
+- ceiling_title and ceiling_pay: the top of this path as people usually reach it (e.g. Director of Business Analysis) \
+and the most it typically pays as a yearly number, not counting rare outliers.\n\
 Be honest about pay that's lower than what they make now, and about directions their search shows aren't working. \
 Never invent experience.")
 }
@@ -1298,6 +1322,8 @@ impl Llm for Claude {
             "title": {"type": "string"}, "kind": {"type": "string", "enum": ["now", "stretch", "switch"]}, "fit": {"type": "integer"},
             "why": {"type": "string"}, "pay": {"type": "string"}, "pay_min": {"type": "number"}, "pay_max": {"type": "number"},
             "currency": {"type": "string"}, "pros": strings(), "cons": strings(),
+            "ladder": {"type": "array", "items": obj(json!({"when": {"type": "string"}, "title": {"type": "string"}, "pay_min": {"type": "number"}, "pay_max": {"type": "number"}}))},
+            "ceiling_title": {"type": "string"}, "ceiling_pay": {"type": "number"},
             "gaps": strings(), "titles": strings(), "first_step": {"type": "string"},
         }));
         self.call(&career_system(), &user, obj(json!({"advice": {"type": "string"}, "paths": {"type": "array", "items": path}})), "medium")

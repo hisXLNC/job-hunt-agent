@@ -601,3 +601,13 @@ details.card > summary { cursor: pointer; list-style-position: outside; }
 /* Place pickers */
 .places .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .places .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* Career paths: compare where each leads, then each path's ladder to its ceiling. */
+.career-compare td, .career-compare th { vertical-align: top; }
+.ceilbar { height: 5px; background: var(--surface-2); border-radius: 999px; margin-top: 4px; min-width: 60px; }
+.ceilbar span { display: block; height: 100%; background: var(--good); border-radius: 999px; }
+.ladder { list-style: none; margin: 8px 0; padding: 0 0 0 14px; border-left: 2px solid var(--accent-soft); display: flex; flex-direction: column; gap: 6px; }
+.ladder li { position: relative; display: flex; flex-direction: column; }
+.ladder li::before { content: ""; position: absolute; left: -20px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.ladder li.ceiling::before { background: var(--good); }
+.ladder .when { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }

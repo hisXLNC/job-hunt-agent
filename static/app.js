@@ -2384,6 +2384,7 @@ async function act(el) {
     } else list.splice(Number(el.dataset.i), 1);
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/contacts`, { method: 'POST', body: { contacts: list } }); route(); });
   }
+  if (a === 'careerJump') { document.getElementById(`path-${el.dataset.i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (a === 'career') {
     const here = location.hash;
     return busy(async () => { await api('/api/results/career', { method: 'POST' }); settingsCache = null; route(); watchCareer(here); }, 'Claude is thinking about your career options. This takes a minute or two.');
@@ -2661,32 +2662,40 @@ async function showSourceTest(start) {
   if (t.running) sourcePoll = setTimeout(() => { if (location.hash.startsWith('#settings/sources')) showSourceTest(); }, 2000);
 }
 
-/** Claude's career advice: the overall view, then each direction with its pay range drawn to scale,
- *  pros and cons, what you'd need, a first step, and its titles to add to your search. */
+/** Your career paths, for choosing a direction: Claude's advice, a comparison of where each path leads
+ *  (now, 5 and 10 years, and its pay ceiling), then each path's ladder, pros and cons, and what it takes. */
 function careerHtml(career, thinking, tracks) {
-  const kindName = { now: 'Within reach now', stretch: 'A stretch', switch: 'A change of direction' };
+  const kindName = { now: 'Open to you now', stretch: 'A step up or sideways', switch: 'A change of direction' };
   const paths = career?.paths || [];
-  const ranged = paths.filter(c => c.pay_min && c.pay_max);
-  const lo = Math.min(...ranged.map(c => c.pay_min)), hi = Math.max(...ranged.map(c => c.pay_max));
-  const money = (n, cur) => `${cur && cur !== 'USD' && cur !== 'CAD' && cur !== 'AUD' ? `${esc(cur)} ` : '$'}${n >= 10000 ? `${Math.round(n / 1000)}k` : Math.round(n).toLocaleString()}`;
-  const bar = c => c.pay_min && c.pay_max && hi > lo ? `<div class="payrange" title="${esc(c.pay)}"><span style="left:${(c.pay_min - lo) / (hi - lo) * 100}%;width:${Math.max(2, (c.pay_max - c.pay_min) / (hi - lo) * 100)}%"></span></div>
-      <div class="row small muted" style="justify-content:space-between"><span>${money(c.pay_min, c.currency)}</span><span>${money(c.pay_max, c.currency)}</span></div>` : '';
+  const cur = c => c.currency && !['USD', 'CAD', 'AUD', 'NZD', 'SGD'].includes(c.currency) ? `${c.currency} ` : '$';
+  const money = (n, c) => n ? `${cur(c)}${n >= 10000 ? `${Math.round(n / 1000)}k` : Math.round(n).toLocaleString()}` : '–';
+  const range = (lo, hi, c) => lo && hi ? `${money(lo, c)}–${money(hi, c).replace(cur(c), '')}` : money(hi || lo, c);
+  const step = (c, when) => (c.ladder || []).find(x => x.when.toLowerCase().includes(when)) || null;
+  const top = Math.max(1, ...paths.map(c => c.ceiling_pay || c.pay_max || 0));
+  const compare = paths.some(c => (c.ladder || []).length) ? `<table class="career-compare"><thead><tr><th>Path</th><th class="num">Now</th><th class="num">In 5 years</th><th class="num">In 10 years</th><th class="num">Ceiling</th></tr></thead><tbody>
+      ${paths.map(c => { const n = step(c, 'now'), f = step(c, '5'), t = step(c, '10'); return `<tr><td><a href="#path-${esc(c.title)}" data-act="careerJump" data-i="${paths.indexOf(c)}">${esc(c.title)}</a><br><span class="muted small">${esc(kindName[c.kind] || c.kind)}</span></td>
+        <td class="num">${n ? range(n.pay_min, n.pay_max, c) : range(c.pay_min, c.pay_max, c)}</td><td class="num">${f ? range(f.pay_min, f.pay_max, c) : '–'}</td><td class="num">${t ? range(t.pay_min, t.pay_max, c) : '–'}</td>
+        <td class="num"><b>${money(c.ceiling_pay, c)}</b><div class="ceilbar"><span style="width:${(c.ceiling_pay || 0) / top * 100}%"></span></div></td></tr>`; }).join('')}</tbody></table>` : '';
+  const ladder = c => (c.ladder || []).length ? `<ol class="ladder">${c.ladder.map(x => `<li><span class="when">${esc(x.when)}</span><b>${esc(x.title)}</b><span class="muted small">${range(x.pay_min, x.pay_max, c)}</span></li>`).join('')}
+      ${c.ceiling_title ? `<li class="ceiling"><span class="when">Ceiling</span><b>${esc(c.ceiling_title)}</b><span class="small">up to <b>${money(c.ceiling_pay, c)}</b></span></li>` : ''}</ol>` : '';
   const list = (label, xs, cls) => xs?.length ? `<div class="small ${cls}"><b>${label}</b><ul>${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
-  return `<section class="card" id="careerCard"><header><h2>Your career options</h2>
-    ${thinking ? '<span class="muted small"><span class="spin"></span>Claude is thinking… (a minute or two)</span>' : `<button class="btn" data-act="career">${career ? 'Think again' : 'Show my options'}</button>`}</header>
+  const searchFor = (c, i) => (c.titles || []).length ? `<details class="small"><summary class="muted">Look for this role now</summary>
+      <p style="margin:6px 0">Job titles for it: ${c.titles.map(esc).join(', ')}</p>
+      ${tracks.length ? `<div class="row">${tracks.length > 1 ? `<label class="small">Add them to the search for your<select data-path-track="${i}" style="margin-left:6px">${tracks.map(t => `<option value="${esc(t.name)}">${esc(t.label)}</option>`).join('')}</select> CV</label>` : ''}<button class="btn sm" data-act="addTitles" data-i="${i}" data-titles="${esc(JSON.stringify(c.titles))}" ${c.titles.every(t => tracks.some(x => x.titles.some(y => y.toLowerCase() === t.toLowerCase()))) ? 'disabled title="Already in your search"' : ''}>${tracks.length > 1 ? 'Add' : 'Add them to my search'}</button></div>` : ''}</details>` : '';
+  return `<section class="card" id="careerCard"><header><h2>Your career paths</h2>
+    ${thinking ? '<span class="muted small"><span class="spin"></span>Claude is thinking… (a minute or two)</span>' : `<button class="btn" data-act="career">${career ? 'Think again' : 'Map my career paths'}</button>`}</header>
     ${career ? `${career.advice ? `<div class="advice"><b>Claude's advice</b><p>${esc(career.advice)}</p></div>` : ''}
-      <p class="muted small">From ${esc(fmtDate(career.at))}: every direction your CVs support, with typical yearly pay where you search. Pay marked (estimate) is Claude's estimate; the rest comes from postings you found. Think again after your search has been running a while: it uses what's working.</p>
-      <div class="paths">${paths.map((c, i) => `<div class="path">
-        <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><span><b>${esc(c.title)}</b><br><span class="small muted">${esc(kindName[c.kind] || c.kind)} · fit ${c.fit}</span></span><span class="pill good" style="white-space:nowrap">${esc(c.pay)}</span></div>
-        ${bar(c)}
+      ${compare ? `<h3 class="sub">Where each path leads</h3>${compare}<p class="muted small">Typical yearly base pay where you search, with steady progress. The ceiling is the most the path usually pays, at its top role. Claude's estimates from ${esc(fmtDate(career.at))}: use them to compare paths, not as offers.</p>` : ''}
+      <div class="paths">${paths.map((c, i) => `<div class="path" id="path-${i}">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><span><b>${esc(c.title)}</b><br><span class="small muted">${esc(kindName[c.kind] || c.kind)} · fit ${c.fit}</span></span>${c.ceiling_pay ? `<span class="pill good" style="white-space:nowrap" title="The most this path usually pays">up to ${money(c.ceiling_pay, c)}</span>` : `<span class="pill good" style="white-space:nowrap">${esc(c.pay)}</span>`}</div>
         <p class="small">${esc(c.why)}</p>
+        ${ladder(c)}
         <div class="proscons">${list('For', c.pros, 'pro')}${list('Against', c.cons, 'con')}</div>
-        ${(c.gaps || []).length ? `<p class="small"><b>You'd need:</b> ${c.gaps.map(esc).join('; ')}</p>` : ''}
-        ${c.first_step ? `<p class="small"><b>This month:</b> ${esc(c.first_step)}</p>` : ''}
-        <p class="small muted">Search for: ${(c.titles || []).map(esc).join(', ')}</p>
-        ${tracks.length ? `<div class="row">${tracks.length > 1 ? `<select data-path-track="${i}">${tracks.map(t => `<option value="${esc(t.name)}">${esc(t.label)}</option>`).join('')}</select>` : ''}<button class="btn sm" data-act="addTitles" data-i="${i}" data-titles="${esc(JSON.stringify(c.titles || []))}" ${(c.titles || []).every(t => tracks.some(x => x.titles.some(y => y.toLowerCase() === t.toLowerCase()))) ? 'disabled title="Already in your search"' : ''}>Add these titles to my search</button></div>` : ''}
+        ${(c.gaps || []).length ? `<p class="small"><b>What it takes:</b> ${c.gaps.map(esc).join('; ')}</p>` : ''}
+        ${c.first_step ? `<p class="small"><b>First step this month:</b> ${esc(c.first_step)}</p>` : ''}
+        ${searchFor(c, i)}
       </div>`).join('')}</div>`
-    : `<p class="muted">Claude reads your whole CV and lays out every direction it supports: roles within reach now, stretches and changes of direction, each with its pay range, pros and cons, what you'd need and a first step, plus its overall advice.${thinking ? '' : ' It does this by itself when you add a CV.'}</p>`}
+    : `<p class="muted">Claude reads your whole CV and maps every direction it supports: where each leads in 3, 5 and 10 years, the pay at each step and the most the path can pay, with pros and cons and its advice on which to choose.${thinking ? '' : ' It does this by itself when you add a CV.'}</p>`}
   </section>`;
 }
 
