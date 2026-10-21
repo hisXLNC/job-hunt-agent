@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.43.1",
+    "date": "2026-10-21",
+    "title": "View opens the posting",
+    "changes": [
+      "Fix: View on a role you picked on the Overview opened its CV tab; it now opens the posting's Overview."
+    ]
+  },
+  {
     "version": "1.43.0",
     "date": "2026-10-21",
     "title": "Apply on the company's own site, and work-life balance in career paths",
