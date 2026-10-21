@@ -1,0 +1,20 @@
+# Job Hunt on a Synology NAS: Container Manager → Project → Create, and paste this in.
+# Fill in the three values marked FILL IN. See server/README.md for the full steps.
+services:
+  job-hunt:
+    image: ghcr.io/hisxlnc/job-hunt-server:latest
+    container_name: job-hunt
+    restart: unless-stopped
+    ports:
+      - "8790:8790"
+    environment:
+      TZ: Europe/London   # your time zone
+      # FILL IN: the password you'll sign in with (at least 8 characters).
+      JOBHUNT_PASSWORD: "change-me-please"
+      # FILL IN: from `claude setup-token` on your PC, to use your Claude subscription.
+      # Leave empty to use a Claude API key instead (set it in Job Hunt → Settings → Connections).
+      CLAUDE_CODE_OAUTH_TOKEN: ""
+    volumes:
+      # FILL IN if your shared folder isn't called "docker": where Job Hunt keeps its data, and its backups.
+      - /volume1/docker/job-hunt/data:/data
+      - /volume1/docker/job-hunt/backups:/backups

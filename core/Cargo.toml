@@ -1,0 +1,24 @@
+[package]
+name = "jobhunt-core"
+version = "1.42.1"
+edition = "2021"
+publish = false
+description = "Job Hunt's logic: job search, scoring, CV tailoring, tracking, inbox and calendar. No window code, so it builds and tests anywhere."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+regex = "1"
+once_cell = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"

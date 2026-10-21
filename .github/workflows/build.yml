@@ -1,0 +1,197 @@
+name: Build Job Hunt for Windows
+
+# Only a release builds: a push to main that changes static/changelog.json (every version bump does).
+# GitHub's monthly build minutes are limited, and Windows minutes count double, so a quick Linux job
+# checks first: is this version already published (then nothing to do), and do the tests pass.
+on:
+  push:
+    branches: [main]
+    paths: ["static/changelog.json", ".github/workflows/build.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# A newer release replaces one still building.
+concurrency:
+  group: windows-build
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      publish: ${{ steps.p.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Already published?
+        id: p
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          v=$(python3 tools/release_ci.py version)
+          if [ -n "$GH_TOKEN" ] && gh release view "v$v" --repo hisXLNC/job-hunt-releases > /dev/null 2>&1; then
+            echo "v$v is already published: nothing to build."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.p.outputs.publish == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.p.outputs.publish == 'true'
+        with:
+          workspaces: core
+      - uses: actions/setup-node@v7
+        if: steps.p.outputs.publish == 'true'
+        with:
+          node-version: "22"
+      - name: Versions, page scripts and every core test
+        if: steps.p.outputs.publish == 'true'
+        run: python3 tools/release_ci.py verify --quick
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # static/changelog.json sets the version (Semantic Versioning); every other file must agree.
+      - name: Check versions
+        shell: bash
+        run: python tools/release_ci.py check
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            core
+            desktop/src-tauri
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Read the version from static/changelog.json
+        id: version
+        shell: bash
+        run: echo "semver=$(python tools/release_ci.py version)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the app and installer (signed for automatic updates)
+        working-directory: desktop/src-tauri
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # The built-in Google connection: a "Desktop app" OAuth client file's text. Optional;
+          # without it, each person adds their own client file in Settings.
+          JOBHUNT_GOOGLE_CLIENT: ${{ secrets.GOOGLE_CLIENT_JSON }}
+        run: |
+          if [ -z "$JOBHUNT_GOOGLE_CLIENT" ]; then
+            echo "::notice::GOOGLE_CLIENT_JSON isn't set, so this build has no built-in Google connection"
+          fi
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY isn't set, so this build can't be offered as an automatic update"
+            python -c "import json; p='tauri.conf.json'; c=json.load(open(p, encoding='utf-8')); c['bundle']['createUpdaterArtifacts']=False; json.dump(c, open(p, 'w', encoding='utf-8'), indent=2)"
+          fi
+          npx --yes @tauri-apps/cli@2 build
+
+      - name: Find the installer
+        id: find
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem desktop/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "no installer was built" }
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item $setup.FullName out/JobHunt-Setup.exe
+          # Versioned copy for the update feed (asset names with spaces get rewritten by GitHub)
+          $name = "JobHunt_${{ steps.version.outputs.semver }}_x64-setup.exe"
+          Copy-Item $setup.FullName "out/$name"
+          if (Test-Path "$($setup.FullName).sig") { Copy-Item "$($setup.FullName).sig" "out/$name.sig" }
+          Write-Host "Installer: $($setup.Name), $([math]::Round($setup.Length / 1MB, 1)) MB"
+
+      - name: Smoke test (the app starts and keeps running)
+        shell: pwsh
+        run: |
+          $env:JOBHUNT_DATA = "$env:RUNNER_TEMP\jobhunt-smoke"
+          $p = Start-Process -FilePath desktop/src-tauri/target/release/JobHunt.exe -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) { throw "Job Hunt exited during startup with code $($p.ExitCode)" }
+          if (-not (Test-Path "$env:JOBHUNT_DATA\jobhunt.db")) { throw "Job Hunt didn't create its database" }
+          Stop-Process -Id $p.Id -Force
+          Write-Host "Job Hunt started, created its data and stayed running"
+
+      - name: Scan with Windows Defender
+        shell: pwsh
+        run: |
+          $mp = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $mp)) { Write-Warning "Defender not available on this runner"; exit 0 }
+          & $mp -SignatureUpdate | Out-Host
+          & $mp -Scan -ScanType 3 -File "$PWD\out" -DisableRemediation | Out-Host
+          $code = $LASTEXITCODE
+          if ($code -eq 2) { throw "Windows Defender flagged the installer; not publishing it" }
+          if ($code -ne 0) { Write-Warning "Defender scan exited with $code" } else { Write-Host "Defender: no threats found" }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: JobHunt-Setup
+          path: out/JobHunt-Setup.exe
+
+      - name: Publish as the 'latest' release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest out/JobHunt-Setup.exe \
+            --title "Job Hunt (latest)" \
+            --notes "Built from ${GITHUB_SHA::7}, tested, and scanned with Windows Defender. Download JobHunt-Setup.exe and run it: it installs for your Windows account (no administrator rights), adds Start menu and desktop shortcuts, and opens Job Hunt." \
+            --target "$GITHUB_SHA"
+
+      - name: Publish the update to hisXLNC/job-hunt-releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          SEMVER: ${{ steps.version.outputs.semver }}
+        run: |
+          setup="out/JobHunt_${SEMVER}_x64-setup.exe"
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::RELEASES_TOKEN isn't set; not publishing an update"; exit 0; fi
+          if [ ! -f "$setup.sig" ]; then echo "::warning::No update signature; not publishing an update"; exit 0; fi
+          repo=hisXLNC/job-hunt-releases
+          # A release needs a commit to tag, so give a brand-new, empty repo its first file.
+          if ! gh api "repos/$repo/commits?per_page=1" > /dev/null 2>&1; then
+            readme=$(printf '# Job Hunt releases\n\nInstallers and the update feed for Job Hunt for Windows. Download the newest **JobHunt-Setup.exe** from Releases.\n' | base64 -w0)
+            gh api -X PUT "repos/$repo/contents/README.md" -f message="Start the Job Hunt releases repo" -f content="$readme" > /dev/null
+          fi
+          # Clear a draft left by a publish that failed part-way.
+          if [ "$(gh release view "v$SEMVER" --repo "$repo" --json isDraft -q .isDraft 2>/dev/null)" = "true" ]; then
+            gh release delete "v$SEMVER" --repo "$repo" --yes
+          fi
+          if gh release view "v$SEMVER" --repo "$repo" > /dev/null 2>&1; then
+            echo "v$SEMVER is already published; add a new version to static/changelog.json to ship an update"
+            exit 0
+          fi
+          python tools/release_ci.py manifest "$setup" out/latest.json
+          python tools/release_ci.py notes > out/notes.md
+          gh release create "v$SEMVER" "$setup" out/latest.json out/JobHunt-Setup.exe \
+            --repo "$repo" --title "$(python tools/release_ci.py title)" --notes-file out/notes.md
+
+      # A tag per published version marks the exact code each release was built from.
+      - name: Tag the release in this repository
+        shell: bash
+        env:
+          SEMVER: ${{ steps.version.outputs.semver }}
+        run: |
+          tag="v$SEMVER"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+            echo "$tag is already tagged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$(python tools/release_ci.py title)" "$GITHUB_SHA"
+          git push origin "$tag"

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The Job Hunt window talks to the app through its own jobhunt:// address, so it needs no extra permissions.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

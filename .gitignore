@@ -1,0 +1,5 @@
+target/
+desktop/src-tauri/gen/
+data/
+preview-data/
+__pycache__/

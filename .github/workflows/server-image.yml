@@ -1,0 +1,69 @@
+name: Build the Job Hunt server image
+
+# The Synology / Docker version. Builds for Intel/AMD (amd64) and ARM (arm64) NAS models and
+# publishes ghcr.io/hisxlnc/job-hunt-server:latest plus a tag per version.
+
+# Only a release builds (a version bump changes static/changelog.json), and only if this version's
+# image isn't published yet: GitHub's monthly build minutes are limited.
+on:
+  push:
+    branches: [main]
+    paths: ["static/changelog.json", ".github/workflows/server-image.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+# One build at a time, and a running build always finishes: a newer push waits (only the newest
+# waiting one is kept). Cancelling a running build on every push meant the image hardly ever got
+# published.
+concurrency:
+  group: server-image
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Version from static/changelog.json
+        id: v
+        run: echo "semver=$(python3 -c 'import json;print(json.load(open("static/changelog.json"))[0]["version"])')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Already published?
+        id: have
+        run: |
+          if docker buildx imagetools inspect "ghcr.io/hisxlnc/job-hunt-server:${{ steps.v.outputs.semver }}" > /dev/null 2>&1; then
+            echo "This version's image is already published: nothing to build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-qemu-action@v4
+        if: steps.have.outputs.skip != 'true'
+      - uses: docker/setup-buildx-action@v4
+        if: steps.have.outputs.skip != 'true'
+
+      - uses: docker/build-push-action@v7
+        if: steps.have.outputs.skip != 'true'
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/hisxlnc/job-hunt-server:latest
+            ghcr.io/hisxlnc/job-hunt-server:${{ steps.v.outputs.semver }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # The built-in Google connection (see build.yml), handed over as a build secret.
+          secrets: |
+            google_client=${{ secrets.GOOGLE_CLIENT_JSON }}

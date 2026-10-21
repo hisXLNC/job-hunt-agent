@@ -1,0 +1,11 @@
+#!/bin/sh
+# Before anything is pushed to main (which builds and publishes a release), check it builds:
+# versions, page scripts, every core test, the server and the Windows app. Other branches go
+# straight through; their check runs on GitHub.
+while read local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "Checking before pushing to main…"
+    python3 tools/release_ci.py verify || { echo "Push to main stopped: fix the failure above (or push to a branch)."; exit 1; }
+  fi
+done
+exit 0
