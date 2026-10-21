@@ -6,10 +6,11 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [1.42.2] - 2026-10-21
 
-Senior roles searched too.
+CV & career up front, and senior roles searched too.
 
 ### Changes
 
+- CV & career has its own place in the menu, second after Overview: your CVs, the experience Claude found, the job titles they search for, and your career options, all in one page. It used to be a tab inside Settings.
 - Each job title is also searched as its senior version (Business Analyst and Senior Business Analyst), after the regular searches, so senior roles aren't crowded out of a page of results. Senior, Sr., Lead, Principal and II versions of a title all count as a match, as before.
 
 ## [1.42.1] - 2026-10-21

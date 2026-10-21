@@ -803,7 +803,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let want = targets(&profile);
         if want.is_empty() {
-            return err("Add a CV with job titles first (Settings → Your CVs).");
+            return err("Add a CV with job titles first (CV & career).");
         }
         let places: Vec<String> = profile.locations.iter().filter(|l| !l.trim().is_empty()).cloned().collect();
         let places = if places.is_empty() { profile.country() } else { format!("{} ({})", places.join(", "), profile.country()) };
@@ -1109,7 +1109,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in Settings → Your CVs.");
+            return err("No CV uploaded yet. Add one in CV & career.");
         }
         let mut report = Report::default();
         let cap = profile.max_scored_per_run.max(1);
@@ -1337,7 +1337,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in Settings → Your CVs.");
+            return err("No CV uploaded yet. Add one in CV & career.");
         }
         let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
         let status = if s.score >= profile.score_threshold { "queued" } else { "skipped" };
@@ -1428,7 +1428,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in Settings → Your CVs.");
+            return err("No CV uploaded yet. Add one in CV & career.");
         }
         let p = Posting {
             source: source.into(),
@@ -2209,7 +2209,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let (id, key) = (self.secret("adzuna.id"), self.secret("adzuna.key"));
         if want("adzuna") { results.push(match (&first_title, id.is_empty() || key.is_empty()) {
             (_, true) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No Adzuna key.", "hint": "Add an Adzuna key in Settings \u{2192} Job sources to search thousands of listings for your titles." }),
-            (None, _) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in Settings \u{2192} Your CVs." }),
+            (None, _) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." }),
             (Some(t), false) => timed(format!("Adzuna \u{201c}{t}\u{201d}{}", if place.is_empty() { String::new() } else { format!(" in {place}") }), "search",
                 &|| crate::sources::adzuna(&c, &id, &key, &p.sources.adzuna_country, t, &place, p.sources.adzuna_days), "Check the Adzuna app ID and key in Settings \u{2192} Job sources."),
         }); }
@@ -2219,7 +2219,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let country = p.sources.adzuna_country.clone();
         if want("jsearch") { results.push(match (&keys.jsearch, &first) {
             (None, _) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No JSearch key.", "hint": "Postings from LinkedIn, Indeed, Glassdoor and company sites, through Google for Jobs. Add a key in Settings \u{2192} Job sources." }),
-            (_, None) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in Settings \u{2192} Your CVs." }),
+            (_, None) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." }),
             (Some((provider, key)), Some((t, place))) => {
                 let q = if place.is_empty() { t.clone() } else { format!("{t} in {place}") };
                 timed(format!("Google for Jobs \u{201c}{q}\u{201d}"), "search", &|| crate::sources::jsearch(&c, provider, key, &q, &country), "Check the key and where it's from (OpenWeb Ninja or RapidAPI) in Settings \u{2192} Job sources.")
@@ -2243,7 +2243,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 &|| self.llm().indeed(&[(t.clone(), at.clone())], &p.sources.adzuna_country.to_uppercase(), 2).map(|l| l.into_iter().map(indeed_posting).collect()).map_err(|e| e.0),
                 "Connect Indeed at claude.ai \u{2192} Settings \u{2192} Connectors, and make sure Claude Code on this PC is signed in with that same account.")
         } else {
-            json!({ "name": "Indeed", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in Settings \u{2192} Your CVs." })
+            json!({ "name": "Indeed", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
         }); }
         save(&results, false);
         if want("linkedin") { results.push(if !p.sources.linkedin {
@@ -2257,7 +2257,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                     "LinkedIn may be turning away searches from this connection for now; it usually passes in a day. For steadier results, add an Apify token in Settings \u{2192} Job sources."),
             }
         } else {
-            json!({ "name": "LinkedIn", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in Settings \u{2192} Your CVs." })
+            json!({ "name": "LinkedIn", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
         }); }
         save(&results, false);
         if want("jobbank") || (only == Some("jobbank")) { results.push(if !p.sources.jobbank {
@@ -2266,7 +2266,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             timed(format!("Job Bank \u{201c}{t}\u{201d}{}", if w.is_empty() { String::new() } else { format!(" in {w}") }), "search", &|| crate::sources::jobbank(&c, &t, &w),
                 "Job Bank may be limiting searches from this connection for now; it usually passes in a day.")
         } else {
-            json!({ "name": "Job Bank", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in Settings \u{2192} Your CVs." })
+            json!({ "name": "Job Bank", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
         }); }
         save(&results, false);
         if want("agencies") {
@@ -2355,7 +2355,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let cv = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
             .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
             .map(|d| d.plain_text())
-            .ok_or_else(|| Error("No CV uploaded yet. Add one in Settings \u{2192} Your CVs.".into()))?;
+            .ok_or_else(|| Error("No CV uploaded yet. Add one in CV & career.".into()))?;
         let mut facts = profile.application_facts.trim().to_string();
         if let Some(min) = profile.min_salary {
             facts.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
@@ -2469,7 +2469,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("Add your CV first (Settings → Your CVs).");
+            return err("Add your CV first (CV & career).");
         }
         let r = self.results()?;
         let cv_text: String = cvs.iter().map(|(name, text)| {
@@ -2566,7 +2566,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 let detail: String = e.detail.chars().take(160).collect();
                 match kind.as_str() {
                     // Trying again doesn't help without a CV: the link goes where you add one.
-                    _ if detail.contains("No CV") => add(&mut out, "warn", format!("{what} is waiting for your CV. Add one in Settings \u{2192} Your CVs."), "#settings/cvs"),
+                    _ if detail.contains("No CV") => add(&mut out, "warn", format!("{what} is waiting for your CV. Add one in CV & career."), "#cvs"),
                     "search" | "inbox" => fix(&mut out, "warn", format!("{what} had a problem: {detail}"), "Try again", "run", &kind),
                     _ => add(&mut out, "warn", format!("{what} had a problem: {detail}"), "#overview"),
                 }
@@ -3011,8 +3011,8 @@ replies and interviews, and a little lower for kinds that got none from several 
     pub fn tailor(&self, job_id: &str, track: Option<&str>) -> R<Job> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let profile = self.profile();
-        let t = profile.track(track.or(job.track.as_deref())).cloned().ok_or_else(|| Error("No CV uploaded yet. Add one in Settings → Your CVs.".into()))?;
-        let doc = cv::open(&self.cv_path(&t.name)).map_err(|_| Error(format!("No CV for the “{}” track yet. Upload it in Settings → Your CVs.", t.label)))?;
+        let t = profile.track(track.or(job.track.as_deref())).cloned().ok_or_else(|| Error("No CV uploaded yet. Add one in CV & career.".into()))?;
+        let doc = cv::open(&self.cv_path(&t.name)).map_err(|_| Error(format!("No CV for the “{}” track yet. Upload it in CV & career.", t.label)))?;
         let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.stories, &t.letter_style)?;
         // Take out AI tells Claude slipped in (your CV's own style stays).
         let own = format!("{}\n{}", doc.plain_text(), profile.stories);
@@ -3258,7 +3258,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             let profile = self.profile();
             let cvs = self.cv_texts(&profile);
             if cvs.is_empty() {
-                return err("No CV uploaded yet. Add one in Settings → Your CVs.");
+                return err("No CV uploaded yet. Add one in CV & career.");
             }
             let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
             let db = self.db();
@@ -3302,7 +3302,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in Settings → Your CVs.");
+            return err("No CV uploaded yet. Add one in CV & career.");
         }
         let guidance = self.scoring_guidance(&profile);
         let cap = profile.max_scored_per_run.max(1);

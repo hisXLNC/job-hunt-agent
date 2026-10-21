@@ -75,7 +75,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let cv_text = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
         .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&agent.cv_path(&t.name)).ok()))
         .map(|d| d.plain_text())
-        .ok_or_else(|| Error("No CV uploaded yet. Add one in Settings \u{2192} Your CVs.".into()))?;
+        .ok_or_else(|| Error("No CV uploaded yet. Add one in CV & career.".into()))?;
     // Your files, for the upload fields.
     let who = profile.name.trim();
     let stem = |what: &str| if who.is_empty() { what.to_string() } else { format!("{who} - {what}") };

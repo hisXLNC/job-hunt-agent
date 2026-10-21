@@ -32,7 +32,7 @@ If the blue window asks you to pick a colour style or press Enter, just press En
 ## 3. Add your CV
 
 Step 2: press **Add CVs** and choose your CV. Claude reads it and suggests the job titles to search
-for (you can change them later in Settings → Your CVs). Looking for two kinds of jobs? Add a CV for
+for (you can change them later in CV & career). Looking for two kinds of jobs? Add a CV for
 each.
 
 ## 4. Where you want to work

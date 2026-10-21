@@ -130,7 +130,7 @@ fn start_career(agent: &Arc<Agent>) -> bool {
     std::thread::spawn(move || {
         let Ok(_g) = a.claim("career") else { return };
         match a.write_career_paths() {
-            Ok(_) => a.note("Your career options are ready", "Roles you could go for, their pay, pros and cons, and Claude's advice: Results \u{2192} Career paths."),
+            Ok(_) => a.note("Your career options are ready", "Roles you could go for, their pay, pros and cons, and Claude's advice: CV & career."),
             Err(e) => {
                 let _ = a.db().log(None, "career:error", &e.0);
                 a.note("No career paths yet", &e.0);
@@ -144,7 +144,7 @@ fn start_career(agent: &Arc<Agent>) -> bool {
 fn ready_to_search(agent: &Agent) -> R<()> {
     let p = agent.profile();
     if !p.tracks.iter().any(|t| agent.cv_path(&t.name).exists()) {
-        return Err(Error("Add your CV first (Settings → Your CVs): Job Hunt compares every posting with it.".into()));
+        return Err(Error("Add your CV first (CV & career): Job Hunt compares every posting with it.".into()));
     }
     if !agent.claude_ready() {
         return Err(Error("Connect Claude first (Settings → Accounts): it reads the postings.".into()));

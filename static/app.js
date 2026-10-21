@@ -70,6 +70,7 @@ const ICON = {
   overview: '<path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 7h6V4h-6z"/>',
   pipeline: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/>',
   inbox: '<path d="M4 13l2.5-7h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/>',
+  cvs: '<rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="9.5" r="2.5"/><path d="M8 17c.6-2 2.1-3 4-3s3.4 1 4 3"/>',
   recruiters: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.4-.3 4.4 1.2 5 4.3"/>',
   add: '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/>',
   more: '<path d="M4 7h16M4 12h16M4 17h16"/>',
@@ -86,7 +87,7 @@ const ICON = {
 };
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
-const NAV = [['overview', 'Overview'], ['pipeline', 'Applications'], ['calendar', 'Calendar'], ['documents', 'Documents'], ['results', 'Results'], ['inbox', 'Inbox'], ['recruiters', 'Recruiters'], ['add', 'Add a job'], ['settings', 'Settings']];
+const NAV = [['overview', 'Overview'], ['cvs', 'CV &amp; career'], ['pipeline', 'Applications'], ['calendar', 'Calendar'], ['documents', 'Documents'], ['results', 'Results'], ['inbox', 'Inbox'], ['recruiters', 'Recruiters'], ['add', 'Add a job'], ['settings', 'Settings']];
 const STAGES = {
   queued: 'Pick to tailor', ready: 'Ready to approve', approved: 'Approved – submit it', applied: 'Applied',
   interviewing: 'Interviewing', offer: 'Offer', rejected: 'Rejected', no_response: 'No response', skipped: 'Skipped', dismissed: 'Not interested', saved: 'Saved for later',
@@ -279,6 +280,7 @@ async function showRoute() {
     else if (name === 'inbox') await showInbox();
     else if (name === 'recruiters') await showRecruiters();
     else if (name === 'add') showAdd();
+    else if (name === 'cvs' || (name === 'settings' && arg === 'cvs')) await showSettings('cvs');
     else if (name === 'settings') await showSettings(arg || 'connections');
     else location.hash = '#overview';
   } catch (e) {
@@ -302,7 +304,7 @@ async function showOverview() {
   const setup = o.setup;
   const steps = [
     [setup.claude, setup.engine === 'api' ? 'Add your Claude API key' : 'Connect Claude Code', setup.engine === 'api' ? 'Needed to score jobs and tailor your CV.' : 'Uses Claude Code on this PC and your Claude subscription. No API key needed.', '#settings/connections'],
-    [setup.cvs > 0 && !setup.cvs_missing.length, setup.cvs ? 'Your CVs' : 'Add your CV', setup.cvs ? (setup.cvs_missing.length ? `Missing a file: ${setup.cvs_missing.join(', ')}` : `${setup.cvs} CV${setup.cvs === 1 ? '' : 's'} ready.`) : 'Word, PDF or text. Add as many as you like.', '#settings/cvs'],
+    [setup.cvs > 0 && !setup.cvs_missing.length, setup.cvs ? 'Your CVs' : 'Add your CV', setup.cvs ? (setup.cvs_missing.length ? `Missing a file: ${setup.cvs_missing.join(', ')}` : `${setup.cvs} CV${setup.cvs === 1 ? '' : 's'} ready.`) : 'Word, PDF or text. Add as many as you like.', '#cvs'],
     [setup.google, 'Connect Gmail and Calendar (optional)', 'For job email, replies and interview booking.', '#settings/connections', 'google'],
     [setup.adzuna, 'Add a job-search service (optional)', 'Google for Jobs listings from LinkedIn, Indeed, Glassdoor and more.', '#settings/sources', 'search_service'],
   ].filter(st => !(st[4] && (setup.skipped || []).includes(st[4])));
@@ -419,7 +421,7 @@ async function showPipeline(tab) {
         if (j.status === 'dismissed') return 'You marked them not interested';
         if (j.closed_at) return 'The posting closed';
         if (!r.startsWith('Filtered out:')) return 'Fit score below your minimum (Settings → Preferences)';
-        if (r.includes('no title or keyword match')) return 'Title doesn\'t match any job title or keyword in Your CVs';
+        if (r.includes('no title or keyword match')) return 'Title doesn\'t match any job title or keyword in CV & career';
         if (r.includes('location')) return 'Outside your locations';
         if (r.includes('title contains')) return 'Title has a word you skip (Skip titles containing)';
         if (r.includes('salary')) return 'Salary below your minimum';
@@ -431,7 +433,7 @@ async function showPipeline(tab) {
       why = `<section class="card"><header><h2>Why they were skipped</h2>
           <div class="row"><button class="btn" data-act="rescore" data-group="skipped" title="Score these again against your CVs and settings as they are now">Score again</button><button class="btn ghost" data-act="run" data-task="search-force" title="Search again, and look again at postings set aside before">Search again, including set-aside postings</button></div></header>
         <table><tbody>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<tr><td>${esc(k)}</td><td style="text-align:right"><b>${n}</b></td></tr>`).join('')}${elsewhere ? `<tr><td>Outside your locations (not shown)</td><td style="text-align:right"><b>${elsewhere}</b></td></tr>` : ''}</tbody></table>
-        <p class="muted small">Most skips happen before Claude sees a posting: its title must match a job title or keyword from <a href="#settings/cvs">Your CVs</a>, and its location one of your <a href="#settings/search">locations</a>. Change those, then use <b>Score again</b> to check these postings against your new settings.</p></section>`;
+        <p class="muted small">Most skips happen before Claude sees a posting: its title must match a job title or keyword from <a href="#cvs">Your CVs</a>, and its location one of your <a href="#settings/search">locations</a>. Change those, then use <b>Score again</b> to check these postings against your new settings.</p></section>`;
     }
     body = `${why}<input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
       <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Role')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
@@ -670,7 +672,7 @@ async function showJob(id) {
         </section>` : ''}
         <section class="card">
           <header><h2>${j.cv_path ? 'Tailor again' : 'Tailor'}</h2></header>
-          ${tracks.length ? `<p class="muted small">Starts from your <b>${esc(trackLabel(j.track || tracks[0].name))}</b> CV, the closest fit for this role.</p>` : '<p class="muted small">Add a CV in <a href="#settings/cvs">Settings → Your CVs</a> first.</p>'}
+          ${tracks.length ? `<p class="muted small">Starts from your <b>${esc(trackLabel(j.track || tracks[0].name))}</b> CV, the closest fit for this role.</p>` : '<p class="muted small">Add a CV in <a href="#cvs">CV & career</a> first.</p>'}
           <div class="row" ${tracks.length && j.cv_path ? '' : 'hidden'}><button class="btn" data-act="retailor" ${tailoring ? 'disabled' : ''}>Tailor again</button></div>
           ${tracks.length > 1 ? `<details class="small" style="margin-top:6px"><summary class="muted">Use a different CV</summary><div class="row" style="margin-top:6px"><select id="track" style="width:auto">${tracks.map(t => `<option value="${esc(t.name)}" ${t.name === j.track ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select><button class="btn" data-act="retailor" data-pick="1" ${tailoring ? 'disabled' : ''}>Tailor from it</button></div></details>` : ''}
         </section>
@@ -688,7 +690,7 @@ async function showJob(id) {
     <div class="jpane" data-pane="apply" ${tab === 'apply' ? '' : 'hidden'}>
     ${['ready', 'approved', 'applied', 'interviewing'].includes(j.status) || answers ? `<section class="card">
       <header><h2>Application questions</h2>${answering ? '<span class="muted small"><span class="spin"></span>Writing…</span>' : ''}</header>
-      <p class="muted small">Paste the form's questions, one per line, or leave it empty for the usual ones (why this role, salary expectations, notice period…). Answers use your CV, this posting and your <a href="#settings/cvs">facts for forms</a>.</p>
+      <p class="muted small">Paste the form's questions, one per line, or leave it empty for the usual ones (why this role, salary expectations, notice period…). Answers use your CV, this posting and your <a href="#cvs">facts for forms</a>.</p>
       <textarea id="questions" placeholder="Why do you want to work at ${esc(j.company)}?\nHow many years of experience do you have with SAP?">${esc((answers || []).map(a => a.question).join('\n'))}</textarea>
       <div class="row"><button class="btn primary" data-act="answers" ${answering ? 'disabled' : ''}>${answers ? 'Write them again' : 'Write answers'}</button></div>
       ${(answers || []).map((a, i) => `<div class="qa"><b>${esc(a.question)}</b><div class="posting" id="ans${i}">${esc(a.answer)}</div><button class="btn ghost" data-act="copy" data-from="ans${i}">Copy</button></div>`).join('')}
@@ -859,7 +861,7 @@ function reportHtml(r) {
       <a class="btn desktop-only" href="#settings/extras">Send to Job Hunt from LinkedIn</a>
       <button class="btn ghost" data-act="run" data-task="search-force" title="Looks again at postings set aside earlier, with your current settings">Search again, including set-aside postings</button>
     </div>
-    <p class="muted small">Also set up daily job alerts on LinkedIn, Indeed or your country's job sites for your titles, sent to your Gmail: Job Hunt reads them on every email check. If many postings are set aside for their location or title, widen your locations or add titles in <a href="#settings/cvs">Your CVs</a>.</p>
+    <p class="muted small">Also set up daily job alerts on LinkedIn, Indeed or your country's job sites for your titles, sent to your Gmail: Job Hunt reads them on every email check. If many postings are set aside for their location or title, widen your locations or add titles in <a href="#cvs">Your CVs</a>.</p>
     <div id="moreIdeas" class="ideas"></div></details>` : '';
   return `<section class="card"><header><h2>Last search</h2><a class="btn ghost" href="#pipeline/postings">See the postings</a></header>
     <div class="facts"><span><b>${r.found}</b> postings found</span><span><b>${r.new}</b> new</span>${r.known ? `<span><b>${r.known}</b> seen before</span>` : ''}<span title="${esc(why)}"><b>${r.filtered}</b> set aside (title or place didn't match)${why ? ` <span class="muted small">(${esc(why)})</span>` : ''}</span><span><b>${r.scored}</b> checked by Claude</span><span><b>${r.tailored}</b> tailored</span>${r.to_pick ? `<span><b>${r.to_pick}</b> to pick from</span>` : ''}${r.deferred ? `<span><b>${r.deferred}</b> left for next time</span>` : ''}${r.closed ? `<span><b>${r.closed}</b> closed</span>` : ''}</div>
@@ -970,8 +972,8 @@ async function showWelcome() {
           : `<div id="welcomeClaude" class="small muted"><span class="spin"></span> Checking…</div><p class="muted small" style="margin-top:8px">No Claude subscription? <a href="#settings/connections">Use an API key instead</a> (you pay per use).</p>`}`)}
       ${step(2, st.cvs.length > 0, 'Add your CV', `<p class="muted">Word, PDF or text. Add one per kind of role (e.g. data engineering, program delivery). Claude reads each one and suggests the job titles to search for.</p>
         <label class="drop"><input type="file" accept=".docx,.pdf,.txt" multiple data-upload="cv-add" hidden><b>Add CVs</b><br><span class="muted small">Click to choose files</span></label>
-        ${st.cvs.map(c => `<p class="small" style="margin:8px 0 0"><b>${esc(c.label)}</b>: ${(c.titles || []).length} job titles to search, like ${esc((c.titles || []).slice(0, 4).join(', ') || 'none yet')}${(c.areas || []).length ? `<br><span class="muted">Experience found: ${esc(c.areas.map(a => a.split(':')[0]).join(', '))}</span>` : ''} <a href="#settings/cvs">See all and edit</a></p>`).join('')}
-        ${st.cvs.length ? `<p class="small" style="margin-top:8px">${st.career_thinking ? '<span class="spin"></span>Claude is working out your career options: every direction your CV supports, with pay, pros and cons. ' : st.career ? '' : ''}${st.career || st.career_thinking ? '<a href="#settings/cvs">See your career options</a>' : ''}</p>` : ''}`)}
+        ${st.cvs.map(c => `<p class="small" style="margin:8px 0 0"><b>${esc(c.label)}</b>: ${(c.titles || []).length} job titles to search, like ${esc((c.titles || []).slice(0, 4).join(', ') || 'none yet')}${(c.areas || []).length ? `<br><span class="muted">Experience found: ${esc(c.areas.map(a => a.split(':')[0]).join(', '))}</span>` : ''} <a href="#cvs">See all and edit</a></p>`).join('')}
+        ${st.cvs.length ? `<p class="small" style="margin-top:8px">${st.career_thinking ? '<span class="spin"></span>Claude is working out your career options: every direction your CV supports, with pay, pros and cons. ' : st.career ? '' : ''}${st.career || st.career_thinking ? '<a href="#cvs">See your career options</a>' : ''}</p>` : ''}`)}
       ${step(3, (p.locations || []).length > 0, 'Where you want to work', `<form data-form="welcomeWhere" class="form">
           <div class="field">Cities or areas${placePicker('locations', p.locations, (fresh && tzCountry(deviceTz(), st.countries)) || p.sources.adzuna_country)}</div>
           <div class="stack" style="gap:12px">
@@ -1105,7 +1107,7 @@ async function showApply(id) {
         ${facts.length ? `<div class="copy-list">${facts.map((f, i) => copyRow(i === 0 ? 'Name' : i === 1 ? 'Email' : 'From your facts for forms', f, `f${i}`)).join('')}</div>` : ''}
         ${(answers || []).length ? `<h3 class="sub" style="margin-top:12px">Answers to the usual questions</h3><div class="copy-list">${answers.map((a, i) => copyRow(a.question, a.answer, `a${i}`)).join('')}</div>`
           : `<p class="muted">For questions like “Why this company?” or salary expectations, <a href="#job/${encodeURIComponent(j.id)}" data-tab-to="apply">have Claude write answers</a> from your CV and this posting.</p>`}
-        ${(p.application_facts || '').trim() ? '' : '<p class="muted small">Add the facts forms ask for (work authorization, notice period, salary expectations) in <a href="#settings/cvs">Settings → Your CVs</a> to have them here.</p>'}</li>
+        ${(p.application_facts || '').trim() ? '' : '<p class="muted small">Add the facts forms ask for (work authorization, notice period, salary expectations) in <a href="#cvs">CV & career</a> to have them here.</p>'}</li>
       <li class="card"><h2>Done?</h2><p class="muted">Job Hunt then waits for a reply, and reminds you to follow up if none comes${p.follow_up_after ? ` in ${p.follow_up_after} days` : ''}.${on_apply?.to && on_apply.mode !== 'off' && !done
         ? ` It also ${on_apply.mode === 'send' ? 'emails' : 'drafts an email to'} <b>${esc(on_apply.to.name || on_apply.to.email)}</b>${on_apply.to.known ? ', the recruiter you know there, asking them to put you forward' : ' (named in the posting) to say you\'ve applied'}. <a href="#recruiters">Change this</a>` : ''}</p>
         <div class="row">${done ? `<a class="btn" href="#job/${encodeURIComponent(j.id)}">Back to the job</a>` : `<button class="btn primary" data-act="applied" data-job="${esc(j.id)}">${svg('check')}I've submitted it</button><a class="btn ghost" href="${reviewReturn ? '#review' : `#job/${encodeURIComponent(j.id)}`}">Not now</a>`}</div></li>
@@ -1309,7 +1311,7 @@ async function showResults() {
       ${r.thinking ? '<span class="muted small"><span class="spin"></span>Claude is looking…</span>' : `<button class="btn" data-act="insights">${r.insights ? 'Look again' : 'Ask Claude'}</button>`}</header>
       ${r.insights ? `<p class="muted small">From ${esc(fmtDate(r.insights.at))}. Job Hunt also does this once a month by itself.</p>${mdHtml(r.insights.text)}` : '<p class="muted">Claude reads your results and the applications behind them, and says what is working and what to change: titles, CVs, sources or your fit threshold.</p>'}
     </section>
-    ${careerHtml(r.career, r.career_thinking, tracks)}
+    <section class="card row" style="justify-content:space-between"><span><b>Your career options</b><br><span class="muted small">${r.career ? `${(r.career.paths || []).length} directions with pay, pros and cons, and Claude's advice. Ask again now and then: it uses what's working above.` : 'Every direction your CVs support, with pay ranges, pros and cons, and Claude\'s advice.'}</span></span><a class="btn" href="#cvs">${svg('cvs')}Open CV &amp; career</a></section>
     ${f.sent && f.sent < 20 ? '<p class="muted small">With only a few applications in a group, its rates can swing a lot. They settle as you send more.</p>' : ''}`);
 }
 
@@ -1331,7 +1333,7 @@ async function showInbox() {
 function showAdd() {
   const noCv = overview && !overview.setup?.cvs;
   page(`<div class="head"><div class="grow"><h1>Add a job you found</h1><p class="muted">For roles on LinkedIn, company sites or from referrals. Paste the posting and it gets scored and tailored like any other.</p></div></div>
-    ${noCv ? '<section class="card"><p>Add your CV first: Job Hunt compares the posting with it and tailors it for the role.</p><div class="row"><a class="btn primary" href="#settings/cvs">Add your CV</a></div></section>' : ''}
+    ${noCv ? '<section class="card"><p>Add your CV first: Job Hunt compares the posting with it and tailors it for the role.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>' : ''}
     <form class="card" data-form="add"><div class="form">
       <label class="field">Company<input type="text" name="company" required></label>
       <label class="field">Job title<input type="text" name="title" required></label>
@@ -1409,7 +1411,7 @@ let settingsCache = null;
 async function showSettings(tab) {
   const st = settingsCache = await api('/api/settings');
   const p = st.profile;
-  const tabs = [['connections', 'Accounts'], ['sources', 'Job sources'], ['cvs', 'Your CVs'], ['search', 'Preferences'], ['calendar', 'Schedule'], ['extras', 'Extras'], ['app', 'App']];
+  const tabs = [['connections', 'Accounts'], ['sources', 'Job sources'], ['search', 'Preferences'], ['calendar', 'Schedule'], ['extras', 'Extras'], ['app', 'App']];
   let body = '';
   if (tab === 'connections') {
     body = `<section class="card attention" id="connStatus" hidden></section>
@@ -1579,7 +1581,7 @@ async function showSettings(tab) {
         <label class="field">Skip titles containing<textarea name="exclude_title_keywords">${esc(lines(p.exclude_title_keywords))}</textarea></label>
         <label class="field">Minimum yearly salary<input type="number" name="min_salary" min="0" step="1000" value="${p.min_salary ?? ''}" placeholder="No minimum, e.g. 120000"><span class="hint">Digits only. Jobs whose stated maximum is lower are skipped; jobs with no salary are kept.</span></label>
       </div>
-        <label class="field" style="margin-top:14px">What matters to you<textarea name="guidance" placeholder="e.g. Prefer hybrid roles in fintech or government. Avoid pure sales roles. Open to contract roles.">${esc(p.guidance || '')}</textarea><span class="hint">Claude weighs this when scoring. Job titles and keywords for each CV are set in Your CVs.</span></label>
+        <label class="field" style="margin-top:14px">What matters to you<textarea name="guidance" placeholder="e.g. Prefer hybrid roles in fintech or government. Avoid pure sales roles. Open to contract roles.">${esc(p.guidance || '')}</textarea><span class="hint">Claude weighs this when scoring. Job titles and keywords for each CV are set in CV & career.</span></label>
       </section>
       <section class="card"><header><h2>Tailoring</h2></header>
         <label class="check"><input type="checkbox" name="auto_tailor" ${p.auto_tailor ? 'checked' : ''}> <span>Tailor automatically<br><span class="muted small">Off (recommended): after each search you tick which roles to tailor your CV for, on the Overview. On: every role that fits well enough is tailored right away.</span></span></label>
@@ -1713,6 +1715,12 @@ async function showSettings(tab) {
       <label class="field" style="max-width:420px">When I close the window<select data-act="closeMode"><option value="tray" ${st.app.close === 'tray' ? 'selected' : ''}>Keep running in the tray</option><option value="exit" ${st.app.close === 'exit' ? 'selected' : ''}>Exit Job Hunt</option></select></label>
       <div class="row"><button class="btn" data-act="folder" data-which="data">${svg('folder')}Open data folder</button><button class="btn" data-act="folder" data-which="applications">${svg('folder')}Open tailored applications</button></div>
       <p class="muted small">Your data: ${esc(st.app.data)}</p></section>`}`;
+  }
+  if (tab === 'cvs') {
+    page(`<div class="head"><div class="grow"><h1>CV &amp; career</h1><p class="muted">Where everything starts: your CVs, the job titles they search for, and where your career could go next.</p></div><span class="save-state" id="saveState" aria-live="polite">Changes save by themselves</span></div>
+      ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${body}`);
+    if (st.career_thinking) watchCareer(location.hash);
+    return;
   }
   page(`<div class="head"><div class="grow"><h1>Settings</h1></div><span class="save-state" id="saveState" aria-live="polite">${['search', 'calendar', 'cvs', 'sources'].includes(tab) ? 'Changes save by themselves' : ''}</span></div>
     ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
