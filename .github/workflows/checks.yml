@@ -112,6 +112,12 @@ jobs:
             echo | openssl s_client -connect $h:443 -servername $h -showcerts 2>&1 | grep -E "^ *[0-9] s:|^ *i:|Protocol|Cipher is|Verify return|Verification" | head -20
             curl -sS -o /dev/null -w "curl: %{http_code} %{ssl_verify_result}\n" https://$h/job-listings/ || true
           done
+      - name: Each site in a real browser (as the Windows app reads them)
+        if: always()
+        run: |
+          npm install --no-save --silent playwright@1.48.2
+          npx playwright install --with-deps chromium > /dev/null
+          node tools/render_sites.js
       - name: What each site answers
         if: always()
         run: python3 tools/probe_sites.py "Tax Manager" "Toronto, ON"
