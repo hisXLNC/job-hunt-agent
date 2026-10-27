@@ -1,67 +1,53 @@
-/* Job Hunt. Layout: a light sidebar and frame in one paper tint, the work on a white sheet.
-   Type: Instrument Sans throughout, Instrument Serif for the greeting. Fonts ship with the app. */
-/* The house fonts, kept with the app (SIL Open Font License): Instrument Sans for everything,
-   Instrument Serif for the greeting only. */
-@font-face { font-family: "Instrument Sans"; src: url(fonts/InstrumentSans.woff2) format("woff2"); font-weight: 400 700; font-display: swap; }
-@font-face { font-family: "Instrument Serif"; src: url(fonts/InstrumentSerif.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+/* Job Hunt. Layout: fixed sidebar beside a scrolling work area.
+   Type: Bahnschrift (Windows' DIN face) for headings and figures, Segoe UI for text. All fonts are local. */
 :root {
-  --bg: #FFFFFF;            /* the page: a white sheet */
-  --chrome: #F4F4F2;        /* the frame around it: a neutral stone tint */
-  --surface: #F7F7F5;       /* panels, one step off the sheet */
-  --surface-2: #EFEFEC;
-  --raised: #FFFFFF;        /* inputs and the one card inside a panel */
-  --ink: #1F201D;
-  --ink-2: #3D3D3A;
-  --muted: #636361;
-  --line: #E2E2DE;
-  --line-2: #EAEAE6;
-  --accent: #1B6E66;        /* deep teal: data and links only */
-  --accent-hover: #155952;
+  --bg: #EEF0F5;
+  --surface: #FFFFFF;
+  --surface-2: #F5F6FA;
+  --ink: #161B2B;
+  --ink-2: #4A5168;
+  --muted: #5E667D;
+  --line: #D9DDE8;
+  --line-2: #E8EBF2;
+  --accent: #2F4FC4;
+  --accent-hover: #233D9E;
   --accent-ink: #FFFFFF;
-  --accent-soft: #E3F0EE;
-  --primary: #1F201D;       /* the one filled button: near-black */
-  --primary-hover: #000000;
-  --primary-ink: #FFFFFF;
-  --side: var(--chrome);
-  --side-ink: #4A4A47;
-  --side-hi: #1F201D;
-  --side-act: #E9E8E3;
-  --mark: #1B6E66;          /* chart marks: the one data hue */
-  --mark-soft: #CFE5E1;
-  --good: #247B50; --good-soft: #DCFAE5;
-  --warn: #92400E; --warn-soft: #FFF4DB;
-  --crit: #B42318; --crit-soft: #FDECEA;
-  --info: #3D3D3A; --info-soft: #EFEFEC;
-  --shadow: none;
-  --font-d: "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-b: "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
-  --font-serif: "Instrument Serif", Georgia, serif;
+  --accent-soft: #E1E7FA;
+  --side: #121829;
+  --side-ink: #B4BCD3;
+  --side-hi: #FFFFFF;
+  --side-act: #222B45;
+  --mark: #2a78d6;          /* chart marks: validated palette slot 1 */
+  --mark-soft: #cde2fb;
+  --good: #0B7A3B; --good-soft: #DDF1E4;
+  --warn: #8F5B00; --warn-soft: #FBEFD3;
+  --crit: #B42D2D; --crit-soft: #F8E1DF;
+  --info: #2C5C9E; --info-soft: #E2EAF6;
+  --shadow: 0 1px 2px rgba(18, 24, 41, .06), 0 8px 24px rgba(18, 24, 41, .06);
+  --font-d: Bahnschrift, "DIN Alternate", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-b: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   --font-m: "Cascadia Mono", Consolas, ui-monospace, monospace;
-  --r: 22px;
+  --r: 8px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111111; --chrome: #000000; --surface: #1A1A1A; --surface-2: #222222; --raised: #111111;
-    --ink: #FFFFFF; --ink-2: #D0D0D0; --muted: #B4B4B4; --line: #2E2E2E; --line-2: #242424;
-    --accent: #4FB3A8; --accent-hover: #6CC4BA; --accent-ink: #000000; --accent-soft: #15302C;
-    --primary: #FFFFFF; --primary-hover: #E6E6E6; --primary-ink: #000000;
-    --side: var(--chrome); --side-ink: #B4B4B4; --side-hi: #FFFFFF; --side-act: #222222;
-    --mark: #4FB3A8; --mark-soft: #1E4A45;
-    --good: #3FC07A; --good-soft: #172A1D; --warn: #E3A83C; --warn-soft: #2E2410; --crit: #E5566F; --crit-soft: #2C1A20; --info: #D0D0D0; --info-soft: #222222;
-    --shadow: none;
+    --bg: #0D111B; --surface: #151A27; --surface-2: #1B2131; --ink: #E6E9F2; --ink-2: #B8BFD2; --muted: #9AA2B8;
+    --line: #2A3144; --line-2: #212738; --accent: #8EA4FF; --accent-hover: #A9BAFF; --accent-ink: #0B1233; --accent-soft: #1F2747;
+    --side: #090C14; --side-ink: #A0A8C0; --side-hi: #FFFFFF; --side-act: #1A2138;
+    --mark: #3987e5; --mark-soft: #184f95;
+    --good: #52C47F; --good-soft: #14301F; --warn: #E3A83C; --warn-soft: #33270F; --crit: #EE7474; --crit-soft: #3A1B1B; --info: #82AAE6; --info-soft: #172539;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #111111; --chrome: #000000; --surface: #1A1A1A; --surface-2: #222222; --raised: #111111;
-  --ink: #FFFFFF; --ink-2: #D0D0D0; --muted: #B4B4B4; --line: #2E2E2E; --line-2: #242424;
-  --accent: #4FB3A8; --accent-hover: #6CC4BA; --accent-ink: #000000; --accent-soft: #15302C;
-  --primary: #FFFFFF; --primary-hover: #E6E6E6; --primary-ink: #000000;
-  --side: var(--chrome); --side-ink: #B4B4B4; --side-hi: #FFFFFF; --side-act: #222222;
-  --mark: #4FB3A8; --mark-soft: #1E4A45;
-  --good: #3FC07A; --good-soft: #172A1D; --warn: #E3A83C; --warn-soft: #2E2410; --crit: #E5566F; --crit-soft: #2C1A20; --info: #D0D0D0; --info-soft: #222222;
-  --shadow: none;
+  --bg: #0D111B; --surface: #151A27; --surface-2: #1B2131; --ink: #E6E9F2; --ink-2: #B8BFD2; --muted: #9AA2B8;
+  --line: #2A3144; --line-2: #212738; --accent: #8EA4FF; --accent-hover: #A9BAFF; --accent-ink: #0B1233; --accent-soft: #1F2747;
+  --side: #090C14; --side-ink: #A0A8C0; --side-hi: #FFFFFF; --side-act: #1A2138;
+  --mark: #3987e5; --mark-soft: #184f95;
+  --good: #52C47F; --good-soft: #14301F; --warn: #E3A83C; --warn-soft: #33270F; --crit: #EE7474; --crit-soft: #3A1B1B; --info: #82AAE6; --info-soft: #172539;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
   color-scheme: dark;
 }
 
@@ -248,7 +234,11 @@ tr.click:hover td { background: var(--surface-2); }
 .ring.faint { opacity: .6; }
 .ring.faint b { font-size: 17px; }
 /* The predicted fit after tailoring, next to a fit score. */
-.reach { margin-left: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reach { display: inline-flex; align-items: center; margin-left: 2px; white-space: nowrap; }
+td.fit { white-space: nowrap; }
+.more-places { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.reach-arrow { color: var(--muted); font-size: 11px; margin: 0 2px; }
+.score.forecast { background: transparent; border: 1.5px dashed currentColor; }
 .flags { margin: 0; padding-left: 18px; color: var(--crit); font-size: 13px; }
 
 /* setup checklist */
@@ -354,7 +344,7 @@ table.jobs td.role { min-width: 240px; width: 40%; }
 table.jobs td.salary { min-width: 110px; max-width: 190px; line-height: 1.35; }
 table.jobs td.stage { min-width: 120px; }
 table.jobs td.stage .pill { margin: 0 4px 4px 0; }
-table.jobs td.why { min-width: 200px; max-width: 360px; }
+table.jobs td.why { min-width: 160px; max-width: 360px; }
 td.nowrap { white-space: nowrap; }
 th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover, th.sorted { color: var(--ink); }
@@ -641,14 +631,14 @@ details.card > summary { cursor: pointer; list-style-position: outside; }
 /* Postings on a phone: role (with its stage) and fit; age, pay, source and the link button only on wider screens. */
 @media (max-width: 760px) {
   #t-postings th:not(:nth-child(2)):not(:nth-child(6)), #t-postings td:not(:nth-child(2)):not(:nth-child(6)) { display: none; }
-  #t-postings .reach { display: block; margin: 2px 0 0; }
+  #t-postings .reach { display: flex; margin: 4px 0 0; }
 }
 .phone-only { display: none; }
 @media (max-width: 760px) { .phone-only { display: inline; } }
 /* The other job tables on a phone: fit and role, with the stage (or why it was skipped) under the role. */
 @media (max-width: 760px) {
   #t-skipped th:nth-child(n+3), #t-skipped td:nth-child(n+3), #t-list th:nth-child(n+3):nth-child(-n+7), #t-list td:nth-child(n+3):nth-child(-n+7) { display: none; }
-  #t-skipped .reach, #t-list .reach { display: block; margin: 2px 0 0; }
+  #t-skipped .reach, #t-list .reach { display: flex; margin: 4px 0 0; }
   .card > header { flex-wrap: wrap; }
 }
 /* A company's employee rating: a small tag in lists, a big one on the job page. */
@@ -658,76 +648,13 @@ details.card > summary { cursor: pointer; list-style-position: outside; }
 .stars.lo, .big-stars.lo { color: var(--crit); }
 .big-stars { font-family: var(--font-d); font-size: 28px; font-weight: 700; line-height: 1.1; }
 
-/* ---- The house style: colour on data, not chrome; panels one tone step off the sheet, no
-   shadows at rest; figures at regular weight; sentence case, no tracked capitals. ---- */
-body { background: var(--chrome); }
-.side { background: var(--chrome); color: var(--side-ink); }
-.brand strong { letter-spacing: 0; text-transform: none; font-size: 16px; }
-nav.main a { font-weight: 500; border-radius: 999px; padding: 7px 12px; }
-nav.main a:hover { background: var(--side-act); color: var(--side-hi); }
-nav.main a .badge { background: var(--ink); color: var(--bg); }
-.side-foot .warn-line { color: var(--warn); }
-.theme-switch { background: var(--surface-2); border-color: transparent; border-radius: 999px; }
-.theme-switch button { border-radius: 999px; }
-.theme-switch button.on { background: var(--bg); box-shadow: none; }
-main { background: var(--bg); margin: 8px 8px 8px 0; border: 1px solid var(--line-2); border-radius: 16px; min-height: calc(100vh - 16px); }
-.page { max-width: 1180px; padding: 32px 40px 56px; gap: 16px; }
-.eyebrow { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; }
-h1 { font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
-h2 { font-size: 15px; font-weight: 600; }
-.greet h1 { font-family: var(--font-serif); font-weight: 400; font-size: 44px; line-height: 1.05; letter-spacing: -.01em; }
-.card, .kpi, .modal { box-shadow: none; }
-.card { background: var(--surface); border: 0; border-radius: var(--r); padding: 20px 22px; }
-.card .card, .card .kpi { background: var(--raised); }
-.kpi { background: var(--surface); border: 0; border-radius: var(--r); padding: 16px 18px; }
-a.kpi:hover { background: var(--surface-2); }
-.kpi-l { color: var(--muted); font-weight: 500; }
-.kpi-v { font-size: 32px; font-weight: 400; letter-spacing: -.01em; }
-.btn { border-radius: 999px; border-color: var(--line); background: var(--raised); padding: 7px 16px; }
-.btn:hover { border-color: var(--ink-2); }
-.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
-.btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
-.btn.ghost { background: none; border-color: transparent; color: var(--accent); }
-input[type=text], input[type=search], input[type=email], input[type=url], input[type=number], input[type=password], select, textarea { background: var(--raised); border-color: var(--line); border-radius: 10px; }
-.pill { font-weight: 500; border: 0; }
-.score { font-family: var(--font-b); font-weight: 500; border-radius: 999px; }
-.tabs a.on { color: var(--ink); }
-.lane h3, .todo-group h3, .pick-cv, .conn-group, .cal-h, .who, .ladder .when { text-transform: none; letter-spacing: 0; }
-.todo-group h3 { font-size: 13px; font-weight: 600; color: var(--ink-2); }
-.jcard { background: var(--raised); border-color: var(--line-2); border-radius: 14px; }
-.ideas-card { background: var(--accent-soft); }
-.cal-d.today { box-shadow: none; }
-/* The one card inside a panel that floats: dialogs, menus, toasts and tooltips keep a soft shadow. */
-.modal, .toast, .tip { box-shadow: 0 12px 32px rgba(0, 0, 0, .14); }
-@media (max-width: 760px) {
-  main { margin: 0; border: 0; border-radius: 0; min-height: 100vh; }
-  .page { padding: 18px 16px 88px; }
-  .greet h1 { font-size: 30px; }
-}
-.tabs a.on { color: var(--ink); border-bottom-color: var(--ink); }
-.seg button.on { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
-.sync-banner { background: var(--accent-soft); }
-.update-note { border-color: transparent; border-radius: 14px; }
-/* Overview: the to-do list beside the last search, 3 : 1. */
-.home-grid { display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 1000px) { .home-grid { grid-template-columns: 1fr; } }
-.facts-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
-.facts-list > div { display: flex; flex-direction: column; }
-.facts-list b { font-size: 22px; font-weight: 400; }
-table.mini { margin-top: 6px; }
-table.mini td { padding: 5px 4px; border-bottom: 1px solid var(--line-2); }
-table.mini td.num { text-align: right; }
-.optional-steps { gap: 8px; }
-.optional-steps .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 /* The Send to Job Hunt button, shown as it will sit in the bookmarks bar. */
 .btn.bookmarklet { cursor: grab; border-style: dashed; }
 /* Small drawn icons: a chip's remove mark, a rating's star. */
 .chip svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; vertical-align: -1px; }
 .stars svg, .big-stars svg { width: .85em; height: .85em; fill: currentColor; stroke: none; vertical-align: -.05em; margin-right: 2px; }
-/* Phone tabs: the selected one is the filled near-black pill, its words in the matching ink. */
-@media (max-width: 760px) { .tabs a.on { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); } }
 /* Company and location in their own columns, everywhere a list of roles lines up. */
-td.co { min-width: 120px; }
+td.co { min-width: 100px; }
 td.loc { min-width: 110px; color: var(--ink-2); }
 .todo-row .grow { flex: 1 1 200px; }
 .todo-row .co { flex: 0 1 150px; min-width: 0; }
@@ -740,6 +667,5 @@ td.loc { min-width: 110px; color: var(--ink-2); }
 }
 @media (max-width: 1000px) and (min-width: 761px) { .todo-row .phone-only, .trow .phone-only, .docrow .phone-only { display: inline; } }
 .docrow > a { min-width: 0; }
-td.salary { min-width: 110px; }
-td.salary { white-space: normal; max-width: 130px; }
-table.jobs td { padding: 10px 8px; }
+td.salary { min-width: 110px; white-space: normal; max-width: 130px; }
+table.jobs td { padding: 10px 7px; }

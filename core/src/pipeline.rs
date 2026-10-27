@@ -4609,6 +4609,7 @@ impl Agent {
             "closing_soon": closing,
             "health": health,
             "weekly_goal": profile.weekly_goal,
+            "places": profile.locations,
             "auto_boards": profile.sources.auto_boards,
             "last_report": db.get("last.report")?.and_then(|r| serde_json::from_str::<Value>(&r).ok()),
             "setup": {

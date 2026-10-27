@@ -170,14 +170,44 @@ function ago(iso) {
   return d === 1 ? 'yesterday' : `${d} days ago`;
 }
 const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
-const scoreBadge = n => n == null ? '' : `<span class="score ${n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo'}" title="Fit score">${n}</span>`;
-/** "fit 72 → 85": your CV's fit before tailoring and the tailored CV's after. */
-const fitChange = j => j.score != null && j.score_after != null && j.score_after !== j.score ? `fit ${j.score} → <b>${j.score_after}</b>` : '';
+const scoreBand = n => n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo';
+const scoreBadge = n => n == null ? '' : `<span class="score ${scoreBand(n)}" title="Fit score">${n}</span>`;
 /** Company and location as their own cells: the company with its rating, a dash for no place. */
 const coCell = j => `${esc(j.company)}${ratingTag(j.rating)}`;
-const locCell = j => j.location ? esc(j.location) : '<span class="muted">–</span>';
+/** Country names as a place line spells them, and the short form a remote role shows: "Remote (US)". */
+const COUNTRY_SHORT = [[/^(united states( of america)?|usa|u\.?s\.?a?\.?)$/i, 'US'], [/^canada$/i, 'Canada'], [/^(united kingdom|uk|great britain|england)$/i, 'UK'],
+  [/^(australia|ireland|germany|france|india|netherlands|spain|singapore|kuwait|qatar|united arab emirates|uae|saudi arabia|new zealand|mexico|brazil|poland|portugal|italy|sweden|switzerland|japan|philippines|south africa)$/i, null]];
+const countryOf = s => { for (const [re, short] of COUNTRY_SHORT) if (re.test(s.trim())) return short || s.trim(); return null; };
+/** A posting's place, short. Job sites send a city ("Toronto, ON"), a long list ("United States of America, Eagan,
+ *  Minnesota; …; Canada, Toronto, Ontario") or remote ("Remote - US"). Shows the one nearest your places with
+ *  "+N more", and remote roles as "Toronto (remote)" or "Remote (US)". The full text stays in the tooltip. */
+function placeShort(raw) {
+  const all = String(raw || '').trim();
+  if (!all) return '';
+  const how = /\bremote\b|work from home|\bwfh\b/i.test(all) ? 'remote' : /\bhybrid\b/i.test(all) ? 'hybrid' : '';
+  let country = null;
+  const places = all.split(/\s*(?:;|\||\n|\s\/\s|•)\s*/).map(p => {
+    const bits = p.replace(/\(?\b(remote|hybrid|on-?site|in-?office|work from home|wfh|anywhere)\b\)?/ig, ' ').replace(/[()]/g, ' ')
+      .split(/\s*,\s*|\s+[–-]\s+|^\s*[–-]\s*|\s*[–-]\s*$/).map(b => b.trim()).filter(Boolean);
+    const rest = bits.filter(b => { const c = countryOf(b); if (c) country = country || c; return !c; });
+    return rest.slice(0, 2).join(', ');
+  }).filter(Boolean);
+  const mine = (overview?.places || []).map(p => String(p).split(',')[0].trim().toLowerCase()).filter(Boolean);
+  const pick = places.find(p => mine.some(m => p.toLowerCase().includes(m))) || places[0];
+  const more = places.length > 1 ? ` +${places.length - 1} more` : '';
+  if (!pick) return how === 'remote' ? `Remote${country ? ` (${country})` : ''}` : how === 'hybrid' ? 'Hybrid' : all;
+  return `${pick}${how ? ` (${how})` : ''}${more}`;
+}
+/** The place as shown, with the posting's own text on hover when it was shortened. */
+const placeHtml = j => {
+  const s = placeShort(j.location);
+  if (s === j.location) return esc(s);
+  const [, place, more] = s.match(/^(.*?)( \+\d+ more)?$/);
+  return `<span title="${esc(j.location)}">${esc(place)}${more ? ` <span class="more-places">${esc(more.trim())}</span>` : ''}</span>`;
+};
+const locCell = j => j.location ? placeHtml(j) : '<span class="muted">–</span>';
 /** On a phone the columns fold: company and place under the role. */
-const coLocLine = j => `<span class="phone-only"><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span></span>`;
+const coLocLine = j => `<span class="phone-only"><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}</span></span>`;
 /** A company's employee rating, as a small star tag with the rating out of 5. */
 const ratingTag = r => r?.found && r.rating != null ? ` <span class="stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}" title="Employees rate it ${r.rating.toFixed(1)} out of 5${r.reviews ? `, ${r.reviews.toLocaleString()} reviews` : ''}${r.source ? ` on ${esc(r.source)}` : ''}">${svg('star')}${r.rating.toFixed(1)}</span>` : '';
 /** What employees say, as a card for the job page. */
@@ -200,7 +230,10 @@ function ratingCard(r, busy, company) {
 }
 /** The predicted fit after tailoring, while it isn't tailored yet: "could reach ~85". */
 const canReach = j => j.score_after == null && j.score_potential != null && j.score != null && j.score_potential >= j.score ? j.score_potential : null;
-const reachTag = j => canReach(j) ? `<span class="reach" title="${canReach(j) > j.score ? 'Predicted fit once your CV is tailored to this posting' : 'Tailoring is unlikely to raise this fit: the gap is in experience, not wording'}">→ ~${canReach(j)}</span>` : '';
+/** After the fit badge: the tailored CV's fit as a second badge, or the forecast one (dashed) before tailoring. */
+const reachTag = j => j.score != null && j.score_after != null && j.score_after !== j.score
+  ? `<span class="reach"><span class="reach-arrow">→</span><span class="score ${scoreBand(j.score_after)}" title="Fit of the tailored CV">${j.score_after}</span></span>`
+  : canReach(j) ? `<span class="reach"><span class="reach-arrow">→</span><span class="score forecast ${scoreBand(canReach(j))}" title="${canReach(j) > j.score ? 'Predicted fit once your CV is tailored to this posting' : 'Tailoring is unlikely to raise this fit: the gap is in experience, not wording'}">~${canReach(j)}</span></span>` : '';
 const trackLabel = t => (settingsCache?.profile?.tracks || []).find(x => x.name === t)?.label || overview?.track_labels?.[t] || (t || '').replace(/[-_]/g, ' ');
 const stagePill = s => `<span class="pill ${esc(s)}">${esc(STAGES[s] || s)}</span>`;
 /** When the posting stops taking applications, if it says; red when it's two days or less away. */
@@ -356,26 +389,18 @@ async function showOverview() {
   const maxStage = Math.max(1, ...stages.map(s => c[s] || 0));
   const maxWeek = Math.max(1, ...o.weeks.map(w => w.count));
   const searching = o.running.includes('search');
-  // Today's one fact, from the data: what's waiting on you.
-  const waiting = [c.ready ? `${c.ready} ready to approve` : '', (o.approved || []).length ? `${o.approved.length} to submit` : '', c.queued ? `${c.queued} to pick from` : '', o.interviews.length ? `${o.interviews.length} interview${o.interviews.length === 1 ? '' : 's'} coming up` : ''].filter(Boolean);
-  const fact = waiting.length ? `${waiting.join(', ').replace(/, ([^,]*)$/, ' and $1')}.` : 'Nothing is waiting on you.';
   page(`
-    <div class="head greet">
+    <div class="head">
       <div class="grow">
+        <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
         <h1>${greeting()}${first ? `, ${esc(first)}` : ''}</h1>
-        <p class="muted" style="margin-top:8px">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} · ${esc(fact)}</p>
+        <p class="muted">Last job search ${ago(o.last_search)} · last email check ${ago(o.last_inbox)}</p>
       </div>
       <div class="row">
         <button class="btn" data-act="run" data-task="inbox" ${setup.google ? '' : 'disabled title="Connect Google first"'}>${svg('mail')}Check email</button>
         <button class="btn primary" data-act="run" data-task="search" ${searching ? 'disabled' : !setup.cvs ? 'disabled title="Add your CV first"' : ''}>${searching ? '<span class="spin"></span>Searching…' : `${svg('search')}Search for jobs now`}</button>
       </div>
     </div>
-    <section class="kpis">
-      <a class="kpi" href="#pipeline"><span class="kpi-l">Ready to approve</span><span class="kpi-v">${c.ready || 0}</span><span class="kpi-s">${c.queued ? `${c.queued} more to pick from` : 'Tailored CV and cover letter each'}</span></a>
-      <div class="kpi"><span class="kpi-l">Applied this week</span><span class="kpi-v">${o.this_week}${o.weekly_goal ? `<span class="muted" style="font-size:.5em"> / ${o.weekly_goal}</span>` : ''}</span>${o.weekly_goal ? `<span class="meter"><i style="width:${Math.min(100, o.this_week / o.weekly_goal * 100)}%"></i></span>` : ''}<span class="kpi-s">${delta === 0 ? 'Same as last week' : `<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span> vs last week`}</span></div>
-      <div class="kpi"><span class="kpi-l">Interviews coming up</span><span class="kpi-v">${o.interviews.length}</span><span class="kpi-s">${next ? `Next: ${esc(fmtWhen(next.start))}` : 'None booked yet'}</span></div>
-      <div class="kpi"><span class="kpi-l">Response rate</span><span class="kpi-v">${pct(o.response_rate)}</span><span class="kpi-s">${o.applied_total ? `Of ${o.applied_total} application${o.applied_total === 1 ? '' : 's'} sent` : 'No applications sent yet'}</span></div>
-    </section>
     ${syncNewerHtml(o.sync_newer)}
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}
@@ -384,18 +409,20 @@ async function showOverview() {
       ${h.action === 'removeBroken' ? `<span class="row" style="display:inline-flex;margin-left:6px"><button class="btn" data-act="removeBroken" data-boards="${esc(JSON.stringify(h.data))}">Remove ${h.data.length === 1 ? 'it' : 'them'}</button><button class="btn primary" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button></span>` : ''}
       ${h.fix ? `<button class="btn sm" style="margin-left:6px" data-act="${esc(h.fix.act)}" data-task="${esc(h.fix.task)}">${esc(h.fix.label)}</button>` : ''}
       ${h.link && h.link !== '#overview' ? `<a href="${esc(h.link)}">Fix it</a>` : ''}</li>`).join('')}</ul><div id="healthIdeas" class="ideas"></div></section>` : ''}
-    <div class="home-grid">
-      <div class="stack">${todoHtml(o)}</div>
-      <div class="stack">
-        ${o.progress ? progressHtml(o.progress) : reportHtml(o.last_report)}
-        ${showSteps && neededDone ? `<section class="card optional-steps"><h2>Optional</h2>${steps.filter(st => st[4] && !st[0]).map(([, t, d, href, key]) =>
-          `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
-      </div>
-    </div>
+    ${todoHtml(o)}
+    ${showSteps && neededDone ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && !st[0]).map(([, t, d, href, key]) =>
+      `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
+    ${o.progress ? progressHtml(o.progress) : reportHtml(o.last_report)}
+    <section class="kpis">
+      <a class="kpi" href="#pipeline"><span class="kpi-l">Ready to approve</span><span class="kpi-v">${c.ready || 0}</span><span class="kpi-s">${c.queued ? `${c.queued} more to pick from` : 'Tailored CV and cover letter each'}</span></a>
+      <div class="kpi"><span class="kpi-l">Applied this week</span><span class="kpi-v">${o.this_week}${o.weekly_goal ? `<span class="muted" style="font-size:.5em"> / ${o.weekly_goal}</span>` : ''}</span>${o.weekly_goal ? `<span class="meter"><i style="width:${Math.min(100, o.this_week / o.weekly_goal * 100)}%"></i></span>` : ''}<span class="kpi-s">${delta === 0 ? 'Same as last week' : `<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span> vs last week`}</span></div>
+      <div class="kpi"><span class="kpi-l">Interviews coming up</span><span class="kpi-v">${o.interviews.length}</span><span class="kpi-s">${next ? `Next: ${esc(fmtWhen(next.start))}` : 'None booked yet'}</span></div>
+      <div class="kpi"><span class="kpi-l">Response rate</span><span class="kpi-v">${pct(o.response_rate)}</span><span class="kpi-s">${o.applied_total ? `Of ${o.applied_total} application${o.applied_total === 1 ? '' : 's'} sent` : 'No applications sent yet'}</span></div>
+    </section>
     <details class="card"><summary><b>Recent activity</b></summary>
       ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
     </details>
-    <p class="muted small">Last job search ${ago(o.last_search)} · last email check ${ago(o.last_inbox)} · <a href="#results">Results: what's working</a></p>`);
+    <p class="muted small" style="text-align:center"><a href="#results">Results: what's working</a> · <a href="#calendar">Calendar</a></p>`);
 }
 
 // ---- Applications ----
@@ -450,7 +477,7 @@ async function showPipeline(tab) {
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}<br><span class="small">${esc(sourceName(j.source))}</span></td>
         <td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${stagePill(j.status)}</span></td>
         <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td><td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
-        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
+        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="fit" data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
         <td>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">No postings yet. Run a search from the Overview.</p>'}</section>`;
   } else {
@@ -483,7 +510,7 @@ async function showPipeline(tab) {
     body = `${why}<input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
       <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Role')}${sortTh('Company')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
+        <td class="fit" data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
         <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td><td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>${tab === 'skipped'
           ? `<td class="small why" data-v="${esc((j.reasoning || '').toLowerCase())}">${worth(j)}${esc(j.reasoning || '')}</td>`
@@ -573,7 +600,7 @@ try { Object.assign(sortState, JSON.parse(localStorage.getItem('sort') || '{}'))
 function card(j) {
   return `<a class="jcard" href="#job/${encodeURIComponent(j.id)}">
     <span class="t">${esc(j.title)} ${closedTag(j)}${deadlineTag(j)}</span>
-    <span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span>
+    <span class="muted small">${esc(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}</span>
     ${j.salary ? `<span class="small">${salaryCell(j)}</span>` : ''}
     <span class="row small">${scoreBadge(j.score)}${j.coverage_after != null ? `<span class="muted">${pct(j.coverage_after)} of the posting's keywords</span>` : ''}</span>
   </a>`;
@@ -624,7 +651,7 @@ async function showJob(id) {
       <div class="grow">
         <div class="eyebrow"><a href="#pipeline">Applications</a> / ${esc(STAGES[j.status] || j.status)}</div>
         <h1>${esc(j.title)}</h1>
-        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(rating)}</b>${j.location ? `<span>${esc(j.location)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}</div>
+        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}</div>
       </div>
     </div>
     <div class="actions">
@@ -652,7 +679,7 @@ async function showJob(id) {
         <section class="card">
           <header><h2>Fit</h2></header>
           <div class="row" style="align-items:flex-start;gap:16px;flex-wrap:nowrap">
-            ${j.score != null ? `<div class="fit-pair"><div><div class="ring" style="--p:${j.score}"><b>${j.score}</b></div><span class="muted small">${j.score_after != null || canReach(j) ? 'your CV' : 'fit'}</span></div>${j.score_after != null ? `<span class="fit-arrow">→</span><div><div class="ring" style="--p:${j.score_after}"><b>${j.score_after}</b></div><span class="muted small">tailored</span></div>` : canReach(j) ? `<span class="fit-arrow">→</span><div><div class="ring faint" style="--p:${canReach(j)}"><b>~${canReach(j)}</b></div><span class="muted small">could reach</span></div>` : ''}</div>` : ''}
+            ${j.score != null ? `<div class="fit-pair"><div><div class="ring" style="--p:${j.score}"><b>${j.score}</b></div><span class="muted small">${j.score_after != null || canReach(j) ? 'your CV' : 'fit'}</span></div>${j.score_after != null ? `<span class="fit-arrow">→</span><div><div class="ring" style="--p:${j.score_after}"><b>${j.score_after}</b></div><span class="muted small">tailored</span></div>` : canReach(j) ? `<span class="fit-arrow">→</span><div><div class="ring" style="--p:${canReach(j)}"><b>~${canReach(j)}</b></div><span class="muted small">could reach</span></div>` : ''}</div>` : ''}
             <div><p>${esc(j.reasoning || 'Not scored yet.')}</p>${j.track ? `<p class="muted small" style="margin-top:6px">Matched to your <b>${esc((tracks.find(t => t.name === j.track) || {}).label || j.track)}</b> CV.${j.score_after != null ? ` After tailoring, the same check scores the tailored CV <b>${j.score_after}</b> (${j.score_after >= j.score ? '+' : ''}${j.score_after - j.score}).` : canReach(j) ? ` Tailored to this posting, it could reach about <b>${canReach(j)}</b>: a prediction from the same experience, worded the way the posting does.` : ''}</p>` : ''}</div>
           </div>
           ${flags.length ? `<div><b class="small">Red flags</b><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : ''}
@@ -820,7 +847,7 @@ async function showJob(id) {
 function todoHtml(o) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
   const row = (j, sub, actions) => `<div class="todo-row">
-      ${scoreBadge(j.score)}
+      <span style="white-space:nowrap">${scoreBadge(j.score)}${reachTag(j)}</span>
       <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${sub ? `<br><span class="muted small">${sub}</span>` : ''}${coLocLine(j)}</a>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
       <span class="row todo-act">${actions}</span></div>`;
@@ -848,13 +875,13 @@ function todoHtml(o) {
     })()}
     <div class="row" style="margin-top:8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div></div>`]);
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
-  if (o.ready?.length) groups.push([`Ready to approve (${o.counts.ready}) <a class="btn sm" href="#review" style="margin-left:8px">Review them one by one</a>`, o.ready.map(j => row(j, [fitChange(j), j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
-    `<a class="btn" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
+  if (o.ready?.length) groups.push([`Ready to approve (${o.counts.ready}) <a class="btn primary sm" href="#review" style="margin-left:8px">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
+    `<a class="btn primary" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
      <button class="btn ghost" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`)).join('')]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
-    `<button class="btn" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
+    `<button class="btn primary" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
   if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, '',
-    `<a class="btn" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
+    `<a class="btn primary" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
      <button class="btn ghost" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,
     o.quiet.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}, no reply`,
@@ -912,21 +939,10 @@ function reportHtml(r) {
     </div>
     <p class="muted small">Also set up daily job alerts on LinkedIn, Indeed or your country's job sites for your titles, sent to your Gmail: Job Hunt reads them on every email check. If many postings are set aside for their location or title, widen your locations or add titles in <a href="#cvs">Your CVs</a>.</p>
     <div id="moreIdeas" class="ideas"></div></details>` : '';
-  const src = r.by_source || [];
-  const broken = src.filter(x => x.failed && x.failed >= (x.searches || 1));
-  const n = v => Number(v || 0).toLocaleString();
-  return `<section class="card"><header><h2>Last search</h2><a class="btn ghost sm" href="#pipeline/postings">Postings</a></header>
-    <div class="facts-list">
-      <div><span class="kpi-l">Found</span><b class="num">${n(r.found)}</b></div>
-      <div><span class="kpi-l">New</span><b class="num">${n(r.new)}</b></div>
-      <div><span class="kpi-l">To pick from</span><b class="num">${n(r.to_pick)}</b></div>
-      <div><span class="kpi-l">Tailored</span><b class="num">${n(r.tailored)}</b></div>
-    </div>
-    ${src.length ? `<details class="small"><summary>From ${src.length} source${src.length === 1 ? '' : 's'}${broken.length ? ` · <span class="bad-text">${broken.length} didn't work</span>` : ''}</summary>
-      <table class="mini">${[...src].sort((a, b) => (b.failed >= (b.searches || 1)) - (a.failed >= (a.searches || 1)) || b.found - a.found).map(x => `<tr><td>${esc(sourceName(x.name))}</td><td class="num">${n(x.found)}</td><td>${x.failed >= (x.searches || 1) ? '<span class="bad-text">Didn\'t work</span>' : x.failed ? `<span class="muted">${x.failed} of ${x.searches} searches failed</span>` : ''}</td></tr>`).join('')}</table>
-      ${broken.length ? '<p style="margin-top:6px"><a href="#settings/sources">Fix or turn them off in Job sources</a></p>' : ''}</details>` : ''}
-    <details class="small"><summary>More detail</summary><p style="margin-top:6px">${n(r.known)} seen before · ${n(r.filtered)} set aside (title or place didn't match${why ? `: ${esc(why)}` : ''}) · ${n(r.scored)} checked by Claude${r.deferred ? ` · ${n(r.deferred)} left for next time` : ''}${r.closed ? ` · ${n(r.closed)} closed` : ''}</p>
-      ${probs.length ? `<ul class="flags">${probs.slice(0, 12).map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}</details>
+  return `<section class="card"><header><h2>Last search</h2><a class="btn ghost" href="#pipeline/postings">See the postings</a></header>
+    <div class="facts"><span><b>${r.found}</b> postings found</span><span><b>${r.new}</b> new</span>${r.known ? `<span><b>${r.known}</b> seen before</span>` : ''}<span title="${esc(why)}"><b>${r.filtered}</b> set aside (title or place didn't match)${why ? ` <span class="muted small">(${esc(why)})</span>` : ''}</span><span><b>${r.scored}</b> checked by Claude</span><span><b>${r.tailored}</b> tailored</span>${r.to_pick ? `<span><b>${r.to_pick}</b> to pick from</span>` : ''}${r.deferred ? `<span><b>${r.deferred}</b> left for next time</span>` : ''}${r.closed ? `<span><b>${r.closed}</b> closed</span>` : ''}</div>
+    ${(r.by_source || []).length ? `<p class="small muted" style="margin:8px 0 0">From: ${r.by_source.map(x => `${esc(x.name)} <b>${x.found}</b>${x.failed ? ` <span class="bad-text">(${x.failed === x.searches ? 'failed' : `${x.failed} of ${x.searches} searches failed`})</span>` : ''}`).join(' · ')}</p>` : ''}
+    ${probs.length ? `<details style="margin-top:8px"><summary class="small">${probs.length} problem${probs.length === 1 ? '' : 's'}</summary><ul class="flags">${probs.slice(0, 12).map(p => `<li>${esc(p)}</li>`).join('')}</ul></details>` : ''}
     ${more}
   </section>`;
 }
@@ -968,7 +984,7 @@ async function togglePosting(tr) {
     const id = esc(j.id);
     box.innerHTML = `
       <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div><b>${esc(j.title)}</b> · ${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''}
+        <div><b>${esc(j.title)}</b> · ${esc(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''}
           <div class="muted small">${ageTag(j)} · found on ${esc(sourceName(j.source))}</div></div>
         <div class="row">
           ${j.url ? `<button class="btn" data-act="open" data-what="posting" data-job="${id}">${svg('open')}Open posting</button>` : ''}
@@ -1106,7 +1122,7 @@ async function showReview() {
   const flags = j.red_flags || [];
   j.warnings = warnings || [];
   page(`<div class="head"><div class="grow"><div class="eyebrow">Review · ${queue.length} to go${done ? ` · ${done} skipped` : ''}</div>
-      <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${esc(j.location)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${deadlineTag(j)}</div></div>
+      <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${deadlineTag(j)}</div></div>
       <a class="btn ghost" href="#overview">Exit review</a></div>
     ${revising ? '<section class="card"><p><span class="spin"></span> Making your changes… this updates by itself.</p></section>' : ''}
     <div class="grid-2">
