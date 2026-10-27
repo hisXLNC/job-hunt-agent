@@ -654,12 +654,22 @@ pub fn run() {
             if let Err(e) = jobhunt_core::backup::apply_pending(&data) {
                 eprintln!("restore failed: {e}");
             }
+            // A new install keeps your files (CVs, applications, backups) in Documents\\Job Hunt; the
+            // first-run setup and Settings can choose another folder. Older installs keep theirs.
+            let new_install = !data.join("jobhunt.db").exists();
+            if new_install && !data.join(jobhunt_core::util::FILES_POINTER).exists() {
+                if let Ok(docs) = app.path().document_dir() {
+                    let _ = std::fs::write(data.join(jobhunt_core::util::FILES_POINTER), docs.join("Job Hunt").to_string_lossy().as_bytes());
+                }
+            }
             let db = Db::open(&data.join("jobhunt.db")).map_err(|e| format!("Couldn't open the database: {e}"))?;
             let handle = app.handle().clone();
             let agent = Agent::new(&data, db, Box::new(move |title, body| notify(&handle, title, body)));
             let host: Arc<dyn Host> = Arc::new(TauriHost { app: app.handle().clone() });
             let agent = Arc::new(agent);
             jobhunt_core::sync::apply_after_restore(&agent);
+            // Files saved with a path from another computer, or before they moved, are found again.
+            agent.fix_file_paths();
             // A brand-new install starts with Windows, so searches and email checks carry on after a
             // restart. (Settings → App turns it off; existing installs keep their choice.)
             if agent.secret("profile").is_empty() && agent.secret("app.version").is_empty() && !cfg!(debug_assertions) {

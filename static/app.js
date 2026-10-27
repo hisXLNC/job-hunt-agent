@@ -101,8 +101,16 @@ const FLOW = [
   ['interviews', 'Interviews', c => (c.interviewing || 0) + (c.offer || 0), 'Interviews coming up, and offers.'],
 ];
 /** Every job at once, in different shapes: also tabs of the Overview. */
-const VIEWS = [['tracker', 'Tracker'], ['board', 'Board'], ['documents', 'Documents'], ['postings', 'All postings'], ['skipped', 'Skipped']];
+const VIEWS = [['tracker', 'Applications'], ['postings', 'All postings'], ['skipped', 'Skipped']];
 const INBOX_TABS = [['email', 'Email'], ['recruiters', 'Recruiters']];
+/** Where Job Hunt keeps your files, and a way to choose another folder (setup and Settings). */
+const filesCard = (st, setup) => `<section class="card"><header><h2>${setup ? 'Where to keep your files' : 'Your files'}</h2></header>
+  <p class="muted">Your CVs, every tailored CV and cover letter, and backups go here${setup ? '. Most people keep them in Documents' : ''}. Job Hunt's own database stays in its program data, so a sync app like OneDrive can't damage it.</p>
+  <form data-form="filesFolder" class="row" style="flex-wrap:nowrap;gap:6px"><input type="text" name="dir" value="${esc(st.files.folder)}" style="flex:1">
+    <button class="btn" type="button" data-act="pickFolder" data-into="dir">Browse…</button><button class="btn primary" type="submit">${setup ? 'Use this folder' : 'Move here'}</button></form>
+  <p class="muted small" style="margin-top:6px">Moving takes what's there now with it, and every application still finds its files.</p></section>`;
+/** CV & career's tabs: your CVs, the versions tailored from them, career paths, your details. */
+const cvsTabs = (view, n) => `<nav class="tabs">${[['cvs', `Your CVs${n ? ` (${n})` : ''}`], ['documents', 'Tailored files'], ['career', 'Career paths'], ['details', 'Your details']].map(([id, name]) => `<a href="#cvs${id === 'cvs' ? '' : `/${id}`}" class="${id === view ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
 /** A page's heading with its tabs, for the pages that hold several views. */
 const tabbedHead = (title, about, actions, base, tabs, on) => `<div class="head"><div class="grow"><h1>${title}</h1><p class="muted">${about}</p></div>${actions ? `<div class="row">${actions}</div>` : ''}</div>
   <nav class="tabs">${tabs.map(([id, n]) => `<a href="#${base}/${id}" class="${id === on ? 'on' : ''}">${n}</a>`).join('')}</nav>`;
@@ -128,9 +136,9 @@ function homeHead(on, about, between = '') {
       const all = VIEWS.some(([id]) => id === on) || on === 'list';
       let lastView = 'tracker';
       try { if (all) localStorage.setItem('jh.view', on); else lastView = localStorage.getItem('jh.view') || 'tracker'; } catch (e) {}
+      if (!VIEWS.some(([id]) => id === lastView)) lastView = 'tracker';
       return `<nav class="mode" aria-label="What to show"><a href="#overview" class="${all ? '' : 'on'}">To do</a><a href="#overview/${all ? on : lastView}" class="${all ? 'on' : ''}">All jobs</a></nav>
-    ${all ? `<nav class="tabs views">${VIEWS.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}<a class="views-x" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a></nav>`
-      : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n], i) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-n">${i + 1}</span><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
+    ${all ? '' : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n], i) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-n">${i + 1}</span><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
     })()}
     ${about ? `<p class="muted flow-about">${about}</p>` : ''}`;
 }
@@ -378,8 +386,9 @@ async function showRoute() {
   renderNav();
   try {
     if (name === 'overview' && overview?.setup && !overview.setup.cvs && !welcomed()) { location.hash = '#welcome'; return; }
-    if (name === 'pipeline' || name === 'documents') { location.replace(`#overview/${name === 'documents' ? 'documents' : arg || 'tracker'}`); return; }
-    if (name === 'overview' && (arg === 'documents')) { overview = await api('/api/overview'); await showDocuments(); }
+    if (name === 'documents' || (name === 'pipeline' || name === 'overview') && arg === 'documents') { location.replace('#cvs/documents'); return; }
+    if (name === 'pipeline' || name === 'overview' && arg === 'board') { location.replace(`#overview/${arg && arg !== 'board' ? arg : 'tracker'}`); return; }
+    if (name === 'cvs' && arg === 'documents') await showDocuments();
     else if (name === 'overview' && (VIEWS.some(([id]) => id === arg) || arg === 'list')) { overview = await api('/api/overview'); await showPipeline(arg); }
     else if (name === 'overview') await showOverview(arg);
     else if (name === 'job') await showJob(arg);
@@ -462,9 +471,10 @@ async function showPipeline(tab) {
   const jobs = everything.filter(j => !outsideYours(j));
   // "All" is gone from the tabs (the Tracker and Postings cover it); #pipeline/list still works.
   let body = '';
-  if (tab === 'tracker') {
-    const { rows } = await api('/api/tracker');
-    const groups = {
+  // One row of filters for every job: your applications by where they stand, then every posting
+  // found, and the skipped ones.
+  const { rows } = await api('/api/tracker');
+  const groups = {
       active: ['In progress', r => !['rejected', 'no_response', 'saved'].includes(r.status)],
       you: ['Waiting on you', r => r.who === 'you'],
       them: ['Waiting on them', r => r.who === 'them'],
@@ -473,11 +483,16 @@ async function showPipeline(tab) {
       saved: ['Saved for later', r => r.status === 'saved'],
       done: ['Finished', r => ['rejected', 'no_response'].includes(r.status)],
     };
+  const chips = `<div class="chips all-chips">${Object.entries(groups).map(([k, [n, f]]) => `<button class="chip ${tab === 'tracker' && k === trackFilter ? 'on' : ''}" data-act="trackFilter" data-f="${k}">${n} <b>${rows.filter(f).length}</b></button>`).join('')}
+    <span class="chip-gap"></span>
+    <a class="chip ${tab === 'postings' || tab === 'list' ? 'on' : ''}" href="#overview/postings">All postings <b>${jobs.length}</b></a>
+    <a class="chip ${tab === 'skipped' ? 'on' : ''}" href="#overview/skipped">Skipped <b>${jobs.filter(j => j.status === 'skipped').length + elsewhere}</b></a>
+    <a class="views-x small" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a></div>`;
+  if (tab === 'tracker') {
     const [, keep] = groups[trackFilter] || groups.active;
     // Your move first, then whatever has waited longest.
     const list = rows.filter(keep).sort((a, b) => (a.who === 'you' ? 0 : 1) - (b.who === 'you' ? 0 : 1) || (b.days_since ?? 0) - (a.days_since ?? 0));
-    body = `<div class="chips">${Object.entries(groups).map(([k, [n, f]]) => `<button class="chip ${k === trackFilter ? 'on' : ''}" data-act="trackFilter" data-f="${k}">${n} <b>${rows.filter(f).length}</b></button>`).join('')}</div>
-      <section class="card" style="padding:4px 12px">${list.length ? list.map(trackRow).join('') : `<p class="empty">${rows.length ? 'Nothing here.' : 'No applications yet. Tailor a role from the Overview and it shows up here.'}</p>`}</section>`;
+    body = `<section class="card" style="padding:4px 12px">${list.length ? list.map(trackRow).join('') : `<p class="empty">${rows.length ? 'Nothing here.' : 'No applications yet. Tailor a role from the Overview and it shows up here.'}</p>`}</section>`;
   } else if (tab === 'board') {
     // The lanes you work in; empty ones step aside, and finished applications go below.
     const lanes = ['queued', 'ready', 'approved', 'applied', 'interviewing'];
@@ -501,11 +516,11 @@ async function showPipeline(tab) {
     const sources = [...new Set(list.map(j => j.source))].sort();
     body = `<div class="row" style="margin-bottom:10px"><input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
       <select id="srcFilter" style="width:auto"><option value="">All sources</option>${sources.map(x => `<option value="${esc(x)}">${esc(sourceName(x))} (${list.filter(j => j.source === x).length})</option>`).join('')}</select></div>
-      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-postings"><thead><tr>${sortTh('Age', 'date')}${sortTh('Role')}${sortTh('Company')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}<th></th></tr></thead><tbody>
+      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-postings"><thead><tr>${sortTh('Age', 'date')}${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}<th></th></tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-src="${esc(j.source)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}<br><span class="small">${esc(sourceName(j.source))}</span></td>
-        <td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${stagePill(j.status)}</span></td>
-        <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td><td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
+        <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td>
+        <td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${stagePill(j.status)}</span></td><td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="fit" data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
         <td>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">No postings yet. Run a search from the Overview.</p>'}</section>`;
@@ -537,16 +552,16 @@ async function showPipeline(tab) {
     const bar = tab === 'skipped' ? ((settingsCache || await api('/api/settings').catch(() => null))?.profile?.score_threshold ?? 101) : 101;
     const worth = j => canReach(j) != null && canReach(j) >= bar ? `<span class="pill good" title="Its fit is below your minimum (${bar}), but tailored it could reach about ${canReach(j)}">Worth a look tailored</span> ` : '';
     body = `${why}<input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
-      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Role')}${sortTh('Company')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
+      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td class="fit" data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
-        <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td><td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
+        <td class="fit" data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td><td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
+<td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>${tab === 'skipped'
           ? `<td class="small why" data-v="${esc((j.reasoning || '').toLowerCase())}">${worth(j)}${esc(j.reasoning || '')}</td>`
           : `<td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>`}${tab === 'list' ? `<td class="row-act">${rowActions(j)}</td>` : ''}</tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">Nothing here yet.</p>'}</section>`;
   }
-  page(`${appsHead(tab, `${jobs.length} roles found so far.`)}${body}`);
+  page(`${appsHead(tab)}${chips}${body}`);
   const f = $('#filter'), src = $('#srcFilter');
   const apply = () => {
     const q = (f?.value || '').toLowerCase(), from = src?.value || '';
@@ -1118,6 +1133,7 @@ async function showWelcome() {
       ${st.google.client ? `<div class="row"><button class="btn primary" data-act="google" ${st.google.connecting ? 'disabled' : ''}>${st.google.connected ? `Connected as ${esc(st.google.email || 'you')}: check again` : 'Connect Google'}</button>${st.google.connected ? '<span class="muted small">Nothing to continue from yet? Turn on sync on the other computer, wait a few minutes, then check again.</span>' : ''}</div>
         <div id="googlePaste" ${st.google.pasting ? '' : 'hidden'}>${googlePasteBox(st.google.paste_url)}</div>`
         : '<div class="row"><a class="btn" href="#settings/connections">Set up Google</a></div>'}</section>`}
+    ${st.kind === 'server' ? '' : filesCard(st, true)}
     <ol class="apply-steps">
       ${step(1, s.claude, 'Connect Claude', `<p class="muted">Claude is the AI that reads postings and rewrites your CV for each. ${s.engine === 'api' ? 'Job Hunt uses your Claude API key.' : 'Job Hunt uses your Claude subscription (Pro or Max).'}</p>
         ${s.engine === 'api' ? `<p class="muted">${s.claude ? '✓ Ready, with your API key.' : 'Add your API key in <a href="#settings/connections">Settings → Accounts</a>.'}</p>`
@@ -1359,13 +1375,15 @@ async function showDocuments() {
   };
   const docs = all.filter((groups[docFilter] || groups.all)[1]);
   page(`
-    ${appsHead('documents', 'Every tailored CV and cover letter, newest first. Click a role to read and edit them.')}
+    <div class="head"><div class="grow"><h1>CV &amp; career</h1><p class="muted">Every CV and cover letter tailored from yours, newest first. Click a role to read and edit them.</p></div></div>
+    ${cvsTabs('documents')}
     ${all.length ? '<input type="search" id="docFilter" class="filter" placeholder="Filter by company or title" style="max-width:420px;margin-bottom:10px">' : ''}
     ${all.length ? `<div class="chips">${Object.entries(groups).map(([k, [n, f]]) => `<button class="chip ${k === docFilter ? 'on' : ''}" data-act="docFilter" data-f="${k}">${n} <b>${all.filter(f).length}</b></button>`).join('')}</div>` : ''}
     ${docs.length ? `<section class="card"><div class="doclist">${docs.map(j => `
       <div class="docrow" data-text="${esc((j.company + ' ' + j.title).toLowerCase())}">
+        <span class="co">${coCell(j)}</span>
         <a class="grow" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs"><b>${esc(j.title)}</b><span class="muted small">${j.score != null ? `fit ${j.score} · ` : ''}${esc(fmtDate(j.updated_at))}</span>${coLocLine(j)}</a>
-        <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
+        <span class="loc small">${locCell(j)}</span>
         ${stagePill(j.status)}
         <div class="row">
           ${j.cv_path ? `<button class="btn" data-act="open" data-what="cv" data-job="${esc(j.id)}">${svg('doc')}CV</button>` : ''}
@@ -1739,7 +1757,7 @@ async function showSettings(tab, sub) {
       <label class="field">Facts for application forms<textarea name="application_facts" placeholder="e.g. Citizen, no visa sponsorship needed.\nNotice period: one month.\nSalary expectation: (your range and currency).\nOpen to hybrid; not relocating.">${esc(st.profile.application_facts || '')}</textarea><span class="hint">Used to answer application questions. Anything not here is left as “[Fill in]”.</span></label>
       <div class="row"><button class="btn primary" type="submit">Save</button></div></section></form>`;
     const view = ['career', 'details'].includes(sub) ? sub : 'cvs';
-    body = `<nav class="tabs">${[['cvs', `Your CVs${st.cvs.length ? ` (${st.cvs.length})` : ''}`], ['career', 'Career paths'], ['details', 'Your details']].map(([id, n]) => `<a href="#cvs${id === 'cvs' ? '' : `/${id}`}" class="${id === view ? 'on' : ''}">${n}</a>`).join('')}</nav>
+    body = `${cvsTabs(view, st.cvs.length)}
       ${view === 'career' ? career : view === 'details' ? details : body}`;
   } else if (tab === 'search') {
     body = `<p class="muted">What Job Hunt looks for, where, and what it does with what it finds. The job titles come from your CVs, in <a href="#cvs">CV &amp; career</a>.</p>
@@ -1863,7 +1881,7 @@ async function showSettings(tab, sub) {
       <div class="row" style="margin-top:10px"><label class="btn">Restore from a backup…<input type="file" accept=".zip" data-upload="restore" hidden></label>
         <span class="muted small">Replaces everything here with the backup and restarts Job Hunt. What's here now is kept in a "before-restore" folder.</span></div>
     </section>`;
-    body = `${status}${sync}${backups}`;
+    body = `${status}${sync}${server ? '' : filesCard(st, false)}${backups}`;
   } else {
     const server = st.kind === 'server', here = st.remote.here;
     const r = st.remote, cd = st.claude_desktop;
@@ -2562,7 +2580,7 @@ async function act(el) {
     if (!await ask('Remove this interview, with its prep time and reminders?', 'Remove', true)) return;
     return busy(async () => { await api('/api/calendar/delete', { method: 'POST', body: { id: el.dataset.id } }); route(); }, 'Removed.');
   }
-  if (a === 'trackFilter') { trackFilter = el.dataset.f; route(); return; }
+  if (a === 'trackFilter') { trackFilter = el.dataset.f; if (location.hash === '#overview/tracker') route(); else location.hash = '#overview/tracker'; return; }
   if (a === 'docFilter') { docFilter = el.dataset.f; route(); return; }
   if (a === 'pickTop') {
     const box = el.closest('[data-pickbox]');
@@ -3229,6 +3247,9 @@ document.addEventListener('submit', async e => {
     } else if (kind === 'phone') {
       await api('/api/settings/phone', { method: 'POST', body: { server: f.server.value } });
       toast('Saved.'); route();
+    } else if (kind === 'filesFolder') {
+      const r = await api('/api/settings/files-folder', { method: 'POST', body: { dir: f.dir.value } });
+      settingsCache = null; toast(`Your files are in ${r.folder}.`); route();
     } else if (kind === 'backup') {
       await api('/api/settings/backup', { method: 'POST', body: { secrets: f.secrets.checked } });
       toast('Backup settings saved.'); route();

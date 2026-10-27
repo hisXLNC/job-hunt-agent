@@ -118,6 +118,14 @@ pub fn base64_encode(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
+/// Where your files are (CVs, tailored applications, backups): the folder named in the data
+/// folder's files-folder.txt, chosen at setup or in Settings, or the data folder itself.
+pub fn files_dir(data: &std::path::Path) -> std::path::PathBuf {
+    std::fs::read_to_string(data.join(FILES_POINTER)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+        .map(std::path::PathBuf::from).unwrap_or_else(|| data.to_path_buf())
+}
+pub const FILES_POINTER: &str = "files-folder.txt";
+
 /// Words for a file name as people write them ("Ibrahim Al-Taha", "Smith & Co."): only the characters
 /// Windows doesn't allow in file names become spaces, runs of spaces become one, and no dot ends it.
 pub fn file_words(s: &str) -> String {

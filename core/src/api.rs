@@ -338,6 +338,8 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
             "connecting": agent.is_running("google"),
         },
         "cvs": cvs,
+        // Where your CVs, tailored applications and backups are (chosen at setup or in Settings).
+        "files": { "folder": agent.files().to_string_lossy(), "chosen": agent.files() != agent.data },
         "backup": {
             "dir": get("backup.dir"),
             "folder": bfolder.to_string_lossy(),
@@ -881,8 +883,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         ["api", "open-folder"] if req.remote => Err(Error("Folders open only on the computer running Job Hunt.".into())),
         ["api", "open-folder"] => {
             let dir: PathBuf = match s(&b, "which") {
-                "applications" => agent.data.join("applications"),
-                "cv" => agent.data.join("cv"),
+                "applications" => agent.files().join("applications"),
+                "cv" => agent.files().join("cv"),
                 _ => agent.data.clone(),
             };
             std::fs::create_dir_all(&dir)?;
@@ -909,6 +911,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             "The backup folder can only be changed on the computer running Job Hunt.".into(),
         )),
         ["api", "sync", "continue"] | ["api", "settings", "claude-desktop"] if req.remote && host.kind() != "server" => Err(Error("Do this on the computer running Job Hunt.".into())),
+        ["api", "settings", "files-folder"] if req.remote || host.kind() == "server" => Err(Error("Your files' folder can only be changed in the Job Hunt app on your PC.".into())),
+        ["api", "settings", "files-folder"] => {
+            let folder = agent.set_files_folder(s(&b, "dir"))?;
+            Ok(Resp::json(&json!({ "folder": folder.to_string_lossy() })))
+        }
         ["api", "sync", "resume"] => {
             crate::sync::resume_here(agent)?;
             Ok(Resp::json(&json!({ "sync": crate::sync::status(agent) })))

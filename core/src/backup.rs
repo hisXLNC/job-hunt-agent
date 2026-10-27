@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 pub const SECRET_KEYS: [&str; 9] = ["claude.key", "google.token", "google.client", "adzuna.key", "jsearch.key", "jooble.key", "apify.key", "remote.password", "remote.sessions"];
 
 /// Files in the data folder that belong to this computer only and are never replaced by a restore.
-pub const LOCAL_ONLY: [&str; 2] = ["device.json", "sync-state.json"];
+pub const LOCAL_ONLY: [&str; 3] = ["device.json", "sync-state.json", crate::util::FILES_POINTER];
 
 /// Backups kept in the folder; older ones are deleted.
 pub const KEEP: usize = 14;
@@ -25,7 +25,7 @@ const PENDING: &str = "restore-pending.zip";
 /// Where backups go: your chosen folder, or "backups" in the data folder.
 pub fn folder(agent: &Agent) -> PathBuf {
     let dir = agent.secret("backup.dir");
-    if dir.trim().is_empty() { agent.data.join("backups") } else { PathBuf::from(dir.trim()) }
+    if dir.trim().is_empty() { agent.files().join("backups") } else { PathBuf::from(dir.trim()) }
 }
 
 /// Make a backup now. Returns the zip's path.
@@ -64,8 +64,9 @@ pub fn write_snapshot(agent: &Agent, out: &Path, secrets: bool) -> R<()> {
         let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file("jobhunt.db", opts)?;
         zip.write_all(&std::fs::read(&tmp_db)?)?;
+        let files = agent.files();
         for sub in ["cv", "applications"] {
-            add_dir(&mut zip, &agent.data, &agent.data.join(sub), opts)?;
+            add_dir(&mut zip, &files, &files.join(sub), opts)?;
         }
         for sig in ["signature.png", "signature.jpeg"] {
             let p = agent.data.join(sig);
@@ -155,6 +156,31 @@ pub fn stage_restore(data: &Path, zip_bytes: &[u8]) -> R<()> {
     Ok(())
 }
 
+/// Move a file or folder; across drives (rename can't), copy it and remove the original.
+pub fn move_path(from: &Path, to: &Path) -> R<()> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    copy_all(from, to)?;
+    if from.is_dir() { std::fs::remove_dir_all(from)? } else { std::fs::remove_file(from)? }
+    Ok(())
+}
+
+fn copy_all(from: &Path, to: &Path) -> R<()> {
+    if from.is_dir() {
+        std::fs::create_dir_all(to)?;
+        for e in std::fs::read_dir(from)?.flatten() {
+            copy_all(&e.path(), &to.join(e.file_name()))?;
+        }
+    } else {
+        if let Some(p) = to.parent() {
+            std::fs::create_dir_all(p)?;
+        }
+        std::fs::copy(from, to)?;
+    }
+    Ok(())
+}
+
 /// Apply a staged restore. Call before opening the database. The current data is kept in a
 /// "before-restore" folder, so a restore can be undone by hand. Returns true if one was applied.
 pub fn apply_pending(data: &Path) -> R<bool> {
@@ -166,16 +192,19 @@ pub fn apply_pending(data: &Path) -> R<bool> {
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(&bytes))?;
     let keep = data.join(format!("before-restore {}", chrono::Local::now().format("%Y-%m-%d %H%M%S")));
     std::fs::create_dir_all(&keep)?;
+    // CVs and applications live in your files' folder, the rest in the data folder.
+    let files = crate::util::files_dir(data);
+    let home = |name: &Path| if name.starts_with("cv") || name.starts_with("applications") { files.join(name) } else { data.join(name) };
     for name in ["jobhunt.db", "jobhunt.db-wal", "jobhunt.db-shm", "cv", "applications", "signature.png", "signature.jpeg"] {
-        let p = data.join(name);
+        let p = home(Path::new(name));
         if p.exists() {
-            std::fs::rename(&p, keep.join(name))?;
+            move_path(&p, &keep.join(name))?;
         }
     }
     for i in 0..z.len() {
         let mut f = z.by_index(i)?;
         let Some(rel) = f.enclosed_name() else { continue };
-        let out = data.join(rel);
+        let out = home(&rel);
         if f.is_dir() {
             std::fs::create_dir_all(&out)?;
             continue;

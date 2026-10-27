@@ -705,8 +705,70 @@ impl Agent {
         self.llm.read().unwrap().clone()
     }
 
+    /// Your files' folder (see util::files_dir): CVs, tailored applications, backups.
+    pub fn files(&self) -> PathBuf {
+        crate::util::files_dir(&self.data)
+    }
+
+    /// Keep your files (CVs, tailored applications, and backups unless you chose a folder for
+    /// them) in `dir` from now on: they're moved there and the paths saved with each application
+    /// follow. Returns the folder.
+    pub fn set_files_folder(&self, dir: &str) -> R<PathBuf> {
+        let new = PathBuf::from(dir.trim());
+        if !new.is_absolute() {
+            return err("Choose a whole folder path, like C:\\Users\\you\\Documents\\Job Hunt.");
+        }
+        let _g = self.claim("files-move")?;
+        let old = self.files();
+        if new == old {
+            return Ok(new);
+        }
+        std::fs::create_dir_all(&new).map_err(|e| Error(format!("Couldn't use {}: {e}", new.display())))?;
+        let mut subs = vec!["cv", "applications"];
+        if self.secret("backup.dir").trim().is_empty() {
+            subs.push("backups");
+        }
+        for sub in subs {
+            let from = old.join(sub);
+            if from.exists() {
+                crate::backup::move_path(&from, &new.join(sub)).map_err(|e| Error(format!("Couldn't move your {sub} folder: {}", e.0)))?;
+            }
+        }
+        std::fs::write(self.data.join(crate::util::FILES_POINTER), new.to_string_lossy().as_bytes())?;
+        self.fix_file_paths();
+        self.db().log(None, "files", &format!("your files are now in {}", new.display()))?;
+        Ok(new)
+    }
+
+    /// Point each application's saved CV and letter at where they are now, when the saved path
+    /// leads nowhere: after your files moved, or on another computer after a restore.
+    pub fn fix_file_paths(&self) -> usize {
+        let apps = self.files().join("applications");
+        let here = |p: &str| -> Option<String> {
+            if Path::new(p).exists() {
+                return None;
+            }
+            let parts: Vec<&str> = p.split(['/', '\\']).collect();
+            let at = parts.iter().rposition(|x| *x == "applications")?;
+            let moved = parts[at + 1..].iter().fold(apps.clone(), |acc, x| acc.join(x));
+            moved.exists().then(|| moved.to_string_lossy().to_string())
+        };
+        let mut n = 0;
+        // The list first: the database is used again inside the loop.
+        let jobs = self.db().jobs(None, 100_000).unwrap_or_default();
+        for j in jobs {
+            let mut set: Vec<(&str, Value)> = vec![];
+            if let Some(p) = j.cv_path.as_deref().and_then(here) { set.push(("cv_path", p.into())); }
+            if let Some(p) = j.letter_path.as_deref().and_then(here) { set.push(("letter_path", p.into())); }
+            if !set.is_empty() && self.db().update_job(&j.id, &set).is_ok() {
+                n += 1;
+            }
+        }
+        n
+    }
+
     pub fn cv_path(&self, track: &str) -> PathBuf {
-        self.data.join("cv").join(format!("{track}.docx"))
+        self.files().join("cv").join(format!("{track}.docx"))
     }
 
     fn cv_texts(&self, p: &Profile) -> Vec<(String, String)> {
@@ -2989,10 +3051,10 @@ replies and interviews, and a little lower for kinds that got none from several 
         let label = if suggestion.label.trim().is_empty() { stem.replace(['_', '-'], " ") } else { suggestion.label.trim().to_string() };
         let mut profile = self.profile();
         let id = profile.new_track_id(&label);
-        std::fs::create_dir_all(self.data.join("cv").join("originals"))?;
+        std::fs::create_dir_all(self.files().join("cv").join("originals"))?;
         std::fs::write(self.cv_path(&id), &docx)?;
         let ext = Path::new(filename).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_else(|| "bin".into());
-        std::fs::write(self.data.join("cv").join("originals").join(format!("{id}.{ext}")), bytes)?;
+        std::fs::write(self.files().join("cv").join("originals").join(format!("{id}.{ext}")), bytes)?;
         let track = Track {
             name: id,
             label,
@@ -3020,10 +3082,10 @@ replies and interviews, and a little lower for kinds that got none from several 
         let mut profile = self.profile();
         let Some(pos) = profile.tracks.iter().position(|t| t.name == id) else { return err("That CV no longer exists.") };
         let (docx, kind) = self.cv_bytes(filename, bytes, convert)?;
-        std::fs::create_dir_all(self.data.join("cv").join("originals"))?;
+        std::fs::create_dir_all(self.files().join("cv").join("originals"))?;
         std::fs::write(self.cv_path(id), &docx)?;
         let ext = Path::new(filename).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_else(|| "bin".into());
-        std::fs::write(self.data.join("cv").join("originals").join(format!("{id}.{ext}")), bytes)?;
+        std::fs::write(self.files().join("cv").join("originals").join(format!("{id}.{ext}")), bytes)?;
         profile.tracks[pos].kind = kind;
         profile.tracks[pos].original = filename.to_string();
         let t = profile.tracks[pos].clone();
@@ -3078,7 +3140,7 @@ replies and interviews, and a little lower for kinds that got none from several 
     // --- tailoring ------------------------------------------------------------------------------
 
     pub fn application_dir(&self, job: &Job) -> PathBuf {
-        self.data.join("applications").join(format!("{}-{}", slug(&format!("{} {}", job.company, job.title), 60), short_hash(&job.id)))
+        self.files().join("applications").join(format!("{}-{}", slug(&format!("{} {}", job.company, job.title), 60), short_hash(&job.id)))
     }
 
     /// "Ibrahim Al-Taha - Acme.docx" and "Ibrahim Al-Taha - Acme - Cover Letter.docx": what an
@@ -5461,6 +5523,26 @@ mod tests {
         assert_eq!(s.agent.find_company_apply("test:1").unwrap().as_deref(), Some("https://careers.example.com/jobs/1"), "kept, not asked again");
         assert_eq!(s.agent.find_company_apply("test:2").unwrap(), None);
         assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().apply_url, None);
+    }
+
+    #[test]
+    fn your_files_move_to_the_folder_you_choose() {
+        let s = setup();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        let job = s.agent.tailor("test:1", None).unwrap();
+        let cv = PathBuf::from(job.cv_path.unwrap());
+        assert!(cv.starts_with(s.agent.data.join("applications")), "at first, in the data folder");
+        let docs = tempfile::tempdir().unwrap();
+        let dest = docs.path().join("Job Hunt");
+        s.agent.set_files_folder(&dest.to_string_lossy()).unwrap();
+        assert_eq!(s.agent.files(), dest);
+        let moved = PathBuf::from(s.agent.db().job("test:1").unwrap().unwrap().cv_path.unwrap());
+        assert!(moved.starts_with(dest.join("applications")) && moved.is_file(), "{moved:?}");
+        assert!(!cv.exists() && s.agent.cv_path(&s.agent.profile().tracks[0].name).is_file(), "CVs moved too");
+        // A path saved on another computer is found here.
+        s.agent.db().update_job("test:1", &[("cv_path", format!("C:\\Users\\someone\\AppData\\Local\\Job Hunt\\data\\applications\\{}", moved.strip_prefix(dest.join("applications")).unwrap().to_string_lossy().replace('/', "\\")).into())]).unwrap();
+        assert_eq!(s.agent.fix_file_paths(), 1);
+        assert_eq!(PathBuf::from(s.agent.db().job("test:1").unwrap().unwrap().cv_path.unwrap()), moved);
     }
 
     #[test]

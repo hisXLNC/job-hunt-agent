@@ -94,6 +94,7 @@ fn main() {
     }
     let db = Db::open(&data.join("jobhunt.db")).expect("can't open the database");
     let agent = Arc::new(Agent::new(&data, db, Box::new(|title, body| println!("[note] {title}: {body}"))));
+    agent.fix_file_paths();
     jobhunt_core::sync::apply_after_restore(&agent);
     // Backups go to the /backups folder mapped to a NAS share, unless set otherwise.
     if agent.secret("backup.dir").is_empty() && std::path::Path::new("/backups").is_dir() {
