@@ -19,19 +19,19 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 HEAD = {"User-Agent": UA, "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-CA,en;q=0.9", "Accept-Encoding": "gzip, deflate"}
 
+# name: (posting-link pattern, addresses to try)
 SITES = {
-    "Robert Half (JSON)": [("POST", "https://www.roberthalf.com/bin/jobSearchServlet", {"country": "ca", "keywords": TITLE, "location": PLACE, "distance": "50", "remote": "Any", "emptype": "", "jobtype": "", "timetype": "", "postedwithin": "0", "sortby": "PUBLISHED_DATE_DESC", "pagesize": 25, "pagenumber": 1, "payrate_min": 0, "payrate_period": "", "source": ["Salesforce"]})],
-    "Michael Page": [f"https://www.michaelpage.ca/jobs?search={q}&location={l}", f"https://www.michaelpage.ca/jobs/{slug(TITLE)}/{slug(CITY)}", f"https://www.michaelpage.ca/jobs/{slug(TITLE)}"],
-    "Randstad": [f"https://www.randstad.ca/jobs/q-{slug(TITLE)}/l-{slug(CITY)}/", f"https://www.randstad.ca/jobs/q-{slug(TITLE)}/", f"https://www.randstad.ca/jobs/?q={q}&l={c}"],
-    "Adecco": [f"https://www.adecco.ca/en-ca/jobs/job-search/?k={q}&l={l}", f"https://www.adecco.ca/en-ca/jobs?k={q}&l={c}", f"https://www.adecco.ca/en-ca/jobs/?keywords={q}&location={c}"],
-    "Hays": [f"https://www.hays.ca/en-CA/job-search?q={q}&location={l}", f"https://www.hays.ca/en-CA/job-search/{slug(TITLE)}-jobs-in-{slug(CITY)}", f"https://www.hays.ca/job-search/{slug(TITLE)}-jobs"],
-    "Aerotek": [f"https://jobs.aerotek.com/us/en/search-results?keywords={q}&location={l}", f"https://jobs.aerotek.com/ca/en/search-results?keywords={q}", f"https://www.aerotek.com/en-ca/job-search?keyword={q}"],
-    "Altis": ["https://jobportal.altis.com/search?b=altisrecruitment", "https://altis.com/jobs/", "https://altis.com/find-a-job/"],
-    "LRO Staffing": ["https://jobs.lrostaffing.com/job-listings/", "https://lrostaffing.com/jobs/", "https://lrostaffing.com/job-seekers/"],
-    "People First HR": ["https://peoplefirsthr.com/jobs", "https://peoplefirsthr.com/jobs/", "https://peoplefirsthr.com/job-board/"],
-    "Jobs.ca": [f"https://www.jobs.ca/jobs?q={q}&l={l}", f"https://www.jobs.ca/search/?keywords={q}&location={c}", f"https://www.jobs.ca/en/search/?keywords={q}&location={c}"],
-    "Tech Talent Canada": [f"https://jobs.techtalent.ca/?q={q}", "https://jobs.techtalent.ca/", "https://techtalent.ca/jobs/"],
-    "CIPS": ["https://cips.ca/jobs/", "https://cips.ca/careers/", "https://jobs.cips.ca/"],
+    "Robert Half": (r"/job/|/jobs/[^?#]*\d{5,}", [f"https://www.roberthalf.com/ca/en/jobs?query={q}&location={c}", f"https://www.roberthalf.com/ca/en/jobs/all/{slug(CITY)}?query={q}", "https://www.roberthalf.com/ca/en/jobs"]),
+    "Michael Page": (r"/job-detail/", [f"https://www.michaelpage.ca/jobs/accountant", f"https://www.michaelpage.ca/jobs/accountant/toronto", f"https://www.michaelpage.ca/jobs?search=accountant", f"https://www.michaelpage.ca/jobs/{slug(TITLE)}"]),
+    "Randstad": (r"/jobs/[a-z0-9-]+_[a-z0-9-]+_\d+", [f"https://www.randstad.ca/jobs/q-{slug(TITLE)}/l-{slug(CITY)}/", "https://www.randstad.ca/jobs/q-accountant/l-toronto/"]),
+    "Adecco": (r"/job/|/jobs/[^/?#]+/\d{4,}|/job-details?/", [f"https://www.adecco.com/en-ca/jobs?k={q}&l={c}", f"https://www.adecco.com/en-ca/job-seekers/find-a-job?k={q}&l={c}", f"https://www.adecco.com/en-ca/jobs/{slug(TITLE)}", "https://www.adecco.com/en-ca/job-seekers/find-a-job", "https://www.adecco.com/en-ca/jobs"]),
+    "Hays": (r"/job-detail/", [f"https://www.hays.ca/job-search/{slug(TITLE)}-jobs", f"https://www.hays.ca/job-search/{slug(TITLE)}-jobs-in-{slug(CITY)}", "https://www.hays.ca/job-search/accountant-jobs-in-toronto", "https://www.hays.ca/job-search/accountant-jobs"]),
+    "Aerotek": (r"/job/", [f"https://jobs.aerotek.com/us/en/search-results?keywords={q}"]),
+    "Altis": (r"/jobs?/\d+", ["https://jobportal.altis.com/", f"https://jobportal.altis.com/search?keyword={q}"]),
+    "LRO Staffing": (r"/job-post/", ["https://jobs.lrostaffing.com/job-listings/"]),
+    "People First HR": (r"/jobs?/", ["https://peoplefirsthr.com/jobs"]),
+    "Jobs.ca": (r"/job/|/jobs/", [f"https://www.jobs.ca/jobs?q={q}&l={l}"]),
+    "Tech Talent Canada": (r"/j/", [f"https://jobs.techtalent.ca/?q={q}"]),
 }
 ALSO = sys.argv[3:]
 
@@ -56,7 +56,7 @@ def fetch(item):
         pass
     return url, status, final, hdr, raw.decode("utf-8", "replace")
 
-def report(name, item):
+def report(name, item, pattern=""):
     url, status, final, hdr, body = fetch(item)
     print(f"  {url}")
     if status is None:
@@ -78,7 +78,10 @@ def report(name, item):
     title = re.search(r"(?is)<title[^>]*>(.*?)</title>", body)
     print(f"    title={(title.group(1).strip() if title else '')[:70]!r}  JobPosting={ld}  phenom={phenom}  next={nxt}")
     hrefs = list(dict.fromkeys(h for h in re.findall(r'href\s*=\s*["\']([^"\'#]+)["\']', body) if re.search(r"(?i)job|career|position|vacanc|posting", h)))
-    print(f"    job-ish links {len(hrefs)}: {hrefs[:12]}")
+    print(f"    job-ish links {len(hrefs)}: {hrefs[:6]}")
+    if pattern:
+        own = [h for h in re.findall(r'href\s*=\s*["\']([^"\'#]+)["\']', body) if re.search(pattern, h, re.I)]
+        print(f"    POSTING LINKS ({pattern}) {len(set(own))}: {list(dict.fromkeys(own))[:5]}")
     apis = list(dict.fromkeys(re.findall(r'["\']((?:https?:)?//?[^"\'\s]*(?:api|graphql|search|jobs?)[^"\'\s]*\.?(?:json)?)["\']', body)))
     print(f"    api-ish strings: {[a for a in apis if len(a) < 140][:12]}")
     if nxt:
@@ -91,10 +94,10 @@ def report(name, item):
                 pass
 
 print(f"Searching for {TITLE!r} in {PLACE!r}\n")
-for name, items in SITES.items():
+for name, (pattern, items) in SITES.items():
     print(name)
     for it in items:
-        report(name, it)
+        report(name, it, pattern)
 if ALSO:
     print("Also")
     for u in ALSO:
