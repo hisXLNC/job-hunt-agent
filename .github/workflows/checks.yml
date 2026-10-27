@@ -94,7 +94,16 @@ jobs:
   sites:
     if: inputs.what == 'sites'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
-      - run: python3 tools/probe_sites.py "Tax Manager" "Toronto, ON"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: Each site, read the way a search reads it
+        working-directory: core
+        run: cargo run --quiet --example site_check -- "Accountant" "Toronto, ON"
+      - name: What each site answers
+        if: always()
+        run: python3 tools/probe_sites.py "Tax Manager" "Toronto, ON"
