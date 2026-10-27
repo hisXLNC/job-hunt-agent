@@ -881,6 +881,9 @@ const whyFits = j => {
   return `<details class="why-fits"><summary><span class="why-text">${esc(j.reasoning || '')}</span>${flags.length ? `<span class="bad-text">${flags.length} red flag${flags.length === 1 ? '' : 's'}</span>` : ''}</summary>
     ${flags.length ? `<ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>`;
 };
+/** Where Apply goes, for a posting found on a job board: the company's own site, once Job Hunt finds it there. */
+const onCompanySite = j => j.apply_url ? `<span class="good-text" title="${esc(j.apply_url)}">applies on ${esc(j.company)}'s own site</span>` : '';
+
 /** One step of the job hunt on the Overview: its roles, each with the next thing to do. `tracked`
  *  (the Tracker's rows) fills in the steps after you apply. */
 function stepHtml(o, step, tracked) {
@@ -926,12 +929,12 @@ function stepHtml(o, step, tracked) {
   }
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
   const ready = [];
-  if (o.ready?.length) ready.push([`<a class="btn sm" href="#review">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
+  if (o.ready?.length) ready.push([`<a class="btn sm" href="#review">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : '', onCompanySite(j)].filter(Boolean).join(' · '),
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`)).join('')]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
     `<button class="btn sm" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
-  if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, '',
+  if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, onCompanySite(j),
     `<a class="btn sm" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
      <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,

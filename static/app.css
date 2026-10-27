@@ -729,3 +729,4 @@ table.jobs td { padding: 10px 7px; }
 .mode a.on { background: var(--ink); color: var(--surface); }
 .trow .co { font-weight: 600; }
 .trow > .todo-act { justify-content: flex-end; }
+.good-text { color: var(--good); }

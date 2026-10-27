@@ -3572,6 +3572,38 @@ replies and interviews, and a little lower for kinds that got none from several 
         });
     }
 
+    /// Tailored and approved postings on a job board (LinkedIn, Indeed…) whose own posting on the
+    /// company's site hasn't been looked for in the last week: newest first.
+    pub fn without_apply_link(&self) -> Vec<Job> {
+        let week_ago = (Utc::now() - Duration::days(7)).to_rfc3339();
+        let mut jobs: Vec<Job> = ["ready", "approved"].iter().flat_map(|s| self.db().jobs(Some(s), 500).unwrap_or_default()).collect();
+        jobs.retain(|j| j.apply_url.is_none() && j.apply_email.is_none() && !j.url.trim().is_empty() && crate::sources::is_job_board(&j.url)
+            && self.secret(&format!("applylink.tried:{}", j.id)) < week_ago);
+        jobs.sort_by(|a, b| b.found_at.cmp(&a.found_at));
+        jobs
+    }
+
+    /// Look for a few of them on the companies' own sites, so Apply goes straight to the company.
+    /// Returns how many were found.
+    pub fn find_apply_links(&self, max: usize) -> usize {
+        let mut found = 0;
+        for job in self.without_apply_link().into_iter().take(max) {
+            if self.limited().is_some() {
+                break;
+            }
+            let _ = self.db().set(&format!("applylink.tried:{}", job.id), &now());
+            match self.find_company_apply(&job.id) {
+                Ok(Some(_)) => found += 1,
+                Ok(None) => {}
+                Err(e) => {
+                    let _ = self.db().log(Some(&job.id), "apply-link:error", &e.0);
+                    break;
+                }
+            }
+        }
+        found
+    }
+
     // --- fit forecast for postings scored before it existed ---------------------------------------
 
     /// Postings to pick (and near misses) scored before the fit forecast existed, best first.
@@ -4279,6 +4311,13 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     if ready && !forecast_lately && !agent.budget_wait() && !agent.is_running("forecast") && !agent.is_running("search") && !agent.without_forecast().is_empty() {
         out.push("forecast");
     }
+    // Job board postings you've tailored: found on the company's own site, a few every 10 minutes.
+    let links_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.applylinks"))
+        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 10)
+        .unwrap_or(false);
+    if ready && agent.engine_name() == "code" && !links_lately && !agent.budget_wait() && !agent.is_running("applylinks") && !agent.is_running("search") && !agent.without_apply_link().is_empty() {
+        out.push("applylinks");
+    }
     // Company ratings for roles you're considering: a few every 10 minutes, through Claude Code.
     let rated_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.ratings"))
         .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 10)
@@ -4422,6 +4461,14 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                     let Ok(_g) = a.claim("forecast") else { return };
                     a.forecast_missing(6);
                     let _ = a.db().set("last.forecast", &now());
+                });
+            }
+            "applylinks" => {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    let Ok(_g) = a.claim("applylinks") else { return };
+                    a.find_apply_links(4);
+                    let _ = a.db().set("last.applylinks", &now());
                 });
             }
             "ratings" => {
@@ -5414,6 +5461,20 @@ mod tests {
         assert_eq!(s.agent.find_company_apply("test:1").unwrap().as_deref(), Some("https://careers.example.com/jobs/1"), "kept, not asked again");
         assert_eq!(s.agent.find_company_apply("test:2").unwrap(), None);
         assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().apply_url, None);
+    }
+
+    #[test]
+    fn tailored_job_board_postings_are_looked_up_on_the_company_site() {
+        let s = setup();
+        let board = |t: &str, id: &str| Posting { url: format!("https://www.linkedin.com/jobs/view/{id}/"), ..posting(t, id) };
+        s.agent.search(Some(vec![board("Technical Program Manager", "1"), board("Senior Program Manager", "2")])).unwrap();
+        for id in ["test:1", "test:2"] {
+            s.agent.db().set_status(id, "ready", "").unwrap();
+        }
+        assert_eq!(s.agent.without_apply_link().len(), 2);
+        assert_eq!(s.agent.find_apply_links(5), 1, "one is on its company's site");
+        assert_eq!(s.agent.db().job("test:1").unwrap().unwrap().apply_url.as_deref(), Some("https://careers.example.com/jobs/1"));
+        assert!(s.agent.without_apply_link().is_empty(), "each is looked for once a week at most");
     }
 
     #[test]
