@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.5.0] - 2026-10-27
+
+To do or All jobs.
+
+### Changes
+
+- The Overview has a switch: To do shows your steps, All jobs shows the Tracker, Board, Documents, All postings and Skipped.
+- Pick is one list you can sort (fit, fit after tailoring, newest, pay, company rating) and filter (minimum fit, place or remote, shows pay, no red flags).
+- The Tracker shows the company first, and its rows line up.
+- Testing a job source shows a progress bar.
+
 ## [2.4.0] - 2026-10-27
 
 Everything on the Overview.
@@ -728,6 +739,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.5.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.5.0
 [2.4.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.4.0
 [2.3.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.3.1
 [2.3.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.3.0

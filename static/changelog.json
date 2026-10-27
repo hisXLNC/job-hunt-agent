@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.5.0",
+    "date": "2026-10-27",
+    "title": "To do or All jobs",
+    "changes": [
+      "The Overview has a switch: To do shows your steps, All jobs shows the Tracker, Board, Documents, All postings and Skipped.",
+      "Pick is one list you can sort (fit, fit after tailoring, newest, pay, company rating) and filter (minimum fit, place or remote, shows pay, no red flags).",
+      "The Tracker shows the company first, and its rows line up.",
+      "Testing a job source shows a progress bar."
+    ]
+  },
+  {
     "version": "2.4.0",
     "date": "2026-10-27",
     "title": "Everything on the Overview",
