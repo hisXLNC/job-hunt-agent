@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.2.0] - 2026-10-27
+
+Salary and why-it-fits columns.
+
+### Changes
+
+- The to-do list shows salary and why it fits in their own columns; click the reason to see all of it and the red flags.
+- Fit reasons are now one short line: the strongest match, then the biggest gap.
+- Tailor selected and Select all sit above the roles to pick.
+
 ## [2.1.0] - 2026-10-27
 
 The previous look is back.
@@ -684,6 +694,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.2.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.2.0
 [2.1.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.1.0
 [2.0.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.0.1
 [2.0.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.0.0
