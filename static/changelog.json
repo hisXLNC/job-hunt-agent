@@ -6,6 +6,7 @@
     "changes": [
       "Settings are reorganised into six clear tabs: Accounts, Search, Job sources, Email & calendar, Sync & backup, and App. Each setting sits where you'd look for it: the daily search time with Search, your time zone and phone notices with Email & calendar, the browser button with Job sources.",
       "CV & career has three tabs: Your CVs, Career paths, and Your details (name, email, signature, stories and answers for application forms).",
+      "The side menu is down to seven places: Overview, CV & career, Applications, Calendar, Inbox, Results and Settings. Documents is now a tab in Applications (next to Tracker, Board, All postings and Skipped), Add a job is the button at the top of Applications, and Recruiters is a tab in Inbox next to your job email. Old links still work.",
       "Fit forecast: next to each fit score, the score your CV could reach once it's tailored to that posting (\"95 → ~97\"), predicted from your real experience. Roles you've already tailored show the actual score instead.",
       "Sync & backup shows where your data is at a glance: last sync, last backup, and whether the last sync worked, with Sync now and Back up now. Choose how often it syncs, from every 5 minutes to once a day, or only when you press Sync now. The sidebar shows Syncing… or a red dot when a sync fails.",
       "When you sync with Google Drive, daily backups go there too: the last seven days, one per weekday.",

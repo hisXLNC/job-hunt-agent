@@ -87,7 +87,15 @@ const ICON = {
 };
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
-const NAV = [['overview', 'Overview'], ['cvs', 'CV &amp; career'], ['pipeline', 'Applications'], ['calendar', 'Calendar'], ['documents', 'Documents'], ['results', 'Results'], ['inbox', 'Inbox'], ['recruiters', 'Recruiters'], ['add', 'Add a job'], ['settings', 'Settings']];
+const NAV = [['overview', 'Overview'], ['cvs', 'CV &amp; career'], ['pipeline', 'Applications'], ['calendar', 'Calendar'], ['inbox', 'Inbox'], ['results', 'Results'], ['settings', 'Settings']];
+/** Pages that live under a menu item: Documents and Add a job under Applications, Recruiters under Inbox. */
+const NAV_HOME = { job: 'pipeline', apply: 'pipeline', documents: 'pipeline', add: 'pipeline', recruiters: 'inbox', review: 'overview', welcome: 'overview' };
+const APPS_TABS = [['tracker', 'Tracker'], ['board', 'Board'], ['documents', 'Documents'], ['postings', 'All postings'], ['skipped', 'Skipped']];
+const INBOX_TABS = [['email', 'Email'], ['recruiters', 'Recruiters']];
+/** A page's heading with its tabs, for the pages that hold several views. */
+const tabbedHead = (title, about, actions, base, tabs, on) => `<div class="head"><div class="grow"><h1>${title}</h1><p class="muted">${about}</p></div>${actions ? `<div class="row">${actions}</div>` : ''}</div>
+  <nav class="tabs">${tabs.map(([id, n]) => `<a href="#${base}/${id}" class="${id === on ? 'on' : ''}">${n}</a>`).join('')}</nav>`;
+const appsHead = (on, about) => tabbedHead('Applications', about, `<a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a><a class="btn" href="#add">${svg('add')}Add a job</a>`, 'pipeline', APPS_TABS, on);
 const STAGES = {
   queued: 'Pick to tailor', ready: 'Ready to approve', approved: 'Approved – submit it', applied: 'Applied',
   interviewing: 'Interviewing', offer: 'Offer', rejected: 'Rejected', no_response: 'No response', skipped: 'Skipped', dismissed: 'Not interested', saved: 'Saved for later',
@@ -194,7 +202,7 @@ const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">
 // ---- shell ----
 function renderNav() {
   const page = (location.hash.slice(1) || 'overview').split('/')[0];
-  const active = page === 'job' ? 'pipeline' : page;
+  const active = NAV_HOME[page] || page;
   const ready = overview?.counts?.ready || 0;
   $('#nav').innerHTML = NAV.map(([id, name]) =>
     `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'pipeline' && ready ? `<span class="badge">${ready}</span>` : ''}</a>`).join('');
@@ -273,16 +281,16 @@ async function showRoute() {
   try {
     if (name === 'overview' && overview?.setup && !overview.setup.cvs && !welcomed()) { location.hash = '#welcome'; return; }
     if (name === 'overview') await showOverview();
+    else if (name === 'pipeline' && arg === 'documents' || name === 'documents') await showDocuments();
     else if (name === 'pipeline') await showPipeline(arg || 'tracker');
     else if (name === 'job') await showJob(arg);
     else if (name === 'review') await showReview();
     else if (name === 'welcome') await showWelcome();
     else if (name === 'apply') await showApply(arg);
     else if (name === 'calendar') await showCalendar();
-    else if (name === 'documents') await showDocuments();
     else if (name === 'results') await showResults();
+    else if (name === 'inbox' && arg === 'recruiters' || name === 'recruiters') await showRecruiters();
     else if (name === 'inbox') await showInbox();
-    else if (name === 'recruiters') await showRecruiters();
     else if (name === 'add') showAdd();
     else if (name === 'cvs' || (name === 'settings' && arg === 'cvs')) await showSettings('cvs', name === 'cvs' ? arg : '');
     else if (name === 'settings') await showSettings(arg || 'connections');
@@ -367,7 +375,6 @@ async function showPipeline(tab) {
   const elsewhere = everything.filter(outsideYours).length;
   const jobs = everything.filter(j => !outsideYours(j));
   // "All" is gone from the tabs (the Tracker and Postings cover it); #pipeline/list still works.
-  const tabs = [['tracker', 'Tracker'], ['board', 'Board'], ['postings', 'Postings'], ['skipped', 'Skipped']];
   let body = '';
   if (tab === 'tracker') {
     const { rows } = await api('/api/tracker');
@@ -451,9 +458,7 @@ async function showPipeline(tab) {
           : `<td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>`}${tab === 'list' ? `<td class="row-act">${rowActions(j)}</td>` : ''}</tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">Nothing here yet.</p>'}</section>`;
   }
-  page(`<div class="head"><div class="grow"><h1>Applications</h1><p class="muted">${jobs.length} roles found so far.</p></div>
-    <div class="row"><a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a><a class="btn" href="#add">${svg('add')}Add a job</a></div></div>
-    <nav class="tabs">${tabs.map(([id, n]) => `<a href="#pipeline/${id}" class="${id === tab ? 'on' : ''}">${n}</a>`).join('')}</nav>${body}`);
+  page(`${appsHead(tab, `${jobs.length} roles found so far.`)}${body}`);
   const f = $('#filter'), src = $('#srcFilter');
   const apply = () => {
     const q = (f?.value || '').toLowerCase(), from = src?.value || '';
@@ -603,7 +608,7 @@ async function showJob(id) {
     ${j.warnings.length && !j.closed_at && !['applied', 'interviewing', 'offer'].includes(j.status) ? `<div class="card" style="border-color:var(--warn)"><b>Check this posting is real and open before you put time in.</b><ul class="flags">${j.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
     ${j.closed_at && ['queued', 'ready', 'approved', 'skipped'].includes(j.status) ? `<div class="card" style="border-color:var(--crit)"><b>This posting has closed.</b><p class="muted">Job Hunt noticed on ${esc(fmtDate(j.closed_at))} that the company took it down or stopped taking applications. Open the posting to make sure, then mark it Not interested.</p></div>` : ''}
     ${j.status === 'approved' ? `<div class="card row" style="border-color:var(--accent);justify-content:space-between"><span><b>Next: submit it on the company's site.</b><br><span class="muted">The Apply screen has the posting, your files and your answers in one place.</span></span><a class="btn primary" href="#apply/${encodeURIComponent(j.id)}">Apply</a></div>` : ''}
-    ${(recruiters_here || []).length ? `<div class="card"><b>Recruiter${recruiters_here.length === 1 ? '' : 's'} for this application</b>${recruiters_here.map(r => `<div class="small" style="margin-top:6px"><b>${esc(r.name)}</b> <span class="muted">${esc(r.company_of || '')}</span> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>${r.phone ? ` · <a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a>` : ''}${r.linkedin ? ` · <a href="#" data-act="link" data-url="${esc(r.linkedin)}">LinkedIn</a>` : ''}<br><span class="muted">${esc(r.emails)} email${r.emails === 1 ? '' : 's'} · last ${esc(ago(r.last_at))}${r.last_subject ? ` · “${esc(r.last_subject)}”` : ''}</span></div>`).join('')}<a class="small" href="#recruiters">All recruiters</a></div>` : ''}
+    ${(recruiters_here || []).length ? `<div class="card"><b>Recruiter${recruiters_here.length === 1 ? '' : 's'} for this application</b>${recruiters_here.map(r => `<div class="small" style="margin-top:6px"><b>${esc(r.name)}</b> <span class="muted">${esc(r.company_of || '')}</span> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>${r.phone ? ` · <a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a>` : ''}${r.linkedin ? ` · <a href="#" data-act="link" data-url="${esc(r.linkedin)}">LinkedIn</a>` : ''}<br><span class="muted">${esc(r.emails)} email${r.emails === 1 ? '' : 's'} · last ${esc(ago(r.last_at))}${r.last_subject ? ` · “${esc(r.last_subject)}”` : ''}</span></div>`).join('')}<a class="small" href="#inbox/recruiters">All recruiters</a></div>` : ''}
     ${recruiter && !['rejected', 'offer', 'no_response', 'dismissed'].includes(j.status) && !(recruiters_here || []).some(r => r.email === recruiter.email && ['applied', 'interviewing'].includes(j.status)) ? recruiterCard(recruiter, j) : ''}
     ${tailoring ? `<div class="card"><p><span class="spin"></span> Tailoring your CV and cover letter for this role… this page updates by itself.</p></div>` : ''}
     ${revising ? `<div class="card"><p><span class="spin"></span> Making your changes… this page updates by itself.</p></div>` : ''}
@@ -1120,7 +1125,7 @@ async function showApply(id) {
           : `<p class="muted">For questions like “Why this company?” or salary expectations, <a href="#job/${encodeURIComponent(j.id)}" data-tab-to="apply">have Claude write answers</a> from your CV and this posting.</p>`}
         ${(p.application_facts || '').trim() ? '' : '<p class="muted small">Add the facts forms ask for (work authorization, notice period, salary expectations) in <a href="#cvs/details">CV &amp; career → Your details</a> to have them here.</p>'}</li>
       <li class="card"><h2>Done?</h2><p class="muted">Job Hunt then waits for a reply, and reminds you to follow up if none comes${p.follow_up_after ? ` in ${p.follow_up_after} days` : ''}.${on_apply?.to && on_apply.mode !== 'off' && !done
-        ? ` It also ${on_apply.mode === 'send' ? 'emails' : 'drafts an email to'} <b>${esc(on_apply.to.name || on_apply.to.email)}</b>${on_apply.to.known ? ', the recruiter you know there, asking them to put you forward' : ' (named in the posting) to say you\'ve applied'}. <a href="#recruiters">Change this</a>` : ''}</p>
+        ? ` It also ${on_apply.mode === 'send' ? 'emails' : 'drafts an email to'} <b>${esc(on_apply.to.name || on_apply.to.email)}</b>${on_apply.to.known ? ', the recruiter you know there, asking them to put you forward' : ' (named in the posting) to say you\'ve applied'}. <a href="#inbox/recruiters">Change this</a>` : ''}</p>
         <div class="row">${done ? `<a class="btn" href="#job/${encodeURIComponent(j.id)}">Back to the job</a>` : `<button class="btn primary" data-act="applied" data-job="${esc(j.id)}">${svg('check')}I've submitted it</button><a class="btn ghost" href="${reviewReturn ? '#review' : `#job/${encodeURIComponent(j.id)}`}">Not now</a>`}</div></li>
     </ol>`);
 }
@@ -1215,8 +1220,8 @@ async function showDocuments() {
   };
   const docs = all.filter((groups[docFilter] || groups.all)[1]);
   page(`
-    <div class="head"><div class="grow"><h1>Documents</h1><p class="muted">Every tailored CV and cover letter, newest first. Click a role to read and edit them.</p></div>
-      ${all.length ? '<input type="search" id="docFilter" class="filter" placeholder="Filter by company or title">' : ''}</div>
+    ${appsHead('documents', 'Every tailored CV and cover letter, newest first. Click a role to read and edit them.')}
+    ${all.length ? '<input type="search" id="docFilter" class="filter" placeholder="Filter by company or title" style="max-width:420px;margin-bottom:10px">' : ''}
     ${all.length ? `<div class="chips">${Object.entries(groups).map(([k, [n, f]]) => `<button class="chip ${k === docFilter ? 'on' : ''}" data-act="docFilter" data-f="${k}">${n} <b>${all.filter(f).length}</b></button>`).join('')}</div>` : ''}
     ${docs.length ? `<section class="card"><div class="doclist">${docs.map(j => `
       <div class="docrow" data-text="${esc((j.company + ' ' + j.title).toLowerCase())}">
@@ -1327,10 +1332,9 @@ async function showResults() {
 }
 
 async function showInbox() {
-  const [{ emails }, rec] = await Promise.all([api('/api/emails'), api('/api/recruiters').catch(() => null)]);
-  page(`<div class="head"><div class="grow"><h1>Inbox</h1><p class="muted">Job email Job Hunt has read. Replies are saved as Gmail drafts for you to check and send, and messages are labelled under JobHunt/ in Gmail.</p></div>
-    ${overview?.setup?.google ? `<button class="btn primary" data-act="run" data-task="inbox">${svg('mail')}Check email now</button>` : '<a class="btn primary" href="#settings/connections">Connect Gmail to check email</a>'}</div>
-    ${rec && (rec.recruiters || []).some(r => !r.hidden) ? `<section class="card row" style="justify-content:space-between"><span><b>Recruiters</b> <span class="muted small">${(rec.recruiters || []).filter(r => !r.hidden).length} saved, each with the applications they handled.</span></span><a class="btn" href="#recruiters">${svg('recruiters')}Open Recruiters</a></section>` : ''}
+  const { emails } = await api('/api/emails');
+  page(`${tabbedHead('Inbox', 'Job email Job Hunt has read. Replies are saved as Gmail drafts for you to check and send, and messages are labelled under JobHunt/ in Gmail.',
+      overview?.setup?.google ? `<button class="btn primary" data-act="run" data-task="inbox">${svg('mail')}Check email now</button>` : '<a class="btn primary" href="#settings/connections">Connect Gmail to check email</a>', 'inbox', INBOX_TABS, 'email')}
     <section class="card" style="padding:6px 10px">${emails.length ? `<table><thead><tr><th>Received</th><th>Type</th><th>Email</th><th>Application</th></tr></thead><tbody>
     ${emails.map(m => { const [name, cls] = CATEGORY[m.category] || [m.category, '']; return `<tr>
       <td class="small muted" style="white-space:nowrap">${esc(fmtWhen(m.received_at))}</td>
@@ -1343,7 +1347,7 @@ async function showInbox() {
 // ---- Add a job ----
 function showAdd() {
   const noCv = overview && !overview.setup?.cvs;
-  page(`<div class="head"><div class="grow"><h1>Add a job you found</h1><p class="muted">For roles on LinkedIn, company sites or from referrals. Paste the posting and it gets scored and tailored like any other.</p></div></div>
+  page(`<div class="head"><div class="grow"><div class="eyebrow"><a href="#pipeline">Applications</a> / Add a job</div><h1>Add a job you found</h1><p class="muted">For roles on LinkedIn, company sites or from referrals. Paste the posting and it gets scored and tailored like any other.</p></div></div>
     ${noCv ? '<section class="card"><p>Add your CV first: Job Hunt compares the posting with it and tailors it for the role.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>' : ''}
     <form class="card" data-form="add"><div class="form">
       <label class="field">Company<input type="text" name="company" required></label>
@@ -1974,9 +1978,9 @@ async function showRecruiters() {
       <label class="field">Phone<input name="phone" value="${esc(r.phone)}"></label><label class="field">LinkedIn<input name="linkedin" value="${esc(r.linkedin)}"></label>
       <label class="field" style="grid-column:1/-1">Notes<textarea name="notes">${esc(r.notes)}</textarea></label>
       <div class="row"><button class="btn primary" type="submit">Save</button></div></form></section>`;
-  page(`<div class="head"><div class="grow"><h1>Recruiters</h1><p class="muted">Everyone who emailed you about a role, saved with the applications they handled. When you got to an interview there was nearly always a recruiter: they know you, so ask them to put you forward for new roles at their company.</p></div>
-      <div class="row">${rec.gmail ? `<button class="btn" data-act="recruiterScan" ${rec.scanning ? 'disabled' : ''}>${rec.scanning ? '<span class="spin"></span>Looking…' : 'Find them in my email'}</button>` : ''}
-        <button class="btn" data-act="recruiterNew">Add a recruiter</button><a class="btn ghost" href="/api/recruiters.csv" download>Download spreadsheet</a></div></div>
+  page(`${tabbedHead('Inbox', 'Recruiters who emailed you about a role, saved with the applications they handled. When you got to an interview there was nearly always a recruiter: they know you, so ask them to put you forward for new roles at their company.',
+      `${rec.gmail ? `<button class="btn" data-act="recruiterScan" ${rec.scanning ? 'disabled' : ''}>${rec.scanning ? '<span class="spin"></span>Looking…' : 'Find them in my email'}</button>` : ''}
+        <button class="btn" data-act="recruiterNew">Add a recruiter</button><a class="btn ghost" href="/api/recruiters.csv" download>Download spreadsheet</a>`, 'inbox', INBOX_TABS, 'recruiters')}
     <section class="card"><header><h2>When you apply</h2></header>
       <p class="muted small">When you mark an application as submitted (or Job Hunt sees the confirmation email), it writes to the recruiter on it, or one you know at that company, or the person named in the posting: that you've applied, and, if they know you, could they put you forward. Never more than once a week to the same person, and never to the address the application went to.</p>
       <div class="row" style="gap:16px;flex-wrap:wrap">${[['draft', 'Draft it in Gmail for me to send'], ['send', 'Send it for me'], ['off', 'Off']].map(([v, n]) => `<label class="check"><input type="radio" name="applyMode" data-act="applyMode" value="${v}" ${(rec.on_apply?.mode || 'draft') === v ? 'checked' : ''}> ${n}</label>`).join('')}</div>
@@ -2448,7 +2452,7 @@ async function act(el) {
     }, `Writing to ${el.dataset.name || 'them'}…`);
   }
   if (a === 'recruiterScan') {
-    return busy(async () => { const r = await api('/api/recruiters/scan', { method: 'POST' }); toast(r.started === false ? 'Already looking.' : 'Looking through your email for recruiters. A notice comes when it\'s done, in a few minutes.'); setTimeout(() => { if (location.hash === '#recruiters') route(); }, 4000); });
+    return busy(async () => { const r = await api('/api/recruiters/scan', { method: 'POST' }); toast(r.started === false ? 'Already looking.' : 'Looking through your email for recruiters. A notice comes when it\'s done, in a few minutes.'); setTimeout(() => { if (['#recruiters', '#inbox/recruiters'].includes(location.hash)) route(); }, 4000); });
   }
   if (a === 'recruiterNew') { const f = $('#recruiterNew'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('[name=name]').focus(); return; }
   if (a === 'recruiterEdit') { const f = el.closest('.rec')?.querySelector('.rec-edit'); if (f) f.hidden = !f.hidden; return; }
