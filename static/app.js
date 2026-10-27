@@ -89,15 +89,46 @@ const ICON = {
 };
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
-const NAV = [['overview', 'Overview'], ['cvs', 'CV &amp; career'], ['pipeline', 'Applications'], ['calendar', 'Calendar'], ['inbox', 'Inbox'], ['results', 'Results'], ['settings', 'Settings']];
-/** Pages that live under a menu item: Documents and Add a job under Applications, Recruiters under Inbox. */
-const NAV_HOME = { job: 'pipeline', apply: 'pipeline', documents: 'pipeline', add: 'pipeline', recruiters: 'inbox', review: 'overview', welcome: 'overview' };
-const APPS_TABS = [['tracker', 'Tracker'], ['board', 'Board'], ['documents', 'Documents'], ['postings', 'All postings'], ['skipped', 'Skipped']];
+const NAV = [['overview', 'Overview'], ['cvs', 'CV &amp; career'], ['calendar', 'Calendar'], ['inbox', 'Inbox'], ['results', 'Results'], ['settings', 'Settings']];
+/** Pages that live under a menu item: jobs and applications under the Overview, Recruiters under Inbox. */
+const NAV_HOME = { job: 'overview', apply: 'overview', documents: 'overview', add: 'overview', pipeline: 'overview', recruiters: 'inbox', review: 'overview', welcome: 'overview' };
+/** The job hunt, step by step: each a tab of the Overview, with how many are in it and what to do there. */
+const FLOW = [
+  ['pick', 'Pick', c => c.queued || 0, 'New matches that cleared your fit score. Tick the ones worth applying to: Job Hunt tailors your CV and writes a cover letter for each.'],
+  ['approve', 'Approve', c => c.ready || 0, 'Each has a tailored CV and cover letter. Read them, change what you like, then approve.'],
+  ['submit', 'Submit', c => c.approved || 0, 'Approved. Apply on the company\'s site (Job Hunt fills in the form), or mark it applied if you already did.'],
+  ['waiting', 'Waiting', c => c.applied || 0, 'Sent. Follow up after a week or two without a reply; close the ones that went quiet.'],
+  ['interviews', 'Interviews', c => (c.interviewing || 0) + (c.offer || 0), 'Interviews coming up, and offers.'],
+];
+/** Every job at once, in different shapes: also tabs of the Overview. */
+const VIEWS = [['tracker', 'Tracker'], ['board', 'Board'], ['documents', 'Documents'], ['postings', 'All postings'], ['skipped', 'Skipped']];
 const INBOX_TABS = [['email', 'Email'], ['recruiters', 'Recruiters']];
 /** A page's heading with its tabs, for the pages that hold several views. */
 const tabbedHead = (title, about, actions, base, tabs, on) => `<div class="head"><div class="grow"><h1>${title}</h1><p class="muted">${about}</p></div>${actions ? `<div class="row">${actions}</div>` : ''}</div>
   <nav class="tabs">${tabs.map(([id, n]) => `<a href="#${base}/${id}" class="${id === on ? 'on' : ''}">${n}</a>`).join('')}</nav>`;
-const appsHead = (on, about) => tabbedHead('Applications', about, `<a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a><a class="btn" href="#add">${svg('add')}Add a job</a>`, 'pipeline', APPS_TABS, on);
+/** The Overview's top: greeting, the buttons that start things, the steps and the views. */
+function homeHead(on, about, between = '') {
+  const o = overview || { counts: {}, running: [], setup: {} }, c = o.counts || {}, first = (o.name || '').split(' ')[0];
+  const searching = (o.running || []).includes('search');
+  return `<div class="head">
+      <div class="grow">
+        <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+        <h1>${greeting()}${first ? `, ${esc(first)}` : ''}</h1>
+        <p class="muted">Last job search ${ago(o.last_search)} · last email check ${ago(o.last_inbox)}</p>
+      </div>
+      <div class="row">
+        <a class="btn ghost" href="#add" title="A posting you found yourself">${svg('add')}Add a job</a>
+        <button class="btn" data-act="run" data-task="inbox" ${o.setup?.google ? '' : 'disabled title="Connect Google first"'}>${svg('mail')}Check email</button>
+        <button class="btn primary" data-act="run" data-task="search" ${searching ? 'disabled' : !o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${searching ? '<span class="spin"></span>Searching…' : `${svg('search')}Search for jobs now`}</button>
+      </div>
+    </div>
+    ${between}
+    <nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n], i) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-n">${i + 1}</span><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>
+    <nav class="tabs views">${VIEWS.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}<a class="views-x" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a></nav>
+    ${about ? `<p class="muted flow-about">${about}</p>` : ''}`;
+}
+/** The view tabs' pages (Tracker, Board…) under the Overview's top. */
+const appsHead = (on, about) => homeHead(on, about);
 const STAGES = {
   queued: 'Pick to tailor', ready: 'Ready to approve', approved: 'Approved – submit it', applied: 'Applied',
   interviewing: 'Interviewing', offer: 'Offer', rejected: 'Rejected', no_response: 'No response', skipped: 'Skipped', dismissed: 'Not interested', saved: 'Saved for later',
@@ -265,7 +296,7 @@ function renderNav() {
   const active = NAV_HOME[page] || page;
   const ready = overview?.counts?.ready || 0;
   $('#nav').innerHTML = NAV.map(([id, name]) =>
-    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'pipeline' && ready ? `<span class="badge">${ready}</span>` : ''}</a>`).join('');
+    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && ready ? `<span class="badge">${ready}</span>` : ''}</a>`).join('');
   const running = overview?.running || [];
   const busy = running.includes('search') ? `Searching for jobs… ${overview?.progress?.percent ?? 0}%` : running.includes('inbox') ? 'Checking email…'
     : running.some(r => r.startsWith('tailor') || r === 'add') ? 'Tailoring…' : '';
@@ -279,9 +310,9 @@ function renderNav() {
   $('#mDot').className = 'dot' + (busy ? ' busy' : ' on');
   $('#mNote').textContent = busy || (overview?.last_search ? `Searched ${ago(overview.last_search)}` : '');
   // The phone's tab bar: the four used most, and More for the rest (and the status lines).
-  const more = !['overview', 'pipeline', 'calendar', 'inbox'].includes(active);
-  $('#tabbar').innerHTML = [['overview', 'Overview'], ['pipeline', 'Applications'], ['calendar', 'Calendar'], ['inbox', 'Inbox']].map(([id, name]) =>
-    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}<span>${id === 'pipeline' ? 'Apps' : name}</span>${id === 'pipeline' && ready ? `<span class="badge">${ready}</span>` : ''}</a>`).join('')
+  const more = !['overview', 'cvs', 'calendar', 'inbox'].includes(active);
+  $('#tabbar').innerHTML = [['overview', 'Overview'], ['cvs', 'CVs'], ['calendar', 'Calendar'], ['inbox', 'Inbox']].map(([id, name]) =>
+    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}<span>${name}</span>${id === 'overview' && ready ? `<span class="badge">${ready}</span>` : ''}</a>`).join('')
     + `<button type="button" class="${more ? 'on' : ''}" data-act="moreMenu" aria-expanded="${document.body.classList.contains('more-open')}">${svg('more')}<span>More</span>${!$('#connLine')?.hidden || !$('#limitLine')?.hidden || !$('#updateNote')?.hidden ? '<span class="badge dot-badge"></span>' : ''}</button>`;
   $('#runNote').textContent = busy || `Searched ${ago(overview?.last_search)}${nextSearch ? ` · next ${when(nextSearch)}` : overview?.last_search ? ' · next soon' : ''}`;
   const g = overview?.setup?.google;
@@ -340,9 +371,10 @@ async function showRoute() {
   renderNav();
   try {
     if (name === 'overview' && overview?.setup && !overview.setup.cvs && !welcomed()) { location.hash = '#welcome'; return; }
-    if (name === 'overview') await showOverview();
-    else if (name === 'pipeline' && arg === 'documents' || name === 'documents') await showDocuments();
-    else if (name === 'pipeline') await showPipeline(arg || 'tracker');
+    if (name === 'pipeline' || name === 'documents') { location.replace(`#overview/${name === 'documents' ? 'documents' : arg || 'tracker'}`); return; }
+    if (name === 'overview' && (arg === 'documents')) { overview = await api('/api/overview'); await showDocuments(); }
+    else if (name === 'overview' && (VIEWS.some(([id]) => id === arg) || arg === 'list')) { overview = await api('/api/overview'); await showPipeline(arg); }
+    else if (name === 'overview') await showOverview(arg);
     else if (name === 'job') await showJob(arg);
     else if (name === 'review') await showReview();
     else if (name === 'welcome') await showWelcome();
@@ -369,10 +401,10 @@ function greeting() {
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 }
 
-async function showOverview() {
+async function showOverview(tab) {
   overview = await api('/api/overview');
   renderNav();
-  const o = overview, c = o.counts, first = (o.name || '').split(' ')[0];
+  const o = overview, c = o.counts;
   const setup = o.setup;
   const steps = [
     [setup.claude, setup.engine === 'api' ? 'Add your Claude API key' : 'Connect Claude Code', setup.engine === 'api' ? 'Needed to score jobs and tailor your CV.' : 'Uses Claude Code on this PC and your Claude subscription. No API key needed.', '#settings/connections'],
@@ -385,38 +417,27 @@ async function showOverview() {
   const neededDone = steps.filter(s => !s[4]).every(s => s[0]); // Claude and a CV
   const delta = o.this_week - o.last_week;
   const next = o.interviews[0];
-  const stages = ['queued', 'ready', 'approved', 'applied', 'interviewing', 'offer', 'rejected'];
-  const maxStage = Math.max(1, ...stages.map(s => c[s] || 0));
-  const maxWeek = Math.max(1, ...o.weeks.map(w => w.count));
-  const searching = o.running.includes('search');
-  page(`
-    <div class="head">
-      <div class="grow">
-        <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-        <h1>${greeting()}${first ? `, ${esc(first)}` : ''}</h1>
-        <p class="muted">Last job search ${ago(o.last_search)} · last email check ${ago(o.last_inbox)}</p>
-      </div>
-      <div class="row">
-        <button class="btn" data-act="run" data-task="inbox" ${setup.google ? '' : 'disabled title="Connect Google first"'}>${svg('mail')}Check email</button>
-        <button class="btn primary" data-act="run" data-task="search" ${searching ? 'disabled' : !setup.cvs ? 'disabled title="Add your CV first"' : ''}>${searching ? '<span class="spin"></span>Searching…' : `${svg('search')}Search for jobs now`}</button>
-      </div>
-    </div>
-    ${syncNewerHtml(o.sync_newer)}
+  // The step asked for, or the first one with something in it: your next move.
+  const step = FLOW.some(([id]) => id === tab) ? tab : tab === 'ready' ? 'approve' : (FLOW.find(([, , n]) => n(c)) || FLOW[0])[0];
+  const tracked = ['waiting', 'interviews'].includes(step) ? (await api('/api/tracker')).rows : [];
+  const between = `${syncNewerHtml(o.sync_newer)}
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}
     ${inUseHtml(o.in_use)}
     ${o.health?.length ? `<section class="card health"><header><h2>Needs attention</h2></header><ul class="flags">${o.health.map(h => `<li class="${h.level === 'problem' ? 'crit' : ''}">${esc(h.text)}
       ${h.action === 'removeBroken' ? `<span class="row" style="display:inline-flex;margin-left:6px"><button class="btn" data-act="removeBroken" data-boards="${esc(JSON.stringify(h.data))}">Remove ${h.data.length === 1 ? 'it' : 'them'}</button><button class="btn primary" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button></span>` : ''}
       ${h.fix ? `<button class="btn sm" style="margin-left:6px" data-act="${esc(h.fix.act)}" data-task="${esc(h.fix.task)}">${esc(h.fix.label)}</button>` : ''}
-      ${h.link && h.link !== '#overview' ? `<a href="${esc(h.link)}">Fix it</a>` : ''}</li>`).join('')}</ul><div id="healthIdeas" class="ideas"></div></section>` : ''}
-    ${todoHtml(o)}
+      ${h.link && h.link !== '#overview' ? `<a href="${esc(h.link)}">Fix it</a>` : ''}</li>`).join('')}</ul><div id="healthIdeas" class="ideas"></div></section>` : ''}`;
+  page(`
+    ${homeHead(step, FLOW.find(([id]) => id === step)[3], between)}
+    ${stepHtml(o, step, tracked)}
     ${showSteps && neededDone ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && !st[0]).map(([, t, d, href, key]) =>
       `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
     ${o.progress ? progressHtml(o.progress) : reportHtml(o.last_report)}
     <section class="kpis">
-      <a class="kpi" href="#pipeline"><span class="kpi-l">Ready to approve</span><span class="kpi-v">${c.ready || 0}</span><span class="kpi-s">${c.queued ? `${c.queued} more to pick from` : 'Tailored CV and cover letter each'}</span></a>
+      <a class="kpi" href="#overview/approve"><span class="kpi-l">Ready to approve</span><span class="kpi-v">${c.ready || 0}</span><span class="kpi-s">${c.queued ? `${c.queued} more to pick from` : 'Tailored CV and cover letter each'}</span></a>
       <div class="kpi"><span class="kpi-l">Applied this week</span><span class="kpi-v">${o.this_week}${o.weekly_goal ? `<span class="muted" style="font-size:.5em"> / ${o.weekly_goal}</span>` : ''}</span>${o.weekly_goal ? `<span class="meter"><i style="width:${Math.min(100, o.this_week / o.weekly_goal * 100)}%"></i></span>` : ''}<span class="kpi-s">${delta === 0 ? 'Same as last week' : `<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span> vs last week`}</span></div>
-      <div class="kpi"><span class="kpi-l">Interviews coming up</span><span class="kpi-v">${o.interviews.length}</span><span class="kpi-s">${next ? `Next: ${esc(fmtWhen(next.start))}` : 'None booked yet'}</span></div>
+      <a class="kpi" href="#overview/interviews"><span class="kpi-l">Interviews coming up</span><span class="kpi-v">${o.interviews.length}</span><span class="kpi-s">${next ? `Next: ${esc(fmtWhen(next.start))}` : 'None booked yet'}</span></a>
       <div class="kpi"><span class="kpi-l">Response rate</span><span class="kpi-v">${pct(o.response_rate)}</span><span class="kpi-s">${o.applied_total ? `Of ${o.applied_total} application${o.applied_total === 1 ? '' : 's'} sent` : 'No applications sent yet'}</span></div>
     </section>
     <details class="card"><summary><b>Recent activity</b></summary>
@@ -851,7 +872,9 @@ const whyFits = j => {
   return `<details class="why-fits"><summary><span class="why-text">${esc(j.reasoning || '')}</span>${flags.length ? `<span class="bad-text">${flags.length} red flag${flags.length === 1 ? '' : 's'}</span>` : ''}</summary>
     ${flags.length ? `<ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>`;
 };
-function todoHtml(o) {
+/** One step of the job hunt on the Overview: its roles, each with the next thing to do. `tracked`
+ *  (the Tracker's rows) fills in the steps after you apply. */
+function stepHtml(o, step, tracked) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
   const row = (j, sub, actions) => `<div class="todo-row"><span></span>
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
@@ -867,8 +890,7 @@ function todoHtml(o) {
       ${i.job_id ? `<span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prep</a></span>` : ''}</div>`).join('')]);
   const picking = (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`));
   const inWork = (o.to_tailor || []).length - picking.length;
-  if (picking.length) groups.push([`Pick the roles to tailor your CV for (${picking.length})`, `<div data-pickbox>
-    <p class="muted small" style="margin:0 0 6px">These cleared your fit score. Tick the ones you want: Job Hunt picks the closest of your CVs for each, tailors it and writes a cover letter.</p>
+  if (picking.length) groups.push([`Pick from ${picking.length} new match${picking.length === 1 ? '' : 'es'}`, `<div data-pickbox>
     <div class="row" style="margin:2px 0 8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div>
     ${(() => {
       // Grouped by the CV each would be tailored from, best fit first.
@@ -884,7 +906,8 @@ function todoHtml(o) {
     })()}
 </div>`]);
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
-  if (o.ready?.length) groups.push([`Ready to approve (${o.counts.ready}) <a class="btn sm" href="#review" style="margin-left:8px">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
+  const ready = [];
+  if (o.ready?.length) ready.push([`<a class="btn sm" href="#review">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`)).join('')]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
@@ -897,12 +920,29 @@ function todoHtml(o) {
       `<button class="btn sm" data-act="stage" data-status="no_response" data-job="${id(j)}" data-from="applied">No response</button>`)).join('')]);
   if (o.follow_ups?.length) groups.push(['No reply yet: follow up', o.follow_ups.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
     `<button class="btn sm" data-act="followUp" data-job="${id(j)}">Write follow-up</button>`)).join('')]);
-  if (!groups.length) {
-    const ready = o.setup?.claude && o.setup?.cvs;
-    return `<section class="card todo"><header><h2>To do</h2></header><p class="muted">${ready ? 'You\'re all caught up. New matches appear here after each search.' : 'Finish setting up above, then search for jobs.'}</p></section>`;
-  }
-  return `<section class="card todo"><header><h2>To do</h2><a class="btn ghost" href="#pipeline">All applications</a></header>
-    ${groups.map(([h, rows]) => `<div class="todo-group"><h3>${h}</h3>${rows}</div>`).join('')}</section>`;
+  // Each step's groups; the ones above were made for all of them.
+  const has = h => groups.find(g => String(g[0]).startsWith(h));
+  const listed = new Set([...(o.follow_ups || []), ...(o.quiet || []), ...(o.approved || [])].map(j => j.id));
+  const rest = (title, keep) => {
+    const rows = tracked.filter(r => keep(r) && !listed.has(r.id));
+    return rows.length ? [[title, rows.map(trackRow).join('')]] : [];
+  };
+  const by = {
+    pick: [has('Pick'), has('Tailoring')].filter(Boolean),
+    approve: ready,
+    submit: [has('Ask your recruiters'), has('Submit')].filter(Boolean),
+    waiting: [has('No reply yet'), has('Quiet'), ...rest('Everything else you applied to', r => r.status === 'applied')].filter(Boolean),
+    interviews: [has('Interviews in the next'), ...rest('Interviewing and offers', r => ['interviewing', 'offer'].includes(r.status))].filter(Boolean),
+  }[step];
+  const empty = {
+    pick: o.setup?.claude && o.setup?.cvs ? 'No new matches to pick from. New ones appear here after each search.' : 'Finish setting up above, then search for jobs.',
+    approve: 'Nothing to approve. Tailor some roles in Pick, and they appear here.',
+    submit: 'Nothing waiting to be submitted.',
+    waiting: 'No applications waiting on a reply.',
+    interviews: 'No interviews yet.',
+  }[step];
+  // The groups' headings name the step's parts; the step's own name is on its tab.
+  return `<section class="card todo step-${step}">${by.length ? by.map(([h, rows]) => `<div class="todo-group">${h ? `<h3>${h}</h3>` : ''}${rows}</div>`).join('') : `<p class="muted">${empty}</p>`}</section>`;
 }
 
 // ---- Two computers ----

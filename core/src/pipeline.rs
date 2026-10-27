@@ -1578,7 +1578,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             drop(db);
             self.note(
                 &format!("{closed} posting{} closed", if closed == 1 { " has" } else { "s have" }),
-                "They're marked Closed in Applications, so you can skip them.",
+                "They're marked Closed on the Overview, so you can skip them.",
             );
         }
         Ok((checked, closed))

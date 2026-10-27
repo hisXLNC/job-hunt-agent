@@ -696,3 +696,22 @@ table.jobs td { padding: 10px 7px; }
   .todo-row > span:empty { display: none; }
   .todo-row .why { flex: 1 1 100%; }
 }
+/* The Overview's steps: Pick › Approve › Submit › Waiting › Interviews, each with its count. */
+.flow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.flow a { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 7px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-2); font-weight: 600; text-decoration: none; }
+.flow a:hover { border-color: var(--accent); color: var(--ink); }
+.flow a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #fff); }
+.flow-n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); color: var(--muted); font-size: 12px; }
+.flow a.on .flow-n { background: rgba(255, 255, 255, .22); color: inherit; }
+.flow-c { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.flow a.on .flow-c { background: var(--accent-ink, #fff); color: var(--accent); }
+.flow a.none:not(.on) .flow-c { background: none; color: var(--muted); }
+.flow-arrow { color: var(--muted); font-size: 18px; }
+.tabs.views { font-size: 13px; }
+.tabs.views .views-x { margin-left: auto; color: var(--accent); }
+.flow-about { margin: 0; }
+@media (max-width: 760px) {
+  .flow { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .flow a { flex: none; }
+  .flow-arrow { display: none; }
+}
