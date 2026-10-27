@@ -37,6 +37,10 @@ pub fn create(agent: &Agent) -> R<PathBuf> {
     write_snapshot(agent, &out, agent.secret("backup.secrets") == "1")?;
     prune(&dir)?;
     agent.db().set("last.backup", &crate::util::now())?;
+    // When you sync with Google Drive, a copy goes there too.
+    if let Err(e) = crate::sync::backup_to_drive(agent, &out) {
+        let _ = agent.db().log(None, "backup:error", &format!("not copied to Google Drive: {}", e.0));
+    }
     Ok(out)
 }
 

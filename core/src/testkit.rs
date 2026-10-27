@@ -155,6 +155,7 @@ impl Llm for FakeLlm {
             red_flags: vec![],
             keywords: vec!["Technical Program Manager".into(), "UAT".into(), "vendor management".into(), "Kubernetes".into()],
             deadline: if job.description.contains("apply by Halloween") { "2099-10-31".into() } else { String::new() },
+            potential: Some(92),
         })
     }
     fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], stories: &str, _style: &str) -> R<Tailored> {

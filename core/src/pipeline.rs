@@ -1269,6 +1269,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                     report.scored += 1;
                     job.status = if s.score >= profile.score_threshold { "queued" } else { "skipped" }.into();
                     job.score = Some(s.score);
+                    job.score_potential = s.potential;
                     job.track = Some(s.track.clone());
                     job.reasoning = Some(s.reasoning);
                     job.red_flags = s.red_flags;
@@ -1345,7 +1346,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             let db = self.db();
             db.update_job(job_id, &[
                 ("status", status.into()),
-                ("score", s.score.into()),
+                ("score", s.score.into()), ("score_potential", json!(s.potential)),
                 ("track", s.track.clone().into()),
                 ("reasoning", s.reasoning.into()),
                 ("red_flags", json!(s.red_flags)),
@@ -1392,6 +1393,23 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Claude reads the page to find it.
     pub fn add_clip(&self, clip: &Value) -> R<Job> {
         let f = |k: &str| clip[k].as_str().unwrap_or("").trim().to_string();
+        // A LinkedIn job: read it as LinkedIn shows it signed out, which is far cleaner than the
+        // signed-in page (a list of other jobs, the feed, messages).
+        if let Some(id) = crate::sources::linkedin_job_id(&f("url")).filter(|_| !cfg!(test)) {
+            if let Ok(p) = crate::sources::linkedin_posting(&crate::sources::http(), &id) {
+                if !p.title.is_empty() && !p.company.is_empty() {
+                    let jid = self.add_found("linkedin", &p.company, &p.title, &p.url, &p.location, &p.description)?;
+                    let mut set: Vec<(&str, Value)> = vec![];
+                    if let Some(u) = p.apply_url { set.push(("apply_url", u.into())); }
+                    if let Some(e) = p.apply_email { set.push(("apply_email", e.into())); }
+                    if let Some(t) = p.salary { set.push(("salary", t.into())); }
+                    if !set.is_empty() {
+                        self.db().update_job(&jid, &set)?;
+                    }
+                    return self.db().job(&jid)?.ok_or_else(|| Error("That job no longer exists.".into()));
+                }
+            }
+        }
         let (url, text) = (f("url"), f("text"));
         let (mut title, mut company, mut location, mut description) = (f("title"), f("company"), f("location"), text.clone());
         if text.chars().count() < 40 {
@@ -1452,6 +1470,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
         job.status = "queued".into();
         job.score = Some(s.score);
+        job.score_potential = s.potential;
         job.track = Some(s.track);
         job.reasoning = Some(s.reasoning);
         job.red_flags = s.red_flags;
@@ -1937,6 +1956,9 @@ replies and interviews, and a little lower for kinds that got none from several 
             "next_search": next,
             "sync_on": crate::sync::enabled(self),
             "last_sync": Some(self.secret("last.sync")).filter(|x| !x.is_empty()),
+            "sync_error": Some(self.secret("sync.error")).filter(|x| !x.is_empty() && crate::sync::enabled(self)),
+            "syncing": self.is_running("sync"),
+            "sync_where": if crate::sync::on_drive(self) { "drive" } else { "folder" },
             "last_backup": Some(self.secret("last.backup")).filter(|x| !x.is_empty()),
             "conn_problems": problems,
             "claude_limited_until": self.limited().map(|t| t.to_rfc3339()),
@@ -2115,22 +2137,22 @@ replies and interviews, and a little lower for kinds that got none from several 
         out.push(row("boards", "Company job boards", "Job listings",
             if boards == 0 { "setup" } else if !broken.is_empty() || bok == Some(false) { "problem" } else if bok.is_some() { "ok" } else { "unknown" },
             if boards == 0 { "None yet. Find employers near you in What to search for.".into() } else if !broken.is_empty() { format!("{boards} boards; {} no longer exist{}.", broken.len(), if broken.len() == 1 { "s" } else { "" }) } else if bdetail.is_empty() { format!("{boards} boards; not tested yet.") } else { format!("{boards} boards. {bdetail}") },
-            bat, json!(if boards == 0 { json!(["goto:search"]) } else if broken.is_empty() { json!(["test", "goto:search"]) } else { json!(["test", "removeBroken", "goto:search"]) })).as_object().cloned().map(|mut o| { o.insert("data".into(), json!(broken)); Value::Object(o) }).unwrap());
+            bat, json!(if boards == 0 { json!(["goto:sources"]) } else if broken.is_empty() { json!(["test", "goto:sources"]) } else { json!(["test", "removeBroken", "goto:sources"]) })).as_object().cloned().map(|mut o| { o.insert("data".into(), json!(broken)); Value::Object(o) }).unwrap());
         // Job-alert emails
         let (aok, adetail, aat) = seen("alerts", "Job-alert");
         out.push(row("alerts", "Job-alert emails", "Job listings", if !mail { "setup" } else { match aok { Some(true) => "ok", Some(false) => "problem", None => "unknown" } },
             if !mail { "Needs Gmail connected.".into() } else if adetail.is_empty() { "Read on every email check.".into() } else { adetail }, aat, json!(if mail { json!(["test"]) } else { json!(["goto:googleCard"]) })));
         // Phone, sync, backups
         let phone = !self.secret("phone.topic").is_empty();
-        out.push(row("phone", "Phone notifications (ntfy)", "Other", if phone { "ok" } else { "setup" }, if phone { "On.".into() } else { "Off (optional).".into() }, String::new(), json!(if phone { json!(["phoneTest", "goto:extras"]) } else { json!(["goto:extras"]) })));
+        out.push(row("phone", "Phone notifications (ntfy)", "Other", if phone { "ok" } else { "setup" }, if phone { "On.".into() } else { "Off (optional).".into() }, String::new(), json!(if phone { json!(["phoneTest", "goto:calendar"]) } else { json!(["goto:calendar"]) })));
         let sync = crate::sync::enabled(self);
         let synced = self.secret("last.sync");
         let stale = |k: &str, days: i64| chrono::DateTime::parse_from_rfc3339(&self.secret(k)).map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days() >= days).unwrap_or(true);
         out.push(row("sync", "Sync between computers", "Other", if !sync { "setup" } else if stale("last.sync", 2) { "problem" } else { "ok" },
-            if !sync { "Off (optional).".into() } else if stale("last.sync", 2) { "Hasn't saved in two days. Check the Google Drive folder.".into() } else { "Up to date.".into() }, synced, json!(if sync { json!(["syncNow", "goto:app"]) } else { json!(["goto:app"]) })));
+            if !sync { "Off (optional).".into() } else if stale("last.sync", 2) { "Hasn't saved in two days. Check the Google Drive folder.".into() } else { "Up to date.".into() }, synced, json!(if sync { json!(["syncNow", "goto:sync"]) } else { json!(["goto:sync"]) })));
         let never = self.secret("last.backup").is_empty();
         out.push(row("backup", "Backups", "Other", if never { "unknown" } else if stale("last.backup", 3) { "problem" } else { "ok" },
-            if self.secret("last.backup").is_empty() { "No backup yet.".into() } else if stale("last.backup", 3) { "No backup in three days.".into() } else { "Daily backups are running.".into() }, self.secret("last.backup"), json!(["backupNow", "goto:app"])));
+            if self.secret("last.backup").is_empty() { "No backup yet.".into() } else if stale("last.backup", 3) { "No backup in three days.".into() } else { "Daily backups are running.".into() }, self.secret("last.backup"), json!(["backupNow", "goto:sync"])));
         // Sources you can switch off one by one: off ones say so and offer to come back on; the
         // rest offer to go off. Their keys and boards stay saved either way.
         for r in out.iter_mut().filter(|r| SWITCHABLE.contains(&r["id"].as_str().unwrap_or("")) && r["status"] != "setup" && r["status"] != "na") {
@@ -2519,7 +2541,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             add(&mut out, "problem", if self.engine_name() == "api" { "No Claude API key, so nothing can be scored or tailored.".into() } else { "Claude Code isn't ready on this computer, so nothing can be scored or tailored.".into() }, "#settings/connections");
         }
         if let Some(t) = self.limited() {
-            add(&mut out, "warn", format!("Your Claude usage limit is reached until {}. Searching, scoring and tailoring wait until then, and pick up by themselves.", t.with_timezone(&self.profile().tz()).format("%-I:%M %p")), "#settings/connections");
+            add(&mut out, "warn", format!("Your Claude usage limit is reached. It resets {}; searching, scoring and tailoring wait until then, and pick up by themselves.", crate::util::reset_time(t, chrono::Utc::now())), "#settings/connections");
         }
         if !self.secret("google.token").is_empty() && !self.google_client().is_empty() && self.mail.read().unwrap().is_none() {
             add(&mut out, "problem", "Google is disconnected: job email isn't being read and follow-ups aren't drafted. Reconnect it.".into(), "#settings/connections");
@@ -2546,10 +2568,10 @@ replies and interviews, and a little lower for kinds that got none from several 
             _ => {}
         }
         if crate::sync::enabled(self) && age_days("last.sync").is_none_or(|d| d >= 2) {
-            fix(&mut out, "warn", "Sync between computers hasn't saved in two days. Check the Google Drive folder in Settings \u{2192} App.".into(), "Sync now", "syncNow", "");
+            fix(&mut out, "warn", "Sync between computers hasn't saved in two days. Check it in Settings \u{2192} Sync & backup.".into(), "Sync now", "syncNow", "");
         }
         if age_days("last.backup").is_some_and(|d| d >= 3) {
-            fix(&mut out, "warn", "No backup in three days. Check the backup folder in Settings \u{2192} App.".into(), "Back up now", "backupNow", "");
+            fix(&mut out, "warn", "No backup in three days. Check it in Settings \u{2192} Sync & backup.".into(), "Back up now", "backupNow", "");
         }
         // Problems logged in the last two days, one line per kind.
         let since = (Utc::now() - Duration::days(2)).to_rfc3339();
@@ -3159,7 +3181,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             };
             out.push(json!({
                 "id": j.id, "title": j.title, "company": j.company, "location": j.location, "status": j.status,
-                "score": j.score, "score_after": j.score_after, "deadline": j.deadline, "closed_at": j.closed_at, "url": j.url,
+                "score": j.score, "score_after": j.score_after, "score_potential": j.score_potential, "deadline": j.deadline, "closed_at": j.closed_at, "url": j.url,
                 "apply_email": j.apply_email,
                 "steps": steps,
                 "last_step": last_step.as_ref().map(|l| l.0.clone()),
@@ -3263,7 +3285,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
             let db = self.db();
             db.update_job(job_id, &[
-                ("score", s.score.into()), ("track", s.track.clone().into()), ("reasoning", s.reasoning.into()),
+                ("score", s.score.into()), ("score_potential", json!(s.potential)), ("track", s.track.clone().into()), ("reasoning", s.reasoning.into()),
                 ("red_flags", json!(s.red_flags)), ("keywords", json!(s.keywords)),
             ])?;
             db.log(Some(job_id), "scored", &format!("{} on the {} track (before tailoring it anyway)", s.score, s.track))?;
@@ -3327,7 +3349,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                     cleared += (status == "queued") as usize;
                     let db = self.db();
                     db.update_job(&j.id, &[
-                        ("status", status.into()), ("score", s.score.into()), ("track", s.track.clone().into()),
+                        ("status", status.into()), ("score", s.score.into()), ("score_potential", json!(s.potential)), ("track", s.track.clone().into()),
                         ("reasoning", s.reasoning.into()), ("red_flags", json!(s.red_flags)), ("keywords", json!(s.keywords)),
                     ])?;
                     db.log(Some(&j.id), "scored", &format!("{} on the {} track (scored again)", s.score, s.track))?;
@@ -4168,10 +4190,10 @@ pub fn sync_in_background(agent: &Arc<Agent>) {
         let r = crate::sync::push(&agent, false);
         // The last problem, for Settings; cleared once a sync works.
         let _ = match &r { Err(e) => agent.db().set("sync.error", &e.0), Ok(_) => agent.db().delete("sync.error") };
+        // Try again after the usual gap, not every minute; "last.sync" stays the last one that worked.
+        let _ = agent.db().set("sync.tried", &crate::util::now());
         if let Err(e) = r {
             let _ = agent.db().log(None, "sync:error", &e.0);
-            // Try again after a few minutes, not every minute.
-            let _ = agent.db().set("last.sync", &crate::util::now());
         }
     });
 }
@@ -5122,6 +5144,15 @@ mod tests {
         let s = setup();
         std::fs::remove_file(s.agent.cv_path("program")).unwrap();
         assert!(s.agent.search(Some(vec![])).unwrap_err().0.contains("No CV"));
+    }
+
+    #[test]
+    fn keeps_the_predicted_fit_after_tailoring() {
+        let s = setup();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        let j = s.agent.db().job("test:1").unwrap().unwrap();
+        assert_eq!((j.score, j.score_potential), (Some(85), Some(92)));
+        assert_eq!(j.brief()["score_potential"], 92);
     }
 
     #[test]

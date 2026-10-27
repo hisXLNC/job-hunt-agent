@@ -8,6 +8,20 @@ pub fn now() -> String {
 }
 
 /// 85000 as "85,000".
+/// When a usage limit resets, in this computer's own time and as a wait, so it reads the same
+/// everywhere: "at 9:00 AM (in about 3 hours)".
+pub fn reset_time(at: chrono::DateTime<chrono::Utc>, now: chrono::DateTime<chrono::Utc>) -> String {
+    let mins = (at - now).num_minutes().max(1);
+    let wait = match mins {
+        m if m < 60 => format!("{m} minute{}", if m == 1 { "" } else { "s" }),
+        m if m < 90 => "an hour".to_string(),
+        m if m < 36 * 60 => format!("{} hours", (m + 30) / 60),
+        m => format!("{} days", (m + 720) / 1440),
+    };
+    let day = if at.with_timezone(&chrono::Local).date_naive() == now.with_timezone(&chrono::Local).date_naive() { "" } else { " %a" };
+    format!("at {} (in about {wait})", at.with_timezone(&chrono::Local).format(&format!("%-I:%M %p{day}")))
+}
+
 pub fn thousands(n: i64) -> String {
     let d = n.abs().to_string();
     let mut out = String::new();
@@ -128,12 +142,45 @@ mod tests {
     }
 
     #[test]
+    fn pdf_follows_word_edits() {
+        let dir = std::env::temp_dir().join(format!("jh-pdf-{}", short_hash(&now())));
+        std::fs::create_dir_all(&dir).unwrap();
+        let docx = dir.join("CV.docx");
+        std::fs::write(&docx, "word").unwrap();
+        assert!(pdf_stale(&docx), "no PDF yet");
+        std::fs::write(dir.join("CV.pdf"), "pdf").unwrap();
+        assert!(!pdf_stale(&docx));
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+        std::fs::File::options().write(true).open(&docx).unwrap().set_modified(later).unwrap();
+        assert!(pdf_stale(&docx), "changed in Word after the PDF was made");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn helpers() {
         assert_eq!(slug("Big Bank  Senior TPM, Payments!", 60), "big-bank-senior-tpm-payments");
         assert_eq!(file_word("Mary-Jane O'Neil"), "Mary_Jane_O_Neil");
         assert_eq!(unescape("A &amp; B &#8211; &#x2019;"), "A & B – \u{2019}");
         assert_eq!(escape("a<b & c"), "a&lt;b &amp; c");
     }
+}
+
+/// Whether the PDF next to a Word file is missing or older than it (you changed it in Word).
+pub fn pdf_stale(docx: &std::path::Path) -> bool {
+    let modified = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    match (modified(docx), modified(&docx.with_extension("pdf"))) {
+        (Some(d), Some(p)) => p < d,
+        (_, None) => true,
+        (None, Some(_)) => false,
+    }
+}
+
+/// The PDF of a Word file, made again first when the Word file changed since.
+pub fn pdf_of(docx: &std::path::Path) -> crate::R<std::path::PathBuf> {
+    if pdf_stale(docx) {
+        return docx_to_pdf(docx);
+    }
+    Ok(docx.with_extension("pdf"))
 }
 
 /// Save a PDF copy next to a Word file (same name, .pdf) using Microsoft Word, or LibreOffice when Word

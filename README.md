@@ -47,10 +47,10 @@ in), your CV, where you want to work, where to look, and your first search.
   sync, in your own Google Drive. Nothing is published or sent to whoever shared the app; see
   [PRIVACY.md](PRIVACY.md). Updating or uninstalling never deletes it.
 - **Updates** arrive by themselves: you get a notice and an **Install and restart** button.
-- **Another computer:** Settings → App → Sync between computers → Straight to Google Drive. Install
+- **Another computer:** Settings → Sync & backup → Sync to Google Drive → Straight to Google Drive. Install
   Job Hunt on the other PC and connect the same Google account: it offers to continue where you left
   off.
-- **Backups:** one zip a day with everything, the last 14 kept (Settings → App → Backups).
+- **Backups:** one zip a day with everything, the last 14 kept (Settings → Sync & backup).
 - **Giving it to a friend:** they install their own copy and use their own Claude and Google. See
   [SHARING.md](SHARING.md).
 - **On a server, with your PC off:** possible, but technical. See [server/ORACLE.md](server/ORACLE.md)

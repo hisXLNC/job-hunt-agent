@@ -91,6 +91,7 @@ nav.main a .badge { margin-left: auto; background: var(--accent); color: #fff; b
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
 .dot.on { background: #52C47F; }
 .dot.busy { background: #E3A83C; animation: pulse 1.2s infinite; }
+.dot.crit { background: var(--crit); }
 @keyframes pulse { 50% { opacity: .35; } }
 .theme-switch { display: flex; gap: 2px; padding: 3px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); border-radius: 9px; align-self: stretch; }
 .theme-switch button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 6px; border: 0; border-radius: 6px; background: none; color: var(--side-ink); font: inherit; font-size: 11.5px; cursor: pointer; transition: background .15s, color .15s; }
@@ -138,6 +139,11 @@ form[data-form=profile] { display: flex; flex-direction: column; gap: 20px; }
 
 /* stat tiles */
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+/* Sync & backup status: three small figures inside a card. */
+.kpis.small-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0 14px; }
+.small-kpis .kpi { box-shadow: none; padding: 10px 12px; background: var(--surface-2); }
+.small-kpis .kpi-v { font-size: 17px; }
+@media (max-width: 760px) { .kpis.small-kpis { grid-template-columns: 1fr; } }
 @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .kpi { background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow); padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: inherit; }
 a.kpi:hover { border-color: var(--accent); }
@@ -223,6 +229,10 @@ tr.click:hover td { background: var(--surface-2); }
 .ring { --p: 0; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; flex: none;
   background: radial-gradient(closest-side, var(--surface) 76%, transparent 77% 100%), conic-gradient(var(--mark) calc(var(--p) * 1%), var(--line-2) 0); }
 .ring b { font-family: var(--font-d); font-size: 20px; }
+.ring.faint { opacity: .6; }
+.ring.faint b { font-size: 17px; }
+/* The predicted fit after tailoring, next to a fit score. */
+.reach { margin-left: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .flags { margin: 0; padding-left: 18px; color: var(--crit); font-size: 13px; }
 
 /* setup checklist */

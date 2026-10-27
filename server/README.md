@@ -11,7 +11,7 @@ Package Center). It runs on Intel/AMD and ARM64 models.
 
 ## 1. Get two things from your PC
 
-1. **A backup with your sign-ins.** In the Windows app: Settings → App → Backups → tick *Include saved keys
+1. **A backup with your sign-ins.** In the Windows app: Settings → Sync & backup → Backups → tick *Include saved keys
    and sign-ins* → **Back up now** → **Download** (or take the zip from the backup folder).
 2. **A Claude sign-in for the server** (to use your Claude subscription). In PowerShell on the PC run:
 
@@ -42,7 +42,7 @@ Only devices signed in to your Tailscale account can reach it; nothing is opened
 
 ## 4. Bring your data over
 
-In Job Hunt on the NAS: Settings → App → Backups → **Restore from a backup…** → choose the zip from step 1.1.
+In Job Hunt on the NAS: Settings → Sync & backup → Backups → **Restore from a backup…** → choose the zip from step 1.1.
 Job Hunt restarts with your CVs, applications, settings and Google sign-in.
 
 Then pick one place to run it: **exit the Windows app** (tray icon → Exit, and untick "Start when I sign in"),

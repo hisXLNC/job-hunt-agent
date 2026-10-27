@@ -24,14 +24,14 @@ Send them two links: the installer
    verified the app: they click **Advanced → Go to Job Hunt**. If you kept the Google project in
    *Testing* (see GOOGLE-SETUP.md step 3), add their Gmail address as a test user first, or Google says they don't have
    access.
-5. Optional: Settings → App → **Sync between computers → Straight to Google Drive**, so they can use other
+5. Optional: Settings → Sync & backup → **Sync to Google Drive → Straight to Google Drive**, so they can use other
    computers too.
 
 They get updates automatically, like you. Their data stays on their computer and in their own Google Drive.
 
 ## Using your own Job Hunt on another computer
 
-1. On the computer you use now: Settings → App → **Sync between computers** → **Straight to Google Drive**,
+1. On the computer you use now: Settings → Sync & backup → **Sync to Google Drive** → **Straight to Google Drive**,
    tick *Keep it up to date* and *Include saved keys and sign-ins*, **Save**. (Connect Google first, and
    reconnect it once if it was connected before Drive was added.)
 2. On the other computer: install Job Hunt. On the Welcome page, under *Already using Job Hunt on another

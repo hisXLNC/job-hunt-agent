@@ -163,6 +163,9 @@ const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
 const scoreBadge = n => n == null ? '' : `<span class="score ${n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo'}" title="Fit score">${n}</span>`;
 /** "fit 72 → 85": your CV's fit before tailoring and the tailored CV's after. */
 const fitChange = j => j.score != null && j.score_after != null && j.score_after !== j.score ? `fit ${j.score} → <b>${j.score_after}</b>` : '';
+/** The predicted fit after tailoring, while it isn't tailored yet: "could reach ~85". */
+const canReach = j => j.score_after == null && j.score_potential != null && j.score != null && j.score_potential > j.score ? j.score_potential : null;
+const reachTag = j => canReach(j) ? `<span class="reach" title="Predicted fit once your CV is tailored to this posting">→ ~${canReach(j)}</span>` : '';
 const trackLabel = t => (settingsCache?.profile?.tracks || []).find(x => x.name === t)?.label || overview?.track_labels?.[t] || (t || '').replace(/[-_]/g, ' ');
 const stagePill = s => `<span class="pill ${esc(s)}">${esc(STAGES[s] || s)}</span>`;
 /** When the posting stops taking applications, if it says; red when it's two days or less away. */
@@ -222,8 +225,9 @@ function renderNav() {
   const sync = side.sync_on;
   const at = sync ? side.last_sync : side.last_backup;
   const stale = !at || Date.now() - new Date(at) > (sync ? 2 : 3) * 86400000;
-  $('#dotSync').className = 'dot' + (stale ? ' warn' : ' on');
-  $('#syncNote').textContent = sync ? (at ? `Synced ${ago(at)}` : 'Not synced yet') : (at ? `Backed up ${ago(at)}` : 'No backup yet');
+  $('#dotSync').className = 'dot' + (sync && side.sync_error ? ' crit' : side.syncing ? ' busy' : stale ? ' warn' : ' on');
+  $('#syncNote').textContent = sync ? (side.syncing ? 'Syncing…' : side.sync_error ? 'Sync didn\'t work' : at ? `Synced ${ago(at)}` : 'Not synced yet') : (at ? `Backed up ${ago(at)}` : 'No backup yet');
+  $('#syncLine').title = sync && side.sync_error ? side.sync_error : sync ? `Syncing to ${side.sync_where === 'drive' ? 'Google Drive' : 'your sync folder'}. Open Sync & backup to sync now.` : 'Daily backups. Open Sync & backup to sync to Google Drive.';
   $('#syncLine').hidden = overview?.kind === 'server' && !sync && !at;
   const lim = side.claude_limited_until && new Date(side.claude_limited_until) > new Date();
   $('#limitLine').hidden = !lim && !side.deferred;
@@ -280,7 +284,7 @@ async function showRoute() {
     else if (name === 'inbox') await showInbox();
     else if (name === 'recruiters') await showRecruiters();
     else if (name === 'add') showAdd();
-    else if (name === 'cvs' || (name === 'settings' && arg === 'cvs')) await showSettings('cvs');
+    else if (name === 'cvs' || (name === 'settings' && arg === 'cvs')) await showSettings('cvs', name === 'cvs' ? arg : '');
     else if (name === 'settings') await showSettings(arg || 'connections');
     else location.hash = '#overview';
   } catch (e) {
@@ -408,7 +412,7 @@ async function showPipeline(tab) {
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-src="${esc(j.source)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>
         <td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span></td>
-        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="small" data-v="${esc(j.source)}">${esc(sourceName(j.source))}</td><td data-v="${j.score ?? -1}">${scoreBadge(j.score)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
+        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="small" data-v="${esc(j.source)}">${esc(sourceName(j.source))}</td><td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
         <td>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">No postings yet. Run a search from the Overview.</p>'}</section>`;
   } else {
@@ -420,7 +424,7 @@ async function showPipeline(tab) {
         const r = j.reasoning || '';
         if (j.status === 'dismissed') return 'You marked them not interested';
         if (j.closed_at) return 'The posting closed';
-        if (!r.startsWith('Filtered out:')) return 'Fit score below your minimum (Settings → Preferences)';
+        if (!r.startsWith('Filtered out:')) return 'Fit score below your minimum (Settings → Search)';
         if (r.includes('no title or keyword match')) return 'Title doesn\'t match any job title or keyword in CV & career';
         if (r.includes('location')) return 'Outside your locations';
         if (r.includes('title contains')) return 'Title has a word you skip (Skip titles containing)';
@@ -438,7 +442,7 @@ async function showPipeline(tab) {
     body = `${why}<input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
       <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Role')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}</td><td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span></td>
+        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span></td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>${tab === 'skipped'
           ? `<td class="small why" data-v="${esc((j.reasoning || '').toLowerCase())}">${esc(j.reasoning || '')}</td>`
           : `<td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>`}${tab === 'list' ? `<td class="row-act">${rowActions(j)}</td>` : ''}</tr>`).join('')}
@@ -607,8 +611,8 @@ async function showJob(id) {
         <section class="card">
           <header><h2>Fit</h2></header>
           <div class="row" style="align-items:flex-start;gap:16px;flex-wrap:nowrap">
-            ${j.score != null ? `<div class="fit-pair"><div><div class="ring" style="--p:${j.score}"><b>${j.score}</b></div><span class="muted small">${j.score_after != null ? 'your CV' : 'fit'}</span></div>${j.score_after != null ? `<span class="fit-arrow">→</span><div><div class="ring" style="--p:${j.score_after}"><b>${j.score_after}</b></div><span class="muted small">tailored</span></div>` : ''}</div>` : ''}
-            <div><p>${esc(j.reasoning || 'Not scored yet.')}</p>${j.track ? `<p class="muted small" style="margin-top:6px">Matched to your <b>${esc((tracks.find(t => t.name === j.track) || {}).label || j.track)}</b> CV.${j.score_after != null ? ` After tailoring, the same check scores the tailored CV <b>${j.score_after}</b> (${j.score_after >= j.score ? '+' : ''}${j.score_after - j.score}).` : ''}</p>` : ''}</div>
+            ${j.score != null ? `<div class="fit-pair"><div><div class="ring" style="--p:${j.score}"><b>${j.score}</b></div><span class="muted small">${j.score_after != null || canReach(j) ? 'your CV' : 'fit'}</span></div>${j.score_after != null ? `<span class="fit-arrow">→</span><div><div class="ring" style="--p:${j.score_after}"><b>${j.score_after}</b></div><span class="muted small">tailored</span></div>` : canReach(j) ? `<span class="fit-arrow">→</span><div><div class="ring faint" style="--p:${canReach(j)}"><b>~${canReach(j)}</b></div><span class="muted small">could reach</span></div>` : ''}</div>` : ''}
+            <div><p>${esc(j.reasoning || 'Not scored yet.')}</p>${j.track ? `<p class="muted small" style="margin-top:6px">Matched to your <b>${esc((tracks.find(t => t.name === j.track) || {}).label || j.track)}</b> CV.${j.score_after != null ? ` After tailoring, the same check scores the tailored CV <b>${j.score_after}</b> (${j.score_after >= j.score ? '+' : ''}${j.score_after - j.score}).` : canReach(j) ? ` Tailored to this posting, it could reach about <b>${canReach(j)}</b>: a prediction from the same experience, worded the way the posting does.` : ''}</p>` : ''}</div>
           </div>
           ${flags.length ? `<div><b class="small">Red flags</b><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : ''}
         </section>
@@ -691,7 +695,7 @@ async function showJob(id) {
     <div class="jpane" data-pane="apply" ${tab === 'apply' ? '' : 'hidden'}>
     ${['ready', 'approved', 'applied', 'interviewing'].includes(j.status) || answers ? `<section class="card">
       <header><h2>Application questions</h2>${answering ? '<span class="muted small"><span class="spin"></span>Writing…</span>' : ''}</header>
-      <p class="muted small">Paste the form's questions, one per line, or leave it empty for the usual ones (why this role, salary expectations, notice period…). Answers use your CV, this posting and your <a href="#cvs">facts for forms</a>.</p>
+      <p class="muted small">Paste the form's questions, one per line, or leave it empty for the usual ones (why this role, salary expectations, notice period…). Answers use your CV, this posting and your <a href="#cvs/details">facts for forms</a>.</p>
       <textarea id="questions" placeholder="Why do you want to work at ${esc(j.company)}?\nHow many years of experience do you have with SAP?">${esc((answers || []).map(a => a.question).join('\n'))}</textarea>
       <div class="row"><button class="btn primary" data-act="answers" ${answering ? 'disabled' : ''}>${answers ? 'Write them again' : 'Write answers'}</button></div>
       ${(answers || []).map((a, i) => `<div class="qa"><b>${esc(a.question)}</b><div class="posting" id="ans${i}">${esc(a.answer)}</div><button class="btn ghost" data-act="copy" data-from="ans${i}">Copy</button></div>`).join('')}
@@ -725,7 +729,7 @@ async function showJob(id) {
       ${prep ? mdHtml(prep) : `<p class="muted">${preparing ? 'Claude is writing likely questions, answers from your CV, gaps to prepare for and questions to ask. This page updates by itself.' : 'Likely questions with answers from your CV, what the company is up to now (from a quick web search), gaps to prepare for, and questions to ask them.'}</p>`}
       ${prep ? '<p class="muted small">Also saved as “Interview prep.md” with this application\'s files.</p>' : ''}
       <p class="muted small">The evening before an interview on your calendar, Job Hunt makes sure this sheet is ready and reminds you.</p>
-      <p class="muted small">${claude_desktop ? `Practise out loud: in the Claude app, ask <b>“Practise my interview for ${esc(j.company)}”</b>. Claude plays the interviewer and gives feedback on each answer.` : 'Want a mock interview with feedback? Add Job Hunt to the Claude app in <a href="#settings/extras">Settings → Integrations</a>.'}</p>
+      <p class="muted small">${claude_desktop ? `Practise out loud: in the Claude app, ask <b>“Practise my interview for ${esc(j.company)}”</b>. Claude plays the interviewer and gives feedback on each answer.` : 'Want a mock interview with feedback? Add Job Hunt to the Claude app in <a href="#settings/app">Settings → App</a>.'}</p>
     </section>
     ${thanks || thanking || ['interviewing', 'offer'].includes(j.status) ? `<section class="card">
       <header><h2>Thank-you note</h2>${thanking ? '<span class="muted small"><span class="spin"></span>Writing…</span>' : `<button class="btn" data-act="thanks">${thanks ? 'Write again' : 'Write it now'}</button>`}</header>
@@ -793,7 +797,7 @@ function todoHtml(o) {
       [...picking].sort((a, b) => (b.score || 0) - (a.score || 0)).forEach(j => { (byCv[j.track || ''] ||= []).push(j); });
       const many = Object.keys(byCv).length > 1;
       return Object.entries(byCv).map(([t, list]) => `${many ? `<h4 class="pick-cv">From your ${esc(trackLabel(t) || 'main')} CV</h4>` : ''}${list.map(j => `<div class="pick-item"><label class="todo-row pick"><input type="checkbox" data-pick="${esc(j.id)}">
-      ${scoreBadge(j.score)}
+      ${scoreBadge(j.score)}${reachTag(j)}
       <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''} · ${ageTag(j)}</span></span>
       <span class="row todo-act"><a class="btn ghost" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">✕</button></span></label>
       ${j.reasoning || (j.red_flags || []).length ? `<details class="pick-why"><summary class="small muted">Why it fits${(j.red_flags || []).length ? ` · ${j.red_flags.length} red flag${j.red_flags.length === 1 ? '' : 's'}` : ''}</summary><p class="small">${esc(j.reasoning || '')}</p>${(j.red_flags || []).length ? `<ul class="flags small">${j.red_flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>` : ''}</div>`).join('')}`).join('');
@@ -859,7 +863,7 @@ function reportHtml(r) {
     <div class="row">
       <button class="btn primary" data-act="suggestBoards" data-into="moreIdeas">Find employers near me now</button>
       ${s.adzuna ? '' : '<a class="btn" href="#settings/sources">Add Google for Jobs listings</a>'}
-      <a class="btn desktop-only" href="#settings/extras">Send to Job Hunt from LinkedIn</a>
+      <a class="btn desktop-only" href="#settings/sources">Send to Job Hunt from LinkedIn</a>
       <button class="btn ghost" data-act="run" data-task="search-force" title="Looks again at postings set aside earlier, with your current settings">Search again, including set-aside postings</button>
     </div>
     <p class="muted small">Also set up daily job alerts on LinkedIn, Indeed or your country's job sites for your titles, sent to your Gmail: Job Hunt reads them on every email check. If many postings are set aside for their location or title, widen your locations or add titles in <a href="#cvs">Your CVs</a>.</p>
@@ -963,7 +967,7 @@ async function showWelcome() {
   const step = (n, done, title, body) => `<li class="card ${done ? 'done' : ''}"><h2>${done ? '✓ ' : ''}${esc(title)}</h2>${body}</li>`;
   page(`<div class="head"><div class="grow"><h1>Welcome to Job Hunt</h1><p class="muted">Five steps, about five minutes. You can change everything later in Settings.</p></div><a class="btn ghost" href="#overview">Skip for now</a></div>
     ${overview.sync_newer ? '' : `<section class="card"><header><h2>Already using Job Hunt on another computer?</h2></header>
-      <p class="muted">If it syncs to Google Drive (Settings → App → Sync between computers), connect the same Google account here and Job Hunt offers to continue with all your CVs, applications and settings. Otherwise, start fresh below.</p>
+      <p class="muted">If it syncs to Google Drive (Settings → Sync & backup), connect the same Google account here and Job Hunt offers to continue with all your CVs, applications and settings. Otherwise, start fresh below.</p>
       ${st.google.client ? `<div class="row"><button class="btn primary" data-act="google" ${st.google.connecting ? 'disabled' : ''}>${st.google.connected ? `Connected as ${esc(st.google.email || 'you')}: check again` : 'Connect Google'}</button>${st.google.connected ? '<span class="muted small">Nothing to continue from yet? Turn on sync on the other computer, wait a few minutes, then check again.</span>' : ''}</div>
         <div id="googlePaste" ${st.google.pasting ? '' : 'hidden'}>${googlePasteBox(st.google.paste_url)}</div>`
         : '<div class="row"><a class="btn" href="#settings/connections">Set up Google</a></div>'}</section>`}
@@ -974,7 +978,7 @@ async function showWelcome() {
       ${step(2, st.cvs.length > 0, 'Add your CV', `<p class="muted">Word, PDF or text. Add one per kind of role (e.g. data engineering, program delivery). Claude reads each one and suggests the job titles to search for.</p>
         <label class="drop"><input type="file" accept=".docx,.pdf,.txt" multiple data-upload="cv-add" hidden><b>Add CVs</b><br><span class="muted small">Click to choose files</span></label>
         ${st.cvs.map(c => `<p class="small" style="margin:8px 0 0"><b>${esc(c.label)}</b>: ${(c.titles || []).length} job titles to search, like ${esc((c.titles || []).slice(0, 4).join(', ') || 'none yet')}${(c.areas || []).length ? `<br><span class="muted">Experience found: ${esc(c.areas.map(a => a.split(':')[0]).join(', '))}</span>` : ''} <a href="#cvs">See all and edit</a></p>`).join('')}
-        ${st.cvs.length ? `<p class="small" style="margin-top:8px">${st.career_thinking ? '<span class="spin"></span>Claude is working out your career options: every direction your CV supports, with pay, pros and cons. ' : st.career ? '' : ''}${st.career || st.career_thinking ? '<a href="#cvs">See your career options</a>' : ''}</p>` : ''}`)}
+        ${st.cvs.length ? `<p class="small" style="margin-top:8px">${st.career_thinking ? '<span class="spin"></span>Claude is working out your career options: every direction your CV supports, with pay, pros and cons. ' : st.career ? '' : ''}${st.career || st.career_thinking ? '<a href="#cvs/career">See your career options</a>' : ''}</p>` : ''}`)}
       ${step(3, (p.locations || []).length > 0, 'Where you want to work', `<form data-form="welcomeWhere" class="form">
           <div class="field">Cities or areas${placePicker('locations', p.locations, (fresh && tzCountry(deviceTz(), st.countries)) || p.sources.adzuna_country)}</div>
           <div class="stack" style="gap:12px">
@@ -1106,12 +1110,12 @@ async function showApply(id) {
           <button class="btn ghost" data-act="open" data-what="cv" data-job="${esc(j.id)}">CV (Word)</button>
           <button class="btn ghost" data-act="open" data-what="letter" data-job="${esc(j.id)}">Letter (Word)</button>
           <button class="btn ghost" data-act="open" data-what="folder" data-job="${esc(j.id)}">${svg('folder')}Show files</button>
-        </div>${cv_pdf && letter_pdf ? '' : '<p class="muted small">The PDF copies are made the first time you open them (needs Word or LibreOffice).</p>'}</li>
+        </div>${cv_pdf && letter_pdf ? '' : '<p class="muted small">The PDF copies are made when you open them, and made again after you change the Word file (needs Word or LibreOffice).</p>'}</li>
       <li class="card"><h2>Fill in the form</h2>
         ${facts.length ? `<div class="copy-list">${facts.map((f, i) => copyRow(i === 0 ? 'Name' : i === 1 ? 'Email' : 'From your facts for forms', f, `f${i}`)).join('')}</div>` : ''}
         ${(answers || []).length ? `<h3 class="sub" style="margin-top:12px">Answers to the usual questions</h3><div class="copy-list">${answers.map((a, i) => copyRow(a.question, a.answer, `a${i}`)).join('')}</div>`
           : `<p class="muted">For questions like “Why this company?” or salary expectations, <a href="#job/${encodeURIComponent(j.id)}" data-tab-to="apply">have Claude write answers</a> from your CV and this posting.</p>`}
-        ${(p.application_facts || '').trim() ? '' : '<p class="muted small">Add the facts forms ask for (work authorization, notice period, salary expectations) in <a href="#cvs">CV & career</a> to have them here.</p>'}</li>
+        ${(p.application_facts || '').trim() ? '' : '<p class="muted small">Add the facts forms ask for (work authorization, notice period, salary expectations) in <a href="#cvs/details">CV &amp; career → Your details</a> to have them here.</p>'}</li>
       <li class="card"><h2>Done?</h2><p class="muted">Job Hunt then waits for a reply, and reminds you to follow up if none comes${p.follow_up_after ? ` in ${p.follow_up_after} days` : ''}.${on_apply?.to && on_apply.mode !== 'off' && !done
         ? ` It also ${on_apply.mode === 'send' ? 'emails' : 'drafts an email to'} <b>${esc(on_apply.to.name || on_apply.to.email)}</b>${on_apply.to.known ? ', the recruiter you know there, asking them to put you forward' : ' (named in the posting) to say you\'ve applied'}. <a href="#recruiters">Change this</a>` : ''}</p>
         <div class="row">${done ? `<a class="btn" href="#job/${encodeURIComponent(j.id)}">Back to the job</a>` : `<button class="btn primary" data-act="applied" data-job="${esc(j.id)}">${svg('check')}I've submitted it</button><a class="btn ghost" href="${reviewReturn ? '#review' : `#job/${encodeURIComponent(j.id)}`}">Not now</a>`}</div></li>
@@ -1315,7 +1319,7 @@ async function showResults() {
       ${r.thinking ? '<span class="muted small"><span class="spin"></span>Claude is looking…</span>' : `<button class="btn" data-act="insights">${r.insights ? 'Look again' : 'Ask Claude'}</button>`}</header>
       ${r.insights ? `<p class="muted small">From ${esc(fmtDate(r.insights.at))}. Job Hunt also does this once a month by itself.</p>${mdHtml(r.insights.text)}` : '<p class="muted">Claude reads your results and the applications behind them, and says what is working and what to change: titles, CVs, sources or your fit threshold.</p>'}
     </section>
-    <section class="card row" style="justify-content:space-between"><span><b>Your career options</b><br><span class="muted small">${r.career ? `${(r.career.paths || []).length} directions with pay, pros and cons, and Claude's advice. Ask again now and then: it uses what's working above.` : 'Every direction your CVs support, with pay ranges, pros and cons, and Claude\'s advice.'}</span></span><a class="btn" href="#cvs">${svg('cvs')}Open CV &amp; career</a></section>
+    <section class="card row" style="justify-content:space-between"><span><b>Your career options</b><br><span class="muted small">${r.career ? `${(r.career.paths || []).length} directions with pay, pros and cons, and Claude's advice. Ask again now and then: it uses what's working above.` : 'Every direction your CVs support, with pay ranges, pros and cons, and Claude\'s advice.'}</span></span><a class="btn" href="#cvs/career">${svg('cvs')}Open CV &amp; career</a></section>
     ${f.sent && f.sent < 20 ? '<p class="muted small">With only a few applications in a group, its rates can swing a lot. They settle as you send more.</p>' : ''}`);
 }
 
@@ -1345,7 +1349,7 @@ function showAdd() {
       <label class="field">Location<input type="text" name="location"></label>
       <label class="field wide">Full job description<textarea name="description" required style="min-height:300px"></textarea></label>
     </div><div class="row"><button class="btn primary" type="submit">Score and tailor</button></div></form>
-    <p class="muted small desktop-only">Used the <a href="#settings/extras">Send to Job Hunt</a> button? Press Ctrl+V on this page to add that posting.</p>`);
+    <p class="muted small desktop-only">Used the <a href="#settings/sources">Send to Job Hunt</a> button? Press Ctrl+V on this page to add that posting.</p>`);
 }
 
 // A posting from the Send to Job Hunt button, pasted on the Add a job page.
@@ -1412,10 +1416,12 @@ const lines = v => (v || []).join('\n');
 const fromLines = s => s.split(/\n|,/).map(x => x.trim()).filter(Boolean);
 let settingsCache = null;
 
-async function showSettings(tab) {
+async function showSettings(tab, sub) {
+  // Older links: Extras went to App; Schedule became Email & calendar.
+  tab = { extras: 'app', schedule: 'calendar', preferences: 'search' }[tab] || tab;
   const st = settingsCache = await api('/api/settings');
   const p = st.profile;
-  const tabs = [['connections', 'Accounts'], ['sources', 'Job sources'], ['search', 'Preferences'], ['calendar', 'Schedule'], ['extras', 'Extras'], ['app', 'App']];
+  const tabs = [['connections', 'Accounts'], ['search', 'Search'], ['sources', 'Job sources'], ['calendar', 'Email & calendar'], ['sync', 'Sync & backup'], ['app', 'App']];
   let body = '';
   if (tab === 'connections') {
     body = `<section class="card attention" id="connStatus" hidden></section>
@@ -1464,6 +1470,7 @@ async function showSettings(tab) {
     <section class="card" id="usageCard"><p class="muted small"><span class="spin"></span> Loading…</p></section>
     <p class="muted small">Looking for LinkedIn, Google for Jobs or recruiters? They're in <a href="#settings/sources">Job sources</a>.</p>`;
   } else if (tab === 'sources') {
+    const desk = st.kind !== 'server' && !st.remote.here;
     const tile = (id, name, tag, about, more = '', open = false) => `<article class="tile" data-tile="${id}" id="tile-${id}">
       <header><b>${name}</b>${tag ? `<span class="tag">${tag}</span>` : ''}<span class="tile-state"></span></header>
       <p class="small muted">${about}</p><p class="small tile-detail"></p>
@@ -1522,7 +1529,17 @@ async function showSettings(tab) {
       ${tile('indeed', 'Indeed', 'Uses your Claude plan', 'Searched through the Indeed connector on your Claude account: connect Indeed once at claude.ai → Settings → Connectors, then turn this on.')}
       ${tile('agencies', 'Recruiters and job sites', 'Free', (st.sites?.catalog || []).some(x => x.country === p.sources.adzuna_country) ? 'Recruitment agencies and job sites in your country: choose which ones, or add any other site.' : `Add any job site you use in ${esc(st.countries?.find(c => c.code === p.sources.adzuna_country)?.name || 'your country')}: search on it, copy the address, and paste it in.`,
         `<summary class="small">Choose recruiters and sites</summary>${sitesForm(st)}`)}
-    </div>`;
+    </div>
+    <section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
+      <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and tailors your CV. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
+      ${desk ? `<div class="row"><button class="btn primary" data-act="copyBookmarklet">Copy the button</button><a class="btn" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Or drag this onto your browser's bookmarks bar">Send to Job Hunt</a><a class="btn ghost" href="#add">Add a job</a></div>
+      <ol class="small steps-list">
+        <li>Press <b>Copy the button</b>.</li>
+        <li>In your browser (Chrome or Edge), show the bookmarks bar with <b>Ctrl+Shift+B</b>, right-click it → <b>Add page</b> (Edge: <b>Add favorite</b>). Name it <b>Send to Job Hunt</b>, paste into the address (URL) box, and save.</li>
+        <li>Open a job posting and click the bookmark. On LinkedIn, click the job in the list so it shows on the right (or open the job itself), then click it.</li>
+        <li>Job Hunt picks it up within a few seconds and tells you when it's ready. Added it before version 1.44? Add it again: the old one didn't work on LinkedIn.</li></ol>
+      <label class="check"><input type="checkbox" data-act="clipWatch" ${st.clip_watch ? 'checked' : ''}> <span class="small">Pick up postings sent from the browser</span></label>` : '<div class="row"><a class="btn" href="#add">Add a job</a></div>'}
+    </section>`;
   } else if (tab === 'cvs') {
     const kindName = { docx: 'Word', pdf: 'Converted from PDF', text: 'Converted from text', 'docx-converted': 'Converted to Job Hunt layout' };
     body = `<section class="card"><header><h2>Your CVs</h2><button class="btn ghost" data-act="folder" data-which="cv">${svg('folder')}Open folder</button></header>
@@ -1551,7 +1568,14 @@ async function showSettings(tab) {
         <button class="btn" data-act="suggestCv" data-track="${esc(c.track)}">Find more titles</button>
         <button class="btn ghost danger" data-act="removeCv" data-track="${esc(c.track)}">Remove</button>
       </div></section>`).join('')}
-    ${st.cvs.length ? careerHtml(st.career, st.career_thinking, st.profile.tracks || []) : '<p class="empty">No CVs yet. Add one above to start.</p>'}
+    ${st.cvs.length ? '' : '<p class="empty">No CVs yet. Add one above to start.</p>'}`;
+    const career = st.cvs.length ? careerHtml(st.career, st.career_thinking, st.profile.tracks || []) : '<section class="card"><p>Add a CV first: Claude maps your career paths from it.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>';
+    const details = `<form data-form="profile" data-part="about"><section class="card"><header><h2>About you</h2></header>
+      <p class="muted">Your name goes on your CVs' file names and cover letters; your email is where the weekly review goes.</p>
+      <div class="form">
+        <label class="field">Your name<input type="text" name="name" value="${esc(p.name)}"></label>
+        <label class="field">Your email<input type="email" name="email" value="${esc(p.email)}"></label>
+      </div></section></form>
     <section class="card"><header><h2>Signature</h2>${st.signature ? '<span class="pill good">Added</span>' : ''}</header>
       <p class="muted">Goes on every cover letter, between the sign-off and your name. Sign a white sheet of paper, take a photo or scan, and crop it close. PNG or JPEG.</p>
       ${st.signature ? `<p><img src="${st.signature}" alt="Your signature" style="max-height:60px;max-width:260px;background:#fff;padding:6px;border-radius:6px"></p>` : ''}
@@ -1565,13 +1589,12 @@ async function showSettings(tab) {
       <label class="field">Stories<textarea name="stories" style="min-height:160px" placeholder="e.g. Managed a key shipment for a \$2B oil project in Iran.\nCoordinated urgent delivery of medical supplies to Iraq.">${esc(st.profile.stories || '')}</textarea><span class="hint">One per line or paragraph. Keep the real numbers.</span></label>
       <label class="field">Facts for application forms<textarea name="application_facts" placeholder="e.g. Citizen, no visa sponsorship needed.\nNotice period: one month.\nSalary expectation: (your range and currency).\nOpen to hybrid; not relocating.">${esc(st.profile.application_facts || '')}</textarea><span class="hint">Used to answer application questions. Anything not here is left as “[Fill in]”.</span></label>
       <div class="row"><button class="btn primary" type="submit">Save</button></div></section></form>`;
+    const view = ['career', 'details'].includes(sub) ? sub : 'cvs';
+    body = `<nav class="tabs">${[['cvs', `Your CVs${st.cvs.length ? ` (${st.cvs.length})` : ''}`], ['career', 'Career paths'], ['details', 'Your details']].map(([id, n]) => `<a href="#cvs${id === 'cvs' ? '' : `/${id}`}" class="${id === view ? 'on' : ''}">${n}</a>`).join('')}</nav>
+      ${view === 'career' ? career : view === 'details' ? details : body}`;
   } else if (tab === 'search') {
-    body = `<form data-form="profile" data-part="search">
-      <section class="card"><header><h2>About you</h2></header><div class="form">
-        <label class="field">Your name<input type="text" name="name" value="${esc(p.name)}"></label>
-        <label class="field">Your email<input type="email" name="email" value="${esc(p.email)}"></label>
-        <label class="field">Time zone${tzSelect('timezone', p.timezone)}</label>
-      </div></section>
+    body = `<p class="muted">What Job Hunt looks for, where, and what it does with what it finds. The job titles come from your CVs, in <a href="#cvs">CV &amp; career</a>.</p>
+      <form data-form="profile" data-part="search">
       <section class="card"><header><h2>Where</h2></header><div class="form">
         <div class="field">Cities or areas${placePicker('locations', p.locations, p.sources.adzuna_country)}<span class="hint">Job Hunt also looks about 50 km around each. None: anywhere in the country.</span></div>
         <div class="stack" style="gap:14px">
@@ -1587,6 +1610,9 @@ async function showSettings(tab) {
       </div>
         <label class="field" style="margin-top:14px">What matters to you<textarea name="guidance" placeholder="e.g. Prefer hybrid roles in fintech or government. Avoid pure sales roles. Open to contract roles.">${esc(p.guidance || '')}</textarea><span class="hint">Claude weighs this when scoring. Job titles and keywords for each CV are set in CV & career.</span></label>
       </section>
+      <section class="card"><header><h2>When</h2></header><div class="form">
+        <label class="field">Search every day at${hourSelect('search_hour', p.search_hour)}<span class="hint">If Job Hunt isn't running then, it searches when it next opens.</span></label>
+      </div></section>
       <section class="card"><header><h2>Tailoring</h2></header>
         <label class="check"><input type="checkbox" name="auto_tailor" ${p.auto_tailor ? 'checked' : ''}> <span>Tailor automatically<br><span class="muted small">Off (recommended): after each search you tick which roles to tailor your CV for, on the Overview. On: every role that fits well enough is tailored right away.</span></span></label>
         <details style="margin-top:10px"><summary class="small muted">Advanced</summary><div class="form" style="margin-top:8px">
@@ -1598,40 +1624,16 @@ async function showSettings(tab) {
         <div class="field">Score skipped postings again<div><button class="btn" type="button" data-act="rescore" data-group="skipped">Score them again</button></div><span class="hint">After you change your CVs, titles, fit score or locations.</span></div>
       </div></details></section>
       </form>`;
-  } else if (tab === 'extras') {
-    const cd = st.claude_desktop, ph = st.phone, desk = st.kind !== 'server' && !st.remote.here;
-    const tile = (name, tag, state, about, acts, more = '') => `<article class="tile ${state === 'On' || state === 'Added' ? '' : 'off'}">
-      <header><b>${name}</b>${tag ? `<span class="tag">${tag}</span>` : ''}<span class="tile-state">${state ? `<span class="pill ${state === 'On' || state === 'Added' ? 'good' : ''}">${state}</span>` : ''}</span></header>
-      <p class="small muted">${about}</p><div class="row tile-acts">${acts}</div>${more ? `<details>${more}</details>` : ''}</article>`;
-    body = `<section class="card"><header><h2>Extras</h2></header><p class="muted">Optional things that make Job Hunt handier. None of them is needed.</p></section>
-    <div class="tiles">
-      ${tile('Notifications on your phone', 'Free', ph.topic ? 'On' : 'Off', 'Interviews, offers and applications ready, on your phone even when you\'re away from this computer. Uses the free ntfy app; no account needed.',
-        ph.topic ? '<button class="btn sm" data-act="phoneTest">Send a test</button><button class="btn ghost sm" data-act="phone" data-on="0">Turn off</button>' : '<button class="btn primary sm" data-act="phone" data-on="1">Turn on</button>',
-        ph.topic ? `<summary class="small">Set up your phone</summary><ol class="small steps-list">
-          <li>Install <b>ntfy</b> on your phone: <a href="#" data-act="link" data-url="https://play.google.com/store/apps/details?id=io.heckel.ntfy">Android</a> or <a href="#" data-act="link" data-url="https://apps.apple.com/app/ntfy/id1625396347">iPhone</a>.</li>
-          <li>In ntfy, tap <b>+</b> and subscribe to <b class="mono">${esc(ph.topic)}</b>${ph.server && ph.server !== 'https://ntfy.sh' ? ` on ${esc(ph.server)}` : ''}.</li>
-          <li>Press <b>Send a test</b> above.</li></ol>
-          <label class="check"><input type="checkbox" data-act="phoneUrgent" ${ph.urgent_only ? 'checked' : ''}> <span class="small">Only what can't wait: interviews, offers, replies from employers and postings about to close.</span></label>
-          <label class="check"><input type="checkbox" data-act="phoneDetails" ${ph.details ? 'checked' : ''}> <span class="small">Show the company and role in notices<br><span class="muted">Off (private): notices only say what kind they are, like “An interview update”. They travel through ntfy.sh, a public relay, so anyone who learned your topic name could read them.</span></span></label>
-          <p class="muted small">Keep the topic name to yourself.</p>
-          <form data-form="phone" class="form"><label class="field">Your own ntfy server (optional)<input type="url" name="server" value="${esc(ph.server)}" placeholder="https://ntfy.sh"></label><div class="row"><button class="btn sm" type="submit">Save</button></div></form>` : '')}
-      ${desk ? tile('Send to Job Hunt from your browser', 'PC', st.clip_watch ? 'On' : 'Off', 'A button for your bookmarks bar: on any job posting (LinkedIn, Indeed, a company site), click it and Job Hunt adds the posting and tailors your CV for it.',
-        `<a class="btn primary sm" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Drag me to your bookmarks bar">Send to Job Hunt</a><button class="btn sm" data-act="copyBookmarklet">Copy the button's code</button>`,
-        `<summary class="small">How to add it</summary><ol class="small steps-list">
-          <li>Drag the blue <b>Send to Job Hunt</b> button onto your browser's bookmarks bar (show the bar with Ctrl+Shift+B). If dragging doesn't work: right-click the bookmarks bar → Add page, name it <b>Send to Job Hunt</b>, and paste the copied code as its address.</li>
-          <li>Open a job posting and click it. On LinkedIn, open the job itself first.</li>
-          <li>Job Hunt picks it up within a few seconds and tells you when it's ready.</li></ol>
-          <label class="check"><input type="checkbox" data-act="clipWatch" ${st.clip_watch ? 'checked' : ''}> <span class="small">Pick up postings sent from the browser</span></label>`) : ''}
-      ${tile('Ask Claude about your search', 'Claude app', cd.added ? 'Added' : '', 'Adds Job Hunt to the Claude desktop app, so you can ask in plain words: “What\'s waiting for my approval?”, “Make the Maple Bank letter shorter”, “Search now”.',
-        cd.available ? `<button class="btn ${cd.added ? '' : 'primary'} sm" data-act="addClaudeDesktop">${cd.added ? 'Add again' : 'Add to Claude'}</button>` : '<span class="muted small">Set this up from the Job Hunt app on your PC.</span>',
-        cd.available ? `<summary class="small">After adding</summary><p class="small">Quit the Claude app fully (right-click its icon by the clock → Quit) and open it again. Job Hunt appears among its tools.</p>${cd.config ? `<p class="muted small">Claude's settings file: ${esc(cd.config)}</p>` : ''}` : '')}
-      ${tile('Spreadsheet of your applications', '', '', `Company, title, stage, fit, salary, dates, links and notes.${st.sync.on ? ' With sync on, it\'s kept up to date in your Google Drive too, as <b>Job Hunt applications.csv</b>.' : ''}`,
-        '<a class="btn sm" href="/api/export.csv" download="Job Hunt applications.csv">Download</a>')}
-    </div>`;
   } else if (tab === 'calendar') {
-    const c = p.calendar;
-    body = `<form data-form="profile" data-part="calendar">
-      <section class="card"><header><h2>Interview booking</h2></header><div class="form">
+    const c = p.calendar, ph = st.phone;
+    body = `<p class="muted">What Job Hunt does with your Gmail and Google Calendar, and how it lets you know.${st.google.connected ? '' : ' <b>Connect Google in <a href="#settings/connections">Accounts</a> first.</b>'}</p>
+      <form data-form="profile" data-part="calendar">
+      <section class="card"><header><h2>Email</h2></header><div class="form">
+        <label class="field">Check email every (minutes)<input type="number" min="10" max="240" name="inbox_minutes" value="${p.inbox_minutes}"></label>
+        <label class="field">Your time zone${tzSelect('timezone', p.timezone)}<span class="hint">For interview times, the daily search and reminders.</span></label>
+        <label class="field">Follow up on applications after (days)<input type="number" min="0" max="45" name="follow_up_after" value="${p.follow_up_after ?? 8}"><span class="hint">With no reply by then, Job Hunt drafts a short follow-up in Gmail. 0 for never.</span></label>
+      </div></section>
+      <section class="card"><header><h2>Interviews</h2></header><div class="form">
         <label class="field">Interviews from${hourSelect('work_start', c.work_start, 0, 23)}</label>
         <label class="field">Until${hourSelect('work_end', c.work_end, 1, 24)}</label>
         <label class="field">Interview length to offer (minutes)<input type="number" min="15" step="15" name="slot_minutes" value="${c.slot_minutes}"></label>
@@ -1642,46 +1644,64 @@ async function showSettings(tab) {
       <details class="small" style="margin-top:10px" ${c.calendar_id && c.calendar_id !== 'primary' ? 'open' : ''}><summary class="muted">Advanced</summary><div class="form" style="margin-top:8px">
         <label class="field">Which Google calendar<input type="text" name="calendar_id" value="${esc(c.calendar_id)}"><span class="hint">Leave it as “primary” for your main calendar. For another one, paste its Calendar ID from Google Calendar → Settings → that calendar → Integrate calendar.</span></label>
       </div></details></section>
-      <section class="card"><header><h2>Schedule</h2></header><div class="form">
-        <label class="field">Daily job search at${hourSelect('search_hour', p.search_hour)}<span class="hint">If Job Hunt isn't running then, it searches when it next opens.</span></label>
-        <label class="field">Check email every (minutes)<input type="number" min="10" max="240" name="inbox_minutes" value="${p.inbox_minutes}"></label>
-        <label class="field">Weekly goal (applications)<input type="number" min="0" max="100" name="weekly_goal" value="${p.weekly_goal ?? 10}"><span class="hint">Shown on the Overview, and in your weekly review. 0 for none.</span></label>
-        <label class="field">Follow up on applications after (days)<input type="number" min="0" max="45" name="follow_up_after" value="${p.follow_up_after ?? 8}"><span class="hint">With no reply by then, Job Hunt drafts a short follow-up in Gmail. 0 for never.</span></label>
-      </div></section>
-      <div class="row"><button class="btn primary" type="submit">Save</button></div></form>
-      <section class="card"><header><h2>Weekly review</h2><button class="btn" data-act="weeklyNow">Send it now</button></header>
+      <section class="card"><header><h2>Weekly review</h2><button class="btn" type="button" data-act="weeklyNow">Send it now</button></header>
         <p class="muted">Once a week: what you sent against your goal, who replied, what's going quiet, what to do next, and the best new roles of the week to pick.</p>
         <div class="form">
+          <label class="field">Weekly goal (applications)<input type="number" min="0" max="100" name="weekly_goal" value="${p.weekly_goal ?? 10}"><span class="hint">Shown on the Overview too. 0 for none.</span></label>
           <label class="field">When<select data-act="weeklyDay"><option value="sun" ${st.weekly.day === 'sun' ? 'selected' : ''}>Sunday at 6 PM, to plan the week ahead</option><option value="mon" ${st.weekly.day === 'mon' ? 'selected' : ''}>Monday, at the daily search hour</option></select></label>
         </div>
         <label class="check"><input type="checkbox" data-act="weeklyEmail" ${st.weekly.email ? 'checked' : ''}> <span>Email me the whole review${st.weekly.to ? ` at ${esc(st.weekly.to)}` : ''} (needs Gmail connected). Otherwise it's a short notice.</span></label>
+      </section></form>
+      <section class="card" id="phoneCard"><header><h2>Notices on your phone</h2>${ph.topic ? '<span class="pill good">On</span>' : '<span class="pill">Optional</span>'}</header>
+        <p class="muted">Interviews, offers and applications ready, on your phone even when you're away from this computer. Uses the free ntfy app; no account needed.</p>
+        <div class="row">${ph.topic ? '<button class="btn" data-act="phoneTest">Send a test</button><button class="btn ghost" data-act="phone" data-on="0">Turn off</button>' : '<button class="btn primary" data-act="phone" data-on="1">Turn on</button>'}</div>
+        ${ph.topic ? `<ol class="small steps-list">
+          <li>Install <b>ntfy</b> on your phone: <a href="#" data-act="link" data-url="https://play.google.com/store/apps/details?id=io.heckel.ntfy">Android</a> or <a href="#" data-act="link" data-url="https://apps.apple.com/app/ntfy/id1625396347">iPhone</a>.</li>
+          <li>In ntfy, tap <b>+</b> and subscribe to <b class="mono">${esc(ph.topic)}</b>${ph.server && ph.server !== 'https://ntfy.sh' ? ` on ${esc(ph.server)}` : ''}.</li>
+          <li>Press <b>Send a test</b> above.</li></ol>
+          <label class="check"><input type="checkbox" data-act="phoneUrgent" ${ph.urgent_only ? 'checked' : ''}> <span class="small">Only what can't wait: interviews, offers, replies from employers and postings about to close.</span></label>
+          <label class="check"><input type="checkbox" data-act="phoneDetails" ${ph.details ? 'checked' : ''}> <span class="small">Show the company and role in notices<br><span class="muted">Off (private): notices only say what kind they are, like “An interview update”. They travel through ntfy.sh, a public relay, so anyone who learned your topic name could read them.</span></span></label>
+          <details class="small"><summary class="muted">Your own ntfy server (optional)</summary><form data-form="phone" class="form" style="margin-top:8px"><label class="field">Server<input type="url" name="server" value="${esc(ph.server)}" placeholder="https://ntfy.sh"></label><div class="row"><button class="btn sm" type="submit">Save</button></div></form></details>
+          <p class="muted small">Keep the topic name to yourself.</p>` : ''}
       </section>`;
-  } else {
+  } else if (tab === 'sync') {
     const server = st.kind === 'server', here = st.remote.here;
-    const b = st.backup, r = st.remote;
+    const b = st.backup;
     const kb = n => n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
     const y = st.sync;
     const viaDrive = server || y.where === 'drive' || (!y.on && !y.folder); // new to syncing: Drive is the simpler way
-    const sync = `<section class="card"><header><h2>Sync between computers</h2>${y.on ? '<span class="pill good">On</span>' : ''}</header>
-      <p class="muted">Pick up where you left off on any computer${server ? ', or move between this NAS and a PC' : ''}. Job Hunt keeps an up-to-date copy of everything in your Google Drive; on another computer, install Job Hunt and connect the same Google account, and it finds your data and offers to continue from it. Use one at a time.</p>
-      ${y.error && y.on ? `<p class="pill crit" style="white-space:normal">Last sync didn't work: ${esc(y.error)}</p>` : ''}
+    const every = [[5, 'Every 5 minutes after a change'], [10, 'Every 10 minutes after a change'], [30, 'Every 30 minutes'], [60, 'Every hour'], [360, 'Every 6 hours'], [1440, 'Once a day'], [0, 'Only when I press Sync now']];
+    const state = !y.on ? ['', 'Off', 'Your data is only on this computer (and in its daily backups).']
+      : y.running ? ['', '<span class="spin"></span>Syncing…', 'Saving the latest copy now.']
+      : y.error ? ['crit', 'Didn\'t sync', y.error]
+      : y.last ? ['good', 'Up to date', `Last synced ${ago(y.last)} from ${y.device}.`]
+      : ['warn', 'Not synced yet', 'Press Sync now to save the first copy.'];
+    const status = `<section class="card sync-status"><header><h2>Status</h2><span class="pill ${state[0]}">${state[1]}</span></header>
+      <p class="${state[0] === 'crit' ? '' : 'muted'}">${esc(state[2])}</p>
+      <div class="kpis small-kpis">
+        <div class="kpi"><span class="kpi-l">Sync</span><span class="kpi-v">${y.on ? (y.last ? esc(ago(y.last)) : '–') : 'Off'}</span><span class="kpi-s">${y.on ? (y.where === 'drive' ? 'to Google Drive' : 'to your sync folder') : 'not turned on'}</span></div>
+        <div class="kpi"><span class="kpi-l">Backup</span><span class="kpi-v">${b.last ? esc(ago(b.last)) : '–'}</span><span class="kpi-s">${y.drive_backup ? `in Google Drive ${esc(ago(y.drive_backup))}` : 'on this computer'}</span></div>
+        <div class="kpi"><span class="kpi-l">Automatic sync</span><span class="kpi-v">${y.on ? esc((every.find(e => e[0] === y.every) || [0, `Every ${y.every} min`])[1].replace(' after a change', '')) : 'Off'}</span><span class="kpi-s">${y.on ? 'and when Job Hunt exits' : 'turn on sync below'}</span></div>
+      </div>
+      <div class="row">${y.on ? `<button class="btn primary" data-act="syncNow" ${y.running ? 'disabled' : ''}>Sync now</button>` : ''}<button class="btn ${y.on ? '' : 'primary'}" data-act="backupNow">Back up now</button></div></section>`;
+    const sync = `<section class="card"><header><h2>Sync to Google Drive</h2>${y.on ? '<span class="pill good">On</span>' : ''}</header>
+      <p class="muted">Pick up where you left off on any computer${server ? ', or move between this server and a PC' : ''}. Job Hunt keeps an up-to-date copy of everything in your own Google Drive; on another computer, install Job Hunt and connect the same Google account, and it finds your data and offers to continue from it. Use one at a time. Only you can see the copy.</p>
       <form data-form="sync" class="form">
         <fieldset class="field" style="grid-column:1/-1;border:0;padding:0;margin:0"><legend class="small">Where</legend>
-          <label class="check"><input type="radio" name="where" value="drive" ${viaDrive ? 'checked' : ''}> <span>Straight to Google Drive<br><span class="muted small">Through your Google connection: no Google Drive app needed. Job Hunt uses a "Job Hunt" folder in My Drive and can't see your other files.${y.drive_ready ? '' : ' <b>Connect Google in Settings → Accounts first.</b>'} Connected before this option existed? Reconnect Google once to allow Drive.</span></span></label>
-          ${server ? '' : `<label class="check"><input type="radio" name="where" value="folder" ${viaDrive ? '' : 'checked'}> <span>Through a folder on this computer<br><span class="muted small">One that Google Drive for desktop, OneDrive or Dropbox keeps in the cloud.</span></span></label>`}
+          <label class="check"><input type="radio" name="where" value="drive" ${viaDrive ? 'checked' : ''}> <span>Straight to Google Drive<br><span class="muted small">Through your Google connection: no Google Drive app needed. Job Hunt uses a "Job Hunt" folder in My Drive and can't see your other files. Daily backups are copied there too (the last seven days).${y.drive_ready ? '' : ' <b>Connect Google in Settings → Accounts first.</b>'}</span></span></label>
+          ${server ? '' : `<label class="check"><input type="radio" name="where" value="folder" ${viaDrive ? '' : 'checked'}> <span>Through a folder on this computer<br><span class="muted small">One that Google Drive for desktop, OneDrive or Dropbox keeps in the cloud. Daily backups go there too.</span></span></label>`}
         </fieldset>
         ${server ? '' : `<div class="sync-folder" style="grid-column:1/-1" ${viaDrive ? 'hidden' : ''}><label class="field">Folder<span class="row" style="flex-wrap:nowrap;gap:6px"><input type="text" name="dir" value="${esc(y.folder || '')}" placeholder="${esc(y.suggest || 'G:\\My Drive\\Job Hunt')}" style="flex:1">${here ? '' : '<button class="btn" type="button" data-act="pickFolder" data-into="dir">Browse…</button>'}</span>
           <span class="hint">${y.suggest ? `<a href="#" data-act="useDrive" data-path="${esc(y.suggest)}">Use ${esc(y.suggest)}</a>` : 'Install <a href="#" data-act="link" data-url="https://www.google.com/drive/download/">Google Drive for desktop</a>, then use a folder in My Drive, like G:\\My Drive\\Job Hunt.'}</span></label></div>`}
-        <label class="check"><input type="checkbox" name="on" ${y.on ? 'checked' : ''}> Keep it up to date (a few minutes after a change, and when Job Hunt exits)</label>
+        <label class="check" style="grid-column:1/-1"><input type="checkbox" name="on" ${y.on ? 'checked' : ''}> <b>Keep a synced copy there</b></label>
+        <label class="field">How often<select name="every">${every.map(([v, n]) => `<option value="${v}" ${y.every === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">It also syncs when Job Hunt exits.</span></label>
         <label class="check"><input type="checkbox" name="secrets" ${y.secrets ? 'checked' : ''}> <span>Include saved keys and sign-ins<br><span class="muted small">So another computer needs no setting up. They stay in your own Google Drive.</span></span></label>
-        <div class="row"><button class="btn primary" type="submit">Save</button>${y.on ? '<button class="btn" type="button" data-act="syncNow">Sync now</button>' : ''}</div>
-      </form>
-      <p class="muted small">${y.last ? `Last synced ${esc(ago(y.last))} from ${esc(y.device)}.` : 'Not synced yet.'}</p></section>`;
+        <div class="row"><button class="btn primary" type="submit">Save</button></div>
+      </form></section>`;
     const backups = `<section class="card"><header><h2>Backups</h2><button class="btn primary" data-act="backupNow">Back up now</button></header>
       <p class="muted">Every day Job Hunt saves one zip file with everything: your applications, CVs, cover letters, settings and signature. The last ${14} are kept.
-        ${server ? 'They go to the <b>/backups</b> folder you mapped to a NAS share, so Hyper Backup or Cloud Sync can copy them off the NAS.' : 'Choose your OneDrive or Google Drive folder and every backup is copied to the cloud too.'}</p>
+        ${server ? 'They go to the <b>/backups</b> folder you mapped to a NAS share, so Hyper Backup or Cloud Sync can copy them off the NAS.' : 'With sync on, each one goes to your Google Drive (or sync folder) too.'}</p>
       <form data-form="backup" class="form">
-        ${server ? '' : '<p class="muted small" style="grid-column:1/-1">Daily backups go to the sync folder above (or the data folder until you choose one).</p>'}
         <label class="check"><input type="checkbox" name="secrets" ${b.secrets ? 'checked' : ''}> <span>Include saved keys and sign-ins (Claude API key, Google, Adzuna)<br><span class="muted small">So a restore on a new computer or the NAS needs no signing in again. Keep the backup folder private if you tick this.</span></span></label>
         <div class="row"><button class="btn" type="submit">Save</button></div>
       </form>
@@ -1690,6 +1710,10 @@ async function showSettings(tab) {
       <div class="row" style="margin-top:10px"><label class="btn">Restore from a backup…<input type="file" accept=".zip" data-upload="restore" hidden></label>
         <span class="muted small">Replaces everything here with the backup and restarts Job Hunt. What's here now is kept in a "before-restore" folder.</span></div>
     </section>`;
+    body = `${status}${sync}${backups}`;
+  } else {
+    const server = st.kind === 'server', here = st.remote.here;
+    const r = st.remote, cd = st.claude_desktop;
     const remote = server ? `<section class="card"><header><h2>Signed in from this browser</h2></header>
         <p class="muted">Job Hunt is running on your server. To change the password, enter a new one; every device is signed out.</p>
         <form data-form="remote" class="form"><label class="field">New password<input type="password" name="password" autocomplete="new-password" minlength="8"></label><span></span>
@@ -1705,12 +1729,17 @@ async function showSettings(tab) {
         </form>
         ${r.on ? `<p>On your phone, with Tailscale on, open <b>${esc(r.address)}</b></p><p class="muted small">Windows may ask whether Job Hunt can use the network the first time: allow it on private networks.</p>` : ''}
         ${here ? '<form method="post" action="/logout"><button class="btn ghost" type="submit">Sign out of this browser</button></form>' : ''}</details>`;
+    const extras = `<section class="card"><header><h2>Ask Claude about your search</h2>${cd.added ? '<span class="pill good">Added</span>' : ''}</header>
+        <p class="muted">Adds Job Hunt to the Claude desktop app, so you can ask in plain words: “What's waiting for my approval?”, “Make the Maple Bank letter shorter”, “Search now”.</p>
+        <div class="row">${cd.available ? `<button class="btn ${cd.added ? '' : 'primary'}" data-act="addClaudeDesktop">${cd.added ? 'Add again' : 'Add to Claude'}</button>` : '<span class="muted small">Set this up from the Job Hunt app on your PC.</span>'}</div>
+        ${cd.available ? `<p class="muted small">After adding: quit the Claude app fully (right-click its icon by the clock → Quit) and open it again. Job Hunt appears among its tools.${cd.config ? ` Claude's settings file: ${esc(cd.config)}` : ''}</p>` : ''}</section>
+      <section class="card"><header><h2>Spreadsheet of your applications</h2><a class="btn" href="/api/export.csv" download="Job Hunt applications.csv">Download</a></header>
+        <p class="muted">Company, title, stage, fit, salary, dates, links and notes.${st.sync.on ? ' With sync on, it\'s kept up to date in your Google Drive too, as <b>Job Hunt applications.csv</b>.' : ''}</p></section>`;
     body = `<section class="card"><header><h2>Updates</h2><span class="muted small">Version ${esc(shortVersion(st.app.version))}</span></header>
       <p class="muted small" id="updateStatus">${server ? 'The server version updates with its container image: when a new version is out, update the image in Container Manager.' : 'Job Hunt checks for updates every 30 minutes and lets you know when one is ready.'}</p>
       <div class="row"><button class="btn" data-act="updateCheck">Check for updates</button><button class="btn primary" data-act="updateInstall" id="updateInstallBtn" hidden>Install and restart</button></div></section>
-      ${sync}
-      ${backups}
       ${remote}
+      ${extras}
       <section class="card" id="whatsnew"><header><h2>What's new</h2></header><p class="muted small">Loading…</p></section>
       ${server || here ? `<section class="card"><header><h2>App</h2></header><p class="muted small">Your data: ${esc(st.app.data)}</p></section>` : `<section class="card"><header><h2>App</h2></header>
       <label class="check"><input type="checkbox" data-act="autostart" ${st.app.autostart ? 'checked' : ''}> Start Job Hunt when I sign in to Windows (in the tray, so searches and email checks keep running)</label>
@@ -1721,7 +1750,7 @@ async function showSettings(tab) {
       <p class="muted small">Your data: ${esc(st.app.data)}</p></section>`}`;
   }
   if (tab === 'cvs') {
-    page(`<div class="head"><div class="grow"><h1>CV &amp; career</h1><p class="muted">Where everything starts: your CVs, the job titles they search for, and where your career could go next.</p></div><span class="save-state" id="saveState" aria-live="polite">Changes save by themselves</span></div>
+    page(`<div class="head"><div class="grow"><h1>CV &amp; career</h1><p class="muted">Where everything starts: your CVs and the job titles they search for, where your career could go next, and the details that go on every application.</p></div><span class="save-state" id="saveState" aria-live="polite">Changes save by themselves</span></div>
       ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${body}`);
     if (st.career_thinking) watchCareer(location.hash);
     return;
@@ -1746,9 +1775,23 @@ function clipPage() {
     } catch (e) {}
   });
   var t = function (x) { return (x == null ? '' : String(x)).trim(); };
-  var plain = function (h) { return new DOMParser().parseFromString(String(h || '').replace(/<(br|\/p|\/li|\/h\d|\/div)[^>]*>/gi, '\n'), 'text/html').body.textContent; };
+  // Plain text from HTML without parsing it: sites like LinkedIn refuse HTML parsing from scripts.
+  var plain = function (h) {
+    return String(h || '').replace(/<(br|\/p|\/li|\/h\d|\/div)[^>]*>/gi, '\n').replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&');
+  };
+  var q = function (sels) { for (var i = 0; i < sels.length; i++) { var e = document.querySelector(sels[i]); if (e && t(e.innerText)) return t(e.innerText); } return ''; };
   var sel = t(getSelection());
   var c = { v: 1, url: location.href, title: '', company: '', location: '', text: '', structured: !!job };
+  // LinkedIn signed in: the job open on the right of a search, or its own page. Job Hunt reads
+  // the posting itself from its number, so the link matters most.
+  var li = /linkedin\./.test(location.hostname) && (new URLSearchParams(location.search).get('currentJobId') || (location.pathname.match(/\/jobs\/view\/(?:[^\/]*-)?(\d{6,})/) || [])[1]);
+  if (li && !job) {
+    c.url = 'https://www.linkedin.com/jobs/view/' + li + '/';
+    c.title = q(['.job-details-jobs-unified-top-card__job-title', '.jobs-unified-top-card__job-title', '.t-24.t-bold', 'h1']);
+    c.company = q(['.job-details-jobs-unified-top-card__company-name', '.jobs-unified-top-card__company-name']);
+    c.text = sel || q(['.jobs-description__content', '#job-details', '.jobs-box__html-content', '.jobs-search__job-details--container', '.jobs-details']);
+  }
   if (job) {
     c.title = t(job.title);
     c.company = t(job.hiringOrganization && job.hiringOrganization.name);
@@ -1756,11 +1799,12 @@ function clipPage() {
     c.location = [a.addressLocality, a.addressRegion, a.addressCountry && a.addressCountry.name || a.addressCountry].filter(function (x) { return typeof x === 'string'; }).join(', ');
     c.text = t(plain(job.description));
     if (sel.length > 200) c.text = sel;
-  } else {
+  } else if (!li) {
     var h = document.querySelector('h1');
     c.title = t(h && h.innerText) || document.title;
     c.text = sel || t((document.querySelector('main') || document.body).innerText);
   }
+  if (li && c.text.length < 40) c.text = c.title || 'LinkedIn job ' + li;
   c.text = c.text.slice(0, 30000);
   var out = M + JSON.stringify(c);
   var done = function () { alert('Sent to Job Hunt: ' + (c.title || document.title) + '\n\nJob Hunt picks it up in a few seconds.'); };
@@ -1821,39 +1865,28 @@ async function checkUpdate() {
   return update;
 }
 
+/** The profile with whatever fields this form holds: settings can sit in any card or tab. */
 function readProfile(form, part) {
   const p = JSON.parse(JSON.stringify(settingsCache.profile));
-  const v = n => form.elements[n]?.value ?? '';
-  if (part === 'stories') {
-    p.stories = v('stories').trim();
-    p.application_facts = v('application_facts').trim();
-  } else if (part === 'search') {
-    p.name = v('name').trim(); p.email = v('email').trim(); p.timezone = v('timezone').trim();
-    p.locations = fromLines(v('locations')); p.remote_ok = form.elements.remote_ok.checked; p.include_metro = !!form.elements.include_metro?.checked;
-    p.min_salary = v('min_salary') ? Number(v('min_salary')) : null;
-    p.score_threshold = Number(v('score_threshold')); p.max_per_run = Number(v('max_per_run'));
-    p.auto_tailor = !!form.elements.auto_tailor?.checked;
-    p.purge_after_days = Number(v('purge_after_days') || 0);
-    p.max_scored_per_run = Number(v('max_scored_per_run')); p.guidance = v('guidance').trim();
-    p.exclude_companies = fromLines(v('exclude_companies')); p.exclude_title_keywords = fromLines(v('exclude_title_keywords'));
-
-    Object.assign(p.sources, { adzuna_where: [], adzuna_country: v('adzuna_country') || 'ca' });
-  } else if (part === 'boards') {
+  const el = n => form.elements[n];
+  const v = n => el(n)?.value ?? '';
+  const has = n => el(n) != null;
+  for (const k of ['name', 'email', 'timezone', 'guidance', 'stories', 'application_facts']) if (has(k)) p[k] = v(k).trim();
+  for (const k of ['remote_ok', 'include_metro', 'auto_tailor']) if (has(k)) p[k] = !!el(k).checked;
+  for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'search_hour', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k)) p[k] = Number(v(k) || 0);
+  for (const k of ['locations', 'exclude_companies', 'exclude_title_keywords']) if (has(k)) p[k] = fromLines(v(k));
+  if (has('min_salary')) p.min_salary = v('min_salary') ? Number(v('min_salary')) : null;
+  if (has('adzuna_country')) Object.assign(p.sources, { adzuna_where: [], adzuna_country: v('adzuna_country') || 'ca' });
+  if (part === 'boards') {
     p.sources.auto_boards = !!form.querySelector('[name=auto_boards]')?.checked;
     // Workday links can hold commas in rare cases, so they're split by line only.
     const byLine = x => x.split('\n').map(y => y.trim()).filter(Boolean);
     Object.assign(p.sources, { greenhouse: fromLines(v('greenhouse')), lever: fromLines(v('lever')), ashby: fromLines(v('ashby')),
       workday: byLine(v('workday')), smartrecruiters: fromLines(v('smartrecruiters')), workable: fromLines(v('workable')) });
-  } else {
-    Object.assign(p.calendar, {
-      work_start: Number(v('work_start')), work_end: Number(v('work_end')), slot_minutes: Number(v('slot_minutes')),
-      propose_slots: Number(v('propose_slots')), prep_minutes: Number(v('prep_minutes')), calendar_id: v('calendar_id').trim() || 'primary',
-      followup_days: fromLines(v('followup_days')).map(Number).filter(n => n > 0),
-    });
-    p.search_hour = Number(v('search_hour')); p.inbox_minutes = Number(v('inbox_minutes'));
-    p.follow_up_after = Number(v('follow_up_after') || 0);
-    p.weekly_goal = Number(v('weekly_goal') || 0);
   }
+  for (const k of ['work_start', 'work_end', 'slot_minutes', 'propose_slots', 'prep_minutes']) if (has(k)) p.calendar[k] = Number(v(k));
+  if (has('calendar_id')) p.calendar.calendar_id = v('calendar_id').trim() || 'primary';
+  if (has('followup_days')) p.calendar.followup_days = fromLines(v('followup_days')).map(Number).filter(n => n > 0);
   return p;
 }
 
@@ -2929,7 +2962,7 @@ document.addEventListener('submit', async e => {
       await refreshOverview(); route();
     } else if (kind === 'sync') {
       const where = form.querySelector('[name=where]:checked')?.value || 'drive';
-      const r = await api('/api/sync/settings', { method: 'POST', body: { where, ...(f.dir ? { dir: f.dir.value } : {}), on: f.on.checked, secrets: f.secrets.checked } });
+      const r = await api('/api/sync/settings', { method: 'POST', body: { where, ...(f.dir ? { dir: f.dir.value } : {}), on: f.on.checked, secrets: f.secrets.checked, ...(f.every ? { every: Number(f.every.value) } : {}) } });
       toast(r.sync.newer ? `${r.sync.newer.device} has newer data there. Choose on the Overview whether to continue from it.` : r.sync.on ? `Synced. ${where === 'drive' ? 'The Job Hunt folder in your Google Drive' : 'This folder'} now has your latest data.` : 'Saved.');
       await refreshOverview(); route();
     } else if (kind === 'welcomeWhere') {

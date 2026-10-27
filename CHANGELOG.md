@@ -4,6 +4,21 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [1.44.0] - 2026-10-27
+
+Settings that make sense, Drive sync you can see, and a fit forecast.
+
+### Changes
+
+- Settings are reorganised into six clear tabs: Accounts, Search, Job sources, Email & calendar, Sync & backup, and App. Each setting sits where you'd look for it: the daily search time with Search, your time zone and phone notices with Email & calendar, the browser button with Job sources.
+- CV & career has three tabs: Your CVs, Career paths, and Your details (name, email, signature, stories and answers for application forms).
+- Fit forecast: next to each fit score, the score your CV could reach once it's tailored to that posting ("95 → ~97"), predicted from your real experience. Roles you've already tailored show the actual score instead.
+- Sync & backup shows where your data is at a glance: last sync, last backup, and whether the last sync worked, with Sync now and Back up now. Choose how often it syncs, from every 5 minutes to once a day, or only when you press Sync now. The sidebar shows Syncing… or a red dot when a sync fails.
+- When you sync with Google Drive, daily backups go there too: the last seven days, one per weekday.
+- Fix: the Send to Job Hunt browser button did nothing on LinkedIn and some company sites. It now works on LinkedIn's job pages and search results, and Job Hunt reads the full posting from LinkedIn itself, with the company's own apply link. Add the button to your browser again to get the new one.
+- Fix: after you change a tailored CV or cover letter in Word, its PDF is made again from your changes when you open or attach it.
+- Fix: the time your Claude usage limit resets read differently in different places. It's now shown everywhere in this computer's time, with how long is left.
+
 ## [1.43.1] - 2026-10-21
 
 View opens the posting.
@@ -619,6 +634,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[1.44.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.44.0
 [1.43.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.43.1
 [1.43.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.43.0
 [1.42.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.42.2

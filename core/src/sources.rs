@@ -905,6 +905,40 @@ pub fn linkedin_offsite_apply(html: &str) -> Option<String> {
     Some(target).filter(|t| t.starts_with("http") && !is_job_board(t))
 }
 
+/// A LinkedIn job's number from any link to it: /jobs/view/<id> (with or without a title in front),
+/// or a search or collection page with currentJobId=<id>.
+pub fn linkedin_job_id(link: &str) -> Option<String> {
+    static VIEW: Lazy<Regex> = Lazy::new(|| Regex::new(r"/jobs/view/(?:[^/?#]*-)?(\d{6,})").unwrap());
+    let u = url::Url::parse(link).ok()?;
+    if !u.host_str()?.to_lowercase().contains("linkedin.") {
+        return None;
+    }
+    u.query_pairs().find(|(k, _)| k == "currentJobId").map(|(_, v)| v.to_string()).filter(|v| v.len() >= 6 && v.chars().all(|c| c.is_ascii_digit()))
+        .or_else(|| VIEW.captures(u.path()).map(|m| m[1].to_string()))
+}
+
+/// The title, company and place at the top of a signed-out LinkedIn posting.
+pub fn parse_linkedin_top(html: &str) -> (String, String, String) {
+    static TITLE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?s)<h[12][^>]*top-card-layout__title[^>]*>(.*?)</h[12]>"#).unwrap());
+    static ORG: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?s)<a[^>]*topcard__org-name-link[^>]*>(.*?)</a>"#).unwrap());
+    static PLACE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?s)<span[^>]*topcard__flavor--bullet[^>]*>(.*?)</span>"#).unwrap());
+    let get = |r: &Regex| r.captures(html).map(|m| html_to_text(&m[1]).trim().to_string()).unwrap_or_default();
+    (get(&TITLE), get(&ORG), get(&PLACE))
+}
+
+/// One LinkedIn posting by its number, read the way a signed-out visitor sees it.
+pub fn linkedin_posting(c: &reqwest::blocking::Client, id: &str) -> Result<Posting, String> {
+    let html = linkedin_get(c, &format!("https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{id}"))?;
+    let description = parse_linkedin_posting(&html).ok_or("no description on the page")?;
+    let (title, company, location) = parse_linkedin_top(&html);
+    let (salary, salary_max) = salary_from_text(&description).map(|(t, m)| (Some(t), m)).unwrap_or((None, None));
+    Ok(Posting {
+        source: "linkedin".into(), external_id: id.into(), url: format!("https://www.linkedin.com/jobs/view/{id}/"),
+        title, company, location, apply_email: find_apply_email(&description), apply_url: linkedin_offsite_apply(&html),
+        salary, salary_max, description, ..Posting::default()
+    })
+}
+
 /// Fill in the descriptions of new LinkedIn postings, at most `max`, a couple of seconds apart.
 /// Returns how many were read.
 pub fn linkedin_details(c: &reqwest::blocking::Client, postings: &mut [&mut Posting], max: usize) -> usize {
@@ -1655,6 +1689,22 @@ mod tests {
         assert!(parse_jobbank_posting(partner).unwrap().starts_with("We are hiring"));
         assert!(parse_jobbank_posting("<html>Not found</html>").is_none());
         assert!(jobbank_search_url("Tax Manager", "Toronto, ON").contains("searchstring=Tax+Manager&locationstring=Toronto%2C+ON&sort=D&fage=30"));
+    }
+
+    #[test]
+    fn linkedin_links_and_top_card() {
+        assert_eq!(linkedin_job_id("https://www.linkedin.com/jobs/collections/recommended/?currentJobId=4012345678&discover=x").as_deref(), Some("4012345678"));
+        assert_eq!(linkedin_job_id("https://ca.linkedin.com/jobs/view/senior-tax-manager-at-maple-bank-4012345678?trk=x").as_deref(), Some("4012345678"));
+        assert_eq!(linkedin_job_id("https://www.linkedin.com/jobs/view/4012345678/").as_deref(), Some("4012345678"));
+        assert_eq!(linkedin_job_id("https://www.linkedin.com/feed/"), None);
+        assert_eq!(linkedin_job_id("https://careers.acme.example/jobs/view/4012345678"), None);
+        let html = r#"<h2 class="top-card-layout__title font-sans topcard__title">Senior Tax Manager</h2>
+          <h4><a class="topcard__org-name-link topcard__flavor--black-link" href="x">
+            Maple Bank
+          </a><span class="topcard__flavor topcard__flavor--bullet">
+            Toronto, Ontario, Canada
+          </span></h4>"#;
+        assert_eq!(parse_linkedin_top(html), ("Senior Tax Manager".into(), "Maple Bank".into(), "Toronto, Ontario, Canada".into()));
     }
 
     #[test]

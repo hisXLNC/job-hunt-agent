@@ -23,10 +23,10 @@ instead of yours. Cloudflare's email check and Job Hunt's password keep everyone
 ## 1. Get ready on your PC
 
 1. **Sync to Google Drive** (the easy way to bring everything over, and to switch between PC and server
-   later). In the Windows app: Settings → App → **Sync between computers** → **Straight to Google Drive**,
+   later). In the Windows app: Settings → Sync & backup → **Sync to Google Drive** → **Straight to Google Drive**,
    tick *Keep it up to date* and *Include saved keys and sign-ins*, **Save**. If Google was connected before
    Drive was added, reconnect it first (Settings → Accounts → Reconnect Google).
-   (Or instead: Settings → App → Backups → tick *Include saved keys and sign-ins* → **Back up now**, and keep
+   (Or instead: Settings → Sync & backup → Backups → tick *Include saved keys and sign-ins* → **Back up now**, and keep
    the zip for step 8.)
 2. **A Claude sign-in for the server**, to use your Claude subscription there. In PowerShell run
    `claude setup-token`, sign in when the browser opens, and copy the long token it prints. Keep it private.
@@ -145,7 +145,7 @@ install` and a long token). Paste it in your `ssh` window and press Enter. Back 
    3. Paste it into Job Hunt and press **Finish**.
 3. Job Hunt finds your data in Google Drive: press **Continue from …** on the Overview. It restarts with your
    CVs, applications, settings and sign-ins, and keeps syncing with Drive.
-   (Using a backup zip instead: Settings → App → Backups → **Restore from a backup…**.)
+   (Using a backup zip instead: Settings → Sync & backup → Backups → **Restore from a backup…**.)
 4. On the PC, **exit the Windows app** (tray icon → Exit) and untick *Start when I sign in*, or both will
    search and handle your email.
 

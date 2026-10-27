@@ -52,13 +52,10 @@ fn file_for(label: &str, only_one: bool) -> Option<&'static str> {
     }
 }
 
-/// The PDF of a Word file, made now if there isn't one; the Word file if a PDF can't be made.
+/// The PDF of a Word file, made now if there isn't one or it's older than the Word file; the Word
+/// file if a PDF can't be made.
 fn as_pdf(docx: &Path) -> PathBuf {
-    let pdf = docx.with_extension("pdf");
-    if pdf.exists() {
-        return pdf;
-    }
-    crate::util::docx_to_pdf(docx).unwrap_or_else(|_| docx.to_path_buf())
+    crate::util::pdf_of(docx).unwrap_or_else(|_| docx.to_path_buf())
 }
 
 fn attachment(path: &Path, name: &str) -> Option<Value> {

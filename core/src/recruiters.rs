@@ -552,7 +552,7 @@ one line on why I fit, with a real figure from my CV, and ask them to make sure 
     let mail = agent.mail.read().unwrap().clone();
     // Your tailored CV goes with a sent email, if you chose that.
     let attach: Vec<std::path::PathBuf> = if agent.secret("apply.recruiter_cv") == "1" {
-        job.cv_path.as_deref().map(std::path::PathBuf::from).map(|p| { let pdf = p.with_extension("pdf"); if pdf.exists() { pdf } else { p } }).into_iter().collect()
+        job.cv_path.as_deref().map(std::path::PathBuf::from).map(|p| crate::util::pdf_of(&p).unwrap_or(p)).into_iter().collect()
     } else { vec![] };
     let (mut sent, mut drafted) = (false, false);
     if let Some(m) = &mail {

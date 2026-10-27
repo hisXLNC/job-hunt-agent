@@ -242,7 +242,7 @@ mod tests {
     impl Llm for Fake {
         fn score(&self, _c: &[(String, String)], _g: &str, _j: &Job) -> R<JobScore> {
             report(1200, 300, 0.02);
-            Ok(JobScore { score: 80, track: "t".into(), reasoning: String::new(), red_flags: vec![], keywords: vec![], deadline: String::new() })
+            Ok(JobScore { score: 80, track: "t".into(), reasoning: String::new(), red_flags: vec![], keywords: vec![], deadline: String::new(), potential: None })
         }
         fn cv_profile(&self, _t: &str) -> R<CvProfile> {
             report_limit(Some(Utc::now().timestamp() + 7200));

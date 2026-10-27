@@ -407,6 +407,9 @@ pub fn status(agent: &Agent) -> Value {
         "suggest": suggest_folder(),
         "secrets": agent.secret("sync.secrets") != "0",
         "last": agent.secret("last.sync"),
+        "every": every(agent),
+        "running": agent.is_running("sync"),
+        "drive_backup": agent.secret("last.drive_backup"),
         "device": name,
         "newer": newer,
     })
@@ -534,20 +537,60 @@ pub fn presence_status(agent: &Agent) -> Value {
     Value::Null
 }
 
-/// Whether a sync is due: on, something changed, and the last one was a few minutes ago.
+/// How often to sync by itself after a change, in minutes; 0: only when you press Sync now (and
+/// when Job Hunt exits). Uploading the whole copy to Google Drive is heavier than a folder, so it
+/// waits longer unless you choose.
+pub fn every(agent: &Agent) -> i64 {
+    agent.secret("sync.every").parse::<i64>().ok().filter(|m| *m >= 0).unwrap_or(if on_drive(agent) { 10 } else { 5 })
+}
+
+/// A copy of a daily backup in your Google Drive, when you sync there: one per weekday ("Job Hunt
+/// backup Mon.zip"), each replaced a week later, so the last seven days are always there.
+/// Ok(false) when you don't sync with Google Drive.
+pub fn backup_to_drive(agent: &Agent, zip: &Path) -> R<bool> {
+    if !enabled(agent) || !on_drive(agent) {
+        return Ok(false);
+    }
+    let Some(place) = drive(agent) else { return Ok(false) };
+    let name = format!("Job Hunt backup {}.zip", chrono::Local::now().format("%a"));
+    place.write(&name, &std::fs::read(zip)?)?;
+    agent.db().set("last.drive_backup", &crate::util::now())?;
+    Ok(true)
+}
+
+/// Whether a sync is due: on, something changed, and the last one (or the last try) was at
+/// least `every` minutes ago.
 pub fn due(agent: &Agent) -> bool {
-    // Uploading the whole copy to Google Drive: less often than a folder.
-    let gap = if on_drive(agent) { 10 } else { 5 };
-    let recent = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.sync"))
-        .map(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_minutes() < gap)
-        .unwrap_or(false);
-    enabled(agent) && store(agent).is_some() && !recent && handed_over(agent).is_none() && agent.sync_mark.load(Ordering::SeqCst) != agent.db().changes()
+    let gap = every(agent);
+    let ago = |k: &str| chrono::DateTime::parse_from_rfc3339(&agent.secret(k)).map(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_minutes()).ok();
+    let recent = [ago("last.sync"), ago("sync.tried")].into_iter().flatten().any(|m| m < gap);
+    gap > 0 && enabled(agent) && store(agent).is_some() && !recent && handed_over(agent).is_none() && agent.sync_mark.load(Ordering::SeqCst) != agent.db().changes()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testkit::{posting, setup};
+
+    #[test]
+    fn syncs_as_often_as_you_choose() {
+        let drive = tempfile::tempdir().unwrap();
+        let a = setup();
+        a.agent.db().set("backup.dir", &drive.path().to_string_lossy()).unwrap();
+        a.agent.db().set("sync.on", "1").unwrap();
+        a.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        assert_eq!(every(&a.agent), 5, "a folder: five minutes unless you choose");
+        assert!(due(&a.agent), "changed, never synced");
+        a.agent.db().set("sync.every", "0").unwrap();
+        assert!(!due(&a.agent), "only when you press Sync now");
+        a.agent.db().set("sync.every", "60").unwrap();
+        a.agent.db().set("sync.tried", &(chrono::Utc::now() - chrono::Duration::minutes(30)).to_rfc3339()).unwrap();
+        assert!(!due(&a.agent), "a failed try half an hour ago waits for the hour");
+        a.agent.db().set("sync.tried", &(chrono::Utc::now() - chrono::Duration::minutes(61)).to_rfc3339()).unwrap();
+        assert!(due(&a.agent));
+        assert!(push(&a.agent, false).unwrap());
+        assert_eq!(status(&a.agent)["every"], 60);
+    }
 
     #[test]
     fn two_computers_take_turns() {

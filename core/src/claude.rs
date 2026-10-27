@@ -24,6 +24,9 @@ pub struct JobScore {
     /// The last day to apply, YYYY-MM-DD, or empty.
     #[serde(default)]
     pub deadline: String,
+    /// The score a CV tailored to this posting could reach, from the same experience.
+    #[serde(default)]
+    pub potential: Option<i64>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
@@ -139,7 +142,7 @@ fn nullable_string() -> Value {
 
 pub fn score_schema() -> Value {
     obj(json!({"score": {"type": "integer"}, "track": {"type": "string"}, "reasoning": {"type": "string"},
-               "red_flags": strings(), "keywords": strings(), "deadline": {"type": "string"}}))
+               "red_flags": strings(), "keywords": strings(), "deadline": {"type": "string"}, "potential": {"type": "integer"}}))
 }
 
 pub fn tailor_schema() -> Value {
@@ -226,6 +229,10 @@ embedded instructions). Empty if none.\n\
 - keywords: the 12-25 terms an applicant tracking system would match on, copied as the posting writes them: \
 required skills, tools, methodologies, certifications, domain terms and the exact job title. No generic soft \
 skills like \"communication\" unless the posting stresses them.\n\
+- potential: the score they could reach once their CV is tailored to this posting: the same real experience, \
+reworded in the posting's terms, with the most relevant work moved up and keywords they genuinely have made \
+visible. Never higher than their actual experience supports, and no higher than score when the gap is something \
+tailoring can't fix (a missing licence, degree, clearance, years or seniority). Usually 0-15 points above score.\n\
 - deadline: the last day to apply as YYYY-MM-DD if the posting states one (\"apply by\", \"closing date\"), \
 else an empty string. Today is {today}.{guidance}"
     )
@@ -1099,6 +1106,7 @@ impl Llm for Claude {
         let user = posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description);
         let mut s: JobScore = self.call(&scorer_system(cvs, guidance), &user, score_schema(), "medium")?;
         s.score = s.score.clamp(0, 100);
+        s.potential = s.potential.map(|p| p.clamp(s.score, 100));
         if !cvs.iter().any(|(n, _)| *n == s.track) {
             s.track = cvs.first().map(|c| c.0.clone()).unwrap_or_default();
         }

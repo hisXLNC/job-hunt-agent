@@ -181,9 +181,8 @@ fn job_file(agent: &Agent, job: &crate::db::Job, what: &str) -> R<PathBuf> {
         "letter" => need(&job.letter_path)?,
         "cv-pdf" | "letter-pdf" => {
             let docx = need(if what == "cv-pdf" { &job.cv_path } else { &job.letter_path })?;
-            let pdf = docx.with_extension("pdf");
-            // Older applications have no PDF yet: make one now.
-            if pdf.exists() { pdf } else { crate::util::docx_to_pdf(&docx)? }
+            // Made now when there's none yet, or again when you changed the Word file since.
+            crate::util::pdf_of(&docx).map_err(|e| Error(format!("Couldn't make the PDF from the Word file: {} Close it in Word and try again.", e.0)))?
         }
         "prep" => agent.application_dir(job).join("Interview prep.md"),
         _ => return Err(Error("Nothing to open.".into())),
@@ -502,7 +501,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ["api", "jobs", id] => {
                 let job = job_or_404(agent, id)?;
                 let history = agent.db().history(id)?;
-                let pdf = |p: &Option<String>| p.as_deref().map(|p| Path::new(p).with_extension("pdf").exists()).unwrap_or(false);
+                let pdf = |p: &Option<String>| p.as_deref().map(|p| !crate::util::pdf_stale(Path::new(p))).unwrap_or(false);
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
                     "job": job, "history": history, "progress": agent.tracker(Some(id))?.pop(),
@@ -961,7 +960,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         ["api", "usage", "run-held"] => {
             if let Some(t) = agent.limited() {
-                return Err(Error(format!("Your Claude usage limit is reached until {}.", t.with_timezone(&agent.profile().tz()).format("%-I:%M %p"))));
+                return Err(Error(format!("Your Claude usage limit is reached. It resets {}.", crate::util::reset_time(t, chrono::Utc::now()))));
             }
             Ok(Resp::json(&json!({ "started": agent.run_deferred()? })))
         }
@@ -1065,6 +1064,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             if let Some(w) = b.get("where").and_then(|v| v.as_str()) {
                 agent.db().set("sync.where", if w == "drive" { "drive" } else { "folder" })?;
+            }
+            if let Some(m) = b.get("every").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))) {
+                agent.db().set("sync.every", &m.clamp(0, 24 * 60).to_string())?;
             }
             if let Some(on) = b.get("on").and_then(|v| v.as_bool()) {
                 if on && crate::sync::on_drive(agent) && agent.files.read().unwrap().is_none() {
@@ -1478,9 +1480,8 @@ fn hold_for_later(agent: &Agent, b: &Value) -> Option<String> {
     if b.get("now").and_then(|v| v.as_bool()) == Some(true) {
         return None;
     }
-    let tz = agent.profile().tz();
     if let Some(t) = agent.limited() {
-        return Some(format!("Your Claude usage limit is reached, so this starts by itself after it resets at {}.", t.with_timezone(&tz).format("%-I:%M %p")));
+        return Some(format!("Your Claude usage limit is reached, so this starts by itself after it resets, {}.", crate::util::reset_time(t, chrono::Utc::now())));
     }
     if agent.budget_wait() {
         let hour = agent.secret("budget.hour").parse::<u32>().unwrap_or(22);

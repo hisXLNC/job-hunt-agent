@@ -347,14 +347,21 @@ pub fn is_limit(text: &str) -> bool {
 /// When a limit message says it resets ("resets 10:50am (Asia/Dubai)", "resets Oct 24, 9am (Europe/London)"),
 /// as Unix seconds: the next such time after `now`.
 pub fn resets_at(text: &str, now: chrono::DateTime<chrono::Utc>) -> Option<i64> {
-    use chrono::{Datelike, NaiveTime, TimeZone};
     let low = text.to_lowercase();
     let rest = &text[low.find("resets")? + 6..];
     let (when, zone) = match rest.find('(') {
         Some(i) => (rest[..i].trim(), rest[i + 1..].split(')').next().unwrap_or("").trim()),
         None => (rest.trim(), ""),
     };
-    let tz: chrono_tz::Tz = zone.parse().unwrap_or(chrono_tz::UTC);
+    // Claude Code names the zone; without one, it's this computer's own time.
+    match zone.parse::<chrono_tz::Tz>() {
+        Ok(tz) => reset_in(when, &tz, now),
+        Err(_) => reset_in(when, &chrono::Local, now),
+    }
+}
+
+fn reset_in<Z: chrono::TimeZone>(when: &str, tz: &Z, now: chrono::DateTime<chrono::Utc>) -> Option<i64> {
+    use chrono::{Datelike, NaiveTime};
     let when = when.trim_start_matches("at ").trim();
     let (date, time) = match when.rsplit_once(',') {
         Some((d, t)) => (Some(d.trim()), t.trim()),
@@ -365,7 +372,7 @@ pub fn resets_at(text: &str, now: chrono::DateTime<chrono::Utc>) -> Option<i64> 
         t.insert_str(t.len() - 2, ":00"); // "9am" -> "9:00am"
     }
     let time = NaiveTime::parse_from_str(&t, "%I:%M%p").ok()?;
-    let local_now = now.with_timezone(&tz);
+    let local_now = now.with_timezone(tz);
     let day = match date {
         Some(d) => {
             let d = chrono::NaiveDate::parse_from_str(&format!("{d} {}", local_now.year()), "%b %d %Y").ok()?;
@@ -373,9 +380,9 @@ pub fn resets_at(text: &str, now: chrono::DateTime<chrono::Utc>) -> Option<i64> 
         }
         None => local_now.date_naive(),
     };
-    let mut at = tz.from_local_datetime(&day.and_time(time)).earliest()?;
+    let mut at = tz.from_local_datetime(&day.and_time(time)).earliest()?.with_timezone(&chrono::Utc);
     if date.is_none() && at <= now {
-        at = at + chrono::Duration::days(1);
+        at += chrono::Duration::days(1);
     }
     Some(at.timestamp())
 }
