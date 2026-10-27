@@ -18,6 +18,9 @@ Settings that make sense, Drive sync you can see, and a fit forecast.
 - Fix: the Send to Job Hunt browser button did nothing on LinkedIn and some company sites. It now works on LinkedIn's job pages and search results, and Job Hunt reads the full posting from LinkedIn itself, with the company's own apply link. Add the button to your browser again to get the new one.
 - Fix: after you change a tailored CV or cover letter in Word, its PDF is made again from your changes when you open or attach it.
 - Fix: the time your Claude usage limit resets read differently in different places. It's now shown everywhere in this computer's time, with how long is left.
+- Skipped roles whose fit forecast clears your minimum are marked "Worth a look tailored", so a near miss isn't lost.
+- On a phone, the Postings and Skipped lists show the role, its fit and its stage (or why it was skipped) without scrolling sideways.
+- Smaller fixes: cards with a button on the right no longer stack in the middle; the empty Recruiters card is gone from the Inbox; the setup page no longer says you use a subscription when you use an API key; Results says "Not enough replies yet" instead of a blank; Sync & backup has one Back up now button.
 
 ## [1.43.1] - 2026-10-21
 

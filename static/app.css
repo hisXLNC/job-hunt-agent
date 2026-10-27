@@ -131,6 +131,8 @@ form[data-form=profile] { display: flex; flex-direction: column; gap: 20px; }
 
 /* ---- cards ---- */
 .card { background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* A card laid out as one line: text on the left, its button on the right (wrapping on phones). */
+.card.row { flex-direction: row; flex-wrap: wrap; align-items: center; }
 .card > header { display: flex; align-items: center; gap: 10px; }
 .card > header h2 { flex: 1; }
 .grid-2 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
@@ -621,3 +623,19 @@ details.card > summary { cursor: pointer; list-style-position: outside; }
 .ladder li::before { content: ""; position: absolute; left: -20px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
 .ladder li.ceiling::before { background: var(--good); }
 .ladder .when { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+/* Postings on a phone: role (with its stage) and fit; age, pay, source and the link button only on wider screens. */
+@media (max-width: 760px) {
+  #t-postings th:nth-child(1), #t-postings td:nth-child(1), #t-postings th:nth-child(3), #t-postings td:nth-child(3),
+  #t-postings th:nth-child(4), #t-postings td:nth-child(4), #t-postings th:nth-child(6), #t-postings td:nth-child(6),
+  #t-postings th:nth-child(7), #t-postings td:nth-child(7) { display: none; }
+  #t-postings .reach { display: block; margin: 2px 0 0; }
+}
+.phone-only { display: none; }
+@media (max-width: 760px) { .phone-only { display: inline; } }
+/* The other job tables on a phone: fit and role, with the stage (or why it was skipped) under the role. */
+@media (max-width: 760px) {
+  #t-skipped th:nth-child(n+3), #t-skipped td:nth-child(n+3), #t-list th:nth-child(n+3):nth-child(-n+5), #t-list td:nth-child(n+3):nth-child(-n+5) { display: none; }
+  #t-skipped .reach, #t-list .reach { display: block; margin: 2px 0 0; }
+  .card > header { flex-wrap: wrap; }
+}

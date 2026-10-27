@@ -397,7 +397,7 @@ async function showPipeline(tab) {
       const list = of(st);
       return `<div class="lane"><h3>${stagePill(st)}<span class="n">${list.length}</span></h3>${list.map(card).join('')}</div>`;
     }).join('')}</div>` : '<p class="empty">No applications in progress yet. Matches appear here after a search.</p>'}
-      ${empty.length && shown.length ? `<p class="muted small">Nothing in ${empty.map(st => STAGES[st].split(' – ')[0]).join(', ')}.</p>` : ''}
+      ${empty.length && shown.length ? `<p class="muted small">No roles yet in: ${empty.map(st => STAGES[st].split(' – ')[0]).join(' · ')}.</p>` : ''}
       ${saved.length ? `<details class="card" open><summary><b>Saved for later</b> <span class="muted small">${saved.length} backup${saved.length === 1 ? '' : 's'}</span></summary>
         <div class="queue">${saved.map(j => `<div class="qitem">${scoreBadge(j.score)}<a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span><br><span class="muted small">${esc(j.company)}</span></a>${closedTag(j)}${deadlineTag(j)}<button class="btn sm" data-act="stage" data-status="${j.cv_path ? 'ready' : 'queued'}" data-job="${esc(j.id)}" data-from="saved">Bring back</button></div>`).join('')}</div></details>` : ''}
       ${done.length ? `<details class="card"><summary><b>Finished</b> <span class="muted small">${of('offer').length} offer${of('offer').length === 1 ? '' : 's'}, ${of('rejected').length} rejected${of('no_response').length ? `, ${of('no_response').length} no response` : ''}</span></summary>
@@ -411,7 +411,7 @@ async function showPipeline(tab) {
       <section class="card" style="padding:6px 10px"><table class="jobs" id="t-postings"><thead><tr>${sortTh('Age', 'date')}${sortTh('Role')}${sortTh('Salary', 'num')}${sortTh('Source')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}<th></th></tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-src="${esc(j.source)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>
-        <td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span></td>
+        <td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span><span class="phone-only"><br>${stagePill(j.status)}</span></td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="small" data-v="${esc(j.source)}">${esc(sourceName(j.source))}</td><td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
         <td>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">No postings yet. Run a search from the Overview.</p>'}</section>`;
@@ -439,12 +439,15 @@ async function showPipeline(tab) {
         <table><tbody>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<tr><td>${esc(k)}</td><td style="text-align:right"><b>${n}</b></td></tr>`).join('')}${elsewhere ? `<tr><td>Outside your locations (not shown)</td><td style="text-align:right"><b>${elsewhere}</b></td></tr>` : ''}</tbody></table>
         <p class="muted small">Most skips happen before Claude sees a posting: its title must match a job title or keyword from <a href="#cvs">Your CVs</a>, and its location one of your <a href="#settings/search">locations</a>. Change those, then use <b>Score again</b> to check these postings against your new settings.</p></section>`;
     }
+    // A skipped role whose forecast clears your fit score is worth a second look: tailored, it could make it.
+    const bar = tab === 'skipped' ? ((settingsCache || await api('/api/settings').catch(() => null))?.profile?.score_threshold ?? 101) : 101;
+    const worth = j => canReach(j) != null && canReach(j) >= bar ? `<span class="pill good" title="Its fit is below your minimum (${bar}), but tailored it could reach about ${canReach(j)}">Worth a look tailored</span> ` : '';
     body = `${why}<input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
       <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Role')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span></td>
+        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span><span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>${tab === 'skipped'
-          ? `<td class="small why" data-v="${esc((j.reasoning || '').toLowerCase())}">${esc(j.reasoning || '')}</td>`
+          ? `<td class="small why" data-v="${esc((j.reasoning || '').toLowerCase())}">${worth(j)}${esc(j.reasoning || '')}</td>`
           : `<td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>`}${tab === 'list' ? `<td class="row-act">${rowActions(j)}</td>` : ''}</tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">Nothing here yet.</p>'}</section>`;
   }
@@ -972,7 +975,7 @@ async function showWelcome() {
         <div id="googlePaste" ${st.google.pasting ? '' : 'hidden'}>${googlePasteBox(st.google.paste_url)}</div>`
         : '<div class="row"><a class="btn" href="#settings/connections">Set up Google</a></div>'}</section>`}
     <ol class="apply-steps">
-      ${step(1, s.claude, 'Connect Claude', `<p class="muted">Claude is the AI that reads postings and rewrites your CV for each. Job Hunt uses your Claude subscription (Pro or Max).</p>
+      ${step(1, s.claude, 'Connect Claude', `<p class="muted">Claude is the AI that reads postings and rewrites your CV for each. ${s.engine === 'api' ? 'Job Hunt uses your Claude API key.' : 'Job Hunt uses your Claude subscription (Pro or Max).'}</p>
         ${s.engine === 'api' ? `<p class="muted">${s.claude ? '✓ Ready, with your API key.' : 'Add your API key in <a href="#settings/connections">Settings → Accounts</a>.'}</p>`
           : `<div id="welcomeClaude" class="small muted"><span class="spin"></span> Checking…</div><p class="muted small" style="margin-top:8px">No Claude subscription? <a href="#settings/connections">Use an API key instead</a> (you pay per use).</p>`}`)}
       ${step(2, st.cvs.length > 0, 'Add your CV', `<p class="muted">Word, PDF or text. Add one per kind of role (e.g. data engineering, program delivery). Claude reads each one and suggests the job titles to search for.</p>
@@ -1280,7 +1283,7 @@ async function showResults() {
       <div class="kpi"><span class="kpi-l">Applications sent</span><span class="kpi-v">${f.sent}</span><span class="kpi-s">of ${f.tailored} tailored</span></div>
       <div class="kpi"><span class="kpi-l">Reply rate</span><span class="kpi-v">${rate(f.replied, f.sent)}</span><span class="kpi-s">${f.replied} repl${f.replied === 1 ? 'y' : 'ies'}</span></div>
       <div class="kpi"><span class="kpi-l">Interview rate</span><span class="kpi-v">${rate(f.interviews, f.sent)}</span><span class="kpi-s">${f.interviews} interview${f.interviews === 1 ? '' : 's'}</span></div>
-      <div class="kpi"><span class="kpi-l">Typical wait for a reply</span><span class="kpi-v">${r.days_to_reply == null ? '–' : `${r.days_to_reply} d`}</span><span class="kpi-s">Half of replies came sooner</span></div>
+      <div class="kpi"><span class="kpi-l">Typical wait for a reply</span><span class="kpi-v">${r.days_to_reply == null ? '–' : `${r.days_to_reply} d`}</span><span class="kpi-s">${r.days_to_reply == null ? 'Not enough replies yet' : 'Half of replies came sooner'}</span></div>
     </section>
     <section class="card"><header><h2>From posting to offer</h2></header>
       <div class="bars">${steps.map(([n, v], i) => `<div class="bar-row"><span>${esc(n)}</span><span class="track"><span class="fill" style="display:block;width:${Math.max(v ? 1 : 0, v / max * 100)}%"></span></span><span class="v">${v}${i && steps[i - 1][1] ? ` <span class="muted small">${Math.round(v / steps[i - 1][1] * 100)}%</span>` : ''}</span></div>`).join('')}</div>
@@ -1327,7 +1330,7 @@ async function showInbox() {
   const [{ emails }, rec] = await Promise.all([api('/api/emails'), api('/api/recruiters').catch(() => null)]);
   page(`<div class="head"><div class="grow"><h1>Inbox</h1><p class="muted">Job email Job Hunt has read. Replies are saved as Gmail drafts for you to check and send, and messages are labelled under JobHunt/ in Gmail.</p></div>
     ${overview?.setup?.google ? `<button class="btn primary" data-act="run" data-task="inbox">${svg('mail')}Check email now</button>` : '<a class="btn primary" href="#settings/connections">Connect Gmail to check email</a>'}</div>
-    ${rec ? `<section class="card row" style="justify-content:space-between"><span><b>Recruiters</b> <span class="muted small">${(rec.recruiters || []).filter(r => !r.hidden).length} saved, each with the applications they handled.</span></span><a class="btn" href="#recruiters">${svg('recruiters')}Open Recruiters</a></section>` : ''}
+    ${rec && (rec.recruiters || []).some(r => !r.hidden) ? `<section class="card row" style="justify-content:space-between"><span><b>Recruiters</b> <span class="muted small">${(rec.recruiters || []).filter(r => !r.hidden).length} saved, each with the applications they handled.</span></span><a class="btn" href="#recruiters">${svg('recruiters')}Open Recruiters</a></section>` : ''}
     <section class="card" style="padding:6px 10px">${emails.length ? `<table><thead><tr><th>Received</th><th>Type</th><th>Email</th><th>Application</th></tr></thead><tbody>
     ${emails.map(m => { const [name, cls] = CATEGORY[m.category] || [m.category, '']; return `<tr>
       <td class="small muted" style="white-space:nowrap">${esc(fmtWhen(m.received_at))}</td>
@@ -1698,7 +1701,7 @@ async function showSettings(tab, sub) {
         <label class="check"><input type="checkbox" name="secrets" ${y.secrets ? 'checked' : ''}> <span>Include saved keys and sign-ins<br><span class="muted small">So another computer needs no setting up. They stay in your own Google Drive.</span></span></label>
         <div class="row"><button class="btn primary" type="submit">Save</button></div>
       </form></section>`;
-    const backups = `<section class="card"><header><h2>Backups</h2><button class="btn primary" data-act="backupNow">Back up now</button></header>
+    const backups = `<section class="card"><header><h2>Backups</h2></header>
       <p class="muted">Every day Job Hunt saves one zip file with everything: your applications, CVs, cover letters, settings and signature. The last ${14} are kept.
         ${server ? 'They go to the <b>/backups</b> folder you mapped to a NAS share, so Hyper Backup or Cloud Sync can copy them off the NAS.' : 'With sync on, each one goes to your Google Drive (or sync folder) too.'}</p>
       <form data-form="backup" class="form">
