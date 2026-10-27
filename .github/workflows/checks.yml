@@ -104,6 +104,14 @@ jobs:
       - name: Each site, read the way a search reads it
         working-directory: core
         run: cargo run --quiet --example site_check -- "Accountant" "Toronto, ON"
+      - name: TLS of the sites that can't be reached
+        if: always()
+        run: |
+          for h in jobs.lrostaffing.com; do
+            echo "== $h"
+            echo | openssl s_client -connect $h:443 -servername $h -showcerts 2>&1 | grep -E "^ *[0-9] s:|^ *i:|Protocol|Cipher is|Verify return|Verification" | head -20
+            curl -sS -o /dev/null -w "curl: %{http_code} %{ssl_verify_result}\n" https://$h/job-listings/ || true
+          done
       - name: What each site answers
         if: always()
         run: python3 tools/probe_sites.py "Tax Manager" "Toronto, ON"

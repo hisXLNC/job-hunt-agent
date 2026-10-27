@@ -21,7 +21,7 @@ HEAD = {"User-Agent": UA, "Accept": "text/html,application/xhtml+xml,application
 
 # name: (posting-link pattern, addresses to try)
 SITES = {
-    "Robert Half": (r"/job/|/jobs/[^?#]*\d{5,}", [f"https://www.roberthalf.com/ca/en/jobs?query={q}&location={c}", f"https://www.roberthalf.com/ca/en/jobs/all/{slug(CITY)}?query={q}", "https://www.roberthalf.com/ca/en/jobs"]),
+    "Robert Half": (r"/job/|/jobs/[^?#]*\d{5,}", [f"https://www.roberthalf.com/ca/en/jobs/{slug(TITLE)}/{slug(CITY)}", "https://www.roberthalf.com/ca/en/jobs/accountant/toronto", f"https://www.roberthalf.com/ca/en/jobs/all/{slug(CITY)}?keywords={q}", f"https://www.roberthalf.com/ca/en/jobs?query={q}&location={c}", f"https://www.roberthalf.com/ca/en/jobs/all/{slug(CITY)}?query={q}", "https://www.roberthalf.com/ca/en/jobs"]),
     "Michael Page": (r"/job-detail/", [f"https://www.michaelpage.ca/jobs/accountant", f"https://www.michaelpage.ca/jobs/accountant/toronto", f"https://www.michaelpage.ca/jobs?search=accountant", f"https://www.michaelpage.ca/jobs/{slug(TITLE)}"]),
     "Randstad": (r"/jobs/[a-z0-9-]+_[a-z0-9-]+_\d+", [f"https://www.randstad.ca/jobs/q-{slug(TITLE)}/l-{slug(CITY)}/", "https://www.randstad.ca/jobs/q-accountant/l-toronto/"]),
     "Adecco": (r"/job/|/jobs/[^/?#]+/\d{4,}|/job-details?/", [f"https://www.adecco.com/en-ca/jobs?k={q}&l={c}", f"https://www.adecco.com/en-ca/job-seekers/find-a-job?k={q}&l={c}", f"https://www.adecco.com/en-ca/jobs/{slug(TITLE)}", "https://www.adecco.com/en-ca/job-seekers/find-a-job", "https://www.adecco.com/en-ca/jobs"]),

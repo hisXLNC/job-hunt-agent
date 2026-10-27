@@ -26,7 +26,18 @@ fn main() {
                     println!("    details read for {n} of {}", thin.len());
                 }
             }
-            Err(e) => println!("{:<20} FAILED in {secs:.1}s: {e}  {}", t.name, sites::search_url(&t, &q, &w)),
+            Err(e) => {
+                let url = sites::search_url(&t, &q, &w);
+                println!("{:<20} FAILED in {secs:.1}s: {e}  {url}", t.name);
+                // The whole error, for connection problems (TLS and the like).
+                if let Err(e) = c.get(&url).send() {
+                    let mut src: Option<&dyn std::error::Error> = Some(&e);
+                    while let Some(x) = src {
+                        println!("    because: {x}");
+                        src = x.source();
+                    }
+                }
+            }
         }
     }
 }
