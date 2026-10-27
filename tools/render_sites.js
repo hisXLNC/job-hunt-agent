@@ -6,6 +6,7 @@ const { chromium } = require('playwright');
 
 const SITES = [
   ['Randstad', 'https://www.randstad.ca/jobs/q-accountant/l-toronto/'],
+  ['Randstad all', 'https://www.randstad.ca/jobs/'],
   ['Adecco', 'https://www.adecco.com/en-ca/job-seekers/find-a-job?k=Accountant&l=Toronto%2C+ON'],
   ['Adecco search', 'https://www.adecco.com/en-ca/job-search'],
   ['Adecco search q', 'https://www.adecco.com/en-ca/job-search?k=accountant&l=Toronto'],
@@ -31,11 +32,16 @@ const SITES = [
     const calls = [];
     page.on('response', async r => {
       const type = r.headers()['content-type'] || '';
-      if (!/json/.test(type) || /analytics|consent|onetrust|google|facebook|hotjar|optimizely|datadog|newrelic|clarity/.test(r.url())) return;
+      const full = /jobs\/summarized|jobsweb|randstad\.ca\/(api|search-app)/.test(r.url());
+      if (name.startsWith('Randstad') && !/\.(css|png|svg|jpg|woff2?|js)(\?|$)/.test(r.url())) console.log(`   ANY ${r.request().method()} ${r.url().slice(0, 200)} ${type}`);
+      if (!/json/.test(type) || /analytics|consent|onetrust|cookielaw|google|facebook|hotjar|optimizely|datadog|newrelic|clarity|reddit|demdex/.test(r.url())) return;
       try {
         const body = await r.text();
         const req = r.request();
-        calls.push(`${req.method()} ${r.url().slice(0, 220)}  [${r.status()}, ${body.length} chars]${req.postData() ? `\n        body: ${req.postData().slice(0, 300)}` : ''}\n        answer: ${body.slice(0, 300).replace(/\s+/g, ' ')}`);
+        const n = full ? 4000 : 300;
+        let shape = '';
+        if (full) try { const v = JSON.parse(body); const first = v.jobs?.[0] || v.data?.result?.jobs?.[0] || v.data?.result?.jobs; shape = `\n        first job: ${JSON.stringify(first).slice(0, 2500)}\n        keys: ${JSON.stringify(Object.keys(v.data?.result || v))}`; } catch (e) {}
+        calls.push(`${req.method()} ${r.url().slice(0, 220)}  [${r.status()}, ${body.length} chars]${req.postData() ? `\n        body: ${req.postData().slice(0, n)}` : ''}\n        headers: ${JSON.stringify(req.headers()).slice(0, full ? 1200 : 0)}\n        answer: ${body.slice(0, full ? 600 : 300).replace(/\s+/g, ' ')}${shape}`);
       } catch (e) {}
     });
     try {
