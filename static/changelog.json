@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.3.1",
+    "date": "2026-10-27",
+    "title": "Every place gets searched",
+    "changes": [
+      "Each job title is now searched in all your places before the next title, so cities after your first (Halifax, for one) are searched by every job site, not only Adzuna.",
+      "Indeed searches all your places, not only the first.",
+      "The Halifax area (Dartmouth, Bedford, Sackville, Cole Harbour) counts as Halifax when nearby places are included.",
+      "Tailored files are named simply \"Your Name - Company.docx\" and \"Your Name - Company - Cover Letter.docx\".",
+      "When Google signs Job Hunt out, it says why that usually happens (a Google project in Testing signs out every 7 days) and how to stop it."
+    ]
+  },
+  {
     "version": "2.3.0",
     "date": "2026-10-27",
     "title": "Recruiter sites work again",

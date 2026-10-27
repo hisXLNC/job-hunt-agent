@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.3.1] - 2026-10-27
+
+Every place gets searched.
+
+### Changes
+
+- Each job title is now searched in all your places before the next title, so cities after your first (Halifax, for one) are searched by every job site, not only Adzuna.
+- Indeed searches all your places, not only the first.
+- The Halifax area (Dartmouth, Bedford, Sackville, Cole Harbour) counts as Halifax when nearby places are included.
+- Tailored files are named simply "Your Name - Company.docx" and "Your Name - Company - Cover Letter.docx".
+- When Google signs Job Hunt out, it says why that usually happens (a Google project in Testing signs out every 7 days) and how to stop it.
+
 ## [2.3.0] - 2026-10-27
 
 Recruiter sites work again.
@@ -704,6 +716,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.3.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.3.1
 [2.3.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.3.0
 [2.2.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.2.0
 [2.1.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.1.0
