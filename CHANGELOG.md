@@ -4,6 +4,24 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.0.0] - 2026-10-27
+
+Job Hunt 2: a calmer look, Drive backup on by default, clearer sources.
+
+### Changes
+
+- A new look: a light, calm layout with soft panels, no clutter of small capitals and shadows, one dark button for the main thing on each screen, and colour kept for what matters (fit, ratings, problems). A true dark mode.
+- The Overview opens with your greeting and what's waiting on you today, then your four numbers, your to-do list, and a short Last search: "From 16 sources · 6 didn't work", with the details one click away.
+- Company and location have their own columns in every list: All postings, Skipped, the Tracker, Documents and the Overview.
+- Connecting Google now keeps your data synced and backed up in your own Google Drive straight away. On a new PC, install Job Hunt, connect the same Google account on the Welcome page, and it offers to continue where you left off. Already connected? One click: Turn on.
+- Recruiters and job sites that can't be read now show as Some not working (never Working), with a button to turn off the ones that don't work.
+- Fit forecasts are filled in for postings found before forecasts existed, and show on the Overview.
+- Company ratings: more companies get one (broader searches, retried sooner, one failure no longer stops the rest).
+- Indeed through your Claude account: Job Hunt now lets Claude Code look up the Indeed tools when your account has several connectors, waits longer for connectors to start, and tries once more before reporting a problem.
+- The Send to Job Hunt bookmark has a briefcase icon in your bookmarks bar (add it again to get it), with a Copy the name button.
+- A posting you send twice is noted on the job that's there (and is clickable in Recent activity), not shown as a problem.
+- Fix: Google could still say to reconnect after you'd connected, from a test made before.
+
 ## [1.45.0] - 2026-10-27
 
 Company ratings from employee reviews.
@@ -647,6 +665,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.0.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.0.0
 [1.45.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.45.0
 [1.44.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.44.0
 [1.43.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.43.1

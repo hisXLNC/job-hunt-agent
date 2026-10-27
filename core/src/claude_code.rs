@@ -275,7 +275,12 @@ pub fn args(ask: &Ask, system_file: &Path) -> Vec<String> {
         a.extend(["--disallowedTools".into(), CONNECTOR_DENIED.join(",")]);
     }
     // Your claude.ai connectors load, but only these tools may run; anything else is refused.
+    // ToolSearch too: with several connectors, Claude Code may hold their tools back until it
+    // looks them up, and refused, the connector's tools never appear.
     let mut allowed: Vec<&str> = ask.connectors.to_vec();
+    if !ask.connectors.is_empty() {
+        allowed.push("ToolSearch");
+    }
     if ask.web {
         allowed.extend(["WebSearch", "WebFetch"]);
     }
@@ -400,6 +405,10 @@ pub fn ask(cc: &ClaudeCode, ask: &Ask) -> R<Value> {
         }
         let mut c = command(cc);
         c.args(args(ask, &system_file)).current_dir(&dir);
+        if !ask.connectors.is_empty() {
+            // A minute for claude.ai connectors to connect before the first turn.
+            c.env("MCP_TIMEOUT", "60000");
+        }
         let (ok, out, err) = run_capture(c, ask.prompt, ask.limit)?;
         parse_output(ok, &out, &err)
     })();
@@ -428,7 +437,7 @@ mod tests {
         assert_eq!(b[b.iter().position(|x| x == "--tools").unwrap() + 1], "Read");
         let c = args(&Ask { system: "s", prompt: "p", schema: &schema, model: "", effort: "", files: &[], connectors: &["mcp__x__a", "mcp__x__b"], web: false, limit: Duration::from_secs(1) }, Path::new("/tmp/i.txt"));
         assert!(!c.contains(&"--strict-mcp-config".to_string()), "connectors need your account's MCP servers");
-        assert_eq!(c[c.iter().position(|x| x == "--allowedTools").unwrap() + 1], "mcp__x__a,mcp__x__b");
+        assert_eq!(c[c.iter().position(|x| x == "--allowedTools").unwrap() + 1], "mcp__x__a,mcp__x__b,ToolSearch");
         // An empty --tools hides claude.ai connectors too, so the risky built-ins are refused by name instead.
         assert!(!c.contains(&"--tools".to_string()));
         let denied = &c[c.iter().position(|x| x == "--disallowedTools").unwrap() + 1];

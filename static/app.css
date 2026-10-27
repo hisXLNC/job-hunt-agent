@@ -421,7 +421,7 @@ form[data-form=profile] [type=submit] { display: none; }
 .chip b { color: var(--ink); margin-left: 2px; }
 .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .chip.on b { color: inherit; }
-.trow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.4fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+.trow { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1.5fr) minmax(0, 1.3fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line-2); }
 .trow:last-child { border-bottom: 0; }
 .tmain { color: inherit; text-decoration: none; min-width: 0; }
 .tnext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -640,16 +640,14 @@ details.card > summary { cursor: pointer; list-style-position: outside; }
 
 /* Postings on a phone: role (with its stage) and fit; age, pay, source and the link button only on wider screens. */
 @media (max-width: 760px) {
-  #t-postings th:nth-child(1), #t-postings td:nth-child(1), #t-postings th:nth-child(3), #t-postings td:nth-child(3),
-  #t-postings th:nth-child(4), #t-postings td:nth-child(4), #t-postings th:nth-child(6), #t-postings td:nth-child(6),
-  #t-postings th:nth-child(7), #t-postings td:nth-child(7) { display: none; }
+  #t-postings th:not(:nth-child(2)):not(:nth-child(6)), #t-postings td:not(:nth-child(2)):not(:nth-child(6)) { display: none; }
   #t-postings .reach { display: block; margin: 2px 0 0; }
 }
 .phone-only { display: none; }
 @media (max-width: 760px) { .phone-only { display: inline; } }
 /* The other job tables on a phone: fit and role, with the stage (or why it was skipped) under the role. */
 @media (max-width: 760px) {
-  #t-skipped th:nth-child(n+3), #t-skipped td:nth-child(n+3), #t-list th:nth-child(n+3):nth-child(-n+5), #t-list td:nth-child(n+3):nth-child(-n+5) { display: none; }
+  #t-skipped th:nth-child(n+3), #t-skipped td:nth-child(n+3), #t-list th:nth-child(n+3):nth-child(-n+7), #t-list td:nth-child(n+3):nth-child(-n+7) { display: none; }
   #t-skipped .reach, #t-list .reach { display: block; margin: 2px 0 0; }
   .card > header { flex-wrap: wrap; }
 }
@@ -728,3 +726,20 @@ table.mini td.num { text-align: right; }
 .stars svg, .big-stars svg { width: .85em; height: .85em; fill: currentColor; stroke: none; vertical-align: -.05em; margin-right: 2px; }
 /* Phone tabs: the selected one is the filled near-black pill, its words in the matching ink. */
 @media (max-width: 760px) { .tabs a.on { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); } }
+/* Company and location in their own columns, everywhere a list of roles lines up. */
+td.co { min-width: 120px; }
+td.loc { min-width: 110px; color: var(--ink-2); }
+.todo-row .grow { flex: 1 1 200px; }
+.todo-row .co { flex: 0 1 150px; min-width: 0; }
+.todo-row .loc { flex: 0 1 120px; min-width: 0; color: var(--ink-2); }
+.docrow { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, .9fr) minmax(0, .8fr) auto auto; }
+.docrow .loc, .trow .loc { color: var(--ink-2); }
+@media (max-width: 1000px) {
+  .todo-row .co, .todo-row .loc, .trow .co, .trow .loc, .docrow .co, .docrow .loc { display: none; }
+  .docrow { display: flex; }
+}
+@media (max-width: 1000px) and (min-width: 761px) { .todo-row .phone-only, .trow .phone-only, .docrow .phone-only { display: inline; } }
+.docrow > a { min-width: 0; }
+td.salary { min-width: 110px; }
+td.salary { white-space: normal; max-width: 130px; }
+table.jobs td { padding: 10px 8px; }

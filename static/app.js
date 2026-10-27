@@ -173,6 +173,11 @@ const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
 const scoreBadge = n => n == null ? '' : `<span class="score ${n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo'}" title="Fit score">${n}</span>`;
 /** "fit 72 → 85": your CV's fit before tailoring and the tailored CV's after. */
 const fitChange = j => j.score != null && j.score_after != null && j.score_after !== j.score ? `fit ${j.score} → <b>${j.score_after}</b>` : '';
+/** Company and location as their own cells: the company with its rating, a dash for no place. */
+const coCell = j => `${esc(j.company)}${ratingTag(j.rating)}`;
+const locCell = j => j.location ? esc(j.location) : '<span class="muted">–</span>';
+/** On a phone the columns fold: company and place under the role. */
+const coLocLine = j => `<span class="phone-only"><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span></span>`;
 /** A company's employee rating, as a small star tag with the rating out of 5. */
 const ratingTag = r => r?.found && r.rating != null ? ` <span class="stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}" title="Employees rate it ${r.rating.toFixed(1)} out of 5${r.reviews ? `, ${r.reviews.toLocaleString()} reviews` : ''}${r.source ? ` on ${esc(r.source)}` : ''}">${svg('star')}${r.rating.toFixed(1)}</span>` : '';
 /** What employees say, as a card for the job page. */
@@ -440,11 +445,12 @@ async function showPipeline(tab) {
     const sources = [...new Set(list.map(j => j.source))].sort();
     body = `<div class="row" style="margin-bottom:10px"><input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
       <select id="srcFilter" style="width:auto"><option value="">All sources</option>${sources.map(x => `<option value="${esc(x)}">${esc(sourceName(x))} (${list.filter(j => j.source === x).length})</option>`).join('')}</select></div>
-      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-postings"><thead><tr>${sortTh('Age', 'date')}${sortTh('Role')}${sortTh('Salary', 'num')}${sortTh('Source')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}<th></th></tr></thead><tbody>
+      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-postings"><thead><tr>${sortTh('Age', 'date')}${sortTh('Role')}${sortTh('Company')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}<th></th></tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-src="${esc(j.source)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>
-        <td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${j.location ? ` · ${esc(j.location)}` : ''}</span><span class="phone-only"><br>${stagePill(j.status)}</span></td>
-        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="small" data-v="${esc(j.source)}">${esc(sourceName(j.source))}</td><td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
+        <td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}<br><span class="small">${esc(sourceName(j.source))}</span></td>
+        <td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${stagePill(j.status)}</span></td>
+        <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td><td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
+        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
         <td>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">No postings yet. Run a search from the Overview.</p>'}</section>`;
   } else {
@@ -475,9 +481,10 @@ async function showPipeline(tab) {
     const bar = tab === 'skipped' ? ((settingsCache || await api('/api/settings').catch(() => null))?.profile?.score_threshold ?? 101) : 101;
     const worth = j => canReach(j) != null && canReach(j) >= bar ? `<span class="pill good" title="Its fit is below your minimum (${bar}), but tailored it could reach about ${canReach(j)}">Worth a look tailored</span> ` : '';
     body = `${why}<input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
-      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Role')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
+      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Role')}${sortTh('Company')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${j.location ? ` · ${esc(j.location)}` : ''}</span><span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
+        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
+        <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td><td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>${tab === 'skipped'
           ? `<td class="small why" data-v="${esc((j.reasoning || '').toLowerCase())}">${worth(j)}${esc(j.reasoning || '')}</td>`
           : `<td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>`}${tab === 'list' ? `<td class="row-act">${rowActions(j)}</td>` : ''}</tr>`).join('')}
@@ -587,7 +594,8 @@ function trackRow(r) {
   const id = esc(r.id);
   const act = r.follow_up_due ? `<button class="btn sm" data-act="followUp" data-job="${id}">Write follow-up</button>` : rowActions(r);
   return `<div class="trow">
-    <a class="grow tmain" href="#job/${encodeURIComponent(r.id)}"><span class="qt">${esc(r.title)}</span> ${closedTag(r)}${deadlineTag(r)}<br><span class="muted small">${esc(r.company)}${r.location ? ` · ${esc(r.location)}` : ''}</span></a>
+    <a class="grow tmain" href="#job/${encodeURIComponent(r.id)}"><span class="qt">${esc(r.title)}</span> ${closedTag(r)}${deadlineTag(r)}${coLocLine(r)}</a>
+    <span class="co small">${coCell(r)}</span><span class="loc small">${locCell(r)}</span>
     ${stepsHtml(r)}
     <div class="tnext"><span class="who ${esc(r.who)}">${{ you: 'Your move', them: 'Waiting on them', later: 'Saved', done: 'Done' }[r.who] || ''}</span>
       <span class="small">${nextText(r)}</span>
@@ -813,7 +821,8 @@ function todoHtml(o) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
   const row = (j, sub, actions) => `<div class="todo-row">
       ${scoreBadge(j.score)}
-      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}<br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${sub ? ` · ${sub}` : ''}</span></a>
+      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${sub ? `<br><span class="muted small">${sub}</span>` : ''}${coLocLine(j)}</a>
+      <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
       <span class="row todo-act">${actions}</span></div>`;
   const id = j => esc(j.id);
   const groups = [];
@@ -832,7 +841,8 @@ function todoHtml(o) {
       const many = Object.keys(byCv).length > 1;
       return Object.entries(byCv).map(([t, list]) => `${many ? `<h4 class="pick-cv">From your ${esc(trackLabel(t) || 'main')} CV</h4>` : ''}${list.map(j => `<div class="pick-item"><label class="todo-row pick"><input type="checkbox" data-pick="${esc(j.id)}">
       ${scoreBadge(j.score)}${reachTag(j)}
-      <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${j.location ? ` · ${esc(j.location)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''} · ${ageTag(j)}</span></span>
+      <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${j.salary ? `${esc(j.salary)} · ` : ''}${ageTag(j)}</span>${coLocLine(j)}</span>
+      <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
       <span class="row todo-act"><a class="btn ghost" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></label>
       ${j.reasoning || (j.red_flags || []).length ? `<details class="pick-why"><summary class="small muted">Why it fits${(j.red_flags || []).length ? ` · ${j.red_flags.length} red flag${j.red_flags.length === 1 ? '' : 's'}` : ''}</summary><p class="small">${esc(j.reasoning || '')}</p>${(j.red_flags || []).length ? `<ul class="flags small">${j.red_flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>` : ''}</div>`).join('')}`).join('');
     })()}
@@ -843,7 +853,7 @@ function todoHtml(o) {
      <button class="btn ghost" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`)).join('')]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
     `<button class="btn" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
-  if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, j.location ? esc(j.location) : '',
+  if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, '',
     `<a class="btn" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
      <button class="btn ghost" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,
@@ -1267,7 +1277,8 @@ async function showDocuments() {
     ${all.length ? `<div class="chips">${Object.entries(groups).map(([k, [n, f]]) => `<button class="chip ${k === docFilter ? 'on' : ''}" data-act="docFilter" data-f="${k}">${n} <b>${all.filter(f).length}</b></button>`).join('')}</div>` : ''}
     ${docs.length ? `<section class="card"><div class="doclist">${docs.map(j => `
       <div class="docrow" data-text="${esc((j.company + ' ' + j.title).toLowerCase())}">
-        <a class="grow" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs"><b>${esc(j.title)}</b><span class="muted small">${esc(j.company)}${j.score != null ? ` · fit ${j.score}` : ''} · ${esc(fmtDate(j.updated_at))}</span></a>
+        <a class="grow" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs"><b>${esc(j.title)}</b><span class="muted small">${j.score != null ? `fit ${j.score} · ` : ''}${esc(fmtDate(j.updated_at))}</span>${coLocLine(j)}</a>
+        <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
         ${stagePill(j.status)}
         <div class="row">
           ${j.cv_path ? `<button class="btn" data-act="open" data-what="cv" data-job="${esc(j.id)}">${svg('doc')}CV</button>` : ''}

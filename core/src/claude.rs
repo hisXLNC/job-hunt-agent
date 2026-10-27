@@ -929,6 +929,9 @@ struct FoundJobs {
 
 /// The Indeed connector's tools, as Claude Code names claude.ai connectors (and as a locally added server).
 pub const INDEED_TOOLS: &[&str] = &[
+    // The whole connector (its tools may be renamed or added to), then its tools by name.
+    "mcp__claude_ai_Indeed",
+    "mcp__Indeed",
     "mcp__claude_ai_Indeed__search_jobs",
     "mcp__claude_ai_Indeed__get_job_details",
     "mcp__Indeed__search_jobs",
@@ -945,7 +948,9 @@ match the searches and call get_job_details for each. Return those postings with
 results: never invent or guess a value; use an empty string when a field is missing or says N/A. url is the job's \
 View Job URL exactly as given. description is the full description text from get_job_details (at most about 6000 \
 characters). posted is the posted date as shown.\n\n\
-tools_available: false if you have no Indeed tools, and then return no jobs."
+If the Indeed tools aren't in your tool list, look them up first with the ToolSearch tool (search for \
+\"Indeed search_jobs\") and then use them. tools_available: false only if no Indeed tools can be found that \
+way either, and then return no jobs."
     )
 }
 
@@ -1488,11 +1493,18 @@ impl Llm for Claude {
         let prompt = format!("Country code: {country}\n\nSearches:\n{}", list.join("\n"));
         let schema = found_jobs_schema();
         let system = indeed_system(details);
-        let v = crate::claude_code::ask(cc, &crate::claude_code::Ask {
-            system: &system, prompt: &prompt, schema: &schema, model: &self.model, effort: "low", files: &[],
-            connectors: INDEED_TOOLS, web: false, limit: Duration::from_secs(15 * 60),
-        })?;
-        let found: FoundJobs = serde_json::from_value(v).map_err(|e| Error(format!("Claude's answer wasn't in the expected shape ({e}).")))?;
+        let run = || -> R<FoundJobs> {
+            let v = crate::claude_code::ask(cc, &crate::claude_code::Ask {
+                system: &system, prompt: &prompt, schema: &schema, model: &self.model, effort: "low", files: &[],
+                connectors: INDEED_TOOLS, web: false, limit: Duration::from_secs(15 * 60),
+            })?;
+            serde_json::from_value(v).map_err(|e| Error(format!("Claude's answer wasn't in the expected shape ({e}).")))
+        };
+        let mut found = run()?;
+        // Connectors sometimes aren't ready on the first try: once more before saying why.
+        if !found.tools_available {
+            found = run()?;
+        }
         if !found.tools_available {
             return Err(Error(crate::claude_code::connector_diagnosis(cc, "Indeed")));
         }
