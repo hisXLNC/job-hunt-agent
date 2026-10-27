@@ -2625,6 +2625,15 @@ replies and interviews, and a little lower for kinds that got none from several 
             if crate::claude_code::is_limit(&e.detail) {
                 continue;
             }
+            // Fixed since: the same task worked afterwards, or (for Google's) Google was connected again.
+            let at = |k: &str| chrono::DateTime::parse_from_rfc3339(&self.secret(k)).ok();
+            let when = chrono::DateTime::parse_from_rfc3339(&e.created_at).ok();
+            let ok_key = match kind.as_str() { "search" => "last.search", "inbox" => "last.inbox", "sync" => "last.sync", "backup" => "last.backup", _ => "last.check" };
+            let google = kind == "inbox" || kind == "sync" && self.secret("sync.where") == "drive";
+            let fixed = |k: &str| matches!((when, at(k)), (Some(w), Some(t)) if t > w);
+            if fixed(ok_key) || google && fixed("google.at") {
+                continue;
+            }
             if ["search", "inbox", "sync", "backup", "check"].contains(&kind.as_str()) && seen.insert(kind.clone()) {
                 let what = match kind.as_str() { "search" => "Job search", "inbox" => "Email check", "sync" => "Sync", "backup" => "Backup", _ => "Posting check" };
                 let detail: String = e.detail.chars().take(160).collect();
@@ -5864,6 +5873,10 @@ mod tests {
         s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2"), posting("Delivery Manager", "3")])).unwrap();
         s.agent.db().log(None, "inbox:error", "Gmail said 401").unwrap();
         assert!(s.agent.health().iter().any(|h| h["text"].as_str().unwrap().contains("Email check had a problem")));
+        // Reconnecting Google (or a check that works) clears it.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        s.agent.db().set("google.at", &now()).unwrap();
+        assert!(!s.agent.health().iter().any(|h| h["text"].as_str().unwrap().contains("Email check had a problem")));
         assert!(s.agent.write_insights().is_err(), "too few applications");
         for id in ["test:1", "test:2", "test:3"] {
             s.agent.db().set_status(id, "applied", "").unwrap();

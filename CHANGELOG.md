@@ -16,6 +16,7 @@ Every place gets searched.
 - Tailored files are named simply "Your Name - Company.docx" and "Your Name - Company - Cover Letter.docx".
 - When Google signs Job Hunt out, it says why that usually happens (a Google project in Testing signs out every 7 days) and how to stop it.
 - Google Drive keeps only your last three daily backups (named by date); the older ones, and the weekday ones from before, are deleted.
+- Needs attention no longer shows a problem that's already fixed: an error goes away once the same task works again, or once you reconnect Google.
 
 ## [2.3.0] - 2026-10-27
 
