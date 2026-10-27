@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.1.0",
+    "date": "2026-10-27",
+    "title": "The previous look is back",
+    "changes": [
+      "The look from before 2.0 is back: the dark blue side menu and blue buttons.",
+      "The fit after tailoring is a second score badge next to the first; before tailoring, the predicted fit is the same badge with a dashed outline.",
+      "Long place lists show the place nearest you with \"+3 more\", and remote roles read \"Toronto (remote)\" or \"Remote (US)\". Hover for the full list.",
+      "The to-do list lines up: fit, role, company, place and buttons sit in the same columns in every group, with the same buttons."
+    ]
+  },
+  {
     "version": "2.0.1",
     "date": "2026-10-27",
     "title": "The Job Hunt logo on your Send to Job Hunt button",

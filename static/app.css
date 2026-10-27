@@ -669,3 +669,17 @@ td.loc { min-width: 110px; color: var(--ink-2); }
 .docrow > a { min-width: 0; }
 td.salary { min-width: 110px; white-space: normal; max-width: 130px; }
 table.jobs td { padding: 10px 7px; }
+/* To-do rows share one grid, so fit, role, company, place and buttons line up across every group:
+   tick box, fit, role, company, place, actions (right-aligned). */
+.todo-row { display: grid; grid-template-columns: 18px 128px minmax(0, 1fr) 150px 130px 220px; gap: 12px; }
+.todo-row > .todo-fit { display: inline-flex; align-items: center; white-space: nowrap; }
+.todo-row .co, .todo-row .loc { flex: none; }
+.todo-row .todo-act { grid-column: -2 / -1; justify-content: flex-end; flex-wrap: nowrap; }
+.todo-act .btn.icon-only { padding-left: 6px; padding-right: 6px; }
+.pick-why { margin-left: 170px; }
+@media (max-width: 1000px) { .todo-row { grid-template-columns: 18px 128px minmax(0, 1fr) auto; } }
+@media (max-width: 760px) {
+  .todo-row { display: flex; flex-wrap: wrap; }
+  .todo-row > span:empty { display: none; }
+  .pick-why { margin-left: 30px; }
+}

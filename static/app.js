@@ -846,17 +846,17 @@ async function showJob(id) {
 /** One list of what's waiting on you, most urgent first, with the action right on each row. */
 function todoHtml(o) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
-  const row = (j, sub, actions) => `<div class="todo-row">
-      <span style="white-space:nowrap">${scoreBadge(j.score)}${reachTag(j)}</span>
+  const row = (j, sub, actions) => `<div class="todo-row"><span></span>
+      <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
       <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${sub ? `<br><span class="muted small">${sub}</span>` : ''}${coLocLine(j)}</a>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
       <span class="row todo-act">${actions}</span></div>`;
   const id = j => esc(j.id);
   const groups = [];
   const soon = (o.interviews || []).filter(i => new Date(i.start) - Date.now() < 3 * 86400000);
-  if (soon.length) groups.push(['Interviews in the next few days', soon.map(i => `<div class="todo-row"><span class="pill interviewing">${esc(fmtWhen(i.start))}</span>
+  if (soon.length) groups.push(['Interviews in the next few days', soon.map(i => `<div class="todo-row"><span></span><span class="todo-fit"><span class="pill interviewing">${esc(fmtWhen(i.start))}</span></span>
       <span class="grow"><span class="qt">${esc(i.company || i.title)}</span>${i.job_title ? `<br><span class="muted small">${esc(i.job_title)}</span>` : ''}</span>
-      ${i.job_id ? `<span class="row todo-act"><a class="btn" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prep</a></span>` : ''}</div>`).join('')]);
+      ${i.job_id ? `<span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prep</a></span>` : ''}</div>`).join('')]);
   const picking = (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`));
   const inWork = (o.to_tailor || []).length - picking.length;
   if (picking.length) groups.push([`Pick the roles to tailor your CV for (${picking.length})`, `<div data-pickbox>
@@ -867,27 +867,27 @@ function todoHtml(o) {
       [...picking].sort((a, b) => (b.score || 0) - (a.score || 0)).forEach(j => { (byCv[j.track || ''] ||= []).push(j); });
       const many = Object.keys(byCv).length > 1;
       return Object.entries(byCv).map(([t, list]) => `${many ? `<h4 class="pick-cv">From your ${esc(trackLabel(t) || 'main')} CV</h4>` : ''}${list.map(j => `<div class="pick-item"><label class="todo-row pick"><input type="checkbox" data-pick="${esc(j.id)}">
-      ${scoreBadge(j.score)}${reachTag(j)}
+      <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
       <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${j.salary ? `${esc(j.salary)} · ` : ''}${ageTag(j)}</span>${coLocLine(j)}</span>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
-      <span class="row todo-act"><a class="btn ghost" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></label>
+      <span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></label>
       ${j.reasoning || (j.red_flags || []).length ? `<details class="pick-why"><summary class="small muted">Why it fits${(j.red_flags || []).length ? ` · ${j.red_flags.length} red flag${j.red_flags.length === 1 ? '' : 's'}` : ''}</summary><p class="small">${esc(j.reasoning || '')}</p>${(j.red_flags || []).length ? `<ul class="flags small">${j.red_flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>` : ''}</div>`).join('')}`).join('');
     })()}
     <div class="row" style="margin-top:8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div></div>`]);
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
-  if (o.ready?.length) groups.push([`Ready to approve (${o.counts.ready}) <a class="btn primary sm" href="#review" style="margin-left:8px">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
-    `<a class="btn primary" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
-     <button class="btn ghost" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`)).join('')]);
+  if (o.ready?.length) groups.push([`Ready to approve (${o.counts.ready}) <a class="btn sm" href="#review" style="margin-left:8px">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
+    `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
+     <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`)).join('')]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
-    `<button class="btn primary" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
+    `<button class="btn sm" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
   if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, '',
-    `<a class="btn primary" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
-     <button class="btn ghost" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>`)).join('')]);
+    `<a class="btn sm" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
+     <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,
     o.quiet.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}, no reply`,
-      `<button class="btn ghost sm" data-act="stage" data-status="no_response" data-job="${id(j)}" data-from="applied">No response</button>`)).join('')]);
+      `<button class="btn sm" data-act="stage" data-status="no_response" data-job="${id(j)}" data-from="applied">No response</button>`)).join('')]);
   if (o.follow_ups?.length) groups.push(['No reply yet: follow up', o.follow_ups.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
-    `<button class="btn" data-act="followUp" data-job="${id(j)}">Write follow-up</button>`)).join('')]);
+    `<button class="btn sm" data-act="followUp" data-job="${id(j)}">Write follow-up</button>`)).join('')]);
   if (!groups.length) {
     const ready = o.setup?.claude && o.setup?.cvs;
     return `<section class="card todo"><header><h2>To do</h2></header><p class="muted">${ready ? 'You\'re all caught up. New matches appear here after each search.' : 'Finish setting up above, then search for jobs.'}</p></section>`;
