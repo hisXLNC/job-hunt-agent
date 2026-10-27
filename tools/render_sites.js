@@ -11,6 +11,7 @@ const SITES = [
   ['Adecco search q', 'https://www.adecco.com/en-ca/job-search?k=accountant&l=Toronto'],
   ['Hays', 'https://www.hays.ca/job-search/accountant-jobs-in-toronto'],
   ['Aerotek', 'https://jobs.aerotek.com/us/en/search-results?keywords=Accountant'],
+  ['Aerotek Canada', 'https://jobs.aerotek.com/ca/en/search-results?keywords=Technician'],
   ['Michael Page', 'https://www.michaelpage.ca/jobs/accountant/toronto'],
   ['Robert Half', 'https://www.roberthalf.com/ca/en/jobs/accountant/toronto'],
   ['Altis', 'https://jobportal.altis.com/?keyword=Accountant'],
@@ -26,6 +27,17 @@ const SITES = [
   for (const [name, url] of SITES) {
     const page = await ctx.newPage();
     console.log(`\n== ${name}  ${url}`);
+    // The searches a page makes in the background: where its jobs come from.
+    const calls = [];
+    page.on('response', async r => {
+      const type = r.headers()['content-type'] || '';
+      if (!/json/.test(type) || /analytics|consent|onetrust|google|facebook|hotjar|optimizely|datadog|newrelic|clarity/.test(r.url())) return;
+      try {
+        const body = await r.text();
+        const req = r.request();
+        calls.push(`${req.method()} ${r.url().slice(0, 220)}  [${r.status()}, ${body.length} chars]${req.postData() ? `\n        body: ${req.postData().slice(0, 300)}` : ''}\n        answer: ${body.slice(0, 300).replace(/\s+/g, ' ')}`);
+      } catch (e) {}
+    });
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
       // Settle: the link count stops changing for two seconds (at most 30 s).
@@ -50,6 +62,7 @@ const SITES = [
       console.log(`links=${info.links} text=${info.text} JobPosting=${info.jobposting} job-ish=${info.jobish}`);
       for (const l of info.sample) console.log(`   ${l.href}  |  ${l.text}`);
       if (/search/i.test(name)) console.log('   inputs:', info.inputs.join('  '));
+      for (const c of calls.filter(c => c.length > 0).slice(0, 12)) console.log('   XHR', c);
     } catch (e) {
       console.log('FAILED', e.message.split('\n')[0]);
     }
