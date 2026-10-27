@@ -11,7 +11,7 @@ on:
       what:
         description: "What to check"
         type: choice
-        options: [everything, secrets]
+        options: [everything, secrets, sites]
         default: everything
 
 permissions:
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   core:
-    if: inputs.what != 'secrets'
+    if: inputs.what == 'everything'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -39,7 +39,7 @@ jobs:
         run: python3 tools/release_ci.py verify --quick
 
   server-image:
-    if: inputs.what != 'secrets'
+    if: inputs.what == 'everything'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -58,6 +58,7 @@ jobs:
 
   # Whether the build secrets are set and well formed, without showing them.
   secrets:
+    if: inputs.what != 'sites'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -88,3 +89,12 @@ jobs:
         env:
           K: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: '[ -n "$K" ] && echo "::notice::TAURI_SIGNING_PRIVATE_KEY is set" || echo "::warning::TAURI_SIGNING_PRIVATE_KEY isn''t set"'
+
+  # What each recruiter and job site answers when Job Hunt reads it (the cloud sessions can't reach them).
+  sites:
+    if: inputs.what == 'sites'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 tools/probe_sites.py "Tax Manager" "Toronto, ON"
