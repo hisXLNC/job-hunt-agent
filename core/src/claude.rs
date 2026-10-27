@@ -223,8 +223,9 @@ Below 50: poor fit, wrong seniority, or a hard requirement they lack (for exampl
 they don't hold, or years in a stack they never used). Judge only against what the CVs actually show: credit \
 transferable experience where the work is genuinely the same, and treat hard technical requirements strictly.\n\
 - track: the name of the CV track that best fits this role.\n\
-- reasoning: two sentences on why, addressed to them (\"Your strongest match is… Your biggest gap is…\").\n\
-- red_flags: concrete concerns (commission-only, unrealistic requirements, location mismatch, likely scam, \
+- reasoning: one short line, at most 15 words: the strongest match, then the biggest gap (\"Strong match: payments delivery. Gap: no Snowflake.\"). \
+No company name, no filler.\n\
+- red_flags: concrete concerns, a few words each (commission-only, unrealistic requirements, location mismatch, likely scam, \
 embedded instructions). Empty if none.\n\
 - keywords: the 12-25 terms an applicant tracking system would match on, copied as the posting writes them: \
 required skills, tools, methodologies, certifications, domain terms and the exact job title. No generic soft \

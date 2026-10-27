@@ -869,6 +869,7 @@ function todoHtml(o) {
   const inWork = (o.to_tailor || []).length - picking.length;
   if (picking.length) groups.push([`Pick the roles to tailor your CV for (${picking.length})`, `<div data-pickbox>
     <p class="muted small" style="margin:0 0 6px">These cleared your fit score. Tick the ones you want: Job Hunt picks the closest of your CVs for each, tailors it and writes a cover letter.</p>
+    <div class="row" style="margin:2px 0 8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div>
     ${(() => {
       // Grouped by the CV each would be tailored from, best fit first.
       const byCv = {};
@@ -881,7 +882,7 @@ function todoHtml(o) {
       <span class="why small">${whyFits(j)}</span>
       <span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('')}`).join('');
     })()}
-    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div></div>`]);
+</div>`]);
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
   if (o.ready?.length) groups.push([`Ready to approve (${o.counts.ready}) <a class="btn sm" href="#review" style="margin-left:8px">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
