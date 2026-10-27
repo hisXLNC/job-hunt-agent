@@ -844,12 +844,20 @@ async function showJob(id) {
 // ---- Inbox ----
 // ---- What to do next ----
 /** One list of what's waiting on you, most urgent first, with the action right on each row. */
+/** "Why it fits" for a role to pick: Claude's reasons, folded to two lines, and its red flags. */
+const whyFits = j => {
+  const flags = j.red_flags || [];
+  if (!j.reasoning && !flags.length) return '<span class="muted">–</span>';
+  return `<details class="why-fits"><summary><span class="why-text">${esc(j.reasoning || '')}</span>${flags.length ? `<span class="bad-text">${flags.length} red flag${flags.length === 1 ? '' : 's'}</span>` : ''}</summary>
+    ${flags.length ? `<ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>`;
+};
 function todoHtml(o) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
   const row = (j, sub, actions) => `<div class="todo-row"><span></span>
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${sub ? `<br><span class="muted small">${sub}</span>` : ''}${coLocLine(j)}</a>
-      <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
+      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${coLocLine(j)}</a>
+      <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span>
+      <span class="why small muted">${sub || ''}</span>
       <span class="row todo-act">${actions}</span></div>`;
   const id = j => esc(j.id);
   const groups = [];
@@ -866,12 +874,12 @@ function todoHtml(o) {
       const byCv = {};
       [...picking].sort((a, b) => (b.score || 0) - (a.score || 0)).forEach(j => { (byCv[j.track || ''] ||= []).push(j); });
       const many = Object.keys(byCv).length > 1;
-      return Object.entries(byCv).map(([t, list]) => `${many ? `<h4 class="pick-cv">From your ${esc(trackLabel(t) || 'main')} CV</h4>` : ''}${list.map(j => `<div class="pick-item"><label class="todo-row pick"><input type="checkbox" data-pick="${esc(j.id)}">
+      return Object.entries(byCv).map(([t, list]) => `${many ? `<h4 class="pick-cv">From your ${esc(trackLabel(t) || 'main')} CV</h4>` : ''}${list.map(j => `<div class="todo-row pick"><label style="display:contents"><input type="checkbox" data-pick="${esc(j.id)}">
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${j.salary ? `${esc(j.salary)} · ` : ''}${ageTag(j)}</span>${coLocLine(j)}</span>
-      <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span>
-      <span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></label>
-      ${j.reasoning || (j.red_flags || []).length ? `<details class="pick-why"><summary class="small muted">Why it fits${(j.red_flags || []).length ? ` · ${j.red_flags.length} red flag${j.red_flags.length === 1 ? '' : 's'}` : ''}</summary><p class="small">${esc(j.reasoning || '')}</p>${(j.red_flags || []).length ? `<ul class="flags small">${j.red_flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>` : ''}</div>`).join('')}`).join('');
+      <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${ageTag(j)}</span>${coLocLine(j)}</span>
+      <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span></label>
+      <span class="why small">${whyFits(j)}</span>
+      <span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('')}`).join('');
     })()}
     <div class="row" style="margin-top:8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div></div>`]);
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
