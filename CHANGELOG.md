@@ -15,6 +15,7 @@ Every place gets searched.
 - The Halifax area (Dartmouth, Bedford, Sackville, Cole Harbour) counts as Halifax when nearby places are included.
 - Tailored files are named simply "Your Name - Company.docx" and "Your Name - Company - Cover Letter.docx".
 - When Google signs Job Hunt out, it says why that usually happens (a Google project in Testing signs out every 7 days) and how to stop it.
+- Google Drive keeps only your last three daily backups (named by date); the older ones, and the weekday ones from before, are deleted.
 
 ## [2.3.0] - 2026-10-27
 

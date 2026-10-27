@@ -544,17 +544,39 @@ pub fn every(agent: &Agent) -> i64 {
     agent.secret("sync.every").parse::<i64>().ok().filter(|m| *m >= 0).unwrap_or(if on_drive(agent) { 10 } else { 5 })
 }
 
-/// A copy of a daily backup in your Google Drive, when you sync there: one per weekday ("Job Hunt
-/// backup Mon.zip"), each replaced a week later, so the last seven days are always there.
-/// Ok(false) when you don't sync with Google Drive.
+/// Daily backups kept in your Google Drive: the newest ones, older ones deleted.
+pub const DRIVE_BACKUPS: usize = 3;
+
+/// A copy of a daily backup in your Google Drive, when you sync there: "Job Hunt backup
+/// 2026-10-27.zip", keeping the last three. Ok(false) when you don't sync with Google Drive.
 pub fn backup_to_drive(agent: &Agent, zip: &Path) -> R<bool> {
     if !enabled(agent) || !on_drive(agent) {
         return Ok(false);
     }
+    backup_to_drive_on(agent, zip, &chrono::Local::now().format("%Y-%m-%d").to_string())
+}
+
+fn backup_to_drive_on(agent: &Agent, zip: &Path, day: &str) -> R<bool> {
     let Some(place) = drive(agent) else { return Ok(false) };
-    let name = format!("Job Hunt backup {}.zip", chrono::Local::now().format("%a"));
+    let name = format!("Job Hunt backup {day}.zip");
     place.write(&name, &std::fs::read(zip)?)?;
     agent.db().set("last.drive_backup", &crate::util::now())?;
+    // The ones Job Hunt put there (it can only find its files by name), newest last.
+    let mut kept: Vec<String> = serde_json::from_str(&agent.secret("drive.backups")).unwrap_or_default();
+    kept.retain(|n| n != &name);
+    kept.push(name);
+    let old = kept.len().saturating_sub(DRIVE_BACKUPS);
+    for gone in kept.drain(..old) {
+        let _ = place.remove(&gone);
+    }
+    // Versions before this one kept one per weekday ("Job Hunt backup Mon.zip"): cleared once.
+    if agent.secret("drive.backups.weekdays_cleared").is_empty() {
+        for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] {
+            let _ = place.remove(&format!("Job Hunt backup {d}.zip"));
+        }
+        agent.db().set("drive.backups.weekdays_cleared", "1")?;
+    }
+    agent.db().set("drive.backups", &serde_json::to_string(&kept)?)?;
     Ok(true)
 }
 
@@ -681,6 +703,24 @@ mod tests {
         // A exits: no longer in use.
         release(&a.agent);
         assert!(drive.read(IN_USE).unwrap().is_none());
+    }
+
+    #[test]
+    fn keeps_the_last_three_backups_in_drive() {
+        let drive = std::sync::Arc::new(FakeDrive::default());
+        let a = setup();
+        *a.agent.files.write().unwrap() = Some(drive.clone());
+        a.agent.db().set("sync.where", "drive").unwrap();
+        a.agent.db().set("sync.on", "1").unwrap();
+        drive.0.lock().unwrap().insert("Job Hunt backup Mon.zip".into(), b"old".to_vec());
+        let zip = a.agent.data.join("b.zip");
+        std::fs::write(&zip, b"zip").unwrap();
+        for day in ["2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-27"] {
+            assert!(backup_to_drive_on(&a.agent, &zip, day).unwrap());
+        }
+        let mut names: Vec<String> = drive.0.lock().unwrap().keys().cloned().collect();
+        names.sort();
+        assert_eq!(names, vec!["Job Hunt backup 2026-10-25.zip", "Job Hunt backup 2026-10-26.zip", "Job Hunt backup 2026-10-27.zip"]);
     }
 
     #[test]
