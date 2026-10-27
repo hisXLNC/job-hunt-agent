@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.45.0",
+    "date": "2026-10-27",
+    "title": "Company ratings from employee reviews",
+    "changes": [
+      "What employees say about each company: the rating out of 5 and number of reviews from Glassdoor, Indeed and similar sites, work-life balance, the share who'd recommend it, and what reviewers praise and complain about. It shows as ★ 4.1 next to the company on the Overview, in your lists and on each job, with the details in a \"What employees say\" card on the job's Overview.",
+      "Job Hunt looks companies up by itself for roles you're considering, a few at a time, once per company (again after two months), through Claude Code. On a job, Look up reviews or Look again asks now. Turn it off in Settings → Search → Employers."
+    ]
+  },
+  {
     "version": "1.44.0",
     "date": "2026-10-27",
     "title": "Settings that make sense, Drive sync you can see, and a fit forecast",

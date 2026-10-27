@@ -4,7 +4,7 @@ use crate::util::now;
 use crate::{err, R};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::Path;
 
 /// Pipeline stages, in board order.
@@ -193,6 +193,12 @@ pub fn dupe_key(company: &str, title: &str) -> String {
     }
     let c: String = c.into_iter().filter(|w| !LEGAL.contains(&w.as_str())).collect();
     format!("{c}|{}", words(title).join(" "))
+}
+
+/// One employer however a source spells it ("Thomson Reuters Holdings Inc." is "thomsonreuters"),
+/// for what's kept per company, like its employee rating.
+pub fn company_key(company: &str) -> String {
+    dupe_key(company, "").trim_end_matches('|').to_string()
 }
 
 /// A posting's link reduced to what identifies the job, so the same posting found through two
@@ -918,6 +924,24 @@ impl Db {
             params![key, value],
         )?;
         Ok(())
+    }
+
+    /// What employees say about a company (see claude::CompanyRating), with when it was looked up
+    /// ("at"), or None if it hasn't been.
+    pub fn rating(&self, company: &str) -> Option<Value> {
+        let key = company_key(company);
+        if key.is_empty() {
+            return None;
+        }
+        self.get(&format!("rating:{key}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
+    }
+
+    pub fn set_rating(&self, company: &str, rating: &crate::claude::CompanyRating) -> R<Value> {
+        let mut v = serde_json::to_value(rating)?;
+        v["at"] = json!(now());
+        v["company"] = json!(company);
+        self.set(&format!("rating:{}", company_key(company)), &v.to_string())?;
+        Ok(v)
     }
 
     pub fn delete(&self, key: &str) -> R<()> {

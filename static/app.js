@@ -171,6 +171,26 @@ const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
 const scoreBadge = n => n == null ? '' : `<span class="score ${n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo'}" title="Fit score">${n}</span>`;
 /** "fit 72 → 85": your CV's fit before tailoring and the tailored CV's after. */
 const fitChange = j => j.score != null && j.score_after != null && j.score_after !== j.score ? `fit ${j.score} → <b>${j.score_after}</b>` : '';
+/** A company's employee rating, as a small star tag: "★ 4.1". */
+const ratingTag = r => r?.found && r.rating != null ? ` <span class="stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}" title="Employees rate it ${r.rating.toFixed(1)} out of 5${r.reviews ? `, ${r.reviews.toLocaleString()} reviews` : ''}${r.source ? ` on ${esc(r.source)}` : ''}">★ ${r.rating.toFixed(1)}</span>` : '';
+/** What employees say, as a card for the job page. */
+function ratingCard(r, busy, company) {
+  const head = `<header><h2>What employees say</h2>${busy ? '<span class="muted small"><span class="spin"></span>Looking…</span>' : `<button class="btn ${r ? 'ghost' : ''} sm" data-act="rateCompany">${r ? 'Look again' : 'Look up reviews'}</button>`}</header>`;
+  if (!r) return `<section class="card">${head}<p class="muted">Ratings and reviews of ${esc(company)} from Glassdoor, Indeed and the like: what people who work there praise and complain about. Job Hunt looks them up by itself for roles you're considering.</p></section>`;
+  if (!r.found) return `<section class="card">${head}<p class="muted">No employee reviews of ${esc(company)} were found (${esc(fmtDate(r.at))}). Smaller employers often have none.</p></section>`;
+  const five = n => n == null ? '' : `<b>${n.toFixed(1)}</b><span class="muted"> / 5</span>`;
+  const list = (label, xs, cls) => (xs || []).length ? `<div class="small ${cls}"><b>${label}</b><ul>${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+  return `<section class="card">${head}
+    <div class="row" style="gap:22px;align-items:flex-end">
+      <div><div class="big-stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}">★ ${r.rating.toFixed(1)}</div><span class="muted small">${r.reviews ? `${r.reviews.toLocaleString()} reviews` : 'reviews'}${r.source ? ` on ${r.url ? `<a href="#" data-act="link" data-url="${esc(r.url)}">${esc(r.source)}</a>` : esc(r.source)}` : ''}</span></div>
+      ${r.work_life != null ? `<div class="small">Work-life balance<br>${five(r.work_life)}</div>` : ''}
+      ${r.recommend != null ? `<div class="small">Would recommend it<br><b>${r.recommend}%</b></div>` : ''}
+    </div>
+    ${r.summary ? `<p class="small">${esc(r.summary)}</p>` : ''}
+    <div class="proscons">${list('Praised', r.pros, 'pro')}${list('Complaints', r.cons, 'con')}</div>
+    ${(r.others || []).length ? `<p class="muted small">Also: ${r.others.map(o => `${o.url ? `<a href="#" data-act="link" data-url="${esc(o.url)}">${esc(o.source)}</a>` : esc(o.source)} ${o.rating.toFixed(1)}${o.reviews ? ` (${o.reviews.toLocaleString()})` : ''}`).join(' · ')}</p>` : ''}
+    <p class="muted small">Looked up ${esc(fmtDate(r.at))}. Reviews are opinions, and a few can swing a small company's score.</p></section>`;
+}
 /** The predicted fit after tailoring, while it isn't tailored yet: "could reach ~85". */
 const canReach = j => j.score_after == null && j.score_potential != null && j.score != null && j.score_potential > j.score ? j.score_potential : null;
 const reachTag = j => canReach(j) ? `<span class="reach" title="Predicted fit once your CV is tailored to this posting">→ ~${canReach(j)}</span>` : '';
@@ -194,7 +214,7 @@ function eventText(e) {
   if (k.startsWith('email:')) return `Email: ${esc((CATEGORY[k.slice(6)] || [k.slice(6)])[0])} · ${esc(e.detail)}`;
   if (k.endsWith(':error')) return `<span style="color:var(--crit)">Problem</span> · ${esc(e.detail)}`;
   if (k === 'backup' && e.detail.startsWith('saved ')) return 'Backup saved';
-  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', care: 'Interview reminders', 'apply-link': 'Company site' };
+  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', care: 'Interview reminders', 'apply-link': 'Company site', ratings: 'Company ratings' };
   return `${esc(names[k] || k)} · ${esc(e.detail)}`;
 }
 const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">${esc(e.company)} – ${esc(e.title)}</a> · ` : '';
@@ -418,7 +438,7 @@ async function showPipeline(tab) {
       <section class="card" style="padding:6px 10px"><table class="jobs" id="t-postings"><thead><tr>${sortTh('Age', 'date')}${sortTh('Role')}${sortTh('Salary', 'num')}${sortTh('Source')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}<th></th></tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-src="${esc(j.source)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>
-        <td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span><span class="phone-only"><br>${stagePill(j.status)}</span></td>
+        <td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${j.location ? ` · ${esc(j.location)}` : ''}</span><span class="phone-only"><br>${stagePill(j.status)}</span></td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="small" data-v="${esc(j.source)}">${esc(sourceName(j.source))}</td><td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
         <td>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`).join('')}
       </tbody></table>${list.length ? '' : '<p class="empty">No postings yet. Run a search from the Overview.</p>'}</section>`;
@@ -452,7 +472,7 @@ async function showPipeline(tab) {
     body = `${why}<input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
       <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Role')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
       ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}</span><span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
+        <td data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="role" data-v="${esc(`${j.title} ${j.company}`.toLowerCase())}"><b>${esc(j.title)}</b><br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${j.location ? ` · ${esc(j.location)}` : ''}</span><span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>${tab === 'skipped'
           ? `<td class="small why" data-v="${esc((j.reasoning || '').toLowerCase())}">${worth(j)}${esc(j.reasoning || '')}</td>`
           : `<td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>`}${tab === 'list' ? `<td class="row-act">${rowActions(j)}</td>` : ''}</tr>`).join('')}
@@ -576,7 +596,7 @@ const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply
 const jobTabs = {};
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, warnings, history, progress, own, prep, preparing, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
   const tracks = st.profile.tracks;
@@ -591,7 +611,7 @@ async function showJob(id) {
       <div class="grow">
         <div class="eyebrow"><a href="#pipeline">Applications</a> / ${esc(STAGES[j.status] || j.status)}</div>
         <h1>${esc(j.title)}</h1>
-        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${esc(j.location)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}</div>
+        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(rating)}</b>${j.location ? `<span>${esc(j.location)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}</div>
       </div>
     </div>
     <div class="actions">
@@ -624,6 +644,7 @@ async function showJob(id) {
           </div>
           ${flags.length ? `<div><b class="small">Red flags</b><ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : ''}
         </section>
+        ${ratingCard(rating, rating_busy, j.company)}
         ${(j.keywords || []).length ? `<section class="card">
           <header><h2>Posting keywords</h2>${j.coverage_after != null ? `<span class="muted small">your CV covered <b>${pct(j.coverage_before)}</b> before tailoring, <b>${pct(j.coverage_after)}</b> after</span>` : ''}</header>
           <div>${j.keywords.map(k => `<span class="kw ${gaps.has(k.toLowerCase()) ? 'miss' : ''}">${esc(k)}</span>`).join('')}</div>
@@ -787,7 +808,7 @@ function todoHtml(o) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
   const row = (j, sub, actions) => `<div class="todo-row">
       ${scoreBadge(j.score)}
-      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}<br><span class="muted small">${esc(j.company)}${sub ? ` · ${sub}` : ''}</span></a>
+      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}<br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${sub ? ` · ${sub}` : ''}</span></a>
       <span class="row todo-act">${actions}</span></div>`;
   const id = j => esc(j.id);
   const groups = [];
@@ -806,7 +827,7 @@ function todoHtml(o) {
       const many = Object.keys(byCv).length > 1;
       return Object.entries(byCv).map(([t, list]) => `${many ? `<h4 class="pick-cv">From your ${esc(trackLabel(t) || 'main')} CV</h4>` : ''}${list.map(j => `<div class="pick-item"><label class="todo-row pick"><input type="checkbox" data-pick="${esc(j.id)}">
       ${scoreBadge(j.score)}${reachTag(j)}
-      <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${esc(j.company)}${j.location ? ` · ${esc(j.location)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''} · ${ageTag(j)}</span></span>
+      <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${j.location ? ` · ${esc(j.location)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''} · ${ageTag(j)}</span></span>
       <span class="row todo-act"><a class="btn ghost" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">✕</button></span></label>
       ${j.reasoning || (j.red_flags || []).length ? `<details class="pick-why"><summary class="small muted">Why it fits${(j.red_flags || []).length ? ` · ${j.red_flags.length} red flag${j.red_flags.length === 1 ? '' : 's'}` : ''}</summary><p class="small">${esc(j.reasoning || '')}</p>${(j.red_flags || []).length ? `<ul class="flags small">${j.red_flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>` : ''}</div>`).join('')}`).join('');
     })()}
@@ -1054,7 +1075,7 @@ async function showReview() {
   const flags = j.red_flags || [];
   j.warnings = warnings || [];
   page(`<div class="head"><div class="grow"><div class="eyebrow">Review · ${queue.length} to go${done ? ` · ${done} skipped` : ''}</div>
-      <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${esc(j.location)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${deadlineTag(j)}</div></div>
+      <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${esc(j.location)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${deadlineTag(j)}</div></div>
       <a class="btn ghost" href="#overview">Exit review</a></div>
     ${revising ? '<section class="card"><p><span class="spin"></span> Making your changes… this updates by itself.</p></section>' : ''}
     <div class="grid-2">
@@ -1617,6 +1638,9 @@ async function showSettings(tab, sub) {
       </div>
         <label class="field" style="margin-top:14px">What matters to you<textarea name="guidance" placeholder="e.g. Prefer hybrid roles in fintech or government. Avoid pure sales roles. Open to contract roles.">${esc(p.guidance || '')}</textarea><span class="hint">Claude weighs this when scoring. Job titles and keywords for each CV are set in CV & career.</span></label>
       </section>
+      <section class="card"><header><h2>Employers</h2></header>
+        <label class="check"><input type="checkbox" data-act="ratingsAuto" ${st.ratings_auto ? 'checked' : ''}> <span>Look up what employees say<br><span class="muted small">Ratings and reviews from Glassdoor, Indeed and the like, for the companies of roles you're considering: shown as ★ next to the company, and on each job. Each company is looked up once (again after two months), through Claude Code; it uses a little of your Claude plan.</span></span></label>
+      </section>
       <section class="card"><header><h2>When</h2></header><div class="form">
         <label class="field">Search every day at${hourSelect('search_hour', p.search_hour)}<span class="hint">If Job Hunt isn't running then, it searches when it next opens.</span></label>
       </div></section>
@@ -2053,7 +2077,7 @@ const CONN_ACT = {
   phoneTest: () => ['Send a test', 'phoneTest'], syncNow: () => ['Sync now', 'syncNow'], backupNow: () => ['Back up now', 'backupNow'],
 };
 let connPoll;
-const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', 'apply-link': "Finding companies' own postings", cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
+const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
 async function renderUsage() {
   const box = $('#usageCard'); if (!box) return;
   let u;
@@ -2610,6 +2634,13 @@ async function act(el) {
     });
   }
   if (a === 'open') return busy(async () => follow(await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/open`, { method: 'POST', body: { what: el.dataset.what } })));
+  if (a === 'rateCompany') {
+    return busy(async () => {
+      const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/rating`, { method: 'POST' });
+      toast(r.rating?.found ? `Employees rate it ${r.rating.rating.toFixed(1)} out of 5.` : 'No employee reviews found for this company.', !r.rating?.found);
+      route();
+    }, 'Looking up employee reviews (a minute or two)…');
+  }
   if (a === 'findApply') {
     return busy(async () => {
       const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/apply-link`, { method: 'POST' });
@@ -2873,6 +2904,10 @@ document.addEventListener('change', async e => {
   }
   if (el.dataset.act === 'calShowGoogle') {
     await api('/api/calendar/show-google', { method: 'POST', body: { on: el.checked } }).then(() => route()).catch(err => toast(err.message, true));
+  }
+  if (el.dataset.act === 'ratingsAuto') {
+    await api('/api/settings/ratings', { method: 'POST', body: { on: el.checked } }).then(() => toast(el.checked ? 'Job Hunt will look up company ratings.' : 'Company ratings won\'t be looked up.')).catch(err => toast(err.message, true));
+    return;
   }
   if (el.dataset.act === 'clipWatch') {
     await api('/api/settings/clip-watch', { method: 'POST', body: { on: el.checked } }).catch(err => toast(err.message, true));

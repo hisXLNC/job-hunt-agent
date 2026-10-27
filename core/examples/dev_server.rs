@@ -19,6 +19,16 @@ use std::sync::Arc;
 struct DemoLlm;
 
 impl Llm for DemoLlm {
+    fn company_rating(&self, company: &str, _location: &str) -> R<jobhunt_core::claude::CompanyRating> {
+        let n = company.len() as f64;
+        Ok(jobhunt_core::claude::CompanyRating {
+            found: !company.contains("Consultancy"), rating: Some(3.0 + (n * 0.37) % 1.9), reviews: Some(120 + (n as i64 * 97) % 3000), source: "Glassdoor".into(),
+            url: "https://www.glassdoor.com/".into(), work_life: Some(3.2 + (n * 0.21) % 1.3), recommend: Some(55 + (n as i64 * 7) % 40),
+            pros: vec!["Good benefits".into(), "Smart colleagues".into(), "Hybrid work".into()], cons: vec!["Slow promotions".into(), "Busy year-end".into()],
+            summary: format!("People at {company} like the team and benefits; some mention slow decisions."),
+            others: vec![jobhunt_core::claude::OtherRating { source: "Indeed".into(), rating: Some(3.9), reviews: Some(410), url: String::new() }],
+        })
+    }
     fn career_paths(&self, _c: &str, _cvs: &str, _e: &str) -> R<jobhunt_core::claude::CareerPlan> {
         let p = |title: &str, kind: &str, fit: i64, pay: (f64, f64), gaps: &[&str], titles: &[&str], step: &str, pros: &[&str], cons: &[&str]| jobhunt_core::claude::CareerPath {
             title: title.into(), kind: kind.into(), fit, pay: format!("${}k–{}k", pay.0 / 1000.0, pay.1 / 1000.0), pay_min: Some(pay.0), pay_max: Some(pay.1), currency: "CAD".into(),

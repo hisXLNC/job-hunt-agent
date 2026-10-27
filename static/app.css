@@ -639,3 +639,9 @@ details.card > summary { cursor: pointer; list-style-position: outside; }
   #t-skipped .reach, #t-list .reach { display: block; margin: 2px 0 0; }
   .card > header { flex-wrap: wrap; }
 }
+/* A company's employee rating: a small tag in lists, a big one on the job page. */
+.stars { font-size: 12px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.stars.hi, .big-stars.hi { color: var(--good); }
+.stars.mid, .big-stars.mid { color: var(--warn); }
+.stars.lo, .big-stars.lo { color: var(--crit); }
+.big-stars { font-family: var(--font-d); font-size: 28px; font-weight: 700; line-height: 1.1; }

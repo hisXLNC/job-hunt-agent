@@ -96,6 +96,14 @@ impl Llm for FakeLlm {
         Ok(FoundJob { title: "Senior Program Manager".into(), company: "Maple Bank".into(), location: "Toronto, ON".into(),
             description: "Lead program delivery across finance systems, UAT and vendor management.".into(), ..Default::default() })
     }
+    fn company_rating(&self, company: &str, _location: &str) -> R<crate::claude::CompanyRating> {
+        self.calls.lock().unwrap().push(format!("company_rating:{company}"));
+        if company.contains("Unknown") {
+            return Ok(Default::default());
+        }
+        Ok(crate::claude::CompanyRating { found: true, rating: Some(4.1), reviews: Some(1234), source: "Glassdoor".into(), url: "https://www.glassdoor.example/acme".into(),
+            work_life: Some(3.8), recommend: Some(78), pros: vec!["Good people".into()], cons: vec!["Slow promotions".into()], summary: "Liked overall.".into(), others: vec![] })
+    }
     fn company_apply(&self, job: &Job) -> R<Option<String>> {
         self.calls.lock().unwrap().push(format!("company_apply:{}", job.id));
         let n = job.id.rsplit(':').next().unwrap_or("");

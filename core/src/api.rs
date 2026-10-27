@@ -359,6 +359,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "weekly": { "day": if get("weekly.day") == "mon" { "mon" } else { "sun" }, "email": get("weekly.email") != "0", "to": weekly_to },
         "phone": { "topic": get("phone.topic"), "server": get("phone.server"), "urgent_only": get("phone.urgent_only") == "1", "details": get("phone.details") == "1" },
         "clip_watch": get("clip.watch") != "0",
+        "ratings_auto": get("ratings.auto") != "0",
         "claude_desktop": {
             "available": host.mcp_command().is_some(),
             "added": cd_config.as_deref().map(crate::mcp::in_claude_desktop).unwrap_or(false),
@@ -447,8 +448,19 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let status = req.query.get("status").map(|s| s.as_str()).filter(|s| !s.is_empty());
                 let pdf = |p: &Option<String>| p.as_deref().map(|p| Path::new(p).with_extension("pdf").exists()).unwrap_or(false);
                 let (now, reposts) = (chrono::Utc::now(), agent.db().reposts()?);
-                let jobs: Vec<Value> = agent.db().jobs(status, 2000)?.iter().map(|j| {
+                let list = agent.db().jobs(status, 2000)?;
+                // Each company's rating, read once.
+                let rated: std::collections::HashMap<String, Value> = {
+                    let db = agent.db();
+                    list.iter().map(|j| crate::db::company_key(&j.company)).collect::<std::collections::HashSet<_>>().into_iter()
+                        .filter_map(|k| list.iter().find(|j| crate::db::company_key(&j.company) == k).and_then(|j| db.rating(&j.company)).map(|r| (k, crate::pipeline::rating_brief(&r))))
+                        .collect()
+                };
+                let jobs: Vec<Value> = list.iter().map(|j| {
                     let mut b = j.brief();
+                    if let Some(r) = rated.get(&crate::db::company_key(&j.company)) {
+                        b["rating"] = r.clone();
+                    }
                     b["warnings"] = json!(crate::pipeline::posting_warnings(j, reposts.get(&j.id).copied().unwrap_or(0), now));
                     // Postings found before salaries were read from the text.
                     if j.salary.is_none() {
@@ -506,6 +518,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
                     "job": job, "history": history, "progress": agent.tracker(Some(id))?.pop(),
                     "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
+                    "rating": agent.db().rating(&job.company), "rating_busy": agent.is_running(&format!("rating:{}", crate::db::company_key(&job.company))),
                     "cv_pdf": pdf(&job.cv_path), "letter_pdf": pdf(&job.letter_path),
                     "revising": agent.is_running(&format!("revise:{id}")),
                     "undo": { "cv": agent.can_undo(id, "cv"), "letter": agent.can_undo(id, "letter") },
@@ -657,6 +670,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         }
                     });
                     Ok(Resp::json(&json!({ "started": true })))
+                }
+                "rating" => {
+                    let key = format!("rating:{}", crate::db::company_key(&job.company));
+                    let _g = agent.claim(&key).map_err(|_| Error("Job Hunt is already looking this company up.".into()))?;
+                    Ok(Resp::json(&json!({ "rating": agent.rate_company(&job.company, &job.location)? })))
                 }
                 "apply-link" => {
                     if agent.is_running(&format!("apply-link:{id}")) {
@@ -1156,6 +1174,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         ["api", "settings", "phone-test"] => {
             agent.test_phone()?;
+            ok()
+        }
+        ["api", "settings", "ratings"] => {
+            let on = b.get("on").and_then(|v| v.as_bool()).unwrap_or(true);
+            agent.db().set("ratings.auto", if on { "1" } else { "0" })?;
             ok()
         }
         ["api", "settings", "clip-watch"] => {

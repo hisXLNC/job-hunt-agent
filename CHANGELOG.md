@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [1.45.0] - 2026-10-27
+
+Company ratings from employee reviews.
+
+### Changes
+
+- What employees say about each company: the rating out of 5 and number of reviews from Glassdoor, Indeed and similar sites, work-life balance, the share who'd recommend it, and what reviewers praise and complain about. It shows as ★ 4.1 next to the company on the Overview, in your lists and on each job, with the details in a "What employees say" card on the job's Overview.
+- Job Hunt looks companies up by itself for roles you're considering, a few at a time, once per company (again after two months), through Claude Code. On a job, Look up reviews or Look again asks now. Turn it off in Settings → Search → Employers.
+
 ## [1.44.0] - 2026-10-27
 
 Settings that make sense, Drive sync you can see, and a fit forecast.
@@ -638,6 +647,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[1.45.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.45.0
 [1.44.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.44.0
 [1.43.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.43.1
 [1.43.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.43.0

@@ -3507,6 +3507,65 @@ replies and interviews, and a little lower for kinds that got none from several 
         });
     }
 
+    // --- what employees say ----------------------------------------------------------------------
+
+    /// Look up what employees say about a company, and keep it for every job there.
+    pub fn rate_company(&self, company: &str, location: &str) -> R<Value> {
+        let r = self.llm().company_rating(company, location)?;
+        let v = self.db().set_rating(company, &r)?;
+        self.db().log(None, "ratings", &if r.found {
+            format!("{company}: {:.1} out of 5 on {}", r.rating.unwrap_or(0.0), r.source)
+        } else {
+            format!("{company}: no employee reviews found")
+        })?;
+        Ok(v)
+    }
+
+    /// Companies of roles you're considering whose rating is missing or old (60 days; 14 when none
+    /// was found), best fit first, with a place for each.
+    pub fn companies_to_rate(&self) -> Vec<(String, String)> {
+        const CONSIDERING: [&str; 7] = ["queued", "ready", "approved", "applied", "interviewing", "offer", "saved"];
+        let db = self.db();
+        let mut jobs: Vec<Job> = db.jobs(None, 2000).unwrap_or_default().into_iter().filter(|j| CONSIDERING.contains(&j.status.as_str())).collect();
+        jobs.sort_by_key(|j| std::cmp::Reverse(j.score.unwrap_or(0)));
+        let mut seen = std::collections::HashSet::new();
+        let now = Utc::now();
+        jobs.into_iter()
+            .filter(|j| seen.insert(crate::db::company_key(&j.company)) && !crate::db::company_key(&j.company).is_empty())
+            .filter(|j| match db.rating(&j.company) {
+                None => true,
+                Some(r) => {
+                    let days = r["at"].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| (now - t.with_timezone(&Utc)).num_days()).unwrap_or(999);
+                    days >= if r["found"].as_bool() == Some(true) { 60 } else { 14 }
+                }
+            })
+            .map(|j| (j.company, j.location))
+            .collect()
+    }
+
+    /// Look up a few companies' ratings. Returns how many were looked up.
+    pub fn rate_companies(&self, max: usize) -> usize {
+        let mut n = 0;
+        for (company, location) in self.companies_to_rate().into_iter().take(max) {
+            if self.limited().is_some() {
+                break;
+            }
+            match self.rate_company(&company, &location) {
+                Ok(_) => n += 1,
+                Err(e) => {
+                    let _ = self.db().log(None, "ratings:error", &format!("{company}: {}", e.0));
+                    break;
+                }
+            }
+        }
+        n
+    }
+
+    /// Whether Job Hunt looks up company ratings by itself (on unless you turned it off).
+    pub fn ratings_auto(&self) -> bool {
+        self.secret("ratings.auto") != "0"
+    }
+
     // --- approval ---------------------------------------------------------------------------------
 
     /// Your go-ahead. Email applications are sent from your Gmail; anything else waits for you to
@@ -4104,6 +4163,13 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     if crate::backup::due(agent) && !agent.is_running("backup") {
         out.push("backup");
     }
+    // Company ratings for roles you're considering: a few every 20 minutes, through Claude Code.
+    let rated_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.ratings"))
+        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 20)
+        .unwrap_or(false);
+    if ready && !rated_lately && agent.ratings_auto() && agent.engine_name() == "code" && !agent.budget_wait() && !agent.is_running("ratings") && !agent.is_running("search") && !agent.companies_to_rate().is_empty() {
+        out.push("ratings");
+    }
     if crate::sync::due(agent) && !agent.is_running("sync") {
         out.push("sync");
     }
@@ -4169,6 +4235,11 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     out
 }
 
+/// A company's rating for lists: the stars, how many reviews, and where from.
+pub fn rating_brief(r: &Value) -> Value {
+    json!({ "found": r["found"], "rating": r["rating"], "reviews": r["reviews"], "source": r["source"] })
+}
+
 /// See which postings waiting on you have closed, in the background.
 pub fn check_in_background(agent: &Arc<Agent>) {
     let agent = agent.clone();
@@ -4227,6 +4298,14 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                             let _ = a.db().log(None, "discover:error", &e.0);
                         }
                     }
+                });
+            }
+            "ratings" => {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    let Ok(_g) = a.claim("ratings") else { return };
+                    a.rate_companies(4);
+                    let _ = a.db().set("last.ratings", &now());
                 });
             }
             "calsync" => {
@@ -4372,6 +4451,9 @@ impl Agent {
             if let Some(r) = crate::recruiters::for_company(&recruiters, &j.company) {
                 b["recruiter"] = json!(r.name);
             }
+            if let Some(r) = db.rating(&j.company) {
+                b["rating"] = rating_brief(&r);
+            }
             b
         };
         // Applications at a company where you know a recruiter, and haven't asked them yet: ask.
@@ -4384,9 +4466,17 @@ impl Agent {
         let ready: Vec<Value> = db.jobs(Some("ready"), 8)?.iter().map(with_warnings).collect();
         let to_tailor: Vec<Value> = db.jobs(Some("queued"), 30)?.iter().map(with_warnings).collect();
         drop(db);
-        let quiet: Vec<Value> = self.quiet_applications()?.iter().map(|j| j.brief()).collect();
+        let quiet_jobs = self.quiet_applications()?;
         let db = self.db();
-        let approved: Vec<Value> = db.jobs(Some("approved"), 8)?.iter().map(|j| j.brief()).collect();
+        let rated = |j: &Job| {
+            let mut b = j.brief();
+            if let Some(r) = db.rating(&j.company) {
+                b["rating"] = rating_brief(&r);
+            }
+            b
+        };
+        let quiet: Vec<Value> = quiet_jobs.iter().map(rated).collect();
+        let approved: Vec<Value> = db.jobs(Some("approved"), 8)?.iter().map(rated).collect();
         let interviews = db.upcoming_interviews(&Utc::now().to_rfc3339(), 5)?;
         // Optional setup steps you said "Not now" to.
         let skipped_steps: Vec<&str> = ["google", "search_service"].into_iter().filter(|k| db.get(&format!("setup.skip.{k}")).ok().flatten().is_some()).collect();
@@ -5144,6 +5234,23 @@ mod tests {
         let s = setup();
         std::fs::remove_file(s.agent.cv_path("program")).unwrap();
         assert!(s.agent.search(Some(vec![])).unwrap_err().0.contains("No CV"));
+    }
+
+    #[test]
+    fn looks_up_each_company_once() {
+        let s = setup();
+        s.agent.search(Some(vec![
+            Posting { company: "Acme Inc.".into(), ..posting("Technical Program Manager", "1") },
+            Posting { company: "Acme".into(), ..posting("Senior Program Manager", "2") },
+            Posting { company: "Unknown Co".into(), ..posting("Program Manager", "3") },
+        ])).unwrap();
+        assert_eq!(s.agent.companies_to_rate().len(), 2, "Acme Inc. and Acme are one employer");
+        assert_eq!(s.agent.rate_companies(5), 2);
+        assert!(s.agent.companies_to_rate().is_empty(), "kept for 60 days (14 when none was found)");
+        let r = s.agent.db().rating("ACME Inc").unwrap();
+        assert_eq!((r["rating"].as_f64(), r["reviews"].as_i64(), r["source"].as_str()), (Some(4.1), Some(1234), Some("Glassdoor")));
+        assert_eq!(s.agent.db().rating("Unknown Co").unwrap()["found"], false);
+        assert_eq!(s.llm.calls.lock().unwrap().iter().filter(|c| c.starts_with("company_rating")).count(), 2);
     }
 
     #[test]
