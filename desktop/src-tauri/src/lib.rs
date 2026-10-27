@@ -421,6 +421,98 @@ fn apply_window(app: &AppHandle, job_id: &str, url: tauri::Url) -> Result<(), St
     Ok(())
 }
 
+/// Read a job site's page in a real browser (see `jobhunt_core::sites::set_browser`): a window kept
+/// off screen, at most two at once. It waits out bot checks ("Just a moment…") and the scripts that
+/// fill the list in, then hands back the page.
+fn read_in_browser(app: &AppHandle, url: &str) -> Result<String, String> {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::{mpsc, Condvar, Mutex};
+    use std::time::{Duration, Instant};
+    static SLOTS: (Mutex<usize>, Condvar) = (Mutex::new(0), Condvar::new());
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    struct Slot;
+    impl Drop for Slot {
+        fn drop(&mut self) {
+            *SLOTS.0.lock().unwrap() -= 1;
+            SLOTS.1.notify_one();
+        }
+    }
+    struct Close(AppHandle, String);
+    impl Drop for Close {
+        fn drop(&mut self) {
+            let (app, label) = (self.0.clone(), self.1.clone());
+            let _ = self.0.run_on_main_thread(move || {
+                if let Some(w) = app.get_webview_window(&label) {
+                    let _ = w.destroy();
+                }
+            });
+        }
+    }
+
+    let page: tauri::Url = url.parse().map_err(|_| "not a web address".to_string())?;
+    {
+        let mut busy = SLOTS.0.lock().unwrap();
+        while *busy >= 2 {
+            busy = SLOTS.1.wait(busy).unwrap();
+        }
+        *busy += 1;
+    }
+    let _slot = Slot;
+    let label = format!("reader{}", NEXT.fetch_add(1, Ordering::SeqCst));
+    let (tx, rx) = mpsc::channel();
+    let (a, l) = (app.clone(), label.clone());
+    app.run_on_main_thread(move || {
+        let made = WebviewWindowBuilder::new(&a, &l, WebviewUrl::External(page))
+            .title("Job Hunt \u{2013} reading a job site")
+            .inner_size(1280.0, 900.0)
+            .position(-32000.0, -32000.0)
+            .decorations(false)
+            .skip_taskbar(true)
+            .focused(false)
+            .build();
+        let _ = tx.send(made.map(|_| ()).map_err(|e| e.to_string()));
+    })
+    .map_err(|e| e.to_string())?;
+    rx.recv_timeout(Duration::from_secs(15)).map_err(|_| "the browser didn't start".to_string())??;
+    let _close = Close(app.clone(), label.clone());
+
+    // Run `js` in the page; its answer comes back as JSON.
+    let ask = |js: &str, wait: Duration| -> Option<serde_json::Value> {
+        let w = app.get_webview_window(&label)?;
+        let (tx, rx) = mpsc::channel();
+        w.eval_with_callback(js, move |out| {
+            let _ = tx.send(out);
+        })
+        .ok()?;
+        rx.recv_timeout(wait).ok().and_then(|out| serde_json::from_str(&out).ok())
+    };
+    // Settled: loaded, past any bot check, and nothing new on the page for two seconds.
+    let start = Instant::now();
+    let (mut last, mut steady, mut checking) = ((0, 0), 0, false);
+    while start.elapsed() < Duration::from_secs(45) {
+        std::thread::sleep(Duration::from_secs(1));
+        let Some(v) = ask("({ s: document.readyState, t: document.title, a: document.links.length, h: document.body ? document.body.innerText.length : 0 })", Duration::from_secs(5)) else { continue };
+        let title = v["t"].as_str().unwrap_or("").to_lowercase();
+        let now = (v["a"].as_u64().unwrap_or(0), v["h"].as_u64().unwrap_or(0));
+        checking = title.contains("just a moment") || title.contains("attention required") || title.contains("security check");
+        if v["s"] != "complete" || checking || now.1 < 200 {
+            steady = 0;
+            continue;
+        }
+        steady = if now == last { steady + 1 } else { 0 };
+        last = now;
+        if steady >= 2 && start.elapsed() > Duration::from_secs(3) {
+            break;
+        }
+    }
+    if checking {
+        return Err("the site's bot check didn't let Job Hunt through".into());
+    }
+    ask("document.documentElement.outerHTML", Duration::from_secs(15))
+        .and_then(|v| v.as_str().map(String::from))
+        .ok_or_else(|| "the page didn't load".to_string())
+}
+
 /// A message from the Apply window's script: the form's fields to answer, or "I submitted it".
 fn on_fill_message(app: AppHandle, job_id: String, kind: String, data: serde_json::Value) {
     std::thread::spawn(move || {
@@ -533,7 +625,13 @@ pub fn run() {
     }
     builder
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--background"])))
-        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(StateFlags::all().difference(StateFlags::VISIBLE)).build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::all().difference(StateFlags::VISIBLE))
+                // The off-screen windows that read job sites keep no size or place.
+                .with_filter(|label| !label.starts_with("reader"))
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -573,6 +671,9 @@ pub fn run() {
                 let _ = jobhunt_core::web::ensure_started(agent.clone(), host.clone(), api::remote_port(&agent));
             }
             clip_watch(agent.clone());
+            // Job sites behind a bot check, or that list their jobs with scripts, are read in a browser.
+            let reader = app.handle().clone();
+            jobhunt_core::sites::set_browser(Box::new(move |url| read_in_browser(&reader, url)));
             app.manage(Arc::new(Ctx { agent, host }));
             if app.autolaunch().is_enabled().unwrap_or(false) {
                 let _ = app.autolaunch().enable(); // keep the sign-in entry pointing at this copy

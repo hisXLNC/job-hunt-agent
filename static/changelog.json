@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.3.0",
+    "date": "2026-10-27",
+    "title": "Recruiter sites work again",
+    "changes": [
+      "Michael Page, Hays, Adecco, Altis and Robert Half moved their job searches; Job Hunt follows them.",
+      "Sites that check for a real browser or build their lists with scripts (Robert Half, Randstad, Adecco, Hays, Altis, People First HR, Jobs.ca, Tech Talent Canada) are read in a hidden browser window in the Windows app, and LRO Staffing, whose connection the app couldn't open, is read there too.",
+      "The CIPS job board is now for members only, so it's no longer offered."
+    ]
+  },
+  {
     "version": "2.2.0",
     "date": "2026-10-27",
     "title": "Salary and why-it-fits columns",

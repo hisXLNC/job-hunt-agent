@@ -7,7 +7,7 @@
 //!   2. the search data in careers sites built on Phenom (Aerotek and its sister companies);
 //!   3. links that look like postings (the site's own pattern, or a general one).
 //! A posting found as a link is read later from its own page, again from its JobPosting data when
-//! it has some, or from the page's main text. Robert Half answers its own search as JSON.
+//! it has some, or from the page's main text.
 //!
 //! Many of these sites now check for a real browser (Cloudflare's "Just a moment…", AWS's bot check)
 //! or build their lists with scripts. Where there is a browser (the Windows app, see `set_browser`),
@@ -19,17 +19,8 @@ use crate::util::{html_to_text, short_hash};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::time::Duration;
-
-/// How a site is read.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum How {
-    /// Its search page, read as above.
-    Page,
-    /// Robert Half's job search, which answers in JSON.
-    RobertHalf,
-}
 
 /// A site Job Hunt knows. In `search`, {q} is the job title and {l} the place (both URL-encoded),
 /// {qs}/{ls} the same as lower-case-hyphenated slugs. A search without {q} is the site's whole list,
@@ -44,25 +35,24 @@ pub struct Site {
     pub search: &'static str,
     /// Links to postings look like this (a regex on the address); empty: the general pattern.
     pub link: &'static str,
-    pub how: How,
     /// Its pages need a real browser: a bot check, or a list built by scripts.
     pub browser: bool,
 }
 
 pub const SITES: &[Site] = &[
-    Site { id: "roberthalf", name: "Robert Half", country: "ca", kind: "Agency", about: "Accounting, finance, tech, marketing and administrative roles.", search: "https://www.roberthalf.com/ca/en/jobs", link: "", how: How::RobertHalf , browser: true },
-    Site { id: "michaelpage", name: "Michael Page", country: "ca", kind: "Agency", about: "Professional and management roles.", search: "https://www.michaelpage.ca/jobs/{qs}/{ls}", link: r"/job-detail/", how: How::Page , browser: false },
-    Site { id: "randstad", name: "Randstad", country: "ca", kind: "Agency", about: "Office, customer service, industrial and professional roles.", search: "https://www.randstad.ca/jobs/q-{qs}/l-{ls}/", link: r"/jobs/[a-z0-9-]+_[a-z0-9-]+_\d+", how: How::Page , browser: true },
-    Site { id: "adecco", name: "Adecco", country: "ca", kind: "Agency", about: "Temporary and permanent jobs across industries.", search: "https://www.adecco.com/en-ca/job-seekers/find-a-job?k={q}&l={l}", link: r"/job/|/jobs/[^/?#]+/\d{4,}", how: How::Page , browser: true },
-    Site { id: "hays", name: "Hays", country: "ca", kind: "Agency", about: "Specialist roles in tech, construction, finance and more.", search: "https://www.hays.ca/job-search/{qs}-jobs-in-{ls}", link: r"/job-detail/|/jobs?/[^?#]*\d{5,}", how: How::Page , browser: true },
-    Site { id: "aerotek", name: "Aerotek", country: "us", kind: "Agency", about: "Industrial, manufacturing and skilled trades roles.", search: "https://jobs.aerotek.com/us/en/search-results?keywords={q}&location={l}", link: r"/job/", how: How::Page , browser: false },
-    Site { id: "aplin", name: "Aplin", country: "ca", kind: "Agency", about: "Professional, contract and permanent roles across Canada.", search: "https://www.aplin.com/jobs/?search={q}", link: "", how: How::Page , browser: false },
-    Site { id: "altis", name: "Altis Recruitment", country: "ca", kind: "Agency", about: "Administrative, customer service, marketing, finance and project roles.", search: "https://jobportal.altis.com/?keyword={q}", link: "", how: How::Page , browser: true },
-    Site { id: "lro", name: "LRO Staffing", country: "ca", kind: "Agency", about: "Professional, administrative and government-related roles, especially in Ottawa.", search: "https://jobs.lrostaffing.com/job-listings/", link: r"/job-post/", how: How::Page , browser: false },
-    Site { id: "locksearch", name: "Lock Search Group", country: "ca", kind: "Agency", about: "Specialized professional and senior roles.", search: "https://www.locksearchgroup.com/opportunities/", link: r"/(?:job|opportunit(?:y|ies))/[a-z0-9-]{8,}", how: How::Page , browser: false },
-    Site { id: "peoplefirst", name: "People First HR", country: "ca", kind: "Agency", about: "Professional recruitment and executive roles, mostly in Manitoba.", search: "https://peoplefirsthr.com/jobs", link: "", how: How::Page , browser: true },
-    Site { id: "jobsca", name: "Jobs.ca", country: "ca", kind: "Job site", about: "Canada's Jobs.ca network: also covers healthcarejobs.ca, techjobs.ca, itjobs.ca and salesrep.ca.", search: "https://www.jobs.ca/jobs?q={q}&l={l}", link: "", how: How::Page , browser: true },
-    Site { id: "techtalent", name: "Tech Talent Canada", country: "ca", kind: "Job site", about: "Canadian tech roles.", search: "https://jobs.techtalent.ca/?q={q}", link: r"/j/[a-z0-9-]+-[0-9a-f]{8,}", how: How::Page , browser: true },
+    Site { id: "roberthalf", name: "Robert Half", country: "ca", kind: "Agency", about: "Accounting, finance, tech, marketing and administrative roles.", search: "https://www.roberthalf.com/ca/en/jobs/{qs}/{ls}", link: r"/ca/en/job/", browser: true },
+    Site { id: "michaelpage", name: "Michael Page", country: "ca", kind: "Agency", about: "Professional and management roles.", search: "https://www.michaelpage.ca/jobs/{qs}/{ls}", link: r"/job-detail/", browser: false },
+    Site { id: "randstad", name: "Randstad", country: "ca", kind: "Agency", about: "Office, customer service, industrial and professional roles.", search: "https://www.randstad.ca/jobs/q-{qs}/l-{ls}/", link: r"/jobs/[a-z0-9-]+_[a-z0-9-]+_\d+", browser: true },
+    Site { id: "adecco", name: "Adecco", country: "ca", kind: "Agency", about: "Temporary and permanent jobs across industries.", search: "https://www.adecco.com/en-ca/job-seekers/find-a-job?k={q}&l={l}", link: r"/job/|/jobs/[^/?#]+/\d{4,}", browser: true },
+    Site { id: "hays", name: "Hays", country: "ca", kind: "Agency", about: "Specialist roles in tech, construction, finance and more.", search: "https://www.hays.ca/job-search/{qs}-jobs-in-{ls}", link: r"/job-detail/|/jobs?/[^?#]*\d{5,}", browser: true },
+    Site { id: "aerotek", name: "Aerotek", country: "us", kind: "Agency", about: "Industrial, manufacturing and skilled trades roles.", search: "https://jobs.aerotek.com/us/en/search-results?keywords={q}&location={l}", link: r"/job/", browser: false },
+    Site { id: "aplin", name: "Aplin", country: "ca", kind: "Agency", about: "Professional, contract and permanent roles across Canada.", search: "https://www.aplin.com/jobs/?search={q}", link: "", browser: false },
+    Site { id: "altis", name: "Altis Recruitment", country: "ca", kind: "Agency", about: "Administrative, customer service, marketing, finance and project roles.", search: "https://jobportal.altis.com/?keyword={q}", link: "", browser: true },
+    Site { id: "lro", name: "LRO Staffing", country: "ca", kind: "Agency", about: "Professional, administrative and government-related roles, especially in Ottawa.", search: "https://jobs.lrostaffing.com/job-listings/", link: r"/job-post/", browser: false },
+    Site { id: "locksearch", name: "Lock Search Group", country: "ca", kind: "Agency", about: "Specialized professional and senior roles.", search: "https://www.locksearchgroup.com/opportunities/", link: r"/(?:job|opportunit(?:y|ies))/[a-z0-9-]{8,}", browser: false },
+    Site { id: "peoplefirst", name: "People First HR", country: "ca", kind: "Agency", about: "Professional recruitment and executive roles, mostly in Manitoba.", search: "https://peoplefirsthr.com/jobs", link: "", browser: true },
+    Site { id: "jobsca", name: "Jobs.ca", country: "ca", kind: "Job site", about: "Canada's Jobs.ca network: also covers healthcarejobs.ca, techjobs.ca, itjobs.ca and salesrep.ca.", search: "https://www.jobs.ca/jobs?q={q}&l={l}", link: "", browser: true },
+    Site { id: "techtalent", name: "Tech Talent Canada", country: "ca", kind: "Job site", about: "Canadian tech roles.", search: "https://jobs.techtalent.ca/?q={q}", link: r"/j/[a-z0-9-]+-[0-9a-f]{8,}", browser: true },
 ];
 
 /// A job site you added: its name and its search address, with {title} and {place} where the
@@ -80,7 +70,6 @@ pub struct Target {
     pub name: String,
     pub search: String,
     pub link: String,
-    pub how: How,
     pub browser: bool,
 }
 
@@ -93,14 +82,13 @@ impl CustomSite {
 /// The sites you turned on, known and your own.
 pub fn targets(on: &[String], custom: &[CustomSite]) -> Vec<Target> {
     let mut out: Vec<Target> = SITES.iter().filter(|s| on.iter().any(|x| x == s.id))
-        .map(|s| Target { id: s.id.into(), name: s.name.into(), search: s.search.into(), link: s.link.into(), how: s.how, browser: s.browser })
+        .map(|s| Target { id: s.id.into(), name: s.name.into(), search: s.search.into(), link: s.link.into(), browser: s.browser })
         .collect();
     out.extend(custom.iter().filter(|c| c.url.starts_with("http")).map(|c| Target {
         id: c.id(),
         name: if c.name.trim().is_empty() { url::Url::parse(&c.url).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or_else(|| "Your site".into()) } else { c.name.trim().to_string() },
         search: c.url.replace("{title}", "{q}").replace("{place}", "{l}"),
         link: String::new(),
-        how: How::Page,
         browser: false,
     }));
     out
@@ -124,7 +112,7 @@ pub fn search_url(t: &Target, title: &str, place: &str) -> String {
 
 /// The searches for a site: a few titles in your first place, or once for a whole list.
 pub fn searches_for(t: &Target, titles_places: &[(String, String)]) -> Vec<(String, String)> {
-    if t.how == How::RobertHalf || t.search.contains("{q}") || t.search.contains("{qs}") {
+    if t.search.contains("{q}") || t.search.contains("{qs}") {
         titles_places.iter().take(3).cloned().collect()
     } else {
         vec![(String::new(), String::new())]
@@ -151,9 +139,8 @@ fn get(c: &reqwest::blocking::Client, url: &str) -> Result<String, String> {
 }
 
 /// A real browser: reads a page as you'd see it, past bot checks and once its scripts have listed
-/// what they list. With `script`, that runs in the page once it's ready and its answer (a string,
-/// or a promise of one) comes back instead of the page.
-pub type Browser = dyn Fn(&str, Option<&str>) -> Result<String, String> + Send + Sync;
+/// what they list.
+pub type Browser = dyn Fn(&str) -> Result<String, String> + Send + Sync;
 static BROWSER: std::sync::OnceLock<Box<Browser>> = std::sync::OnceLock::new();
 
 /// The Windows app lends its browser for reading sites. The server has none.
@@ -178,13 +165,13 @@ const NEEDS_BROWSER: &str = "the site checks for a real web browser; the Job Hun
 fn read(c: &reqwest::blocking::Client, url: &str, prefer_browser: bool) -> Result<(String, bool), String> {
     if prefer_browser {
         if let Some(b) = browser() {
-            return b(url, None).map(|h| (h, true));
+            return b(url).map(|h| (h, true));
         }
     }
     match get(c, url) {
         Ok(h) if !challenged(&h) => Ok((h, false)),
         plain => match browser() {
-            Some(b) => b(url, None).map(|h| (h, true)),
+            Some(b) => b(url).map(|h| (h, true)),
             None => Err(match plain {
                 Err(e) if !e.starts_with("the site turned") => e,
                 _ => NEEDS_BROWSER.into(),
@@ -378,23 +365,25 @@ pub fn parse_page(t: &Target, html: &str, page_url: &str, place: &str) -> Vec<Po
     if !ph.is_empty() {
         return ph;
     }
-    // The site's own pattern, then the general one (sites change their addresses).
+    // The site's own pattern, then (sites change their addresses) links into a jobs path that end
+    // in a posting's number: never a category page like "/jobs/s-skilled-trades/".
     let own = linked_jobs(t, &t.link, html, &base, place);
-    if own.is_empty() && !t.link.is_empty() { linked_jobs(t, "", html, &base, place) } else { own }
+    if own.is_empty() && !t.link.is_empty() {
+        linked_jobs(t, r"^https?://[^/]+/(?:[a-z]{2}(?:-[a-z]{2})?/)*(?:jobs?|job-detail|careers?|opportunit(?:y|ies)|postings?|positions?)/[^?#]*\d{4,}", html, &base, place)
+    } else {
+        own
+    }
 }
 
 /// One search on a site.
 pub fn search(c: &reqwest::blocking::Client, t: &Target, title: &str, place: &str) -> Result<Vec<Posting>, String> {
-    if t.how == How::RobertHalf {
-        return robert_half(c, t, title, place);
-    }
     let url = search_url(t, title, place);
     let (html, in_browser) = read(c, &url, t.browser)?;
     let list = parse_page(t, &html, &url, place);
     let scripted = html.len() < 20_000 && (html.contains("id=\"root\"") || html.contains("id=\"app\"") || html.contains("__NEXT_DATA__") || html.contains("ng-app"));
     if list.is_empty() && !in_browser && scripted {
         return match browser() {
-            Some(b) => b(&url, None).map(|h| parse_page(t, &h, &url, place)),
+            Some(b) => b(&url).map(|h| parse_page(t, &h, &url, place)),
             None => Err("the page lists its jobs only in a web browser; the Job Hunt app on Windows can read it, this server can't".into()),
         };
     }
@@ -457,65 +446,6 @@ pub fn details(c: &reqwest::blocking::Client, postings: &mut [&mut Posting], max
     n
 }
 
-// --- Robert Half ------------------------------------------------------------------------------
-
-/// Robert Half's own job search (what its jobs page asks), in Canada.
-fn robert_half(c: &reqwest::blocking::Client, t: &Target, title: &str, place: &str) -> Result<Vec<Posting>, String> {
-    std::thread::sleep(Duration::from_millis(1500));
-    let body = json!({ "country": "ca", "keywords": title, "location": place, "distance": "50", "remote": "Any", "emptype": "", "jobtype": "", "timetype": "",
-        "postedwithin": "0", "sortby": "PUBLISHED_DATE_DESC", "pagesize": 25, "pagenumber": 1, "payrate_min": 0, "payrate_period": "", "source": ["Salesforce"] });
-    let plain = c.post("https://www.roberthalf.com/bin/jobSearchServlet")
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
-        .json(&body).send().map_err(|e| format!("couldn't connect ({e})"))
-        .and_then(|r| if r.status().is_success() { r.json::<Value>().map_err(|e| format!("unexpected answer ({e})")) } else { Err(format!("Robert Half said {}", r.status())) });
-    let v = match (plain, browser()) {
-        (Ok(v), _) => v,
-        // Behind its bot check: ask the same question from its own jobs page, in the browser.
-        (Err(_), Some(b)) => {
-            let ask = format!("fetch('/bin/jobSearchServlet', {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }}, body: JSON.stringify({body}) }}).then(r => r.text())");
-            let text = b(&t.search, Some(&ask))?;
-            serde_json::from_str(&text).map_err(|_| "Robert Half's search didn't answer as expected".to_string())?
-        }
-        (Err(e), None) => return Err(if e.contains("403") || e.contains("500") || e.contains("503") { NEEDS_BROWSER.into() } else { e }),
-    };
-    Ok(parse_robert_half(t, &v))
-}
-
-pub fn parse_robert_half(t: &Target, v: &Value) -> Vec<Posting> {
-    v["jobs"].as_array().into_iter().flatten().filter_map(|j| {
-        let title = text(&j["jobtitle"]);
-        let id = text(&j["unique_job_number"]);
-        if title.is_empty() || id.is_empty() {
-            return None;
-        }
-        let place = [text(&j["city"]), text(&j["stateprovince"])].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
-        let description = html_to_text(&text(&j["description"]));
-        let (lo, hi) = (j["payrate_min"].as_f64().or_else(|| text(&j["payrate_min"]).parse().ok()), j["payrate_max"].as_f64().or_else(|| text(&j["payrate_max"]).parse().ok()));
-        let hourly = text(&j["payrate_period"]).to_lowercase().contains("hour");
-        let pay = hi.filter(|h| *h > 0.0).map(|h| {
-            let m = |x: f64| format!("${}", crate::util::thousands(x.round() as i64));
-            let t = match lo.filter(|l| *l > 0.0 && *l != h) { Some(l) => format!("{}–{}", m(l), m(h)), None => m(h) };
-            if hourly { (format!("{t}/hour"), None) } else { (t, Some(h)) }
-        }).or_else(|| salary_from_text(&description));
-        let remote = text(&j["remote"]).eq_ignore_ascii_case("yes") || is_remote(&[&place, &title]);
-        Some(Posting {
-            apply_url: None,
-            source: t.id.clone(),
-            external_id: id,
-            company: "Robert Half (client not named)".into(),
-            remote,
-            title,
-            location: place,
-            url: text(&j["job_detail_url"]),
-            apply_email: None,
-            posted_at: Some(text(&j["date_posted"])).filter(|d| !d.is_empty()),
-            salary_max: pay.as_ref().and_then(|p| p.1),
-            salary: pay.map(|p| p.0),
-            description,
-        })
-    }).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,6 +458,7 @@ mod tests {
     fn search_addresses() {
         assert_eq!(search_url(&site("michaelpage"), "Tax Manager", "Toronto, ON"), "https://www.michaelpage.ca/jobs/tax-manager/toronto");
         assert_eq!(search_url(&site("hays"), "Tax Manager", "Toronto, ON"), "https://www.hays.ca/job-search/tax-manager-jobs-in-toronto");
+        assert_eq!(search_url(&site("roberthalf"), "Tax Manager", "Toronto, ON"), "https://www.roberthalf.com/ca/en/jobs/tax-manager/toronto");
         assert_eq!(search_url(&site("randstad"), "Tax Manager", "Toronto, ON"), "https://www.randstad.ca/jobs/q-tax-manager/l-toronto/");
         assert_eq!(search_url(&site("altis"), "Tax Manager", "Toronto, ON"), "https://jobportal.altis.com/?keyword=Tax+Manager");
         assert!(site("jobsca").browser && !site("lro").browser);
@@ -583,21 +514,15 @@ mod tests {
         assert!(!challenged(&format!("<html><head><title>Tax Manager jobs</title></head><body>{}</body></html>", "x".repeat(40_000))));
         // A site whose posting addresses no longer fit its own pattern: the general one finds them.
         let r = site("randstad");
-        let page = r#"<a href="/jobs/">All jobs</a><a href="/jobs/senior-tax-manager-toronto-2026-1123/">Senior Tax Manager</a>"#;
+        let page = r#"<a href="/jobs/">All jobs</a><a href="/jobs/s-skilled-trades-and-industrial-management/">skilled trades</a><a href="/jobs/senior-tax-manager-toronto-2026-1123/">Senior Tax Manager</a>"#;
         let l = parse_page(&r, page, "https://www.randstad.ca/jobs/q-tax-manager/l-toronto/", "Toronto, ON");
         assert_eq!(l.iter().map(|p| p.title.as_str()).collect::<Vec<_>>(), vec!["Senior Tax Manager"]);
     }
 
     #[test]
-    fn posting_pages_and_robert_half() {
+    fn posting_pages() {
         let page = r#"<html><body><header>Menu</header><main><h1>Senior Payroll Specialist</h1><p>Our client, a Calgary energy company, is hiring a Senior Payroll Specialist to run bi-weekly payroll for 1,200 employees across Alberta and BC. You'll reconcile, report and improve processes.</p><p>Salary $80,000 - $90,000. Email resumes to jobs@aplin.example</p></main><footer>© Aplin</footer></body></html>"#;
         let (d, ld) = parse_posting_page(page).unwrap();
         assert!(ld.is_none() && d.contains("bi-weekly payroll") && !d.contains("Menu") && !d.contains("© Aplin"));
-        let rh = json!({ "found": 1, "jobs": [{ "unique_job_number": "03720-0013141339-cauen", "jobtitle": "Senior Accountant", "city": "Toronto", "stateprovince": "ON",
-            "job_detail_url": "https://www.roberthalf.com/ca/en/job/toronto-on/senior-accountant/03720-0013141339-cauen", "description": "<p>Month-end close.</p>",
-            "date_posted": "2026-10-17T14:00:00Z", "payrate_min": "75000", "payrate_max": "85000", "payrate_period": "Yearly", "remote": "No" }] });
-        let l = parse_robert_half(&site("roberthalf"), &rh);
-        assert_eq!((l[0].location.as_str(), l[0].salary.as_deref(), l[0].salary_max), ("Toronto, ON", Some("$75,000–$85,000"), Some(85000.0)));
-        assert_eq!(l[0].description, "Month-end close.");
     }
 }
