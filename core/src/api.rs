@@ -440,7 +440,13 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&json!({ "running": agent.is_running("test-sources"), "last": last })));
             }
             ["api", "tracker"] => return Ok(Resp::json(&json!({ "rows": agent.tracker(None)? }))),
-            ["api", "connections"] => return Ok(Resp::json(&json!({ "rows": agent.connections()?, "testing": agent.is_running("test-sources") }))),
+            ["api", "connections"] => {
+                let testing = agent.is_running("test-sources");
+                // While testing: which one (none: all), and how far along.
+                let t: Value = if testing { serde_json::from_str(&agent.secret("sources.test")).unwrap_or(Value::Null) } else { Value::Null };
+                let progress = testing.then(|| json!({ "only": t["only"], "done": t["done"], "total": t["total"] }));
+                return Ok(Resp::json(&json!({ "rows": agent.connections()?, "testing": testing, "progress": progress })));
+            }
             ["api", "rescore"] => {
                 let group = req.query.get("group").map(|s| s.as_str()).unwrap_or("skipped");
                 let mut plan = agent.rescore_plan(group)?;

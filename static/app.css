@@ -411,7 +411,7 @@ form[data-form=profile] [type=submit] { display: none; }
 .chip b { color: var(--ink); margin-left: 2px; }
 .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .chip.on b { color: inherit; }
-.trow { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1.5fr) minmax(0, 1.3fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+.trow { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.3fr) minmax(0, .8fr) minmax(0, 1.5fr) minmax(0, 1.3fr) 130px; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line-2); }
 .trow:last-child { border-bottom: 0; }
 .tmain { color: inherit; text-decoration: none; min-width: 0; }
 .tnext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -715,3 +715,17 @@ table.jobs td { padding: 10px 7px; }
   .flow a { flex: none; }
   .flow-arrow { display: none; }
 }
+/* A test's progress, in place of a source's buttons while it runs. */
+.test-bar { display: inline-flex; align-items: center; gap: 8px; }
+.test-bar .meter { width: 120px; }
+.test-bar .meter > i { transition: width .4s; }
+/* Pick: sort and filters above the list; a hidden row stays out of the grid. */
+.pick-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 0 10px; border-bottom: 1px solid var(--line-2); }
+.pick-filters select { width: auto; margin-left: 6px; padding: 4px 8px; }
+.todo-row[hidden] { display: none; }
+/* The Overview's two ways to look: To do (the steps) or All jobs (the views). */
+.mode { display: inline-flex; align-self: flex-start; padding: 3px; gap: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.mode a { padding: 6px 16px; border-radius: 999px; color: var(--ink-2); font-weight: 600; text-decoration: none; }
+.mode a.on { background: var(--ink); color: var(--surface); }
+.trow .co { font-weight: 600; }
+.trow > .todo-act { justify-content: flex-end; }

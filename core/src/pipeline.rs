@@ -2226,6 +2226,11 @@ replies and interviews, and a little lower for kinds that got none from several 
             None => vec![],
         };
         let mut results: Vec<Value> = vec![];
+        // How many checks this test makes, for its progress bar.
+        let singles = ["adzuna", "jsearch", "jooble", "indeed", "linkedin", "jobbank", "alerts"].iter().filter(|k| want(k)).count();
+        let total = singles
+            + if want("boards") { crate::sources::boards(&p).len() } else { 0 }
+            + if want("agencies") { crate::sites::targets(&p.sources.sites, &p.sources.custom_sites).len() } else { 0 };
         let save = |results: &Vec<Value>, done: bool| {
             let all: Vec<Value> = kept.iter().chain(results.iter()).cloned().map(|mut r| {
                 r["id"] = json!(source_row_id(&r));
@@ -2234,7 +2239,8 @@ replies and interviews, and a little lower for kinds that got none from several 
                 }
                 r
             }).collect();
-            let v = json!({ "started": started, "finished": if done { Some(now()) } else { None }, "results": all });
+            let v = json!({ "started": started, "finished": if done { Some(now()) } else { None }, "results": all,
+                "only": only, "done": results.len(), "total": total.max(results.len()) });
             let _ = self.db().set("sources.test", &v.to_string());
             v
         };
@@ -4627,6 +4633,7 @@ impl Agent {
             "health": health,
             "weekly_goal": profile.weekly_goal,
             "places": profile.locations,
+            "remote_ok": profile.remote_ok,
             "auto_boards": profile.sources.auto_boards,
             "last_report": db.get("last.report")?.and_then(|r| serde_json::from_str::<Value>(&r).ok()),
             "setup": {

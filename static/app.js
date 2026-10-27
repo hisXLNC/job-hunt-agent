@@ -123,8 +123,15 @@ function homeHead(on, about, between = '') {
       </div>
     </div>
     ${between}
-    <nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n], i) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-n">${i + 1}</span><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>
-    <nav class="tabs views">${VIEWS.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}<a class="views-x" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a></nav>
+    ${(() => {
+      // Two ways to look: what to do next (the steps), or every job (the views).
+      const all = VIEWS.some(([id]) => id === on) || on === 'list';
+      let lastView = 'tracker';
+      try { if (all) localStorage.setItem('jh.view', on); else lastView = localStorage.getItem('jh.view') || 'tracker'; } catch (e) {}
+      return `<nav class="mode" aria-label="What to show"><a href="#overview" class="${all ? '' : 'on'}">To do</a><a href="#overview/${all ? on : lastView}" class="${all ? 'on' : ''}">All jobs</a></nav>
+    ${all ? `<nav class="tabs views">${VIEWS.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}<a class="views-x" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a></nav>`
+      : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n], i) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-n">${i + 1}</span><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
+    })()}
     ${about ? `<p class="muted flow-about">${about}</p>` : ''}`;
 }
 /** The view tabs' pages (Tracker, Board…) under the Overview's top. */
@@ -444,6 +451,7 @@ async function showOverview(tab) {
       ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
     </details>
     <p class="muted small" style="text-align:center"><a href="#results">Results: what's working</a> · <a href="#calendar">Calendar</a></p>`);
+  restorePickViews();
 }
 
 // ---- Applications ----
@@ -642,8 +650,9 @@ function trackRow(r) {
   const id = esc(r.id);
   const act = r.follow_up_due ? `<button class="btn sm" data-act="followUp" data-job="${id}">Write follow-up</button>` : rowActions(r);
   return `<div class="trow">
+    <span class="co">${coCell(r)}</span>
     <a class="grow tmain" href="#job/${encodeURIComponent(r.id)}"><span class="qt">${esc(r.title)}</span> ${closedTag(r)}${deadlineTag(r)}${coLocLine(r)}</a>
-    <span class="co small">${coCell(r)}</span><span class="loc small">${locCell(r)}</span>
+    <span class="loc small">${locCell(r)}</span>
     ${stepsHtml(r)}
     <div class="tnext"><span class="who ${esc(r.who)}">${{ you: 'Your move', them: 'Waiting on them', later: 'Saved', done: 'Done' }[r.who] || ''}</span>
       <span class="small">${nextText(r)}</span>
@@ -890,21 +899,31 @@ function stepHtml(o, step, tracked) {
       ${i.job_id ? `<span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prep</a></span>` : ''}</div>`).join('')]);
   const picking = (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`));
   const inWork = (o.to_tailor || []).length - picking.length;
-  if (picking.length) groups.push([`Pick from ${picking.length} new match${picking.length === 1 ? '' : 'es'}`, `<div data-pickbox>
-    <div class="row" style="margin:2px 0 8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div>
-    ${(() => {
-      // Grouped by the CV each would be tailored from, best fit first.
-      const byCv = {};
-      [...picking].sort((a, b) => (b.score || 0) - (a.score || 0)).forEach(j => { (byCv[j.track || ''] ||= []).push(j); });
-      const many = Object.keys(byCv).length > 1;
-      return Object.entries(byCv).map(([t, list]) => `${many ? `<h4 class="pick-cv">From your ${esc(trackLabel(t) || 'main')} CV</h4>` : ''}${list.map(j => `<div class="todo-row pick"><label style="display:contents"><input type="checkbox" data-pick="${esc(j.id)}">
+  if (picking.length) {
+    // One list, best fit first; the filters reorder and hide rows in place (see applyPickView).
+    const places = [...new Set((o.places || []).map(p => String(p).split(',')[0].trim()).filter(Boolean))];
+    const opt = (v, n) => `<option value="${v}">${n}</option>`;
+    const rows = [...picking].sort((a, b) => (b.score || 0) - (a.score || 0)).map(j => `<div class="todo-row pick" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}"
+        data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}"
+        data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"><label style="display:contents"><input type="checkbox" data-pick="${esc(j.id)}">
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
       <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${ageTag(j)}</span>${coLocLine(j)}</span>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span></label>
       <span class="why small">${whyFits(j)}</span>
-      <span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('')}`).join('');
-    })()}
+      <span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('');
+    groups.push([`Pick from ${picking.length} new match${picking.length === 1 ? '' : 'es'}`, `<div data-pickbox>
+    <div class="row" style="margin:2px 0 8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div>
+    <div class="pick-filters">
+      <label class="small">Sort by <select data-pickf="sort">${opt('fit', 'Best fit')}${opt('reach', 'Fit after tailoring')}${opt('new', 'Newest')}${opt('pay', 'Highest pay')}${opt('rating', 'Best-rated company')}</select></label>
+      <label class="small">Fit <select data-pickf="min">${opt('0', 'Any')}${opt('60', '60 or more')}${opt('70', '70 or more')}${opt('80', '80 or more')}</select></label>
+      ${places.length > 1 || o.remote_ok ? `<label class="small">Where <select data-pickf="place">${opt('', 'Anywhere')}${places.map(p => opt(esc(p.toLowerCase()), esc(p))).join('')}${opt('remote', 'Remote')}</select></label>` : ''}
+      <label class="check small"><input type="checkbox" data-pickf="pay"> Shows pay</label>
+      <label class="check small"><input type="checkbox" data-pickf="flags"> No red flags</label>
+      <span class="muted small" data-pickcount></span>
+    </div>
+    <div class="pick-list">${rows}</div>
 </div>`]);
+  }
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
   const ready = [];
   if (o.ready?.length) ready.push([`<a class="btn sm" href="#review">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
@@ -2063,12 +2082,41 @@ function showBoardFields() {
 }
 
 // Ticking roles to tailor
+/** The Pick list's sort and filters, applied to its rows in place (ticks stay), and remembered. */
+function applyPickView(box, saved) {
+  const controls = [...box.querySelectorAll('[data-pickf]')];
+  if (saved) controls.forEach(el => { if (el.dataset.pickf in saved) el.type === 'checkbox' ? el.checked = !!saved[el.dataset.pickf] : el.value = saved[el.dataset.pickf]; });
+  const v = {};
+  controls.forEach(el => { v[el.dataset.pickf] = el.type === 'checkbox' ? el.checked : el.value; });
+  if (!saved) try { localStorage.setItem('jh.pickView', JSON.stringify(v)); } catch (e) {}
+  const list = box.querySelector('.pick-list');
+  if (!list) return;
+  const key = { fit: 'score', reach: 'reach', new: 'age', pay: 'pay', rating: 'rating' }[v.sort] || 'score';
+  const rows = [...list.children].sort((a, b) => Number(b.dataset[key]) - Number(a.dataset[key]) || Number(b.dataset.score) - Number(a.dataset.score));
+  let shown = 0;
+  for (const r of rows) {
+    const hide = Number(r.dataset.score) < Number(v.min || 0) || (v.pay && !(Number(r.dataset.pay) > 0))
+      || (v.flags && Number(r.dataset.flags) > 0) || (v.place && !r.dataset.place.includes(v.place));
+    r.hidden = hide;
+    if (hide) r.querySelector('[data-pick]').checked = false; // never tailor what you can't see
+    else shown++;
+    list.appendChild(r);
+  }
+  const count = box.querySelector('[data-pickcount]');
+  if (count) count.textContent = shown < rows.length ? `Showing ${shown} of ${rows.length}` : '';
+  pickChanged(box);
+}
+function restorePickViews() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('jh.pickView') || 'null'); } catch (e) {}
+  document.querySelectorAll('[data-pickbox]').forEach(b => applyPickView(b, saved || {}));
+}
 function pickChanged(box) {
   const n = box.querySelectorAll('[data-pick]:checked').length;
   const btn = box.querySelector('button[data-act=tailorPicked]');
   if (btn) { btn.disabled = !n; btn.textContent = n ? `Tailor ${n} selected` : 'Tailor selected'; }
   const all = box.querySelector('[data-act=pickAll]');
-  if (all) all.textContent = n && n === box.querySelectorAll('[data-pick]').length ? 'Clear' : 'Select all';
+  if (all) all.textContent = n && n === box.querySelectorAll('.todo-row:not([hidden]) [data-pick]').length ? 'Clear' : 'Select all';
 }
 // Sync: the folder box only for syncing through a folder.
 document.addEventListener('change', e => {
@@ -2079,6 +2127,7 @@ document.addEventListener('change', e => {
 document.addEventListener('change', e => {
   const box = e.target.closest?.('[data-pickbox]');
   if (box && e.target.matches('[data-pick]')) pickChanged(box);
+  if (box && e.target.matches('[data-pickf]')) applyPickView(box);
 });
 
 // Place pickers: a place typed (or chosen from the list) is added on Enter or when you move on;
@@ -2247,6 +2296,12 @@ function connBtn(r, a, testing) {
 }
 
 /** Fill in each source's tile, and on Accounts, what needs attention (nothing shows when all is well). */
+/** A running test's progress: a bar and "3 of 12 checked". */
+const testBar = p => {
+  const total = Math.max(1, p?.total || 0), done = Math.min(p?.done || 0, total);
+  return `<span class="test-bar" title="Testing"><span class="meter"><i style="width:${Math.max(4, done / total * 100)}%"></i></span><span class="small muted">${done} of ${total} checked</span></span>`;
+};
+let connWasTesting = false;
 async function renderConnStatus() {
   clearTimeout(connPoll);
   let d;
@@ -2260,7 +2315,9 @@ async function renderConnStatus() {
     t.classList.toggle('problem', ['problem', 'partial'].includes(r.status));
     t.querySelector('.tile-detail').innerHTML = ['off', 'setup'].includes(r.status) ? ''
       : `${esc(r.detail)}${r.at ? ` <span class="muted">· ${esc(ago(r.at))}</span>` : ''}`;
-    t.querySelector('.tile-acts').innerHTML = (r.actions || []).filter(a => !a.startsWith('goto:')).map(a => connBtn(r, a, d.testing)).join('');
+    // The one being tested shows how far along it is instead of its buttons.
+    t.querySelector('.tile-acts').innerHTML = d.progress && d.progress.only === r.id ? testBar(d.progress)
+      : (r.actions || []).filter(a => !a.startsWith('goto:')).map(a => connBtn(r, a, d.testing)).join('');
   });
   const box = $('#connStatus');
   if (box) {
@@ -2270,7 +2327,10 @@ async function renderConnStatus() {
       <span class="conn-name"><b>${esc(r.name)}</b></span><span class="grow small">${esc(r.detail)}</span>
       <span class="row todo-act">${(r.actions || []).map(a => connBtn(r, a, d.testing)).join('')}</span></div>`).join('')}`;
   }
-  if (d.testing) connPoll = setTimeout(() => { if (location.hash.startsWith('#settings')) renderConnStatus(); }, 3000);
+  // Done testing: the sources page shows each site's result.
+  if (connWasTesting && !d.testing && location.hash.startsWith('#settings/sources')) { connWasTesting = false; settingsCache = null; route(); return; }
+  connWasTesting = d.testing;
+  if (d.testing) connPoll = setTimeout(() => { if (location.hash.startsWith('#settings')) renderConnStatus(); }, 1500);
 }
 
 // ---- Settings save themselves ----
@@ -2416,11 +2476,8 @@ async function act(el) {
   }
   if (a === 'connTest') {
     const sites = el.dataset.id === 'agencies' ? document.querySelectorAll('#tile-agencies [name=site]:checked, #tile-agencies .site-own').length : 0;
-    return busy(async () => {
-      await api('/api/connections/test', { method: 'POST', body: { id: el.dataset.id } }); renderConnStatus();
-      // The sites' card shows each one's result once the test is through.
-      if (sites) setTimeout(() => { if (location.hash.startsWith('#settings/sources')) { settingsCache = null; route(); } }, 5000 + sites * 4000);
-    }, sites ? `Testing ${sites} site${sites === 1 ? '' : 's'}… results show here in about ${Math.ceil((5 + sites * 4) / 10) * 10} seconds.` : 'Testing…');
+    return busy(async () => { await api('/api/connections/test', { method: 'POST', body: { id: el.dataset.id } }); renderConnStatus(); },
+      sites ? `Testing ${sites} site${sites === 1 ? '' : 's'}… each one's result shows here when it's through.` : 'Testing…');
   }
   if (a === 'connIndeed') {
     const on = el.dataset.on === '1';
@@ -2506,8 +2563,7 @@ async function act(el) {
   if (a === 'docFilter') { docFilter = el.dataset.f; route(); return; }
   if (a === 'pickTop') {
     const box = el.closest('[data-pickbox]');
-    const all = [...box.querySelectorAll('[data-pick]')];
-    // The best scores, whichever CV they're under.
+    const all = [...box.querySelectorAll('.todo-row:not([hidden]) [data-pick]')];
     const score = c => Number(c.closest('.todo-row').querySelector('.score')?.textContent || 0);
     const top = new Set([...all].sort((a, b) => score(b) - score(a)).slice(0, Number(el.dataset.n)));
     all.forEach(c => { c.checked = top.has(c); });
@@ -2516,7 +2572,7 @@ async function act(el) {
   }
   if (a === 'pickAll') {
     const box = el.closest('[data-pickbox]');
-    const all = [...box.querySelectorAll('[data-pick]')];
+    const all = [...box.querySelectorAll('.todo-row:not([hidden]) [data-pick]')];
     const on = !all.every(c => c.checked);
     all.forEach(c => { c.checked = on; });
     pickChanged(box);
@@ -2887,7 +2943,7 @@ async function showSourceTest(start) {
   box.innerHTML = `<p class="muted small">Each source is tried once, with one of your job titles, to see that it works. Real searches use all your titles.</p><table><tbody>${rows.map(x => `<tr><td>${esc(x.name)}</td><td>${status(x)}</td><td class="small">${what(x)}${x.hint ? `<br><span class="muted">${esc(x.hint)}</span>` : ''}</td>
       <td>${x.kind === 'board' && !x.ok && x.source ? `<button class="btn ghost" data-act="removeBoard" data-source="${esc(x.source)}" data-name="${esc(x.board)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>
     ${broken.length || rows.some(x => x.kind === 'board' && x.ok && !x.matching) ? `<div class="row"><button class="btn primary" data-act="suggestBoards" data-into="testIdeas">Suggest companies to add</button><span class="muted small">Claude suggests employers near you whose job boards have matching roles.</span></div><div id="testIdeas" class="ideas"></div>` : ''}
-    <p class="muted small">${t.running ? '<span class="spin"></span>Testing… Indeed goes through Claude Code and can take a minute.' : t.last?.finished ? `Tested ${esc(ago(t.last.finished))}.` : ''}</p>`;
+    <p class="muted small">${t.running ? `${testBar(t.last)} Indeed goes through Claude Code and can take a minute.` : t.last?.finished ? `Tested ${esc(ago(t.last.finished))}.` : ''}</p>`;
   if (t.running) sourcePoll = setTimeout(() => { if (location.hash.startsWith('#settings/sources')) showSourceTest(); }, 2000);
 }
 
