@@ -1181,6 +1181,21 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.test_phone()?;
             ok()
         }
+        ["api", "bookmark-page"] => {
+            // The page that gives the Send to Job Hunt bookmark the Job Hunt logo: bookmarked, then its
+            // address swapped for the button's code. Opened in your browser, on this computer only.
+            if req.remote {
+                return Err(Error("Set up the button on the computer running Job Hunt.".into()));
+            }
+            let html = s(&b, "html");
+            if !html.starts_with("<!doctype html>") || html.len() > 200_000 {
+                return Err(Error("That isn't the setup page.".into()));
+            }
+            let path = agent.data.join("Send to Job Hunt.html");
+            std::fs::write(&path, html)?;
+            host.open_path(&path)?;
+            ok()
+        }
         ["api", "settings", "sites-off"] => {
             // Turn off recruiter and job sites that can't be read: known ones by id, your own by theirs.
             let ids: Vec<String> = b["ids"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();

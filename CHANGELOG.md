@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.0.1] - 2026-10-27
+
+The Job Hunt logo on your Send to Job Hunt button.
+
+### Changes
+
+- Send to Job Hunt now gets the Job Hunt logo as its icon in your bookmarks bar: in Settings → Job sources, press Set up the button and follow the three steps on the page that opens. (Added it before? Do this once to replace it.)
+
 ## [2.0.0] - 2026-10-27
 
 Job Hunt 2: a calmer look, Drive backup on by default, clearer sources.
@@ -665,6 +673,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.0.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.0.1
 [2.0.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.0.0
 [1.45.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.45.0
 [1.44.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v1.44.0

@@ -1593,11 +1593,11 @@ async function showSettings(tab, sub) {
     </div>
     <section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
       <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and tailors your CV. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
-      ${desk ? `<div class="row"><a class="btn bookmarklet" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Drag this onto your browser's bookmarks bar">${BOOKMARK_NAME}</a><span class="muted small">Drag it to your bookmarks bar, or:</span></div>
+      ${desk ? `<div class="row"><button class="btn primary" data-act="bookmarkSetup"><img src="/static/logo.svg" alt="" width="16" height="16">Set up the button</button><span class="muted small">Opens a page in your browser that walks you through it, so the button gets the Job Hunt logo.</span></div>
+      <details class="small"><summary class="muted">Or add it yourself</summary><ol class="small steps-list">
+        <li><button class="btn sm" data-act="copyBookmarklet">Copy the button</button>, or drag <a class="btn sm bookmarklet" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Drag this onto your browser's bookmarks bar">${BOOKMARK_NAME}</a> to your bookmarks bar.</li>
+        <li>In your browser (Chrome or Edge), show the bookmarks bar with <b>Ctrl+Shift+B</b>, right-click it → <b>Add page</b> (Edge: <b>Add favorite</b>). Name it <b>${BOOKMARK_NAME}</b>, paste into the address (URL) box, and save. Added this way it has no logo.</li></ol></details>
       <ol class="small steps-list">
-        <li><button class="btn primary sm" data-act="copyBookmarklet">Copy the button</button></li>
-        <li>In your browser (Chrome or Edge), show the bookmarks bar with <b>Ctrl+Shift+B</b>, right-click it → <b>Add page</b> (Edge: <b>Add favorite</b>). Paste into the address (URL) box.</li>
-        <li>For the name, <button class="btn sm" data-act="copyText" data-text="${BOOKMARK_NAME}">Copy the name</button> and paste it: the 💼 shows as its icon in the bar. Save.</li>
         <li>Open a job posting and click the bookmark. On LinkedIn, click the job in the list so it shows on the right (or open the job itself), then click it.</li>
         <li>Job Hunt picks it up within a few seconds and tells you when it's ready. Added it before version 1.44? Add it again: the old one didn't work on LinkedIn.</li></ol>
       <label class="check"><input type="checkbox" data-act="clipWatch" ${st.clip_watch ? 'checked' : ''}> <span class="small">Pick up postings sent from the browser</span></label>` : '<div class="row"><a class="btn" href="#add">Add a job</a></div>'}
@@ -1877,8 +1877,31 @@ function clipPage() {
   var fallback = function () { var ta = document.createElement('textarea'); ta.value = out; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(out).then(done, fallback); else fallback();
 }
-/** The bookmark's name: the briefcase is its icon in the bookmarks bar (bookmarks can't carry a picture). */
-const BOOKMARK_NAME = '💼 Send to Job Hunt';
+/** The bookmark's name. Its icon is the Job Hunt logo, kept from the setup page it was made from. */
+const BOOKMARK_NAME = 'Send to Job Hunt';
+/** The setup page, opened in your browser: its icon is the Job Hunt logo, so a bookmark of it shows the
+ *  logo; its address is then swapped for the button's code, and the logo stays. */
+async function bookmarkPage() {
+  const blob = await (await fetch('/static/icon-192.png')).blob();
+  const logo = await new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(blob); });
+  const code = JSON.stringify(bookmarklet()).replace(/</g, '\\u003c');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${BOOKMARK_NAME}</title>
+<link rel="icon" type="image/png" href="${logo}"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{font:16px/1.55 system-ui,"Segoe UI",sans-serif;color:#1f201d;background:#f4f4f2;margin:0;padding:48px 16px}
+main{max-width:620px;margin:0 auto;background:#fff;border:1px solid #eaeae6;border-radius:16px;padding:32px}
+h1{font-size:24px;margin:12px 0 4px}ol{padding-left:22px}li{margin:14px 0}kbd{background:#efefec;border-radius:6px;padding:1px 6px;font:inherit}
+button{font:inherit;background:#1f201d;color:#fff;border:0;border-radius:999px;padding:8px 18px;cursor:pointer}p.note{color:#636361;font-size:14px}</style></head>
+<body><main><img src="${logo}" width="48" height="48" alt=""><h1>Send to Job Hunt</h1>
+<p>Three steps give your browser a Job Hunt button with the Job Hunt logo.</p>
+<ol><li>Press <kbd>Ctrl</kbd>+<kbd>D</kbd> to bookmark this page. Choose <b>Bookmarks bar</b> as the folder, keep the name, and press <b>Done</b>. (No bookmarks bar? Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>.)</li>
+<li><button id="copy">Copy the code</button> <span id="done"></span></li>
+<li>Right-click the new <b>Send to Job Hunt</b> on your bookmarks bar and choose <b>Edit</b>. Select everything in the <b>URL</b> box, paste, and <b>Save</b>.</li></ol>
+<p>Then, on any job posting (LinkedIn, Indeed, a company's site), click it: Job Hunt adds the job, scores it and tailors your CV.</p>
+<p class="note">The bookmark usually keeps the Job Hunt logo. If your browser shows a plain icon instead, the button works just the same.</p></main>
+<script>var CODE=${code};document.getElementById('copy').onclick=function(){var d=document.getElementById('done');
+function ok(){d.textContent='Copied. Now step 3.';}function fb(){var t=document.createElement('textarea');t.value=CODE;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();ok();}
+if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(CODE).then(ok,fb);else fb();};</script></body></html>`;
+}
 const bookmarklet = () => 'javascript:' + encodeURIComponent(`(${clipPage.toString()})()`);
 
 // Versions have three parts everywhere: 1.7.0, 1.8.0… Older feeds wrote "1.07", which reads as 1.7.0.
@@ -2559,6 +2582,9 @@ async function act(el) {
       if (location.hash.startsWith('#job/')) setTimeout(route, 300);
       else el.outerHTML = '<span class="muted small"><span class="spin"></span>Writing…</span>';
     }, 'Writing the follow-up…');
+  }
+  if (a === 'bookmarkSetup') {
+    return busy(async () => { await api('/api/bookmark-page', { method: 'POST', body: { html: await bookmarkPage() } }); }, 'The setup page opened in your browser.');
   }
   if (a === 'copyText') {
     try { await navigator.clipboard.writeText(el.dataset.text || ''); toast('Copied.'); } catch (e) { toast('Select the text and copy it.', true); }

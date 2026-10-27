@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.0.1",
+    "date": "2026-10-27",
+    "title": "The Job Hunt logo on your Send to Job Hunt button",
+    "changes": [
+      "Send to Job Hunt now gets the Job Hunt logo as its icon in your bookmarks bar: in Settings → Job sources, press Set up the button and follow the three steps on the page that opens. (Added it before? Do this once to replace it.)"
+    ]
+  },
+  {
     "version": "2.0.0",
     "date": "2026-10-27",
     "title": "Job Hunt 2: a calmer look, Drive backup on by default, clearer sources",
