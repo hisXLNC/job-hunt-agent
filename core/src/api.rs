@@ -1094,6 +1094,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     return Err(Error("Choose a folder first, for example \"My Drive\\Job Hunt\" in Google Drive.".into()));
                 }
                 agent.db().set("sync.on", if on { "1" } else { "0" })?;
+                // Turned off on purpose: stop suggesting it on the Overview.
+                if on { agent.db().delete("sync.declined")?; } else { agent.db().set("sync.declined", "1")?; }
             }
             // Check for newer data from another computer in the new folder before writing to it.
             let newer = crate::sync::newer_elsewhere(agent);
@@ -1439,8 +1441,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             db.set("google.token", &serde_json::to_string(&token)?)?;
             db.delete("google.pending")?;
             drop(db);
-            agent.connect();
-            agent.note("Google connected", &format!("Job Hunt can now read job email, manage interviews and sync for {}.", token.email));
+            agent.google_connected(&token.email);
             Ok(Resp::json(&json!({ "email": token.email })))
         }
         ["api", "settings", "google-connect"] => {
@@ -1454,12 +1455,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let result = google::sign_in(&client, &|url| h.open_url(url)).and_then(|mut token| {
                     token.email = google::Google::new(client.clone(), token.clone(), "primary", Box::new(|_| {})).account_email().unwrap_or_default();
                     a.db().set("google.token", &serde_json::to_string(&token)?)?;
-                    a.connect();
                     Ok(token.email)
                 });
                 drop(g);
                 match result {
-                    Ok(email) => a.note("Google connected", &format!("Job Hunt can now read job email and manage interviews for {email}.")),
+                    Ok(email) => a.google_connected(&email),
                     Err(e) => a.note("Google didn't connect", &e.0),
                 }
             });

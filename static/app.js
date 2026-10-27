@@ -192,8 +192,8 @@ function ratingCard(r, busy, company) {
     <p class="muted small">Looked up ${esc(fmtDate(r.at))}. Reviews are opinions, and a few can swing a small company's score.</p></section>`;
 }
 /** The predicted fit after tailoring, while it isn't tailored yet: "could reach ~85". */
-const canReach = j => j.score_after == null && j.score_potential != null && j.score != null && j.score_potential > j.score ? j.score_potential : null;
-const reachTag = j => canReach(j) ? `<span class="reach" title="Predicted fit once your CV is tailored to this posting">→ ~${canReach(j)}</span>` : '';
+const canReach = j => j.score_after == null && j.score_potential != null && j.score != null && j.score_potential >= j.score ? j.score_potential : null;
+const reachTag = j => canReach(j) ? `<span class="reach" title="${canReach(j) > j.score ? 'Predicted fit once your CV is tailored to this posting' : 'Tailoring is unlikely to raise this fit: the gap is in experience, not wording'}">→ ~${canReach(j)}</span>` : '';
 const trackLabel = t => (settingsCache?.profile?.tracks || []).find(x => x.name === t)?.label || overview?.track_labels?.[t] || (t || '').replace(/[-_]/g, ' ');
 const stagePill = s => `<span class="pill ${esc(s)}">${esc(STAGES[s] || s)}</span>`;
 /** When the posting stops taking applications, if it says; red when it's two days or less away. */
@@ -361,10 +361,7 @@ async function showOverview() {
         <button class="btn primary" data-act="run" data-task="search" ${searching ? 'disabled' : !setup.cvs ? 'disabled title="Add your CV first"' : ''}>${searching ? '<span class="spin"></span>Searching…' : `${svg('search')}Search for jobs now`}</button>
       </div>
     </div>
-    ${o.sync_newer ? `<section class="card sync-banner"><header><h2>Continue where you left off</h2></header>
-      <p>Job Hunt on <b>${esc(o.sync_newer.device)}</b> saved newer data ${esc(ago(o.sync_newer.saved_at))}${o.sync_newer.jobs ? ` (${o.sync_newer.jobs} roles)` : ''}. Continue from it here? Job Hunt restarts with it, and what's on this computer now is kept in a "before-restore" folder.</p>
-      <div class="row"><button class="btn primary" data-act="syncContinue" data-folder="${esc(o.sync_newer.folder)}">Continue from ${esc(o.sync_newer.device)}</button>
-      <button class="btn ghost" data-act="syncDecline" data-saved="${esc(o.sync_newer.saved_at)}">Keep this computer's data</button></div></section>` : ''}
+    ${syncNewerHtml(o.sync_newer)}
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}
     ${inUseHtml(o.in_use)}
@@ -987,6 +984,11 @@ function cvHtml(blocks) {
 
 // ---- First-time setup, in one guided page ----
 const welcomed = () => { try { return !!sessionStorage.getItem('welcomed'); } catch { return true; } };
+/** Newer data from another computer (in Google Drive or a sync folder): continue from it here? */
+const syncNewerHtml = n => n ? `<section class="card sync-banner"><header><h2>Continue where you left off</h2></header>
+      <p>Job Hunt on <b>${esc(n.device)}</b> saved newer data ${esc(ago(n.saved_at))}${n.jobs ? ` (${n.jobs} roles)` : ''}. Continue from it here? Job Hunt restarts with it, and what's on this computer now is kept in a "before-restore" folder.</p>
+      <div class="row"><button class="btn primary" data-act="syncContinue" data-folder="${esc(n.folder)}">Continue from ${esc(n.device)}</button>
+      <button class="btn ghost" data-act="syncDecline" data-saved="${esc(n.saved_at)}">Keep this computer's data</button></div></section>` : '';
 async function showWelcome() {
   try { sessionStorage.setItem('welcomed', '1'); } catch {}
   const st = settingsCache = await api('/api/settings');
@@ -995,8 +997,8 @@ async function showWelcome() {
   const fresh = !(p.locations || []).length; // nothing saved yet: suggest this device's country and time zone
   const step = (n, done, title, body) => `<li class="card ${done ? 'done' : ''}"><h2>${done ? '✓ ' : ''}${esc(title)}</h2>${body}</li>`;
   page(`<div class="head"><div class="grow"><h1>Welcome to Job Hunt</h1><p class="muted">Five steps, about five minutes. You can change everything later in Settings.</p></div><a class="btn ghost" href="#overview">Skip for now</a></div>
-    ${overview.sync_newer ? '' : `<section class="card"><header><h2>Already using Job Hunt on another computer?</h2></header>
-      <p class="muted">If it syncs to Google Drive (Settings → Sync & backup), connect the same Google account here and Job Hunt offers to continue with all your CVs, applications and settings. Otherwise, start fresh below.</p>
+    ${overview.sync_newer ? syncNewerHtml(overview.sync_newer) : `<section class="card"><header><h2>Already using Job Hunt on another computer?</h2></header>
+      <p class="muted">Connect the same Google account here: Job Hunt finds your data in your Google Drive and offers to continue with all your CVs, applications and settings. (On the other computer, connecting Google turns that on.) Otherwise, start fresh below.</p>
       ${st.google.client ? `<div class="row"><button class="btn primary" data-act="google" ${st.google.connecting ? 'disabled' : ''}>${st.google.connected ? `Connected as ${esc(st.google.email || 'you')}: check again` : 'Connect Google'}</button>${st.google.connected ? '<span class="muted small">Nothing to continue from yet? Turn on sync on the other computer, wait a few minutes, then check again.</span>' : ''}</div>
         <div id="googlePaste" ${st.google.pasting ? '' : 'hidden'}>${googlePasteBox(st.google.paste_url)}</div>`
         : '<div class="row"><a class="btn" href="#settings/connections">Set up Google</a></div>'}</section>`}
@@ -1474,6 +1476,7 @@ async function showSettings(tab, sub) {
       </form></section>
     <section class="card" id="googleCard"><header><h2>Gmail, Google Calendar and Drive</h2>${st.google.connected ? `<span class="pill good">Connected${st.google.email ? ` · ${esc(st.google.email)}` : ''}</span>` : '<span class="pill">Optional</span>'}</header>
       <p class="muted">Job Hunt sorts your job email, drafts replies, books interviews in your calendar and keeps a private copy of your data in your own Drive. Everything stays in your Google account.</p>
+      ${st.google.connected && !st.sync.on && st.sync.drive_ready ? `<div class="advice"><b>Back up and sync to your Google Drive</b><p>Keeps everything in a private "Job Hunt" folder in your Drive, so you can install Job Hunt on any PC and pick up where you left off.</p><div class="row"><button class="btn primary" data-act="syncOn">Turn on</button></div></div>` : ''}
       ${st.google.connected ? `<div class="row">
           <button class="btn" data-act="google" ${st.google.connecting ? 'disabled' : ''}>${st.google.connecting ? '<span class="spin"></span>Waiting for Google…' : 'Reconnect Google'}</button>
           <button class="btn ghost" data-act="forget" data-what="google">Disconnect</button></div>`
@@ -1714,7 +1717,8 @@ async function showSettings(tab, sub) {
         <div class="kpi"><span class="kpi-l">Backup</span><span class="kpi-v">${b.last ? esc(ago(b.last)) : '–'}</span><span class="kpi-s">${y.drive_backup ? `in Google Drive ${esc(ago(y.drive_backup))}` : 'on this computer'}</span></div>
         <div class="kpi"><span class="kpi-l">Automatic sync</span><span class="kpi-v">${y.on ? esc((every.find(e => e[0] === y.every) || [0, `Every ${y.every} min`])[1].replace(' after a change', '')) : 'Off'}</span><span class="kpi-s">${y.on ? 'and when Job Hunt exits' : 'turn on sync below'}</span></div>
       </div>
-      <div class="row">${y.on ? `<button class="btn primary" data-act="syncNow" ${y.running ? 'disabled' : ''}>Sync now</button>` : ''}<button class="btn ${y.on ? '' : 'primary'}" data-act="backupNow">Back up now</button></div></section>`;
+      <div class="row">${y.on ? `<button class="btn primary" data-act="syncNow" ${y.running ? 'disabled' : ''}>Sync now</button>` : y.drive_ready ? '<button class="btn primary" data-act="syncOn">Turn on sync to Google Drive</button>' : '<a class="btn primary" href="#settings/connections">Connect Google to sync</a>'}<button class="btn" data-act="backupNow">Back up now</button></div>
+      ${y.on ? '' : '<p class="muted small">One click: your data goes to a private "Job Hunt" folder in your Google Drive and keeps itself up to date, with daily backups. On another PC, install Job Hunt and connect the same Google account to continue there.</p>'}</section>`;
     const sync = `<section class="card"><header><h2>Sync to Google Drive</h2>${y.on ? '<span class="pill good">On</span>' : ''}</header>
       <p class="muted">Pick up where you left off on any computer${server ? ', or move between this server and a PC' : ''}. Job Hunt keeps an up-to-date copy of everything in your own Google Drive; on another computer, install Job Hunt and connect the same Google account, and it finds your data and offers to continue from it. Use one at a time. Only you can see the copy.</p>
       <form data-form="sync" class="form">
@@ -2641,6 +2645,13 @@ async function act(el) {
       route();
     }, 'Looking up employee reviews (a minute or two)…');
   }
+  if (a === 'syncOn') {
+    return busy(async () => {
+      const r = await api('/api/sync/settings', { method: 'POST', body: { where: 'drive', on: true } });
+      settingsCache = null; await refreshOverview(); route();
+      toast(r.sync.newer ? `Job Hunt on ${r.sync.newer.device} has newer data in your Google Drive. Choose whether to continue from it.` : 'Synced and backed up to the Job Hunt folder in your Google Drive. It keeps itself up to date.');
+    }, 'Saving a copy to your Google Drive…');
+  }
   if (a === 'findApply') {
     return busy(async () => {
       const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/apply-link`, { method: 'POST' });
@@ -2855,7 +2866,8 @@ let settingsPoll;
 function pollSettings() {
   clearTimeout(settingsPoll);
   settingsPoll = setTimeout(async () => {
-    if (!location.hash.startsWith('#settings')) return;
+    // Settings, or the Welcome page (continuing from another computer starts there).
+    if (!location.hash.startsWith('#settings') && location.hash !== '#welcome') return;
     const st = await api('/api/settings').catch(() => null);
     if (!st) return;
     await refreshOverview();

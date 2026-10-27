@@ -852,10 +852,13 @@ https://. Each suggestion is checked against the real board afterwards, so give 
 
 fn company_rating_system() -> String {
     "You look up what employees say about one employer, for someone deciding whether to apply there.\n\n\
-Search the web (WebSearch, then WebFetch where a page opens) for the company's employee reviews: Glassdoor first, \
-then Indeed company reviews, Comparably, Kununu or the country's own review site. Search results often show the \
-rating and review count (\"4.1 ★ 1,234 reviews\") even when the page itself won't open; use them. Make sure it's \
-the same employer (the right country or the parent company), not one with a similar name.\n\
+Search the web (WebSearch; WebFetch where a page opens) for the company's employee reviews. Try several searches \
+before giving up: \"<company> Glassdoor reviews\", \"<company> Indeed reviews\", \"<company> employee reviews \
+rating\", and the name without Inc./Ltd./Group or with its parent company's name. Sites: Glassdoor, Indeed company \
+reviews, Comparably, Kununu, Bayt, AmbitionBox, or the country's own review site. Search results usually show the \
+rating and review count (\"4.1 ★ 1,234 reviews\") even when the page itself won't open: use them. A large employer \
+reviewed under its global name counts (a bank's or a government department's overall rating). Make sure it's the \
+same employer, not one with a similar name; a recruitment agency posting for an unnamed client has no rating.\n\
 - found: false (and the rest empty) if no reviews can be found.\n\
 - rating, reviews, source, url: the overall rating out of 5 and the number of reviews on the site with the most \
 reviews, its name, and the link to its reviews page.\n\

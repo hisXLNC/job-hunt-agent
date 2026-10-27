@@ -391,6 +391,32 @@ impl Agent {
         }
     }
 
+    /// Google was just connected: start using it, and keep your data safe in your own Google Drive
+    /// unless you've chosen how to sync before (then that choice stands).
+    pub fn google_connected(&self, email: &str) {
+        let _ = self.db().set("google.at", &now());
+        self.connect();
+        let first_time = self.secret("sync.on").is_empty();
+        if first_time && self.files.read().unwrap().is_some() {
+            let db = self.db();
+            let _ = db.set("sync.where", "drive");
+            let _ = db.set("sync.on", "1");
+            drop(db);
+            // A copy from another computer is there already: the Overview offers to continue from it.
+            if crate::sync::newer_elsewhere(self).is_none() {
+                if let Err(e) = crate::sync::push(self, true) {
+                    let _ = self.db().set("sync.error", &e.0);
+                }
+            }
+        }
+        let who = if email.is_empty() { String::new() } else { format!(" for {email}") };
+        if first_time {
+            self.note("Google connected", &format!("Job Hunt now reads job email, manages interviews and keeps your data synced and backed up in your own Google Drive{who}. Change it in Settings \u{2192} Sync & backup."));
+        } else {
+            self.note("Google connected", &format!("Job Hunt can now read job email and manage interviews{who}."));
+        }
+    }
+
     /// Whether Claude can be called at all (installed Claude Code, or an API key).
     pub fn claude_ready(&self) -> bool {
         match self.engine_name().as_str() {
@@ -2140,6 +2166,8 @@ replies and interviews, and a little lower for kinds that got none from several 
             bat, json!(if boards == 0 { json!(["goto:sources"]) } else if broken.is_empty() { json!(["test", "goto:sources"]) } else { json!(["test", "removeBroken", "goto:sources"]) })).as_object().cloned().map(|mut o| { o.insert("data".into(), json!(broken)); Value::Object(o) }).unwrap());
         // Job-alert emails
         let (aok, adetail, aat) = seen("alerts", "Job-alert");
+        // A test from before you (re)connected Google says nothing about it now.
+        let (aok, adetail) = if !aat.is_empty() && aat < self.secret("google.at") { (None, String::new()) } else { (aok, adetail) };
         out.push(row("alerts", "Job-alert emails", "Job listings", if !mail { "setup" } else { match aok { Some(true) => "ok", Some(false) => "problem", None => "unknown" } },
             if !mail { "Needs Gmail connected.".into() } else if adetail.is_empty() { "Read on every email check.".into() } else { adetail }, aat, json!(if mail { json!(["test"]) } else { json!(["goto:googleCard"]) })));
         // Phone, sync, backups
@@ -2542,6 +2570,10 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         if let Some(t) = self.limited() {
             add(&mut out, "warn", format!("Your Claude usage limit is reached. It resets {}; searching, scoring and tailoring wait until then, and pick up by themselves.", crate::util::reset_time(t, chrono::Utc::now())), "#settings/connections");
+        }
+        // Google connected, but your data is only on this computer: one click keeps it in your Drive.
+        if self.files.read().unwrap().is_some() && !crate::sync::enabled(self) && self.secret("sync.declined").is_empty() {
+            fix(&mut out, "warn", "Your Job Hunt data is only on this computer. Keep it backed up and synced in your own Google Drive, to pick up where you left off on any PC.".into(), "Turn on", "syncOn", "");
         }
         if !self.secret("google.token").is_empty() && !self.google_client().is_empty() && self.mail.read().unwrap().is_none() {
             add(&mut out, "problem", "Google is disconnected: job email isn't being read and follow-ups aren't drafted. Reconnect it.".into(), "#settings/connections");
@@ -3507,6 +3539,47 @@ replies and interviews, and a little lower for kinds that got none from several 
         });
     }
 
+    // --- fit forecast for postings scored before it existed ---------------------------------------
+
+    /// Postings to pick (and near misses) scored before the fit forecast existed, best first.
+    pub fn without_forecast(&self) -> Vec<Job> {
+        let bar = self.profile().score_threshold;
+        let mut jobs: Vec<Job> = self.db().jobs(None, 2000).unwrap_or_default().into_iter()
+            .filter(|j| j.score_potential.is_none() && j.score_after.is_none() && j.score.is_some())
+            .filter(|j| j.status == "queued" || (j.status == "skipped" && j.score.unwrap_or(0) >= bar - 15))
+            .collect();
+        jobs.sort_by_key(|j| (j.status != "queued", std::cmp::Reverse(j.score.unwrap_or(0))));
+        jobs
+    }
+
+    /// Score a few of them again for their forecast; the score you've seen stays. Returns how many.
+    pub fn forecast_missing(&self, max: usize) -> usize {
+        let profile = self.profile();
+        let cvs = self.cv_texts(&profile);
+        if cvs.is_empty() {
+            return 0;
+        }
+        let mut n = 0;
+        for job in self.without_forecast().into_iter().take(max) {
+            if self.limited().is_some() {
+                break;
+            }
+            match self.llm().score(&cvs, &self.scoring_guidance(&profile), &job) {
+                Ok(s) => {
+                    // Not below the score already shown: a forecast never reads as a drop.
+                    let p = s.potential.unwrap_or(s.score).max(job.score.unwrap_or(0));
+                    let _ = self.db().update_job(&job.id, &[("score_potential", p.into())]);
+                    n += 1;
+                }
+                Err(e) => {
+                    let _ = self.db().log(Some(&job.id), "forecast:error", &e.0);
+                    break;
+                }
+            }
+        }
+        n
+    }
+
     // --- what employees say ----------------------------------------------------------------------
 
     /// Look up what employees say about a company, and keep it for every job there.
@@ -3521,7 +3594,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         Ok(v)
     }
 
-    /// Companies of roles you're considering whose rating is missing or old (60 days; 14 when none
+    /// Companies of roles you're considering whose rating is missing or old (60 days; 7 when none
     /// was found), best fit first, with a place for each.
     pub fn companies_to_rate(&self) -> Vec<(String, String)> {
         const CONSIDERING: [&str; 7] = ["queued", "ready", "approved", "applied", "interviewing", "offer", "saved"];
@@ -3536,7 +3609,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 None => true,
                 Some(r) => {
                     let days = r["at"].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| (now - t.with_timezone(&Utc)).num_days()).unwrap_or(999);
-                    days >= if r["found"].as_bool() == Some(true) { 60 } else { 14 }
+                    days >= if r["found"].as_bool() == Some(true) { 60 } else { 7 }
                 }
             })
             .map(|j| (j.company, j.location))
@@ -3554,7 +3627,10 @@ replies and interviews, and a little lower for kinds that got none from several 
                 Ok(_) => n += 1,
                 Err(e) => {
                     let _ = self.db().log(None, "ratings:error", &format!("{company}: {}", e.0));
-                    break;
+                    // One company that didn't work doesn't stop the rest; a problem with Claude itself does.
+                    if self.limited().is_some() || e.0.contains("Claude Code") || e.0.contains("signed in") {
+                        break;
+                    }
                 }
             }
         }
@@ -4163,9 +4239,16 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     if crate::backup::due(agent) && !agent.is_running("backup") {
         out.push("backup");
     }
-    // Company ratings for roles you're considering: a few every 20 minutes, through Claude Code.
+    // Fit forecasts for postings scored before they existed: a few every 15 minutes.
+    let forecast_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.forecast"))
+        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 15)
+        .unwrap_or(false);
+    if ready && !forecast_lately && !agent.budget_wait() && !agent.is_running("forecast") && !agent.is_running("search") && !agent.without_forecast().is_empty() {
+        out.push("forecast");
+    }
+    // Company ratings for roles you're considering: a few every 10 minutes, through Claude Code.
     let rated_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.ratings"))
-        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 20)
+        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 10)
         .unwrap_or(false);
     if ready && !rated_lately && agent.ratings_auto() && agent.engine_name() == "code" && !agent.budget_wait() && !agent.is_running("ratings") && !agent.is_running("search") && !agent.companies_to_rate().is_empty() {
         out.push("ratings");
@@ -4300,11 +4383,19 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                     }
                 });
             }
+            "forecast" => {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    let Ok(_g) = a.claim("forecast") else { return };
+                    a.forecast_missing(6);
+                    let _ = a.db().set("last.forecast", &now());
+                });
+            }
             "ratings" => {
                 let a = agent.clone();
                 std::thread::spawn(move || {
                     let Ok(_g) = a.claim("ratings") else { return };
-                    a.rate_companies(4);
+                    a.rate_companies(6);
                     let _ = a.db().set("last.ratings", &now());
                 });
             }
@@ -5246,7 +5337,7 @@ mod tests {
         ])).unwrap();
         assert_eq!(s.agent.companies_to_rate().len(), 2, "Acme Inc. and Acme are one employer");
         assert_eq!(s.agent.rate_companies(5), 2);
-        assert!(s.agent.companies_to_rate().is_empty(), "kept for 60 days (14 when none was found)");
+        assert!(s.agent.companies_to_rate().is_empty(), "kept for 60 days (7 when none was found)");
         let r = s.agent.db().rating("ACME Inc").unwrap();
         assert_eq!((r["rating"].as_f64(), r["reviews"].as_i64(), r["source"].as_str()), (Some(4.1), Some(1234), Some("Glassdoor")));
         assert_eq!(s.agent.db().rating("Unknown Co").unwrap()["found"], false);
