@@ -1326,8 +1326,10 @@ pub fn searches(p: &Profile, max: usize) -> Vec<(String, String)> {
         .map(|t| format!("Senior {t}"))
         .filter(|s| !titles.iter().any(|x| x.eq_ignore_ascii_case(s)))
         .collect();
-    let mut out: Vec<(String, String)> = places.iter().flat_map(|w| titles.iter().map(move |t| (t.clone(), w.clone()))).collect();
-    out.extend(places.iter().flat_map(|w| senior.iter().map(move |t| (t.clone(), w.clone()))));
+    // Each title in every place before the next title, so a source that runs only a few searches
+    // still looks in each of your places, not only the first.
+    let mut out: Vec<(String, String)> = titles.iter().flat_map(|t| places.iter().map(move |w| (t.clone(), w.clone()))).collect();
+    out.extend(senior.iter().flat_map(|t| places.iter().map(move |w| (t.clone(), w.clone()))));
     out.into_iter().take(max).collect()
 }
 
@@ -1805,14 +1807,15 @@ mod tests {
         let p = crate::testkit::sample_profile();
         let q = searches(&p, 50);
         assert!(q.len() > 2 && q.len() < 50);
-        // The GTA cities are one search around Toronto; every title there comes first.
-        // Senior versions come after every regular search.
+        // The GTA cities are one search around Toronto; each title is searched in every place before
+        // the next. Senior versions come after every regular search.
         let first_senior = q.iter().position(|(t, _)| t.starts_with("Senior ") && !p.tracks.iter().any(|x| x.titles.contains(t))).unwrap();
         assert!(q[first_senior..].iter().all(|(t, _)| t.starts_with("Senior ")), "{q:?}");
         let places: Vec<&str> = q[..first_senior].iter().map(|(_, w)| w.as_str()).collect();
-        let first_other = places.iter().position(|w| *w != "Toronto, ON").unwrap();
-        assert!(first_other > 0 && places[first_other..].iter().all(|w| *w == "Ontario"), "{places:?}");
+        assert_eq!(&places[..4], &["Toronto, ON", "Ontario", "Toronto, ON", "Ontario"], "{places:?}");
         assert_eq!(searches(&p, 3).len(), 3);
+        // Two searches reach both places.
+        assert_eq!(searches(&p, 2).iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>(), vec!["Toronto, ON", "Ontario"]);
     }
 
     #[test]

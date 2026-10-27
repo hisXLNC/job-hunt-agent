@@ -489,6 +489,9 @@ pub const REGIONS: &[Region] = &[
     Region { name: "Ottawa–Gatineau", city: "Ottawa", country: "ca", centre: "Ottawa, ON", members: &[
         "National Capital Region", "Ottawa-Gatineau", "Ottawa", "Gatineau", "Kanata", "Nepean", "Orléans", "Orleans, ON",
     ] },
+    Region { name: "Halifax area", city: "Halifax", country: "ca", centre: "Halifax, NS", members: &[
+        "Halifax Regional Municipality", "Halifax, NS", "Halifax", "Dartmouth", "Bedford, NS", "Lower Sackville", "Cole Harbour", "Burnside, NS",
+    ] },
     Region { name: "Calgary area", city: "Calgary", country: "ca", centre: "Calgary, AB", members: &["Calgary Region", "Calgary Metropolitan", "Calgary", "Airdrie", "Cochrane, AB", "Chestermere", "Okotoks"] },
     Region { name: "New York City area", city: "New York", country: "us", centre: "New York, NY", members: &[
         "New York City Metropolitan Area", "NYC", "New York", "Manhattan", "Brooklyn", "Bronx", "Staten Island", "Jersey City",

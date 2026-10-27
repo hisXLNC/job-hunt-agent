@@ -10,7 +10,7 @@ use crate::profile::Profile;
 use crate::slots::{free_slots, is_free, parse_time, weekday_after};
 use crate::sources::{fetch_all, Posting};
 use crate::util::now;
-use crate::util::{file_word, short_hash, slug};
+use crate::util::{short_hash, slug};
 use crate::{err, Error, R};
 use chrono::{Duration, Utc};
 use serde::Serialize;
@@ -1109,8 +1109,8 @@ replies and interviews, and a little lower for kinds that got none from several 
         if self.engine_name() != "code" {
             return err("searching Indeed needs Claude Code on this PC. Choose it in Settings → Accounts, or turn Indeed off in Job sources.");
         }
-        let place = profile.search_places().into_iter().next().unwrap_or_else(|| profile.country());
-        let mut searches: Vec<(String, String)> = titles.iter().take(8).map(|t| (t.clone(), place.clone())).collect();
+        // Your titles across all your places (each title in every place before the next).
+        let mut searches = crate::sources::searches(&profile, 8);
         if profile.remote_ok {
             searches.extend(titles.iter().take(2).map(|t| (t.clone(), "remote".to_string())));
         }
@@ -3066,10 +3066,18 @@ replies and interviews, and a little lower for kinds that got none from several 
         self.data.join("applications").join(format!("{}-{}", slug(&format!("{} {}", job.company, job.title), 60), short_hash(&job.id)))
     }
 
+    /// "Ibrahim Al-Taha - Acme.docx" and "Ibrahim Al-Taha - Acme - Cover Letter.docx": what an
+    /// employer sees when they download them.
     fn file_names(&self, job: &Job) -> (String, String) {
-        let name = file_word(&self.profile().name);
-        let company = file_word(&job.company);
-        (format!("{name}_CV_{company}.docx"), format!("{name}_Cover_Letter_{company}.docx"))
+        let name = crate::util::file_words(&self.profile().name);
+        let company = crate::util::file_words(&job.company);
+        let base = match (name.is_empty(), company.is_empty()) {
+            (false, false) => format!("{name} - {company}"),
+            (false, true) => name,
+            (true, false) => format!("CV - {company}"),
+            (true, true) => "CV".into(),
+        };
+        (format!("{base}.docx"), format!("{base} - Cover Letter.docx"))
     }
 
     pub fn tailor(&self, job_id: &str, track: Option<&str>) -> R<Job> {
@@ -5310,7 +5318,7 @@ mod tests {
         let tailored = cv::open(Path::new(job.cv_path.as_ref().unwrap())).unwrap();
         assert!(tailored.plain_text().contains("Led vendor management of contracted"));
         assert!(Path::new(job.letter_path.as_ref().unwrap()).exists());
-        assert!(job.cv_path.unwrap().ends_with("Jane_Candidate_CV_Acme.docx"));
+        assert!(job.cv_path.unwrap().ends_with("Jane Candidate - Acme.docx"));
         assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().status, "skipped");
         assert!(s.agent.db().job("test:3").unwrap().unwrap().reasoning.unwrap().starts_with("Filtered out: location"));
         assert_eq!(*s.notes.lock().unwrap(), vec!["1 application ready"]);

@@ -1637,7 +1637,7 @@ mod tests {
         call(&agent, &host, "POST", "/api/jobs/test:1/open", json!({"what": "cv"}));
         let opened = fh.opened.lock().unwrap().clone();
         assert_eq!(opened[0], "https://acme.example/jobs/1");
-        assert!(opened[1].ends_with("Jane_Candidate_CV_Acme.docx"));
+        assert!(opened[1].ends_with("Jane Candidate - Acme.docx"));
         let (_, u) = call(&agent, &host, "GET", "/api/update/check", Value::Null);
         assert_eq!((u["version"].as_str(), u["notified"].as_bool()), (Some("1.1.0"), Some(false)));
         assert_eq!(call(&agent, &host, "POST", "/api/update/install", Value::Null).1["installed"], true);

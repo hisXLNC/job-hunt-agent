@@ -112,23 +112,17 @@ pub fn short_hash(s: &str) -> String {
     d.iter().take(6).map(|b| format!("{b:02x}")).collect()
 }
 
-/// Letters, digits and underscores only, for file names.
 /// Standard base64, for callers without the base64 crate (the desktop app).
 pub fn base64_encode(bytes: &[u8]) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
-pub fn file_word(s: &str) -> String {
-    let w: String = s.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
-    let mut out = String::new();
-    for part in w.split('_').filter(|p| !p.is_empty()) {
-        if !out.is_empty() {
-            out.push('_');
-        }
-        out.push_str(part);
-    }
-    out
+/// Words for a file name as people write them ("Ibrahim Al-Taha", "Smith & Co."): only the characters
+/// Windows doesn't allow in file names become spaces, runs of spaces become one, and no dot ends it.
+pub fn file_words(s: &str) -> String {
+    let w: String = s.chars().map(|c| if c.is_control() || "\\/:*?\"<>|".contains(c) { ' ' } else { c }).collect();
+    w.split_whitespace().collect::<Vec<_>>().join(" ").trim_end_matches(['.', ' ']).to_string()
 }
 
 #[cfg(test)]
@@ -159,7 +153,8 @@ mod tests {
     #[test]
     fn helpers() {
         assert_eq!(slug("Big Bank  Senior TPM, Payments!", 60), "big-bank-senior-tpm-payments");
-        assert_eq!(file_word("Mary-Jane O'Neil"), "Mary_Jane_O_Neil");
+        assert_eq!(file_words("Mary-Jane  O'Neil"), "Mary-Jane O'Neil");
+        assert_eq!(file_words("Smith/Jones: Tax & Co."), "Smith Jones Tax & Co");
         assert_eq!(unescape("A &amp; B &#8211; &#x2019;"), "A & B – \u{2019}");
         assert_eq!(escape("a<b & c"), "a&lt;b &amp; c");
     }

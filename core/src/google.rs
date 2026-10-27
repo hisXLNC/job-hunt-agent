@@ -285,7 +285,9 @@ impl Google {
             .send()?
             .json()?;
         if r.get("error").and_then(|e| e.as_str()) == Some("invalid_grant") {
-            return Err(Error("Google access has expired or was removed. Reconnect Google in Settings → Accounts.".into()));
+            return Err(Error("Google signed Job Hunt out. If that happens about a week after you connect, the Google project is still in Testing, \
+and Google signs it out every 7 days: publish it once at console.cloud.google.com \u{2192} Google Auth Platform \u{2192} Audience \u{2192} Publish app. \
+Then reconnect Google in Settings \u{2192} Connections.".into()));
         }
         let email = t.email.clone();
         *t = token_from(&r, Some(&t.refresh_token))?;
