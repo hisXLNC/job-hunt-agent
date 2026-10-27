@@ -84,6 +84,8 @@ const ICON = {
   check: '<path d="m5 12 5 5 9-10"/>',
   results: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
 };
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
@@ -171,8 +173,8 @@ const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
 const scoreBadge = n => n == null ? '' : `<span class="score ${n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo'}" title="Fit score">${n}</span>`;
 /** "fit 72 → 85": your CV's fit before tailoring and the tailored CV's after. */
 const fitChange = j => j.score != null && j.score_after != null && j.score_after !== j.score ? `fit ${j.score} → <b>${j.score_after}</b>` : '';
-/** A company's employee rating, as a small star tag: "★ 4.1". */
-const ratingTag = r => r?.found && r.rating != null ? ` <span class="stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}" title="Employees rate it ${r.rating.toFixed(1)} out of 5${r.reviews ? `, ${r.reviews.toLocaleString()} reviews` : ''}${r.source ? ` on ${esc(r.source)}` : ''}">★ ${r.rating.toFixed(1)}</span>` : '';
+/** A company's employee rating, as a small star tag with the rating out of 5. */
+const ratingTag = r => r?.found && r.rating != null ? ` <span class="stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}" title="Employees rate it ${r.rating.toFixed(1)} out of 5${r.reviews ? `, ${r.reviews.toLocaleString()} reviews` : ''}${r.source ? ` on ${esc(r.source)}` : ''}">${svg('star')}${r.rating.toFixed(1)}</span>` : '';
 /** What employees say, as a card for the job page. */
 function ratingCard(r, busy, company) {
   const head = `<header><h2>What employees say</h2>${busy ? '<span class="muted small"><span class="spin"></span>Looking…</span>' : `<button class="btn ${r ? 'ghost' : ''} sm" data-act="rateCompany">${r ? 'Look again' : 'Look up reviews'}</button>`}</header>`;
@@ -182,7 +184,7 @@ function ratingCard(r, busy, company) {
   const list = (label, xs, cls) => (xs || []).length ? `<div class="small ${cls}"><b>${label}</b><ul>${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   return `<section class="card">${head}
     <div class="row" style="gap:22px;align-items:flex-end">
-      <div><div class="big-stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}">★ ${r.rating.toFixed(1)}</div><span class="muted small">${r.reviews ? `${r.reviews.toLocaleString()} reviews` : 'reviews'}${r.source ? ` on ${r.url ? `<a href="#" data-act="link" data-url="${esc(r.url)}">${esc(r.source)}</a>` : esc(r.source)}` : ''}</span></div>
+      <div><div class="big-stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}">${svg('star')}${r.rating.toFixed(1)}</div><span class="muted small">${r.reviews ? `${r.reviews.toLocaleString()} reviews` : 'reviews'}${r.source ? ` on ${r.url ? `<a href="#" data-act="link" data-url="${esc(r.url)}">${esc(r.source)}</a>` : esc(r.source)}` : ''}</span></div>
       ${r.work_life != null ? `<div class="small">Work-life balance<br>${five(r.work_life)}</div>` : ''}
       ${r.recommend != null ? `<div class="small">Would recommend it<br><b>${r.recommend}%</b></div>` : ''}
     </div>
@@ -214,7 +216,7 @@ function eventText(e) {
   if (k.startsWith('email:')) return `Email: ${esc((CATEGORY[k.slice(6)] || [k.slice(6)])[0])} · ${esc(e.detail)}`;
   if (k.endsWith(':error')) return `<span style="color:var(--crit)">Problem</span> · ${esc(e.detail)}`;
   if (k === 'backup' && e.detail.startsWith('saved ')) return 'Backup saved';
-  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', care: 'Interview reminders', 'apply-link': 'Company site', ratings: 'Company ratings' };
+  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', care: 'Interview reminders', 'apply-link': 'Company site', ratings: 'Company ratings', 'added-again': 'Sent again', forecast: 'Fit forecast' };
   return `${esc(names[k] || k)} · ${esc(e.detail)}`;
 }
 const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">${esc(e.company)} – ${esc(e.title)}</a> · ` : '';
@@ -349,18 +351,26 @@ async function showOverview() {
   const maxStage = Math.max(1, ...stages.map(s => c[s] || 0));
   const maxWeek = Math.max(1, ...o.weeks.map(w => w.count));
   const searching = o.running.includes('search');
+  // Today's one fact, from the data: what's waiting on you.
+  const waiting = [c.ready ? `${c.ready} ready to approve` : '', (o.approved || []).length ? `${o.approved.length} to submit` : '', c.queued ? `${c.queued} to pick from` : '', o.interviews.length ? `${o.interviews.length} interview${o.interviews.length === 1 ? '' : 's'} coming up` : ''].filter(Boolean);
+  const fact = waiting.length ? `${waiting.join(', ').replace(/, ([^,]*)$/, ' and $1')}.` : 'Nothing is waiting on you.';
   page(`
-    <div class="head">
+    <div class="head greet">
       <div class="grow">
-        <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
         <h1>${greeting()}${first ? `, ${esc(first)}` : ''}</h1>
-        <p class="muted">Last job search ${ago(o.last_search)} · last email check ${ago(o.last_inbox)}</p>
+        <p class="muted" style="margin-top:8px">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })} · ${esc(fact)}</p>
       </div>
       <div class="row">
         <button class="btn" data-act="run" data-task="inbox" ${setup.google ? '' : 'disabled title="Connect Google first"'}>${svg('mail')}Check email</button>
         <button class="btn primary" data-act="run" data-task="search" ${searching ? 'disabled' : !setup.cvs ? 'disabled title="Add your CV first"' : ''}>${searching ? '<span class="spin"></span>Searching…' : `${svg('search')}Search for jobs now`}</button>
       </div>
     </div>
+    <section class="kpis">
+      <a class="kpi" href="#pipeline"><span class="kpi-l">Ready to approve</span><span class="kpi-v">${c.ready || 0}</span><span class="kpi-s">${c.queued ? `${c.queued} more to pick from` : 'Tailored CV and cover letter each'}</span></a>
+      <div class="kpi"><span class="kpi-l">Applied this week</span><span class="kpi-v">${o.this_week}${o.weekly_goal ? `<span class="muted" style="font-size:.5em"> / ${o.weekly_goal}</span>` : ''}</span>${o.weekly_goal ? `<span class="meter"><i style="width:${Math.min(100, o.this_week / o.weekly_goal * 100)}%"></i></span>` : ''}<span class="kpi-s">${delta === 0 ? 'Same as last week' : `<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span> vs last week`}</span></div>
+      <div class="kpi"><span class="kpi-l">Interviews coming up</span><span class="kpi-v">${o.interviews.length}</span><span class="kpi-s">${next ? `Next: ${esc(fmtWhen(next.start))}` : 'None booked yet'}</span></div>
+      <div class="kpi"><span class="kpi-l">Response rate</span><span class="kpi-v">${pct(o.response_rate)}</span><span class="kpi-s">${o.applied_total ? `Of ${o.applied_total} application${o.applied_total === 1 ? '' : 's'} sent` : 'No applications sent yet'}</span></div>
+    </section>
     ${syncNewerHtml(o.sync_newer)}
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}
@@ -369,20 +379,18 @@ async function showOverview() {
       ${h.action === 'removeBroken' ? `<span class="row" style="display:inline-flex;margin-left:6px"><button class="btn" data-act="removeBroken" data-boards="${esc(JSON.stringify(h.data))}">Remove ${h.data.length === 1 ? 'it' : 'them'}</button><button class="btn primary" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button></span>` : ''}
       ${h.fix ? `<button class="btn sm" style="margin-left:6px" data-act="${esc(h.fix.act)}" data-task="${esc(h.fix.task)}">${esc(h.fix.label)}</button>` : ''}
       ${h.link && h.link !== '#overview' ? `<a href="${esc(h.link)}">Fix it</a>` : ''}</li>`).join('')}</ul><div id="healthIdeas" class="ideas"></div></section>` : ''}
-    ${todoHtml(o)}
-    ${showSteps && neededDone ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && !st[0]).map(([, t, d, href, key]) =>
-      `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
-    ${o.progress ? progressHtml(o.progress) : reportHtml(o.last_report)}
-    <section class="kpis">
-      <a class="kpi" href="#pipeline"><span class="kpi-l">Ready to approve</span><span class="kpi-v">${c.ready || 0}</span><span class="kpi-s">${c.queued ? `${c.queued} more to pick from` : 'Tailored CV and cover letter each'}</span></a>
-      <div class="kpi"><span class="kpi-l">Applied this week</span><span class="kpi-v">${o.this_week}${o.weekly_goal ? `<span class="muted" style="font-size:.5em"> / ${o.weekly_goal}</span>` : ''}</span>${o.weekly_goal ? `<span class="meter"><i style="width:${Math.min(100, o.this_week / o.weekly_goal * 100)}%"></i></span>` : ''}<span class="kpi-s">${delta === 0 ? 'Same as last week' : `<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span> vs last week`}</span></div>
-      <div class="kpi"><span class="kpi-l">Interviews coming up</span><span class="kpi-v">${o.interviews.length}</span><span class="kpi-s">${next ? `Next: ${esc(fmtWhen(next.start))}` : 'None booked yet'}</span></div>
-      <div class="kpi"><span class="kpi-l">Response rate</span><span class="kpi-v">${pct(o.response_rate)}</span><span class="kpi-s">${o.applied_total ? `Of ${o.applied_total} application${o.applied_total === 1 ? '' : 's'} sent` : 'No applications sent yet'}</span></div>
-    </section>
+    <div class="home-grid">
+      <div class="stack">${todoHtml(o)}</div>
+      <div class="stack">
+        ${o.progress ? progressHtml(o.progress) : reportHtml(o.last_report)}
+        ${showSteps && neededDone ? `<section class="card optional-steps"><h2>Optional</h2>${steps.filter(st => st[4] && !st[0]).map(([, t, d, href, key]) =>
+          `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
+      </div>
+    </div>
     <details class="card"><summary><b>Recent activity</b></summary>
       ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
     </details>
-    <p class="muted small" style="text-align:center"><a href="#results">Results: what's working</a> · <a href="#calendar">Calendar</a></p>`);
+    <p class="muted small">Last job search ${ago(o.last_search)} · last email check ${ago(o.last_inbox)} · <a href="#results">Results: what's working</a></p>`);
 }
 
 // ---- Applications ----
@@ -496,7 +504,7 @@ const CAN_CHOOSE = ['skipped', 'dismissed', 'saved'];
 /** The next step for a job, right on its row. */
 function rowActions(j) {
   const id = esc(j.id);
-  if (j.status === 'ready') return `<button class="btn primary sm" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">Approve</button><button class="btn ghost sm" data-act="stage" data-status="dismissed" data-job="${id}" data-from="ready" title="Not interested">✕</button>`;
+  if (j.status === 'ready') return `<button class="btn primary sm" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">Approve</button><button class="btn ghost sm" data-act="stage" data-status="dismissed" data-job="${id}" data-from="ready" title="Not interested">${svg('close')}</button>`;
   if (j.status === 'approved') return `<a class="btn primary sm" href="#apply/${encodeURIComponent(j.id)}">Apply</a>`;
   if (j.status === 'queued') return `<button class="btn sm" data-act="tailorPicked" data-job="${id}">Tailor</button>`;
   if (['skipped', 'dismissed'].includes(j.status)) return `<button class="btn ghost sm" data-act="tailorAnyway" data-job="${id}">Tailor anyway</button>`;
@@ -825,18 +833,18 @@ function todoHtml(o) {
       return Object.entries(byCv).map(([t, list]) => `${many ? `<h4 class="pick-cv">From your ${esc(trackLabel(t) || 'main')} CV</h4>` : ''}${list.map(j => `<div class="pick-item"><label class="todo-row pick"><input type="checkbox" data-pick="${esc(j.id)}">
       ${scoreBadge(j.score)}${reachTag(j)}
       <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${esc(j.company)}${ratingTag(j.rating)}${j.location ? ` · ${esc(j.location)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''} · ${ageTag(j)}</span></span>
-      <span class="row todo-act"><a class="btn ghost" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">✕</button></span></label>
+      <span class="row todo-act"><a class="btn ghost" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></label>
       ${j.reasoning || (j.red_flags || []).length ? `<details class="pick-why"><summary class="small muted">Why it fits${(j.red_flags || []).length ? ` · ${j.red_flags.length} red flag${j.red_flags.length === 1 ? '' : 's'}` : ''}</summary><p class="small">${esc(j.reasoning || '')}</p>${(j.red_flags || []).length ? `<ul class="flags small">${j.red_flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>` : ''}</div>`).join('')}`).join('');
     })()}
     <div class="row" style="margin-top:8px"><button class="btn primary" data-act="tailorPicked" disabled>Tailor selected</button>${picking.length > 5 ? '<button class="btn" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div></div>`]);
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
-  if (o.ready?.length) groups.push([`Ready to approve (${o.counts.ready}) <a class="btn primary sm" href="#review" style="margin-left:8px">Review them one by one</a>`, o.ready.map(j => row(j, [fitChange(j), j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
-    `<a class="btn primary" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
-     <button class="btn ghost" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">✕</button>`)).join('')]);
+  if (o.ready?.length) groups.push([`Ready to approve (${o.counts.ready}) <a class="btn sm" href="#review" style="margin-left:8px">Review them one by one</a>`, o.ready.map(j => row(j, [fitChange(j), j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : ''].filter(Boolean).join(' · '),
+    `<a class="btn" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
+     <button class="btn ghost" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`)).join('')]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
-    `<button class="btn primary" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
+    `<button class="btn" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
   if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, j.location ? esc(j.location) : '',
-    `<a class="btn primary" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
+    `<a class="btn" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
      <button class="btn ghost" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,
     o.quiet.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}, no reply`,
@@ -894,10 +902,21 @@ function reportHtml(r) {
     </div>
     <p class="muted small">Also set up daily job alerts on LinkedIn, Indeed or your country's job sites for your titles, sent to your Gmail: Job Hunt reads them on every email check. If many postings are set aside for their location or title, widen your locations or add titles in <a href="#cvs">Your CVs</a>.</p>
     <div id="moreIdeas" class="ideas"></div></details>` : '';
-  return `<section class="card"><header><h2>Last search</h2><a class="btn ghost" href="#pipeline/postings">See the postings</a></header>
-    <div class="facts"><span><b>${r.found}</b> postings found</span><span><b>${r.new}</b> new</span>${r.known ? `<span><b>${r.known}</b> seen before</span>` : ''}<span title="${esc(why)}"><b>${r.filtered}</b> set aside (title or place didn't match)${why ? ` <span class="muted small">(${esc(why)})</span>` : ''}</span><span><b>${r.scored}</b> checked by Claude</span><span><b>${r.tailored}</b> tailored</span>${r.to_pick ? `<span><b>${r.to_pick}</b> to pick from</span>` : ''}${r.deferred ? `<span><b>${r.deferred}</b> left for next time</span>` : ''}${r.closed ? `<span><b>${r.closed}</b> closed</span>` : ''}</div>
-    ${(r.by_source || []).length ? `<p class="small muted" style="margin:8px 0 0">From: ${r.by_source.map(x => `${esc(x.name)} <b>${x.found}</b>${x.failed ? ` <span class="bad-text">(${x.failed === x.searches ? 'failed' : `${x.failed} of ${x.searches} searches failed`})</span>` : ''}`).join(' · ')}</p>` : ''}
-    ${probs.length ? `<details style="margin-top:8px"><summary class="small">${probs.length} problem${probs.length === 1 ? '' : 's'}</summary><ul class="flags">${probs.slice(0, 12).map(p => `<li>${esc(p)}</li>`).join('')}</ul></details>` : ''}
+  const src = r.by_source || [];
+  const broken = src.filter(x => x.failed && x.failed >= (x.searches || 1));
+  const n = v => Number(v || 0).toLocaleString();
+  return `<section class="card"><header><h2>Last search</h2><a class="btn ghost sm" href="#pipeline/postings">Postings</a></header>
+    <div class="facts-list">
+      <div><span class="kpi-l">Found</span><b class="num">${n(r.found)}</b></div>
+      <div><span class="kpi-l">New</span><b class="num">${n(r.new)}</b></div>
+      <div><span class="kpi-l">To pick from</span><b class="num">${n(r.to_pick)}</b></div>
+      <div><span class="kpi-l">Tailored</span><b class="num">${n(r.tailored)}</b></div>
+    </div>
+    ${src.length ? `<details class="small"><summary>From ${src.length} source${src.length === 1 ? '' : 's'}${broken.length ? ` · <span class="bad-text">${broken.length} didn't work</span>` : ''}</summary>
+      <table class="mini">${[...src].sort((a, b) => (b.failed >= (b.searches || 1)) - (a.failed >= (a.searches || 1)) || b.found - a.found).map(x => `<tr><td>${esc(sourceName(x.name))}</td><td class="num">${n(x.found)}</td><td>${x.failed >= (x.searches || 1) ? '<span class="bad-text">Didn\'t work</span>' : x.failed ? `<span class="muted">${x.failed} of ${x.searches} searches failed</span>` : ''}</td></tr>`).join('')}</table>
+      ${broken.length ? '<p style="margin-top:6px"><a href="#settings/sources">Fix or turn them off in Job sources</a></p>' : ''}</details>` : ''}
+    <details class="small"><summary>More detail</summary><p style="margin-top:6px">${n(r.known)} seen before · ${n(r.filtered)} set aside (title or place didn't match${why ? `: ${esc(why)}` : ''}) · ${n(r.scored)} checked by Claude${r.deferred ? ` · ${n(r.deferred)} left for next time` : ''}${r.closed ? ` · ${n(r.closed)} closed` : ''}</p>
+      ${probs.length ? `<ul class="flags">${probs.slice(0, 12).map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}</details>
     ${more}
   </section>`;
 }
@@ -1190,7 +1209,7 @@ async function showCalendar() {
     if (i.kind === 'deadline' && i.status === 'queued') acts = `<button class="btn sm" data-act="tailorPicked" data-job="${id}">Tailor</button>`;
     if (i.kind === 'deadline' && i.status === 'ready') acts = `<button class="btn primary sm" data-act="approve" data-job="${id}" data-email="${esc(i.apply_email || '')}">Approve</button>`;
     if (i.kind === 'google' && i.suggest) acts = `<span class="muted small">Interview for ${esc(i.suggest.company)}?</span><button class="btn sm" data-act="calLink" data-id="${esc(i.id)}" data-job="${esc(i.suggest.job_id)}" title="Show it with that application and move it to Interviewing">Link to application</button>`;
-    if (i.local && i.kind === 'interview') acts += `<button class="btn ghost sm" data-act="calDelete" data-id="${esc(i.id)}" title="Remove this interview, its prep time and reminders">✕</button>`;
+    if (i.local && i.kind === 'interview') acts += `<button class="btn ghost sm" data-act="calDelete" data-id="${esc(i.id)}" title="Remove this interview, its prep time and reminders">${svg('close')}</button>`;
     return `<div class="cal-row ${past ? 'past' : ''} ${i.kind === 'google' ? 'gcal' : ''}"><span class="cal-t">${i.all_day ? (i.overdue ? '<b style="color:var(--crit)">Due</b>' : 'All day') : esc(timeOf(i.at))}</span>
       <span class="pill ${cls}">${label}</span><span class="grow"><b>${esc(i.title)}</b>${job ? `<br><span class="small">${job}</span>` : ''}</span><span class="row todo-act">${acts}</span></div>`;
   };
@@ -1416,7 +1435,7 @@ function placePicker(name, values, country) {
   const more = (c?.cities || []).filter(x => !has(x));
   return `<div class="places" data-places="${name}" data-country="${esc(country)}">
     <textarea name="${name}" hidden>${esc(lines(picked))}</textarea>
-    <div class="chips">${picked.map(x => `<button type="button" class="chip on" data-act="placeDrop" data-place="${esc(x)}" title="Remove">${esc(x)} ✕</button>`).join('') || '<span class="muted small">None yet: anywhere in the country.</span>'}</div>
+    <div class="chips">${picked.map(x => `<button type="button" class="chip on" data-act="placeDrop" data-place="${esc(x)}" title="Remove">${esc(x)} ${svg('close')}</button>`).join('') || '<span class="muted small">None yet: anywhere in the country.</span>'}</div>
     <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input type="text" class="place-input" list="cities-${name}" placeholder="Type a city or area" style="flex:1"><datalist id="cities-${name}">${(c?.cities || []).map(x => `<option value="${esc(x)}">`).join('')}</datalist><button type="button" class="btn sm" data-act="placeAdd">Add</button></div>
     ${more.length ? `<div class="small muted" style="margin-top:8px">Popular in ${esc(c.name)}:</div><div class="chips">${more.map(x => `<button type="button" class="chip" data-act="placePick" data-place="${esc(x)}">+ ${esc(x)}</button>`).join('')}</div>` : ''}
   </div>`;
@@ -1563,10 +1582,11 @@ async function showSettings(tab, sub) {
     </div>
     <section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
       <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and tailors your CV. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
-      ${desk ? `<div class="row"><button class="btn primary" data-act="copyBookmarklet">Copy the button</button><a class="btn" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Or drag this onto your browser's bookmarks bar">Send to Job Hunt</a><a class="btn ghost" href="#add">Add a job</a></div>
+      ${desk ? `<div class="row"><a class="btn bookmarklet" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Drag this onto your browser's bookmarks bar">${BOOKMARK_NAME}</a><span class="muted small">Drag it to your bookmarks bar, or:</span></div>
       <ol class="small steps-list">
-        <li>Press <b>Copy the button</b>.</li>
-        <li>In your browser (Chrome or Edge), show the bookmarks bar with <b>Ctrl+Shift+B</b>, right-click it → <b>Add page</b> (Edge: <b>Add favorite</b>). Name it <b>Send to Job Hunt</b>, paste into the address (URL) box, and save.</li>
+        <li><button class="btn primary sm" data-act="copyBookmarklet">Copy the button</button></li>
+        <li>In your browser (Chrome or Edge), show the bookmarks bar with <b>Ctrl+Shift+B</b>, right-click it → <b>Add page</b> (Edge: <b>Add favorite</b>). Paste into the address (URL) box.</li>
+        <li>For the name, <button class="btn sm" data-act="copyText" data-text="${BOOKMARK_NAME}">Copy the name</button> and paste it: the 💼 shows as its icon in the bar. Save.</li>
         <li>Open a job posting and click the bookmark. On LinkedIn, click the job in the list so it shows on the right (or open the job itself), then click it.</li>
         <li>Job Hunt picks it up within a few seconds and tells you when it's ready. Added it before version 1.44? Add it again: the old one didn't work on LinkedIn.</li></ol>
       <label class="check"><input type="checkbox" data-act="clipWatch" ${st.clip_watch ? 'checked' : ''}> <span class="small">Pick up postings sent from the browser</span></label>` : '<div class="row"><a class="btn" href="#add">Add a job</a></div>'}
@@ -1642,7 +1662,7 @@ async function showSettings(tab, sub) {
         <label class="field" style="margin-top:14px">What matters to you<textarea name="guidance" placeholder="e.g. Prefer hybrid roles in fintech or government. Avoid pure sales roles. Open to contract roles.">${esc(p.guidance || '')}</textarea><span class="hint">Claude weighs this when scoring. Job titles and keywords for each CV are set in CV & career.</span></label>
       </section>
       <section class="card"><header><h2>Employers</h2></header>
-        <label class="check"><input type="checkbox" data-act="ratingsAuto" ${st.ratings_auto ? 'checked' : ''}> <span>Look up what employees say<br><span class="muted small">Ratings and reviews from Glassdoor, Indeed and the like, for the companies of roles you're considering: shown as ★ next to the company, and on each job. Each company is looked up once (again after two months), through Claude Code; it uses a little of your Claude plan.</span></span></label>
+        <label class="check"><input type="checkbox" data-act="ratingsAuto" ${st.ratings_auto ? 'checked' : ''}> <span>Look up what employees say<br><span class="muted small">Ratings and reviews from Glassdoor, Indeed and the like, for the companies of roles you're considering: shown as a star rating next to the company, and on each job. Each company is looked up once (again after two months), through Claude Code; it uses a little of your Claude plan.</span></span></label>
       </section>
       <section class="card"><header><h2>When</h2></header><div class="form">
         <label class="field">Search every day at${hourSelect('search_hour', p.search_hour)}<span class="hint">If Job Hunt isn't running then, it searches when it next opens.</span></label>
@@ -1846,6 +1866,8 @@ function clipPage() {
   var fallback = function () { var ta = document.createElement('textarea'); ta.value = out; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(out).then(done, fallback); else fallback();
 }
+/** The bookmark's name: the briefcase is its icon in the bookmarks bar (bookmarks can't carry a picture). */
+const BOOKMARK_NAME = '💼 Send to Job Hunt';
 const bookmarklet = () => 'javascript:' + encodeURIComponent(`(${clipPage.toString()})()`);
 
 // Versions have three parts everywhere: 1.7.0, 1.8.0… Older feeds wrote "1.07", which reads as 1.7.0.
@@ -1983,7 +2005,7 @@ document.addEventListener('change', e => {
 });
 
 // ---- Connections: one row each, with its status and what fixes it ----
-const CONN_PILL = { ok: ['good', 'Working'], problem: ['crit', 'Needs attention'], off: ['', 'Off'], setup: ['', 'Not set up'], unknown: ['good', 'On'], na: ['', 'Not in your country'] };
+const CONN_PILL = { ok: ['good', 'Working'], partial: ['warn', 'Some not working'], problem: ['crit', 'Needs attention'], off: ['', 'Off'], setup: ['', 'Not set up'], unknown: ['good', 'On'], na: ['', 'Not in your country'] };
 /** The recruiters database: everyone who emailed you about a role, with the applications they handled. */
 let recruiterQuery = '';
 async function showRecruiters() {
@@ -2078,6 +2100,7 @@ const CONN_ACT = {
   test: () => ['Test', 'connTest'], checkClaude: () => ['Check again', 'checkClaude'], google: () => ['Connect', 'google'],
   on: () => ['Turn on', 'connIndeed', 'data-on="1"'], off: () => ['Turn off', 'connIndeed', 'data-on="0"'],
   removeBroken: r => ['Remove broken boards', 'removeBroken', `data-boards="${esc(JSON.stringify(r.data || []))}"`],
+  sitesOff: r => [`Turn off the ${(r.data || []).length === 1 ? 'one' : (r.data || []).length} not working`, 'sitesOff', `data-ids="${esc(JSON.stringify(r.data || []))}"`],
   phoneTest: () => ['Send a test', 'phoneTest'], syncNow: () => ['Sync now', 'syncNow'], backupNow: () => ['Back up now', 'backupNow'],
 };
 let connPoll;
@@ -2135,14 +2158,14 @@ async function renderConnStatus() {
     const [cls, label] = CONN_PILL[r.status] || ['', r.status];
     t.querySelector('.tile-state').innerHTML = `<span class="pill ${cls}">${label}</span>`;
     t.classList.toggle('off', ['off', 'setup'].includes(r.status));
-    t.classList.toggle('problem', r.status === 'problem');
+    t.classList.toggle('problem', ['problem', 'partial'].includes(r.status));
     t.querySelector('.tile-detail').innerHTML = ['off', 'setup'].includes(r.status) ? ''
       : `${esc(r.detail)}${r.at ? ` <span class="muted">· ${esc(ago(r.at))}</span>` : ''}`;
     t.querySelector('.tile-acts').innerHTML = (r.actions || []).filter(a => !a.startsWith('goto:')).map(a => connBtn(r, a, d.testing)).join('');
   });
   const box = $('#connStatus');
   if (box) {
-    const probs = d.rows.filter(r => r.status === 'problem');
+    const probs = d.rows.filter(r => ['problem', 'partial'].includes(r.status));
     box.hidden = !probs.length;
     box.innerHTML = `<header><h2>Needs attention</h2></header>${probs.map(r => `<div class="conn-row problem">
       <span class="conn-name"><b>${esc(r.name)}</b></span><span class="grow small">${esc(r.detail)}</span>
@@ -2526,6 +2549,10 @@ async function act(el) {
       else el.outerHTML = '<span class="muted small"><span class="spin"></span>Writing…</span>';
     }, 'Writing the follow-up…');
   }
+  if (a === 'copyText') {
+    try { await navigator.clipboard.writeText(el.dataset.text || ''); toast('Copied.'); } catch (e) { toast('Select the text and copy it.', true); }
+    return;
+  }
   if (a === 'copy') {
     const text = $(`#${el.dataset.from}`)?.textContent || '';
     try { await navigator.clipboard.writeText(text); toast('Copied.'); } catch (e) { toast('Select the text and copy it.', true); }
@@ -2563,6 +2590,13 @@ async function act(el) {
       toast(`Added ${r.added} job board${r.added === 1 ? '' : 's'}. Searching them now.`);
       await refreshOverview(); route();
     });
+  }
+  if (a === 'sitesOff') {
+    const ids = JSON.parse(el.dataset.ids || '[]');
+    return busy(async () => {
+      await api('/api/settings/sites-off', { method: 'POST', body: { ids } });
+      settingsCache = null; await refreshOverview(); route();
+    }, `Turned off ${ids.length} site${ids.length === 1 ? '' : 's'} that couldn't be read. Turn any back on in Job sources.`);
   }
   if (a === 'removeBroken' || a === 'removeBoard') {
     const boards = a === 'removeBoard' ? [{ source: el.dataset.source, name: el.dataset.name }] : JSON.parse(el.dataset.boards || '[]');

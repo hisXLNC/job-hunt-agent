@@ -403,6 +403,11 @@ impl Db {
         Ok(n > 0)
     }
 
+    /// The stored job that is this posting (same id, or the same role at the same company).
+    pub fn existing_job(&self, id: &str, company: &str, title: &str) -> Option<String> {
+        self.con.query_row("SELECT id FROM jobs WHERE id = ?1 OR dupe_key = ?2 LIMIT 1", params![id, dupe_key(company, title)], |r| r.get(0)).optional().ok().flatten()
+    }
+
     /// Remove postings you never acted on that haven't changed in `days` days: skipped (filtered
     /// out or scored low), not interested, and closed ones still waiting to be tailored. Never
     /// anything tailored, saved or applied to. Each is remembered so it isn't found again as new.

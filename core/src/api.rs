@@ -197,6 +197,7 @@ fn static_type(path: &str) -> &'static str {
         "svg" => "image/svg+xml",
         "png" => "image/png",
         "ico" => "image/x-icon",
+        "woff2" => "font/woff2",
         "json" => "application/json",
         "webmanifest" => "application/manifest+json",
         _ => "application/octet-stream",
@@ -228,6 +229,8 @@ pub fn start_clip(agent: &Arc<Agent>, clip: Value) {
         match a.add_clip(&clip) {
             Ok(j) if j.status == "ready" => a.note("Application ready", &format!("{} at {} (fit {}) has a tailored CV and cover letter waiting for your approval.", j.title, j.company, j.score.unwrap_or(0))),
             Ok(j) => a.note("Added to Job Hunt", &format!("{} at {}: fit {}.", j.title, j.company, j.score.unwrap_or(0))),
+            // Already there: not a problem, and noted on that job (see add_found).
+            Err(e) if e.0.ends_with("is already in Job Hunt.") => a.note("Already in Job Hunt", &e.0),
             Err(e) => {
                 let _ = a.db().log(None, "add:error", &e.0);
                 a.note("Couldn't add that posting", &e.0);
@@ -1176,6 +1179,15 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         ["api", "settings", "phone-test"] => {
             agent.test_phone()?;
+            ok()
+        }
+        ["api", "settings", "sites-off"] => {
+            // Turn off recruiter and job sites that can't be read: known ones by id, your own by theirs.
+            let ids: Vec<String> = b["ids"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+            let mut p = agent.profile();
+            p.sources.sites.retain(|x| !ids.contains(x));
+            p.sources.custom_sites.retain(|c| !ids.contains(&c.id()));
+            agent.save_profile(&p)?;
             ok()
         }
         ["api", "settings", "ratings"] => {

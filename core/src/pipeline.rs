@@ -1487,6 +1487,12 @@ replies and interviews, and a little lower for kinds that got none from several 
         if self.db().job_exists(&p.id(), &p.company, &p.title)? {
             let known = self.db().job(&p.id())?.map(|j| j.status).unwrap_or_default();
             if known != "skipped" {
+                // Sent again: note it on the job that's there, so it's one click away.
+                // Read first: an `if let` on self.db() would hold the lock through the log below.
+                let existing = self.db().existing_job(&p.id(), &p.company, &p.title);
+                if let Some(id) = existing {
+                    self.db().log(Some(&id), "added-again", "you sent this posting again; it's already in Job Hunt")?;
+                }
                 return err(format!("{} at {} is already in Job Hunt.", p.title, p.company));
             }
             // Filtered out or scored low before: you want it, so look again.
@@ -2147,14 +2153,18 @@ replies and interviews, and a little lower for kinds that got none from several 
         } else {
             let of = |st: &str| sites.iter().filter(|x| x["state"] == st).map(|x| x["name"].as_str().unwrap_or("").to_string()).collect::<Vec<_>>();
             let (ok, quiet, bad) = (of("ok"), of("quiet"), of("problem"));
-            // A problem only when none of them works: one site failing among several isn't.
-            let status = if !ok.is_empty() { "ok" } else if !bad.is_empty() && quiet.is_empty() { "problem" } else { "unknown" };
+            // A problem when none of them works; "partial" when some can't be read while others work,
+            // so a row never says Working over sites that fail.
+            let status = if !ok.is_empty() && !bad.is_empty() { "partial" } else if !ok.is_empty() { "ok" } else if !bad.is_empty() && quiet.is_empty() { "problem" } else { "unknown" };
+            let bad_ids: Vec<Value> = sites.iter().filter(|x| x["state"] == "problem").map(|x| x["id"].clone()).collect();
             let mut parts = vec![format!("{} on", sites.len())];
             if !ok.is_empty() { parts.push(format!("{} found postings", ok.len())) }
             if !quiet.is_empty() { parts.push(format!("no postings from {}", quiet.join(", "))) }
             if !bad.is_empty() { parts.push(format!("couldn't read {}", bad.join(", "))) }
             let at = sites.iter().filter_map(|x| x["at"].as_str()).max().unwrap_or("").to_string();
-            out.push(row("agencies", "Recruiters and job sites", "Job listings", status, format!("{}. Details in Settings \u{2192} Job sources.", parts.join("; ")), at, json!(["test", "goto:sitesCard"])));
+            let actions = if bad_ids.is_empty() { json!(["test", "goto:sitesCard"]) } else { json!(["test", "sitesOff", "goto:sitesCard"]) };
+            out.push(row("agencies", "Recruiters and job sites", "Job listings", status, format!("{}. Details in Settings \u{2192} Job sources.", parts.join("; ")), at, actions)
+                .as_object().cloned().map(|mut o| { o.insert("data".into(), json!(bad_ids)); Value::Object(o) }).unwrap());
         }
         // Company job boards
         let boards = crate::sources::boards(&p).len();
@@ -4854,7 +4864,10 @@ mod tests {
         assert_eq!((by("michaelpage")["state"].as_str(), by("hays")["state"].as_str(), by("lro")["state"].as_str()), (Some("ok"), Some("problem"), Some("quiet")));
         assert!(by("hays")["detail"].as_str().unwrap().contains("turned the request away"));
         let r = row(&s);
-        assert_eq!(r["status"], "ok", "one working is enough: {r}");
+        // Some working and some not: "partial", never Working over a site that fails, with the
+        // ones to turn off.
+        assert_eq!(r["status"], "partial", "{r}");
+        assert_eq!(r["data"], json!(["hays"]));
         assert!(r["detail"].as_str().unwrap().contains("couldn't read Hays") && r["detail"].as_str().unwrap().contains("no postings from LRO Staffing"), "{r}");
         assert!(!s.agent.health().iter().any(|h| h["text"].as_str().unwrap_or("").contains("Recruiters")), "not a problem to fix");
         // None working: then it is.
@@ -5325,6 +5338,18 @@ mod tests {
         let s = setup();
         std::fs::remove_file(s.agent.cv_path("program")).unwrap();
         assert!(s.agent.search(Some(vec![])).unwrap_err().0.contains("No CV"));
+    }
+
+    #[test]
+    fn a_posting_sent_twice_points_at_the_one_there() {
+        let s = setup();
+        let clip = json!({"url": "https://careers.acme.example/1", "title": "Data Lead", "company": "Acme", "location": "Toronto, ON", "structured": true,
+            "text": "Lead the data platform team and its roadmap, with stakeholders across the bank."});
+        let first = s.agent.add_clip(&clip).unwrap();
+        let e = s.agent.add_clip(&clip).unwrap_err();
+        assert!(e.0.ends_with("is already in Job Hunt."));
+        let h = s.agent.db().history(&first.id).unwrap();
+        assert!(h.iter().any(|x| x.kind == "added-again"), "noted on that job, so Recent activity links to it");
     }
 
     #[test]
