@@ -7,6 +7,12 @@ name: Checks
 # day to day the same checks run locally with `python tools/release_ci.py verify`.
 on:
   workflow_dispatch:
+    inputs:
+      what:
+        description: "What to check"
+        type: choice
+        options: [everything, secrets]
+        default: everything
 
 permissions:
   contents: read
@@ -17,6 +23,7 @@ concurrency:
 
 jobs:
   core:
+    if: inputs.what != 'secrets'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -32,6 +39,7 @@ jobs:
         run: python3 tools/release_ci.py verify --quick
 
   server-image:
+    if: inputs.what != 'secrets'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -47,3 +55,36 @@ jobs:
           push: false
           cache-from: type=gha,scope=checks
           cache-to: type=gha,scope=checks,mode=max
+
+  # Whether the build secrets are set and well formed, without showing them.
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Built-in Google connection (GOOGLE_CLIENT_JSON)
+        env:
+          GOOGLE_CLIENT_JSON: ${{ secrets.GOOGLE_CLIENT_JSON }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          t = os.environ.get("GOOGLE_CLIENT_JSON", "").strip()
+          if not t:
+              print("::error::GOOGLE_CLIENT_JSON isn't set"); sys.exit(1)
+          try:
+              d = json.loads(t)
+          except Exception:
+              print("::error::GOOGLE_CLIENT_JSON isn't valid JSON: paste the whole file, from { to }"); sys.exit(1)
+          c = d.get("installed") or d.get("web")
+          if not c:
+              print("::error::GOOGLE_CLIENT_JSON isn't a Google OAuth client file"); sys.exit(1)
+          if "installed" not in d:
+              print("::error::GOOGLE_CLIENT_JSON is a Web client; Job Hunt needs a Desktop app client"); sys.exit(1)
+          missing = [k for k in ("client_id", "client_secret") if not c.get(k)]
+          if missing:
+              print(f"::error::GOOGLE_CLIENT_JSON has no {' or '.join(missing)}: download it again (Add secret first if needed)"); sys.exit(1)
+          print(f"::notice::GOOGLE_CLIENT_JSON is a Desktop client for project {c.get('project_id', '?')}, ready to build in")
+          PY
+      - name: Update signing key (TAURI_SIGNING_PRIVATE_KEY)
+        env:
+          K: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: '[ -n "$K" ] && echo "::notice::TAURI_SIGNING_PRIVATE_KEY is set" || echo "::warning::TAURI_SIGNING_PRIVATE_KEY isn''t set"'
