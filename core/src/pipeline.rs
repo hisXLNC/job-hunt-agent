@@ -2237,6 +2237,14 @@ replies and interviews, and a little lower for kinds that got none from several 
             out.push(row("linkedin", "LinkedIn", "Job listings", match ok { Some(true) => "ok", Some(false) => "problem", None => "unknown" },
                 if detail.is_empty() { format!("{how} Not tested yet.") } else { format!("{how} {detail}") }, at, json!(["test", "off", "goto:listingsCard"])));
         }
+        // FreeHire: free, no key
+        if p.sources.is_off("freehire") {
+            out.push(row("freehire", "FreeHire", "Job listings", "off", "Turned off.".into(), String::new(), json!(["on"])));
+        } else {
+            let (ok, detail, at) = seen("freehire", "FreeHire");
+            out.push(row("freehire", "FreeHire", "Job listings", match ok { Some(true) => "ok", Some(false) => "problem", None => "unknown" },
+                if detail.is_empty() { "Free job search, mostly linking to employers' own sites. Not tested yet.".into() } else { detail }, at, json!(["test", "off"])));
+        }
         // Canada's Job Bank: its own search page
         if !p.sources.available("jobbank") {
             out.push(not_here("jobbank", "Job Bank (Canada)"));
@@ -2328,7 +2336,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         };
         let mut results: Vec<Value> = vec![];
         // How many checks this test makes, for its progress bar.
-        let singles = ["adzuna", "jsearch", "jooble", "indeed", "linkedin", "jobbank", "alerts"].iter().filter(|k| want(k)).count();
+        let singles = ["adzuna", "jsearch", "jooble", "indeed", "linkedin", "jobbank", "freehire", "alerts"].iter().filter(|k| want(k)).count();
         let total = singles
             + if want("boards") { crate::sources::boards(&p).len() } else { 0 }
             + if want("agencies") { crate::sites::targets(&p.sources.sites, &p.sources.custom_sites).len() } else { 0 };
@@ -2426,6 +2434,15 @@ replies and interviews, and a little lower for kinds that got none from several 
             }
         } else {
             json!({ "name": "LinkedIn", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
+        }); }
+        save(&results, false);
+        if want("freehire") { results.push(if p.sources.is_off("freehire") {
+            json!({ "name": "FreeHire", "kind": "search", "ok": false, "skipped": true, "error": "Turned off.", "hint": "Turn FreeHire on in Settings \u{2192} Job sources to include it." })
+        } else if let Some((t, _)) = crate::sources::searches(&p, 1).into_iter().next() {
+            timed(format!("FreeHire \u{201c}{t}\u{201d}"), "search", &|| crate::sources::freehire(&c, &t, &p.sources.adzuna_country),
+                "FreeHire didn't answer; it's a free service, so try again later.")
+        } else {
+            json!({ "name": "FreeHire", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
         }); }
         save(&results, false);
         if want("jobbank") || (only == Some("jobbank")) { results.push(if !p.sources.jobbank {
@@ -4466,7 +4483,7 @@ replies and interviews, and a little lower for kinds that got none from several 
 }
 
 /// The connections you can turn off one by one in Connections.
-pub const SWITCHABLE: [&str; 9] = ["jsearch", "jooble", "adzuna", "indeed", "linkedin", "jobbank", "agencies", "boards", "alerts"];
+pub const SWITCHABLE: [&str; 10] = ["jsearch", "jooble", "adzuna", "indeed", "linkedin", "jobbank", "freehire", "agencies", "boards", "alerts"];
 
 /// Budget mode's night: from your hour until 6 AM (an hour after midnight: from then until 6).
 fn is_night(h: u32, from: u32) -> bool {
@@ -5016,7 +5033,7 @@ fn source_row_id(r: &Value) -> String {
         return "agencies".into();
     }
     let n = r["name"].as_str().unwrap_or("");
-    for (prefix, id) in [("Adzuna", "adzuna"), ("Google for Jobs", "jsearch"), ("Jooble", "jooble"), ("Indeed", "indeed"), ("LinkedIn", "linkedin"), ("Job Bank", "jobbank"), ("Job-alert", "alerts")] {
+    for (prefix, id) in [("Adzuna", "adzuna"), ("Google for Jobs", "jsearch"), ("Jooble", "jooble"), ("Indeed", "indeed"), ("LinkedIn", "linkedin"), ("Job Bank", "jobbank"), ("FreeHire", "freehire"), ("Job-alert", "alerts")] {
         if n.starts_with(prefix) {
             return id.into();
         }

@@ -1302,7 +1302,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         ["api", "connections", "test"] => {
             let id = s(&b, "id").to_string();
-            if !["boards", "adzuna", "jsearch", "jooble", "indeed", "linkedin", "jobbank", "agencies", "alerts"].contains(&id.as_str()) {
+            if !["boards", "adzuna", "jsearch", "jooble", "indeed", "linkedin", "jobbank", "freehire", "agencies", "alerts"].contains(&id.as_str()) {
                 return Err(Error("That connection has no test.".into()));
             }
             if agent.is_running("test-sources") {
@@ -1381,7 +1381,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.save_profile(&p)?;
             ok()
         }
-        ["api", "connections", which @ ("indeed" | "linkedin" | "jsearch" | "jooble" | "adzuna" | "boards" | "alerts" | "jobbank" | "agencies")] => {
+        ["api", "connections", which @ ("indeed" | "linkedin" | "jsearch" | "jooble" | "adzuna" | "boards" | "alerts" | "jobbank" | "freehire" | "agencies")] => {
             let mut p = agent.profile();
             let on = b.get("on").and_then(|v| v.as_bool()).ok_or_else(|| Error("Say on or off.".into()))?;
             p.sources.set_on(which, on);

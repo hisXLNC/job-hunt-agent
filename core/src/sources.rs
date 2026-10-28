@@ -1374,6 +1374,58 @@ pub fn jooble(c: &reqwest::blocking::Client, key: &str, keywords: &str, location
     Ok(parse_jooble(&v))
 }
 
+// --- FreeHire (freehire.me): a free job search built for apps and AI agents ------------------
+
+/// FreeHire's search results: postings with their full text, mostly linking to the employer's own site.
+pub fn parse_freehire(body: &Value) -> Vec<Posting> {
+    let mut out = vec![];
+    for j in body.get("data").and_then(|x| x.as_array()).into_iter().flatten() {
+        let (title, company) = (s(j, "title").trim().to_string(), s(j, "company").trim().to_string());
+        // Their tracking tag off the link.
+        let url = s(j, "url").replace("?utm_source=freehire.me&", "?").replace("?utm_source=freehire.me", "").replace("&utm_source=freehire.me", "");
+        if title.is_empty() || company.is_empty() || !url.starts_with("http") {
+            continue;
+        }
+        let id = Some(s(j, "public_slug")).filter(|x| !x.is_empty()).unwrap_or_else(|| s(j, "external_id"));
+        let e = j.get("enrichment").cloned().unwrap_or(Value::Null);
+        let num = |k: &str| e.get(k).and_then(|x| x.as_f64());
+        let (lo, hi) = (num("salary_min"), num("salary_max"));
+        let salary = (lo.is_some() || hi.is_some()).then(|| {
+            let f = |x: f64| format!("{:.0}", x);
+            let amount = match (lo, hi) { (Some(a), Some(b)) => format!("{}–{}", f(a), f(b)), (Some(a), None) => format!("from {}", f(a)), (None, Some(b)) => format!("up to {}", f(b)), _ => String::new() };
+            format!("{} {amount}{}", s(&e, "salary_currency"), Some(s(&e, "salary_period")).filter(|x| !x.is_empty()).map(|x| format!(" per {x}")).unwrap_or_default()).trim().to_string()
+        });
+        let desc = s(j, "description");
+        let desc = if desc.trim().is_empty() { s(&e, "summary") } else { desc };
+        let place = s(j, "location");
+        out.push(Posting {
+            source: "freehire".into(),
+            external_id: id,
+            remote: s(j, "work_mode") == "remote" || is_remote(&[&place]),
+            location: place,
+            apply_email: find_apply_email(&desc),
+            description: desc.trim().to_string(),
+            salary,
+            salary_max: hi,
+            posted_at: Some(s(j, "posted_at")).filter(|x| !x.is_empty()),
+            title,
+            company,
+            url,
+            ..Posting::default()
+        });
+    }
+    out
+}
+
+/// FreeHire's newest postings for a title in a country (two-letter code), at most 100.
+pub fn freehire(c: &reqwest::blocking::Client, title: &str, country: &str) -> Result<Vec<Posting>, String> {
+    let mut q: Vec<(&str, String)> = vec![("q", title.into()), ("limit", "100".into()), ("sort", "posted_at".into()), ("order", "desc".into()), ("description_format", "markdown".into())];
+    if !country.is_empty() {
+        q.push(("countries", country.to_uppercase()));
+    }
+    Ok(parse_freehire(&get_json(c, "https://freehire.me/api/v1/agent/jobs/search", &q)?))
+}
+
 /// The searches to run on a keyed service, at most `max`: every job title in your first place,
 /// then in your other places (see Profile::search_places), or nationwide when you have none.
 pub fn searches(p: &Profile, max: usize) -> Vec<(String, String)> {
@@ -1524,6 +1576,19 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str))
                     r.map(|l| (l, false))
                 })));
             }
+        }
+    }
+    // FreeHire: one search per title across your country (it doesn't narrow by city reliably).
+    if !off("freehire") {
+        let mut titles: Vec<String> = vec![];
+        for (t, _) in searches(p, 12) {
+            if !titles.iter().any(|x| x.eq_ignore_ascii_case(&t)) && titles.len() < 6 {
+                titles.push(t);
+            }
+        }
+        for title in titles {
+            let (c, country) = (c.clone(), p.sources.adzuna_country.clone());
+            calls.push((format!("FreeHire “{title}”"), "FreeHire".into(), None, Box::new(move || freehire(&c, &title, &country).map(|l| (l, false)))));
         }
     }
     // Job Bank: a few searches, 5 seconds apart; once it turns one away, the rest wait.
@@ -1698,6 +1763,15 @@ mod tests {
         assert!(text.contains("Run the PMO.") && text.contains("PMP"));
         assert!(url.unwrap().ends_with("program-manager"));
 
+        let f = parse_freehire(&json!({"meta": {"total": 2}, "data": [
+            {"title": "Senior Accountant", "company": "Xanadu", "location": "Toronto, Canada", "public_slug": "xan-1", "work_mode": "hybrid",
+             "url": "https://xanadu.careers.hibob.com/jobs/f01?utm_source=freehire.me", "description": "Own the close. Send your resume to jobs@xanadu.example",
+             "posted_at": "2026-10-20T00:00:00Z", "enrichment": {"salary_min": 80000, "salary_max": 95000, "salary_currency": "CAD", "salary_period": "year"}},
+            {"title": "", "company": "Nobody", "url": "https://x.example"}]}));
+        assert_eq!(f.len(), 1, "a posting without a title is skipped");
+        assert_eq!((f[0].url.as_str(), f[0].source.as_str(), f[0].external_id.as_str()), ("https://xanadu.careers.hibob.com/jobs/f01", "freehire", "xan-1"));
+        assert_eq!((f[0].salary.as_deref(), f[0].salary_max), (Some("CAD 80000–95000 per year"), Some(95000.0)));
+        assert_eq!(f[0].apply_email.as_deref(), Some("jobs@xanadu.example"));
         let b = parse_bamboohr("acme", &json!({"meta": {"totalCount": 2}, "result": [
             {"id": "134", "jobOpeningName": "Senior Accountant", "location": {"city": "Halifax", "state": "Nova Scotia"}, "isRemote": null},
             {"id": "135", "jobOpeningName": "Controller", "location": {"city": null, "state": null}, "atsLocation": {"country": "Canada", "province": "Ontario", "city": "Toronto"}, "isRemote": true}]}));

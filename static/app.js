@@ -126,6 +126,7 @@ function homeHead(on, about, between = '') {
         <p class="muted">Last job search ${ago(o.last_search)} · last email check ${ago(o.last_inbox)}</p>
       </div>
       <div class="row">
+        <button class="btn ghost" data-act="palette" title="Find any job (Ctrl+K)">${svg('search')}Find a job</button>
         <a class="btn ghost" href="#add" title="A posting you found yourself">${svg('add')}Add a job</a>
         <button class="btn" data-act="run" data-task="inbox" ${o.setup?.google ? '' : 'disabled title="Connect Google first"'}>${svg('mail')}Check email</button>
         <button class="btn primary" data-act="run" data-task="search" ${searching ? 'disabled' : !o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${searching ? '<span class="spin"></span>Searching…' : `${svg('search')}Search for jobs now`}</button>
@@ -506,7 +507,7 @@ async function showPipeline() {
 }
 
 /** How each source is called on screen. */
-const SOURCE = { adzuna: 'Adzuna', jsearch: 'Google for Jobs', jooble: 'Jooble', indeed: 'Indeed', greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workday: 'Workday', smartrecruiters: 'SmartRecruiters', workable: 'Workable', bamboohr: 'BambooHR', linkedin: 'LinkedIn', bayt: 'Bayt', naukrigulf: 'Naukrigulf', gulftalent: 'GulfTalent', eluta: 'Eluta', workopolis: 'Workopolis', glassdoor: 'Glassdoor', jobbank: 'Job Bank', ziprecruiter: 'ZipRecruiter', manual: 'Added by you', clip: 'Sent from your browser', alert: 'Job-alert email', email: 'Job-alert email' };
+const SOURCE = { adzuna: 'Adzuna', jsearch: 'Google for Jobs', jooble: 'Jooble', indeed: 'Indeed', greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workday: 'Workday', smartrecruiters: 'SmartRecruiters', workable: 'Workable', bamboohr: 'BambooHR', linkedin: 'LinkedIn', bayt: 'Bayt', naukrigulf: 'Naukrigulf', gulftalent: 'GulfTalent', eluta: 'Eluta', workopolis: 'Workopolis', glassdoor: 'Glassdoor', jobbank: 'Job Bank', freehire: 'FreeHire', ziprecruiter: 'ZipRecruiter', manual: 'Added by you', clip: 'Sent from your browser', alert: 'Job-alert email', email: 'Job-alert email' };
 const sourceName = s => SOURCE[s] || (s ? s[0].toUpperCase() + s.slice(1) : '');
 /** Stages a posting can be picked from, whatever its score or location ("Tailor anyway"). */
 const CAN_CHOOSE = ['skipped', 'dismissed', 'saved'];
@@ -1627,6 +1628,7 @@ async function showSettings(tab, sub) {
             <div class="row"><button class="btn primary" type="submit">Save</button>${st.apify.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="apify">Remove</button>' : ''}</div>
           </form>`, !!st.apify.key)}
       ${p.sources.adzuna_country === 'ca' ? tile('jobbank', 'Job Bank', 'Free · Canada', "Canada's national job board, including postings found only there.") : ''}
+      ${tile('freehire', 'FreeHire', 'Free', "A free job search gathered from employers' own careers sites, with each posting's full text.")}
       ${tile('alerts', 'Job-alert emails', 'Free', 'Set up job alerts on LinkedIn, Indeed, Job Bank, recruiters like Randstad, Adecco, Hays and Robert Half, or your country\'s job sites, sent to your Gmail, and Job Hunt reads them on every email check. Needs Gmail connected.')}
       ${tile('jsearch', 'Google for Jobs', 'Free key', 'The widest reach: LinkedIn, Indeed, Glassdoor and company sites, with full descriptions. Free for about 6 searches a day.',
         `<summary class="small">${st.jsearch.key ? 'Change the key' : 'Add a key'}</summary>${keyNote('OpenWeb Ninja', 'https://www.openwebninja.com/api/jsearch')}<form data-form="jsearch" class="form tile-form">
@@ -2318,11 +2320,75 @@ async function autosave(form) {
   saveTimer = setTimeout(() => autosave(form), 800);
 }));
 
+// ---- Find any job (Ctrl+K) ----
+/** A search over every job, company first, grouped by where it stands; Enter opens the first. */
+let paletteJobs = null;
+async function jobPalette() {
+  if ($('.palette-back')) return;
+  const back = document.createElement('div');
+  back.className = 'modal-back palette-back';
+  back.innerHTML = `<div class="modal palette" role="dialog" aria-modal="true" aria-label="Find a job">
+    <input type="search" class="palette-q" placeholder="Find a job by company, title or place…" aria-label="Find a job">
+    <div class="palette-list"><p class="muted small">Loading…</p></div>
+    <p class="muted small palette-hint">↑ ↓ to choose · Enter to open · Esc to close</p></div>`;
+  document.body.appendChild(back);
+  const q = back.querySelector('.palette-q'), list = back.querySelector('.palette-list');
+  let sel = 0, shown = [];
+  const close = () => { back.remove(); document.removeEventListener('keydown', key, true); };
+  const ORDER = ['ready', 'approved', 'queued', 'interviewing', 'offer', 'applied', 'saved', 'no_response', 'rejected', 'skipped', 'dismissed'];
+  const draw = () => {
+    const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const hay = j => `${j.company} ${j.title} ${j.location || ''}`.toLowerCase();
+    shown = (paletteJobs || []).filter(j => words.every(w => hay(j).includes(w)))
+      .sort((a, b) => (ORDER.indexOf(a.status) - ORDER.indexOf(b.status)) || (b.score || 0) - (a.score || 0)).slice(0, 40);
+    sel = Math.min(sel, Math.max(0, shown.length - 1));
+    let last = '';
+    list.innerHTML = shown.length ? shown.map((j, i) => {
+      const head = j.status !== last ? `<h3>${esc(STAGES[j.status] || j.status)}</h3>` : '';
+      last = j.status;
+      return `${head}<a class="palette-row ${i === sel ? 'on' : ''}" href="#job/${encodeURIComponent(j.id)}" data-i="${i}">${scoreBadge(j.score)}<span class="grow"><b>${esc(j.company)}</b> · ${esc(j.title)}<br><span class="muted small">${esc(j.location || '')}</span></span></a>`;
+    }).join('') : `<p class="muted small">${paletteJobs ? 'No job matches.' : 'Loading…'}</p>`;
+    list.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
+  };
+  const key = e => {
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, Math.min(shown.length - 1, sel + (e.key === 'ArrowDown' ? 1 : -1))); draw(); }
+    else if (e.key === 'Enter' && shown[sel]) { e.preventDefault(); close(); location.hash = `#job/${encodeURIComponent(shown[sel].id)}`; }
+  };
+  document.addEventListener('keydown', key, true);
+  back.addEventListener('click', e => { if (e.target === back || e.target.closest('.palette-row')) close(); });
+  q.addEventListener('input', () => { sel = 0; draw(); });
+  q.focus();
+  try { paletteJobs = (await api('/api/jobs')).jobs; } catch (e) { paletteJobs = []; }
+  draw();
+}
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); jobPalette(); }
+});
+/** Every key, in Job Hunt's own dialog. */
+function keysHelp() {
+  const rows = [['Ctrl + K', 'Find any job'], ['/', 'Search the list on this page'], ['j / k', 'Next or previous job'], ['a', 'Approve (on a job ready to approve)'],
+    ['o', 'Open the posting'], ['t', 'Tailor my CV for this role'], ['c', 'Ask Claude about this job'], ['Esc', 'Back to the list'], ['?', 'These keys']];
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="Keys"><h2>Keys</h2>
+    <table class="keys"><tbody>${rows.map(([k, w]) => `<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(w)}</td></tr>`).join('')}</tbody></table>
+    <p class="muted small">In Review: a approve · s save for later · x not interested · n next.</p>
+    <div class="modal-btns"><button class="btn primary">Close</button></div></div>`;
+  const close = () => { back.remove(); document.removeEventListener('keydown', key, true); };
+  const key = e => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === '?') { e.preventDefault(); close(); } };
+  back.addEventListener('click', e => { if (e.target === back || e.target.closest('button')) close(); });
+  document.addEventListener('keydown', key, true);
+  document.body.appendChild(back);
+}
+
 // ---- Keyboard ----
-// / search the list · a approve · j / k next and previous job · Esc back · ? this help
+// Ctrl+K find a job · / search the list · a approve · j / k next and previous job · o open the
+// posting · t tailor · c ask Claude · Esc back · ? the keys
 let jobOrder = [];
 document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if ($('.modal-back')) return;
   const t = e.target;
   if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) {
     if (e.key === 'Escape') t.blur();
@@ -2340,7 +2406,16 @@ document.addEventListener('keydown', e => {
     const f = $('#filter') || $('#docFilter');
     if (f) { e.preventDefault(); f.focus(); }
   } else if (e.key === '?') {
-    toast('Keys: / search the list · a approve · j / k next or previous job · Esc back to the list');
+    e.preventDefault(); keysHelp();
+  } else if (e.key === 'o' && onJob) {
+    const b = document.querySelector('.actions [data-act=open][data-what=company], .actions [data-act=open][data-what=posting]');
+    if (b) { e.preventDefault(); b.click(); }
+  } else if (e.key === 't' && onJob) {
+    const b = document.querySelector('.actions [data-act=tailorPicked]');
+    if (b) { e.preventDefault(); b.click(); }
+  } else if (e.key === 'c' && onJob) {
+    const b = document.querySelector('[data-jtab=chat]');
+    if (b) { e.preventDefault(); b.click(); setTimeout(() => $('#chatMsg')?.focus(), 50); }
   } else if (e.key === 'Escape' && onJob) {
     history.length > 1 ? history.back() : (location.hash = '#pipeline');
   } else if (e.key === 'a' && onJob) {
@@ -2608,6 +2683,7 @@ async function act(el) {
   if (a === 'offerAdvice') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/offer`, { method: 'POST', body: { offer: $('#offerText').value } }); setTimeout(route, 300); }, 'Weighing the offer…');
   }
+  if (a === 'palette') return jobPalette();
   if (a === 'chatSend') {
     const msg = $('#chatMsg').value.trim();
     if (!msg) { toast('Write a message first.', true); return; }
