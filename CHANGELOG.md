@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.6.0] - 2026-10-28
+
+Your files in Documents, simpler All jobs.
+
+### Changes
+
+- Your CVs, tailored CVs and cover letters, and backups are kept in a folder you choose: Documents\Job Hunt for new installs, or any folder in setup or Settings → Sync & backup → Your files. Moving takes the files along.
+- All jobs is one list with one row of filters, from your applications by stage to all postings and the skipped ones. The Board is gone (the steps are the board), and tailored files moved to CV & career → Tailored files.
+- The company comes first, then the role, in every list.
+- LinkedIn and other job board postings you tailor are found on the company's own site by themselves, so Apply goes straight to the company.
+- Tailored files are found again after continuing on another computer.
+
 ## [2.5.0] - 2026-10-27
 
 To do or All jobs.
@@ -739,6 +751,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.6.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.6.0
 [2.5.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.5.0
 [2.4.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.4.0
 [2.3.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.3.1

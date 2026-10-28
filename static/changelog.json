@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.6.0",
+    "date": "2026-10-28",
+    "title": "Your files in Documents, simpler All jobs",
+    "changes": [
+      "Your CVs, tailored CVs and cover letters, and backups are kept in a folder you choose: Documents\\Job Hunt for new installs, or any folder in setup or Settings → Sync & backup → Your files. Moving takes the files along.",
+      "All jobs is one list with one row of filters, from your applications by stage to all postings and the skipped ones. The Board is gone (the steps are the board), and tailored files moved to CV & career → Tailored files.",
+      "The company comes first, then the role, in every list.",
+      "LinkedIn and other job board postings you tailor are found on the company's own site by themselves, so Apply goes straight to the company.",
+      "Tailored files are found again after continuing on another computer."
+    ]
+  },
+  {
     "version": "2.5.0",
     "date": "2026-10-27",
     "title": "To do or All jobs",
