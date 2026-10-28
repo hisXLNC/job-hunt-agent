@@ -2605,6 +2605,41 @@ replies and interviews, and a little lower for kinds that got none from several 
         Ok(msg)
     }
 
+    // --- chat about one job ---------------------------------------------------------------------------
+
+    /// The job's chat: [{who: "you"|"claude", text, at}], oldest first.
+    pub fn chat(&self, job_id: &str) -> Vec<Value> {
+        serde_json::from_str(&self.secret(&format!("chat:{job_id}"))).unwrap_or_default()
+    }
+
+    /// Send a message in the job's chat and keep Claude's reply. Returns the reply.
+    pub fn chat_send(&self, job_id: &str, message: &str) -> R<String> {
+        let message = message.trim();
+        if message.is_empty() {
+            return err("Write a message first.");
+        }
+        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        let profile = self.profile();
+        let cv = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
+            .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
+            .map(|d| d.plain_text())
+            .unwrap_or_default();
+        let mut list = self.chat(job_id);
+        // The last 20 turns are plenty of context.
+        let history: Vec<(String, String)> = list.iter().rev().take(20).rev()
+            .map(|m| (m["who"].as_str().unwrap_or("you").to_string(), m["text"].as_str().unwrap_or("").to_string())).collect();
+        let reply = self.llm().chat(&profile.name, &cv, &job, &job.notes, &history, message)?;
+        let at = now();
+        list.push(json!({ "who": "you", "text": message, "at": at }));
+        list.push(json!({ "who": "claude", "text": reply, "at": at }));
+        self.db().set(&format!("chat:{job_id}"), &json!(list).to_string())?;
+        Ok(reply)
+    }
+
+    pub fn chat_clear(&self, job_id: &str) -> R<()> {
+        self.db().set(&format!("chat:{job_id}"), "")
+    }
+
     // --- coaching -------------------------------------------------------------------------------------
 
     /// Claude's read of your results so far: what's working and what to change. Kept with its date.
@@ -3301,8 +3336,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         std::fs::create_dir_all(&dir)?;
         let (cv_name, letter_name) = self.file_names(&job);
         let (cv_path, letter_path) = (dir.join(cv_name), dir.join(letter_name));
-        std::fs::write(&cv_path, &applied.bytes)?;
-        std::fs::write(&letter_path, cv::cover_letter(&doc, &result.cover_letter, self.signature().as_deref())?)?;
+        // Web links that note when they're opened, when Job Hunt has a public address.
+        std::fs::write(&cv_path, crate::links::track(self, job_id, &job.company, applied.bytes.clone()))?;
+        std::fs::write(&letter_path, crate::links::track(self, job_id, &job.company, cv::cover_letter(&doc, &result.cover_letter, self.signature().as_deref())?))?;
         // Old PDF copies would show the previous version; new ones are made when you open them
         // (making them here took Word a while for every application).
         for p in [&cv_path, &letter_path] {
@@ -5785,6 +5821,21 @@ mod tests {
         s.agent.canada_employers_once();
         assert_eq!(s.agent.profile().sources.workday.len(), CANADA_EMPLOYERS.len() - 1, "removed by you: stays removed");
         assert!(CANADA_EMPLOYERS.iter().all(|(_, l)| crate::sources::workday_board(l).is_some()));
+    }
+
+    #[test]
+    fn chatting_about_a_job_keeps_the_conversation() {
+        let s = setup();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        assert!(s.agent.chat_send("test:1", "  ").is_err());
+        let r = s.agent.chat_send("test:1", "How do I answer the salary question?").unwrap();
+        assert!(r.contains("(0 before)"), "{r}");
+        let r = s.agent.chat_send("test:1", "Shorter please").unwrap();
+        assert!(r.contains("(2 before)"), "the earlier turns go along: {r}");
+        assert_eq!(s.agent.chat("test:1").len(), 4);
+        assert_eq!(s.agent.chat("test:1")[1]["who"], "claude");
+        s.agent.chat_clear("test:1").unwrap();
+        assert!(s.agent.chat("test:1").is_empty());
     }
 
     #[test]

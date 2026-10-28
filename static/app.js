@@ -598,11 +598,11 @@ function trackRow(r) {
 
 // ---- Job ----
 let jobPoll;
-const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions &amp; contacts'], ['interview', 'Interview'], ['notes', 'Notes &amp; history']];
+const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions &amp; contacts'], ['interview', 'Interview'], ['chat', 'Ask Claude'], ['notes', 'Notes &amp; history']];
 const jobTabs = {};
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, know, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
   const tracks = st.profile.tracks;
@@ -675,6 +675,7 @@ async function showJob(id) {
     </div>
     <div class="jpane" data-pane="docs" ${tab === 'docs' ? '' : 'hidden'}>
     ${j.cv_path || j.cover_letter || tailoring ? '' : `<section class="card"><p class="muted">Not tailored yet.</p><div class="row"><button class="btn primary" data-act="tailorPicked" data-job="${esc(j.id)}">Tailor my CV for this role</button></div></section>`}
+    ${(links || []).length ? `<section class="card"><header><h2>Your links</h2></header>${links.map(l => `<p class="small"><b>${esc(l.site)}</b>: ${l.opened ? `<span class="good-text">opened ${l.opened} time${l.opened === 1 ? '' : 's'}</span>, last ${esc(ago(l.last))}` : '<span class="muted">not opened yet</span>'}${l.previews ? ` <span class="muted">(${l.previews} by link checkers)</span>` : ''}</p>`).join('')}</section>` : ''}
     ${j.cv_path || j.cover_letter ? `<section class="card">
       <div class="row file-row">${j.cv_path ? `<button class="btn" data-act="open" data-what="cv">${svg('doc')}Open tailored CV</button><button class="btn" data-act="open" data-what="letter">${svg('doc')}Open cover letter</button>
         <button class="btn ghost" data-act="open" data-what="cv-pdf" title="${cv_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">CV PDF</button><button class="btn ghost" data-act="open" data-what="letter-pdf" title="${letter_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">Letter PDF</button>
@@ -760,6 +761,16 @@ async function showJob(id) {
       ${offer?.advice ? mdHtml(offer.advice) : ''}
     </section>` : ''}
     </div>
+    <div class="jpane" data-pane="chat" ${tab === 'chat' ? '' : 'hidden'}>
+    <section class="card chat">
+      <header><h2>Ask Claude about this job</h2>${(chat || []).length ? '<button class="btn ghost sm" data-act="chatClear">Start over</button>' : ''}</header>
+      <p class="muted small">Claude knows this posting, your CV for it and your notes. Ask for an answer to a form question, a shorter cover letter, what to say about salary, or how to prepare.</p>
+      <div class="chat-log">${(chat || []).map((m, i) => `<div class="chat-msg ${m.who === 'you' ? 'me' : 'them'}">${m.who === 'you' ? esc(m.text) : `<div id="chat${i}">${mdHtml(m.text)}</div><button class="btn ghost sm" data-act="copy" data-from="chat${i}">Copy</button>`}</div>`).join('')}
+        ${chatting ? '<div class="chat-msg them"><span class="spin"></span>Writing…</div>' : ''}</div>
+      <div class="chat-send"><textarea id="chatMsg" rows="2" placeholder="e.g. Write a 100-word answer to “Why do you want to work here?”" ${chatting ? 'disabled' : ''}></textarea>
+        <button class="btn primary" data-act="chatSend" ${chatting ? 'disabled' : ''}>Send</button></div>
+    </section>
+    </div>
     <div class="jpane" data-pane="interview" ${tab === 'interview' ? '' : 'hidden'}>
     <section class="card prep">
       <header><h2>Interview prep</h2>${preparing ? '<span class="muted small"><span class="spin"></span>Writing…</span>' : `<button class="btn" data-act="prep">${prep ? 'Write again' : 'Write prep sheet'}</button>`}</header>
@@ -806,7 +817,7 @@ async function showJob(id) {
     const el = $('#pv-cv'); if (el) el.innerHTML = cv ? cvHtml(cv) : own?.cv ? '<p class="muted">Your own CV is a PDF: use <b>Open tailored CV</b> to see it.</p>' : '<p class="muted">The tailored CV file is missing. Re-tailor to make a new one.</p>';
   }).catch(e => { const el = $('#pv-cv'); if (el) el.innerHTML = `<p class="muted">${esc(e.message)}</p>`; });
   main().dataset.contacts = JSON.stringify(contacts || []);
-  if (tailoring || preparing || revising || following_up || answering || advising || writing_to || thanking) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
+  if (tailoring || preparing || revising || following_up || answering || advising || writing_to || thanking || chatting) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
 }
 
 // ---- Inbox ----
@@ -1863,6 +1874,11 @@ async function showSettings(tab, sub) {
       <p class="muted small" id="updateStatus">${server ? 'The server version updates with its container image: when a new version is out, update the image in Container Manager.' : 'Job Hunt checks for updates every 30 minutes and lets you know when one is ready.'}</p>
       <div class="row"><button class="btn" data-act="updateCheck">Check for updates</button><button class="btn primary" data-act="updateInstall" id="updateInstallBtn" hidden>Install and restart</button></div></section>
       ${remote}
+      <section class="card"><header><h2>Know when your CV links are opened</h2>${st.links?.base ? '<span class="pill good">On</span>' : ''}</header>
+        <p class="muted">The web links in each tailored CV and cover letter (your LinkedIn, a portfolio) go through Job Hunt first, which notes the click and sends the reader straight on. The text they see doesn't change. Each job then shows whether its links were opened: a sign someone read your application.</p>
+        <p class="muted small">Needs Job Hunt reachable from the internet at an https address, such as the server version behind Cloudflare. ${server ? '' : 'On this PC that means a tunnel (Cloudflare Tunnel or Tailscale Funnel) to remote access, which has to be on; links only work while this PC is on.'} Email security scanners and link previews are counted apart from people.</p>
+        <form data-form="links" class="form"><label class="field">Job Hunt's public address<input name="base" type="url" placeholder="https://jobhunt.example.com" value="${esc(st.links?.base || '')}"><span class="hint">Leave empty to turn it off.</span></label>
+        <div class="row"><button class="btn" type="submit">Save</button></div></form></section>
       ${extras}
       <section class="card" id="whatsnew"><header><h2>What's new</h2></header><p class="muted small">Loading…</p></section>
       ${server || here ? `<section class="card"><header><h2>App</h2></header><p class="muted small">Your data: ${esc(st.app.data)}</p></section>` : `<section class="card"><header><h2>App</h2></header>
@@ -2195,7 +2211,7 @@ const CONN_ACT = {
   phoneTest: () => ['Send a test', 'phoneTest'], syncNow: () => ['Sync now', 'syncNow'], backupNow: () => ['Back up now', 'backupNow'],
 };
 let connPoll;
-const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
+const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', chat: 'Ask Claude (job chat)', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
 async function renderUsage() {
   const box = $('#usageCard'); if (!box) return;
   let u;
@@ -2591,6 +2607,16 @@ async function act(el) {
   }
   if (a === 'offerAdvice') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/offer`, { method: 'POST', body: { offer: $('#offerText').value } }); setTimeout(route, 300); }, 'Weighing the offer…');
+  }
+  if (a === 'chatSend') {
+    const msg = $('#chatMsg').value.trim();
+    if (!msg) { toast('Write a message first.', true); return; }
+    jobTabs[jobId] = 'chat';
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/chat`, { method: 'POST', body: { message: msg } }); setTimeout(route, 300); });
+  }
+  if (a === 'chatClear') {
+    if (!await ask('Start the conversation over? This one is deleted.')) return;
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/chat`, { method: 'POST', body: { clear: true } }); route(); });
   }
   if (a === 'forgetNetwork') {
     if (!await ask('Remove your LinkedIn connections from Job Hunt?')) return;
@@ -3226,6 +3252,9 @@ document.addEventListener('submit', async e => {
     } else if (kind === 'backup') {
       await api('/api/settings/backup', { method: 'POST', body: { secrets: f.secrets.checked } });
       toast('Backup settings saved.'); route();
+    } else if (kind === 'links') {
+      await api('/api/settings/links', { method: 'POST', body: { base: f.base.value } });
+      settingsCache = null; toast(f.base.value.trim() ? 'Saved. Links in CVs tailored from now on note when they\'re opened.' : 'Turned off.'); route();
     } else if (kind === 'remote') {
       await api('/api/settings/remote', { method: 'POST', body: { password: f.password.value, port: f.port ? Number(f.port.value) : undefined, on: f.on ? f.on.checked : undefined } });
       toast('Saved.'); route();

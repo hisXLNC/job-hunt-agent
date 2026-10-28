@@ -161,7 +161,7 @@ fn cookie<'a>(req: &'a Request, name: &str) -> Option<&'a str> {
 }
 
 fn write(mut stream: TcpStream, r: Resp) -> std::io::Result<()> {
-    let reason = match r.status { 200 => "OK", 303 => "See Other", 401 => "Unauthorized", 403 => "Forbidden", 404 => "Not Found", 429 => "Too Many Requests", _ => "Error" };
+    let reason = match r.status { 200 => "OK", 302 => "Found", 303 => "See Other", 401 => "Unauthorized", 403 => "Forbidden", 404 => "Not Found", 429 => "Too Many Requests", _ => "Error" };
     let mut head = format!("HTTP/1.1 {} {reason}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n", r.status, r.ctype, r.body.len());
     for (k, v) in &r.headers {
         head.push_str(&format!("{k}: {v}\r\n"));
@@ -249,6 +249,15 @@ fn connection(stream: TcpStream, agent: &Arc<Agent>, host: &Arc<dyn Host>, enabl
                 html(401, login_page("That password isn't right."))
             }
         }
+        // A link in a CV or cover letter (see links.rs): anyone can open it.
+        ("GET" | "HEAD", p) if p.starts_with("/l/") => {
+            let ua = req.headers.get("user-agent").cloned().unwrap_or_default();
+            let ua = if req.method == "HEAD" { String::new() } else { ua };
+            match crate::links::open(agent, p.trim_start_matches("/l/"), &ua) {
+                Some(to) => Resp { status: 302, ctype: "text/plain".into(), body: vec![], headers: vec![("Location".into(), to), ("Cache-Control".into(), "no-store".into()), ("Referrer-Policy".into(), "no-referrer".into())] },
+                None => html(404, "<p>This link isn't known.</p>".into()),
+            }
+        }
         ("POST", "/logout") => {
             sign_out(agent, token.as_deref());
             redirect("/login", vec![("Set-Cookie".into(), format!("{COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0{secure}"))])
@@ -316,6 +325,14 @@ mod tests {
         std::thread::spawn(move || serve(a, h, &format!("127.0.0.1:{port}"), Arc::new(|| true)));
         std::thread::sleep(Duration::from_millis(200));
 
+        // A link from a CV opens for anyone, and is counted; a link checker's visit apart.
+        s.agent.db().add_link("acme-abcd", "test:1", "https://www.linkedin.com/in/alex").unwrap();
+        let r = send(port, "GET /l/acme-abcd HTTP/1.1\r\nHost: x\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0) Chrome/130\r\n\r\n");
+        assert!(r.starts_with("HTTP/1.1 302") && r.contains("Location: https://www.linkedin.com/in/alex"), "{r}");
+        send(port, "GET /l/acme-abcd HTTP/1.1\r\nHost: x\r\nUser-Agent: Microsoft Office SafeLinks\r\n\r\n");
+        assert!(send(port, "GET /l/nope HTTP/1.1\r\nHost: x\r\n\r\n").starts_with("HTTP/1.1 404"));
+        let l = s.agent.db().links("test:1").unwrap();
+        assert_eq!((l[0]["opened"].as_i64(), l[0]["previews"].as_i64()), (Some(1), Some(1)));
         // Signed out: pages go to the sign-in page, the API refuses.
         assert!(send(port, "GET / HTTP/1.1\r\nHost: x\r\n\r\n").contains("Location: /login"));
         assert!(send(port, "GET /api/overview HTTP/1.1\r\nHost: x\r\n\r\n").starts_with("HTTP/1.1 401"));

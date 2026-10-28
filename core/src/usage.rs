@@ -213,6 +213,9 @@ impl Llm for Metered {
     fn outreach(&self, candidate: &str, cv: &str, job: &Job, contact: &str) -> R<String> {
         self.run("outreach", |l| l.outreach(candidate, cv, job, contact))
     }
+    fn chat(&self, candidate: &str, cv: &str, job: &Job, notes: &str, history: &[(String, String)], message: &str) -> R<String> {
+        self.run("chat", |l| l.chat(candidate, cv, job, notes, history, message))
+    }
     fn insights(&self, candidate: &str, results: &str, applications: &str) -> R<String> {
         self.run("insights", |l| l.insights(candidate, results, applications))
     }

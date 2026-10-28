@@ -79,6 +79,9 @@ impl Llm for FakeLlm {
     fn outreach(&self, c: &str, _cv: &str, job: &Job, contact: &str) -> R<String> {
         Ok(format!("Hi {}, I applied for {}. {c}", contact.lines().next().unwrap_or(""), job.title))
     }
+    fn chat(&self, _c: &str, _cv: &str, job: &Job, _notes: &str, history: &[(String, String)], message: &str) -> R<String> {
+        Ok(format!("About {} ({} before): {message}", job.title, history.len()))
+    }
     fn insights(&self, _c: &str, results: &str, _apps: &str) -> R<String> {
         Ok(format!("## What's working\n{}", results.len()))
     }

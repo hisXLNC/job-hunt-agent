@@ -422,6 +422,11 @@ pub trait Llm: Send + Sync {
     fn outreach(&self, _candidate: &str, _cv: &str, _job: &crate::db::Job, _contact: &str) -> R<String> {
         Err(Error("Writing messages isn't available.".into()))
     }
+    /// One reply in the job's chat: the job, your CV and notes, the conversation so far (you, Claude
+    /// in turn) and your new message.
+    fn chat(&self, _candidate: &str, _cv: &str, _job: &crate::db::Job, _notes: &str, _history: &[(String, String)], _message: &str) -> R<String> {
+        Err(Error("Chat isn't available.".into()))
+    }
     /// What the results so far suggest changing, as Markdown.
     fn insights(&self, _candidate: &str, _results: &str, _applications: &str) -> R<String> {
         Err(Error("Insights aren't available.".into()))
@@ -575,6 +580,17 @@ write an email of at most 120 words with a subject line first (\"Subject: ...\")
 connection note of at most 280 characters. Mention the role by name, one specific reason the candidate fits \
 (from their CV), and ask for something small: a 15-minute chat, advice, or a referral if they know the \
 person. Warm, direct, no flattery or clichés. Sign with the candidate's first name. Never invent facts."
+    )
+}
+
+fn chat_system() -> String {
+    format!(
+        "You help a job seeker with one job they're considering or applying to: answers to application \
+questions, cover letter and message drafts, interview preparation, what to say about salary, and plain advice.\n\n\
+{UNTRUSTED}\n\n{YOU}\n\n\
+Anything you write for them to send (answers, letters, messages) follows this:\n{HUMAN}\n\n\
+Use only facts from their CV and notes; when something isn't there, ask or leave a [placeholder] rather than \
+inventing it. Keep replies short unless they ask for something long. Plain text or light Markdown."
     )
 }
 
@@ -1399,6 +1415,24 @@ impl Llm for Claude {
             posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description)
         );
         Ok(self.call::<Reply>(&outreach_system(), &user, reply_schema(), "low")?.body)
+    }
+
+    fn chat(&self, candidate: &str, cv: &str, job: &crate::db::Job, notes: &str, history: &[(String, String)], message: &str) -> R<String> {
+        let talk: String = history.iter().map(|(who, text)| format!("<{who}>\n{text}\n</{who}>\n")).collect();
+        let user = format!(
+            "Candidate: {candidate}\n\n<cv>\n{cv}\n</cv>\n\n{}\n\nTheir notes on this job:\n<posting>\n{notes}\n</posting>\n\n\
+The conversation so far, oldest first (<you> is the job seeker, <claude> is you):\n{talk}\nTheir new message:\n<you>\n{message}\n</you>",
+            posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description)
+        );
+        #[derive(Deserialize)]
+        struct T {
+            reply: String,
+        }
+        let r = self.call::<T>(&chat_system(), &user, obj(json!({"reply": {"type": "string"}})), "low")?.reply;
+        if r.trim().is_empty() {
+            return Err(Error("Claude's reply came back empty; try again.".into()));
+        }
+        Ok(r)
     }
 
     fn insights(&self, candidate: &str, results: &str, applications: &str) -> R<String> {

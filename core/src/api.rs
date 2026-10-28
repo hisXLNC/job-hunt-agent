@@ -347,6 +347,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
             "last": get("last.backup"),
             "files": bfiles.iter().take(crate::backup::KEEP).map(|(n, size)| json!({"name": n, "size": size})).collect::<Vec<_>>(),
         },
+        "links": { "base": get("links.base") },
         "remote": {
             "on": get("remote.on") == "1",
             "port": remote_port_of(&get("remote.port")),
@@ -583,6 +584,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     }),
                     "offer": agent.offer(id), "advising": agent.is_running(&format!("offer:{id}")),
                     "know": crate::network::at_company(&crate::network::list(agent), &job.company),
+                    "links": crate::links::for_job(agent, id),
+                    "chat": agent.chat(id), "chatting": agent.is_running(&format!("chat:{id}")),
                     "contacts": agent.contacts(id), "writing_to": agent.is_running(&format!("contact:{id}")),
                     "ats": job.cv_path.as_deref().and_then(|p| crate::cv::open(Path::new(p)).ok()).map(|d| crate::cv::ats_check(&d)),
                     "claude_desktop": crate::mcp::claude_desktop_config().as_deref().map(crate::mcp::in_claude_desktop).unwrap_or(false),
@@ -790,6 +793,28 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         if let Err(e) = r {
                             let _ = a.db().log(Some(&id), &format!("{what}:error"), &e.0);
                             a.note("That didn't work", &e.0);
+                        }
+                    });
+                    Ok(Resp::json(&json!({ "started": true })))
+                }
+                "chat" => {
+                    if b.get("clear").and_then(|v| v.as_bool()) == Some(true) {
+                        agent.chat_clear(id)?;
+                        return ok();
+                    }
+                    let key = format!("chat:{id}");
+                    if agent.is_running(&key) {
+                        return Err(Error("Claude is still answering the last message.".into()));
+                    }
+                    if s(&b, "message").trim().is_empty() {
+                        return Err(Error("Write a message first.".into()));
+                    }
+                    let (a, id, msg) = (agent.clone(), id.to_string(), s(&b, "message").to_string());
+                    std::thread::spawn(move || {
+                        let Ok(_g) = a.claim(&key) else { return };
+                        if let Err(e) = a.chat_send(&id, &msg) {
+                            let _ = a.db().log(Some(&id), "chat:error", &e.0);
+                            a.note("Claude couldn't answer", &e.0);
                         }
                     });
                     Ok(Resp::json(&json!({ "started": true })))
@@ -1418,6 +1443,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     crate::web::ensure_started(agent.clone(), host.clone(), remote_port(agent)).map_err(Error)?;
                 }
             }
+            ok()
+        }
+        ["api", "settings", "links"] => {
+            crate::links::set_base(agent, s(&b, "base"))?;
             ok()
         }
         ["api", "settings", "suggest-boards"] => Ok(Resp::json(&json!({ "boards": agent.suggest_boards()? }))),

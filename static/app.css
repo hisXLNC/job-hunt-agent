@@ -741,3 +741,11 @@ table.jobs td { padding: 10px 7px; }
 #t-all td.loc { min-width: 90px; }
 #t-all td.role { min-width: 150px; }
 .week-words p { margin: 0 0 6px; }
+
+.chat-log { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.chat-msg { max-width: 85%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; }
+.chat-msg.me { align-self: flex-end; background: var(--accent-soft, #e8edff); }
+.chat-msg.them { align-self: flex-start; background: var(--surface-2, #f4f4f2); white-space: normal; }
+.chat-msg.them p:first-child { margin-top: 0; }
+.chat-send { display: flex; gap: 8px; align-items: flex-end; }
+.chat-send textarea { flex: 1; }

@@ -12,6 +12,7 @@ pub mod db;
 pub mod filters;
 pub mod fill;
 pub mod google;
+pub mod links;
 pub mod mcp;
 pub mod network;
 pub mod pipeline;

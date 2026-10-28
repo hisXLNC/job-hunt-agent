@@ -118,6 +118,9 @@ CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, dupe_key TEXT NOT NULL, 
 CREATE INDEX IF NOT EXISTS purged_dupe ON purged(dupe_key);
 -- The same role posted again later under another listing: a sign it's hard to fill, or not real.
 CREATE TABLE IF NOT EXISTS reposts (job_id TEXT NOT NULL, posting_id TEXT NOT NULL, seen_at TEXT NOT NULL, PRIMARY KEY (job_id, posting_id));
+-- Links in tailored CVs and letters that note when they're opened (see links.rs).
+CREATE TABLE IF NOT EXISTS links (token TEXT PRIMARY KEY, job_id TEXT NOT NULL, target TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS clicks (token TEXT NOT NULL, at TEXT NOT NULL, bot INTEGER NOT NULL DEFAULT 0);
 -- Which sources listed each role (by company and title), to show how much they overlap.
 CREATE TABLE IF NOT EXISTS sightings (dupe_key TEXT NOT NULL, source TEXT NOT NULL, first_at TEXT NOT NULL, last_at TEXT NOT NULL, PRIMARY KEY (dupe_key, source));
 ";
@@ -493,6 +496,31 @@ impl Db {
         }).collect();
         out.sort_by_key(|v| std::cmp::Reverse(v["roles"].as_u64().unwrap_or(0)));
         Ok(out)
+    }
+
+    pub fn add_link(&self, token: &str, job_id: &str, target: &str) -> R<()> {
+        self.con.execute("INSERT OR REPLACE INTO links (token, job_id, target, created_at) VALUES (?1, ?2, ?3, ?4)", params![token, job_id, target, now()])?;
+        Ok(())
+    }
+
+    pub fn link_target(&self, token: &str) -> R<Option<String>> {
+        Ok(self.con.query_row("SELECT target FROM links WHERE token = ?1", [token], |r| r.get(0)).optional()?)
+    }
+
+    pub fn add_click(&self, token: &str, bot: bool) -> R<()> {
+        self.con.execute("INSERT INTO clicks (token, at, bot) VALUES (?1, ?2, ?3)", params![token, now(), bot as i64])?;
+        Ok(())
+    }
+
+    /// An application's links, one per address (its latest files' links and any earlier ones):
+    /// {target, opened (by people), previews (by link checkers), last}.
+    pub fn links(&self, job_id: &str) -> R<Vec<Value>> {
+        let mut st = self.con.prepare(
+            "SELECT l.target, COALESCE(SUM(c.bot = 0), 0), COALESCE(SUM(c.bot = 1), 0), MAX(CASE WHEN c.bot = 0 THEN c.at END)
+             FROM links l LEFT JOIN clicks c ON c.token = l.token WHERE l.job_id = ?1 GROUP BY l.target ORDER BY MIN(l.created_at)",
+        )?;
+        let rows = st.query_map([job_id], |r| Ok(json!({ "target": r.get::<_, String>(0)?, "opened": r.get::<_, i64>(1)?, "previews": r.get::<_, i64>(2)?, "last": r.get::<_, Option<String>>(3)? })))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// How many times each role was posted again.
