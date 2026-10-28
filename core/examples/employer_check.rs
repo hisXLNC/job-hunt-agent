@@ -24,6 +24,38 @@ const EMPLOYERS: &[(&str, &[&str])] = &[
 fn main() {
     let title = std::env::args().nth(1).unwrap_or_else(|| "Accountant".into());
     let c = sources::http();
+    // FreeHire's job search for agents, and Hiring Cafe's search page (without a browser).
+    for url in ["https://freehire.me/api/v1/agent/jobs/search?q=Accountant&countries=CA&limit=20&description_format=markdown&sort=posted_at&order=desc",
+        "https://freehire.me/api/v1/agent/jobs/search?q=Accountant&countries=CA&cities=Halifax&limit=20"] {
+        match c.get(url).header("Accept", "application/json").send() {
+            Ok(r) => {
+                let status = r.status().as_u16();
+                let body = r.text().unwrap_or_default();
+                println!("FreeHire {status} {} chars  {url}", body.len());
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+                    println!("    meta {}", v["meta"]);
+                    for j in v["data"].as_array().into_iter().flatten().take(4) {
+                        println!("    {} | {} | {} | {} | desc {} chars | keys {:?}", j["title"], j["company"], j["location"], j["url"], j["description"].as_str().map(|d| d.len()).unwrap_or(0),
+                            j.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()).unwrap_or_default());
+                    }
+                } else {
+                    println!("    not json: {:?}", body.chars().take(300).collect::<String>());
+                }
+            }
+            Err(e) => println!("FreeHire FAILED {e}"),
+        }
+    }
+    let hc = "https://hiringcafe.com/?searchState=%7B%22searchQuery%22%3A%22Accountant%22%2C%22locations%22%3A%5B%7B%22formatted_address%22%3A%22Canada%22%2C%22types%22%3A%5B%22country%22%5D%2C%22id%22%3A%22user_country%22%2C%22address_components%22%3A%5B%7B%22long_name%22%3A%22Canada%22%2C%22short_name%22%3A%22CA%22%2C%22types%22%3A%5B%22country%22%5D%7D%5D%2C%22options%22%3A%7B%22flexible_regions%22%3A%5B%22anywhere_in_continent%22%2C%22anywhere_in_world%22%5D%7D%7D%5D%2C%22dateFetchedPastNDays%22%3A14%7D";
+    match c.get(hc).header("Accept", "text/html").send() {
+        Ok(r) => {
+            let status = r.status().as_u16();
+            let body = r.text().unwrap_or_default();
+            let links: Vec<&str> = Regex::new(r#"/job/[A-Za-z0-9_-]{6,}"#).unwrap().find_iter(&body).map(|m| m.as_str()).take(5).collect();
+            println!("Hiring Cafe {status} {} chars, next data {}, bot check {}, job links {links:?}", body.len(), body.contains("__NEXT_DATA__"),
+                ["challenge-platform", "cf-browser-verification", "vercel security checkpoint", "just a moment"].iter().any(|w| body.to_lowercase().contains(w)));
+        }
+        Err(e) => println!("Hiring Cafe FAILED {e}"),
+    }
     // A BambooHR careers site, read the way a search reads it.
     match sources::bamboohr(&c, "ashteadtechnology", &|_| true) {
         Ok(list) => {

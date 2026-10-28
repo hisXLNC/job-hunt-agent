@@ -19,6 +19,7 @@ const SITES = [
   ['People First HR', 'https://peoplefirsthr.com/jobs'],
   ['Jobs.ca', 'https://www.jobs.ca/jobs?q=Accountant&l=Toronto%2C+ON'],
   ['Tech Talent Canada', 'https://jobs.techtalent.ca/?q=Developer'],
+  ['Hiring Cafe', 'https://hiringcafe.com/?searchState=%7B%22searchQuery%22%3A%22Accountant%22%2C%22locations%22%3A%5B%7B%22formatted_address%22%3A%22Canada%22%2C%22types%22%3A%5B%22country%22%5D%2C%22id%22%3A%22user_country%22%2C%22address_components%22%3A%5B%7B%22long_name%22%3A%22Canada%22%2C%22short_name%22%3A%22CA%22%2C%22types%22%3A%5B%22country%22%5D%7D%5D%2C%22options%22%3A%7B%22flexible_regions%22%3A%5B%22anywhere_in_continent%22%2C%22anywhere_in_world%22%5D%7D%7D%5D%2C%22dateFetchedPastNDays%22%3A14%7D'],
   ['Job Bank', 'https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=Accountant&locationstring=Toronto%2C+ON'],
 ];
 
