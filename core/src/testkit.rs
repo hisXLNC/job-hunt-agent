@@ -104,6 +104,9 @@ impl Llm for FakeLlm {
         Ok(crate::claude::CompanyRating { found: true, rating: Some(4.1), reviews: Some(1234), source: "Glassdoor".into(), url: "https://www.glassdoor.example/acme".into(),
             work_life: Some(3.8), recommend: Some(78), pros: vec!["Good people".into()], cons: vec!["Slow promotions".into()], summary: "Liked overall.".into(), others: vec![] })
     }
+    fn shorten_reasons(&self, reasons: &[String]) -> R<Vec<String>> {
+        Ok(reasons.iter().map(|r| r.split_whitespace().take(6).collect::<Vec<_>>().join(" ")).collect())
+    }
     fn company_apply(&self, job: &Job) -> R<Option<String>> {
         self.calls.lock().unwrap().push(format!("company_apply:{}", job.id));
         let n = job.id.rsplit(':').next().unwrap_or("");

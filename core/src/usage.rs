@@ -234,6 +234,9 @@ impl Llm for Metered {
     fn company_apply(&self, job: &Job) -> R<Option<String>> {
         self.run("apply-link", |l| l.company_apply(job))
     }
+    fn shorten_reasons(&self, reasons: &[String]) -> R<Vec<String>> {
+        self.run("reasons", |l| l.shorten_reasons(reasons))
+    }
 }
 
 #[cfg(test)]

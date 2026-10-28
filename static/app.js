@@ -84,6 +84,7 @@ const ICON = {
   check: '<path d="m5 12 5 5 9-10"/>',
   results: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
 };
@@ -601,7 +602,7 @@ const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply
 const jobTabs = {};
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, know, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
   const tracks = st.profile.tracks;
@@ -616,7 +617,7 @@ async function showJob(id) {
       <div class="grow">
         <div class="eyebrow"><a href="#pipeline">Applications</a> / ${esc(STAGES[j.status] || j.status)}</div>
         <h1>${esc(j.title)}</h1>
-        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}</div>
+        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}${stretchTag(j)}</div>
       </div>
     </div>
     <div class="actions">
@@ -744,6 +745,8 @@ async function showJob(id) {
     ${!['skipped', 'dismissed'].includes(j.status) ? `<section class="card">
       <header><h2>People at ${esc(j.company)}</h2>${writing_to ? '<span class="muted small"><span class="spin"></span>Writing…</span>' : ''}</header>
       <p class="muted small">A recruiter, the hiring manager or someone you know there. A short note to the right person often counts for more than a perfect CV. <a href="#" data-act="link" data-url="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(j.company + ' ' + j.title.split(/[,(-]/)[0])}">Look on LinkedIn</a></p>
+      ${(know || []).filter(p => !(contacts || []).some(c => c.name === p.name)).map(p => `<div class="qa"><div class="row" style="justify-content:space-between"><span><span class="pill good">You know them</span> <b>${esc(p.name)}</b>${p.position ? ` · ${esc(p.position)}` : ''}${p.link ? ` · <a href="#" data-act="link" data-url="${esc(p.link)}">profile</a>` : ''}</span>
+        <button class="btn primary" data-act="askReferral" data-person="${esc(JSON.stringify(p))}" ${writing_to ? 'disabled' : ''}>Ask ${esc(firstName(p.name))} for a referral</button></div></div>`).join('')}
       ${(contacts || []).map((c, i) => `<div class="qa"><div class="row" style="justify-content:space-between"><span><b>${esc(c.name)}</b>${c.role ? ` · ${esc(c.role)}` : ''}${c.email ? ` · ${esc(c.email)}` : ''}${c.link ? ` · <a href="#" data-act="link" data-url="${esc(c.link)}">profile</a>` : ''}</span>
         <span class="row"><button class="btn" data-act="outreach" data-i="${i}" ${writing_to ? 'disabled' : ''}>${c.message ? 'Write again' : 'Write a message'}</button><button class="btn ghost" data-act="removeContact" data-i="${i}">Remove</button></span></div>
         ${c.message ? `<div class="posting" id="msg${i}">${esc(c.message)}</div><button class="btn ghost" data-act="copy" data-from="msg${i}">Copy</button>` : ''}</div>`).join('')}
@@ -816,6 +819,9 @@ const whyFits = j => {
   return `<details class="why-fits"><summary><span class="why-text">${esc(j.reasoning || '')}</span>${flags.length ? `<span class="bad-text">${flags.length} red flag${flags.length === 1 ? '' : 's'}</span>` : ''}</summary>
     ${flags.length ? `<ul class="flags">${flags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}</details>`;
 };
+/** The posting's hard requirements the CV doesn't show (red flags Claude marks "Must have:"): a stretch to apply for. */
+const mustHaves = j => (j.red_flags || []).filter(f => /^must have:/i.test(f)).map(f => f.replace(/^must have:\s*/i, ''));
+const stretchTag = j => { const m = mustHaves(j); return m.length ? ` <span class="pill warn" title="Required, and not on your CV: ${esc(m.join('; '))}">Stretch</span>` : ''; };
 /** Where Apply goes, for a posting found on a job board: the company's own site, once Job Hunt finds it there. */
 const onCompanySite = j => j.apply_url ? `<span class="good-text" title="${esc(j.apply_url)}">applies on ${esc(j.company)}'s own site</span>` : '';
 
@@ -823,9 +829,9 @@ const onCompanySite = j => j.apply_url ? `<span class="good-text" title="${esc(j
  *  (the Tracker's rows) fills in the steps after you apply. */
 function stepHtml(o, step, tracked) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
-  const row = (j, sub, actions) => `<div class="todo-row"><span></span>
+  const row = (j, sub, actions, tick = '') => `<div class="todo-row">${tick || '<span></span>'}
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${coLocLine(j)}</a>
+      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${stretchTag(j)}${j.know?.length ? ` <span class="pill good" title="Connected on LinkedIn: ${esc(j.know.join(', '))}">You know ${esc(j.know.length === 1 ? firstName(j.know[0]) : `${j.know.length} people`)} there</span>` : ''}${coLocLine(j)}</a>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span>
       <span class="why small muted">${sub || ''}</span>
       <span class="row todo-act">${actions}</span></div>`;
@@ -845,7 +851,7 @@ function stepHtml(o, step, tracked) {
         data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}"
         data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"><label style="display:contents"><input type="checkbox" data-pick="${esc(j.id)}">
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}<br><span class="muted small">${ageTag(j)}</span>${coLocLine(j)}</span>
+      <span class="grow"><span class="qt">${esc(j.title)}</span> ${closedTag(j)}${deadlineTag(j)}${stretchTag(j)}${j.recruiter ? ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>` : ''}${j.know?.length ? ` <span class="pill good" title="You're connected on LinkedIn with ${esc(j.know.join(', '))}: ask for a referral on the job's Questions &amp; contacts tab">You know ${esc(j.know.length === 1 ? firstName(j.know[0]) : `${j.know.length} people`)} there</span>` : ''}<br><span class="muted small">${ageTag(j)}</span>${coLocLine(j)}</span>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span></label>
       <span class="why small">${whyFits(j)}</span>
       <span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('');
@@ -864,9 +870,13 @@ function stepHtml(o, step, tracked) {
   }
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
   const ready = [];
-  if (o.ready?.length) ready.push([`<a class="btn sm" href="#review">Review them one by one</a>`, o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : '', onCompanySite(j)].filter(Boolean).join(' · '),
+  const many = o.ready?.length > 1;
+  if (o.ready?.length) ready.push([many ? '' : `<a class="btn sm" href="#review">Review it</a>`, `<div data-approvebox>
+    ${many ? `<div class="row" style="margin:2px 0 8px"><button class="btn primary" data-act="approvePicked" disabled>Approve selected</button><button class="btn ghost" type="button" data-act="approveAll">Select all</button><a class="btn" href="#review">Review them one by one</a></div>` : ''}
+    ${o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : '', onCompanySite(j)].filter(Boolean).join(' · '),
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
-     <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`)).join('')]);
+     <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`,
+    o.ready.length > 1 ? `<input type="checkbox" data-appr="${id(j)}" data-email="${esc(j.apply_email || '')}" aria-label="Select ${esc(j.company)}">` : '')).join('')}</div>`]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
     `<button class="btn sm" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
   if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, onCompanySite(j),
@@ -1362,6 +1372,7 @@ async function showResults() {
       <td class="num">${x.interviews} <span class="muted small">${rate(x.interviews, x.sent)}</span></td>
       <td class="num">${x.offers}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Nothing sent yet.</p>'}</section>`;
   page(`<div class="head"><div class="grow"><h1>Results</h1><p class="muted">Which CVs, sources and fit scores turn into replies and interviews. A reply is any answer from the company, a rejection included, but not an automatic “we received it”.</p></div></div>
+    ${r.week_words?.length ? `<section class="card week-words"><header><h2>Your week</h2></header>${r.week_words.map(w => `<p>${esc(w)}</p>`).join('')}</section>` : ''}
     <section class="kpis">
       <div class="kpi"><span class="kpi-l">Applications sent</span><span class="kpi-v">${f.sent}</span><span class="kpi-s">of ${f.tailored} tailored</span></div>
       <div class="kpi"><span class="kpi-l">Reply rate</span><span class="kpi-v">${rate(f.replied, f.sent)}</span><span class="kpi-s">${f.replied} repl${f.replied === 1 ? 'y' : 'ies'}</span></div>
@@ -1588,7 +1599,7 @@ async function showSettings(tab, sub) {
             <div class="row"><button class="btn primary" type="submit">Save</button>${st.apify.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="apify">Remove</button>' : ''}</div>
           </form>`, !!st.apify.key)}
       ${p.sources.adzuna_country === 'ca' ? tile('jobbank', 'Job Bank', 'Free · Canada', "Canada's national job board, including postings found only there.") : ''}
-      ${tile('alerts', 'Job-alert emails', 'Free', 'Set up job alerts on LinkedIn, Indeed, Bayt or your country\'s job sites, sent to your Gmail, and Job Hunt reads them on every email check. Needs Gmail connected.')}
+      ${tile('alerts', 'Job-alert emails', 'Free', 'Set up job alerts on LinkedIn, Indeed, Job Bank, recruiters like Randstad, Adecco, Hays and Robert Half, or your country\'s job sites, sent to your Gmail, and Job Hunt reads them on every email check. Needs Gmail connected.')}
       ${tile('jsearch', 'Google for Jobs', 'Free key', 'The widest reach: LinkedIn, Indeed, Glassdoor and company sites, with full descriptions. Free for about 6 searches a day.',
         `<summary class="small">${st.jsearch.key ? 'Change the key' : 'Add a key'}</summary>${keyNote('OpenWeb Ninja', 'https://www.openwebninja.com/api/jsearch')}<form data-form="jsearch" class="form tile-form">
           
@@ -1619,6 +1630,11 @@ async function showSettings(tab, sub) {
     <section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
       <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and tailors your CV. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
       ${desk ? `<div class="row"><button class="btn primary" data-act="bookmarkSetup"><img src="/static/logo.svg" alt="" width="16" height="16">Set up the button</button><span class="muted small">Opens a page in your browser that walks you through it, so the button gets the Job Hunt logo.</span></div>
+      <details class="small"><summary class="muted">Or install it as a browser extension (Chrome or Edge)</summary><ol class="small steps-list">
+        <li><a class="btn sm" href="/api/extension.zip" download>${svg('download')}Download the extension</a> and unzip it (right-click → <b>Extract All</b>). Keep the <b>Send to Job Hunt</b> folder somewhere it stays, like Documents.</li>
+        <li>In Chrome open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>), turn on <b>Developer mode</b>, press <b>Load unpacked</b> and choose the <b>Send to Job Hunt</b> folder.</li>
+        <li>Pin it: the puzzle-piece icon by the address bar → the pin next to <b>Send to Job Hunt</b>. Then on a posting, click the Job Hunt logo.</li></ol>
+        <p class="muted small">The browser may remind you about developer-mode extensions when it starts; keep it. It reads only the tab you click it on.</p></details>
       <details class="small"><summary class="muted">Or add it yourself</summary><ol class="small steps-list">
         <li><button class="btn sm" data-act="copyBookmarklet">Copy the button</button>, or drag <a class="btn sm bookmarklet" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Drag this onto your browser's bookmarks bar">${BOOKMARK_NAME}</a> to your bookmarks bar.</li>
         <li>In your browser (Chrome or Edge), show the bookmarks bar with <b>Ctrl+Shift+B</b>, right-click it → <b>Add page</b> (Edge: <b>Add favorite</b>). Name it <b>${BOOKMARK_NAME}</b>, paste into the address (URL) box, and save. Added this way it has no logo.</li></ol></details>
@@ -1856,52 +1872,6 @@ async function showSettings(tab, sub) {
   if (tab === 'app') { showWhatsNew(); if (update?.available) showUpdate(update); }
 }
 
-/** The Send to Job Hunt button: reads the posting on the page you're on and puts it on the clipboard. */
-function clipPage() {
-  var M = 'JOBHUNT-CLIP:', job = null;
-  document.querySelectorAll('script[type="application/ld+json"]').forEach(function (s) {
-    try {
-      var d = JSON.parse(s.textContent), list = [].concat(d['@graph'] || d);
-      list.forEach(function (x) { if (!job && x && [].concat(x['@type']).indexOf('JobPosting') >= 0) job = x; });
-    } catch (e) {}
-  });
-  var t = function (x) { return (x == null ? '' : String(x)).trim(); };
-  // Plain text from HTML without parsing it: sites like LinkedIn refuse HTML parsing from scripts.
-  var plain = function (h) {
-    return String(h || '').replace(/<(br|\/p|\/li|\/h\d|\/div)[^>]*>/gi, '\n').replace(/<[^>]+>/g, '')
-      .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&');
-  };
-  var q = function (sels) { for (var i = 0; i < sels.length; i++) { var e = document.querySelector(sels[i]); if (e && t(e.innerText)) return t(e.innerText); } return ''; };
-  var sel = t(getSelection());
-  var c = { v: 1, url: location.href, title: '', company: '', location: '', text: '', structured: !!job };
-  // LinkedIn signed in: the job open on the right of a search, or its own page. Job Hunt reads
-  // the posting itself from its number, so the link matters most.
-  var li = /linkedin\./.test(location.hostname) && (new URLSearchParams(location.search).get('currentJobId') || (location.pathname.match(/\/jobs\/view\/(?:[^\/]*-)?(\d{6,})/) || [])[1]);
-  if (li && !job) {
-    c.url = 'https://www.linkedin.com/jobs/view/' + li + '/';
-    c.title = q(['.job-details-jobs-unified-top-card__job-title', '.jobs-unified-top-card__job-title', '.t-24.t-bold', 'h1']);
-    c.company = q(['.job-details-jobs-unified-top-card__company-name', '.jobs-unified-top-card__company-name']);
-    c.text = sel || q(['.jobs-description__content', '#job-details', '.jobs-box__html-content', '.jobs-search__job-details--container', '.jobs-details']);
-  }
-  if (job) {
-    c.title = t(job.title);
-    c.company = t(job.hiringOrganization && job.hiringOrganization.name);
-    var place = [].concat(job.jobLocation || [])[0], a = (place && place.address) || {};
-    c.location = [a.addressLocality, a.addressRegion, a.addressCountry && a.addressCountry.name || a.addressCountry].filter(function (x) { return typeof x === 'string'; }).join(', ');
-    c.text = t(plain(job.description));
-    if (sel.length > 200) c.text = sel;
-  } else if (!li) {
-    var h = document.querySelector('h1');
-    c.title = t(h && h.innerText) || document.title;
-    c.text = sel || t((document.querySelector('main') || document.body).innerText);
-  }
-  if (li && c.text.length < 40) c.text = c.title || 'LinkedIn job ' + li;
-  c.text = c.text.slice(0, 30000);
-  var out = M + JSON.stringify(c);
-  var done = function () { alert('Sent to Job Hunt: ' + (c.title || document.title) + '\n\nJob Hunt picks it up in a few seconds.'); };
-  var fallback = function () { var ta = document.createElement('textarea'); ta.value = out; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(out).then(done, fallback); else fallback();
-}
 /** The bookmark's name. Its icon is the Job Hunt logo, kept from the setup page it was made from. */
 const BOOKMARK_NAME = 'Send to Job Hunt';
 /** The setup page, opened in your browser: its icon is the Job Hunt logo, so a bookmark of it shows the
@@ -2052,6 +2022,13 @@ function restorePickViews() {
   try { saved = JSON.parse(localStorage.getItem('jh.pickView') || 'null'); } catch (e) {}
   document.querySelectorAll('[data-pickbox]').forEach(b => applyPickView(b, saved || {}));
 }
+function approveChanged(box) {
+  const n = box.querySelectorAll('[data-appr]:checked').length;
+  const btn = box.querySelector('button[data-act=approvePicked]');
+  if (btn) { btn.disabled = !n; btn.textContent = n ? `Approve ${n} selected` : 'Approve selected'; }
+  const all = box.querySelector('[data-act=approveAll]');
+  if (all) all.textContent = n && n === box.querySelectorAll('[data-appr]').length ? 'Clear' : 'Select all';
+}
 function pickChanged(box) {
   const n = box.querySelectorAll('[data-pick]:checked').length;
   const btn = box.querySelector('button[data-act=tailorPicked]');
@@ -2069,6 +2046,8 @@ document.addEventListener('change', e => {
   const box = e.target.closest?.('[data-pickbox]');
   if (box && e.target.matches('[data-pick]')) pickChanged(box);
   if (box && e.target.matches('[data-pickf]')) applyPickView(box);
+  const abox = e.target.closest?.('[data-approvebox]');
+  if (abox && e.target.matches('[data-appr]')) approveChanged(abox);
 });
 
 // Place pickers: a place typed (or chosen from the list) is added on Enter or when you move on;
@@ -2125,6 +2104,10 @@ async function showRecruiters() {
       <div class="row" style="gap:16px;flex-wrap:wrap">${[['draft', 'Draft it in Gmail for me to send'], ['send', 'Send it for me'], ['off', 'Off']].map(([v, n]) => `<label class="check"><input type="radio" name="applyMode" data-act="applyMode" value="${v}" ${(rec.on_apply?.mode || 'draft') === v ? 'checked' : ''}> ${n}</label>`).join('')}</div>
       <label class="check"><input type="checkbox" data-act="applyCv" ${rec.on_apply?.attach_cv ? 'checked' : ''}> <span>Attach my tailored CV to emails Job Hunt sends</span></label>
       ${rec.gmail ? '' : '<p class="muted small">Needs Gmail connected (Settings → Accounts); until then the email is written on the application\'s People list for you to copy.</p>'}</section>
+    <section class="card"><header><h2>People you know</h2></header>
+      <p class="muted small">Your LinkedIn connections, so each job shows who you know at the company and Job Hunt drafts a note asking for a referral. A referral is the surest way past the pile. In LinkedIn: Me → Settings → Data privacy → Get a copy of your data → Connections; LinkedIn emails you a file within the hour. Choose <b>Connections.csv</b> from it here. It stays on your computer.</p>
+      <div class="row"><label class="btn ${rec.network?.count ? '' : 'primary'}">${rec.network?.count ? 'Replace with a newer export' : 'Choose Connections.csv'}<input type="file" accept=".csv" data-upload="network" hidden></label>
+      ${rec.network?.count ? `<span class="muted small">${rec.network.count} connections${rec.network.at ? `, saved ${esc(ago(rec.network.at))}` : ''}</span><button class="btn ghost" data-act="forgetNetwork">Remove them</button>` : ''}</div></section>
     <form class="card form" data-form="recruiterEdit" id="recruiterNew" hidden><h2 style="grid-column:1/-1">Add a recruiter</h2>
       <label class="field">Name<input name="name" required></label><label class="field">Email<input name="email" type="email" required></label>
       <label class="field">Company<input name="company" required></label><label class="field">Phone<input name="phone"></label>
@@ -2167,7 +2150,9 @@ function sitesForm(st) {
   const on = st.profile.sources.sites || [], mine = st.profile.sources.custom_sites || [];
   const status = Object.fromEntries((st.sites?.status || []).map(x => [x.id, x]));
   const pill = id => { const x = status[id]; if (!x) return ''; const [cls, label] = SITE_STATE[x.state] || ['', x.state]; return `<span class="pill ${cls}" title="${esc(x.detail)}">${label}</span>`; };
-  const line = id => status[id] && status[id].state !== 'unknown' ? `<br><span class="small ${status[id].state === 'problem' ? '' : 'muted'}">${esc(status[id].detail)}${status[id].at ? ` · ${esc(ago(status[id].at))}` : ''}</span>` : '';
+  // A recruiter site that can't be read (or shows nothing) still sends job alerts: suggest those.
+  const ALERTS_OK = ['randstad', 'adecco', 'hays', 'roberthalf', 'michaelpage', 'altis', 'lro', 'peoplefirst', 'techtalent', 'jobsca', 'aplin'];
+  const line = id => status[id] && status[id].state !== 'unknown' ? `<br><span class="small ${status[id].state === 'problem' ? '' : 'muted'}">${esc(status[id].detail)}${status[id].at ? ` · ${esc(ago(status[id].at))}` : ''}</span>${['problem', 'quiet'].includes(status[id].state) && ALERTS_OK.includes(id) ? '<br><span class="small">Tip: set up job alerts on its website for your titles, sent to your Gmail. Job Hunt reads them on every email check.</span>' : ''}` : '';
   const here = x => x.country === st.profile.sources.adzuna_country || on.includes(x.id);
   const group = kind => (st.sites?.catalog || []).filter(x => x.kind === kind && here(x)).map(x => `<label class="check"><input type="checkbox" name="site" value="${esc(x.id)}" ${on.includes(x.id) ? 'checked' : ''}>
       <span><b>${esc(x.name)}</b> ${on.includes(x.id) ? pill(x.id) : ''}<br><span class="muted small">${esc(x.about)}</span>${on.includes(x.id) ? line(x.id) : ''}</span></label>`).join('');
@@ -2193,7 +2178,7 @@ const CONN_ACT = {
   phoneTest: () => ['Send a test', 'phoneTest'], syncNow: () => ['Sync now', 'syncNow'], backupNow: () => ['Back up now', 'backupNow'],
 };
 let connPoll;
-const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
+const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
 async function renderUsage() {
   const box = $('#usageCard'); if (!box) return;
   let u;
@@ -2529,6 +2514,34 @@ async function act(el) {
       await refreshOverview(); route();
     });
   }
+  if (a === 'approveAll') {
+    const box = el.closest('[data-approvebox]');
+    const all = [...box.querySelectorAll('[data-appr]')];
+    const on = !all.every(c => c.checked);
+    all.forEach(c => { c.checked = on; });
+    approveChanged(box);
+    return;
+  }
+  if (a === 'approvePicked') {
+    const picked = [...el.closest('[data-approvebox]').querySelectorAll('[data-appr]:checked')];
+    if (!picked.length) return;
+    const emails = picked.filter(c => c.dataset.email).length;
+    if (!await ask(`Approve ${picked.length} application${picked.length === 1 ? '' : 's'}?${emails ? ` ${emails === 1 ? 'One applies' : `${emails} apply`} by email: the tailored CV and cover letter go out from your Gmail now.` : ''} The rest wait under Submit for you to apply on the company's site.`)) return;
+    return busy(async () => {
+      let sent = 0, approved = 0;
+      const failed = [];
+      for (const c of picked) {
+        try {
+          const r = await api(`/api/jobs/${encodeURIComponent(c.dataset.appr)}/approve`, { method: 'POST' });
+          if (r.outcome === 'applied') sent++; else approved++;
+        } catch (e) { failed.push(e.message || String(e)); }
+      }
+      await refreshOverview();
+      toast([approved ? `${approved} approved: submit ${approved === 1 ? 'it' : 'them'} under Submit.` : '', sent ? `${sent} sent by email.` : '', failed.length ? `${failed.length} didn't go: ${failed[0]}` : ''].filter(Boolean).join(' '));
+      location.hash = approved ? '#overview/submit' : '#overview/approve';
+      route();
+    });
+  }
   if (a === 'approve') {
     if (el.dataset.email && !await ask(`Send your tailored CV and cover letter to ${el.dataset.email} from your Gmail?`)) return;
     return busy(async () => {
@@ -2561,6 +2574,24 @@ async function act(el) {
   }
   if (a === 'offerAdvice') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/offer`, { method: 'POST', body: { offer: $('#offerText').value } }); setTimeout(route, 300); }, 'Weighing the offer…');
+  }
+  if (a === 'forgetNetwork') {
+    if (!await ask('Remove your LinkedIn connections from Job Hunt?')) return;
+    return busy(async () => { await api('/api/network/forget', { method: 'POST' }); route(); }, 'Removed.');
+  }
+  if (a === 'askReferral') {
+    const list = JSON.parse(main().dataset.contacts || '[]');
+    const p = JSON.parse(el.dataset.person);
+    let i = list.findIndex(c => c.name === p.name);
+    if (i < 0) {
+      list.push({ name: p.name, role: p.position || '', email: p.email || '', link: p.link || '', note: 'A LinkedIn connection of mine who works there. Ask, warmly and briefly, whether they would refer me or pass my CV to the hiring manager, and offer to send the posting and my CV.' });
+      i = list.length - 1;
+    }
+    return busy(async () => {
+      await api(`/api/jobs/${encodeURIComponent(jobId)}/contacts`, { method: 'POST', body: { contacts: list } });
+      await api(`/api/jobs/${encodeURIComponent(jobId)}/outreach`, { method: 'POST', body: { index: i } });
+      setTimeout(route, 300);
+    }, `Writing to ${firstName(p.name)}…`);
   }
   if (a === 'outreach') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/outreach`, { method: 'POST', body: { index: Number(el.dataset.i) } }); setTimeout(route, 300); }, 'Writing the message…');
@@ -3089,6 +3120,12 @@ document.addEventListener('change', async e => {
         toast('Restoring… Job Hunt restarts in a moment.');
         await api('/api/backup/restore', { method: 'POST', raw: await file.arrayBuffer() });
         setTimeout(() => location.reload(), 6000);
+      } catch (err) { toast(err.message, true); }
+    } else if (el.dataset.upload === 'network') {
+      try {
+        const r = await api('/api/network', { method: 'POST', raw: await el.files[0].text() });
+        toast(`${r.count} connections saved. Jobs at their companies now show who you know there.`);
+        route();
       } catch (err) { toast(err.message, true); }
     } else if (el.dataset.upload === 'signature') {
       try {

@@ -13,6 +13,7 @@ pub mod filters;
 pub mod fill;
 pub mod google;
 pub mod mcp;
+pub mod network;
 pub mod pipeline;
 pub mod profile;
 pub mod recruiters;

@@ -22,9 +22,11 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 /// Near-miss titles Claude looks at per search; the rest wait for the next one.
 const NEAR_MISS_BATCH: usize = 150;
 
+/// Matches waiting this long to be picked are set aside as not interested.
+const UNPICKED_DAYS: i64 = 60;
 /// Job-alert emails from the big job sites, and Canada's Job Bank. Kept separate from the inbox
 /// check, which skips promotions.
-pub const ALERTS_QUERY: &str = "newer_than:7d from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com OR alert@indeed.com OR jobalert.indeed.com OR noreply@glassdoor.com OR jobbank.gc.ca OR guichetemplois.gc.ca OR eluta.ca OR workopolis.com OR bayt.com OR naukrigulf.com OR gulftalent.com OR monstergulf.com OR reed.co.uk OR totaljobs.com OR seek.com.au OR stepstone OR ziprecruiter.com OR naukri.com)";
+pub const ALERTS_QUERY: &str = "newer_than:7d from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com OR alert@indeed.com OR jobalert.indeed.com OR noreply@glassdoor.com OR jobbank.gc.ca OR guichetemplois.gc.ca OR eluta.ca OR workopolis.com OR bayt.com OR naukrigulf.com OR gulftalent.com OR monstergulf.com OR reed.co.uk OR totaljobs.com OR seek.com.au OR stepstone OR ziprecruiter.com OR naukri.com OR randstad.ca OR randstad.com OR adecco.ca OR adecco.com OR hays.ca OR hays.com OR roberthalf.com OR roberthalf.ca OR michaelpage.ca OR michaelpage.com OR altis.com OR lrostaffing.com OR peoplefirsthr.com OR techtalent.ca OR jobs.ca OR aplin.com)";
 
 fn alert_site(from: &str) -> &'static str {
     let f = from.to_lowercase();
@@ -47,6 +49,13 @@ fn alert_site(from: &str) -> &'static str {
     } else if f.contains("gulftalent") {
         "gulftalent"
     } else {
+        // Recruiters' own job alerts: their sites are hard to read directly, their emails aren't.
+        for (domain, id) in [("randstad.", "randstad"), ("adecco.", "adecco"), ("hays.", "hays"), ("roberthalf.", "roberthalf"), ("michaelpage.", "michaelpage"),
+            ("altis.", "altis"), ("lrostaffing.", "lro"), ("peoplefirsthr.", "peoplefirst"), ("techtalent.", "techtalent"), ("jobs.ca", "jobsca"), ("aplin.", "aplin")] {
+            if f.contains(domain) {
+                return id;
+            }
+        }
         "alert"
     }
 }
@@ -1200,6 +1209,10 @@ replies and interviews, and a little lower for kinds that got none from several 
         let mut report = Report::default();
         let cap = profile.max_scored_per_run.max(1);
         self.drop_outside_locations()?;
+        let set_aside = self.db().archive_unpicked(UNPICKED_DAYS)?;
+        if set_aside > 0 {
+            self.db().log(None, "archive", &format!("set aside {set_aside} match{} not picked in {UNPICKED_DAYS} days (in All jobs under Not interested)", if set_aside == 1 { "" } else { "es" }))?;
+        }
         let purged = self.db().purge_older_than(profile.purge_after_days)?;
         if purged > 0 {
             self.db().log(None, "purge", &format!("removed {purged} old posting{} you never acted on", if purged == 1 { "" } else { "s" }))?;
@@ -1249,6 +1262,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         let mut candidates: Vec<Posting> = vec![];
         let mut near: Vec<Posting> = vec![];
         let mut seen: HashSet<String> = HashSet::new();
+        // Copies on the company's own site first, so a job board's copy of the same role is the one dropped.
+        let mut postings = postings;
+        postings.sort_by_key(|p| crate::sources::is_job_board(&p.url));
         for mut p in postings {
             if p.salary.is_none() {
                 if let Some((text, max)) = crate::sources::salary_from_text(&p.description) {
@@ -1271,6 +1287,13 @@ replies and interviews, and a little lower for kinds that got none from several 
             }
             let known = self.db().job_exists(&p.id(), &p.company, &p.title)? || self.db().url_exists(&p.url)?;
             if known {
+                // Found on the company's site this time: apply there rather than on the job board.
+                let existing = self.db().existing_job(&p.id(), &p.company, &p.title);
+                if let Some(id) = existing {
+                    if self.db().prefer_company_link(&id, &p.url)? {
+                        self.db().log(Some(&id), "company-site", &format!("found on the company's site: {}", p.url))?;
+                    }
+                }
                 let posted = p.posted_at.as_deref().and_then(posted_date);
                 self.db().record_repost(&p.id(), &p.company, &p.title, &p.url, posted)?;
                 report.known += 1;
@@ -2429,7 +2452,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 Ok(ids) => json!({ "name": "Job-alert emails (LinkedIn, Indeed, Glassdoor, Job Bank)", "kind": "email",
                     // Gmail answered: it works, whether or not any alerts came this week.
                     "ok": true, "found": ids.len(), "unit": "emails this week",
-                    "hint": if ids.is_empty() { "None this week. On LinkedIn, Indeed, Glassdoor and Job Bank (jobbank.gc.ca), set up job alerts for your titles sent to this Gmail address; Job Hunt reads them on every email check." } else { "" } }),
+                    "hint": if ids.is_empty() { "None this week. On LinkedIn, Indeed, Glassdoor, Job Bank (jobbank.gc.ca) and recruiters like Randstad, Adecco and Hays, set up job alerts for your titles sent to this Gmail address; Job Hunt reads them on every email check." } else { "" } }),
                 Err(e) => json!({ "name": "Job-alert emails", "kind": "email", "ok": false, "error": e.0, "hint": "Reconnect Google in Settings \u{2192} Accounts." }),
             },
         }); }
@@ -2644,6 +2667,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         if !self.claude_ready() {
             add(&mut out, "problem", if self.engine_name() == "api" { "No Claude API key, so nothing can be scored or tailored.".into() } else { "Claude Code isn't ready on this computer, so nothing can be scored or tailored.".into() }, "#settings/connections");
         }
+        if self.engine_name() == "api" && self.claude_ready() && (self.profile().sources.indeed || self.ratings_auto()) {
+            add(&mut out, "warn", "You're using a Claude API key. Indeed search, company ratings and finding jobs on companies' own sites need your Claude subscription: choose it in Settings \u{2192} Connections \u{2192} Claude.".into(), "#settings/connections");
+        }
         if let Some(t) = self.limited() {
             add(&mut out, "warn", format!("Your Claude usage limit is reached. It resets {}; searching, scoring and tailoring wait until then, and pick up by themselves.", crate::util::reset_time(t, chrono::Utc::now())), "#settings/connections");
         }
@@ -2832,6 +2858,90 @@ replies and interviews, and a little lower for kinds that got none from several 
             }
         }
         Ok(text)
+    }
+
+    /// The last seven days in a few plain sentences, against the seven before: what you sent, what
+    /// came back, what Job Hunt found, and the one thing most worth doing next.
+    pub fn week_in_words(&self) -> R<Vec<String>> {
+        let profile = self.profile();
+        let now = Utc::now();
+        let (week, before) = ((now - Duration::days(7)).to_rfc3339(), (now - Duration::days(14)).to_rfc3339());
+        let (jobs, emails) = {
+            let db = self.db();
+            (db.jobs(None, 1_000_000)?, db.job_emails()?)
+        };
+        let plural = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+        let sent = |from: &str, to: &str| jobs.iter().filter(|j| j.applied_at.as_deref().is_some_and(|a| a >= from && a < to)).count();
+        let (now_s, this, last) = (now.to_rfc3339(), sent(&week, "~"), sent(&before, &week));
+        let mut out = vec![];
+        let change = match this.cmp(&last) {
+            _ if last == 0 && this == 0 => String::new(),
+            std::cmp::Ordering::Greater => format!(", {} more than the week before", this - last),
+            std::cmp::Ordering::Less => format!(", {} fewer than the week before", last - this),
+            std::cmp::Ordering::Equal => ", the same as the week before".into(),
+        };
+        let goal = profile.weekly_goal as usize;
+        out.push(match (this, goal) {
+            (0, 0) => "You didn't send any applications this week.".into(),
+            (0, g) => format!("You didn't send any applications this week; your goal is {g}."),
+            (n, g) if g > 0 && n >= g => format!("You sent {}{change}: your goal of {g} is met.", plural(n, "application", "applications")),
+            (n, g) if g > 0 => format!("You sent {}{change}, {} short of your goal of {g}.", plural(n, "application", "applications"), g - n),
+            (n, _) => format!("You sent {}{change}.", plural(n, "application", "applications")),
+        });
+        // Who wrote back, by what they said.
+        let company = |id: &str| jobs.iter().find(|j| j.id == id).map(|j| j.company.clone()).unwrap_or_default();
+        let said = |c: &str| match c {
+            "interview_request" | "interview_confirmed" => "an interview",
+            "rejection" => "a no",
+            "offer" => "an offer",
+            _ => "a reply",
+        };
+        let mut back: Vec<(String, &str)> = vec![];
+        for (id, c, _, at) in &emails {
+            if at.as_str() >= week.as_str() && at.as_str() <= now_s.as_str() && !["application_received", "job_alert", "not_job"].contains(&c.as_str()) {
+                let co = company(id);
+                if !co.is_empty() && !back.iter().any(|(b, _)| *b == co) {
+                    back.push((co, said(c)));
+                }
+            }
+        }
+        if back.is_empty() {
+            out.push(if this + last > 0 { "No company wrote back this week. That's normal: most replies come one to three weeks after you apply.".into() } else { "No replies this week.".into() });
+        } else {
+            let list: Vec<String> = back.iter().take(4).map(|(co, what)| format!("{what} from {co}")).collect();
+            let more = if back.len() > 4 { format!(" and {} more", back.len() - 4) } else { String::new() };
+            out.push(format!("{} wrote back: {}{more}.", plural(back.len(), "company", "companies"), list.join(", ")));
+        }
+        let found: Vec<&Job> = jobs.iter().filter(|j| j.found_at.as_str() >= week.as_str()).collect();
+        let good = found.iter().filter(|j| j.status != "skipped").count();
+        if !found.is_empty() {
+            out.push(format!("Job Hunt found {}; {} cleared your fit bar.", plural(found.len(), "new posting", "new postings"), if good == 0 { "none".to_string() } else { good.to_string() }));
+        }
+        // How it's going overall, once there's enough to say.
+        let ever = jobs.iter().filter(|j| j.applied_at.is_some()).count();
+        let replied: HashSet<&str> = emails.iter().filter(|(_, c, _, _)| !["application_received", "job_alert", "not_job"].contains(&c.as_str())).map(|(id, _, _, _)| id.as_str()).collect();
+        let answered = jobs.iter().filter(|j| j.applied_at.is_some() && replied.contains(j.id.as_str())).count();
+        if ever >= 5 {
+            let pct = answered * 100 / ever;
+            let read = if pct >= 20 { "a good rate" } else if pct >= 8 { "about usual" } else { "on the low side: tailoring each CV and applying within a few days of the posting helps most" };
+            out.push(format!("So far {answered} of your {ever} applications got a reply ({pct}%), {read}."));
+        }
+        // The one thing most worth doing next.
+        let count = |s: &str| jobs.iter().filter(|j| j.status == s).count();
+        let (ready, queued, approved) = (count("ready"), count("queued"), count("approved"));
+        let next = if ready > 0 {
+            format!("Next: {} ready to approve. That's the quickest step.", plural(ready, "application is", "applications are"))
+        } else if approved > 0 {
+            format!("Next: {} approved and waiting to be submitted on the company's site.", plural(approved, "application is", "applications are"))
+        } else if queued > 0 {
+            format!("Next: pick a few of the {} waiting to be tailored.", plural(queued, "match", "matches"))
+        } else {
+            String::new()
+        };
+        if !next.is_empty() {
+            out.push(next);
+        }
+        Ok(out)
     }
 
     /// Where the weekly review is emailed: your address in your profile, else your Gmail address.
@@ -3664,6 +3774,36 @@ replies and interviews, and a little lower for kinds that got none from several 
         found
     }
 
+    /// Fit reasons from before they were kept short: still-open postings whose reason runs long.
+    pub fn long_reasons(&self) -> Vec<Job> {
+        self.db().jobs(None, 5000).unwrap_or_default().into_iter()
+            .filter(|j| j.reasoning.as_deref().unwrap_or("").chars().count() > 160 && !["dismissed", "rejected", "no_response"].contains(&j.status.as_str()))
+            .collect()
+    }
+
+    /// Make a few of them one line, in one request. Returns how many.
+    pub fn shorten_old_reasons(&self, max: usize) -> usize {
+        let jobs: Vec<Job> = self.long_reasons().into_iter().take(max).collect();
+        if jobs.is_empty() || self.limited().is_some() {
+            return 0;
+        }
+        let reasons: Vec<String> = jobs.iter().map(|j| j.reasoning.clone().unwrap_or_default()).collect();
+        match self.llm().shorten_reasons(&reasons) {
+            Ok(lines) => {
+                for (j, line) in jobs.iter().zip(lines) {
+                    if !line.is_empty() {
+                        let _ = self.db().update_job(&j.id, &[("reasoning", line.into())]);
+                    }
+                }
+                jobs.len()
+            }
+            Err(e) => {
+                let _ = self.db().log(None, "reasons:error", &e.0);
+                0
+            }
+        }
+    }
+
     // --- fit forecast for postings scored before it existed ---------------------------------------
 
     /// Postings to pick (and near misses) scored before the fit forecast existed, best first.
@@ -3763,6 +3903,24 @@ replies and interviews, and a little lower for kinds that got none from several 
     }
 
     /// Whether Job Hunt looks up company ratings by itself (on unless you turned it off).
+    /// Canada's Job Bank is free and has most Canadian postings: turned on once for searches in
+    /// Canada (you can turn it off again; it isn't turned back on).
+    pub fn jobbank_on_once(&self) {
+        if !self.secret("jobbank.defaulted").is_empty() {
+            return;
+        }
+        let mut p = self.profile();
+        if p.sources.adzuna_country != "ca" {
+            return;
+        }
+        if !p.sources.jobbank {
+            p.sources.jobbank = true;
+            let _ = self.save_profile(&p);
+            let _ = self.db().log(None, "sources", "Job Bank turned on: free, with most Canadian postings");
+        }
+        let _ = self.db().set("jobbank.defaulted", "1");
+    }
+
     pub fn ratings_auto(&self) -> bool {
         self.secret("ratings.auto") != "0"
     }
@@ -4340,6 +4498,7 @@ pub fn posting_warnings(j: &Job, reposts: i64, now: chrono::DateTime<Utc>) -> Ve
 pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     use chrono::Timelike;
     let mut out = vec![];
+    agent.jobbank_on_once();
     let p = agent.profile();
     let tz = p.tz();
     let now = Utc::now();
@@ -4370,6 +4529,13 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
         .unwrap_or(false);
     if ready && !forecast_lately && !agent.budget_wait() && !agent.is_running("forecast") && !agent.is_running("search") && !agent.without_forecast().is_empty() {
         out.push("forecast");
+    }
+    // Long fit reasons from before they were kept short: ten at a time, every 15 minutes, until done.
+    let reasons_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.reasons"))
+        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 15)
+        .unwrap_or(false);
+    if ready && !reasons_lately && !agent.budget_wait() && !agent.is_running("reasons") && !agent.is_running("search") && !agent.long_reasons().is_empty() {
+        out.push("reasons");
     }
     // Job board postings you've tailored: found on the company's own site, a few every 10 minutes.
     let links_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.applylinks"))
@@ -4523,6 +4689,14 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                     let _ = a.db().set("last.forecast", &now());
                 });
             }
+            "reasons" => {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    let Ok(_g) = a.claim("reasons") else { return };
+                    a.shorten_old_reasons(10);
+                    let _ = a.db().set("last.reasons", &now());
+                });
+            }
             "applylinks" => {
                 let a = agent.clone();
                 std::thread::spawn(move || {
@@ -4666,6 +4840,7 @@ impl Agent {
         let today = Utc::now().with_timezone(&tz).date_naive();
         // Recruiters you know (read before taking the database below: it needs it too).
         let recruiters = crate::recruiters::list(self);
+        let network = crate::network::list(self);
         let db = self.db();
         let counts = db.counts()?;
         let n = |k: &str| counts.get(k).and_then(|v| v.as_i64()).unwrap_or(0);
@@ -4681,6 +4856,10 @@ impl Agent {
             b["warnings"] = json!(posting_warnings(j, reposts.get(&j.id).copied().unwrap_or(0), at));
             if let Some(r) = crate::recruiters::for_company(&recruiters, &j.company) {
                 b["recruiter"] = json!(r.name);
+            }
+            let know: Vec<Value> = crate::network::at_company(&network, &j.company).iter().map(|p| p["name"].clone()).collect();
+            if !know.is_empty() {
+                b["know"] = json!(know);
             }
             if let Some(r) = db.rating(&j.company) {
                 b["rating"] = rating_brief(&r);
@@ -5548,6 +5727,31 @@ mod tests {
     }
 
     #[test]
+    fn job_bank_is_turned_on_once_in_canada() {
+        let s = setup();
+        assert!(!s.agent.profile().sources.jobbank);
+        s.agent.jobbank_on_once();
+        assert!(s.agent.profile().sources.jobbank, "the sample profile searches Canada");
+        let mut p = s.agent.profile();
+        p.sources.jobbank = false;
+        s.agent.save_profile(&p).unwrap();
+        s.agent.jobbank_on_once();
+        assert!(!s.agent.profile().sources.jobbank, "turned off by you: stays off");
+    }
+
+    #[test]
+    fn long_fit_reasons_are_made_one_line() {
+        let s = setup();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        let long = "Your strongest match is that you have led platform delivery from start to finish across requirements, design, testing and release, for a large public program. Your biggest gap is the posting's cloud certification.";
+        s.agent.db().update_job("test:1", &[("reasoning", long.into())]).unwrap();
+        assert_eq!(s.agent.long_reasons().len(), 1);
+        assert_eq!(s.agent.shorten_old_reasons(10), 1);
+        assert_eq!(s.agent.db().job("test:1").unwrap().unwrap().reasoning.as_deref(), Some("Your strongest match is that you"));
+        assert!(s.agent.long_reasons().is_empty(), "done once");
+    }
+
+    #[test]
     fn tailored_job_board_postings_are_looked_up_on_the_company_site() {
         let s = setup();
         let board = |t: &str, id: &str| Posting { url: format!("https://www.linkedin.com/jobs/view/{id}/"), ..posting(t, id) };
@@ -6035,6 +6239,8 @@ mod tests {
         }
         assert!(s.agent.write_insights().unwrap()["text"].as_str().unwrap().contains("What's working"));
         assert!(s.agent.results().unwrap()["insights"].is_object());
+        let words = s.agent.week_in_words().unwrap();
+        assert!(words[0].starts_with("You "), "{words:?}");
         let w = s.agent.weekly_summary().unwrap();
         assert!(w.contains("your goal is 10"), "{w}");
         assert!(s.notes.lock().unwrap().contains(&"Your week in Job Hunt".to_string()));

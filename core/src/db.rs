@@ -460,6 +460,22 @@ impl Db {
         Ok(self.con.execute(&format!("DELETE {pick}"), params![before])?)
     }
 
+    /// Matches left waiting to be picked for `days` days are set aside as not interested (unless
+    /// the posting says it's still open past today), so the list holds what's current. Returns how many.
+    pub fn archive_unpicked(&self, days: i64) -> R<usize> {
+        let before = (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339();
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let ids: Vec<String> = {
+            let mut st = self.con.prepare("SELECT id FROM jobs WHERE status = 'queued' AND found_at < ?1 AND (deadline IS NULL OR deadline = '' OR deadline < ?2)")?;
+            let rows = st.query_map(params![before, today], |r| r.get(0))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        for id in &ids {
+            self.set_status(id, "dismissed", &format!("set aside: not picked in {days} days"))?;
+        }
+        Ok(ids.len())
+    }
+
     /// The id and reasoning of skipped postings that were filtered out before scoring.
     pub fn filtered_out(&self, id: &str, company: &str, title: &str) -> R<Option<String>> {
         Ok(self.con.query_row(
@@ -474,30 +490,46 @@ impl Db {
     /// name for the same employer). The copy furthest along is kept; only copies waiting to be
     /// tailored or skipped are removed, never one you've worked on. Returns how many went.
     pub fn merge_duplicates(&self) -> R<usize> {
-        let rows: Vec<(String, String, String)> = {
+        let rows: Vec<(String, String, String, String)> = {
             let mut st = self.con.prepare(
-                "SELECT dupe_key, id, status FROM jobs WHERE dupe_key IN (SELECT dupe_key FROM jobs GROUP BY dupe_key HAVING COUNT(*) > 1)
+                "SELECT dupe_key, id, status, url FROM jobs WHERE dupe_key IN (SELECT dupe_key FROM jobs GROUP BY dupe_key HAVING COUNT(*) > 1)
                  UNION ALL
-                 SELECT 'url:' || url_key, id, status FROM jobs WHERE url_key != '' AND url_key IN (SELECT url_key FROM jobs WHERE url_key != '' GROUP BY url_key HAVING COUNT(*) > 1)
+                 SELECT 'url:' || url_key, id, status, url FROM jobs WHERE url_key != '' AND url_key IN (SELECT url_key FROM jobs WHERE url_key != '' GROUP BY url_key HAVING COUNT(*) > 1)
                  ORDER BY 1",
             )?;
-            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
             rows.collect::<rusqlite::Result<_>>()?
         };
-        // Furthest along first.
+        // Furthest along first; between equals, the copy on the company's own site.
         let rank = |s: &str| ["offer", "interviewing", "applied", "rejected", "no_response", "approved", "ready", "saved", "dismissed", "queued", "skipped"].iter().position(|x| *x == s).unwrap_or(9);
         let mut n = 0;
         for group in rows.chunk_by(|a, b| a.0 == b.0) {
-            let mut g: Vec<&(String, String, String)> = group.iter().collect();
-            g.sort_by_key(|r| rank(&r.2));
+            let mut g: Vec<&(String, String, String, String)> = group.iter().collect();
+            g.sort_by_key(|r| (rank(&r.2), crate::sources::is_job_board(&r.3)));
             for r in &g[1..] {
                 if r.2 == "queued" || r.2 == "skipped" {
+                    // The kept copy came from a job board: apply on the company's site instead.
+                    self.prefer_company_link(&g[0].1, &r.3)?;
                     self.con.execute("DELETE FROM jobs WHERE id = ?1", [&r.1])?;
                     n += 1;
                 }
             }
         }
         Ok(n)
+    }
+
+    /// The same role seen on the company's own site while the stored copy came from a job board:
+    /// the company's link becomes where you apply. Never the other way round. True if it changed.
+    pub fn prefer_company_link(&self, id: &str, url: &str) -> R<bool> {
+        if url.trim().is_empty() || crate::sources::is_job_board(url) {
+            return Ok(false);
+        }
+        // Only over a job board's copy: two company links (a careers page and its ATS) stay as found.
+        let stored: Option<String> = self.con.query_row("SELECT url FROM jobs WHERE id = ?1 AND apply_url IS NULL", [id], |r| r.get(0)).optional()?;
+        if !stored.is_some_and(|u| crate::sources::is_job_board(&u)) {
+            return Ok(false);
+        }
+        Ok(self.con.execute("UPDATE jobs SET apply_url = ?2 WHERE id = ?1", params![id, url.trim()])? > 0)
     }
 
     pub fn delete_job(&self, id: &str) -> R<()> {
@@ -1037,6 +1069,47 @@ mod tests {
         assert_eq!(db.merge_duplicates().unwrap(), 1);
         assert!(db.job("t:2").unwrap().is_none() && db.job("t:1").unwrap().is_some());
         assert!(db.job("t:1").unwrap().unwrap().closed_at.is_some());
+    }
+
+    #[test]
+    fn the_company_site_wins_over_a_job_board_copy() {
+        let db = Db::memory().unwrap();
+        let mut board = job("li:1", "Acme", "TPM");
+        board.url = "https://www.linkedin.com/jobs/view/4012345678".into();
+        db.insert_job(&board).unwrap();
+        assert!(!db.prefer_company_link("li:1", "https://ca.indeed.com/viewjob?jk=9").unwrap(), "another board isn't better");
+        assert!(db.prefer_company_link("li:1", "https://careers.acme.com/jobs/7").unwrap());
+        assert_eq!(db.job("li:1").unwrap().unwrap().apply_url.as_deref(), Some("https://careers.acme.com/jobs/7"));
+        // Found on the company's site first: a board's copy never replaces it.
+        let mut own = job("co:1", "Beta", "PM");
+        own.url = "https://beta.com/careers/1".into();
+        db.insert_job(&own).unwrap();
+        assert!(!db.prefer_company_link("co:1", "https://beta.wd3.myworkdayjobs.com/x/job/1").unwrap());
+        // Two stored copies: the company's is kept when neither is worked on.
+        let mut dup = job("li:2", "Beta Inc.", "PM");
+        dup.url = "https://www.linkedin.com/jobs/view/4099999999".into();
+        db.insert_job(&dup).unwrap();
+        db.update_job("co:1", &[("status", "queued".into())]).unwrap();
+        db.update_job("li:2", &[("status", "queued".into())]).unwrap();
+        assert_eq!(db.merge_duplicates().unwrap(), 1);
+        assert!(db.job("co:1").unwrap().is_some() && db.job("li:2").unwrap().is_none());
+    }
+
+    #[test]
+    fn matches_not_picked_in_60_days_are_set_aside() {
+        let db = Db::memory().unwrap();
+        for (id, status, found, deadline) in [("t:old", "queued", "2026-01-01T00:00:00Z", None), ("t:new", "queued", "2099-01-01T00:00:00Z", None),
+            ("t:open", "queued", "2026-01-01T00:00:00Z", Some("2099-01-01")), ("t:ready", "ready", "2026-01-01T00:00:00Z", None)] {
+            db.insert_job(&job(id, "C", id)).unwrap();
+            db.update_job(id, &[("status", status.into())]).unwrap();
+            db.backdate(id, found).unwrap();
+            if let Some(d) = deadline {
+                db.update_job(id, &[("deadline", d.into())]).unwrap();
+            }
+        }
+        assert_eq!(db.archive_unpicked(60).unwrap(), 1);
+        let st = |id: &str| db.job(id).unwrap().unwrap().status;
+        assert_eq!((st("t:old"), st("t:new"), st("t:open"), st("t:ready")), ("dismissed".into(), "queued".into(), "queued".into(), "ready".into()));
     }
 
     #[test]

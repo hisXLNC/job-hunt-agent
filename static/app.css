@@ -740,3 +740,4 @@ table.jobs td { padding: 10px 7px; }
 #t-all td { padding: 10px 6px; }
 #t-all td.loc { min-width: 90px; }
 #t-all td.role { min-width: 150px; }
+.week-words p { margin: 0 0 6px; }

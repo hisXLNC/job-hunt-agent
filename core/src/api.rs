@@ -401,6 +401,26 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&o));
             }
             ["api", "usage"] => return Ok(Resp::json(&agent.usage_summary())),
+            ["api", "extension.zip"] => {
+                // The Send to Job Hunt extension, with the page reader the bookmark uses.
+                use std::io::Write;
+                let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+                let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+                let fail = |_| Error("Couldn't pack the extension.".into());
+                for (name, from) in [("manifest.json", "extension/manifest.json"), ("popup.html", "extension/popup.html"), ("popup.js", "extension/popup.js"),
+                    ("icon-48.png", "extension/icon-48.png"), ("icon-128.png", "extension/icon-128.png"), ("clip.js", "clip.js")] {
+                    let bytes = host.asset(from).ok_or_else(|| Error(format!("The extension's {name} is missing from this copy of Job Hunt.")))?;
+                    zip.start_file(format!("Send to Job Hunt/{name}"), opts).map_err(fail)?;
+                    zip.write_all(&bytes)?;
+                }
+                let body = zip.finish().map_err(fail)?.into_inner();
+                return Ok(Resp {
+                    status: 200,
+                    ctype: "application/zip".into(),
+                    body,
+                    headers: vec![("Cache-Control".into(), "no-store".into()), ("Content-Disposition".into(), "attachment; filename=\"Send to Job Hunt.zip\"".into())],
+                });
+            }
             ["api", "recruiters.csv"] => {
                 let _ = crate::recruiters::backfill(agent);
                 return Ok(Resp {
@@ -428,11 +448,12 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     v["applications"] = json!(links.iter().filter(|l| l["email"] == r.email.as_str()).cloned().collect::<Vec<_>>());
                     v
                 }).collect();
-                return Ok(Resp::json(&json!({ "recruiters": rows, "last": agent.secret("last.recruiters"), "scanning": agent.is_running("recruiters"), "gmail": mail,
+                return Ok(Resp::json(&json!({ "recruiters": rows, "network": { "count": crate::network::list(agent).len(), "at": agent.secret("network.at") }, "last": agent.secret("last.recruiters"), "scanning": agent.is_running("recruiters"), "gmail": mail,
                     "on_apply": { "mode": crate::recruiters::apply_mode(agent), "attach_cv": agent.secret("apply.recruiter_cv") == "1" } })));
             }
             ["api", "results"] => {
                 let mut r = agent.results()?;
+                r["week_words"] = json!(agent.week_in_words().unwrap_or_default());
                 r["thinking"] = json!(agent.is_running("insights"));
                 r["career_thinking"] = json!(agent.is_running("career"));
                 return Ok(Resp::json(&r));
@@ -547,6 +568,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         v
                     }),
                     "offer": agent.offer(id), "advising": agent.is_running(&format!("offer:{id}")),
+                    "know": crate::network::at_company(&crate::network::list(agent), &job.company),
                     "contacts": agent.contacts(id), "writing_to": agent.is_running(&format!("contact:{id}")),
                     "ats": job.cv_path.as_deref().and_then(|p| crate::cv::open(Path::new(p)).ok()).map(|d| crate::cv::ats_check(&d)),
                     "claude_desktop": crate::mcp::claude_desktop_config().as_deref().map(crate::mcp::in_claude_desktop).unwrap_or(false),
@@ -1282,6 +1304,14 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             ok()
         }
+        ["api", "network"] => {
+            let n = crate::network::import(agent, &String::from_utf8_lossy(&req.body))?;
+            Ok(Resp::json(&json!({ "count": n })))
+        }
+        ["api", "network", "forget"] => {
+            crate::network::forget(agent)?;
+            ok()
+        }
         ["api", "recruiters", "edit"] => {
             crate::recruiters::edit(agent, &b)?;
             ok()
@@ -1571,6 +1601,8 @@ mod tests {
             match path {
                 "index.html" | "app.js" => Some(b"hello".to_vec()),
                 "changelog.json" => Some(br#"[{"version": "1.1.0", "title": "Updates"}]"#.to_vec()),
+                // The browser extension's files, as shipped.
+                p if p.starts_with("extension/") || p == "clip.js" => std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../static").join(p)).ok(),
                 _ => None,
             }
         }
@@ -1661,6 +1693,14 @@ mod tests {
         assert_eq!(r["funnel"]["found"], 1);
         let (_, one) = call(&agent, &host, "GET", "/api/jobs/test:1", Value::Null);
         assert_eq!((one["undo"]["cv"].as_bool(), one["follow_up"].is_null()), (Some(false), true));
+        // The browser extension downloads whole: its manifest names files that are all in the zip.
+        let ext = handle(&agent, &host, &Req { method: "GET".into(), path: "/api/extension.zip".into(), query: HashMap::new(), body: vec![], remote: false });
+        assert_eq!(ext.status, 200);
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(ext.body)).unwrap();
+        let manifest: Value = serde_json::from_reader(z.by_name("Send to Job Hunt/manifest.json").unwrap()).unwrap();
+        for f in [manifest["action"]["default_popup"].as_str().unwrap(), manifest["icons"]["128"].as_str().unwrap(), "popup.js", "clip.js"] {
+            assert!(z.by_name(&format!("Send to Job Hunt/{f}")).is_ok(), "{f} in the extension");
+        }
         let (_, a) = call(&agent, &host, "POST", "/api/jobs/test:1/approve", Value::Null);
         assert_eq!(a["outcome"], "approved");
         assert_eq!(call(&agent, &host, "POST", "/api/open-url", json!({"url": "file:///etc/passwd"})).0, 400);
