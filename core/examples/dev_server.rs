@@ -29,6 +29,20 @@ impl Llm for DemoLlm {
             others: vec![jobhunt_core::claude::OtherRating { source: "Indeed".into(), rating: Some(3.9), reviews: Some(410), url: String::new() }],
         })
     }
+    fn coach(&self, _c: &str, _cvs: &str, _e: &str) -> R<jobhunt_core::claude::CoachPlan> {
+        use jobhunt_core::claude::{CoachPlan, SkillAdvice, TitleIdea};
+        let k = |skill: &str, kind: &str, why: &str, how: &str, time: &str| SkillAdvice { skill: skill.into(), kind: kind.into(), why: why.into(), how: how.into(), time: time.into() };
+        Ok(CoachPlan {
+            advice: "Your delivery record is strong; what costs you most is that your CV never says \"technical program management\" or \"vendor management\", though your experience shows both. Fix those two lines this week. Kubernetes comes up in every role, but it's rarely the deciding skill for program leads; a short course is enough to talk about it.".into(),
+            skills: vec![
+                k("Technical Program Management", "show", "All 7 roles ask for it; your platform delivery work is exactly this.", "Use the phrase in your headline and one bullet about the payments migration.", "an afternoon"),
+                k("Vendor management", "show", "All 7 roles ask for it; you ran three system integrators.", "Add a bullet naming the vendors you managed and the contract size.", "an afternoon"),
+                k("Kubernetes", "learn", "All 7 roles mention it, usually as a nice-to-have.", "Kubernetes for Beginners (KodeKloud) or the CNCF's free Introduction to Kubernetes.", "2-3 weeks"),
+            ],
+            titles: vec![TitleIdea { title: "Delivery Lead".into(), cv: "Program delivery".into(), why: "The same work under the name governments and consultancies use.".into() },
+                TitleIdea { title: "Technical Delivery Manager".into(), cv: "Program delivery".into(), why: "Common in fintech for the role you do.".into() }],
+        })
+    }
     fn career_paths(&self, _c: &str, _cvs: &str, _e: &str) -> R<jobhunt_core::claude::CareerPlan> {
         let p = |title: &str, kind: &str, fit: i64, pay: (f64, f64), gaps: &[&str], titles: &[&str], step: &str, pros: &[&str], cons: &[&str]| jobhunt_core::claude::CareerPath {
             title: title.into(), kind: kind.into(), fit, pay: format!("${}k–{}k", pay.0 / 1000.0, pay.1 / 1000.0), pay_min: Some(pay.0), pay_max: Some(pay.1), currency: "CAD".into(),

@@ -956,7 +956,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let want = targets(&profile);
         if want.is_empty() {
-            return err("Add a CV with job titles first (CV & career).");
+            return err("Add a CV with job titles first (CV & Career).");
         }
         let places: Vec<String> = profile.locations.iter().filter(|l| !l.trim().is_empty()).cloned().collect();
         let places = if places.is_empty() { profile.country() } else { format!("{} ({})", places.join(", "), profile.country()) };
@@ -1268,7 +1268,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in CV & career.");
+            return err("No CV uploaded yet. Add one in CV & Career.");
         }
         let mut report = Report::default();
         let cap = profile.max_scored_per_run.max(1);
@@ -1529,7 +1529,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in CV & career.");
+            return err("No CV uploaded yet. Add one in CV & Career.");
         }
         let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
         let status = if s.score >= profile.score_threshold { "queued" } else { "skipped" };
@@ -1639,7 +1639,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in CV & career.");
+            return err("No CV uploaded yet. Add one in CV & Career.");
         }
         let p = Posting {
             source: source.into(),
@@ -2457,7 +2457,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let (id, key) = (self.secret("adzuna.id"), self.secret("adzuna.key"));
         if want("adzuna") { results.push(match (&first_title, id.is_empty() || key.is_empty()) {
             (_, true) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No Adzuna key.", "hint": "Add an Adzuna key in Settings \u{2192} Job sources to search thousands of listings for your titles." }),
-            (None, _) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." }),
+            (None, _) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." }),
             (Some(t), false) => timed(format!("Adzuna \u{201c}{t}\u{201d}{}", if place.is_empty() { String::new() } else { format!(" in {place}") }), "search",
                 &|| crate::sources::adzuna(&c, &id, &key, &p.sources.adzuna_country, t, &place, p.sources.adzuna_days), "Check the Adzuna app ID and key in Settings \u{2192} Job sources."),
         }); }
@@ -2467,7 +2467,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let country = p.sources.adzuna_country.clone();
         if want("jsearch") { results.push(match (&keys.jsearch, &first) {
             (None, _) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No JSearch key.", "hint": "Postings from LinkedIn, Indeed, Glassdoor and company sites, through Google for Jobs. Add a key in Settings \u{2192} Job sources." }),
-            (_, None) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." }),
+            (_, None) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." }),
             (Some((provider, key)), Some((t, place))) => {
                 let q = if place.is_empty() { t.clone() } else { format!("{t} in {place}") };
                 timed(format!("Google for Jobs \u{201c}{q}\u{201d}"), "search", &|| crate::sources::jsearch(&c, provider, key, &q, &country), "Check the key and where it's from (OpenWeb Ninja or RapidAPI) in Settings \u{2192} Job sources.")
@@ -2491,7 +2491,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 &|| self.llm().indeed(&[(t.clone(), at.clone())], &p.sources.adzuna_country.to_uppercase(), 2).map(|l| l.into_iter().map(indeed_posting).collect()).map_err(|e| e.0),
                 "")
         } else {
-            json!({ "name": "Indeed", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
+            json!({ "name": "Indeed", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." })
         }); }
         save(&results, false);
         if want("linkedin") { results.push(if !p.sources.linkedin {
@@ -2505,7 +2505,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                     "LinkedIn may be turning away searches from this connection for now; it usually passes in a day. For steadier results, add an Apify token in Settings \u{2192} Job sources."),
             }
         } else {
-            json!({ "name": "LinkedIn", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
+            json!({ "name": "LinkedIn", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." })
         }); }
         save(&results, false);
         if want("freehire") { results.push(if p.sources.is_off("freehire") {
@@ -2514,7 +2514,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             timed(format!("FreeHire \u{201c}{t}\u{201d}"), "search", &|| crate::sources::freehire(&c, &t, &p.sources.adzuna_country),
                 "FreeHire didn't answer; it's a free service, so try again later.")
         } else {
-            json!({ "name": "FreeHire", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
+            json!({ "name": "FreeHire", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." })
         }); }
         save(&results, false);
         if want("jobbank") || (only == Some("jobbank")) { results.push(if !p.sources.jobbank {
@@ -2523,7 +2523,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             timed(format!("Job Bank \u{201c}{t}\u{201d}{}", if w.is_empty() { String::new() } else { format!(" in {w}") }), "search", &|| crate::sources::jobbank(&c, &t, &w),
                 "Job Bank may be limiting searches from this connection for now; it usually passes in a day.")
         } else {
-            json!({ "name": "Job Bank", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & career." })
+            json!({ "name": "Job Bank", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." })
         }); }
         save(&results, false);
         if want("agencies") {
@@ -2612,7 +2612,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let cv = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
             .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
             .map(|d| d.plain_text())
-            .ok_or_else(|| Error("No CV uploaded yet. Add one in CV & career.".into()))?;
+            .ok_or_else(|| Error("No CV uploaded yet. Add one in CV & Career.".into()))?;
         let mut facts = profile.application_facts.trim().to_string();
         if let Some(min) = profile.min_salary {
             facts.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
@@ -2761,7 +2761,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("Add your CV first (CV & career).");
+            return err("Add your CV first (CV & Career).");
         }
         let r = self.results()?;
         let cv_text: String = cvs.iter().map(|(name, text)| {
@@ -2780,6 +2780,112 @@ replies and interviews, and a little lower for kinds that got none from several 
         db.set("career", &v.to_string())?;
         db.log(None, "career", "Claude suggested career paths")?;
         Ok(v)
+    }
+
+    /// The skills the postings you go for ask for and your CV doesn't show, most missed first, from
+    /// the roles scored in the last 90 days that came near your fit score. Also the hard requirements
+    /// those postings had that you didn't meet.
+    pub fn skill_gaps(&self) -> R<Value> {
+        let p = self.profile();
+        let jobs = self.db().jobs(None, 1_000_000)?;
+        let since = (Utc::now() - Duration::days(90)).to_rfc3339();
+        let floor = (p.score_threshold - 15).max(40);
+        let mut cvs: BTreeMap<String, String> = BTreeMap::new();
+        let mut asked: BTreeMap<String, (String, usize, usize, Vec<Value>)> = BTreeMap::new();
+        let mut musts: Vec<Value> = vec![];
+        let mut n = 0;
+        for j in jobs.iter().filter(|j| j.found_at >= since && j.score.is_some_and(|x| x >= floor) && !j.keywords.is_empty()) {
+            n += 1;
+            let track = j.track.clone().unwrap_or_default();
+            if !cvs.contains_key(&track) {
+                let text = p.track(j.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()).map(|d| d.plain_text().to_lowercase()).unwrap_or_default();
+                cvs.insert(track.clone(), text);
+            }
+            let cv_text = &cvs[&track];
+            let gaps: HashSet<String> = j.keyword_gaps.iter().map(|g| g.trim().to_lowercase()).collect();
+            let tailored = j.coverage_after.is_some();
+            let mut seen = HashSet::new();
+            for k in &j.keywords {
+                let key = k.trim().to_lowercase();
+                if key.is_empty() || !seen.insert(key.clone()) {
+                    continue;
+                }
+                let missing = gaps.contains(&key) || (!tailored && !cv_text.is_empty() && !cv_text.contains(&key));
+                let e = asked.entry(key).or_insert_with(|| (k.trim().to_string(), 0, 0, vec![]));
+                e.1 += 1;
+                if missing {
+                    e.2 += 1;
+                    if e.3.len() < 3 {
+                        e.3.push(json!({ "id": j.id, "company": j.company, "title": j.title }));
+                    }
+                }
+            }
+            for f in j.red_flags.iter().filter_map(|f| f.strip_prefix("Must have:")) {
+                if musts.len() < 12 {
+                    musts.push(json!({ "text": f.trim(), "id": j.id, "company": j.company, "title": j.title }));
+                }
+            }
+        }
+        let min = if n >= 10 { 2 } else { 1 };
+        let mut skills: Vec<_> = asked.into_values().filter(|e| e.2 >= min).collect();
+        skills.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1)).then(a.0.cmp(&b.0)));
+        let skills: Vec<Value> = skills.into_iter().take(20).map(|(skill, asked, missing, jobs)| json!({
+            "skill": skill, "asked": asked, "missing": missing, "share": if n > 0 { (missing * 100 / n) as i64 } else { 0 }, "jobs": jobs,
+        })).collect();
+        Ok(json!({ "postings": n, "skills": skills, "must_haves": musts }))
+    }
+
+    /// The career coach: how to close the gaps that cost you most, and titles to try. Kept with its
+    /// date; the titles also show on the Overview until you add or dismiss them.
+    pub fn write_coach(&self) -> R<Value> {
+        let profile = self.profile();
+        let cvs = self.cv_texts(&profile);
+        if cvs.is_empty() {
+            return err("Add your CV first (CV & Career).");
+        }
+        let gaps = self.skill_gaps()?;
+        let cv_text: String = cvs.iter().map(|(name, text)| {
+            let label = profile.tracks.iter().find(|t| &t.name == name).map(|t| t.label.as_str()).unwrap_or(name);
+            format!("<cv label=\"{label}\">\n{text}\n</cv>")
+        }).collect::<Vec<_>>().join("\n\n");
+        let titles: Vec<String> = profile.tracks.iter().flat_map(|t| t.titles.iter().cloned()).collect();
+        let r = self.results()?;
+        let skills: Vec<String> = gaps["skills"].as_array().into_iter().flatten()
+            .map(|g| format!("- {}: asked for in {} postings, not shown in your CV in {}", g["skill"].as_str().unwrap_or(""), g["asked"], g["missing"])).collect();
+        let musts: Vec<String> = gaps["must_haves"].as_array().into_iter().flatten().map(|m| format!("- {}", m["text"].as_str().unwrap_or(""))).collect();
+        let evidence = format!("Postings looked at (near or above their fit score, last 90 days): {}\nTitles searched: {}\nSkills asked for that the CV doesn't show:\n{}\nHard requirements they missed:\n{}\nResults by kind of role: {}",
+            gaps["postings"], titles.join(", "), if skills.is_empty() { "none yet".into() } else { skills.join("\n") },
+            if musts.is_empty() { "none".into() } else { musts.join("\n") }, r["by_title"]);
+        let plan = self.llm().coach(&profile.name, &cv_text, &evidence)?;
+        // Titles you search already, or one of your CVs can't be told, are left out.
+        let ideas: Vec<Value> = plan.titles.iter().filter(|t| !titles.iter().any(|x| x.eq_ignore_ascii_case(t.title.trim())) && !t.title.trim().is_empty()).map(|t| {
+            let track = profile.tracks.iter().find(|x| x.label.eq_ignore_ascii_case(t.cv.trim()) || x.name == t.cv).or(profile.tracks.first());
+            json!({ "title": t.title.trim(), "track": track.map(|x| x.name.clone()), "cv": track.map(|x| x.label.clone()), "why": t.why })
+        }).collect();
+        let v = json!({ "at": now(), "advice": plan.advice, "skills": plan.skills, "titles": ideas });
+        let db = self.db();
+        db.set("coach", &v.to_string())?;
+        db.set("title.ideas", &json!(ideas).to_string())?;
+        db.log(None, "coach", "Claude looked at the skills you're missing")?;
+        Ok(v)
+    }
+
+    /// Titles the coach suggested that you haven't added or dismissed.
+    pub fn title_ideas(&self) -> Vec<Value> {
+        serde_json::from_str(&self.secret("title.ideas")).unwrap_or_default()
+    }
+
+    /// Done with a suggested title: added to its CV's searches, or dismissed.
+    pub fn title_idea_done(&self, title: &str, add: bool) -> R<()> {
+        let mut ideas = self.title_ideas();
+        if add {
+            let track = ideas.iter().find(|i| i["title"] == title).and_then(|i| i["track"].as_str().map(String::from))
+                .or_else(|| self.profile().tracks.first().map(|t| t.name.clone()))
+                .ok_or_else(|| Error("Add your CV first.".into()))?;
+            self.add_titles(&track, &[title.to_string()])?;
+        }
+        ideas.retain(|i| i["title"] != title);
+        self.db().set("title.ideas", &json!(ideas).to_string())
     }
 
     /// Search for more titles with one of your CVs (from a career path).
@@ -2874,7 +2980,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 let detail: String = e.detail.chars().take(160).collect();
                 match kind.as_str() {
                     // Trying again doesn't help without a CV: the link goes where you add one.
-                    _ if detail.contains("No CV") => add(&mut out, "warn", format!("{what} is waiting for your CV. Add one in CV & career."), "#cvs"),
+                    _ if detail.contains("No CV") => add(&mut out, "warn", format!("{what} is waiting for your CV. Add one in CV & Career."), "#cvs"),
                     "search" | "inbox" => fix(&mut out, "warn", format!("{what} had a problem: {detail}"), "Try again", "run", &kind),
                     _ => add(&mut out, "warn", format!("{what} had a problem: {detail}"), "#overview"),
                 }
@@ -3434,8 +3540,8 @@ replies and interviews, and a little lower for kinds that got none from several 
     pub fn tailor(&self, job_id: &str, track: Option<&str>) -> R<Job> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let profile = self.profile();
-        let t = profile.track(track.or(job.track.as_deref())).cloned().ok_or_else(|| Error("No CV uploaded yet. Add one in CV & career.".into()))?;
-        let doc = cv::open(&self.cv_path(&t.name)).map_err(|_| Error(format!("No CV for the “{}” track yet. Upload it in CV & career.", t.label)))?;
+        let t = profile.track(track.or(job.track.as_deref())).cloned().ok_or_else(|| Error("No CV uploaded yet. Add one in CV & Career.".into()))?;
+        let doc = cv::open(&self.cv_path(&t.name)).map_err(|_| Error(format!("No CV for the “{}” track yet. Upload it in CV & Career.", t.label)))?;
         let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.stories, &t.letter_style)?;
         // Take out AI tells Claude slipped in (your CV's own style stays).
         let own = format!("{}\n{}", doc.plain_text(), profile.stories);
@@ -3682,7 +3788,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             let profile = self.profile();
             let cvs = self.cv_texts(&profile);
             if cvs.is_empty() {
-                return err("No CV uploaded yet. Add one in CV & career.");
+                return err("No CV uploaded yet. Add one in CV & Career.");
             }
             let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
             let db = self.db();
@@ -3726,7 +3832,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in CV & career.");
+            return err("No CV uploaded yet. Add one in CV & Career.");
         }
         let guidance = self.scoring_guidance(&profile);
         let cap = profile.max_scored_per_run.max(1);
@@ -5008,6 +5114,14 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                     if stale && sent >= 10 && a.claude_ready() {
                         let _ = a.write_insights();
                     }
+                    // The career coach, weekly: the gaps that cost you most and new titles to try.
+                    if a.claude_ready() && !a.budget_wait() {
+                        if let Ok(_c) = a.claim("coach") {
+                            if let Err(e) = a.write_coach() {
+                                let _ = a.db().log(None, "coach:error", &e.0);
+                            }
+                        }
+                    }
                 });
             }
             t => {
@@ -5699,6 +5813,29 @@ mod tests {
         let track = s.agent.profile().tracks[0].name.clone();
         assert_eq!(s.agent.add_titles(&track, &["Data Systems Lead".into(), "data systems lead".into()]).unwrap(), 1);
         assert!(s.agent.profile().tracks[0].titles.contains(&"Data Systems Lead".to_string()));
+    }
+
+    #[test]
+    fn the_career_coach_finds_missing_skills_and_suggests_titles() {
+        let s = setup();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Program Manager, Delivery", "2")])).unwrap();
+        let g = s.agent.skill_gaps().unwrap();
+        assert_eq!(g["postings"].as_u64(), Some(2), "{g}");
+        let skills: Vec<&str> = g["skills"].as_array().unwrap().iter().filter_map(|x| x["skill"].as_str()).collect();
+        assert_eq!(skills.first(), Some(&"Kubernetes"), "missing from the CV in both: {skills:?}");
+        assert!(!skills.contains(&"UAT"), "the CV shows UAT: {skills:?}");
+        assert_eq!(g["skills"][0]["missing"].as_u64(), Some(2));
+        let c = s.agent.write_coach().unwrap();
+        assert_eq!(c["skills"][0]["skill"], "Kubernetes");
+        assert!(s.llm.calls.lock().unwrap().iter().any(|x| x.starts_with("coach:") && x.contains("Kubernetes: asked for in 2 postings")), "the gaps go to Claude");
+        // The suggested title waits on the Overview until it's added or dismissed.
+        assert_eq!(s.agent.title_ideas()[0]["title"], "Delivery Lead");
+        s.agent.title_idea_done("Delivery Lead", true).unwrap();
+        assert!(s.agent.title_ideas().is_empty());
+        assert!(s.agent.profile().tracks.iter().any(|t| t.titles.contains(&"Delivery Lead".to_string())));
+        // Searched already: not suggested again.
+        s.agent.write_coach().unwrap();
+        assert!(s.agent.title_ideas().is_empty());
     }
 
     #[test]

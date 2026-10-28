@@ -1429,6 +1429,28 @@ pub fn freehire(c: &reqwest::blocking::Client, title: &str, country: &str) -> Re
 /// The searches to run on a keyed service, at most `max`: every job title in your first place,
 /// then in your other places (see Profile::search_places), or nationwide when you have none.
 pub fn searches(p: &Profile, max: usize) -> Vec<(String, String)> {
+    use chrono::Datelike;
+    searches_on(p, max, chrono::Utc::now().num_days_from_ce() as usize)
+}
+
+/// `searches` on a given day: when there are more than `max`, the first half of them run every day
+/// and the rest take turns, a different few each day, so every title gets searched within a few days.
+pub fn searches_on(p: &Profile, max: usize, day: usize) -> Vec<(String, String)> {
+    let (all, places) = all_searches(p);
+    if all.len() <= max {
+        return all;
+    }
+    // Your first title in each of your places always runs.
+    let fixed = (max / 2).max(places).max(1).min(max);
+    let rest = &all[fixed..];
+    let turn = max - fixed;
+    let start = (day * turn) % rest.len();
+    let mut out: Vec<(String, String)> = all[..fixed].to_vec();
+    out.extend((0..turn.min(rest.len())).map(|i| rest[(start + i) % rest.len()].clone()));
+    out
+}
+
+fn all_searches(p: &Profile) -> (Vec<(String, String)>, usize) {
     let mut titles: Vec<String> = vec![];
     for t in p.tracks.iter().flat_map(|t| t.titles.iter()) {
         if !t.trim().is_empty() && !titles.iter().any(|x| x.eq_ignore_ascii_case(t.trim())) {
@@ -1451,7 +1473,7 @@ pub fn searches(p: &Profile, max: usize) -> Vec<(String, String)> {
     // still looks in each of your places, not only the first.
     let mut out: Vec<(String, String)> = titles.iter().flat_map(|t| places.iter().map(move |w| (t.clone(), w.clone()))).collect();
     out.extend(senior.iter().flat_map(|t| places.iter().map(move |w| (t.clone(), w.clone()))));
-    out.into_iter().take(max).collect()
+    (out, places.len())
 }
 
 pub struct Fetched {
@@ -1973,6 +1995,18 @@ mod tests {
         assert_eq!(searches(&p, 3).len(), 3);
         // Two searches reach both places.
         assert_eq!(searches(&p, 2).iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>(), vec!["Toronto, ON", "Ontario"]);
+        // More searches than a source runs: the first ones every day, the rest take turns, so
+        // within a few days every one has run.
+        let all = searches_on(&p, 1000, 0);
+        let mut seen = std::collections::HashSet::new();
+        for day in 0..30 {
+            let today = searches_on(&p, 6, day);
+            assert_eq!(today.len(), 6);
+            assert_eq!(&today[..3], &all[..3], "the first half every day");
+            seen.extend(today);
+        }
+        assert_eq!(seen.len(), all.len(), "every search runs within a month");
+        assert_ne!(searches_on(&p, 6, 1), searches_on(&p, 6, 2));
     }
 
     #[test]

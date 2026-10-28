@@ -130,7 +130,7 @@ fn start_career(agent: &Arc<Agent>) -> bool {
     std::thread::spawn(move || {
         let Ok(_g) = a.claim("career") else { return };
         match a.write_career_paths() {
-            Ok(_) => a.note("Your career options are ready", "Roles you could go for, their pay, pros and cons, and Claude's advice: CV & career."),
+            Ok(_) => a.note("Your career options are ready", "Roles you could go for, their pay, pros and cons, and Claude's advice: CV & Career."),
             Err(e) => {
                 let _ = a.db().log(None, "career:error", &e.0);
                 a.note("No career paths yet", &e.0);
@@ -144,7 +144,7 @@ fn start_career(agent: &Arc<Agent>) -> bool {
 fn ready_to_search(agent: &Agent) -> R<()> {
     let p = agent.profile();
     if !p.tracks.iter().any(|t| agent.cv_path(&t.name).exists()) {
-        return Err(Error("Add your CV first (CV & career): Job Hunt compares every posting with it.".into()));
+        return Err(Error("Add your CV first (CV & Career): Job Hunt compares every posting with it.".into()));
     }
     if !agent.claude_ready() {
         return Err(Error("Connect Claude first (Settings → Accounts): it reads the postings.".into()));
@@ -403,7 +403,16 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let mut o = agent.overview()?;
                 o["version"] = json!(host.version());
                 o["side"] = agent.side_status();
+                o["title_ideas"] = json!(agent.title_ideas());
                 return Ok(Resp::json(&o));
+            }
+            ["api", "coach"] => {
+                return Ok(Resp::json(&json!({
+                    "gaps": agent.skill_gaps()?,
+                    "coach": serde_json::from_str::<Value>(&agent.secret("coach")).ok(),
+                    "thinking": agent.is_running("coach"),
+                    "claude": agent.claude_ready(),
+                })));
             }
             ["api", "usage"] => return Ok(Resp::json(&agent.usage_summary())),
             ["api", "extension.zip"] => {
@@ -1224,6 +1233,27 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             Ok(Resp::json(&json!({ "restarting": true, "from": info.device_name })))
         }
         ["api", "results", "career"] => Ok(Resp::json(&json!({ "started": start_career(agent) }))),
+        ["api", "coach", "run"] => {
+            if agent.is_running("coach") || !agent.claude_ready() {
+                return Ok(Resp::json(&json!({ "started": false })));
+            }
+            let a = agent.clone();
+            std::thread::spawn(move || {
+                let Ok(_g) = a.claim("coach") else { return };
+                match a.write_coach() {
+                    Ok(_) => a.note("Your career coach is ready", "The skills that would help most, how to get them, and titles to try: CV & Career \u{2192} Career coach."),
+                    Err(e) => {
+                        let _ = a.db().log(None, "coach:error", &e.0);
+                        a.note("No coaching yet", &e.0);
+                    }
+                }
+            });
+            Ok(Resp::json(&json!({ "started": true })))
+        }
+        ["api", "titles", "idea"] => {
+            agent.title_idea_done(s(&b, "title"), b["add"].as_bool().unwrap_or(false))?;
+            Ok(Resp::json(&json!({ "ideas": agent.title_ideas() })))
+        }
         ["api", "results", "add-titles"] => {
             let titles: Vec<String> = b.get("titles").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
             Ok(Resp::json(&json!({ "added": agent.add_titles(s(&b, "track"), &titles)? })))

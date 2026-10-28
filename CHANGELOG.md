@@ -4,6 +4,21 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.11.0] - 2026-10-28
+
+Career coach, pause searches, and a clearer job page.
+
+### Changes
+
+- Stop a search while it runs, or pause the daily search for a day, a few days or a couple of weeks, or turn it off: from the Daily search menu at the top of the Overview, or in Settings.
+- New Career coach tab in CV & Career: the skills the roles you go for ask for that your CV doesn't show, the hard requirements you missed, and a plan from Claude for closing each gap.
+- Every week the coach suggests new job titles to try; add one to your search with a click from the Overview.
+- All your job titles get searched: sources that run only a few searches now take turns through the rest, a different few each day.
+- The job page puts progress and stage front and centre, shows the full posting, and puts the company rating on the right.
+- Applications is back in the left menu, Recent activity is open by default, and the Tailored files and Career paths tables line up and sort by any column.
+- Skip companies rated below a score you choose (Settings, Which roles).
+- Fill it in for me keeps working when an Apply button opens a new window.
+
 ## [2.10.0] - 2026-10-28
 
 Your own CV, applications you send yourself, and All jobs filters.
@@ -76,7 +91,7 @@ Your files in Documents, All jobs as one table.
 ### Changes
 
 - Your CVs, tailored CVs and cover letters, and backups are kept in a folder you choose: Documents\Job Hunt for new installs, or any folder in setup or Settings → Sync & backup → Your files. Moving takes the files along.
-- All jobs is one table of every job (applications, new postings and skipped ones): click any column's heading to sort by it. The Board is gone (the steps are the board), and tailored files moved to CV & career → Tailored files.
+- All jobs is one table of every job (applications, new postings and skipped ones): click any column's heading to sort by it. The Board is gone (the steps are the board), and tailored files moved to CV & Career → Tailored files.
 - The company comes first, then the role, in every list.
 - LinkedIn and other job board postings you tailor are found on the company's own site by themselves, so Apply goes straight to the company.
 - Tailored files are found again after continuing on another computer.
@@ -189,8 +204,8 @@ Settings that make sense, Drive sync you can see, and a fit forecast.
 ### Changes
 
 - Settings are reorganised into six clear tabs: Accounts, Search, Job sources, Email & calendar, Sync & backup, and App. Each setting sits where you'd look for it: the daily search time with Search, your time zone and phone notices with Email & calendar, the browser button with Job sources.
-- CV & career has three tabs: Your CVs, Career paths, and Your details (name, email, signature, stories and answers for application forms).
-- The side menu is down to seven places: Overview, CV & career, Applications, Calendar, Inbox, Results and Settings. Documents is now a tab in Applications (next to Tracker, Board, All postings and Skipped), Add a job is the button at the top of Applications, and Recruiters is a tab in Inbox next to your job email. Old links still work.
+- CV & Career has three tabs: Your CVs, Career paths, and Your details (name, email, signature, stories and answers for application forms).
+- The side menu is down to seven places: Overview, CV & Career, Applications, Calendar, Inbox, Results and Settings. Documents is now a tab in Applications (next to Tracker, Board, All postings and Skipped), Add a job is the button at the top of Applications, and Recruiters is a tab in Inbox next to your job email. Old links still work.
 - Fit forecast: next to each fit score, the score your CV could reach once it's tailored to that posting ("95 → ~97"), predicted from your real experience. Roles you've already tailored show the actual score instead.
 - Sync & backup shows where your data is at a glance: last sync, last backup, and whether the last sync worked, with Sync now and Back up now. Choose how often it syncs, from every 5 minutes to once a day, or only when you press Sync now. The sidebar shows Syncing… or a red dot when a sync fails.
 - When you sync with Google Drive, daily backups go there too: the last seven days, one per weekday.
@@ -217,18 +232,18 @@ Apply on the company's own site, and work-life balance in career paths.
 
 - When a role is on the company's own site, Apply goes there instead of LinkedIn, Indeed or another job board. Job Hunt picks up the company link from Google for Jobs and LinkedIn, and after you approve a role it asks Claude to find the posting on the company's careers site.
 - On the Apply page, "Find it on the company's site" looks for it on demand; the job board posting stays as a fallback.
-- Career paths now show the usual hours a week and the work-life balance of each role (good, mixed or demanding, and why: on-call, travel, busy seasons, remote), so you can weigh pay against time. Press Think again on CV & career to add them.
+- Career paths now show the usual hours a week and the work-life balance of each role (good, mixed or demanding, and why: on-call, travel, busy seasons, remote), so you can weigh pay against time. Press Think again on CV & Career to add them.
 
 ## [1.42.2] - 2026-10-21
 
-CV & career up front, and senior roles searched too.
+CV & Career up front, and senior roles searched too.
 
 ### Changes
 
 - Fix: Indeed through your Claude account didn't work even when connected: Job Hunt started Claude Code with every tool switched off, which also hid your claude.ai connectors. It now refuses only the risky built-in tools by name.
 - When Indeed (through your Claude account) doesn't work, Job Hunt now checks why and says so: Claude Code signed in with a token or API key, the connector not connected, or just not answering this time. Source tests say they try one sample title; real searches use all of them.
 - Career paths help you choose a direction, not just your next job: each path shows where it leads now and in 3, 5 and 10 years, with the title and pay at each step, the top of the path and the most it can pay. A table compares the paths side by side, and Claude's advice weighs where they lead. Its job titles (to add to your search) are folded away under Look for this role now, with the CV they go to labelled.
-- CV & career has its own place in the menu, second after Overview: your CVs, the experience Claude found, the job titles they search for, and your career options, all in one page. It used to be a tab inside Settings.
+- CV & Career has its own place in the menu, second after Overview: your CVs, the experience Claude found, the job titles they search for, and your career options, all in one page. It used to be a tab inside Settings.
 - Each job title is also searched as its senior version (Business Analyst and Senior Business Analyst), after the regular searches, so senior roles aren't crowded out of a page of results. Senior, Sr., Lead, Principal and II versions of a title all count as a match, as before.
 
 ## [1.42.1] - 2026-10-21
@@ -816,6 +831,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.11.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.11.0
 [2.10.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.10.0
 [2.9.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.9.1
 [2.9.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.9.0

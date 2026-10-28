@@ -857,3 +857,16 @@ a.qt:hover { text-decoration: underline; }
 #t-docs td:nth-child(2) { max-width: 220px; } #t-docs td:nth-child(3) { max-width: 120px; }
 section.card:has(> #t-docs) { overflow-x: auto; }
 #t-docs th, #t-docs td { padding-left: 8px; padding-right: 8px; }
+/* The career coach and the titles it suggests. */
+.title-ideas .idea-row { display: flex; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.title-ideas .idea-row:first-of-type { border-top: 0; }
+.coach-skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+.coach-skill { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.coach-skill p { margin: 6px 0 0; }
+#t-gaps td { vertical-align: middle; }
+.gap-bar { width: 120px; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-bottom: 4px; }
+.gap-bar span { display: block; height: 100%; background: var(--accent, #2E4FD0); }
+@media (max-width: 760px) { #t-gaps th:nth-child(4), #t-gaps td:nth-child(4) { display: none; } .title-ideas .idea-row { flex-wrap: wrap; } }
+.title-ideas .idea-row .grow { flex: 1; min-width: 0; }
+.coach-skill > .row { flex-wrap: nowrap; gap: 8px; align-items: flex-start; }
+.coach-skill .pill { white-space: nowrap; }

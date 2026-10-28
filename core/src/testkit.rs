@@ -85,6 +85,12 @@ impl Llm for FakeLlm {
     fn insights(&self, _c: &str, results: &str, _apps: &str) -> R<String> {
         Ok(format!("## What's working\n{}", results.len()))
     }
+    fn coach(&self, _c: &str, _cvs: &str, evidence: &str) -> R<crate::claude::CoachPlan> {
+        self.calls.lock().unwrap().push(format!("coach:{evidence}"));
+        Ok(crate::claude::CoachPlan { advice: "Show your Kubernetes work.".into(),
+            skills: vec![crate::claude::SkillAdvice { skill: "Kubernetes".into(), kind: "learn".into(), why: "Asked for often.".into(), how: "CKA".into(), time: "6 weeks".into() }],
+            titles: vec![crate::claude::TitleIdea { title: "Delivery Lead".into(), cv: "Program delivery".into(), why: "Same work.".into() }] })
+    }
     fn career_paths(&self, _c: &str, cvs: &str, _evidence: &str) -> R<crate::claude::CareerPlan> {
         Ok(crate::claude::CareerPlan { advice: "Lead with delivery.".into(), paths: vec![crate::claude::CareerPath { title: "Data Engineering Manager".into(), kind: "now".into(), fit: 80, pay: "$110k–135k".into(),
             pay_min: Some(110000.0), pay_max: Some(135000.0), currency: "CAD".into(), pros: vec!["Steady demand".into()], cons: vec!["Narrow field".into()],

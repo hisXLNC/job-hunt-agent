@@ -379,7 +379,7 @@ pub fn ats_issues(body_xml: &str, headers: &[String], text: &str) -> Vec<serde_j
         add("problem", "Your contact details are in the page header or footer. Many tracking systems skip those, so put your email and phone in the body, under your name.");
     }
     if body_xml.contains("<w:txbxContent") {
-        add("problem", "Some text is in text boxes, which many tracking systems skip entirely. Move it into normal paragraphs (or use Convert to an editable copy in CV & career).");
+        add("problem", "Some text is in text boxes, which many tracking systems skip entirely. Move it into normal paragraphs (or use Convert to an editable copy in CV & Career).");
     }
     if COLS.is_match(body_xml) {
         add("problem", "The CV uses newspaper-style columns, which tracking systems often read across, mixing the two columns' lines.");

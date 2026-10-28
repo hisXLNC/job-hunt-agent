@@ -222,6 +222,9 @@ impl Llm for Metered {
     fn thank_you(&self, candidate: &str, job: &Job, interview: &str) -> R<FollowUp> {
         self.run("thanks", |l| l.thank_you(candidate, job, interview))
     }
+    fn coach(&self, candidate: &str, cvs: &str, evidence: &str) -> R<crate::claude::CoachPlan> {
+        self.run("coach", |l| l.coach(candidate, cvs, evidence))
+    }
     fn career_paths(&self, candidate: &str, cvs: &str, evidence: &str) -> R<crate::claude::CareerPlan> {
         self.run("career", |l| l.career_paths(candidate, cvs, evidence))
     }

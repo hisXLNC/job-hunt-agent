@@ -439,6 +439,10 @@ pub trait Llm: Send + Sync {
     fn career_paths(&self, _candidate: &str, _cvs: &str, _evidence: &str) -> R<CareerPlan> {
         Err(Error("Career paths aren't available.".into()))
     }
+    /// What's holding you back in the postings you go for, how to close each gap, and new titles to try.
+    fn coach(&self, _candidate: &str, _cvs: &str, _evidence: &str) -> R<CoachPlan> {
+        Err(Error("Career coaching isn't available.".into()))
+    }
     /// The job posting on a web page you sent from your browser.
     fn read_posting(&self, _url: &str, _page: &str) -> R<FoundJob> {
         Err(Error("Reading web pages isn't available.".into()))
@@ -688,6 +692,54 @@ pub struct CareerPath {
     /// busy seasons, how much is remote).
     pub balance: String,
     pub balance_note: String,
+}
+
+/// The career coach's view: which missing skills cost you most, how to close each, and titles to try.
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct CoachPlan {
+    /// A few sentences: the biggest thing holding them back, and what to do first.
+    pub advice: String,
+    pub skills: Vec<SkillAdvice>,
+    pub titles: Vec<TitleIdea>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct SkillAdvice {
+    pub skill: String,
+    /// "show": the CV suggests they have it, so say it plainly; "learn": a course, certificate or
+    /// project closes it; "experience": it takes doing the work.
+    pub kind: String,
+    /// Why it matters: how often it's asked for, and how much it weighs.
+    pub why: String,
+    /// The concrete step (a named certificate or course, a project, a line to add to the CV).
+    pub how: String,
+    /// Roughly how long, e.g. "an afternoon", "4-6 weeks".
+    pub time: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct TitleIdea {
+    pub title: String,
+    /// Which CV it suits (its label, as given).
+    pub cv: String,
+    pub why: String,
+}
+
+fn coach_system() -> String {
+    format!("You are a frank career coach. Your job is to say which missing skills cost this person the most in the postings they go for, and how to close each one.\n\n{UNTRUSTED}\n\n{YOU}\n\n\
+You get their CVs (each with a label), the titles they search, and the evidence from their own search: the skills the postings they go for ask for that their CV doesn't show, with how many postings ask for each, the hard requirements they missed, and which titles bring good matches.\n\
+advice: 3-5 sentences: the one or two gaps that matter most, and what to do in the next month.\n\
+skills: the 5-8 gaps worth closing, most valuable first (often asked for, weighs on fit, closable). For each: \
+kind \"show\" when their CV suggests they already have it but doesn't say so (the fix is a line on the CV; \
+say which experience backs it), \"learn\" when a course, certificate or project closes it (name a real, \
+well-known one), or \"experience\" when only doing the work closes it (say how to get it in their current or \
+next role); why (cite how many postings ask for it); how (one concrete step); time (roughly how long). \
+Never suggest claiming a skill they don't have.\n\
+titles: 3-6 job titles they don't search yet that their CVs support and that would find good matches (sideways \
+moves, other names for the same work, adjacent fields). cv is the label of the CV each suits; why is one sentence.")
 }
 
 /// One step on a career path: when, the role, and its typical yearly pay.
@@ -1468,6 +1520,14 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
             "gaps": strings(), "titles": strings(), "first_step": {"type": "string"},
         }));
         self.call(&career_system(), &user, obj(json!({"advice": {"type": "string"}, "paths": {"type": "array", "items": path}})), "medium")
+    }
+
+    fn coach(&self, candidate: &str, cvs: &str, evidence: &str) -> R<CoachPlan> {
+        let user = format!("Candidate: {candidate}\n\n{cvs}\n\nTheir search so far:\n<posting>\n{evidence}\n</posting>");
+        let skill = obj(json!({"skill": {"type": "string"}, "kind": {"type": "string", "enum": ["show", "learn", "experience"]},
+            "why": {"type": "string"}, "how": {"type": "string"}, "time": {"type": "string"}}));
+        let title = obj(json!({"title": {"type": "string"}, "cv": {"type": "string"}, "why": {"type": "string"}}));
+        self.call(&coach_system(), &user, obj(json!({"advice": {"type": "string"}, "skills": {"type": "array", "items": skill}, "titles": {"type": "array", "items": title}})), "medium")
     }
 
     fn read_posting(&self, url: &str, page: &str) -> R<FoundJob> {

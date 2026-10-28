@@ -1,6 +1,6 @@
 [package]
 name = "jobhunt"
-version = "2.10.0"
+version = "2.11.0"
 description = "Job Hunt: finds roles, tailors your CV, tracks applications, triages email and books interviews"
 authors = ["Job Hunt"]
 edition = "2021"

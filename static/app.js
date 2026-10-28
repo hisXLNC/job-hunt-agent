@@ -112,8 +112,8 @@ const filesCard = (st, setup) => `<section class="card"><header><h2>${setup ? 'W
   <form data-form="filesFolder" class="row" style="flex-wrap:nowrap;gap:6px"><input type="text" name="dir" value="${esc(st.files.folder)}" style="flex:1">
     <button class="btn" type="button" data-act="pickFolder" data-into="dir">Browse…</button><button class="btn primary" type="submit">${setup ? 'Use this folder' : 'Move here'}</button></form>
   <p class="muted small" style="margin-top:6px">Moving takes what's there now with it, and every application still finds its files.</p></section>`;
-/** CV & career's tabs: your CVs, the versions tailored from them, career paths, your details. */
-const cvsTabs = (view, n) => `<nav class="tabs">${[['cvs', `Your CVs${n ? ` (${n})` : ''}`], ['documents', 'Tailored files'], ['career', 'Career paths'], ['details', 'Your details']].map(([id, name]) => `<a href="#cvs${id === 'cvs' ? '' : `/${id}`}" class="${id === view ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
+/** CV & Career's tabs: your CVs, the versions tailored from them, career paths, your details. */
+const cvsTabs = (view, n) => `<nav class="tabs">${[['cvs', `Your CVs${n ? ` (${n})` : ''}`], ['documents', 'Tailored files'], ['career', 'Career paths'], ['coach', 'Career coach'], ['details', 'Your details']].map(([id, name]) => `<a href="#cvs${id === 'cvs' ? '' : `/${id}`}" class="${id === view ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
 /** A page's heading with its tabs, for the pages that hold several views. */
 const tabbedHead = (title, about, actions, base, tabs, on) => `<div class="head"><div class="grow"><h1>${title}</h1><p class="muted">${about}</p></div>${actions ? `<div class="row">${actions}</div>` : ''}</div>
   <nav class="tabs">${tabs.map(([id, n]) => `<a href="#${base}/${id}" class="${id === on ? 'on' : ''}">${n}</a>`).join('')}</nav>`;
@@ -325,7 +325,7 @@ function eventText(e) {
   if (k.startsWith('email:')) return `Email: ${esc((CATEGORY[k.slice(6)] || [k.slice(6)])[0])} · ${esc(e.detail)}`;
   if (k.endsWith(':error')) return `<span style="color:var(--crit)">Problem</span> · ${esc(e.detail)}`;
   if (k === 'backup' && e.detail.startsWith('saved ')) return 'Backup saved';
-  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', care: 'Interview reminders', 'apply-link': 'Company site', ratings: 'Company ratings', 'added-again': 'Sent again', forecast: 'Fit forecast' };
+  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', coach: 'Career coach', care: 'Interview reminders', 'apply-link': 'Company site', ratings: 'Company ratings', 'added-again': 'Sent again', forecast: 'Fit forecast' };
   return `${esc(names[k] || k)} · ${esc(e.detail)}`;
 }
 const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">${esc(e.company)} – ${esc(e.title)}</a> · ` : '';
@@ -415,6 +415,7 @@ async function showRoute() {
     if (name === 'documents' || (name === 'pipeline' || name === 'overview') && arg === 'documents') { location.replace('#cvs/documents'); return; }
     if (name === 'pipeline' || name === 'overview' && (arg === 'board' || arg === 'list' || VIEWS.some(([id]) => id === arg))) { location.replace('#applications'); return; }
     if (name === 'cvs' && arg === 'documents') await showDocuments();
+    else if (name === 'cvs' && arg === 'coach') await showCoach();
     else if (name === 'applications') { overview = await api('/api/overview'); await showPipeline(arg); }
     else if (name === 'overview') await showOverview(arg);
     else if (name === 'job') await showJob(arg);
@@ -466,6 +467,7 @@ async function showOverview(tab) {
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}
     ${inUseHtml(o.in_use)}
+    ${titleIdeasHtml(o.title_ideas)}
     ${o.health?.length ? `<section class="card health"><header><h2>Needs attention</h2></header><ul class="flags">${o.health.map(h => `<li class="${h.level === 'problem' ? 'crit' : ''}">${esc(h.text)}
       ${h.action === 'removeBroken' ? `<span class="row" style="display:inline-flex;margin-left:6px"><button class="btn" data-act="removeBroken" data-boards="${esc(JSON.stringify(h.data))}">Remove ${h.data.length === 1 ? 'it' : 'them'}</button><button class="btn primary" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button></span>` : ''}
       ${h.fix ? `<button class="btn sm" style="margin-left:6px" data-act="${esc(h.fix.act)}" data-task="${esc(h.fix.task)}">${esc(h.fix.label)}</button>` : ''}
@@ -1422,6 +1424,51 @@ async function showCalendar() {
 }
 
 let docFilter = 'all';
+/** Titles the career coach suggested this week: add one to its CV's searches, or say no. */
+function titleIdeasHtml(ideas) {
+  if (!ideas?.length) return '';
+  return `<section class="card title-ideas"><header><h2>New titles to try</h2><a class="btn ghost sm" href="#cvs/coach">Why these</a></header>
+    <p class="muted small">Your career coach thinks these would find good matches. Add one and the next search looks for it.</p>
+    ${ideas.map(i => `<div class="idea-row"><div class="grow"><b>${esc(i.title)}</b>${i.cv ? ` <span class="muted small">· with your ${esc(i.cv)} CV</span>` : ''}<div class="muted small">${esc(i.why || '')}</div></div>
+      <button class="btn sm primary" data-act="titleIdea" data-add="1" data-title="${esc(i.title)}">Add to my search</button><button class="btn sm ghost" data-act="titleIdea" data-title="${esc(i.title)}">No thanks</button></div>`).join('')}
+  </section>`;
+}
+
+const COACH_KIND = { show: ['good', 'Say it on your CV'], learn: ['', 'Learn it'], experience: ['warn', 'Get the experience'] };
+let coachWatch;
+async function showCoach() {
+  const r = await api('/api/coach');
+  const g = r.gaps || { postings: 0, skills: [], must_haves: [] }, c = r.coach;
+  const ideas = overview?.title_ideas || [];
+  const jobsOf = x => (x.jobs || []).map(j => `<a href="#job/${encodeURIComponent(j.id)}">${esc(j.company)}</a>`).join(', ');
+  page(`
+    <div class="head"><div class="grow"><h1>CV &amp; Career</h1><p class="muted">The skills the roles you go for ask for that your CV doesn't show, and what would help most.</p></div></div>
+    ${cvsTabs('coach')}
+    <section class="card coach-plan"><header><h2>Your career coach</h2>
+      ${r.thinking ? '<span class="pill"><span class="spin"></span>Thinking…</span>' : `<button class="btn ${c ? 'ghost' : 'primary'}" data-act="coachRun" ${r.claude && g.postings ? '' : 'disabled'}>${c ? 'Look again' : 'Get my plan'}</button>`}</header>
+      ${c ? `<p>${esc(c.advice)}</p><p class="muted small">From ${esc(fmtDate(c.at))}. Job Hunt looks again every week with your weekly review.</p>
+        <div class="coach-skills">${(c.skills || []).map(k => { const [cls, label] = COACH_KIND[k.kind] || ['', k.kind]; return `<div class="coach-skill">
+          <div class="row" style="justify-content:space-between"><b>${esc(k.skill)}</b><span class="pill ${cls}">${label}</span></div>
+          <p class="small">${esc(k.why)}</p><p class="small"><b>How:</b> ${esc(k.how)}</p>${k.time ? `<p class="muted small">About ${esc(k.time)}</p>` : ''}</div>`; }).join('')}</div>`
+        : `<p class="muted">${!g.postings ? 'After a search or two, your coach looks at the roles you go for and says which missing skills would help most, how to get each one, and new titles to try.' : !r.claude ? 'Connect Claude to get a plan (Settings → Connections).' : 'Claude looks at the skills below and your CVs, then says which ones are worth the effort, how to get each, and new titles to try. It takes a minute.'}</p>`}
+    </section>
+    ${ideas.length ? titleIdeasHtml(ideas) : ''}
+    <section class="card"><header><h2>Skills your CV doesn't show</h2><span class="muted small">From ${g.postings} role${g.postings === 1 ? '' : 's'} near your fit score in the last 90 days</span></header>
+      ${g.skills.length ? `<table class="jobs" id="t-gaps"><thead><tr>${sortTh('Skill')}${sortTh('Not in your CV', 'num')}${sortTh('Asked for', 'num')}<th>For example</th></tr></thead><tbody>
+        ${g.skills.map(x => `<tr><td data-v="${esc(x.skill.toLowerCase())}"><b>${esc(x.skill)}</b></td>
+          <td data-v="${x.missing}"><div class="gap-bar"><span style="width:${Math.min(100, x.share)}%"></span></div><span class="small">${x.missing} role${x.missing === 1 ? '' : 's'} · ${x.share}%</span></td>
+          <td data-v="${x.asked}" class="small">${x.asked}</td><td class="small">${jobsOf(x)}</td></tr>`).join('')}</tbody></table>
+        <p class="muted small">If you have one of these, add it to your CV in your own words, and tailoring will use it. Never claim one you don't have.</p>`
+        : `<p class="muted">${g.postings ? 'Your CV covers what these roles ask for. Nice.' : 'Nothing yet: run a search first.'}</p>`}
+    </section>
+    ${g.must_haves.length ? `<section class="card"><header><h2>Hard requirements you missed</h2></header><ul class="flags">
+      ${g.must_haves.map(m => `<li>${esc(m.text)} <span class="muted small">· <a href="#job/${encodeURIComponent(m.id)}">${esc(m.company)} – ${esc(m.title)}</a></span></li>`).join('')}</ul></section>` : ''}`);
+  const t = document.getElementById('t-gaps');
+  if (t) { if (!sortState['t-gaps']) sortState['t-gaps'] = { col: 1, dir: 'desc' }; applySort(t); }
+  clearTimeout(coachWatch);
+  if (r.thinking) { const here = location.hash; coachWatch = setTimeout(() => { if (location.hash === here) route(); }, 8000); }
+}
+
 async function showDocuments() {
   const { jobs } = await api('/api/jobs');
   const all = jobs.filter(j => j.cv_path || j.letter_path).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
@@ -2388,7 +2435,7 @@ const CONN_ACT = {
   phoneTest: () => ['Send a test', 'phoneTest'], syncNow: () => ['Sync now', 'syncNow'], backupNow: () => ['Back up now', 'backupNow'],
 };
 let connPoll;
-const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', chat: 'Ask Claude (job chat)', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
+const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', coach: 'Career coach', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', chat: 'Ask Claude (job chat)', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
 async function renderUsage() {
   const box = $('#usageCard'); if (!box) return;
   let u;
@@ -2939,6 +2986,17 @@ async function act(el) {
       list.push({ name, role: $('#cRole').value.trim(), email: extra.includes('@') && !extra.startsWith('http') ? extra : '', link: extra.startsWith('http') ? extra : '' });
     } else list.splice(Number(el.dataset.i), 1);
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/contacts`, { method: 'POST', body: { contacts: list } }); route(); });
+  }
+  if (a === 'coachRun') {
+    return busy(async () => { const r = await api('/api/coach/run', { method: 'POST' }); if (!r.started) toast('Your coach is already thinking, or Claude isn\'t connected.'); route(); }, 'Your coach is looking at the skills you\'re missing. This takes a minute or two.');
+  }
+  if (a === 'titleIdea') {
+    const add = !!el.dataset.add;
+    return busy(async () => {
+      await api('/api/titles/idea', { method: 'POST', body: { title: el.dataset.title, add } });
+      settingsCache = null; await refreshOverview(); route();
+      toast(add ? `Added “${el.dataset.title}”. The next search looks for it.` : 'Dropped.');
+    });
   }
   if (a === 'careerJump') { document.getElementById(`path-${el.dataset.i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (a === 'career') {
