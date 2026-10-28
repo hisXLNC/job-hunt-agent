@@ -818,3 +818,9 @@ a.qt:hover { text-decoration: underline; }
   .select-bar [data-act=dismissPicked] { font-size: 0; gap: 0; }
   .select-bar [data-act=dismissPicked] svg { width: 16px; height: 16px; }
 }
+
+.ats-ok { list-style: none; padding: 0; margin: 0; }
+.ats-ok li { padding: 2px 0 2px 22px; position: relative; }
+.ats-ok li::before { content: "✓"; position: absolute; left: 4px; color: var(--good); font-weight: 700; }
+.ats .flags li.ats-tip { color: var(--ink-2); }
+.ats .flags li.ats-tip::marker { color: var(--warn); }

@@ -1392,8 +1392,25 @@ async function showDocuments() {
 function atsHtml(list) {
   const problems = list.filter(x => x.level === 'problem');
   return `<details class="ats" ${problems.length ? 'open' : ''}><summary class="small"><b>Screening-software check:</b> ${list.length ? `${problems.length ? `<span style="color:var(--crit)">${problems.length} problem${problems.length === 1 ? '' : 's'}</span>` : 'reads cleanly'}${list.length - problems.length ? `, ${list.length - problems.length} tip${list.length - problems.length === 1 ? '' : 's'}` : ''}` : 'the software employers use to screen CVs reads it cleanly'}</summary>
-    ${list.length ? `<ul class="flags">${list.map(x => `<li class="${x.level === 'problem' ? 'crit' : ''}">${esc(x.text)}</li>`).join('')}</ul>` : ''}</details>`;
+    ${list.length ? `<ul class="flags">${list.map(x => `<li class="${x.level === 'problem' ? 'crit' : 'ats-tip'}">${esc(x.text)}</li>`).join('')}</ul>` : ''}
+    ${(() => {
+      // What was checked, ticked when nothing above is about it.
+      const said = list.map(x => x.text.toLowerCase()).join(' ');
+      const ok = ATS_CHECKS.filter(([, key]) => !said.includes(key));
+      return ok.length ? `<p class="small muted" style="margin:8px 0 4px">${list.length ? 'Also checked, and fine:' : 'What was checked:'}</p><ul class="ats-ok small">${ok.map(([what]) => `<li>${esc(what)}</li>`).join('')}</ul>` : '';
+    })()}</details>`;
 }
+/** What the screening-software check looks at, with a word its warning about it would contain. */
+const ATS_CHECKS = [
+  ['Your email and phone are in the body, not only in the page header or footer', 'header or footer'],
+  ['No text hidden in text boxes', 'text boxes'],
+  ['No newspaper-style columns', 'columns'],
+  ['No tables that older systems jumble', 'table'],
+  ['No pictures (photos, logos or icons)', 'picture'],
+  ['An email address the system can find', 'no email'],
+  ['Standard section names: Experience, Education, Skills', 'section names'],
+  ['A usual length (no more than about three pages)', 'words'],
+];
 
 /** Pay across your tailored roles, as a range bar with the typical figure and your minimum. */
 function payHtml(p) {
