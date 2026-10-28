@@ -6,12 +6,12 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.6.0] - 2026-10-28
 
-Your files in Documents, simpler All jobs.
+Your files in Documents, All jobs as one table.
 
 ### Changes
 
 - Your CVs, tailored CVs and cover letters, and backups are kept in a folder you choose: Documents\Job Hunt for new installs, or any folder in setup or Settings → Sync & backup → Your files. Moving takes the files along.
-- All jobs is one list with one row of filters, from your applications by stage to all postings and the skipped ones. The Board is gone (the steps are the board), and tailored files moved to CV & career → Tailored files.
+- All jobs is one table of every job (applications, new postings and skipped ones): click any column's heading to sort by it. The Board is gone (the steps are the board), and tailored files moved to CV & career → Tailored files.
 - The company comes first, then the role, in every list.
 - LinkedIn and other job board postings you tailor are found on the company's own site by themselves, so Apply goes straight to the company.
 - Tailored files are found again after continuing on another computer.

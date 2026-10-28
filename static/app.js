@@ -101,7 +101,7 @@ const FLOW = [
   ['interviews', 'Interviews', c => (c.interviewing || 0) + (c.offer || 0), 'Interviews coming up, and offers.'],
 ];
 /** Every job at once, in different shapes: also tabs of the Overview. */
-const VIEWS = [['tracker', 'Applications'], ['postings', 'All postings'], ['skipped', 'Skipped']];
+const VIEWS = [['tracker', 'All jobs'], ['postings', 'All jobs'], ['skipped', 'All jobs']];
 const INBOX_TABS = [['email', 'Email'], ['recruiters', 'Recruiters']];
 /** Where Job Hunt keeps your files, and a way to choose another folder (setup and Settings). */
 const filesCard = (st, setup) => `<section class="card"><header><h2>${setup ? 'Where to keep your files' : 'Your files'}</h2></header>
@@ -389,7 +389,7 @@ async function showRoute() {
     if (name === 'documents' || (name === 'pipeline' || name === 'overview') && arg === 'documents') { location.replace('#cvs/documents'); return; }
     if (name === 'pipeline' || name === 'overview' && arg === 'board') { location.replace(`#overview/${arg && arg !== 'board' ? arg : 'tracker'}`); return; }
     if (name === 'cvs' && arg === 'documents') await showDocuments();
-    else if (name === 'overview' && (VIEWS.some(([id]) => id === arg) || arg === 'list')) { overview = await api('/api/overview'); await showPipeline(arg); }
+    else if (name === 'overview' && (VIEWS.some(([id]) => id === arg) || arg === 'list')) { overview = await api('/api/overview'); await showPipeline(); }
     else if (name === 'overview') await showOverview(arg);
     else if (name === 'job') await showJob(arg);
     else if (name === 'review') await showReview();
@@ -464,114 +464,44 @@ async function showOverview(tab) {
 }
 
 // ---- Applications ----
-async function showPipeline(tab) {
-  // Postings outside your locations aren't shown anywhere (the Skipped tab counts them).
-  const { jobs: everything } = await api('/api/jobs');
-  const elsewhere = everything.filter(outsideYours).length;
-  const jobs = everything.filter(j => !outsideYours(j));
-  // "All" is gone from the tabs (the Tracker and Postings cover it); #pipeline/list still works.
-  let body = '';
-  // One row of filters for every job: your applications by where they stand, then every posting
-  // found, and the skipped ones.
-  const { rows } = await api('/api/tracker');
-  const groups = {
-      active: ['In progress', r => !['rejected', 'no_response', 'saved'].includes(r.status)],
-      you: ['Waiting on you', r => r.who === 'you'],
-      them: ['Waiting on them', r => r.who === 'them'],
-      quiet: ['No reply in 2+ weeks', r => r.status === 'applied' && (r.days_since ?? 0) >= 14],
-      interviewing: ['Interviewing', r => ['interviewing', 'offer'].includes(r.status)],
-      saved: ['Saved for later', r => r.status === 'saved'],
-      done: ['Finished', r => ['rejected', 'no_response'].includes(r.status)],
-    };
-  const chips = `<div class="chips all-chips">${Object.entries(groups).map(([k, [n, f]]) => `<button class="chip ${tab === 'tracker' && k === trackFilter ? 'on' : ''}" data-act="trackFilter" data-f="${k}">${n} <b>${rows.filter(f).length}</b></button>`).join('')}
-    <span class="chip-gap"></span>
-    <a class="chip ${tab === 'postings' || tab === 'list' ? 'on' : ''}" href="#overview/postings">All postings <b>${jobs.length}</b></a>
-    <a class="chip ${tab === 'skipped' ? 'on' : ''}" href="#overview/skipped">Skipped <b>${jobs.filter(j => j.status === 'skipped').length + elsewhere}</b></a>
-    <a class="views-x small" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a></div>`;
-  if (tab === 'tracker') {
-    const [, keep] = groups[trackFilter] || groups.active;
-    // Your move first, then whatever has waited longest.
-    const list = rows.filter(keep).sort((a, b) => (a.who === 'you' ? 0 : 1) - (b.who === 'you' ? 0 : 1) || (b.days_since ?? 0) - (a.days_since ?? 0));
-    body = `<section class="card" style="padding:4px 12px">${list.length ? list.map(trackRow).join('') : `<p class="empty">${rows.length ? 'Nothing here.' : 'No applications yet. Tailor a role from the Overview and it shows up here.'}</p>`}</section>`;
-  } else if (tab === 'board') {
-    // The lanes you work in; empty ones step aside, and finished applications go below.
-    const lanes = ['queued', 'ready', 'approved', 'applied', 'interviewing'];
-    const of = st => jobs.filter(j => j.status === st).sort((a, b) => (b.score || 0) - (a.score || 0));
-    const shown = lanes.filter(st => of(st).length);
-    const empty = lanes.filter(st => !of(st).length);
-    const done = [...of('offer'), ...of('rejected'), ...of('no_response')];
-    const saved = of('saved');
-    body = `${shown.length ? `<div class="board" style="grid-template-columns:repeat(${shown.length}, minmax(200px, 1fr))">${shown.map(st => {
-      const list = of(st);
-      return `<div class="lane"><h3>${stagePill(st)}<span class="n">${list.length}</span></h3>${list.map(card).join('')}</div>`;
-    }).join('')}</div>` : '<p class="empty">No applications in progress yet. Matches appear here after a search.</p>'}
-      ${empty.length && shown.length ? `<p class="muted small">No roles yet in: ${empty.map(st => STAGES[st].split(' – ')[0]).join(' · ')}.</p>` : ''}
-      ${saved.length ? `<details class="card" open><summary><b>Saved for later</b> <span class="muted small">${saved.length} backup${saved.length === 1 ? '' : 's'}</span></summary>
-        <div class="queue">${saved.map(j => `<div class="qitem">${scoreBadge(j.score)}<a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span><br><span class="muted small">${esc(j.company)}</span></a>${closedTag(j)}${deadlineTag(j)}<button class="btn sm" data-act="stage" data-status="${j.cv_path ? 'ready' : 'queued'}" data-job="${esc(j.id)}" data-from="saved">Bring back</button></div>`).join('')}</div></details>` : ''}
-      ${done.length ? `<details class="card"><summary><b>Finished</b> <span class="muted small">${of('offer').length} offer${of('offer').length === 1 ? '' : 's'}, ${of('rejected').length} rejected${of('no_response').length ? `, ${of('no_response').length} no response` : ''}</span></summary>
-        <div class="queue">${done.map(j => `<a class="qitem" href="#job/${encodeURIComponent(j.id)}">${scoreBadge(j.score)}<span><span class="qt">${esc(j.title)}</span><br><span class="muted small">${esc(j.company)}</span></span>${stagePill(j.status)}</a>`).join('')}</div></details>` : ''}`;
-  } else if (tab === 'postings') {
-    // Every posting any search found, newest first, with where it came from.
-    const list = [...jobs].sort((a, b) => String(b.found_at).localeCompare(String(a.found_at)));
-    const sources = [...new Set(list.map(j => j.source))].sort();
-    body = `<div class="row" style="margin-bottom:10px"><input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
-      <select id="srcFilter" style="width:auto"><option value="">All sources</option>${sources.map(x => `<option value="${esc(x)}">${esc(sourceName(x))} (${list.filter(j => j.source === x).length})</option>`).join('')}</select></div>
-      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-postings"><thead><tr>${sortTh('Age', 'date')}${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}<th></th></tr></thead><tbody>
-      ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-src="${esc(j.source)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}<br><span class="small">${esc(sourceName(j.source))}</span></td>
-        <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td>
-        <td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${stagePill(j.status)}</span></td><td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
-        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="fit" data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>
-        <td>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`).join('')}
-      </tbody></table>${list.length ? '' : '<p class="empty">No postings yet. Run a search from the Overview.</p>'}</section>`;
-  } else {
-    const list = jobs.filter(j => tab === 'skipped' ? ['skipped', 'dismissed'].includes(j.status) : !['skipped', 'dismissed'].includes(j.status));
-    let why = '';
-    if (tab === 'skipped' && list.length) {
-      // Group the reasons, so it's clear whether settings or fit are skipping things.
-      const kind = j => {
-        const r = j.reasoning || '';
-        if (j.status === 'dismissed') return 'You marked them not interested';
-        if (j.closed_at) return 'The posting closed';
-        if (!r.startsWith('Filtered out:')) return 'Fit score below your minimum (Settings → Search)';
-        if (r.includes('no title or keyword match')) return 'Title doesn\'t match any job title or keyword in CV & career';
-        if (r.includes('location')) return 'Outside your locations';
-        if (r.includes('title contains')) return 'Title has a word you skip (Skip titles containing)';
-        if (r.includes('salary')) return 'Salary below your minimum';
-        if (r.includes('excluded company')) return 'A company you skip';
-        return 'Other';
-      };
-      const counts = {};
-      list.forEach(j => { const k = kind(j); counts[k] = (counts[k] || 0) + 1; });
-      why = `<section class="card"><header><h2>Why they were skipped</h2>
-          <div class="row"><button class="btn" data-act="rescore" data-group="skipped" title="Score these again against your CVs and settings as they are now">Score again</button><button class="btn ghost" data-act="run" data-task="search-force" title="Search again, and look again at postings set aside before">Search again, including set-aside postings</button></div></header>
-        <table><tbody>${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<tr><td>${esc(k)}</td><td style="text-align:right"><b>${n}</b></td></tr>`).join('')}${elsewhere ? `<tr><td>Outside your locations (not shown)</td><td style="text-align:right"><b>${elsewhere}</b></td></tr>` : ''}</tbody></table>
-        <p class="muted small">Most skips happen before Claude sees a posting: its title must match a job title or keyword from <a href="#cvs">Your CVs</a>, and its location one of your <a href="#settings/search">locations</a>. Change those, then use <b>Score again</b> to check these postings against your new settings.</p></section>`;
-    }
-    // A skipped role whose forecast clears your fit score is worth a second look: tailored, it could make it.
-    const bar = tab === 'skipped' ? ((settingsCache || await api('/api/settings').catch(() => null))?.profile?.score_threshold ?? 101) : 101;
-    const worth = j => canReach(j) != null && canReach(j) >= bar ? `<span class="pill good" title="Its fit is below your minimum (${bar}), but tailored it could reach about ${canReach(j)}">Worth a look tailored</span> ` : '';
-    body = `${why}<input type="text" id="filter" placeholder="Filter by title, company or location" style="max-width:420px">
-      <section class="card" style="padding:6px 10px"><table class="jobs" id="t-${tab}"><thead><tr>${sortTh('Fit', 'num')}${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Stage', 'rank')}${tab === 'skipped' ? sortTh('Why') : sortTh('Age', 'date')}${tab === 'list' ? '<th></th>' : ''}</tr></thead><tbody>
-      ${list.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-text="${esc(`${j.title} ${j.company} ${j.location}`.toLowerCase())}">
-        <td class="fit" data-v="${j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td><td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td><td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b>${coLocLine(j)}<span class="phone-only"><br>${tab === 'skipped' ? `${worth(j)}<span class="small muted">${esc(j.reasoning || '')}</span>` : stagePill(j.status)}</span></td>
-<td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
-        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td><td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)} ${closedTag(j)}${deadlineTag(j)}</td>${tab === 'skipped'
-          ? `<td class="small why" data-v="${esc((j.reasoning || '').toLowerCase())}">${worth(j)}${esc(j.reasoning || '')}</td>`
-          : `<td class="small muted nowrap" data-v="${esc(ageValue(j))}">${ageTag(j)}</td>`}${tab === 'list' ? `<td class="row-act">${rowActions(j)}</td>` : ''}</tr>`).join('')}
-      </tbody></table>${list.length ? '' : '<p class="empty">Nothing here yet.</p>'}</section>`;
-  }
-  page(`${appsHead(tab)}${chips}${body}`);
-  const f = $('#filter'), src = $('#srcFilter');
-  const apply = () => {
-    const q = (f?.value || '').toLowerCase(), from = src?.value || '';
-    main().querySelectorAll('tr[data-text]').forEach(tr => { tr.hidden = (q && !tr.dataset.text.includes(q)) || (from && tr.dataset.src !== from); });
+async function showPipeline() {
+  // Every job in one table (applications, new postings, skipped ones): click a column's heading to
+  // sort by it. Postings outside your locations aren't shown.
+  const [{ jobs: everything }, { rows }] = await Promise.all([api('/api/jobs'), api('/api/tracker')]);
+  const jobs = everything.filter(j => !outsideYours(j) && j.status !== 'dismissed');
+  const tracked = Object.fromEntries(rows.map(r => [r.id, r]));
+  const WHO = { you: 'Your move', them: 'Waiting on them', later: 'Saved', done: 'Done' };
+  // A skipped role whose forecast clears your fit score is worth a second look: tailored, it could make it.
+  const bar = (settingsCache || await api('/api/settings').catch(() => null))?.profile?.score_threshold ?? 101;
+  const worth = j => canReach(j) != null && canReach(j) >= bar ? `<span class="pill good" title="Its fit is below your minimum (${bar}), but tailored it could reach about ${canReach(j)}">Worth a look tailored</span> ` : '';
+  const next = j => {
+    const r = tracked[j.id];
+    if (r) return `<span class="who ${esc(r.who)}">${WHO[r.who] || ''}</span> <span class="small">${nextText(r)}</span>`;
+    if (j.status === 'queued') return '<span class="small">Pick it to tailor</span>';
+    if (j.status === 'skipped') return `<span class="small muted" title="${esc(j.reasoning || '')}">${worth(j)}${esc((j.reasoning || '').slice(0, 60))}${(j.reasoning || '').length > 60 ? '…' : ''}</span>`;
+    return '';
   };
-  f?.addEventListener('input', apply);
-  src?.addEventListener('change', apply);
+  const nextKey = j => ({ you: 0, them: 1, later: 2, done: 3 }[tracked[j.id]?.who] ?? (j.status === 'queued' ? 0.5 : 4));
+  // Until you sort it yourself: what needs you first.
+  if (!sortState['t-all']) sortState['t-all'] = { col: 5, dir: 'asc' };
+  page(`${appsHead('tracker')}
+    <div class="row all-bar"><span class="muted small">${jobs.length} job${jobs.length === 1 ? '' : 's'}. Click a column's heading to sort by it; click again to reverse.</span>
+      <a class="views-x small" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a></div>
+    <section class="card" style="padding:6px 10px"><table class="jobs" id="t-all"><thead><tr>${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}${sortTh('Next step', 'num')}${sortTh('Age', 'date')}<th></th></tr></thead><tbody>
+      ${jobs.map(j => `<tr class="click" data-expand="${esc(j.id)}">
+        <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td>
+        <td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b> ${closedTag(j)}${deadlineTag(j)}${coLocLine(j)}<span class="phone-only"><br>${stagePill(j.status)}</span></td>
+        <td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
+        <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td>
+        <td class="fit" data-v="${j.score_after ?? j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td>
+        <td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)}</td>
+        <td class="next" data-v="${nextKey(j)}">${next(j)}</td>
+        <td class="small muted nowrap" data-v="${esc(ageValue(j))}" title="Found on ${esc(sourceName(j.source))}">${ageTag(j)}</td>
+        <td class="row-act">${rowActions(j)}</td></tr>`).join('')}
+    </tbody></table>${jobs.length ? '' : '<p class="empty">No jobs yet. Search for jobs from the Overview.</p>'}</section>`);
   main().querySelectorAll('table.jobs').forEach(applySort);
   // j / k on a job page walk through the list as it was shown here.
-  jobOrder = [...main().querySelectorAll('[data-expand], .board .jcard')].map(el => el.dataset.expand || decodeURIComponent(el.getAttribute('href').replace('#job/', '')));
+  jobOrder = [...main().querySelectorAll('[data-expand]')].map(el => el.dataset.expand);
 }
 
 /** How each source is called on screen. */
@@ -641,17 +571,7 @@ document.addEventListener('click', e => {
 });
 try { Object.assign(sortState, JSON.parse(localStorage.getItem('sort') || '{}')); } catch (err) {}
 
-function card(j) {
-  return `<a class="jcard" href="#job/${encodeURIComponent(j.id)}">
-    <span class="t">${esc(j.title)} ${closedTag(j)}${deadlineTag(j)}</span>
-    <span class="muted small">${esc(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}</span>
-    ${j.salary ? `<span class="small">${salaryCell(j)}</span>` : ''}
-    <span class="row small">${scoreBadge(j.score)}${j.coverage_after != null ? `<span class="muted">${pct(j.coverage_after)} of the posting's keywords</span>` : ''}</span>
-  </a>`;
-}
-
 // ---- Tracker ----
-let trackFilter = 'active';
 /** The steps an application has reached, as dots on a line, with dates on hover. */
 function stepsHtml(r) {
   const at = r.steps.map(x => x.at);
@@ -2580,7 +2500,6 @@ async function act(el) {
     if (!await ask('Remove this interview, with its prep time and reminders?', 'Remove', true)) return;
     return busy(async () => { await api('/api/calendar/delete', { method: 'POST', body: { id: el.dataset.id } }); route(); }, 'Removed.');
   }
-  if (a === 'trackFilter') { trackFilter = el.dataset.f; if (location.hash === '#overview/tracker') route(); else location.hash = '#overview/tracker'; return; }
   if (a === 'docFilter') { docFilter = el.dataset.f; route(); return; }
   if (a === 'pickTop') {
     const box = el.closest('[data-pickbox]');

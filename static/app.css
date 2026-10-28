@@ -628,15 +628,13 @@ details.card > summary { cursor: pointer; list-style-position: outside; }
 
 /* Postings on a phone: role (with its stage) and fit; age, pay, source and the link button only on wider screens. */
 @media (max-width: 760px) {
-  #t-postings th:not(:nth-child(3)):not(:nth-child(6)), #t-postings td:not(:nth-child(3)):not(:nth-child(6)) { display: none; }
-  #t-postings .reach { display: flex; margin: 4px 0 0; }
+  #t-all th:not(:nth-child(2)):not(:nth-child(5)), #t-all td:not(:nth-child(2)):not(:nth-child(5)) { display: none; }
+  #t-all .reach { display: flex; margin: 4px 0 0; }
 }
 .phone-only { display: none; }
 @media (max-width: 760px) { .phone-only { display: inline; } }
 /* The other job tables on a phone: fit and role, with the stage (or why it was skipped) under the role. */
 @media (max-width: 760px) {
-  #t-skipped th:nth-child(2), #t-skipped td:nth-child(2), #t-skipped th:nth-child(n+4), #t-skipped td:nth-child(n+4), #t-list th:nth-child(2), #t-list td:nth-child(2), #t-list th:nth-child(n+4):nth-child(-n+7), #t-list td:nth-child(n+4):nth-child(-n+7) { display: none; }
-  #t-skipped .reach, #t-list .reach { display: flex; margin: 4px 0 0; }
   .card > header { flex-wrap: wrap; }
 }
 /* A company's employee rating: a small tag in lists, a big one on the job page. */
@@ -730,9 +728,15 @@ table.jobs td { padding: 10px 7px; }
 .trow .co { font-weight: 600; }
 .trow > .todo-act { justify-content: flex-end; }
 .good-text { color: var(--good); }
-/* All jobs: one row of filters, your applications by stage, then every posting and the skipped ones. */
-.all-chips { align-items: center; }
-.all-chips .chip-gap { align-self: stretch; width: 1px; margin: 2px 6px; background: var(--line); }
-.all-chips .views-x { margin-left: auto; color: var(--accent); }
-.all-chips a.chip { text-decoration: none; }
+/* All jobs: one sortable table. */
+.all-bar { justify-content: space-between; margin-bottom: 8px; }
+.all-bar .views-x { color: var(--accent); }
+#t-all td.next { min-width: 140px; max-width: 200px; }
+#t-all td.role { min-width: 170px; }
+#t-all td.salary { min-width: 90px; max-width: 110px; }
+#t-all td.next .who { display: block; font-size: 11px; }
+#t-all td.row-act { white-space: nowrap; }
 .docrow .co, .trow .co { font-weight: 600; }
+#t-all td { padding: 10px 6px; }
+#t-all td.loc { min-width: 90px; }
+#t-all td.role { min-width: 150px; }
