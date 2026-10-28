@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.7.0",
+    "date": "2026-10-28",
+    "title": "Referrals, browser extension and bulk approve",
+    "changes": [
+      "Jobs from recruiters' job-alert emails (Randstad, Adecco, Hays, Robert Half, Michael Page and more).",
+      "The same job on several sites is kept once, and you apply on the company's own site.",
+      "A Stretch badge when a posting requires something your CV doesn't show.",
+      "Approve several applications at once.",
+      "Add your LinkedIn connections to see who you know at each company and ask them for a referral.",
+      "Send to Job Hunt as a Chrome or Edge extension.",
+      "Results opens with your week in plain words.",
+      "Fit reasons are one short line.",
+      "Matches not picked in 60 days are set aside.",
+      "Job Bank is on by default in Canada."
+    ]
+  },
+  {
     "version": "2.6.0",
     "date": "2026-10-28",
     "title": "Your files in Documents, All jobs as one table",
