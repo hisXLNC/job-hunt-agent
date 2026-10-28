@@ -803,7 +803,7 @@ from the conversation they should fill in, since you weren't there. Sign with th
 #[serde(default)]
 pub struct BoardIdea {
     pub company: String,
-    /// "greenhouse", "lever", "ashby", "workday", "smartrecruiters" or "workable".
+    /// "greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable" or "bamboohr".
     pub board: String,
     /// The name at the end of the careers link (for Workday, the whole link).
     pub slug: String,
@@ -850,7 +850,8 @@ fn boards_system() -> String {
 Suggest 15-25 real employers that hire for the given kinds of role with offices in or near the given places (or \
 remotely in that country); every suggestion must have roles there, not only elsewhere, and that you believe publish their openings on Greenhouse (boards.greenhouse.io/<slug>), Lever \
 (jobs.lever.co/<slug>), Ashby (jobs.ashbyhq.com/<slug>), Workday (<tenant>.wd<N>.myworkdayjobs.com/<site>), \
-SmartRecruiters (jobs.smartrecruiters.com/<slug>) or Workable (apply.workable.com/<slug>). Favour employers with \
+SmartRecruiters (jobs.smartrecruiters.com/<slug>), Workable (apply.workable.com/<slug>) or BambooHR \
+(<slug>.bamboohr.com/careers, common with mid-sized employers). Favour employers with \
 steady hiring for these roles: banks, insurers, consultancies, public sector technology, fintech and software \
 companies with offices there; large employers mostly use Workday. board is the platform's name in lowercase; slug \
 is the name at the end of the careers link, except for Workday, where it is the whole careers link starting with \
@@ -1281,7 +1282,7 @@ impl Llm for Claude {
         let s = json!({"type": "string"});
         let schema = json!({"type": "object", "additionalProperties": false, "required": ["companies"], "properties": {
             "companies": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["company", "board", "slug"],
-                "properties": {"company": s, "board": {"type": "string", "enum": ["greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable"]}, "slug": s}}}}});
+                "properties": {"company": s, "board": {"type": "string", "enum": ["greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable", "bamboohr"]}, "slug": s}}}}});
         let user = format!("Kinds of role: {targets}\nPlaces: {places}");
         let ideas: Ideas = self.call(&boards_system(), &user, schema, "low")?;
         Ok(ideas.companies)

@@ -412,7 +412,7 @@ fn slugs(company: &str) -> Vec<String> {
 }
 
 /// Add the job boards of the companies your in-house recruiters work for, where Job Hunt finds one
-/// (Greenhouse, Lever, Ashby, SmartRecruiters, Workable). Returns the companies added.
+/// (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, BambooHR). Returns the companies added.
 pub fn add_their_boards(agent: &Agent, list: &[Recruiter]) -> Vec<String> {
     let profile = agent.profile();
     let have = crate::sources::boards(&profile);
@@ -426,7 +426,7 @@ pub fn add_their_boards(agent: &Agent, list: &[Recruiter]) -> Vec<String> {
             continue;
         }
         'company: for slug in slugs(&r.company) {
-            for board in ["greenhouse", "lever", "ashby", "smartrecruiters", "workable"] {
+            for board in ["greenhouse", "lever", "ashby", "smartrecruiters", "workable", "bamboohr"] {
                 if have.iter().any(|(b, n)| *b == board && n.eq_ignore_ascii_case(&slug)) || removed.contains(&format!("{board}:{slug}")) {
                     break 'company;
                 }

@@ -506,7 +506,7 @@ async function showPipeline() {
 }
 
 /** How each source is called on screen. */
-const SOURCE = { adzuna: 'Adzuna', jsearch: 'Google for Jobs', jooble: 'Jooble', indeed: 'Indeed', greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workday: 'Workday', smartrecruiters: 'SmartRecruiters', workable: 'Workable', linkedin: 'LinkedIn', bayt: 'Bayt', naukrigulf: 'Naukrigulf', gulftalent: 'GulfTalent', eluta: 'Eluta', workopolis: 'Workopolis', glassdoor: 'Glassdoor', jobbank: 'Job Bank', ziprecruiter: 'ZipRecruiter', manual: 'Added by you', clip: 'Sent from your browser', alert: 'Job-alert email', email: 'Job-alert email' };
+const SOURCE = { adzuna: 'Adzuna', jsearch: 'Google for Jobs', jooble: 'Jooble', indeed: 'Indeed', greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workday: 'Workday', smartrecruiters: 'SmartRecruiters', workable: 'Workable', bamboohr: 'BambooHR', linkedin: 'LinkedIn', bayt: 'Bayt', naukrigulf: 'Naukrigulf', gulftalent: 'GulfTalent', eluta: 'Eluta', workopolis: 'Workopolis', glassdoor: 'Glassdoor', jobbank: 'Job Bank', ziprecruiter: 'ZipRecruiter', manual: 'Added by you', clip: 'Sent from your browser', alert: 'Job-alert email', email: 'Job-alert email' };
 const sourceName = s => SOURCE[s] || (s ? s[0].toUpperCase() + s.slice(1) : '');
 /** Stages a posting can be picked from, whatever its score or location ("Tailor anyway"). */
 const CAN_CHOOSE = ['skipped', 'dismissed', 'saved'];
@@ -1605,6 +1605,7 @@ async function showSettings(tab, sub) {
           <label class="field">Workday<textarea name="workday" placeholder="https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1">${esc(lines(p.sources.workday))}</textarea><span class="hint">Careers links, one per line. Searched for your job titles.</span></label>
           <label class="field">SmartRecruiters<textarea name="smartrecruiters">${esc(lines(p.sources.smartrecruiters))}</textarea></label>
           <label class="field">Workable<textarea name="workable">${esc(lines(p.sources.workable))}</textarea></label>
+          <label class="field">BambooHR<textarea name="bamboohr" placeholder="acme">${esc(lines(p.sources.bamboohr))}</textarea><span class="hint">The name before .bamboohr.com in the careers link.</span></label>
         </div>
         </form>`)}
       ${tile('linkedin', 'LinkedIn', 'Free', "LinkedIn's public job search, the one anyone sees without signing in. It never touches your LinkedIn account. A few searches a day.",
@@ -1984,7 +1985,7 @@ function readProfile(form, part) {
     // Workday links can hold commas in rare cases, so they're split by line only.
     const byLine = x => x.split('\n').map(y => y.trim()).filter(Boolean);
     Object.assign(p.sources, { greenhouse: fromLines(v('greenhouse')), lever: fromLines(v('lever')), ashby: fromLines(v('ashby')),
-      workday: byLine(v('workday')), smartrecruiters: fromLines(v('smartrecruiters')), workable: fromLines(v('workable')) });
+      workday: byLine(v('workday')), smartrecruiters: fromLines(v('smartrecruiters')), workable: fromLines(v('workable')), bamboohr: fromLines(v('bamboohr')) });
   }
   for (const k of ['work_start', 'work_end', 'slot_minutes', 'propose_slots', 'prep_minutes']) if (has(k)) p.calendar[k] = Number(v(k));
   if (has('calendar_id')) p.calendar.calendar_id = v('calendar_id').trim() || 'primary';
@@ -2002,7 +2003,7 @@ async function reloadBoards() {
 function showBoardFields() {
   const f = document.querySelector('form[data-form=profile][data-part=boards]');
   if (!f || !settingsCache) return;
-  for (const k of ['greenhouse', 'lever', 'ashby', 'workday', 'smartrecruiters', 'workable']) {
+  for (const k of ['greenhouse', 'lever', 'ashby', 'workday', 'smartrecruiters', 'workable', 'bamboohr']) {
     const el = f.elements[k];
     if (el && el !== document.activeElement) el.value = lines(settingsCache.profile.sources[k]);
   }

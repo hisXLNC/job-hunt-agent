@@ -696,6 +696,75 @@ pub fn smartrecruiters(c: &reqwest::blocking::Client, company: &str, wanted: &dy
     Ok((out, complete))
 }
 
+/// A BambooHR company's careers list (<name>.bamboohr.com/careers/list): titles and places only.
+pub fn parse_bamboohr(company: &str, body: &Value) -> Vec<Posting> {
+    let mut out = vec![];
+    for j in body.get("result").and_then(|x| x.as_array()).into_iter().flatten() {
+        let id = id_str(j);
+        let title = s(j, "jobOpeningName").trim().to_string();
+        if id.is_empty() || title.is_empty() {
+            continue;
+        }
+        let at = |k: &str| j.get(k).cloned().unwrap_or(Value::Null);
+        let (loc, ats) = (at("location"), at("atsLocation"));
+        let mut place = [s(&loc, "city"), s(&loc, "state")].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>();
+        if place.is_empty() {
+            place = [s(&ats, "city"), s(&ats, "province"), s(&ats, "state"), s(&ats, "country")].into_iter().filter(|x| !x.is_empty()).collect();
+        }
+        let place = place.join(", ");
+        out.push(Posting {
+            source: "bamboohr".into(),
+            external_id: format!("{company}-{id}"),
+            company: company.to_string(),
+            remote: j.get("isRemote") == Some(&Value::Bool(true)) || is_remote(&[&place]),
+            location: place,
+            url: format!("https://{company}.bamboohr.com/careers/{id}"),
+            description: format!("{title}. (Open the posting for the full description.)"),
+            title,
+            ..Posting::default()
+        });
+    }
+    out
+}
+
+/// One BambooHR posting's full text, and when it was posted.
+pub fn bamboohr_details(body: &Value) -> (String, Option<String>) {
+    let j = body.pointer("/result/jobOpening").cloned().unwrap_or(Value::Null);
+    let mut text = html_to_text(&s(&j, "description"));
+    let exp = s(&j, "minimumExperience");
+    if !exp.is_empty() {
+        text = format!("{text}\n\nMinimum experience: {exp}");
+    }
+    (text.trim().to_string(), Some(s(&j, "datePosted")).filter(|x| !x.is_empty()))
+}
+
+/// A BambooHR company: every posting, with the matching ones read in full.
+pub fn bamboohr(c: &reqwest::blocking::Client, company: &str, wanted: &dyn Fn(&str) -> bool) -> Result<Vec<Posting>, String> {
+    let company = company.trim().trim_start_matches("https://").split('.').next().unwrap_or("").to_lowercase();
+    if company.is_empty() {
+        return Err("needs the company's name, as in <name>.bamboohr.com".into());
+    }
+    let base = format!("https://{company}.bamboohr.com/careers");
+    let mut out = parse_bamboohr(&company, &get_json(c, &format!("{base}/list"), &[])?);
+    let mut read = 0;
+    for p in out.iter_mut() {
+        if read >= DETAILS_PER_BOARD || !wanted(&p.title) {
+            continue;
+        }
+        let id = p.external_id.trim_start_matches(&format!("{company}-")).to_string();
+        if let Ok(v) = get_json(c, &format!("{base}/{id}/detail"), &[]) {
+            let (text, posted) = bamboohr_details(&v);
+            if !text.is_empty() {
+                p.apply_email = find_apply_email(&text);
+                p.description = text;
+            }
+            p.posted_at = posted;
+        }
+        read += 1;
+    }
+    Ok(out)
+}
+
 pub fn workable(c: &reqwest::blocking::Client, account: &str) -> Result<Vec<Posting>, String> {
     let v = get_json(c, &format!("https://apply.workable.com/api/v1/widget/accounts/{account}"), &[("details", "true".into())])?;
     Ok(parse_workable(account, &v))
@@ -1358,7 +1427,7 @@ pub fn board_prefix(source: &str, name: &str) -> String {
 pub fn boards(p: &Profile) -> Vec<(&'static str, String)> {
     let s = &p.sources;
     let mut out = vec![];
-    for (src, list) in [("greenhouse", &s.greenhouse), ("lever", &s.lever), ("ashby", &s.ashby), ("workday", &s.workday), ("smartrecruiters", &s.smartrecruiters), ("workable", &s.workable)] {
+    for (src, list) in [("greenhouse", &s.greenhouse), ("lever", &s.lever), ("ashby", &s.ashby), ("workday", &s.workday), ("smartrecruiters", &s.smartrecruiters), ("workable", &s.workable), ("bamboohr", &s.bamboohr)] {
         for name in list.iter().map(|x| x.trim()).filter(|x| !x.is_empty()) {
             out.push((src, name.to_string()));
         }
@@ -1374,6 +1443,7 @@ pub fn fetch_board(c: &reqwest::blocking::Client, p: &Profile, source: &str, nam
         "lever" => lever(c, name).map(|l| (l, true)),
         "ashby" => ashby(c, name).map(|l| (l, true)),
         "workable" => workable(c, name).map(|l| (l, true)),
+        "bamboohr" => bamboohr(c, name, &want).map(|l| (l, true)),
         "smartrecruiters" => smartrecruiters(c, name, &want),
         "workday" => {
             let mut titles: Vec<String> = p.tracks.iter().flat_map(|t| t.titles.clone()).collect();
@@ -1392,6 +1462,7 @@ pub fn board_label(source: &str, name: &str) -> String {
         "workday" => "Workday",
         "smartrecruiters" => "SmartRecruiters",
         "workable" => "Workable",
+        "bamboohr" => "BambooHR",
         other => other,
     };
     let name = match source {
@@ -1627,6 +1698,14 @@ mod tests {
         assert!(text.contains("Run the PMO.") && text.contains("PMP"));
         assert!(url.unwrap().ends_with("program-manager"));
 
+        let b = parse_bamboohr("acme", &json!({"meta": {"totalCount": 2}, "result": [
+            {"id": "134", "jobOpeningName": "Senior Accountant", "location": {"city": "Halifax", "state": "Nova Scotia"}, "isRemote": null},
+            {"id": "135", "jobOpeningName": "Controller", "location": {"city": null, "state": null}, "atsLocation": {"country": "Canada", "province": "Ontario", "city": "Toronto"}, "isRemote": true}]}));
+        assert_eq!((b[0].title.as_str(), b[0].location.as_str(), b[0].url.as_str()), ("Senior Accountant", "Halifax, Nova Scotia", "https://acme.bamboohr.com/careers/134"));
+        assert_eq!((b[1].location.as_str(), b[1].remote), ("Toronto, Ontario, Canada", true));
+        let (text, posted) = bamboohr_details(&json!({"result": {"jobOpening": {"description": "<p>Lead the <b>close</b>.</p>", "datePosted": "2026-10-01", "minimumExperience": "Senior Manager"}}}));
+        assert!(text.contains("Lead the close") && text.contains("Minimum experience: Senior Manager"), "{text}");
+        assert_eq!(posted.as_deref(), Some("2026-10-01"));
         let w = parse_workable("koho", &json!({"name": "KOHO", "jobs": [{"title": "Delivery Lead", "shortcode": "AB12CD", "url": "https://apply.workable.com/j/AB12CD",
             "city": "Toronto", "state": "Ontario", "country": "Canada", "telecommuting": true, "published_on": "2026-10-02", "description": "<p>Lead delivery.</p>"}]}));
         assert_eq!((w[0].id().as_str(), w[0].company.as_str()), ("workable:koho-AB12CD", "KOHO"));

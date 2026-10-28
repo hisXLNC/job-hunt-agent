@@ -42,6 +42,8 @@ pub struct Sources {
     pub smartrecruiters: Vec<String>,
     /// Workable account names (apply.workable.com/<name>).
     pub workable: Vec<String>,
+    /// BambooHR company names (<name>.bamboohr.com/careers).
+    pub bamboohr: Vec<String>,
     /// Search Indeed through the Indeed connector on your Claude account (needs Claude Code).
     pub indeed: bool,
     /// Search LinkedIn: its signed-out job search, or through Apify when there's a token.
@@ -106,6 +108,7 @@ impl Default for Sources {
             lever: vec![],
             ashby: vec![],
             workday: vec![],
+            bamboohr: vec![],
             smartrecruiters: vec![],
             workable: vec![],
             indeed: false,

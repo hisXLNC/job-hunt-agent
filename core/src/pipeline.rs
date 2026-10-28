@@ -22,6 +22,19 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 /// Near-miss titles Claude looks at per search; the rest wait for the next one.
 const NEAR_MISS_BATCH: usize = 150;
 
+/// Canada's big pension funds, banks and insurers whose careers sites Job Hunt reads (all on
+/// Workday). CPP Investments (behind a bot check) and Scotiabank (SuccessFactors) can't be read.
+const CANADA_EMPLOYERS: &[(&str, &str)] = &[
+    ("Ontario Teachers'", "https://otppb.wd3.myworkdayjobs.com/OntarioTeachers_Careers"),
+    ("HOOPP", "https://hoopp.wd10.myworkdayjobs.com/HOOPP"),
+    ("OMERS", "https://omers.wd3.myworkdayjobs.com/OMERS_External"),
+    ("RBC", "https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1"),
+    ("TD", "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers"),
+    ("CIBC", "https://cibc.wd3.myworkdayjobs.com/search"),
+    ("BMO", "https://bmo.wd3.myworkdayjobs.com/External"),
+    ("Manulife", "https://manulife.wd3.myworkdayjobs.com/MFCJH_Jobs"),
+    ("Sun Life", "https://sunlife.wd3.myworkdayjobs.com/Experienced-Jobs"),
+];
 /// Matches waiting this long to be picked are set aside as not interested.
 const UNPICKED_DAYS: i64 = 60;
 /// Job-alert emails from the big job sites, and Canada's Job Bank. Kept separate from the inbox
@@ -992,6 +1005,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 "workday" => &mut s.workday,
                 "smartrecruiters" => &mut s.smartrecruiters,
                 "workable" => &mut s.workable,
+                "bamboohr" => &mut s.bamboohr,
                 _ => continue,
             };
             let before = v.len();
@@ -1089,6 +1103,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 "workday" => &mut s.workday,
                 "smartrecruiters" => &mut s.smartrecruiters,
                 "workable" => &mut s.workable,
+                "bamboohr" => &mut s.bamboohr,
                 _ => continue,
             };
             if !slug.is_empty() && !v.iter().any(|x| x.eq_ignore_ascii_case(slug)) {
@@ -2348,6 +2363,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 "workday" => "Use the careers site's link as it appears in your browser, like https://company.wd3.myworkdayjobs.com/Careers.",
                 "smartrecruiters" => "Use the name after jobs.smartrecruiters.com/ in the company's careers link (capitals matter).",
                 "workable" => "Use the name after apply.workable.com/ in the company's careers link.",
+                "bamboohr" => "Use the name before .bamboohr.com in the company's careers link.",
                 _ => "Check the name: it's the part at the end of the company's careers link. Or remove it.",
             };
             let mut row = timed(crate::sources::board_label(src, &name), "board", &|| crate::sources::fetch_board(&c, &p, src, &name).map(|r| r.0), hint);
@@ -3924,6 +3940,22 @@ replies and interviews, and a little lower for kinds that got none from several 
         let _ = self.db().set("jobbank.defaulted", "1");
     }
 
+    /// In Canada, the careers sites of the big pension funds, banks and insurers, added once: the
+    /// steadiest employers, posting first on their own sites. Ones you remove stay removed.
+    pub fn canada_employers_once(&self) {
+        if !self.secret("employers.ca.defaulted").is_empty() || self.profile().sources.adzuna_country != "ca" {
+            return;
+        }
+        let list: Vec<Value> = CANADA_EMPLOYERS.iter().map(|(_, link)| json!({ "board": "workday", "slug": link })).collect();
+        if let Ok(n) = self.add_boards(&list) {
+            if n > 0 {
+                let names: Vec<&str> = CANADA_EMPLOYERS.iter().map(|(n, _)| *n).collect();
+                let _ = self.db().log(None, "sources", &format!("added the careers sites of {}", names.join(", ")));
+            }
+        }
+        let _ = self.db().set("employers.ca.defaulted", "1");
+    }
+
     pub fn ratings_auto(&self) -> bool {
         self.secret("ratings.auto") != "0"
     }
@@ -4502,6 +4534,7 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     use chrono::Timelike;
     let mut out = vec![];
     agent.jobbank_on_once();
+    agent.canada_employers_once();
     let p = agent.profile();
     let tz = p.tz();
     let now = Utc::now();
@@ -4966,7 +4999,7 @@ fn posting_of(j: &Job) -> Posting {
 }
 
 /// The company-board lists in your sources, by source name.
-fn board_lists(s: &mut crate::profile::Sources) -> [(&'static str, &mut Vec<String>); 6] {
+fn board_lists(s: &mut crate::profile::Sources) -> [(&'static str, &mut Vec<String>); 7] {
     [
         ("greenhouse", &mut s.greenhouse),
         ("lever", &mut s.lever),
@@ -4974,6 +5007,7 @@ fn board_lists(s: &mut crate::profile::Sources) -> [(&'static str, &mut Vec<Stri
         ("workday", &mut s.workday),
         ("smartrecruiters", &mut s.smartrecruiters),
         ("workable", &mut s.workable),
+        ("bamboohr", &mut s.bamboohr),
     ]
 }
 
@@ -5740,6 +5774,17 @@ mod tests {
         s.agent.save_profile(&p).unwrap();
         s.agent.jobbank_on_once();
         assert!(!s.agent.profile().sources.jobbank, "turned off by you: stays off");
+    }
+
+    #[test]
+    fn canadas_big_employers_are_added_once() {
+        let s = setup();
+        s.agent.canada_employers_once();
+        assert_eq!(s.agent.profile().sources.workday.len(), CANADA_EMPLOYERS.len());
+        s.agent.remove_boards(&[json!({ "source": "workday", "name": CANADA_EMPLOYERS[4].1 })]).unwrap();
+        s.agent.canada_employers_once();
+        assert_eq!(s.agent.profile().sources.workday.len(), CANADA_EMPLOYERS.len() - 1, "removed by you: stays removed");
+        assert!(CANADA_EMPLOYERS.iter().all(|(_, l)| crate::sources::workday_board(l).is_some()));
     }
 
     #[test]

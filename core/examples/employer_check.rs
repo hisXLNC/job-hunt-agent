@@ -12,7 +12,7 @@ const EMPLOYERS: &[(&str, &[&str])] = &[
     ("Ontario Teachers' (OTPP)", &["https://www.otpp.com/en-ca/careers/", "https://otppb.wd3.myworkdayjobs.com/OTPP"]),
     ("HOOPP", &["https://hoopp.com/careers", "https://hoopp.wd3.myworkdayjobs.com/HOOPP"]),
     ("OMERS", &["https://www.omers.com/careers", "https://omers.wd3.myworkdayjobs.com/OMERS_External"]),
-    ("RBC", &["https://jobs.rbc.com/ca/en", "https://rbc.wd3.myworkdayjobs.com/RBC_Careers"]),
+    ("RBC", &["https://jobs.rbc.com/ca/en", "https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1"]),
     ("TD", &["https://jobs.td.com/en-CA/", "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers"]),
     ("CIBC", &["https://jobs.cibc.com/", "https://cibc.wd3.myworkdayjobs.com/search"]),
     ("BMO", &["https://jobs.bmo.com/ca/en", "https://bmo.wd3.myworkdayjobs.com/External"]),
@@ -24,6 +24,16 @@ const EMPLOYERS: &[(&str, &[&str])] = &[
 fn main() {
     let title = std::env::args().nth(1).unwrap_or_else(|| "Accountant".into());
     let c = sources::http();
+    // A BambooHR careers site, read the way a search reads it.
+    match sources::bamboohr(&c, "ashteadtechnology", &|_| true) {
+        Ok(list) => {
+            println!("BambooHR ashteadtechnology: {} postings, {} with full text", list.len(), list.iter().filter(|p| !p.description.ends_with("full description.)")).count());
+            for p in list.iter().take(2) {
+                println!("    {} | {} | {} | {} chars", p.title, p.location, p.url, p.description.len());
+            }
+        }
+        Err(e) => println!("BambooHR ashteadtechnology FAILED: {e}"),
+    }
     let wd = Regex::new(r#"https?://[a-z0-9-]+\.wd\d+\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?[A-Za-z0-9_-]+"#).unwrap();
     let other = Regex::new(r#"(?i)(boards\.greenhouse\.io/[a-z0-9]+|jobs\.lever\.co/[a-z0-9-]+|jobs\.smartrecruiters\.com/[A-Za-z0-9]+|apply\.workable\.com/[a-z0-9-]+|jobs\.ashbyhq\.com/[a-z0-9-]+|[a-z0-9.-]*taleo\.net|[a-z0-9.-]*successfactors\.(?:com|eu)|[a-z0-9.-]*icims\.com|phenompeople|eagerLoadRefineSearch|cdn\.phenompeople)"#).unwrap();
     for (name, links) in EMPLOYERS {
