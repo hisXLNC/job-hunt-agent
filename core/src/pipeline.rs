@@ -24,7 +24,7 @@ const NEAR_MISS_BATCH: usize = 150;
 
 /// Canada's big pension funds, banks and insurers whose careers sites Job Hunt reads (all on
 /// Workday). CPP Investments (behind a bot check) and Scotiabank (SuccessFactors) can't be read.
-const CANADA_EMPLOYERS: &[(&str, &str)] = &[
+pub const CANADA_EMPLOYERS: &[(&str, &str)] = &[
     ("Ontario Teachers'", "https://otppb.wd3.myworkdayjobs.com/OntarioTeachers_Careers"),
     ("HOOPP", "https://hoopp.wd10.myworkdayjobs.com/HOOPP"),
     ("OMERS", "https://omers.wd3.myworkdayjobs.com/OMERS_External"),

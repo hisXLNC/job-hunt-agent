@@ -105,6 +105,10 @@ jobs:
         if: always()
         working-directory: core
         run: cargo run --quiet --example employer_check -- "Accountant"
+      - name: How much the sources overlap (those that need no key)
+        if: always()
+        working-directory: core
+        run: cargo run --quiet --example overlap_check -- "Tax Manager|Senior Accountant|Program Manager|Financial Analyst" "Toronto, ON|Halifax, NS" 2>/dev/null
       - name: Each site, read the way a search reads it
         working-directory: core
         run: cargo run --quiet --example site_check -- "Accountant" "Toronto, ON"
