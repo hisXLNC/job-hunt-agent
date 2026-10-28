@@ -118,6 +118,8 @@ CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, dupe_key TEXT NOT NULL, 
 CREATE INDEX IF NOT EXISTS purged_dupe ON purged(dupe_key);
 -- The same role posted again later under another listing: a sign it's hard to fill, or not real.
 CREATE TABLE IF NOT EXISTS reposts (job_id TEXT NOT NULL, posting_id TEXT NOT NULL, seen_at TEXT NOT NULL, PRIMARY KEY (job_id, posting_id));
+-- Which sources listed each role (by company and title), to show how much they overlap.
+CREATE TABLE IF NOT EXISTS sightings (dupe_key TEXT NOT NULL, source TEXT NOT NULL, first_at TEXT NOT NULL, last_at TEXT NOT NULL, PRIMARY KEY (dupe_key, source));
 ";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -440,6 +442,57 @@ impl Db {
             self.con.execute("INSERT OR IGNORE INTO reposts (job_id, posting_id, seen_at) VALUES (?1, ?2, ?3)", params![job, posting_id, now.to_rfc3339()])?;
         }
         Ok(())
+    }
+
+    /// Note that each of these sources listed these roles (source, company, title), today.
+    pub fn record_sightings(&self, seen: &[(String, String, String)]) -> R<()> {
+        let at = now();
+        let tx = self.con.unchecked_transaction()?;
+        for (source, company, title) in seen {
+            tx.execute(
+                "INSERT INTO sightings (dupe_key, source, first_at, last_at) VALUES (?1, ?2, ?3, ?3)
+                 ON CONFLICT (dupe_key, source) DO UPDATE SET last_at = ?3",
+                params![dupe_key(company, title), source, at],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Per source, over the last `days`: how many roles it listed, how many no other source did,
+    /// and how many of its roles each other source also listed. Biggest first.
+    pub fn source_overlap(&self, days: i64) -> R<Vec<Value>> {
+        use std::collections::{BTreeMap, BTreeSet};
+        let since = (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339();
+        let mut by_role: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        {
+            let mut st = self.con.prepare("SELECT dupe_key, source FROM sightings WHERE last_at >= ?1")?;
+            let rows = st.query_map([&since], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+            for r in rows {
+                let (k, s) = r?;
+                by_role.entry(k).or_default().insert(s);
+            }
+        }
+        let mut per: BTreeMap<String, (u64, u64, BTreeMap<String, u64>)> = BTreeMap::new();
+        for sources in by_role.values() {
+            for s in sources {
+                let e = per.entry(s.clone()).or_default();
+                e.0 += 1;
+                if sources.len() == 1 {
+                    e.1 += 1;
+                }
+                for o in sources.iter().filter(|o| *o != s) {
+                    *e.2.entry(o.clone()).or_default() += 1;
+                }
+            }
+        }
+        let mut out: Vec<Value> = per.into_iter().map(|(source, (roles, only, also))| {
+            let mut also: Vec<(String, u64)> = also.into_iter().collect();
+            also.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+            json!({ "source": source, "roles": roles, "only": only, "also": also.into_iter().map(|(s, n)| json!({ "source": s, "roles": n })).collect::<Vec<_>>() })
+        }).collect();
+        out.sort_by_key(|v| std::cmp::Reverse(v["roles"].as_u64().unwrap_or(0)));
+        Ok(out)
     }
 
     /// How many times each role was posted again.
@@ -1110,6 +1163,21 @@ mod tests {
         assert_eq!(db.archive_unpicked(60).unwrap(), 1);
         let st = |id: &str| db.job(id).unwrap().unwrap().status;
         assert_eq!((st("t:old"), st("t:new"), st("t:open"), st("t:ready")), ("dismissed".into(), "queued".into(), "queued".into(), "ready".into()));
+    }
+
+    #[test]
+    fn how_much_sources_overlap() {
+        let db = Db::memory().unwrap();
+        let s = |src: &str, co: &str, t: &str| (src.to_string(), co.to_string(), t.to_string());
+        db.record_sightings(&[s("adzuna", "Acme Inc.", "PM"), s("linkedin", "Acme", "PM"), s("adzuna", "Beta", "Analyst"), s("jobbank", "Gamma", "Clerk")]).unwrap();
+        db.record_sightings(&[s("linkedin", "Acme", "PM")]).unwrap();
+        let o = db.source_overlap(90).unwrap();
+        let get = |n: &str| o.iter().find(|v| v["source"] == n).unwrap().clone();
+        assert_eq!((get("adzuna")["roles"].as_u64(), get("adzuna")["only"].as_u64()), (Some(2), Some(1)));
+        assert_eq!(get("adzuna")["also"][0], json!({ "source": "linkedin", "roles": 1 }));
+        assert_eq!((get("linkedin")["roles"].as_u64(), get("linkedin")["only"].as_u64()), (Some(1), Some(0)));
+        assert_eq!(get("jobbank")["only"], 1);
+        assert_eq!(o[0]["source"], "adzuna", "biggest first");
     }
 
     #[test]

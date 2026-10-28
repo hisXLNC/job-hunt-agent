@@ -1257,6 +1257,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         };
         report.found = postings.len();
         self.tally(&report);
+        // Every source's listings, before copies are dropped, for how much the sources overlap.
+        let seen: Vec<(String, String, String)> = postings.iter().map(|p| (p.source.clone(), p.company.clone(), p.title.clone())).collect();
+        self.db().record_sightings(&seen)?;
 
         // Sort what's new: filtered out, a near miss on the title (Claude takes a look), or worth scoring.
         let mut candidates: Vec<Posting> = vec![];

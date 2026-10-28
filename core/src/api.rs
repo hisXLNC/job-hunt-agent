@@ -454,6 +454,20 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ["api", "results"] => {
                 let mut r = agent.results()?;
                 r["week_words"] = json!(agent.week_in_words().unwrap_or_default());
+                // How much the sources overlap, with each one's name as shown.
+                let site = |id: &str| crate::sites::SITES.iter().find(|s| s.id == id).map(|s| s.name.to_string());
+                let mut overlap = agent.db().source_overlap(90)?;
+                for v in overlap.iter_mut() {
+                    if let Some(n) = site(v["source"].as_str().unwrap_or("")) {
+                        v["name"] = json!(n);
+                    }
+                    for a in v["also"].as_array_mut().into_iter().flatten() {
+                        if let Some(n) = site(a["source"].as_str().unwrap_or("")) {
+                            a["name"] = json!(n);
+                        }
+                    }
+                }
+                r["overlap"] = json!(overlap);
                 r["thinking"] = json!(agent.is_running("insights"));
                 r["career_thinking"] = json!(agent.is_running("career"));
                 return Ok(Resp::json(&r));

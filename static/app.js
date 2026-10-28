@@ -1358,6 +1358,21 @@ function payHtml(p) {
 }
 
 // ---- Results ----
+/** Where jobs come from: per source, the roles it listed in the last 90 days, how many only it
+ *  found, and which other sources listed the same ones. */
+function overlapCard(list) {
+  const name = x => x.name || sourceName(x.source);
+  const pc = (a, b) => b ? Math.round(a / b * 100) : 0;
+  if (!list.length) return `<section class="card"><header><h2>Where jobs come from</h2></header><p class="muted">How much your job sources overlap shows here after your next search: Job Hunt now notes every source that lists each role.</p></section>`;
+  const low = list.filter(x => x.roles >= 10).sort((a, b) => pc(a.only, a.roles) - pc(b.only, b.roles))[0];
+  return `<section class="card"><header><h2>Where jobs come from</h2><span class="muted small">last 90 days</span></header>
+    <p class="muted small">The same role on several sources counts once per source. <b>Only here</b> is what you'd miss without that source.${low && pc(low.only, low.roles) < 25 ? ` ${esc(name(low))} adds the least: ${100 - pc(low.only, low.roles)}% of its roles are on another source too.` : ''}</p>
+    <table class="jobs"><thead><tr>${sortTh('Source', 'text')}${sortTh('Roles', 'num')}${sortTh('Only here', 'num')}<th>Also listed on</th></tr></thead><tbody>
+    ${list.map(x => `<tr><td>${esc(name(x))}</td><td class="num" data-v="${x.roles}">${x.roles}</td>
+      <td class="num" data-v="${pc(x.only, x.roles)}">${x.only} <span class="muted small">${pc(x.only, x.roles)}%</span></td>
+      <td class="small">${x.also.length ? x.also.slice(0, 4).map(a => `${esc(name(a))} <span class="muted">${pc(a.roles, x.roles)}%</span>`).join(' · ') : '<span class="muted">nowhere else</span>'}</td></tr>`).join('')}
+    </tbody></table></section>`;
+}
 async function showResults() {
   const [r, st] = await Promise.all([api('/api/results'), settingsCache ? Promise.resolve(settingsCache) : api('/api/settings')]);
   const tracks = st.profile.tracks || [];
@@ -1379,6 +1394,7 @@ async function showResults() {
       <div class="kpi"><span class="kpi-l">Interview rate</span><span class="kpi-v">${rate(f.interviews, f.sent)}</span><span class="kpi-s">${f.interviews} interview${f.interviews === 1 ? '' : 's'}</span></div>
       <div class="kpi"><span class="kpi-l">Typical wait for a reply</span><span class="kpi-v">${r.days_to_reply == null ? '–' : `${r.days_to_reply} d`}</span><span class="kpi-s">${r.days_to_reply == null ? 'Not enough replies yet' : 'Half of replies came sooner'}</span></div>
     </section>
+    ${overlapCard(r.overlap || [])}
     <section class="card"><header><h2>From posting to offer</h2></header>
       <div class="bars">${steps.map(([n, v], i) => `<div class="bar-row"><span>${esc(n)}</span><span class="track"><span class="fill" style="display:block;width:${Math.max(v ? 1 : 0, v / max * 100)}%"></span></span><span class="v">${v}${i && steps[i - 1][1] ? ` <span class="muted small">${Math.round(v / steps[i - 1][1] * 100)}%</span>` : ''}</span></div>`).join('')}</div>
       <p class="muted small">Each percentage is of the step above it.</p></section>
