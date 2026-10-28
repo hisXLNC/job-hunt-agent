@@ -740,18 +740,16 @@ impl Agent {
         Ok(new)
     }
 
-    /// Point each application's saved CV and letter at where they are now, when the saved path
-    /// leads nowhere: after your files moved, or on another computer after a restore.
+    /// Point each application's saved CV and letter at their copies in your files' folder: after
+    /// your files moved, or on another computer after a restore.
     pub fn fix_file_paths(&self) -> usize {
         let apps = self.files().join("applications");
+        // The copy in your files' folder wins: a path into another folder or computer is followed here.
         let here = |p: &str| -> Option<String> {
-            if Path::new(p).exists() {
-                return None;
-            }
             let parts: Vec<&str> = p.split(['/', '\\']).collect();
             let at = parts.iter().rposition(|x| *x == "applications")?;
             let moved = parts[at + 1..].iter().fold(apps.clone(), |acc, x| acc.join(x));
-            moved.exists().then(|| moved.to_string_lossy().to_string())
+            (moved.exists() && moved != Path::new(p)).then(|| moved.to_string_lossy().to_string())
         };
         let mut n = 0;
         // The list first: the database is used again inside the loop.
@@ -5532,9 +5530,13 @@ mod tests {
         let job = s.agent.tailor("test:1", None).unwrap();
         let cv = PathBuf::from(job.cv_path.unwrap());
         assert!(cv.starts_with(s.agent.data.join("applications")), "at first, in the data folder");
+        let backup = crate::backup::create(&s.agent).unwrap();
+        assert!(backup.starts_with(s.agent.data.join("backups")));
         let docs = tempfile::tempdir().unwrap();
         let dest = docs.path().join("Job Hunt");
         s.agent.set_files_folder(&dest.to_string_lossy()).unwrap();
+        assert!(dest.join("backups").join(backup.file_name().unwrap()).is_file() && !backup.exists(), "backups moved too");
+        assert!(crate::backup::create(&s.agent).unwrap().starts_with(dest.join("backups")), "and new ones go there");
         assert_eq!(s.agent.files(), dest);
         let moved = PathBuf::from(s.agent.db().job("test:1").unwrap().unwrap().cv_path.unwrap());
         assert!(moved.starts_with(dest.join("applications")) && moved.is_file(), "{moved:?}");

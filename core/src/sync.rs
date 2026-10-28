@@ -706,6 +706,49 @@ mod tests {
     }
 
     #[test]
+    fn cvs_and_tailored_files_travel_through_google_drive() {
+        let drive = std::sync::Arc::new(FakeDrive::default());
+        // Computer A keeps its files in a folder of its own (like Documents\\Job Hunt) and syncs to Drive.
+        let a = setup();
+        let a_docs = tempfile::tempdir().unwrap();
+        a.agent.set_files_folder(&a_docs.path().join("Job Hunt").to_string_lossy()).unwrap();
+        *a.agent.files.write().unwrap() = Some(drive.clone());
+        a.agent.db().set("sync.where", "drive").unwrap();
+        a.agent.db().set("sync.on", "1").unwrap();
+        a.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        let job = a.agent.tailor("test:1", None).unwrap();
+        let track = a.agent.profile().tracks[0].name.clone();
+        assert!(a.agent.cv_path(&track).starts_with(a_docs.path()) && a.agent.cv_path(&track).is_file());
+        assert!(Path::new(job.cv_path.as_deref().unwrap()).starts_with(a_docs.path()));
+        assert!(push(&a.agent, true).unwrap());
+
+        // What went to Drive has the CV and the tailored CV, letter and PDFs.
+        let bytes = drive.0.lock().unwrap().get(ZIP).cloned().unwrap();
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let names: Vec<String> = (0..z.len()).map(|i| z.by_index(i).unwrap().name().to_string()).collect();
+        assert!(names.contains(&format!("cv/{track}.docx")), "{names:?}");
+        assert!(names.iter().filter(|n| n.starts_with("applications/") && n.ends_with(".docx")).count() >= 2, "{names:?}");
+
+        // Computer B keeps its files somewhere else, and continues from Drive.
+        let b = setup();
+        let b_docs = tempfile::tempdir().unwrap();
+        let b_files = b_docs.path().join("My Job Hunt");
+        std::fs::write(b.agent.data.join(crate::util::FILES_POINTER), b_files.to_string_lossy().as_bytes()).unwrap();
+        *b.agent.files.write().unwrap() = Some(drive.clone());
+        continue_from(&b.agent, DRIVE).unwrap();
+        assert!(crate::backup::apply_pending(&b.agent.data).unwrap());
+        assert!(b_files.join("cv").join(format!("{track}.docx")).is_file(), "the CV is in B's folder");
+        // When Job Hunt starts on B, each application finds its files in B's folder.
+        let db = crate::db::Db::open(&b.agent.data.join("jobhunt.db")).unwrap();
+        let on_b = Agent::new(&b.agent.data, db, Box::new(|_, _| {}));
+        assert_eq!(on_b.fix_file_paths(), 1);
+        let moved = on_b.db().job("test:1").unwrap().unwrap();
+        for p in [moved.cv_path.unwrap(), moved.letter_path.unwrap()] {
+            assert!(Path::new(&p).starts_with(&b_files) && Path::new(&p).is_file(), "{p}");
+        }
+    }
+
+    #[test]
     fn keeps_the_last_three_backups_in_drive() {
         let drive = std::sync::Arc::new(FakeDrive::default());
         let a = setup();
