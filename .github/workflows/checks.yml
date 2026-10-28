@@ -101,6 +101,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: core
+      - name: Employers' careers sites (which system, and whether Job Hunt reads it)
+        if: always()
+        working-directory: core
+        run: cargo run --quiet --example employer_check -- "Accountant"
       - name: Each site, read the way a search reads it
         working-directory: core
         run: cargo run --quiet --example site_check -- "Accountant" "Toronto, ON"
