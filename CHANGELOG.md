@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.9.0] - 2026-10-28
+
+Faster picking and approving.
+
+### Changes
+
+- Pick and Approve: a job opens beside the list (wide screens), with j / k to move through it.
+- Tick several jobs and act on them from the bar at the bottom.
+- Each job shows one main button and only the tabs its stage needs.
+- Why it fits, the biggest gap and anything required up top on every job.
+- Calmer lists, a Find a job box, and Results by 7, 30 or 90 days with reply rate by source.
+
 ## [2.8.0] - 2026-10-28
 
 FreeHire, the big Canadian employers, and Ask Claude.
@@ -782,6 +794,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.9.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.9.0
 [2.8.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.8.0
 [2.7.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.7.0
 [2.6.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.6.0

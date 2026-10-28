@@ -1,6 +1,6 @@
 [package]
 name = "jobhunt-core"
-version = "2.8.0"
+version = "2.9.0"
 edition = "2021"
 publish = false
 description = "Job Hunt's logic: job search, scoring, CV tailoring, tracking, inbox and calendar. No window code, so it builds and tests anywhere."

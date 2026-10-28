@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.9.0",
+    "date": "2026-10-28",
+    "title": "Faster picking and approving",
+    "changes": [
+      "Pick and Approve: a job opens beside the list (wide screens), with j / k to move through it.",
+      "Tick several jobs and act on them from the bar at the bottom.",
+      "Each job shows one main button and only the tabs its stage needs.",
+      "Why it fits, the biggest gap and anything required up top on every job.",
+      "Calmer lists, a Find a job box, and Results by 7, 30 or 90 days with reply rate by source."
+    ]
+  },
+  {
     "version": "2.8.0",
     "date": "2026-10-28",
     "title": "FreeHire, the big Canadian employers, and Ask Claude",
