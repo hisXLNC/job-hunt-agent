@@ -4,6 +4,20 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.8.0] - 2026-10-28
+
+FreeHire, the big Canadian employers, and Ask Claude.
+
+### Changes
+
+- FreeHire: a free job search with full postings, mostly linking to employers' own sites.
+- Ontario Teachers', HOOPP, OMERS, RBC, TD, CIBC, BMO, Manulife and Sun Life's careers sites are searched directly (in Canada).
+- Companies on BambooHR can be added as careers sites.
+- Ask Claude: a conversation on each job that knows the posting, your CV and your notes.
+- Know when your CV links are opened (needs Job Hunt at a public address).
+- Results shows how much your job sources overlap, and what only each one finds.
+- Ctrl+K finds any job; press ? for every key.
+
 ## [2.7.0] - 2026-10-28
 
 Referrals, browser extension and bulk approve.
@@ -768,6 +782,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.8.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.8.0
 [2.7.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.7.0
 [2.6.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.6.0
 [2.5.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.5.0
