@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.10.0] - 2026-10-28
+
+Your own CV, applications you send yourself, and All jobs filters.
+
+### Changes
+
+- Attach a CV you tailored yourself to any job: it moves to Approve, shows in the preview (PDFs too) and is the one used when you apply.
+- Applications you send yourself are picked up from the confirmation email, archived or not, even for jobs Job Hunt didn't find, and labelled JobHunt/Applied in Gmail.
+- All jobs: filter by stage, fit, source, date and pay, and sort; nothing is cut off on the right.
+- Approve and View open the full job page, and every button on a job is in view again.
+- Cards line up, including Recent activity.
+
 ## [2.9.1] - 2026-10-28
 
 Quieter searches and safer updates.
@@ -804,6 +816,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.10.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.10.0
 [2.9.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.9.1
 [2.9.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.9.0
 [2.8.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.8.0

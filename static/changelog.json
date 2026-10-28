@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.10.0",
+    "date": "2026-10-28",
+    "title": "Your own CV, applications you send yourself, and All jobs filters",
+    "changes": [
+      "Attach a CV you tailored yourself to any job: it moves to Approve, shows in the preview (PDFs too) and is the one used when you apply.",
+      "Applications you send yourself are picked up from the confirmation email, archived or not, even for jobs Job Hunt didn't find, and labelled JobHunt/Applied in Gmail.",
+      "All jobs: filter by stage, fit, source, date and pay, and sort; nothing is cut off on the right.",
+      "Approve and View open the full job page, and every button on a job is in view again.",
+      "Cards line up, including Recent activity."
+    ]
+  },
+  {
     "version": "2.9.1",
     "date": "2026-10-28",
     "title": "Quieter searches and safer updates",

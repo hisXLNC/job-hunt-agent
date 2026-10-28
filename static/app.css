@@ -574,7 +574,13 @@ form[data-form=profile] [type=submit] { display: none; }
   #connStatus header > .row { width: 100%; }
   #connFilter { max-width: none !important; flex: 1; }
 }
-details.card > summary { cursor: pointer; list-style-position: outside; }
+/* A card that opens: its heading lines up with every other card's, with a chevron on the right. */
+details.card > summary, details.more > summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+details.card > summary::-webkit-details-marker, details.more > summary::-webkit-details-marker { display: none; }
+details.card > summary::after, details.more > summary::after { content: ""; flex: none; width: 8px; height: 8px; margin-right: 4px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+details.card[open] > summary::after, details.more[open] > summary::after { transform: rotate(-135deg); }
+details.card > summary > b:first-child { font-size: 17px; }
+details.card[open] > summary { margin-bottom: 8px; }
 
 /* Settings tiles: one per job source or extra, each with its state and one or two buttons. */
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-bottom: 18px; align-items: start; }
@@ -797,21 +803,6 @@ details.menu .caret { margin-left: 6px; font-size: 11px; }
 a.qt { color: inherit; text-decoration: none; }
 a.qt:hover { text-decoration: underline; }
 
-.step-split.open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 440px); gap: 18px; align-items: start; }
-.side-panel { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
-.side-panel .card { box-shadow: none; border: 1px solid var(--line); padding: 12px 14px; margin: 12px 0 0; }
-.side-panel .why-box { margin-top: 12px; }
-.side-panel .actions { margin: 12px 0 0; }
-.panel-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.panel-title { margin: 2px 0 6px; font-size: 20px; }
-.panel-cv { max-height: 360px; overflow-y: auto; font-size: 12px; border: 1px solid var(--line-2, var(--line)); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
-/* Beside the panel the list is narrow: score, the job (company under it), and its buttons. */
-.step-split.open .todo-row { grid-template-columns: 18px 118px minmax(0, 1fr) auto; }
-.step-split.open .todo-row .co, .step-split.open .todo-row .loc, .step-split.open .todo-row .sal { display: none; }
-.step-split.open .todo-row .phone-only { display: inline; }
-.step-split.open .todo-row .why { grid-column: 3 / -1; grid-row: 2; }
-.step-split.open .todo-row .why:empty { display: none; }
-.todo-row.on { background: var(--accent-soft); border-radius: 10px; }
 @media (max-width: 760px) {
   .select-bar { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); flex-wrap: nowrap; gap: 6px; padding: 6px 8px 6px 12px; }
   .select-bar .btn { padding: 6px 10px; font-size: 13px; }
@@ -824,3 +815,12 @@ a.qt:hover { text-decoration: underline; }
 .ats-ok li::before { content: "✓"; position: absolute; left: 4px; color: var(--good); font-weight: 700; }
 .ats .flags li.ats-tip { color: var(--ink-2); }
 .ats .flags li.ats-tip::marker { color: var(--warn); }
+.pdf-view { width: 100%; height: 780px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+
+.all-filters { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 12px; }
+.all-filters input[type=search] { width: 220px; }
+.all-filters select { width: auto; }
+.all-filters .views-x { margin-left: auto; }
+#t-all td.next .row-act { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+.xpand { position: sticky; left: 0; box-sizing: border-box; }
+.xpand .posting, .xpand p { overflow-wrap: anywhere; }

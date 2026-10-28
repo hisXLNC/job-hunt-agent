@@ -195,6 +195,9 @@ pub fn about_jobs(msg: &Email, apps: &[(String, String, String, String)]) -> boo
 }
 
 pub const INBOX_QUERY: &str = "newer_than:3d -from:me -in:chats -category:promotions -category:social";
+/// Confirmations of applications you sent yourself: two weeks back, archived or not, and in any
+/// tab (some land in Promotions), so a missed check or a quick archive doesn't lose them.
+pub const CONFIRM_QUERY: &str = "newer_than:14d -from:me -in:chats subject:(application OR applying OR applied OR \"thank you for your interest\" OR \"thanks for your interest\" OR candidature)";
 
 /// Which stage an email moves its application to.
 fn email_status(category: &str) -> Option<&'static str> {
@@ -1851,6 +1854,10 @@ replies and interviews, and a little lower for kinds that got none from several 
         } else {
             let coverage = text.map(|t| cv::keyword_coverage(&t, &job.keywords).0);
             db.update_job(job_id, &[("cv_path", p.into()), ("cv_changes", json!([])), ("coverage_after", coverage.into())])?;
+            // Your own tailored CV for a role Job Hunt hasn't tailored: it's ready for you to approve.
+            if ["queued", "skipped", "dismissed", "saved"].contains(&job.status.as_str()) {
+                db.set_status(job_id, "ready", "your own tailored CV attached")?;
+            }
         }
         db.log(Some(job_id), "revised", &format!("your own {} attached: {filename}", if what == "letter" { "cover letter" } else { "CV" }))?;
         db.job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
@@ -4086,7 +4093,13 @@ replies and interviews, and a little lower for kinds that got none from several 
             Err(e) => self.db().log(None, "inbox:error", &format!("job alerts: {e}"))?,
         }
         let recruiters: HashSet<String> = crate::recruiters::list(self).into_iter().map(|r| r.email).collect();
-        for id in mail.recent(INBOX_QUERY, limit)? {
+        let mut ids = mail.recent(INBOX_QUERY, limit)?;
+        for id in mail.recent(CONFIRM_QUERY, limit).unwrap_or_default() {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        for id in ids {
             if self.db().email_seen(&id)? {
                 continue;
             }
@@ -4116,6 +4129,12 @@ replies and interviews, and a little lower for kinds that got none from several 
                     continue;
                 }
             };
+            // "We received your application" for a job Job Hunt never found: you applied yourself,
+            // so it joins your applications.
+            let mut t = t;
+            if t.category == "application_received" && t.job_id.is_none() {
+                t.job_id = self.job_from_confirmation(&t)?;
+            }
             let draft = self.handle_email(&mail, &msg, &t, &profile)?;
             // A recruiter who wrote to you personally: kept in your recruiters list.
             crate::recruiters::note_email(self, &msg, &t);
@@ -4138,6 +4157,32 @@ replies and interviews, and a little lower for kinds that got none from several 
         Ok(stats)
     }
 
+    /// The job an application confirmation is about: one already known by company and role, or a
+    /// new one (from the email) when you applied somewhere Job Hunt didn't find. None without both.
+    fn job_from_confirmation(&self, t: &Triage) -> R<Option<String>> {
+        let (Some(company), Some(role)) = (t.company.as_deref().map(str::trim).filter(|c| !c.is_empty()), t.role.as_deref().map(str::trim).filter(|r| !r.is_empty())) else {
+            return Ok(None);
+        };
+        let existing = self.db().existing_job("", company, role);
+        if existing.is_some() {
+            return Ok(existing);
+        }
+        let p = Posting {
+            source: "email".into(),
+            external_id: short_hash(&format!("{company}|{role}")),
+            company: company.into(),
+            title: role.into(),
+            description: format!("Added from the confirmation email: {}", t.summary),
+            ..Posting::default()
+        };
+        let mut job = p.to_job();
+        job.status = "queued".into();
+        let db = self.db();
+        db.insert_job(&job)?;
+        db.log(Some(&job.id), "added", "you applied yourself; added from the confirmation email")?;
+        Ok(Some(job.id))
+    }
+
     fn handle_email(&self, mail: &Arc<dyn Mail>, msg: &Email, t: &Triage, profile: &Profile) -> R<Option<String>> {
         if let Some(l) = label(&t.category) {
             mail.label(&msg.id, l)?;
@@ -4152,7 +4197,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             db.log(Some(&job.id), &format!("email:{}", t.category), &t.summary)?;
             let mut target = email_status(&t.category);
             // "We received your application": you applied, even if you didn't tell Job Hunt.
-            if t.category == "application_received" && ["approved", "ready", "saved", "queued"].contains(&job.status.as_str()) {
+            if t.category == "application_received" && ["approved", "ready", "saved", "queued", "skipped", "dismissed"].contains(&job.status.as_str()) {
                 target = Some("applied");
                 now_applied = true;
             }
@@ -5884,6 +5929,29 @@ mod tests {
         assert_eq!(s.agent.chat("test:1")[1]["who"], "claude");
         s.agent.chat_clear("test:1").unwrap();
         assert!(s.agent.chat("test:1").is_empty());
+    }
+
+    #[test]
+    fn applying_yourself_is_picked_up_and_your_own_cv_is_used() {
+        let s = setup();
+        *s.agent.cal.write().unwrap() = None;
+        // A confirmation (archived or not) for a job Job Hunt never found: it joins your applications.
+        s.mail.messages.lock().unwrap().insert("c1".into(), crate::google::Email { id: "c1".into(), thread_id: "tc1".into(), from: "Globex Careers <no-reply@globex.example>".into(),
+            subject: "Thank you for applying: Regulatory Change Program Manager".into(), received_at: "2026-10-27T14:00:00Z".into(),
+            body: "We received your application for Regulatory Change Program Manager.".into(), ..Default::default() });
+        s.llm.triages.lock().unwrap().push(Triage { company: Some("Globex".into()), role: Some("Regulatory Change Program Manager".into()), ..triage("application_received", None) });
+        s.agent.process_inbox(50).unwrap();
+        let mine = s.agent.db().jobs(Some("applied"), 10).unwrap();
+        assert_eq!(mine.len(), 1, "added as applied");
+        assert_eq!((mine[0].company.as_str(), mine[0].title.as_str(), mine[0].source.as_str()), ("Globex", "Regulatory Change Program Manager", "email"));
+        assert!(mine[0].applied_at.is_some());
+        assert!(s.mail.labels.lock().unwrap().iter().any(|(id, l)| id == "c1" && l == "Applied"), "labelled JobHunt/Applied in Gmail");
+        // Your own tailored CV, on a role not tailored yet: it's ready to approve, and it's the one used.
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        s.agent.db().set_status("test:1", "queued", "").unwrap();
+        let job = s.agent.use_own_file("test:1", "cv", "My CV.docx", &cv::sample_docx()).unwrap();
+        assert_eq!(job.status, "ready");
+        assert!(job.cv_path.as_deref().unwrap().ends_with("(yours).docx"));
     }
 
     #[test]

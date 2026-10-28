@@ -181,6 +181,10 @@ fn job_file(agent: &Agent, job: &crate::db::Job, what: &str) -> R<PathBuf> {
         "letter" => need(&job.letter_path)?,
         "cv-pdf" | "letter-pdf" => {
             let docx = need(if what == "cv-pdf" { &job.cv_path } else { &job.letter_path })?;
+            // Your own file is a PDF already.
+            if docx.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf")) {
+                return Ok(docx);
+            }
             // Made now when there's none yet, or again when you changed the Word file since.
             crate::util::pdf_of(&docx).map_err(|e| Error(format!("Couldn't make the PDF from the Word file: {} Close it in Word and try again.", e.0)))?
         }
@@ -522,6 +526,16 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     b
                 }).collect();
                 return Ok(Resp::json(&json!({ "jobs": jobs, "counts": agent.db().counts()? })));
+            }
+            // A PDF of yours, shown in the page (the preview of a CV or letter you attached).
+            ["api", "jobs", id, "view", what] => {
+                let job = job_or_404(agent, id)?;
+                let path = job_file(agent, &job, what)?;
+                if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf")) {
+                    return Err(Error("Only PDFs are shown this way.".into()));
+                }
+                let body = std::fs::read(&path).map_err(|_| Error("That file isn't there any more.".into()))?;
+                return Ok(Resp { status: 200, ctype: "application/pdf".into(), body, headers: vec![("Cache-Control".into(), "no-store".into()), ("Content-Disposition".into(), "inline".into())] });
             }
             ["api", "jobs", id, "download", what] => {
                 let job = job_or_404(agent, id)?;
