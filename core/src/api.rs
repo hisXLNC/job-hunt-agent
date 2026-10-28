@@ -949,6 +949,16 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             Ok(Resp::json(&json!({ "started": run_in_background(agent, task) })))
         }
+        ["api", "search", "stop"] => Ok(Resp::json(&json!({ "stopping": agent.stop_search() }))),
+        ["api", "search", "pause"] => {
+            // days: a number (0 resumes), or "off" until you turn them on again.
+            let days = match &b["days"] {
+                Value::Number(n) => Some(n.as_i64().unwrap_or(0).clamp(0, 365)),
+                _ => None,
+            };
+            agent.pause_searches(days)?;
+            Ok(Resp::json(&json!({ "paused": agent.search_paused() })))
+        }
         ["api", "open-url"] => {
             let url = s(&b, "url");
             if !(url.starts_with("https://") || url.starts_with("http://") || url.starts_with("mailto:")) {

@@ -294,6 +294,8 @@ pub struct Agent {
     pub(crate) presence: Mutex<crate::sync::Presence>,
     /// What Claude has been used for (Settings → Accounts → Claude usage).
     pub usage: Arc<Mutex<crate::usage::Log>>,
+    /// You pressed Stop: the running search ends at its next step, keeping what it has.
+    stop: std::sync::atomic::AtomicBool,
 }
 
 /// Where the running search is, for the progress bar.
@@ -358,6 +360,7 @@ impl Agent {
             notify,
             running: Mutex::new(HashSet::new()),
             progress: Mutex::new(Progress::default()),
+            stop: std::sync::atomic::AtomicBool::new(false),
             sync_mark: std::sync::atomic::AtomicU64::new(u64::MAX),
             presence: Mutex::new(crate::sync::Presence::default()),
             usage: Arc::new(Mutex::new(crate::usage::Log::default())),
@@ -652,6 +655,40 @@ impl Agent {
 
     pub fn is_running(&self, name: &str) -> bool {
         self.running.lock().unwrap().contains(name)
+    }
+
+    /// Stop the running search: it ends at its next step and keeps what it found and scored.
+    pub fn stop_search(&self) -> bool {
+        let running = self.is_running("search");
+        if running {
+            self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        running
+    }
+
+    pub fn stopping(&self) -> bool {
+        self.stop.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Scheduled searches paused: "off", or until when (RFC 3339); empty when they run.
+    pub fn search_paused(&self) -> String {
+        let v = self.secret("search.paused");
+        if v == "off" {
+            return v;
+        }
+        match chrono::DateTime::parse_from_rfc3339(&v) {
+            Ok(t) if t.with_timezone(&Utc) > Utc::now() => v,
+            _ => String::new(),
+        }
+    }
+
+    /// Pause scheduled searches for `days` (0: run them again; None: off until you turn them on).
+    pub fn pause_searches(&self, days: Option<i64>) -> R<()> {
+        match days {
+            None => self.db().set("search.paused", "off"),
+            Some(0) => self.db().set("search.paused", ""),
+            Some(d) => self.db().set("search.paused", &(Utc::now() + Duration::days(d)).to_rfc3339()),
+        }
     }
 
     /// The running search's progress, or None when no search is running.
@@ -1226,6 +1263,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             return err("Job Hunt is about to restart for an update; it searches again after.");
         }
         let _guard = self.claim("search")?;
+        self.stop.store(false, std::sync::atomic::Ordering::SeqCst);
         *self.progress.lock().unwrap() = Progress::default();
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
@@ -1247,7 +1285,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             Some(p) => p,
             None => {
                 let keys = self.search_keys();
-                let f = fetch_all(&profile, &keys, &|i, n, name| self.step("Searching job sites", i, n, name));
+                let f = fetch_all(&profile, &keys, &|i, n, name| { self.step("Searching job sites", i, n, name); !self.stopping() });
                 report.source_problems = f.problems;
                 report.by_source = f.by_source.iter().map(|(n, k, p, e)| json!({ "name": n, "searches": k, "found": p, "failed": e })).collect();
                 report.broken_boards = f.failed.iter().map(|(s, n)| json!({ "source": s, "name": n })).collect();
@@ -1258,10 +1296,10 @@ replies and interviews, and a little lower for kinds that got none from several 
                 let ids: HashSet<String> = f.postings.iter().map(|p| p.id()).collect();
                 report.closed += self.close_missing(&profile, &f.complete, &ids)?;
                 let mut all = f.postings;
-                if profile.sources.indeed {
+                if profile.sources.indeed && !self.stopping() {
                     self.step("Searching Indeed", 0, 0, "through the Indeed connector");
                 }
-                let indeed = self.indeed_postings(&profile);
+                let indeed = if self.stopping() { Ok(vec![]) } else { self.indeed_postings(&profile) };
                 if profile.sources.indeed {
                     let (found, failed) = match &indeed { Ok(f) => (f.len(), 0), Err(_) => (0, 1) };
                     report.by_source.push(json!({ "name": "Indeed", "searches": 1, "found": found, "failed": failed }));
@@ -1329,13 +1367,19 @@ replies and interviews, and a little lower for kinds that got none from several 
                 continue;
             }
             report.new += 1;
-            match prefilter(&p, &profile) {
+            // A company you've set a minimum employee rating for, already rated below it.
+            let low = profile.min_rating.and_then(|min| {
+                let r = self.db().rating(&p.company)?;
+                let got = r["rating"].as_f64().filter(|_| r["found"] == true)?;
+                (got < min).then(|| format!("rated {got:.1} by employees, below your minimum of {min:.1}"))
+            });
+            match low.or_else(|| prefilter(&p, &profile)) {
                 None => candidates.push(p),
                 Some(why) if why == NO_TITLE_MATCH => near.push(p),
                 Some(why) => self.skip(&p, &why, &mut report)?,
             }
         }
-        if !near.is_empty() {
+        if !near.is_empty() && !self.stopping() {
             // One request for the titles a word match missed; on failure they wait for the next search.
             let take: Vec<Posting> = near.drain(..near.len().min(NEAR_MISS_BATCH)).collect();
             self.step("Checking near-miss titles", 0, 1, &format!("{} titles", take.len()));
@@ -1359,7 +1403,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         // LinkedIn's and Job Bank's searches list postings without their text: read it for the ones
         // about to be scored.
         let thin_source = |s: &str| s == "linkedin" || s == "jobbank" || crate::sites::is_site_source(s);
-        for (src, name, max) in [("linkedin", "LinkedIn", 30), ("jobbank", "Job Bank", 20)] {
+        for (src, name, max) in [("linkedin", "LinkedIn", 30), ("jobbank", "Job Bank", 20)].into_iter().filter(|_| !self.stopping()) {
             let mut thin: Vec<&mut Posting> = candidates.iter_mut().take(cap).filter(|p| p.source == src && p.description.trim().is_empty()).collect();
             if thin.is_empty() {
                 continue;
@@ -1374,7 +1418,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         // Recruiters' and job sites' postings found as links: read from their own pages.
         let mut thin: Vec<&mut Posting> = candidates.iter_mut().take(cap).filter(|p| crate::sites::is_site_source(&p.source) && p.description.trim().is_empty()).collect();
-        if !thin.is_empty() {
+        if !thin.is_empty() && !self.stopping() {
             self.step("Reading job sites' postings", 0, 1, &format!("{} postings", thin.len()));
             let total = thin.len();
             let read = crate::sites::details(&crate::sources::http(), &mut thin, 30);
@@ -1400,6 +1444,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         let to_score = candidates.len().min(cap);
         report.deferred += candidates.len().saturating_sub(cap); // not stored, so they're scored next time
         for (i, p) in candidates.into_iter().take(cap).enumerate() {
+            if self.stopping() {
+                break;
+            }
             self.step("Scoring postings", i, to_score, &format!("{} at {}", p.title, p.company));
             let mut job = p.to_job();
             match llm.score(&cvs, &guidance, &job) {
@@ -1434,6 +1481,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         let n = queued.len();
         for (i, job) in queued.into_iter().enumerate() {
+            if self.stopping() {
+                break;
+            }
             self.step("Tailoring applications", i, n, &format!("{} at {}", job.title, job.company));
             // Postings can sit in the queue for days: don't tailor one that has closed.
             if crate::sources::posting_closed(&job.url) == Some(true) {
@@ -1448,6 +1498,9 @@ replies and interviews, and a little lower for kinds that got none from several 
             self.tally(&report);
         }
         self.step("Tailoring applications", 1, 1, "done");
+        if self.stopping() {
+            report.errors.push("Stopped: you stopped this search; what it found so far is kept".into());
+        }
         {
             let db = self.db();
             db.log(None, "search", &report.to_string())?;
@@ -1511,6 +1564,8 @@ replies and interviews, and a little lower for kinds that got none from several 
             "salary below your minimum"
         } else if why.starts_with("excluded") {
             "a company you skip"
+        } else if why.starts_with("rated") {
+            "company rated below your minimum"
         } else {
             "other"
         };
@@ -2100,8 +2155,10 @@ replies and interviews, and a little lower for kinds that got none from several 
         let next = if !searched_today && local.hour() >= p.search_hour { None } // due now: it runs within a minute
             else { day.and_hms_opt(p.search_hour, 0, 0).and_then(|t| t.and_local_timezone(tz).earliest()).map(|t| t.to_rfc3339()) };
         let problems = self.connections().map(|c| c.iter().filter(|r| r["status"] == "problem").count()).unwrap_or(0);
+        let paused = self.search_paused();
         json!({
-            "next_search": next,
+            "next_search": if paused.is_empty() { next } else { None },
+            "paused": paused,
             "sync_on": crate::sync::enabled(self),
             "last_sync": Some(self.secret("last.sync")).filter(|x| !x.is_empty()),
             "sync_error": Some(self.secret("sync.error")).filter(|x| !x.is_empty() && crate::sync::enabled(self)),
@@ -3961,6 +4018,17 @@ replies and interviews, and a little lower for kinds that got none from several 
     pub fn rate_company(&self, company: &str, location: &str) -> R<Value> {
         let r = self.llm().company_rating(company, location)?;
         let v = self.db().set_rating(company, &r)?;
+        // Below your minimum: its roles waiting to be picked or approved are set aside.
+        if let (Some(min), Some(got), true) = (self.profile().min_rating, r.rating, r.found) {
+            if got < min {
+                let key = crate::db::company_key(company);
+                let waiting: Vec<Job> = self.db().jobs(None, 5000)?.into_iter()
+                    .filter(|j| ["queued", "ready"].contains(&j.status.as_str()) && crate::db::company_key(&j.company) == key).collect();
+                for j in waiting {
+                    self.db().set_status(&j.id, "skipped", &format!("{company} is rated {got:.1} by employees, below your minimum of {min:.1}"))?;
+                }
+            }
+        }
         self.db().log(None, "ratings", &if r.found {
             format!("{company}: {:.1} out of 5 on {}", r.rating.unwrap_or(0.0), r.source)
         } else {
@@ -4674,7 +4742,9 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
         .unwrap_or(false);
     // Asked for from Claude (search_now) since the last search.
     let requested = { let r = agent.secret("request.search"); !r.is_empty() && r > agent.secret("last.search") };
-    if ready && (requested || (!searched_today && local.hour() >= p.search_hour)) && !agent.is_running("search") {
+    // Paused or off: only a search you ask for runs.
+    let scheduled = agent.search_paused().is_empty() && !searched_today && local.hour() >= p.search_hour;
+    if ready && (requested || scheduled) && !agent.is_running("search") {
         out.push("search");
     }
     if ready && agent.mail.read().map(|m| m.is_some()).unwrap_or(false) && !agent.is_running("inbox") {
@@ -5370,7 +5440,7 @@ mod tests {
         let p = s.agent.profile();
         assert!(p.sources.is_off("jooble") && p.sources.is_off("boards") && !p.sources.is_off("adzuna"));
         // Not searched: no request to either.
-        let f = crate::sources::fetch_all(&p, &s.agent.search_keys(), &|_, _, _| {});
+        let f = crate::sources::fetch_all(&p, &s.agent.search_keys(), &|_, _, _| true);
         assert!(f.by_source.iter().all(|b| b.0 != "Jooble" && b.0 != "Company job boards"), "{:?}", f.by_source);
         let rows = s.agent.connections().unwrap();
         let row = |id: &str| rows.iter().find(|r| r["id"] == id).unwrap().clone();
@@ -5955,6 +6025,28 @@ mod tests {
     }
 
     #[test]
+    fn companies_rated_below_your_minimum_are_skipped() {
+        let s = setup();
+        let mut p = s.agent.profile();
+        p.min_rating = Some(4.5);
+        s.agent.save_profile(&p).unwrap();
+        // Already rated below the minimum: set aside when found.
+        let low = crate::claude::CompanyRating { found: true, rating: Some(3.2), ..Default::default() };
+        let company = posting("Technical Program Manager", "1").company;
+        s.agent.db().set_rating(&company, &low).unwrap();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        let j = s.agent.db().job("test:1").unwrap().unwrap();
+        assert_eq!(j.status, "skipped");
+        assert!(j.reasoning.unwrap_or_default().contains("below your minimum of 4.5"));
+        // Rated after it was found (4.1 from the fake reviews): roles waiting there are set aside.
+        let other = Posting { company: "Globex".into(), ..posting("Senior Program Manager", "2") };
+        s.agent.search(Some(vec![other])).unwrap();
+        assert!(["queued", "ready"].contains(&s.agent.db().job("test:2").unwrap().unwrap().status.as_str()));
+        s.agent.rate_company("Globex", "Toronto").unwrap();
+        assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().status, "skipped");
+    }
+
+    #[test]
     fn long_fit_reasons_are_made_one_line() {
         let s = setup();
         s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
@@ -6505,6 +6597,36 @@ mod tests {
         assert!(s.agent.removed_boards().contains("ashby:typed") && s.agent.removed_boards().contains("lever:koho"));
         s.agent.add_boards(&[json!({ "board": "lever", "slug": "koho" })]).unwrap();
         assert!(!s.agent.removed_boards().contains("lever:koho"), "added back by you: wanted again");
+    }
+
+    #[test]
+    fn searches_can_be_stopped_paused_and_turned_off() {
+        let s = setup();
+        s.agent.db().set("claude.engine", "api").unwrap();
+        s.agent.db().set("claude.key", "sk-test").unwrap();
+        let mut p = s.agent.profile();
+        p.search_hour = 0;
+        s.agent.save_profile(&p).unwrap();
+        assert!(due_tasks(&s.agent).contains(&"search"));
+        s.agent.pause_searches(Some(7)).unwrap();
+        assert!(!s.agent.search_paused().is_empty() && !due_tasks(&s.agent).contains(&"search"), "paused for a week");
+        assert!(s.agent.side_status()["next_search"].is_null());
+        s.agent.pause_searches(None).unwrap();
+        assert_eq!(s.agent.search_paused(), "off");
+        assert!(!due_tasks(&s.agent).contains(&"search"), "off");
+        // One you ask for still runs.
+        s.agent.db().set("request.search", &now()).unwrap();
+        assert!(due_tasks(&s.agent).contains(&"search"));
+        s.agent.db().set("request.search", "").unwrap();
+        s.agent.pause_searches(Some(0)).unwrap();
+        assert!(s.agent.search_paused().is_empty() && due_tasks(&s.agent).contains(&"search"), "back on");
+        // A pause that ran out is over.
+        s.agent.db().set("search.paused", &(Utc::now() - Duration::hours(1)).to_rfc3339()).unwrap();
+        assert!(s.agent.search_paused().is_empty());
+        // Stop: only while one runs.
+        assert!(!s.agent.stop_search() && !s.agent.stopping());
+        let _g = s.agent.claim("search").unwrap();
+        assert!(s.agent.stop_search() && s.agent.stopping());
     }
 
     #[test]

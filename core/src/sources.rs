@@ -1525,7 +1525,9 @@ pub fn board_label(source: &str, name: &str) -> String {
 }
 
 /// Every configured source, de-duplicated by posting id.
-pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str)) -> Fetched {
+/// `on_step` is told each request before it's made; when it answers false the rest are skipped
+/// (the search was stopped).
+pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) -> bool) -> Fetched {
     type Call<'a> = Box<dyn Fn() -> Result<(Vec<Posting>, bool), String> + 'a>;
     let c = http();
     // (what's being searched, the kind of source, the company board if it is one, the request)
@@ -1636,7 +1638,9 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str))
     let mut by_source: Vec<(String, usize, usize, usize)> = vec![];
     let total = calls.len();
     for (i, (name, kind, board, call)) in calls.into_iter().enumerate() {
-        on_step(i, total, &name);
+        if !on_step(i, total, &name) {
+            break;
+        }
         let res = call();
         if !by_source.iter().any(|t| t.0 == kind) {
             by_source.push((kind.clone(), 0, 0, 0));

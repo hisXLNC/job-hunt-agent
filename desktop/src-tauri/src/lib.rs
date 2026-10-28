@@ -411,6 +411,22 @@ fn apply_window(app: &AppHandle, job_id: &str, url: tauri::Url) -> Result<(), St
             }
             false
         })
+        // An Apply button that opens a new tab: open it here instead, where the filling-in script
+        // runs (a new window of its own wouldn't have it, and nothing would be filled in).
+        .on_new_window({
+            let handle = app.clone();
+            move |u, _| {
+                if ["http", "https"].contains(&u.scheme()) {
+                    let h = handle.clone();
+                    let _ = handle.run_on_main_thread(move || {
+                        if let Some(w) = h.get_webview_window("apply") {
+                            let _ = w.navigate(u);
+                        }
+                    });
+                }
+                tauri::webview::NewWindowResponse::Deny
+            }
+        })
         .on_page_load(move |w, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) && filled_load.load(Ordering::SeqCst) {
                 let _ = w.eval("window.__jobhuntAfterFill && window.__jobhuntAfterFill()");

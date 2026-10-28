@@ -159,6 +159,8 @@ pub struct Profile {
     /// A big city brings in the area around it: Toronto the GTA, London Greater London.
     pub include_metro: bool,
     pub min_salary: Option<f64>,
+    /// Skip companies whose employees rate them below this (out of 5); None: any rating.
+    pub min_rating: Option<f64>,
     /// Postings scored at or above this get a tailored CV and cover letter.
     pub score_threshold: i64,
     /// At most this many applications are tailored per search (the rest wait for the next one).
@@ -201,6 +203,7 @@ impl Default for Profile {
             remote_ok: true,
             include_metro: true,
             min_salary: None,
+            min_rating: None,
             score_threshold: 70,
             max_per_run: 10,
             purge_after_days: 0,

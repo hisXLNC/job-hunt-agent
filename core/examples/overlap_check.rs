@@ -19,7 +19,7 @@ fn main() {
     p.sources.sites = jobhunt_core::sites::SITES.iter().filter(|s| s.country == "ca").map(|s| s.id.to_string()).collect();
     p.sources.workday = pipeline::CANADA_EMPLOYERS.iter().map(|(_, l)| l.to_string()).collect();
     println!("Titles {titles:?}, places {places:?}\n");
-    let f = sources::fetch_all(&p, &sources::Keys::default(), &|i, n, name| eprintln!("[{i}/{n}] {name}"));
+    let f = sources::fetch_all(&p, &sources::Keys::default(), &|i, n, name| { eprintln!("[{i}/{n}] {name}"); true });
     for (name, req, found, failed) in &f.by_source {
         println!("{name:<28} {req:>3} searches, {found:>4} postings, {failed} failed");
     }

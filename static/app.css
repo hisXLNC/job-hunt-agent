@@ -824,3 +824,36 @@ a.qt:hover { text-decoration: underline; }
 #t-all td.next .row-act { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
 .xpand { position: sticky; left: 0; box-sizing: border-box; }
 .xpand .posting, .xpand p { overflow-wrap: anywhere; }
+
+.job-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 18px; align-items: start; }
+.job-grid > .stack > .card, .job-grid > .stack > .why-box { margin-top: 0; }
+@media (max-width: 1000px) { .job-grid { grid-template-columns: minmax(0, 1fr); } }
+.posting-card .posting { max-height: 70vh; font-size: 14px; line-height: 1.6; color: var(--ink); }
+.progress-main .steps-line, .progress-main .steps { margin-bottom: 6px; }
+.progress-foot { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
+.progress-foot .stage-set { flex-wrap: nowrap; }
+.progress-foot .stage-set input { width: 200px; }
+.timeline-inline { margin: 4px 0 0; }
+
+#t-docs .file-slots { display: grid; grid-template-columns: 58px 78px 58px 74px 28px; gap: 4px; align-items: center; }
+#t-docs .file-slots .btn { margin: 0; }
+#t-docs td.co { font-weight: 600; min-width: 140px; }
+#t-docs tr[hidden] { display: none; }
+@media (max-width: 760px) { #t-docs th:nth-child(3), #t-docs td:nth-child(3), #t-docs th:nth-child(5), #t-docs td:nth-child(5), #t-docs th:nth-child(6), #t-docs td:nth-child(6) { display: none; } }
+.career-compare { table-layout: auto; }
+.career-compare th, .career-compare td { padding: 10px 12px; vertical-align: middle; }
+.career-compare td.num, .career-compare th.num { white-space: nowrap; text-align: right; }
+.career-compare td.path-name { width: 34%; }
+.career-compare td.ceil { width: 110px; }
+.career-compare .ceilbar { width: 100%; margin-left: auto; }
+.career-compare .ceilbar span { margin-left: auto; }
+@media (max-width: 760px) { .career-compare th:nth-child(3), .career-compare td:nth-child(3), .career-compare th:nth-child(4), .career-compare td:nth-child(4), .career-compare th:nth-child(6), .career-compare td:nth-child(6) { display: none; } }
+.career-compare th:nth-child(n+2):nth-child(-n+6) { text-align: right; }
+/* The daily search's state, in the Overview header and Settings. */
+.sched-menu summary.paused { color: #A86E0B; border-color: #E3A83C; }
+.menu-note { padding: 6px 12px 4px; margin: 0; }
+.btn.danger .spin { border-color: currentColor; border-right-color: transparent; }
+#t-docs .file-slots .btn { justify-content: center; padding-left: 6px; padding-right: 6px; }
+#t-docs td:nth-child(2) { max-width: 220px; } #t-docs td:nth-child(3) { max-width: 120px; }
+section.card:has(> #t-docs) { overflow-x: auto; }
+#t-docs th, #t-docs td { padding-left: 8px; padding-right: 8px; }
