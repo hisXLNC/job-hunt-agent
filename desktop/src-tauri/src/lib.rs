@@ -462,15 +462,30 @@ fn read_in_browser(app: &AppHandle, url: &str) -> Result<String, String> {
     let (tx, rx) = mpsc::channel();
     let (a, l) = (app.clone(), label.clone());
     app.run_on_main_thread(move || {
+        // Never seen and never in your way: made hidden, placed past the right edge of every
+        // screen, unable to take focus, behind every window, and letting the mouse pass through.
+        // Only then shown, since some sites only finish loading in a window that's showing.
+        let right = a.available_monitors().unwrap_or_default().iter()
+            .map(|m| m.position().x as f64 + m.size().width as f64)
+            .fold(0.0, f64::max);
         let made = WebviewWindowBuilder::new(&a, &l, WebviewUrl::External(page))
             .title("Job Hunt \u{2013} reading a job site")
             .inner_size(1280.0, 900.0)
-            .position(-32000.0, -32000.0)
+            .position(right + 400.0, 0.0)
+            .visible(false)
             .decorations(false)
+            .shadow(false)
             .skip_taskbar(true)
             .focused(false)
+            .focusable(false)
+            .always_on_bottom(true)
             .build();
-        let _ = tx.send(made.map(|_| ()).map_err(|e| e.to_string()));
+        let made = made.and_then(|w| {
+            let _ = w.set_ignore_cursor_events(true);
+            let _ = w.set_position(tauri::PhysicalPosition::new((right + 400.0) as i32, 0));
+            w.show().map(|_| ())
+        });
+        let _ = tx.send(made.map_err(|e| e.to_string()));
     })
     .map_err(|e| e.to_string())?;
     rx.recv_timeout(Duration::from_secs(15)).map_err(|_| "the browser didn't start".to_string())??;
