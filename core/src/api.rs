@@ -453,7 +453,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "on_apply": { "mode": crate::recruiters::apply_mode(agent), "attach_cv": agent.secret("apply.recruiter_cv") == "1" } })));
             }
             ["api", "results"] => {
-                let mut r = agent.results()?;
+                let days = req.query.get("days").and_then(|d| d.parse::<i64>().ok()).filter(|d| *d > 0);
+                let mut r = agent.results_for(days)?;
                 r["week_words"] = json!(agent.week_in_words().unwrap_or_default());
                 // How much the sources overlap, with each one's name as shown.
                 let site = |id: &str| crate::sites::SITES.iter().find(|s| s.id == id).map(|s| s.name.to_string());

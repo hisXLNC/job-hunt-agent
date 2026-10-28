@@ -3064,11 +3064,32 @@ replies and interviews, and a little lower for kinds that got none from several 
 
     /// How applications turn out, overall and by CV, source and fit score.
     pub fn results(&self) -> R<Value> {
+        self.results_for(None)
+    }
+
+    /// Results over the last `days` (jobs found or applied to since then), or over everything.
+    pub fn results_for(&self, days: Option<i64>) -> R<Value> {
         let profile = self.profile();
-        let (jobs, emails, stages) = {
+        let (mut jobs, emails, stages) = {
             let db = self.db();
             (db.jobs(None, 1_000_000)?, db.job_emails()?, db.stages_reached()?)
         };
+        // Applications a day over the period (the last 90 days for everything).
+        let span = days.unwrap_or(90).clamp(1, 365);
+        let tz = profile.tz();
+        let today = Utc::now().with_timezone(&tz).date_naive();
+        let mut per_day: Vec<(String, u64)> = (0..span).rev().map(|d| ((today - Duration::days(d)).to_string(), 0)).collect();
+        for j in &jobs {
+            if let Some(d) = j.applied_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok()).map(|t| t.with_timezone(&tz).date_naive().to_string()) {
+                if let Some(x) = per_day.iter_mut().find(|x| x.0 == d) {
+                    x.1 += 1;
+                }
+            }
+        }
+        if let Some(d) = days {
+            let since = (Utc::now() - Duration::days(d)).to_rfc3339();
+            jobs.retain(|j| j.found_at.as_str() >= since.as_str() || j.applied_at.as_deref().is_some_and(|a| a >= since.as_str()));
+        }
         let mut reached: std::collections::HashMap<&str, HashSet<&str>> = std::collections::HashMap::new();
         for (id, st) in &stages {
             reached.entry(id.as_str()).or_default().insert(st.as_str());
@@ -3179,6 +3200,8 @@ replies and interviews, and a little lower for kinds that got none from several 
         };
         Ok(json!({
             "pay": pay_json,
+            "days": days,
+            "per_day": per_day.iter().map(|(d, n)| json!({ "day": d, "sent": n })).collect::<Vec<_>>(),
             "funnel": { "found": jobs.len(), "scored": scored, "tailored": tailored, "sent": total.sent, "replied": total.replied, "interviews": total.interviews, "offers": total.offers },
             "days_to_reply": waits.get(waits.len() / 2),
             "by_cv": rows(&groups[0]),
