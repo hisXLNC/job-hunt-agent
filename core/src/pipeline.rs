@@ -672,6 +672,11 @@ impl Agent {
         (p.found, p.new, p.scored, p.tailored) = (r.found, r.new, r.scored, r.tailored);
     }
 
+    /// Work an update must not cut short: a search, tailoring, or a posting being added.
+    pub fn busy_for_update(&self) -> Vec<String> {
+        self.running().into_iter().filter(|n| n == "search" || n.starts_with("tailor:") || n == "add").collect()
+    }
+
     pub fn running(&self) -> Vec<String> {
         self.running.lock().unwrap().iter().cloned().collect()
     }
@@ -1214,6 +1219,9 @@ replies and interviews, and a little lower for kinds that got none from several 
     }
 
     fn search_with(&self, postings: Option<Vec<Posting>>, force: bool) -> R<Report> {
+        if self.is_running("update") {
+            return err("Job Hunt is about to restart for an update; it searches again after.");
+        }
         let _guard = self.claim("search")?;
         *self.progress.lock().unwrap() = Progress::default();
         let profile = self.profile();

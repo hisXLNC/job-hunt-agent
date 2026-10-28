@@ -2595,9 +2595,14 @@ async function act(el) {
   }
   if (a === 'updateInstall') {
     return busy(async () => {
-      toast('Downloading the update… Job Hunt restarts by itself when it is installed.');
+      toast('Getting the update…');
       const r = await api('/api/update/install', { method: 'POST' });
-      if (!r.installed) { toast("You're already on the newest version."); checkUpdate(); }
+      if (r.waiting) {
+        const what = (r.for || []).some(n => n === 'search') ? 'the job search' : 'the tailoring';
+        toast(`Installing after ${what} finishes: Job Hunt restarts by itself then. Nothing is lost.`);
+        document.querySelectorAll('[data-act=updateInstall]').forEach(b => { b.disabled = true; b.textContent = `Installs after ${what}`; });
+      } else if (!r.installed) { toast("You're already on the newest version."); checkUpdate(); }
+      else toast('Installing the update… Job Hunt restarts by itself in a moment.');
     });
   }
   if (a === 'run') {

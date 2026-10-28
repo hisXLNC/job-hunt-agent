@@ -1589,6 +1589,27 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ok()
         }
         ["api", "update", "install"] => {
+            // A search or tailoring in progress finishes first; the update installs (and Job Hunt
+            // restarts) as soon as it's done. No new search starts meanwhile (see Agent::search).
+            if agent.is_running("update") {
+                return Ok(Resp::json(&json!({ "waiting": true, "for": agent.busy_for_update() })));
+            }
+            let busy = agent.busy_for_update();
+            if !busy.is_empty() {
+                let (a, h) = (agent.clone(), host.clone());
+                std::thread::spawn(move || {
+                    let Ok(_g) = a.claim("update") else { return };
+                    // At most three hours, in case something never finishes.
+                    let until = std::time::Instant::now() + std::time::Duration::from_secs(3 * 3600);
+                    while !a.busy_for_update().is_empty() && std::time::Instant::now() < until {
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                    }
+                    if let Err(e) = h.update_install() {
+                        a.note("The update didn't install", &e.0);
+                    }
+                });
+                return Ok(Resp::json(&json!({ "waiting": true, "for": busy })));
+            }
             let installed = host.update_install()?;
             Ok(Resp::json(&json!({ "installed": installed })))
         }
@@ -1730,6 +1751,21 @@ mod tests {
         let (_, u) = call(&agent, &host, "GET", "/api/update/check", Value::Null);
         assert_eq!((u["version"].as_str(), u["notified"].as_bool()), (Some("1.1.0"), Some(false)));
         assert_eq!(call(&agent, &host, "POST", "/api/update/install", Value::Null).1["installed"], true);
+        // A search running: the update waits for it, and no new search starts meanwhile.
+        {
+            let g = agent.claim("search").unwrap();
+            let r = call(&agent, &host, "POST", "/api/update/install", Value::Null).1;
+            assert_eq!((r["waiting"].as_bool(), r["for"][0].as_str()), (Some(true), Some("search")));
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            assert!(agent.is_running("update"));
+            drop(g);
+            assert!(agent.search(None).is_err_and(|e| e.0.contains("update")), "no search while the update waits");
+            for _ in 0..80 {
+                if !agent.is_running("update") { break; }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            assert!(!agent.is_running("update"), "installed once the search finished");
+        }
         assert_eq!(call(&agent, &host, "GET", "/api/changelog", Value::Null).1["log"][0]["version"], "1.1.0");
         assert_eq!(call(&agent, &host, "POST", "/api/jobs/test:1/revise", json!({"what": "cv", "note": ""})).0, 400);
         assert_eq!(call(&agent, &host, "POST", "/api/jobs/test:1/revise", json!({"what": "nope", "note": "shorter"})).0, 400);
