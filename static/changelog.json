@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.9.1",
+    "date": "2026-10-28",
+    "title": "Quieter searches and safer updates",
+    "changes": [
+      "The windows that read job sites during a search stay off-screen and never take your mouse or keyboard.",
+      "Install and restart waits for a running search or tailoring to finish.",
+      "The screening-software check lists everything it checked."
+    ]
+  },
+  {
     "version": "2.9.0",
     "date": "2026-10-28",
     "title": "Faster picking and approving",
