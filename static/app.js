@@ -222,6 +222,17 @@ function ageTag(j) {
 }
 // Tapping a posting's age (on a phone there's no hovering) shows the exact date and time, without
 // also opening the row or ticking the box it sits in. Caught first, before those handlers run.
+// A company's stars open what its employees say, without opening the row or ticking its box.
+document.addEventListener('click', e => {
+  const star = e.target.closest?.('.stars[data-company]');
+  if (!star) return;
+  e.preventDefault(); e.stopPropagation();
+  showReviews(star.dataset.company);
+}, true);
+document.addEventListener('keydown', e => {
+  const star = e.target.closest?.('.stars[data-company]');
+  if (star && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); showReviews(star.dataset.company); }
+});
 document.addEventListener('click', e => {
   const tag = e.target.closest?.('.age');
   if (!tag) return;
@@ -244,7 +255,7 @@ const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
 const scoreBand = n => n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo';
 const scoreBadge = n => n == null ? '' : `<span class="score ${scoreBand(n)}" title="Fit score">${n}</span>`;
 /** Company and location as their own cells: the company with its rating, a dash for no place. */
-const coCell = j => `${esc(j.company)}${ratingTag(j.rating)}`;
+const coCell = j => `${esc(j.company)}${ratingTag(j.rating, j.company)}`;
 /** Country names as a place line spells them, and the short form a remote role shows: "Remote (US)". */
 const COUNTRY_SHORT = [[/^(united states( of america)?|usa|u\.?s\.?a?\.?)$/i, 'US'], [/^canada$/i, 'Canada'], [/^(united kingdom|uk|great britain|england)$/i, 'UK'],
   [/^(australia|ireland|germany|france|india|netherlands|spain|singapore|kuwait|qatar|united arab emirates|uae|saudi arabia|new zealand|mexico|brazil|poland|portugal|italy|sweden|switzerland|japan|philippines|south africa)$/i, null]];
@@ -280,7 +291,25 @@ const locCell = j => j.location ? placeHtml(j) : '<span class="muted">–</span>
 /** On a phone the columns fold: company and place under the role. */
 const coLocLine = j => `<span class="phone-only"><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}</span></span>`;
 /** A company's employee rating, as a small star tag with the rating out of 5. */
-const ratingTag = r => r?.found && r.rating != null ? ` <span class="stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}" title="Employees rate it ${r.rating.toFixed(1)} out of 5${r.reviews ? `, ${r.reviews.toLocaleString()} reviews` : ''}${r.source ? ` on ${esc(r.source)}` : ''}">${svg('star')}${r.rating.toFixed(1)}</span>` : '';
+const ratingTag = (r, company) => r?.found && r.rating != null ? ` <span class="stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}${company ? ' open-reviews' : ''}" ${company ? `data-company="${esc(company)}" role="button" tabindex="0"` : ''} title="Employees rate it ${r.rating.toFixed(1)} out of 5${r.reviews ? `, ${r.reviews.toLocaleString()} reviews` : ''}${r.source ? ` on ${esc(r.source)}` : ''}${company ? '. Click for what they say.' : ''}">${svg('star')}${r.rating.toFixed(1)}</span>` : '';
+/** What employees say about a company, in a popup over the page you're on (a star was clicked). */
+async function showReviews(company) {
+  let r;
+  try { r = (await api(`/api/rating?company=${encodeURIComponent(company)}`)).rating; } catch (e) { toast(e.message, true); return; }
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  // The job page's card, without its Look again button (that one belongs to the job page).
+  const card = ratingCard(r, false, company).replace(/<button[^>]*data-act="rateCompany"[^>]*>.*?<\/button>/, '');
+  back.innerHTML = `<div class="modal reviews-modal" role="dialog" aria-modal="true" aria-label="What employees say about ${esc(company)}">
+    <h2>${esc(company)}</h2>${card}
+    <div class="modal-btns">${r?.url ? `<button class="btn" data-act="link" data-url="${esc(r.url)}">Read the reviews on ${esc(r.source || 'the site')}</button>` : ''}<button class="btn primary" data-close>Close</button></div></div>`;
+  const done = () => { back.remove(); document.removeEventListener('keydown', key); };
+  const key = e => { if (e.key === 'Escape') done(); };
+  back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) done(); });
+  document.addEventListener('keydown', key);
+  document.body.appendChild(back);
+  back.querySelector('[data-close]').focus();
+}
 /** What employees say, as a card for the job page. */
 function ratingCard(r, busy, company) {
   const head = `<header><h2>What employees say</h2>${busy ? '<span class="muted small"><span class="spin" data-kind="ratings"></span>Looking…</span>' : `<button class="btn ${r ? 'ghost' : ''} sm" data-act="rateCompany">${r ? 'Look again' : 'Look up reviews'}</button>`}</header>`;

@@ -882,3 +882,10 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 /* The running search's menu at the top of the Overview. */
 .search-now { display: flex; flex-direction: column; gap: 6px; min-width: 280px; max-width: 360px; padding: 12px 14px; }
 .search-now .row { gap: 6px; margin-top: 4px; }
+
+/* A company's stars open its reviews. */
+.stars.open-reviews { cursor: pointer; border-radius: 4px; }
+.stars.open-reviews:hover { text-decoration: underline; }
+.stars.open-reviews:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.reviews-modal { max-width: 620px; width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow: auto; }
+.reviews-modal .card { box-shadow: none; border: 0; padding: 0; margin: 8px 0 0; }

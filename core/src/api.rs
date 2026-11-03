@@ -417,6 +417,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 })));
             }
             ["api", "usage"] => return Ok(Resp::json(&agent.usage_summary())),
+            // A company's full rating (lists carry only the stars), for the popup on a star.
+            ["api", "rating"] => {
+                let company = req.query.get("company").cloned().unwrap_or_default();
+                return Ok(Resp::json(&json!({ "company": company, "rating": agent.db().rating(&company) })));
+            }
             ["api", "extension.zip"] => {
                 // The Send to Job Hunt extension, with the page reader the bookmark uses.
                 use std::io::Write;
