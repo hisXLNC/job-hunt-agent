@@ -1275,6 +1275,15 @@ replies and interviews, and a little lower for kinds that got none from several 
         Ok(n)
     }
 
+    /// Add a company by any of its careers links: Job Hunt works out its job board (see
+    /// sources::board_from_link). Returns (kind, name, whether it was new).
+    pub fn add_board_link(&self, link: &str) -> R<(String, String, bool)> {
+        let (kind, name) = crate::sources::board_from_link(&crate::sources::http(), link).map_err(Error)?;
+        let n = self.add_boards(&[json!({ "board": kind, "slug": name })])?;
+        self.db().log(None, "sources", &format!("added the {kind} board {name} from {link}"))?;
+        Ok((kind.to_string(), name, n > 0))
+    }
+
     // --- interview prep --------------------------------------------------------------------
 
     pub fn prep(&self, job_id: &str) -> Option<String> {

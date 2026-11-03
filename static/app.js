@@ -1830,7 +1830,9 @@ async function showSettings(tab, sub) {
         `<summary class="small">Choose companies yourself</summary><form data-form="profile" data-part="boards" class="stack" style="gap:10px;margin-top:8px">
           <label class="check"><input type="checkbox" name="auto_boards" ${p.sources.auto_boards !== false ? 'checked' : ''}> <span>Find employers near me by itself<br><span class="muted small">Every week, and when a search finds little that's new.</span></span></label>
           <div class="row"><button class="btn sm" type="button" data-act="suggestBoards">Suggest companies</button></div><div id="boardIdeas" class="ideas"></div>
-          <p class="muted small">Or add a company yourself: the name at the end of its careers link, like boards.greenhouse.io/<b>name</b> or jobs.lever.co/<b>name</b>. For Workday, paste the whole link.</p>
+          <div class="field">Add a company by its careers link<div class="row" style="flex-wrap:nowrap"><input type="url" id="boardLink" placeholder="https://www.affirm.com/careers" style="flex:1"><button class="btn" type="button" data-act="addBoardLink">Add</button></div>
+            <span class="hint">Its careers page or any of its job postings. Job Hunt works out which job board it uses (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable or BambooHR).</span></div>
+          <p class="muted small">Or type the name at the end of its careers link, like boards.greenhouse.io/<b>name</b> or jobs.lever.co/<b>name</b>. For Workday, paste the whole link.</p>
         <div class="form">
           <label class="field">Greenhouse<textarea name="greenhouse">${esc(lines(p.sources.greenhouse))}</textarea></label>
           <label class="field">Lever<textarea name="lever">${esc(lines(p.sources.lever))}</textarea></label>
@@ -2757,6 +2759,18 @@ async function act(el) {
         document.querySelectorAll('[data-act=updateInstall]').forEach(b => { b.disabled = true; b.textContent = `Installs after ${what}`; });
       } else if (!r.installed) { toast("You're already on the newest version."); checkUpdate(); }
       else toast('Installing the update… Job Hunt restarts by itself in a moment.');
+    });
+  }
+  if (a === 'addBoardLink') {
+    const input = $('#boardLink');
+    if (!input?.value.trim()) { toast('Paste the company\'s careers link first.', true); return; }
+    toast('Finding its job board…');
+    return busy(async () => {
+      const KIND = { greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workday: 'Workday', smartrecruiters: 'SmartRecruiters', workable: 'Workable', bamboohr: 'BambooHR' };
+      const r = await api('/api/settings/add-board-link', { method: 'POST', body: { url: input.value.trim() } });
+      toast(r.new ? `Added: ${KIND[r.board] || r.board} “${r.name}”. The next search looks at its jobs.` : `${KIND[r.board] || r.board} “${r.name}” is already in your list.`);
+      input.value = '';
+      await reloadBoards();
     });
   }
   if (a === 'searchHold') {

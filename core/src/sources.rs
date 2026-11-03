@@ -1541,6 +1541,70 @@ pub fn board_prefix(source: &str, name: &str) -> String {
     }
 }
 
+/// The company job board a link or page names, as (kind, name): boards.greenhouse.io/<name> (or a
+/// Greenhouse embed), jobs.lever.co/<name>, jobs.ashbyhq.com/<name>, a whole Workday careers link,
+/// jobs.smartrecruiters.com/<name>, apply.workable.com/<name> or <name>.bamboohr.com. The first one
+/// found, in that order.
+pub fn board_in(text: &str) -> Option<(&'static str, String)> {
+    static PATTERNS: Lazy<Vec<(&'static str, Regex)>> = Lazy::new(|| {
+        [
+            ("greenhouse", r"(?i)(?:job-)?boards(?:-api)?\.greenhouse\.io/(?:v1/boards/|embed/job_board(?:/js)?\?for=)?([a-z0-9_-]+)"),
+            ("greenhouse", r"(?i)greenhouse\.io/embed/job_board(?:/js)?\?for=([a-z0-9_-]+)"),
+            ("lever", r"(?i)jobs\.(?:eu\.)?lever\.co/([a-z0-9_.-]+)"),
+            ("ashby", r"(?i)jobs\.ashbyhq\.com/([a-z0-9_.%-]+)"),
+            ("workday", r"(?i)(https://[a-z0-9-]+\.wd\d+\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?[A-Za-z0-9_-]+)"),
+            ("smartrecruiters", r"(?i)(?:jobs|careers)\.smartrecruiters\.com/([A-Za-z0-9_-]+)"),
+            ("workable", r"(?i)apply\.workable\.com/([a-z0-9_-]+)"),
+            ("bamboohr", r"(?i)//([a-z0-9-]+)\.bamboohr\.com"),
+        ].into_iter().map(|(k, r)| (k, Regex::new(r).unwrap())).collect()
+    });
+    // Words in those places that aren't a company's board.
+    const NOT: &[&str] = &["embed", "v1", "boards", "jobs", "js", "api", "www", "careers", "static", "assets", "en-us", "privacy", "search"];
+    for (kind, re) in PATTERNS.iter() {
+        for m in re.captures_iter(text) {
+            let name = m[1].trim_end_matches(['.', '/']).to_string();
+            if !NOT.contains(&name.to_lowercase().as_str()) && !name.is_empty() {
+                return Some((kind, name));
+            }
+        }
+    }
+    None
+}
+
+/// The company board behind a careers link: named in the link itself, else in the careers page
+/// (which often embeds or links its job board), else, for a page that tags its links as coming from
+/// Greenhouse (?gh_src=…), Greenhouse under the company's web name ("affirm" for affirm.com), when
+/// that board exists.
+pub fn board_from_link(c: &reqwest::blocking::Client, link: &str) -> Result<(&'static str, String), String> {
+    let u = url::Url::parse(link.trim()).map_err(|_| "Paste the whole careers link, starting with https://".to_string())?;
+    if let Some(b) = board_in(u.as_str()) {
+        return Ok(b);
+    }
+    let page = c.get(u.as_str()).header("Accept", "text/html").send().ok().and_then(|r| r.text().ok()).unwrap_or_default();
+    if let Some(b) = board_in(&page) {
+        return Ok(b);
+    }
+    let host = u.host_str().unwrap_or("").trim_start_matches("www.").trim_start_matches("careers.").trim_start_matches("jobs.");
+    let name = host.split('.').next().unwrap_or("").to_string();
+    let tagged = u.query_pairs().any(|(k, _)| k == "gh_src") || page.contains("greenhouse");
+    if tagged && !name.is_empty() && greenhouse(c, &name).is_ok() {
+        return Ok(("greenhouse", name));
+    }
+    // The other boards that list everything under a name, tried with the company's web name.
+    if !name.is_empty() {
+        if lever(c, &name).is_ok_and(|l| !l.is_empty()) {
+            return Ok(("lever", name));
+        }
+        if ashby(c, &name).is_ok_and(|l| !l.is_empty()) {
+            return Ok(("ashby", name));
+        }
+        if greenhouse(c, &name).is_ok() {
+            return Ok(("greenhouse", name));
+        }
+    }
+    Err("Couldn't tell which job board that company uses. Open one of its job postings and paste that link instead.".into())
+}
+
 /// Every company board you search, as (source, name).
 pub fn boards(p: &Profile) -> Vec<(&'static str, String)> {
     let s = &p.sources;
@@ -2011,6 +2075,25 @@ mod tests {
         assert_eq!((a[0].id().as_str(), a[0].salary_max), ("linkedin:4012345678", Some(145000.0)));
         assert_eq!((a[1].external_id.as_str(), a[1].company.as_str(), a[1].description.trim()), ("3998877665", "Northwind", "Hybrid role"));
         assert!(linkedin_search_url("Tax Manager", "Toronto, ON", true).contains("keywords=Tax+Manager&location=Toronto%2C+ON&f_TPR=r604800&f_WT=2"));
+    }
+
+    #[test]
+    fn boards_named_in_links_and_pages() {
+        for (text, kind, name) in [
+            ("https://boards.greenhouse.io/affirm/jobs/123", "greenhouse", "affirm"),
+            ("https://job-boards.greenhouse.io/stripe?gh_src=x", "greenhouse", "stripe"),
+            (r#"<script src="https://boards.greenhouse.io/embed/job_board/js?for=affirm"></script>"#, "greenhouse", "affirm"),
+            ("fetch('https://boards-api.greenhouse.io/v1/boards/affirm/jobs')", "greenhouse", "affirm"),
+            ("https://jobs.lever.co/koho/abc-123", "lever", "koho"),
+            ("https://jobs.ashbyhq.com/wealthsimple", "ashby", "wealthsimple"),
+            ("https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1/job/Toronto/x", "workday", "https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1"),
+            ("https://jobs.smartrecruiters.com/Visa/123", "smartrecruiters", "Visa"),
+            ("https://apply.workable.com/acme/j/1", "workable", "acme"),
+            ("https://acme.bamboohr.com/careers", "bamboohr", "acme"),
+        ] {
+            assert_eq!(board_in(text), Some((kind, name.to_string())), "{text}");
+        }
+        assert_eq!(board_in("https://www.affirm.com/careers?gh_src=jl4eq6g83us#jobOpenings"), None, "only tagged: the page or a guess decides");
     }
 
     #[test]

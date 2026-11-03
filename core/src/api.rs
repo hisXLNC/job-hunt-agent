@@ -1525,6 +1525,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             let list = b.get("boards").and_then(|v| v.as_array()).cloned().unwrap_or_default();
             Ok(Resp::json(&json!({ "removed": agent.remove_boards(&list)? })))
         }
+        ["api", "settings", "add-board-link"] => {
+            let (board, name, new) = agent.add_board_link(s(&b, "url"))?;
+            Ok(Resp::json(&json!({ "board": board, "name": name, "new": new })))
+        }
         ["api", "settings", "add-boards"] => {
             let list = b.get("boards").and_then(|v| v.as_array()).cloned().unwrap_or_default();
             Ok(Resp::json(&json!({ "added": agent.add_boards(&list)? })))
