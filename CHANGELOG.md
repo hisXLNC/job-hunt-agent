@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.13.0] - 2026-11-03
+
+Every role searched, update notices you'll see, and browser jobs to pick.
+
+### Changes
+
+- Every CV's job titles get searched: the CVs take turns instead of the first CV's titles filling every search, and each CV's top title is searched every day on every source, including Workday company boards.
+- Broad titles are searched before the ones they already cover (Program Manager before Technical Program Manager), so each search finds more.
+- LinkedIn, Job Bank and FreeHire run more searches each time, so more of your titles are covered every day.
+- Postings a search finds but can't get to (over your scoring limit, or not read yet) are kept and scored first next time, instead of waiting to be found again. Postings whose title matches yours are scored before keyword-only matches.
+- Updates: a bar across the top of every page when a new version is ready, a check whenever you open Job Hunt from the tray, a daily reminder until it's installed, and Install update in the tray menu.
+- A job sent from the browser is scored and put on your Overview to pick, instead of being tailored straight away. Sending one that's already in Job Hunt says when its fit was scored.
+
 ## [2.12.0] - 2026-11-03
 
 GTA searches, adding jobs without Claude, and lighter Claude use.
@@ -843,6 +856,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.13.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.13.0
 [2.12.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.12.0
 [2.11.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.11.0
 [2.10.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.10.0

@@ -10,7 +10,8 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct Posting {
     pub source: String,
     pub external_id: String,
@@ -628,7 +629,7 @@ const DETAILS_PER_BOARD: usize = 40;
 pub fn workday(c: &reqwest::blocking::Client, link: &str, titles: &[String], wanted: &dyn Fn(&str) -> bool) -> Result<Vec<Posting>, String> {
     let b = workday_board(link).ok_or("isn't a Workday careers link like https://company.wd3.myworkdayjobs.com/Careers")?;
     let mut found: Vec<(String, String, String)> = vec![];
-    let searches: Vec<&str> = if titles.is_empty() { vec![""] } else { titles.iter().take(8).map(|t| t.as_str()).collect() };
+    let searches: Vec<&str> = if titles.is_empty() { vec![""] } else { titles.iter().map(|t| t.as_str()).collect() };
     for q in searches {
         for page in 0..2u64 {
             let body = serde_json::json!({ "appliedFacets": {}, "limit": 20, "offset": page * 20, "searchText": q });
@@ -1445,15 +1446,17 @@ pub fn searches(p: &Profile, max: usize) -> Vec<(String, String)> {
     searches_on(p, max, chrono::Utc::now().num_days_from_ce() as usize)
 }
 
-/// `searches` on a given day: when there are more than `max`, the first half of them run every day
-/// and the rest take turns, a different few each day, so every title gets searched within a few days.
+/// `searches` on a given day: when there are more than `max`, the first few run every day (each
+/// CV's top title, in each of your places) and the rest take turns, a different few each day, so
+/// every title gets searched within a few days.
 pub fn searches_on(p: &Profile, max: usize, day: usize) -> Vec<(String, String)> {
     let (all, places) = all_searches(p);
     if all.len() <= max {
         return all;
     }
-    // Your first title in each of your places always runs.
-    let fixed = (max / 2).max(places).max(1).min(max);
+    let tracks = p.tracks.iter().filter(|t| t.titles.iter().any(|x| !x.trim().is_empty())).count().max(1);
+    // Each CV's first title in each place, but never more than half: the rest must keep turning.
+    let fixed = (tracks * places).min(max / 2).max(1).min(max);
     let rest = &all[fixed..];
     let turn = max - fixed;
     let start = (day * turn) % rest.len();
@@ -1462,13 +1465,42 @@ pub fn searches_on(p: &Profile, max: usize, day: usize) -> Vec<(String, String)>
     out
 }
 
-fn all_searches(p: &Profile) -> (Vec<(String, String)>, usize) {
+/// Every job title of every CV, the CVs taking turns (each one's first title, then each one's
+/// second...), so a second CV's roles aren't left until the first CV's twenty titles have run.
+/// Titles a broader one already finds come last: a search for "Program Manager" also finds
+/// "Technical Program Manager" and "Programme Manager", so those are searched only when there's room.
+pub fn search_titles(p: &Profile) -> Vec<String> {
+    let lists: Vec<Vec<String>> = p.tracks.iter().map(|t| t.titles.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()).collect();
     let mut titles: Vec<String> = vec![];
-    for t in p.tracks.iter().flat_map(|t| t.titles.iter()) {
-        if !t.trim().is_empty() && !titles.iter().any(|x| x.eq_ignore_ascii_case(t.trim())) {
-            titles.push(t.trim().to_string());
+    for i in 0..lists.iter().map(|l| l.len()).max().unwrap_or(0) {
+        for l in &lists {
+            if let Some(t) = l.get(i) {
+                if !titles.iter().any(|x| x.eq_ignore_ascii_case(t)) {
+                    titles.push(t.clone());
+                }
+            }
         }
     }
+    let covered = |t: &String| titles.iter().any(|b| !b.eq_ignore_ascii_case(t) && crate::filters::title_matches(t, b) && !crate::filters::title_matches(b, t));
+    let (broad, narrow): (Vec<String>, Vec<String>) = titles.iter().cloned().partition(|t| !covered(t));
+    broad.into_iter().chain(narrow).collect()
+}
+
+/// At most `max` of your titles (see search_titles) for a source searched by title alone: the first
+/// half every day, the rest taking turns.
+pub fn titles_on(p: &Profile, max: usize, day: usize) -> Vec<String> {
+    let all = search_titles(p);
+    if all.len() <= max {
+        return all;
+    }
+    let fixed = (max / 2).max(1);
+    let (rest, turn) = (&all[fixed..], max - fixed);
+    let start = (day * turn) % rest.len();
+    all[..fixed].iter().cloned().chain((0..turn.min(rest.len())).map(|i| rest[(start + i) % rest.len()].clone())).collect()
+}
+
+fn all_searches(p: &Profile) -> (Vec<(String, String)>, usize) {
+    let titles = search_titles(p);
     let mut places = p.search_places();
     if places.is_empty() {
         places.push(p.country()); // nowhere in particular: the whole country
@@ -1532,8 +1564,8 @@ pub fn fetch_board(c: &reqwest::blocking::Client, p: &Profile, source: &str, nam
         "bamboohr" => bamboohr(c, name, &want).map(|l| (l, true)),
         "smartrecruiters" => smartrecruiters(c, name, &want),
         "workday" => {
-            let mut titles: Vec<String> = p.tracks.iter().flat_map(|t| t.titles.clone()).collect();
-            titles.dedup();
+            use chrono::Datelike;
+            let titles = titles_on(p, 8, chrono::Utc::now().num_days_from_ce() as usize);
             workday(c, name, &titles, &want).map(|l| (l, false))
         }
         _ => Err("unknown kind of board".into()),
@@ -1589,7 +1621,7 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) 
     }
     // LinkedIn: through Apify when there's a token, else its signed-out search, when it's on.
     if p.sources.linkedin {
-        let list = linkedin_searches(p, 6);
+        let list = linkedin_searches(p, 10);
         if let Some((token, actor)) = &keys.apify {
             let (c, token, actor) = (c.clone(), token.clone(), actor.clone());
             let max = (p.max_scored_per_run as usize).clamp(20, 100);
@@ -1617,8 +1649,9 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) 
     // FreeHire: one search per title across your country (it doesn't narrow by city reliably).
     if !off("freehire") {
         let mut titles: Vec<String> = vec![];
-        for (t, _) in searches(p, 12) {
-            if !titles.iter().any(|x| x.eq_ignore_ascii_case(&t)) && titles.len() < 6 {
+        // Your titles in turn (see searches), ten a search.
+        for (t, _) in searches(p, 40) {
+            if !titles.iter().any(|x| x.eq_ignore_ascii_case(&t)) && titles.len() < 10 {
                 titles.push(t);
             }
         }
@@ -1630,7 +1663,7 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) 
     // Job Bank: a few searches, 5 seconds apart; once it turns one away, the rest wait.
     if !p.sources.is_off("jobbank") {
         let refused = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        for (title, w) in searches(p, 6) {
+        for (title, w) in searches(p, 10) {
             let (c, refused) = (c.clone(), refused.clone());
             let name = if w.is_empty() { format!("Job Bank “{title}”") } else { format!("Job Bank “{title}” in {w}") };
             calls.push((name, "Job Bank".into(), None, Box::new(move || {
@@ -1648,7 +1681,7 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) 
     }
     // Recruiters' and job sites' own listings: each counted on its own, to see which work.
     if !off("agencies") {
-        let tp = searches(p, 3);
+        let tp = searches(p, 4);
         for t in crate::sites::targets(&p.sources.sites, &p.sources.custom_sites) {
             let t = std::sync::Arc::new(t);
             for (title, w) in crate::sites::searches_for(&t, &tp) {
@@ -2015,8 +2048,27 @@ https://www.linkedin.com/comm/jobs/view/4012345678/ (again)\nhttps://www.linkedi
         let places: Vec<&str> = q[..first_senior].iter().map(|(_, w)| w.as_str()).collect();
         assert_eq!(&places[..4], &["Toronto, ON", "Mississauga, ON", "Ontario", "Toronto, ON"], "{places:?}");
         assert_eq!(searches(&p, 3).len(), 3);
-        // Three searches reach all three places.
-        assert_eq!(searches(&p, 3).iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>(), vec!["Toronto, ON", "Mississauga, ON", "Ontario"]);
+        // The CVs take turns: the data CV's first title comes second, not after all seven of the
+        // program CV's; and "Technical Program Manager", which a "Program Manager" search finds,
+        // waits until the broader titles have had their turn.
+        let titles = search_titles(&p);
+        assert!(titles[..2].contains(&"Senior Program Manager".to_string()) && titles[..2].contains(&"Data Engineering Manager".to_string()), "{titles:?}");
+        let pos = |t: &str| titles.iter().position(|x| x == t).unwrap();
+        assert!(pos("Technical Program Manager") > pos("Product Manager"), "{titles:?}");
+        // Workday boards (searched by title only) see both CVs' titles, and all of them within days.
+        let mut seen_t = std::collections::HashSet::new();
+        for day in 0..10 {
+            let t = titles_on(&p, 8, day);
+            assert!(t.len() == 8 && t.iter().any(|x| x.starts_with("Data")) && t.iter().any(|x| x.contains("Program")), "{t:?}");
+            seen_t.extend(t);
+        }
+        assert_eq!(seen_t.len(), titles.len());
+        // Every day, a source that runs 10 searches looks for each CV's top title, in every place.
+        for day in 0..5 {
+            let s = searches_on(&p, 10, day);
+            assert!(s.iter().any(|(t, _)| t.contains("Program")) && s.iter().any(|(t, _)| t.starts_with("Data")), "{s:?}");
+            assert!(["Toronto, ON", "Mississauga, ON", "Ontario"].iter().all(|w| s.iter().any(|(_, x)| x == w)), "{s:?}");
+        }
         // More searches than a source runs: the first ones every day, the rest take turns, so
         // within a few days every one has run.
         let all = searches_on(&p, 1000, 0);

@@ -18,6 +18,8 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 static TOLD_ABOUT_TRAY: AtomicBool = AtomicBool::new(false);
 static QUITTING: AtomicBool = AtomicBool::new(false);
+/// The tray menu's update item: "Check for updates", or "Install Job Hunt X and restart".
+static UPDATE_ITEM: std::sync::OnceLock<MenuItem<tauri::Wry>> = std::sync::OnceLock::new();
 
 pub struct Ctx {
     pub agent: Arc<Agent>,
@@ -174,7 +176,10 @@ fn check_for_update(app: &AppHandle) -> serde_json::Value {
     }
 }
 
-/// Check for a new version soon after starting and every 30 minutes; notify once per version.
+/// Check for a new version soon after starting and every 30 minutes. When one is out: the window
+/// shows its notice straight away (its own timer is paused while it's in the tray), the tray icon
+/// and menu say so, and a notification comes when it's first found and again once a day until it's
+/// installed (one notification is easy to miss: Do Not Disturb, or the PC was away).
 fn update_watch(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(30));
@@ -182,15 +187,56 @@ fn update_watch(app: AppHandle) {
             let u = check_for_update(&app);
             if u.get("available").and_then(|v| v.as_bool()) == Some(true) {
                 let v = u.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                update_found(&app, &v);
                 if let Some(ctx) = app.try_state::<Arc<Ctx>>() {
-                    if ctx.agent.secret("update.notified") != v {
+                    let now = chrono::Utc::now().timestamp();
+                    let at: i64 = ctx.agent.secret("update.notified_at").parse().unwrap_or(0);
+                    if ctx.agent.secret("update.notified") != v || now - at >= 24 * 3600 {
                         let _ = ctx.agent.db().set("update.notified", &v);
-                        notify(&app, &format!("Job Hunt {} is ready to install", v),
-                            "Open Job Hunt and click Install and restart. Your applications and settings stay as they are.");
+                        let _ = ctx.agent.db().set("update.notified_at", &now.to_string());
+                        notify(&app, &format!("Job Hunt {v} is ready to install"),
+                            "Click Install and restart in Job Hunt, or right-click the tray icon. Your applications and settings stay as they are.");
                     }
                 }
             }
             std::thread::sleep(std::time::Duration::from_secs(30 * 60));
+        }
+    });
+}
+
+/// Tell the window and the tray that version `v` is out.
+fn update_found(app: &AppHandle, v: &str) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.eval("typeof checkUpdate === 'function' && checkUpdate()");
+    }
+    if let Some(t) = app.tray_by_id("jobhunt") {
+        let _ = t.set_tooltip(Some(format!("Job Hunt: version {v} is ready to install")));
+    }
+    if let Some(item) = UPDATE_ITEM.get() {
+        let _ = item.set_text(format!("Install Job Hunt {v} and restart"));
+    }
+}
+
+/// The tray's update item: install the update that's out (after any search or tailoring running
+/// now), or check and say there's none.
+fn tray_update(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let u = check_for_update(&app);
+        if u.get("available").and_then(|v| v.as_bool()) != Some(true) {
+            let msg = u.get("error").and_then(|e| e.as_str()).map(String::from)
+                .unwrap_or_else(|| format!("You're on the newest version ({}).", app.package_info().version));
+            notify(&app, "Job Hunt is up to date", &msg);
+            return;
+        }
+        let Some(ctx) = app.try_state::<Arc<Ctx>>() else { return };
+        let req = api::Req { method: "POST".into(), path: "/api/update/install".into(), query: Default::default(), body: vec![], remote: false };
+        let r = api::handle(&ctx.agent, &ctx.host, &req);
+        let body: serde_json::Value = serde_json::from_slice(&r.body).unwrap_or_default();
+        if body.get("waiting").and_then(|w| w.as_bool()) == Some(true) {
+            notify(&app, "Installing after the current work", "Job Hunt installs the update and restarts as soon as the search or tailoring running now finishes.");
+        } else if r.status >= 400 {
+            notify(&app, "The update didn't install", body.get("error").and_then(|e| e.as_str()).unwrap_or("Try again from Settings → App."));
         }
     });
 }
@@ -245,6 +291,8 @@ pub fn show_main(app: &AppHandle) {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
+        // Back from the tray: anything new (an update, say) shows now, not at the page's next timer.
+        let _ = w.eval("typeof onShown === 'function' && onShown()");
     }
 }
 
@@ -589,9 +637,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open Job Hunt", true, None::<&str>)?;
     let search = MenuItem::with_id(app, "search", "Search for jobs now", true, None::<&str>)?;
     let inbox = MenuItem::with_id(app, "inbox", "Check email now", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", "Check for updates", true, None::<&str>)?;
+    let _ = UPDATE_ITEM.set(update.clone());
     let auto = CheckMenuItem::with_id(app, "autostart", "Start when I sign in", true, app.autolaunch().is_enabled().unwrap_or(false), None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Exit Job Hunt", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &PredefinedMenuItem::separator(app)?, &search, &inbox, &PredefinedMenuItem::separator(app)?, &auto, &PredefinedMenuItem::separator(app)?, &exit])?;
+    let menu = Menu::with_items(app, &[&open, &PredefinedMenuItem::separator(app)?, &search, &inbox, &PredefinedMenuItem::separator(app)?, &update, &auto, &PredefinedMenuItem::separator(app)?, &exit])?;
     let auto_item = auto.clone();
     TrayIconBuilder::with_id("jobhunt")
         .icon(app.default_window_icon().cloned().expect("app icon"))
@@ -617,6 +667,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = auto_item.set_checked(on);
                 }
             }
+            "update" => tray_update(app),
             "exit" => quit(app),
             _ => {}
         })

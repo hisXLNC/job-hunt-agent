@@ -389,7 +389,7 @@ let pageDirty = false;
 document.addEventListener('input', e => { if (e.target.closest?.('#main') && !e.target.dataset.act && e.target.type !== 'search') pageDirty = true; });
 function page(html) {
   pageDirty = false;
-  main().innerHTML = `<div class="page">${html}</div>`;
+  main().innerHTML = `<div class="page">${updateBarHtml()}${html}</div>`;
   // Only the job page sets these; elsewhere actions name their job themselves.
   delete main().dataset.job;
   delete main().dataset.status;
@@ -1701,7 +1701,7 @@ document.addEventListener('paste', async e => {
   e.preventDefault();
   try {
     await api('/api/clip', { method: 'POST', raw: text });
-    toast('Adding it now. You\'ll get a notification when it\'s scored and tailored.');
+    toast('Adding it now. Once it\'s scored it\'s on your Overview to pick; you get a notification.');
     location.hash = '#overview';
   } catch (err) { toast(err.message, true); }
 });
@@ -1875,7 +1875,7 @@ async function showSettings(tab, sub) {
         `<summary class="small">Choose recruiters and sites</summary>${sitesForm(st)}`)}
     </div>
     <section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
-      <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and tailors your CV. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
+      <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and puts it on your Overview to pick. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
       ${desk ? `<div class="row"><button class="btn primary" data-act="bookmarkSetup"><img src="/static/logo.svg" alt="" width="16" height="16">Set up the button</button><span class="muted small">Opens a page in your browser that walks you through it, so the button gets the Job Hunt logo.</span></div>
       <details class="small"><summary class="muted">Or install it as a browser extension (Chrome or Edge)</summary><ol class="small steps-list">
         <li><a class="btn sm" href="/api/extension.zip" download>${svg('download')}Download the extension</a> and unzip it (right-click → <b>Extract All</b>). Keep the <b>Send to Job Hunt</b> folder somewhere it stays, like Documents.</li>
@@ -2145,7 +2145,7 @@ button{font:inherit;background:#1f201d;color:#fff;border:0;border-radius:999px;p
 <ol><li>Press <kbd>Ctrl</kbd>+<kbd>D</kbd> to bookmark this page. Choose <b>Bookmarks bar</b> as the folder, keep the name, and press <b>Done</b>. (No bookmarks bar? Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>.)</li>
 <li><button id="copy">Copy the code</button> <span id="done"></span></li>
 <li>Right-click the new <b>Send to Job Hunt</b> on your bookmarks bar and choose <b>Edit</b>. Select everything in the <b>URL</b> box, paste, and <b>Save</b>.</li></ol>
-<p>Then, on any job posting (LinkedIn, Indeed, a company's site), click it: Job Hunt adds the job, scores it and tailors your CV.</p>
+<p>Then, on any job posting (LinkedIn, Indeed, a company's site), click it: Job Hunt adds the job, scores it and puts it on your Overview, ready for you to tailor when you choose.</p>
 <p class="note">The bookmark usually keeps the Job Hunt logo. If your browser shows a plain icon instead, the button works just the same.</p></main>
 <script>var CODE=${code};document.getElementById('copy').onclick=function(){var d=document.getElementById('done');
 function ok(){d.textContent='Copied. Now step 3.';}function fb(){var t=document.createElement('textarea');t.value=CODE;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();ok();}
@@ -2182,7 +2182,18 @@ async function showWhatsNew() {
 }
 
 let update = null;
+/** The version whose top bar you put off with Later (it comes back for the next version). */
+let updateBarLater = null;
+/** A bar across the top of every page while an update waits: the sidebar note is easy to miss. */
+function updateBarHtml() {
+  if (!update?.available || updateBarLater === update.version) return '';
+  return `<div class="update-bar" id="updateBar"><span><b>Job Hunt ${esc(shortVersion(update.version))} is ready.</b> <span class="muted">Your applications and settings stay as they are.</span></span>
+    <span class="row"><button class="btn primary" data-act="updateInstall">Install and restart</button><a class="btn ghost" href="#settings/app">What's new</a><button class="btn ghost" data-act="updateLater">Later</button></span></div>`;
+}
 function showUpdate(u) {
+  const bar = $('#updateBar');
+  if (!u?.available || updateBarLater === u.version) bar?.remove();
+  else if (!bar) main().querySelector('.page')?.insertAdjacentHTML('afterbegin', updateBarHtml());
   const note = $('#updateNote');
   if (u?.available) {
     note.innerHTML = `<b>Job Hunt ${esc(shortVersion(u.version))} is ready</b>
@@ -2666,6 +2677,7 @@ async function act(el) {
     el.disabled = true;
     try { await fn(); if (done) toast(done); } catch (e) { toast(e.message, true); } finally { el.disabled = false; }
   };
+  if (a === 'updateLater') { updateBarLater = update?.version || null; $('#updateBar')?.remove(); return; }
   if (a === 'updateCheck') {
     return busy(async () => {
       const u = await checkUpdate();
@@ -3686,3 +3698,13 @@ refreshOverview().then(route);
 // Look for an update shortly after opening, then every 30 minutes.
 setTimeout(checkUpdate, 4000);
 setInterval(checkUpdate, 30 * 60 * 1000);
+// While Job Hunt sits in the tray its timers are paused, so look again whenever it comes back into
+// view (the app also calls onShown when you open it from the tray).
+let lastShownCheck = Date.now();
+function onShown() {
+  if (Date.now() - lastShownCheck < 5 * 60 * 1000) return;
+  lastShownCheck = Date.now();
+  checkUpdate();
+  refreshOverview().catch(() => {}); // the counts; the page itself stays, so nothing you're typing is lost
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onShown(); });

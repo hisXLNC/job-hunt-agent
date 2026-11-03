@@ -21,6 +21,8 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 /// Near-miss titles Claude looks at per search; the rest wait for the next one.
 const NEAR_MISS_BATCH: usize = 150;
+/// At most this many postings held over for the next search (see Agent::hold).
+const HELD_MAX: usize = 400;
 
 /// Canada's big pension funds, banks and insurers whose careers sites Job Hunt reads (all on
 /// Workday). CPP Investments (behind a bot check) and Scotiabank (SuccessFactors) can't be read.
@@ -228,8 +230,10 @@ fn label(category: &str) -> Option<&'static str> {
 pub struct Report {
     pub found: usize,
     pub new: usize,
-    /// New postings left unscored this time (the per-search cap); they're picked up next time.
+    /// New postings left unscored this time (the per-search cap); they're held and scored first next time.
     pub deferred: usize,
+    /// Postings held over from the last search and looked at again in this one.
+    pub held: usize,
     pub filtered: usize,
     pub scored: usize,
     pub tailored: usize,
@@ -891,6 +895,31 @@ replies and interviews, and a little lower for kinds that got none from several 
 
     // --- job-alert emails ------------------------------------------------------------------
 
+    /// Keep postings a search found but couldn't get to (over the scoring cap, text not read yet,
+    /// a near-miss check that failed), so the next search scores them first. Sources take turns
+    /// with your titles, so the next search might not find them again by itself.
+    fn hold(&self, list: Vec<Posting>) {
+        if list.is_empty() {
+            return;
+        }
+        let db = self.db();
+        let mut held: Vec<Posting> = db.get("search.held").ok().flatten().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        for p in list {
+            if !held.iter().any(|h| h.id() == p.id()) {
+                held.push(p);
+            }
+        }
+        let keep = held.len().saturating_sub(HELD_MAX); // the newest
+        let _ = db.set("search.held", &serde_json::to_string(&held[keep..]).unwrap_or_default());
+    }
+
+    fn take_held(&self) -> Vec<Posting> {
+        let db = self.db();
+        let list: Vec<Posting> = db.get("search.held").ok().flatten().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let _ = db.delete("search.held");
+        list
+    }
+
     fn take_pending_alerts(&self) -> Vec<Posting> {
         let db = self.db();
         let list: Vec<crate::claude::FoundJob> = db.get("alerts.pending").ok().flatten().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
@@ -1361,6 +1390,14 @@ replies and interviews, and a little lower for kinds that got none from several 
                 all
             }
         };
+        // What the last search found but didn't get to: first, so it's scored this time.
+        let postings = {
+            let mut held = self.take_held();
+            held.retain(|h| !postings.iter().any(|a| a.id() == h.id()));
+            report.held = held.len();
+            held.extend(postings);
+            held
+        };
         report.found = postings.len();
         self.tally(&report);
         // Every source's listings, before copies are dropped, for how much the sources overlap.
@@ -1436,10 +1473,20 @@ replies and interviews, and a little lower for kinds that got none from several 
                         }
                     }
                 }
-                Err(e) => report.errors.push(format!("checking near-miss titles: {e}")),
+                Err(e) => {
+                    report.errors.push(format!("checking near-miss titles: {e}"));
+                    report.deferred += take.len();
+                    near.extend(take);
+                }
             }
             report.deferred += near.len(); // over the batch size: next search
         }
+        // Held for the next search, which looks at them first.
+        self.hold(std::mem::take(&mut near));
+        // Best first, so the scoring cap leaves out the weakest: titles that match one of yours,
+        // then postings that only mention your keywords or that Claude picked as near misses.
+        let wanted_title = |p: &Posting| profile.tracks.iter().flat_map(|t| t.titles.iter()).any(|t| crate::filters::title_matches(&p.title, t));
+        candidates.sort_by_key(|p| !wanted_title(p));
         self.tally(&report);
 
         // LinkedIn's and Job Bank's searches list postings without their text: read it for the ones
@@ -1468,11 +1515,12 @@ replies and interviews, and a little lower for kinds that got none from several 
                 report.errors.push(format!("Job sites: read {read} of {total} new postings; the rest wait for the next search"));
             }
         }
-        // Not read yet: not stored, so the next search picks them up with their text. Read: the
-        // filters again, now that there's a description to check.
-        let before = candidates.len();
-        candidates.retain(|p| !(thin_source(&p.source) && p.description.trim().is_empty()));
-        report.deferred += before - candidates.len();
+        // Not read yet: held, so the next search reads and scores them. Read: the filters again, now
+        // that there's a description to check.
+        let (unread, read): (Vec<Posting>, Vec<Posting>) = candidates.into_iter().partition(|p| thin_source(&p.source) && p.description.trim().is_empty());
+        let candidates = read;
+        report.deferred += unread.len();
+        self.hold(unread);
         let mut kept = vec![];
         for p in candidates {
             match thin_source(&p.source).then(|| prefilter(&p, &profile)).flatten() {
@@ -1484,9 +1532,11 @@ replies and interviews, and a little lower for kinds that got none from several 
         let llm = self.llm();
         let guidance = self.scoring_guidance(&profile);
         let to_score = candidates.len().min(cap);
-        report.deferred += candidates.len().saturating_sub(cap); // not stored, so they're scored next time
-        for (i, p) in candidates.into_iter().take(cap).enumerate() {
+        report.deferred += candidates.len().saturating_sub(cap); // held: scored first next time
+        let mut candidates = candidates.into_iter();
+        for (i, p) in candidates.by_ref().take(cap).enumerate() {
             if self.stopping() {
+                self.hold(vec![p]);
                 break;
             }
             self.step("Scoring postings", i, to_score, &format!("{} at {}", p.title, p.company));
@@ -1506,16 +1556,20 @@ replies and interviews, and a little lower for kinds that got none from several 
                     db.insert_job(&job)?;
                     db.log(Some(&job.id), "scored", &format!("{} on the {} track", s.score, s.track))?;
                 }
-                // Not stored, so the next search retries it.
+                // Held, so the next search retries it.
                 Err(e) => {
                     report.errors.push(format!("scoring {} / {}: {e}", p.company, p.title));
-                    if e.0.contains("API key") || e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("wasn't found") {
+                    let stop = e.0.contains("API key") || e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("wasn't found");
+                    self.hold(vec![p]);
+                    if stop {
                         break; // every other posting would fail the same way
                     }
                 }
             }
             self.tally(&report);
         }
+        // Over the cap, or left when the search stopped: scored first next time.
+        self.hold(candidates.collect());
         // Unless tailoring is automatic, roles that cleared the bar wait for you to pick them.
         let queued = if profile.auto_tailor { self.db().jobs(Some("queued"), profile.max_per_run)? } else { vec![] };
         if !profile.auto_tailor {
@@ -1622,7 +1676,7 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// A job you found yourself (LinkedIn, referral), scored and tailored like any other. With
     /// `use_claude` off (or Claude out of reach) it's saved as it is, for you to tailor later.
     pub fn add_manual(&self, company: &str, title: &str, url: &str, location: &str, description: &str, use_claude: bool) -> R<String> {
-        self.add_found("manual", company, title, url, location, description, use_claude)
+        self.add_found("manual", company, title, url, location, description, use_claude, true)
     }
 
     /// The notice after adding a posting: tailored, scored, or saved without Claude.
@@ -1630,6 +1684,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let Ok(Some(j)) = self.db().job(id) else { return ("Added to Job Hunt".into(), String::new()) };
         match (j.status.as_str(), j.score) {
             ("ready", s) => ("Application ready".into(), format!("{} at {} (fit {}) has a tailored CV and cover letter waiting for your approval.", j.title, j.company, s.unwrap_or(0))),
+            ("queued", Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}. It's on your Overview, under Pick, for you to tailor when you choose.", j.title, j.company)),
             (_, Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}.", j.title, j.company)),
             _ => ("Saved to Job Hunt".into(), format!("{} at {} is saved under Applications. Use Tailor anyway when you want a tailored CV and cover letter.", j.title, j.company)),
         }
@@ -1661,7 +1716,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         if let Some(id) = crate::sources::linkedin_job_id(&f("url")).filter(|_| !cfg!(test)) {
             if let Ok(p) = crate::sources::linkedin_posting(&crate::sources::http(), &id) {
                 if !p.title.is_empty() && !p.company.is_empty() {
-                    let jid = self.add_found("linkedin", &p.company, &p.title, &p.url, &p.location, &p.description, use_claude)?;
+                    let jid = self.add_found("linkedin", &p.company, &p.title, &p.url, &p.location, &p.description, use_claude, false)?;
                     let mut set: Vec<(&str, Value)> = vec![];
                     if let Some(u) = p.apply_url { set.push(("apply_url", u.into())); }
                     if let Some(e) = p.apply_email { set.push(("apply_email", e.into())); }
@@ -1715,14 +1770,17 @@ replies and interviews, and a little lower for kinds that got none from several 
         let host = url::Url::parse(&url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default();
         let source = ["linkedin", "indeed", "glassdoor", "jobbank", "workopolis", "eluta", "ziprecruiter", "monster"].iter()
             .find(|s| host.contains(*s)).map(|s| s.to_string()).unwrap_or_else(|| "browser".into());
-        let id = self.add_found(&source, &company, &title, &url, &location, &description, use_claude)?;
+        let id = self.add_found(&source, &company, &title, &url, &location, &description, use_claude, false)?;
         self.db().job(&id)?.ok_or_else(|| Error("That job no longer exists.".into()))
     }
 
     /// Add a posting you found. With Claude it's scored and tailored; without (you said so, it isn't
     /// connected, there's no CV yet, or it's at its usage limit) it's saved for later as it is, and
     /// Tailor anyway scores and tailors it whenever you like.
-    fn add_found(&self, source: &str, company: &str, title: &str, url: &str, location: &str, description: &str, use_claude: bool) -> R<String> {
+    /// `tailor`: tailor it right away (Add a job's "Score it and tailor"); otherwise it waits on the
+    /// Overview to be picked, whatever its score (the browser button: you chose it, so it's shown).
+    #[allow(clippy::too_many_arguments)]
+    fn add_found(&self, source: &str, company: &str, title: &str, url: &str, location: &str, description: &str, use_claude: bool, tailor: bool) -> R<String> {
         if company.trim().is_empty() || title.trim().is_empty() {
             return err("Add the company and the title.");
         }
@@ -1747,10 +1805,17 @@ replies and interviews, and a little lower for kinds that got none from several 
                 // Sent again: note it on the job that's there, so it's one click away.
                 // Read first: an `if let` on self.db() would hold the lock through the log below.
                 let existing = self.db().existing_job(&p.id(), &p.company, &p.title);
+                let mut earlier = String::new();
                 if let Some(id) = existing {
                     self.db().log(Some(&id), "added-again", "you sent this posting again; it's already in Job Hunt")?;
+                    // Its fit is the one worked out when it was first found, against your CVs as they were then.
+                    let old = self.db().job(&id)?;
+                    if let Some((score, found)) = old.and_then(|j| j.score.map(|s| (s, j.found_at))) {
+                        let day = found.get(..10).unwrap_or("").to_string();
+                        earlier = format!(" Its fit of {score} was scored{} against your CVs as they were then; it isn't scored again.", if day.is_empty() { String::new() } else { format!(" on {day}") });
+                    }
                 }
-                return err(format!("{} at {} is already in Job Hunt.", p.title, p.company));
+                return err(format!("{} at {} is already in Job Hunt.{earlier}", p.title, p.company));
             }
             // Filtered out or scored low before: you want it, so look again.
             self.db().delete_job(&p.id())?;
@@ -1794,10 +1859,16 @@ replies and interviews, and a little lower for kinds that got none from several 
             let db = self.db();
             db.insert_job(&job)?;
             db.log(Some(&job.id), "added", how)?;
+            if !tailor {
+                // Yours to pick on the Overview, kept there whatever the filters say.
+                db.log(Some(&job.id), "chosen", "you sent it to Job Hunt")?;
+            }
         }
         // Scored and kept even if tailoring fails now (a usage limit, say): it waits to be picked.
-        if let Err(e) = self.tailor(&job.id, None) {
-            self.db().log(Some(&job.id), "tailor:error", &e.0)?;
+        if tailor {
+            if let Err(e) = self.tailor(&job.id, None) {
+                self.db().log(Some(&job.id), "tailor:error", &e.0)?;
+            }
         }
         Ok(job.id)
     }
@@ -6149,7 +6220,7 @@ mod tests {
             "text": "Lead the data platform team and its roadmap, with stakeholders across the bank."});
         let first = s.agent.add_clip(&clip).unwrap();
         let e = s.agent.add_clip(&clip).unwrap_err();
-        assert!(e.0.ends_with("is already in Job Hunt."));
+        assert!(e.0.contains("is already in Job Hunt."));
         let h = s.agent.db().history(&first.id).unwrap();
         assert!(h.iter().any(|x| x.kind == "added-again"), "noted on that job, so Recent activity links to it");
     }
@@ -6913,7 +6984,9 @@ mod tests {
         // A page that describes the job in the standard way: used as is.
         let j = s.agent.add_clip(&json!({ "url": "https://boards.greenhouse.io/acme/jobs/1", "title": "Technical Program Manager", "company": "Acme",
             "location": "Toronto, ON", "text": "Lead program delivery, UAT and vendor management across finance systems.", "structured": true })).unwrap();
-        assert_eq!((j.source.as_str(), j.status.as_str()), ("browser", "ready"));
+        // Scored and put on the Overview to pick: not tailored until you choose.
+        assert_eq!((j.source.as_str(), j.status.as_str()), ("browser", "queued"));
+        assert!(j.score.is_some() && j.cv_path.is_none());
         assert!(!s.llm.calls.lock().unwrap().iter().any(|c| c.starts_with("read_posting")));
         // A LinkedIn page without that: Claude reads it.
         let j = s.agent.add_clip(&json!({ "url": "https://www.linkedin.com/jobs/view/123", "title": "LinkedIn", "text": "Jobs you may like ... Senior Program Manager at Maple Bank ... Lead program delivery across finance systems." })).unwrap();
@@ -6923,6 +6996,23 @@ mod tests {
         assert!(again.unwrap_err().0.contains("already in Job Hunt"));
         assert!(s.agent.add_clip(&json!({ "url": "https://example.com", "text": "A recipe for banana bread with walnuts and a little cinnamon." })).unwrap_err().0.contains("doesn't look like a job posting"));
         assert!(crate::api::parse_clip("JOBHUNT-CLIP:{\"url\":\"x\"}").is_some() && crate::api::parse_clip("hello").is_none());
+    }
+
+    #[test]
+    fn postings_over_the_cap_are_scored_next_time() {
+        let s = setup();
+        let mut p = s.agent.profile();
+        p.max_scored_per_run = 2;
+        s.agent.save_profile(&p).unwrap();
+        let found: Vec<Posting> = (1..=5).map(|i| posting("Program Manager", &i.to_string())).map(|p| Posting { company: format!("Co {}", p.external_id), ..p }).collect();
+        let r = s.agent.search(Some(found)).unwrap();
+        assert_eq!((r.scored, r.deferred), (2, 3));
+        // The next search finds nothing new, yet the three left over are scored, two at a time.
+        let r = s.agent.search(Some(vec![])).unwrap();
+        assert_eq!((r.held, r.scored, r.deferred), (3, 2, 1));
+        let r = s.agent.search(Some(vec![])).unwrap();
+        assert_eq!((r.held, r.scored, r.deferred), (1, 1, 0));
+        assert_eq!(s.agent.search(Some(vec![])).unwrap().held, 0);
     }
 
     #[test]

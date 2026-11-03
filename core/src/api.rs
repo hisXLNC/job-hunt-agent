@@ -236,7 +236,7 @@ pub fn start_clip(agent: &Arc<Agent>, clip: Value) {
                 a.note(&head, &body);
             }
             // Already there: not a problem, and noted on that job (see add_found).
-            Err(e) if e.0.ends_with("is already in Job Hunt.") => a.note("Already in Job Hunt", &e.0),
+            Err(e) if e.0.contains("is already in Job Hunt.") => a.note("Already in Job Hunt", &e.0),
             Err(e) => {
                 let _ = a.db().log(None, "add:error", &e.0);
                 a.note("Couldn't add that posting", &e.0);
