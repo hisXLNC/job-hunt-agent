@@ -1745,8 +1745,17 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) 
     }
     // Recruiters' and job sites' own listings: each counted on its own, to see which work.
     if !off("agencies") {
-        let tp = searches(p, 4);
-        for t in crate::sites::targets(&p.sources.sites, &p.sources.custom_sites) {
+        // Agencies file jobs under the area's main city ("Toronto"), not each town in it.
+        let mut tp: Vec<(String, String)> = vec![];
+        for (title, w) in searches(p, 8) {
+            let w = p.region(&w).map(|r| r.centre.to_string()).unwrap_or(w);
+            if !tp.contains(&(title.clone(), w.clone())) && tp.len() < 4 {
+                tp.push((title, w));
+            }
+        }
+        // A site that only lists another country's jobs (Aerotek: the US) has nothing in reach.
+        let foreign = |id: &str| crate::sites::SITES.iter().any(|s| s.id == id && !s.country.eq_ignore_ascii_case(&p.sources.adzuna_country));
+        for t in crate::sites::targets(&p.sources.sites, &p.sources.custom_sites).into_iter().filter(|t| !foreign(&t.id)) {
             let t = std::sync::Arc::new(t);
             for (title, w) in crate::sites::searches_for(&t, &tp) {
                 let (c, t2) = (c.clone(), t.clone());

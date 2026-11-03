@@ -10,7 +10,7 @@ on:
       what:
         description: "What to check"
         type: choice
-        options: [everything, secrets, sites]
+        options: [everything, secrets, sites, site-apis]
         default: everything
 
 permissions:
@@ -39,7 +39,7 @@ jobs:
 
   # Whether the build secrets are set and well formed, without showing them.
   secrets:
-    if: inputs.what != 'sites'
+    if: inputs.what != 'sites' && inputs.what != 'site-apis'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -70,6 +70,21 @@ jobs:
         env:
           K: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: '[ -n "$K" ] && echo "::notice::TAURI_SIGNING_PRIVATE_KEY is set" || echo "::warning::TAURI_SIGNING_PRIVATE_KEY isn''t set"'
+
+  # The sites read through their own job-search APIs, quickly (a few minutes).
+  site-apis:
+    if: inputs.what == 'site-apis'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: Sites' job-search APIs, and the problem sites searched
+        working-directory: core
+        run: cargo run --quiet --example site_api_check -- "Program Manager" "Toronto, ON"
 
   # What each recruiter and job site answers when Job Hunt reads it (the cloud sessions can't reach them).
   sites:

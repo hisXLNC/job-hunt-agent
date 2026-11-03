@@ -43,14 +43,14 @@ pub const SITES: &[Site] = &[
     Site { id: "roberthalf", name: "Robert Half", country: "ca", kind: "Agency", about: "Accounting, finance, tech, marketing and administrative roles.", search: "https://www.roberthalf.com/ca/en/jobs/{qs}/{ls}", link: r"/ca/en/job/", browser: true },
     Site { id: "michaelpage", name: "Michael Page", country: "ca", kind: "Agency", about: "Professional and management roles.", search: "https://www.michaelpage.ca/jobs/{qs}/{ls}", link: r"/job-detail/", browser: false },
     Site { id: "randstad", name: "Randstad", country: "ca", kind: "Agency", about: "Office, customer service, industrial and professional roles.", search: "https://www.randstad.ca/jobs/q-{qs}/l-{ls}/", link: r"/jobs/[a-z0-9-]+_[a-z0-9-]+_\d+", browser: true },
-    Site { id: "adecco", name: "Adecco", country: "ca", kind: "Agency", about: "Temporary and permanent jobs across industries.", search: "https://www.adecco.com/en-ca/job-seekers/find-a-job?k={q}&l={l}", link: r"/job/|/jobs/[^/?#]+/\d{4,}", browser: true },
+    Site { id: "adecco", name: "Adecco", country: "ca", kind: "Agency", about: "Temporary and permanent jobs across industries.", search: "https://www.adecco.com/en-ca/job-search?k={q}&l={l}", link: r"/job-search/[a-z0-9-]+/ca_en_[0-9_]+", browser: true },
     Site { id: "hays", name: "Hays", country: "ca", kind: "Agency", about: "Specialist roles in tech, construction, finance and more.", search: "https://www.hays.ca/job-search/{qs}-jobs-in-{ls}", link: r"/job-detail/|/jobs?/[^?#]*\d{5,}", browser: true },
-    Site { id: "aerotek", name: "Aerotek", country: "us", kind: "Agency", about: "Industrial, manufacturing and skilled trades roles.", search: "https://jobs.aerotek.com/us/en/search-results?keywords={q}&location={l}", link: r"/job/", browser: false },
+    Site { id: "aerotek", name: "Aerotek", country: "us", kind: "Agency", about: "Industrial, manufacturing and skilled trades roles in the United States (its site lists US jobs only).", search: "https://jobs.aerotek.com/us/en/search-results?keywords={q}&location={l}", link: r"/job/", browser: false },
     Site { id: "aplin", name: "Aplin", country: "ca", kind: "Agency", about: "Professional, contract and permanent roles across Canada.", search: "https://www.aplin.com/jobs/?search={q}", link: "", browser: false },
-    Site { id: "altis", name: "Altis Recruitment", country: "ca", kind: "Agency", about: "Administrative, customer service, marketing, finance and project roles.", search: "https://jobportal.altis.com/?keyword={q}", link: "", browser: true },
+    Site { id: "altis", name: "Altis Recruitment", country: "ca", kind: "Agency", about: "Administrative, customer service, marketing, finance and project roles.", search: "https://jobportal.altis.com/?keyword={q}", link: r"/jobs/\d+/[a-z0-9-]+", browser: true },
     Site { id: "lro", name: "LRO Staffing", country: "ca", kind: "Agency", about: "Professional, administrative and government-related roles, especially in Ottawa.", search: "https://jobs.lrostaffing.com/job-listings/", link: r"/job-post/", browser: false },
     Site { id: "locksearch", name: "Lock Search Group", country: "ca", kind: "Agency", about: "Specialized professional and senior roles.", search: "https://www.locksearchgroup.com/opportunities/", link: r"/(?:job|opportunit(?:y|ies))/[a-z0-9-]{8,}", browser: false },
-    Site { id: "peoplefirst", name: "People First HR", country: "ca", kind: "Agency", about: "Professional recruitment and executive roles, mostly in Manitoba.", search: "https://peoplefirsthr.com/jobs", link: "", browser: true },
+    Site { id: "peoplefirst", name: "People First HR", country: "ca", kind: "Agency", about: "Professional recruitment and executive roles in Manitoba (Winnipeg).", search: "https://peoplefirsthr.com/jobs", link: "", browser: true },
     Site { id: "jobsca", name: "Jobs.ca", country: "ca", kind: "Job site", about: "Canada's Jobs.ca network: also covers healthcarejobs.ca, techjobs.ca, itjobs.ca and salesrep.ca.", search: "https://www.jobs.ca/jobs?q={q}&l={l}", link: "", browser: true },
     Site { id: "techtalent", name: "Tech Talent Canada", country: "ca", kind: "Job site", about: "Canadian tech roles.", search: "https://jobs.techtalent.ca/?q={q}", link: r"/j/[a-z0-9-]+-[0-9a-f]{8,}", browser: true },
 ];
@@ -375,8 +375,185 @@ pub fn parse_page(t: &Target, html: &str, page_url: &str, place: &str) -> Vec<Po
     }
 }
 
-/// One search on a site.
+// --- sites read through their own job-search APIs -----------------------------------------------
+// Their pages only list jobs once scripts run (and turn plain requests away), but the scripts get
+// the jobs from an API that answers plain requests: Adecco, Altis and Randstad. Found by reading
+// the sites in a real browser (tools/render_sites.js on GitHub: Actions -> Checks -> sites).
+
+fn post_api(c: &reqwest::blocking::Client, url: &str, referer: &str, body: &Value) -> Result<Value, String> {
+    std::thread::sleep(Duration::from_millis(800));
+    let r = c.post(url)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+        .header("Accept", "application/json, text/plain, */*")
+        .header("Accept-Language", "en-CA,en;q=0.9")
+        .header("Referer", referer)
+        .header("Origin", url::Url::parse(referer).map(|u| u.origin().ascii_serialization()).unwrap_or_default())
+        .json(body)
+        .send().map_err(|e| format!("couldn't connect ({e})"))?;
+    let status = r.status().as_u16();
+    if status != 200 {
+        return Err(format!("the site's job search said {status}"));
+    }
+    r.json::<Value>().map_err(|e| format!("unreadable answer ({e})"))
+}
+
+/// Adecco Canada's job search, newest first, for a title (places are filtered afterwards).
+pub fn parse_adecco(t: &Target, v: &Value) -> Vec<Posting> {
+    v["jobs"].as_array().into_iter().flatten().filter_map(|j| {
+        let title = text(&j["jobTitle"]);
+        let id = text(&j["jobId"]);
+        if title.is_empty() || id.is_empty() {
+            return None;
+        }
+        let (city, region) = (text(&j["cityName"]), text(&j["stateName"]));
+        let place = Some(text(&j["jobLocation"])).filter(|l| !l.is_empty()).unwrap_or_else(|| [city.clone(), region.clone()].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", "));
+        let (lo, hi) = (j["minsalary"].as_f64(), j["maxsalary"].as_f64());
+        let hourly = text(&j["salaryTimeScaleID"]).eq_ignore_ascii_case("PERHOUR");
+        let salary = crate::sources::fmt_salary(lo, hi, "").map(|s| if hourly { format!("{s}/hour") } else { s });
+        Some(Posting {
+            source: t.id.clone(),
+            external_id: id.to_lowercase(),
+            company: t.name.clone(),
+            remote: j["isRemote"].as_bool().unwrap_or(false) || is_remote(&[&place, &title]),
+            url: format!("https://www.adecco.com/en-ca/job-search/{}/{}", slug(&format!("{title} {city} {region}")), id.to_lowercase()),
+            title,
+            location: place,
+            posted_at: Some(text(&j["postedDate"])).filter(|d| !d.is_empty()),
+            salary_max: if hourly { None } else { hi },
+            salary,
+            ..Posting::default()
+        })
+    }).collect()
+}
+
+fn adecco(c: &reqwest::blocking::Client, t: &Target, title: &str) -> Result<Vec<Posting>, String> {
+    let q = url::form_urlencoded::byte_serialize(title.as_bytes()).collect::<String>();
+    let body = serde_json::json!({ "queryString": format!("&q={q}&sort=PostedDate desc&rows=50"), "filtersToDisplay": "", "range": 0,
+        "siteName": "adecco", "brand": "adecco", "countryCode": "CA", "languageCode": "en-CA" });
+    Ok(parse_adecco(t, &post_api(c, "https://www.adecco.com/api/data/jobs/summarized", "https://www.adecco.com/en-ca/job-search", &body)?))
+}
+
+/// Altis Recruitment's job ads: [{jobId, jobTitle, location, datePosted, jobDescription, ...}].
+pub fn parse_altis(t: &Target, v: &Value) -> Vec<Posting> {
+    v.as_array().into_iter().flatten().filter_map(|j| {
+        let title = text(&j["jobTitle"]);
+        let id = j["jobId"].as_i64().map(|i| i.to_string()).unwrap_or_else(|| text(&j["jobId"]));
+        if title.is_empty() || id.is_empty() {
+            return None;
+        }
+        let place = text(&j["location"]);
+        let description = html_to_text(&text(&j["jobDescription"]));
+        // "11/3/2026 12:00:00 AM" as 2026-11-03.
+        let posted = chrono::NaiveDateTime::parse_from_str(&text(&j["datePosted"]), "%m/%d/%Y %I:%M:%S %p").ok().map(|d| d.date().to_string());
+        let pay = salary_from_text(&description);
+        Some(Posting {
+            source: t.id.clone(),
+            external_id: id.clone(),
+            company: t.name.clone(),
+            remote: is_remote(&[&place, &title, &text(&j["workArrangement"])]),
+            url: format!("https://jobportal.altis.com/jobs/{id}/{}", slug(&title)),
+            apply_email: find_apply_email(&description),
+            title,
+            location: place,
+            description,
+            posted_at: posted,
+            salary_max: pay.as_ref().and_then(|p| p.1),
+            salary: pay.map(|p| p.0),
+            ..Posting::default()
+        })
+    }).collect()
+}
+
+fn altis(c: &reqwest::blocking::Client, t: &Target, title: &str) -> Result<Vec<Posting>, String> {
+    let body = serde_json::json!({ "keyword": if title.is_empty() { Value::Null } else { title.into() }, "remoteWorkOptionId": null, "jobTypeIds": [],
+        "industryIds": [], "specializations": [], "locations": [], "businessType": "" });
+    Ok(parse_altis(t, &post_api(c, "https://apis.altisexcel.com/Applicant/jobs/ads/Search", "https://jobportal.altis.com/", &body)?))
+}
+
+/// Randstad Canada's job search (Elasticsearch hits): each hit's _source has the posting.
+pub fn parse_randstad(t: &Target, v: &Value) -> Vec<Posting> {
+    let hits = v["searchResults"]["hits"]["hits"].as_array().cloned().unwrap_or_default();
+    hits.iter().filter_map(|h| {
+        let s = &h["_source"];
+        let pick = |keys: &[&str]| keys.iter().map(|k| text(&s[*k])).find(|x| !x.is_empty()).unwrap_or_default();
+        let title = pick(&["Title", "JobTitle", "title", "jobTitle"]);
+        let id = Some(text(&h["_id"])).filter(|x| !x.is_empty()).unwrap_or_else(|| pick(&["JobId", "jobId", "Id"]));
+        if title.is_empty() || id.is_empty() {
+            return None;
+        }
+        let city = pick(&["City", "city", "Location", "location"]);
+        let region = pick(&["Province", "Region", "State", "region"]);
+        let place = [city.clone(), region].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", ");
+        let description = html_to_text(&pick(&["Description", "JobDescription", "description"]));
+        let link = pick(&["Url", "URL", "JobUrl", "url", "Slug"]);
+        let url = if link.starts_with("http") { link } else if link.starts_with('/') { format!("https://www.randstad.ca{link}") } else {
+            format!("https://www.randstad.ca/jobs/{}_{}_{id}/", slug(&title), slug(&city))
+        };
+        let pay = salary_from_text(&description);
+        Some(Posting {
+            source: t.id.clone(),
+            external_id: id,
+            company: t.name.clone(),
+            remote: is_remote(&[&place, &title]),
+            apply_email: find_apply_email(&description),
+            url,
+            title,
+            location: place,
+            description,
+            posted_at: Some(pick(&["PostedDate", "DatePosted", "postedDate", "CreatedDate"])).filter(|d| !d.is_empty()),
+            salary_max: pay.as_ref().and_then(|p| p.1),
+            salary: pay.map(|p| p.0),
+            ..Posting::default()
+        })
+    }).collect()
+}
+
+/// The request Randstad's own search page makes for "<title> jobs".
+pub fn randstad_body(title: &str) -> Value {
+    let qs = slug(title);
+    let path = if qs.is_empty() { "/jobs/".to_string() } else { format!("/jobs/q-{qs}/") };
+    serde_json::json!({ "data": {
+        "currentRoute": { "path": "/jobs/:searchParams*", "url": path, "isExact": true, "params": { "searchParams": path.trim_matches('/').trim_start_matches("jobs").trim_matches('/') }, "routeName": "search" },
+        "currentLanguage": "en",
+        "searchParams": { "isInternal": false, "locationData": {}, "specialism": null, "subSpecialism": null, "jobCategory": null, "keyword": title },
+        "cookies": { "sortBy": "date,relevancy" },
+        "searchData": { "originalLocation": format!("https://www.randstad.ca{path}") },
+    } })
+}
+
+fn randstad(c: &reqwest::blocking::Client, t: &Target, title: &str) -> Result<Vec<Posting>, String> {
+    let referer = format!("https://www.randstad.ca/jobs/q-{}/", slug(title));
+    Ok(parse_randstad(t, &post_api(c, "https://www.randstad.ca/api/search/search-results", &referer, &randstad_body(title))?))
+}
+
+/// A site's own job-search API, for the sites that have one Job Hunt knows (None: read its page).
+fn api_search(c: &reqwest::blocking::Client, t: &Target, title: &str) -> Option<Result<Vec<Posting>, String>> {
+    match t.id.as_str() {
+        "adecco" => Some(adecco(c, t, title)),
+        "altis" => Some(altis(c, t, title)),
+        "randstad" => Some(randstad(c, t, title)),
+        _ => None,
+    }
+}
+
+/// One search on a site: its API when it has one that answers, else its search page.
 pub fn search(c: &reqwest::blocking::Client, t: &Target, title: &str, place: &str) -> Result<Vec<Posting>, String> {
+    let api = api_search(c, t, title);
+    if let Some(Ok(list)) = &api {
+        if !list.is_empty() {
+            return Ok(list.clone());
+        }
+    }
+    let page = search_page(c, t, title, place);
+    match (page, api) {
+        // The API said there are none, and the page agrees (or can't be read).
+        (Ok(l), Some(Ok(_))) if l.is_empty() => Ok(l),
+        (Err(_), Some(Ok(none))) => Ok(none),
+        (page, _) => page,
+    }
+}
+
+fn search_page(c: &reqwest::blocking::Client, t: &Target, title: &str, place: &str) -> Result<Vec<Posting>, String> {
     let url = search_url(t, title, place);
     let (html, in_browser) = read(c, &url, t.browser)?;
     let list = parse_page(t, &html, &url, place);
@@ -489,6 +666,29 @@ pub fn details(c: &reqwest::blocking::Client, postings: &mut [&mut Posting], max
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn adecco_and_altis_from_their_apis() {
+        let t = |id: &str, name: &str| super::Target { id: id.into(), name: name.into(), search: String::new(), link: String::new(), browser: false };
+        // As Adecco's job search answered (trimmed).
+        let a = serde_json::json!({ "jobs": [{ "jobTitle": "Plumber", "jobId": "CA_EN_1_026659_2621332", "minsalary": 35, "maxsalary": 50, "salaryTimeScaleID": "PERHOUR",
+            "jobLocation": "Sault Ste Marie, Ontario", "isRemote": false, "postedDate": "2026-11-03T19:42:03Z", "cityName": "Sault Ste Marie", "stateName": "Ontario" }] });
+        let p = &super::parse_adecco(&t("adecco", "Adecco"), &a)[0];
+        assert_eq!((p.title.as_str(), p.location.as_str(), p.external_id.as_str()), ("Plumber", "Sault Ste Marie, Ontario", "ca_en_1_026659_2621332"));
+        assert_eq!(p.url, "https://www.adecco.com/en-ca/job-search/plumber-sault-ste-marie-ontario/ca_en_1_026659_2621332");
+        assert_eq!((p.salary.as_deref(), p.salary_max), (Some("35–50/hour"), None));
+        // As Altis's job ads answered (trimmed).
+        let l = serde_json::json!([{ "jobId": 25635, "jobType": "Permanent", "jobTitle": "Production Supervisor (Evening Shift)", "datePosted": "11/3/2026 12:00:00 AM",
+            "location": "Brampton, ON", "jobDescription": "<div><p>Lead the evening shift of a production team of 20, with safety and quality targets.</p></div>" }]);
+        let p = &super::parse_altis(&t("altis", "Altis Recruitment"), &l)[0];
+        assert_eq!((p.title.as_str(), p.location.as_str(), p.posted_at.as_deref()), ("Production Supervisor (Evening Shift)", "Brampton, ON", Some("2026-11-03")));
+        assert_eq!(p.url, "https://jobportal.altis.com/jobs/25635/production-supervisor-evening-shift");
+        assert!(p.description.contains("evening shift"));
+        // Randstad's hits: the posting is in each hit's _source.
+        let r = serde_json::json!({ "searchResults": { "hits": { "total": 1, "hits": [{ "_id": "47703962", "_source": { "Title": "Program Manager", "City": "Toronto", "Province": "Ontario" } }] } } });
+        let p = &super::parse_randstad(&t("randstad", "Randstad"), &r)[0];
+        assert_eq!((p.title.as_str(), p.location.as_str(), p.external_id.as_str()), ("Program Manager", "Toronto, Ontario", "47703962"));
+    }
+
     #[test]
     fn posting_from_its_page() {
         let ld = r#"<html><head><title>x</title><script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting",
