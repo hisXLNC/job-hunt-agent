@@ -157,6 +157,25 @@ fn deadline_of(claude: &str, text: &str) -> Option<String> {
         .map(|d| d.to_string())
 }
 
+/// A problem's message short enough for a notice: whole sentences up to about 200 characters
+/// (never cut mid-word), with "…" when there was more.
+fn short_problem(text: &str) -> String {
+    let text = text.trim();
+    if text.chars().count() <= 200 {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    for sentence in text.split_inclusive(". ") {
+        if !out.is_empty() && out.chars().count() + sentence.chars().count() > 200 {
+            return format!("{}…", out.trim_end().trim_end_matches('.'));
+        }
+        out.push_str(sentence);
+    }
+    // One long sentence: cut at a word.
+    let cut: String = text.chars().take(200).collect();
+    format!("{}…", cut.rsplit_once(' ').map(|x| x.0).unwrap_or(&cut))
+}
+
 /// One field of a CSV file, quoted.
 fn csv_field(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\"").replace(['\r', '\n'], " "))
@@ -3225,15 +3244,23 @@ replies and interviews, and a little lower for kinds that got none from several 
             let at = |k: &str| chrono::DateTime::parse_from_rfc3339(&self.secret(k)).ok();
             let when = chrono::DateTime::parse_from_rfc3339(&e.created_at).ok();
             let ok_key = match kind.as_str() { "search" => "last.search", "inbox" => "last.inbox", "sync" => "last.sync", "backup" => "last.backup", _ => "last.check" };
-            let google = kind == "inbox" || kind == "sync" && self.secret("sync.where") == "drive";
+            let signed_out = e.detail.contains("Google signed Job Hunt out");
+            let google = kind == "inbox" || kind == "sync" && self.secret("sync.where") == "drive" || signed_out;
             let fixed = |k: &str| matches!((when, at(k)), (Some(w), Some(t)) if t > w);
             if fixed(ok_key) || google && fixed("google.at") {
                 continue;
             }
             if ["search", "inbox", "sync", "backup", "check"].contains(&kind.as_str()) && seen.insert(kind.clone()) {
                 let what = match kind.as_str() { "search" => "Job search", "inbox" => "Email check", "sync" => "Sync", "backup" => "Backup", _ => "Posting check" };
-                let detail: String = e.detail.chars().take(160).collect();
+                let detail = short_problem(&e.detail);
                 match kind.as_str() {
+                    // One notice with the way out, whichever task found it (the advice is in Settings).
+                    _ if signed_out => {
+                        if seen.insert("google-signed-out".into()) {
+                            fix(&mut out, "warn", format!("Google signed Job Hunt out, so the {} stopped. Reconnect it; if it happens again a week later, \
+publish your Google project (Settings \u{2192} Connections explains how).", what.to_lowercase()), "Reconnect Google", "google", "");
+                        }
+                    }
                     // Trying again doesn't help without a CV: the link goes where you add one.
                     _ if detail.contains("No CV") => add(&mut out, "warn", format!("{what} is waiting for your CV. Add one in CV & Career."), "#cvs"),
                     "search" | "inbox" => fix(&mut out, "warn", format!("{what} had a problem: {detail}"), "Try again", "run", &kind),

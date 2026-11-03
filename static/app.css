@@ -878,3 +878,7 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 .title-ideas .idea-row .grow { flex: 1; min-width: 0; }
 .coach-skill > .row { flex-wrap: nowrap; gap: 8px; align-items: flex-start; }
 .coach-skill .pill { white-space: nowrap; }
+
+/* The running search's menu at the top of the Overview. */
+.search-now { display: flex; flex-direction: column; gap: 6px; min-width: 280px; max-width: 360px; padding: 12px 14px; }
+.search-now .row { gap: 6px; margin-top: 4px; }

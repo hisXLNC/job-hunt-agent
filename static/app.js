@@ -134,10 +134,7 @@ function homeHead(on, about, between = '') {
           <button data-act="run" data-task="inbox" ${o.setup?.google ? '' : 'disabled title="Connect Google first"'}>${svg('mail')}Check email now</button>
         </div></details>
         ${scheduleMenu(o.side?.paused)}
-        ${searching ? (o.progress?.paused
-            ? `<button class="btn primary" data-act="searchHold" data-on="0" title="Carries on from where it paused">${svg('search')}Resume search · ${o.progress?.percent ?? 0}%</button>`
-            : `<button class="btn" data-act="searchHold" data-on="1" title="Pauses after the step it's on; Resume carries on from there"><span class="spin" data-p="${o.progress?.percent ?? 0}"></span>Pause · ${o.progress?.percent ?? 0}%</button>`)
-          + `<button class="btn ghost danger" data-act="searchStop" title="Ends the search after the step it's on; what it found so far is kept">Stop</button>`
+        ${searching ? searchCtl(o.progress)
           : `<button class="btn primary" data-act="run" data-task="search" ${!o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${svg('search')}Search for jobs now</button>`}
       </div>
     </div>
@@ -357,6 +354,7 @@ function renderNav() {
   $('#tabbar').innerHTML = [['overview', 'Overview'], ['applications', 'Jobs'], ['cvs', 'CVs'], ['inbox', 'Inbox']].map(([id, name]) =>
     `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}<span>${name}</span>${id === 'overview' && ready ? `<span class="badge">${ready}</span>` : ''}</a>`).join('')
     + `<button type="button" class="${more ? 'on' : ''}" data-act="moreMenu" aria-expanded="${document.body.classList.contains('more-open')}">${svg('more')}<span>More</span>${!$('#connLine')?.hidden || !$('#limitLine')?.hidden || !$('#updateNote')?.hidden ? '<span class="badge dot-badge"></span>' : ''}</button>`;
+  updateSearchCtl();
   $('#runNote').textContent = busy || `Searched ${ago(overview?.last_search)}${side.paused ? ` · ${side.paused === 'off' ? 'daily search off' : `paused until ${new Date(side.paused).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}` : nextSearch ? ` · next ${when(nextSearch)}` : overview?.last_search ? ' · next soon' : ''}`;
   $('#dotRun').className = 'dot' + (busy ? ' busy' : side.paused ? ' warn' : ' on');
   const g = overview?.setup?.google;
@@ -1061,6 +1059,52 @@ function inUseHtml(u) {
 }
 
 // ---- Search progress ----
+/** What the search is doing, in a line: "Scoring postings (12 of 40)". */
+function stageLine(pr) {
+  if (!pr) return '';
+  const count = pr.total ? ` (${Math.min(pr.done + 1, pr.total)} of ${pr.total})` : '';
+  return `${pr.paused ? 'Paused: ' : ''}${pr.stage || 'Starting the search'}${count}`;
+}
+/** The running search at the top of the Overview: its progress, and a menu with what it's doing
+ * now and Pause / Resume / Stop. Kept up to date in place by updateSearchCtl. */
+function searchCtl(pr) {
+  pr = pr || {};
+  return `<details class="menu" id="searchCtl"><summary class="btn${pr.paused ? ' primary' : ''}" data-sv="summary" title="${esc(stageLine(pr))}">
+      <span class="spin" data-sv="bar" data-p="${pr.percent ?? 0}"></span><span data-sv="label">${pr.paused ? 'Paused' : 'Searching'} · ${pr.percent ?? 0}%</span><span class="caret">▾</span></summary>
+    <div class="menu-list right search-now">
+      <b data-sv="stage">${esc(stageLine(pr))}</b>
+      <span class="muted small" data-sv="detail">${esc(pr.detail || '')}</span>
+      <span class="small" data-sv="counts">${searchCounts(pr)}</span>
+      <div class="row">
+        <button class="btn sm${pr.paused ? ' primary' : ''}" data-act="searchHold" data-sv="hold" data-on="${pr.paused ? '0' : '1'}">${pr.paused ? 'Resume' : 'Pause'}</button>
+        <button class="btn ghost danger sm" data-act="searchStop" title="Ends the search after the step it's on; what it found so far is kept">Stop</button>
+      </div>
+    </div></details>`;
+}
+const searchCounts = pr => `${pr.found ?? 0} found · ${pr.new ?? 0} new · ${pr.scored ?? 0} scored · ${pr.tailored ?? 0} tailored`;
+/** Bring the search menu and the sidebar's line up to date without redrawing anything else. */
+function updateSearchCtl() {
+  const pr = overview?.progress;
+  $('#runLine').title = pr ? `${stageLine(pr)}${pr.detail ? ` – ${pr.detail}` : ''}` : '';
+  const box = $('#searchCtl');
+  if (!box || !pr) return;
+  const set = (k, v) => { const el = box.querySelector(`[data-sv="${k}"]`); if (el && el.textContent !== v) el.textContent = v; };
+  set('label', `${pr.paused ? 'Paused' : 'Searching'} · ${pr.percent}%`);
+  set('stage', stageLine(pr));
+  set('detail', pr.detail || '');
+  set('counts', searchCounts(pr));
+  box.querySelector('[data-sv="bar"]').dataset.p = pr.percent;
+  const sum = box.querySelector('[data-sv="summary"]');
+  sum.title = stageLine(pr);
+  sum.classList.toggle('primary', !!pr.paused);
+  const hold = box.querySelector('[data-sv="hold"]');
+  if (hold.dataset.on !== (pr.paused ? '0' : '1')) {
+    hold.dataset.on = pr.paused ? '0' : '1';
+    hold.textContent = pr.paused ? 'Resume' : 'Pause';
+    hold.classList.toggle('primary', !!pr.paused);
+  }
+}
+
 function progressHtml(pr) {
   if (!pr) return '';
   const count = pr.total ? ` ${Math.min(pr.done + 1, pr.total)} of ${pr.total}` : '';
@@ -1101,6 +1145,7 @@ function reportHtml(r) {
 setInterval(async () => {
   if (!overview?.progress) return;
   await refreshOverview();
+  updateSearchCtl();
   const card = $('#progressCard');
   if (card && overview.progress) card.outerHTML = progressHtml(overview.progress);
   else if (card || !overview.progress) { if (location.hash === '' || location.hash === '#overview') route(); }
@@ -2778,7 +2823,9 @@ async function act(el) {
     return busy(async () => {
       const r = await api('/api/search/hold', { method: 'POST', body: { on } });
       toast(!r.running ? 'No search is running.' : on ? 'Pausing the search after the step it\'s on. Resume carries on from there.' : 'Resuming the search.');
-      await refreshOverview(); route();
+      await refreshOverview();
+      const card = $('#progressCard');
+      if (card && overview?.progress) card.outerHTML = progressHtml(overview.progress);
     });
   }
   if (a === 'searchStop') {
