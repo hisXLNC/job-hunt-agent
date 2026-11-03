@@ -3289,11 +3289,11 @@ async function act(el) {
     return busy(async () => { toast('Converting with Claude. This can take a minute…'); await api(`/api/cvs/${encodeURIComponent(cvId)}/convert`, { method: 'POST' }); await refreshOverview(); route(); }, 'Converted. Open it to check.');
   }
   if (a === 'removeCv') {
-    if (!await ask('Remove this CV from Job Hunt? Jobs it scored are scored again against your other CVs, and applications tailored from it that are waiting for your approval are tailored again from the CV that fits best. Ones you\'ve edited, approved or sent stay as they are. If this is your only CV, they keep what they have until you add another and tailor them again.')) return;
+    if (!await ask('Remove this CV from Job Hunt? Jobs it scored are scored again against your other CVs, and applications tailored from it that are waiting for your approval are tailored again from the CV that fits best. Ones you\'ve edited, approved or sent stay as they are; on a re-tailored one, Undo last CV change and Undo last letter change bring back what it had. If this is your only CV, it all happens when you add your next one.')) return;
     return busy(async () => {
       const r = await api(`/api/cvs/${encodeURIComponent(cvId)}/remove`, { method: 'POST' });
       await refreshOverview(); route();
-      toast(overview?.setup?.cvs ? `Removed.${cvChangeNote(r.change)}` : 'Removed. Jobs it scored are unscored until you add a CV; tailored applications keep their files until you tailor them again.');
+      toast(overview?.setup?.cvs ? `Removed.${cvChangeNote(r.change)}` : 'Removed. Jobs it scored and tailored are redone as soon as you add a CV.');
     });
   }
   if (a === 'checkClaude') { const w = $('#welcomeClaude'); if (w) return welcomeClaude(true); return checkClaude(true); }

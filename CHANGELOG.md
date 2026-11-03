@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.15.1] - 2026-11-03
+
+Nothing lost when your CV changes.
+
+### Changes
+
+- Before an application is tailored again with a new CV, what it had is kept: Undo last CV change and Undo last letter change bring it back, so edits made before Job Hunt recorded them aren't lost.
+- Removing your only CV no longer leaves its jobs stuck: they're scored and tailored again as soon as you add a CV.
+
 ## [2.15.0] - 2026-11-03
 
 A new CV is used everywhere.
@@ -876,6 +885,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.15.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.15.1
 [2.15.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.15.0
 [2.14.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.14.0
 [2.13.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.13.0

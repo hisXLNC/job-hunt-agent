@@ -227,7 +227,8 @@ fn label(category: &str) -> Option<&'static str> {
 }
 
 /// What a change of CV (replaced or removed) leaves to redo: see Agent::cv_changed.
-#[derive(Serialize, Default, Debug, Clone, PartialEq)]
+#[derive(Serialize, serde::Deserialize, Default, Debug, Clone, PartialEq)]
+#[serde(default)]
 pub struct CvChange {
     /// Jobs whose fit was against the old CV: to score again.
     pub unscored: Vec<String>,
@@ -3750,6 +3751,9 @@ replies and interviews, and a little lower for kinds that got none from several 
                 c.kept += 1;
                 continue;
             }
+            // What you had, kept for Put back as it was (an edit from before edits were recorded
+            // would otherwise be lost).
+            self.keep_for_undo(&j)?;
             // Its fit was against the old CV too: scored again before it's tailored again.
             self.db().update_job(&j.id, &[("score", Value::Null), ("score_potential", Value::Null), ("track", if removed { Value::Null } else { id.into() })])?;
             self.db().log(Some(&j.id), "cv-changed", &format!("the {label} CV {what}: tailoring it again"))?;
@@ -3758,10 +3762,38 @@ replies and interviews, and a little lower for kinds that got none from several 
         Ok(c)
     }
 
+    /// Keep an application's tailored CV and cover letter as they are, so Put back as it was can
+    /// restore them after they're tailored again.
+    fn keep_for_undo(&self, j: &Job) -> R<()> {
+        let db = self.db();
+        if let Some(path) = j.cv_path.as_deref().filter(|p| Path::new(p).is_file()) {
+            let backup = Path::new(path).with_extension("before-revision.docx");
+            if std::fs::copy(path, &backup).is_ok() {
+                db.set(&format!("undo:{}:cv", j.id), &json!({ "file": backup, "cv_changes": j.cv_changes, "coverage_after": j.coverage_after, "keyword_gaps": j.keyword_gaps }).to_string())?;
+            }
+        }
+        if let Some(l) = j.cover_letter.as_deref().filter(|l| !l.trim().is_empty()) {
+            db.set(&format!("undo:{}:letter", j.id), &json!({ "letter": l }).to_string())?;
+        }
+        Ok(())
+    }
+
     /// Redo what a change of CV left to redo, in the background: fits first, then tailoring (three
-    /// at a time, held for later if Claude reaches its usage limit).
+    /// at a time, held for later if Claude reaches its usage limit). With no CV left, it waits for
+    /// the next one you add (see after_cv_added).
     pub fn apply_cv_change(self: &Arc<Self>, c: CvChange) {
         if c.unscored.is_empty() && c.retailor.is_empty() {
+            return;
+        }
+        if self.cv_texts(&self.profile()).is_empty() {
+            let mut waiting: CvChange = serde_json::from_str(&self.secret("cv.waiting")).unwrap_or_default();
+            for id in c.unscored {
+                if !waiting.unscored.contains(&id) { waiting.unscored.push(id) }
+            }
+            for id in c.retailor {
+                if !waiting.retailor.contains(&id) { waiting.retailor.push(id) }
+            }
+            let _ = self.db().set("cv.waiting", &serde_json::to_string(&waiting).unwrap_or_default());
             return;
         }
         let a = self.clone();
@@ -3775,6 +3807,25 @@ replies and interviews, and a little lower for kinds that got none from several 
                 let _ = a.tailor_picked(&c.retailor);
             }
         });
+    }
+
+    /// A CV was added: what a removed CV left waiting (your only one, so nothing to redo it with)
+    /// is scored and tailored now, from the new one. Returns what was started.
+    pub fn after_cv_added(self: &Arc<Self>) -> CvChange {
+        let waiting: CvChange = serde_json::from_str(&self.secret("cv.waiting")).unwrap_or_default();
+        if waiting.unscored.is_empty() && waiting.retailor.is_empty() {
+            return waiting;
+        }
+        let _ = self.db().delete("cv.waiting");
+        // Only what's still waiting: you may have tailored, sent or removed some meanwhile.
+        let still = |id: &String, statuses: &[&str]| self.db().job(id).ok().flatten().is_some_and(|j| j.score.is_none() && statuses.contains(&j.status.as_str()));
+        let c = CvChange {
+            unscored: waiting.unscored.iter().filter(|id| still(id, &["queued", "skipped", "saved", "dismissed"])).cloned().collect(),
+            retailor: waiting.retailor.iter().filter(|id| still(id, &["ready"])).cloned().collect(),
+            kept: 0,
+        };
+        self.apply_cv_change(c.clone());
+        c
     }
 
     /// Score these jobs against your CVs as they are now, up to the per-search cap (the rest can
@@ -7185,6 +7236,26 @@ mod tests {
         let h = s.agent.db().history(&ready[0].id).unwrap();
         assert!(h.iter().position(|e| e.kind == "tailored") < h.iter().position(|e| e.kind == "cv-changed"), "tailored after the change");
         assert_eq!(s.agent.db().job(&ready[1].id).unwrap().unwrap().cover_letter.as_deref(), Some("Dear team,\n\nMy own words.\n\nJane"));
+    }
+
+    #[test]
+    fn removing_your_only_cv_redoes_its_work_with_the_next() {
+        let s = setup();
+        s.agent.search(Some(vec![posting("Program Manager", "1")])).unwrap();
+        let j = s.agent.db().jobs(Some("ready"), 10).unwrap().remove(0);
+        // Every CV with a file goes, the tailored application's work with it.
+        for t in s.agent.profile().tracks {
+            let c = s.agent.remove_cv(&t.name).unwrap();
+            s.agent.apply_cv_change(c);
+        }
+        assert!(s.agent.secret("cv.waiting").contains(&j.id), "waiting for a CV");
+        // What it had can be put back once it's tailored again.
+        assert!(s.agent.can_undo(&j.id, "letter") && s.agent.can_undo(&j.id, "cv"));
+        // A new CV: the waiting work starts, with it.
+        s.agent.add_cv("new.txt", "Alex Morgan\nProgram manager\n".repeat(20).as_bytes(), false).unwrap();
+        let c = s.agent.after_cv_added();
+        assert_eq!(c.retailor, vec![j.id.clone()]);
+        assert!(s.agent.secret("cv.waiting").is_empty());
     }
 
     #[test]

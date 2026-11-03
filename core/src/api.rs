@@ -1556,7 +1556,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             let name = req.query.get("filename").cloned().unwrap_or_else(|| "CV.docx".into());
             let t = agent.add_cv(&name, &req.body, req.query.get("convert").is_some())?;
             start_career(agent);
-            Ok(Resp::json(&json!({ "ok": true, "track": t })))
+            // Work a removed CV left waiting (it was your only one) is redone with this one.
+            let change = agent.after_cv_added();
+            Ok(Resp::json(&json!({ "ok": true, "track": t, "change": change })))
         }
         ["api", "cvs", id, action] => {
             if !agent.profile().tracks.iter().any(|t| t.name == *id) {

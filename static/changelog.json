@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.15.1",
+    "date": "2026-11-03",
+    "title": "Nothing lost when your CV changes",
+    "changes": [
+      "Before an application is tailored again with a new CV, what it had is kept: Undo last CV change and Undo last letter change bring it back, so edits made before Job Hunt recorded them aren't lost.",
+      "Removing your only CV no longer leaves its jobs stuck: they're scored and tailored again as soon as you add a CV."
+    ]
+  },
+  {
     "version": "2.15.0",
     "date": "2026-11-03",
     "title": "A new CV is used everywhere",
