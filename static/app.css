@@ -252,7 +252,11 @@ td.fit { white-space: nowrap; }
 /* toast */
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 8px; box-shadow: var(--shadow); z-index: 60; max-width: 560px; }
 .toast.err { background: var(--crit); color: #fff; }
-.spin { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: rot .8s linear infinite; }
+/* A small progress bar where work is under way (see tickBars in app.js). */
+.spin { --p: .04; position: relative; display: inline-block; width: 56px; height: 6px; margin-right: 8px; vertical-align: middle; border-radius: 3px; overflow: hidden; background: color-mix(in srgb, currentColor 18%, transparent); flex: none; }
+.spin::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--p) * 100%); border-radius: 3px; background: var(--accent); transition: width .4s linear; }
+.btn .spin::after, .btn.danger .spin::after { background: currentColor; }
+@media (prefers-reduced-motion: reduce) { .spin::after { transition: none; } }
 @keyframes rot { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
@@ -855,7 +859,7 @@ a.qt:hover { text-decoration: underline; }
 /* The daily search's state, in the Overview header and Settings. */
 .sched-menu summary.paused { color: #A86E0B; border-color: #E3A83C; }
 .menu-note { padding: 6px 12px 4px; margin: 0; }
-.btn.danger .spin { border-color: currentColor; border-right-color: transparent; }
+
 #t-docs .file-slots .btn { justify-content: center; padding-left: 6px; padding-right: 6px; }
 #t-docs td:nth-child(2) { max-width: 220px; } #t-docs td:nth-child(3) { max-width: 120px; }
 section.card:has(> #t-docs) { overflow-x: auto; }
