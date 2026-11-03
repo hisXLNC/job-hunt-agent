@@ -1013,7 +1013,7 @@ function stepHtml(o, step, tracked) {
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span></label>
       <span class="why small">${whyFits(j)}</span>
       <span class="row todo-act">${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('');
-    groups.push([`Pick from ${picking.length} new match${picking.length === 1 ? '' : 'es'}`, `<div data-pickbox>
+    groups.push([`Pick from <span data-pickhead>${picking.length} new match${picking.length === 1 ? '' : 'es'}</span>`, `<div data-pickbox>
     <div class="row" style="margin:2px 0 8px">${picking.length > 5 ? '<button class="btn sm" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost sm" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork}…</span>` : ''}</div>
     <div class="pick-filters">
       <label class="small">Sort by <select data-pickf="sort">${opt('fit', 'Best fit')}${opt('reach', 'Fit after tailoring')}${opt('new', 'Newest')}${opt('pay', 'Highest pay')}${opt('rating', 'Best-rated company')}</select></label>
@@ -2425,8 +2425,14 @@ function applyPickView(box, saved) {
     else shown++;
     list.appendChild(r);
   }
+  // With filters on, every count says what you can see, and how to see the rest.
+  const hidden = rows.length - shown;
   const count = box.querySelector('[data-pickcount]');
-  if (count) count.textContent = shown < rows.length ? `Showing ${shown} of ${rows.length}` : '';
+  if (count) count.innerHTML = hidden ? `<b>${hidden} hidden by your filters.</b> <button class="btn ghost sm" type="button" data-act="pickShowAll">Show all ${rows.length}</button>` : '';
+  const head = document.querySelector('[data-pickhead]');
+  if (head) head.textContent = hidden ? `${shown} of ${rows.length} new matches` : `${rows.length} new match${rows.length === 1 ? '' : 'es'}`;
+  const chip = document.querySelector('.flow a[href="#overview/pick"] .flow-c');
+  if (chip) { chip.textContent = String(shown); chip.title = hidden ? `${shown} shown, ${hidden} hidden by your filters` : ''; }
   pickChanged(box);
 }
 function restorePickViews() {
@@ -3033,6 +3039,12 @@ async function act(el) {
     const top = new Set([...all].sort((a, b) => score(b) - score(a)).slice(0, Number(el.dataset.n)));
     all.forEach(c => { c.checked = top.has(c); });
     pickChanged(box);
+    return;
+  }
+  if (a === 'pickShowAll') {
+    const box = el.closest('[data-pickbox]');
+    box.querySelectorAll('[data-pickf]').forEach(f => { if (f.type === 'checkbox') f.checked = false; else if (f.dataset.pickf !== 'sort') f.value = f.querySelector('option')?.value ?? ''; });
+    applyPickView(box);
     return;
   }
   if (a === 'pickAll') {

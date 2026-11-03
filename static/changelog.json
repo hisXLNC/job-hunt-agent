@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.17.1",
+    "date": "2026-11-03",
+    "title": "Pick counts that match what you see",
+    "changes": [
+      "With Pick list filters on (like Shows pay), the Pick count and heading say how many you can see (\"5 of 16\"), with how many are hidden and a Show all button."
+    ]
+  },
+  {
     "version": "2.17.0",
     "date": "2026-11-03",
     "title": "Pause searches, more from recruiters, and less of your Claude plan",

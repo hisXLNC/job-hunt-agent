@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.17.1] - 2026-11-03
+
+Pick counts that match what you see.
+
+### Changes
+
+- With Pick list filters on (like Shows pay), the Pick count and heading say how many you can see ("5 of 16"), with how many are hidden and a Show all button.
+
 ## [2.17.0] - 2026-11-03
 
 Pause searches, more from recruiters, and less of your Claude plan.
@@ -908,6 +916,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.17.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.1
 [2.17.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.0
 [2.16.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.16.0
 [2.15.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.15.1
