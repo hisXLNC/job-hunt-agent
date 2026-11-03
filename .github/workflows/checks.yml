@@ -71,9 +71,10 @@ jobs:
           K: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: '[ -n "$K" ] && echo "::notice::TAURI_SIGNING_PRIVATE_KEY is set" || echo "::warning::TAURI_SIGNING_PRIVATE_KEY isn''t set"'
 
-  # The sites read through their own job-search APIs, quickly (a few minutes).
+  # The sites read through their own job-search APIs, quickly (a few minutes): on its own, or first
+  # with the rest of "sites".
   site-apis:
-    if: inputs.what == 'site-apis'
+    if: inputs.what == 'site-apis' || inputs.what == 'sites'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -87,7 +88,8 @@ jobs:
         run: cargo run --quiet --example site_api_check -- "Program Manager" "Toronto, ON"
 
   # What each recruiter and job site answers when Job Hunt reads it (the cloud sessions can't reach them).
-  sites:
+  # Employers' own careers sites, and how much the sources overlap: slow, so a job of their own.
+  sources:
     if: inputs.what == 'sites'
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -105,6 +107,17 @@ jobs:
         if: always()
         working-directory: core
         run: cargo run --quiet --example overlap_check -- "Tax Manager|Senior Accountant|Program Manager|Financial Analyst" "Toronto, ON|Halifax, NS" 2>/dev/null
+
+  sites:
+    if: inputs.what == 'sites'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
       - name: Each site, read the way a search reads it
         working-directory: core
         run: cargo run --quiet --example site_check -- "Accountant" "Toronto, ON"
