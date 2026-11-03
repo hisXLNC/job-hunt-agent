@@ -1116,6 +1116,8 @@ pub struct Claude {
     /// hard Claude thinks ("low", "medium" or "high"). See Settings → Accounts.
     pub tailor_model: String,
     pub tailor_effort: String,
+    /// For scoring postings, the most frequent request: "sonnet" or "opus" (empty: the model above).
+    pub score_model: String,
     http: reqwest::blocking::Client,
 }
 
@@ -1135,6 +1137,9 @@ claims, no contractions, \"Dear Hiring Committee\" when no name is given, and \"
 /// The tailoring model and effort to use when none is set.
 pub const TAILOR_MODEL: &str = "opus";
 pub const TAILOR_EFFORT: &str = "medium";
+/// Scoring needs judgement, not prose: Sonnet does it nearly as well as Opus on a fraction of your
+/// plan's usage, and scoring is most of what a search asks of Claude.
+pub const SCORE_MODEL: &str = "sonnet";
 
 /// A model name for the engine: Claude Code takes "opus" and "sonnet" as they are; the API needs
 /// a full model id.
@@ -1187,6 +1192,7 @@ impl Claude {
             model: model.trim().to_string(),
             tailor_model: TAILOR_MODEL.into(),
             tailor_effort: TAILOR_EFFORT.into(),
+            score_model: SCORE_MODEL.into(),
             http: reqwest::blocking::Client::builder().timeout(Duration::from_secs(600)).build().expect("http client"),
         }
     }
@@ -1304,7 +1310,8 @@ impl Llm for Claude {
         // Scoring needs the role and its requirements, which come well within the first 10,000
         // characters once the boilerplate is out; it's the most frequent request, so it's kept lean.
         let user = posting_block_max(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description, 10000);
-        let mut s: JobScore = self.call(&scorer_system(cvs, guidance), &user, score_schema(), "medium")?;
+        let model = if self.score_model.trim().is_empty() { self.model.as_str() } else { self.score_model.as_str() };
+        let mut s: JobScore = self.call_as(model, &scorer_system(cvs, guidance), &user, score_schema(), "medium")?;
         s.score = s.score.clamp(0, 100);
         s.potential = s.potential.map(|p| p.clamp(s.score, 100));
         if !cvs.iter().any(|(n, _)| *n == s.track) {

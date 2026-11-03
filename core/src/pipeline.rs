@@ -512,6 +512,10 @@ impl Agent {
         if let Some(e) = self.db().get("claude.tailor_effort").ok().flatten().filter(|e| !e.is_empty()) {
             claude.tailor_effort = e;
         }
+        // Never chosen: Sonnet (see claude::SCORE_MODEL); chosen "" means the model for everything else.
+        if let Some(m) = self.db().get("claude.score_model").ok().flatten() {
+            claude.score_model = m;
+        }
         *self.llm.write().unwrap() = Arc::new(crate::usage::Metered { inner: Arc::new(claude), log: self.usage.clone() });
         let client = self.google_client();
         let token = self.secret("google.token");
@@ -1391,15 +1395,30 @@ replies and interviews, and a little lower for kinds that got none from several 
 
     /// Search every source (or score the given postings), score what's new and tailor the best.
     pub fn search(&self, postings: Option<Vec<Posting>>) -> R<Report> {
-        self.search_with(postings, false)
+        self.search_with(postings, false, None)
     }
 
     /// A search that also re-checks postings filtered out earlier, against your current CVs and settings.
     pub fn force_search(&self) -> R<Report> {
-        self.search_with(None, true)
+        self.search_with(None, true, None)
     }
 
-    fn search_with(&self, postings: Option<Vec<Posting>>, force: bool) -> R<Report> {
+    /// Postings a search found but couldn't score yet (see hold), waiting for the next one.
+    pub fn held_count(&self) -> usize {
+        serde_json::from_str::<Vec<Value>>(&self.secret("search.held")).map(|l| l.len()).unwrap_or(0)
+    }
+
+    /// Score a small batch of the postings the last search couldn't get to: a quarter of your
+    /// per-search limit (5 to 15), so a big search is scored through the day, a little at a time,
+    /// rather than all at once against your Claude plan's limit, or not until tomorrow's search.
+    /// It doesn't count as a search: your last search and its report stay as they are.
+    pub fn score_held(&self) -> R<Report> {
+        let batch = (self.profile().max_scored_per_run / 4).clamp(5, 15);
+        self.search_with(Some(vec![]), false, Some(batch))
+    }
+
+    /// `batch`: only score held postings, at most this many, quietly (see score_held).
+    fn search_with(&self, postings: Option<Vec<Posting>>, force: bool, batch: Option<usize>) -> R<Report> {
         if self.is_running("update") {
             return err("Job Hunt is about to restart for an update; it searches again after.");
         }
@@ -1421,7 +1440,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             return err("No CV uploaded yet. Add one in CV & Career.");
         }
         let mut report = Report::default();
-        let cap = profile.max_scored_per_run.max(1);
+        let cap = batch.unwrap_or(profile.max_scored_per_run).max(1);
         self.drop_outside_locations()?;
         let set_aside = self.db().archive_unpicked(UNPICKED_DAYS)?;
         if set_aside > 0 {
@@ -1649,8 +1668,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         // Over the cap, or left when the search stopped: scored first next time.
         self.hold(candidates.collect());
-        // Unless tailoring is automatic, roles that cleared the bar wait for you to pick them.
-        let queued = if profile.auto_tailor { self.db().jobs(Some("queued"), profile.max_per_run)? } else { vec![] };
+        // Unless tailoring is automatic, roles that cleared the bar wait for you to pick them. A batch
+        // of held postings leaves tailoring to the next search.
+        let queued = if profile.auto_tailor && batch.is_none() { self.db().jobs(Some("queued"), profile.max_per_run)? } else { vec![] };
         if !profile.auto_tailor {
             report.to_pick = self.db().jobs(Some("queued"), 500)?.len();
         }
@@ -1675,6 +1695,13 @@ replies and interviews, and a little lower for kinds that got none from several 
         self.step("Tailoring applications", 1, 1, "done");
         if self.stopping() {
             report.errors.push("Stopped: you stopped this search; what it found so far is kept".into());
+        }
+        if batch.is_some() {
+            let waiting = self.held_count(); // before taking the database: it reads it too
+            let db = self.db();
+            db.log(None, "held", &format!("scored {} of the postings the last search left, {} cleared your fit score; {waiting} still waiting", report.scored, report.to_pick))?;
+            db.set("last.held", &crate::util::now())?;
+            return Ok(report);
         }
         {
             let db = self.db();
@@ -5314,6 +5341,13 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     if crate::backup::due(agent) && !agent.is_running("backup") {
         out.push("backup");
     }
+    // Postings the last search couldn't score: a small batch every 90 minutes while Claude has room.
+    let held_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.held"))
+        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 90)
+        .unwrap_or(false);
+    if ready && !held_lately && !agent.budget_wait() && !agent.is_running("search") && !out.contains(&"search") && agent.held_count() > 0 {
+        out.push("held");
+    }
     // Fit forecasts for postings scored before they existed: a few every 15 minutes.
     let forecast_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.forecast"))
         .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 15)
@@ -5470,6 +5504,15 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                             let _ = a.db().log(None, "discover:error", &e.0);
                         }
                     }
+                });
+            }
+            "held" => {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = a.score_held() {
+                        let _ = a.db().log(None, "held:error", &e.0);
+                    }
+                    let _ = a.db().set("last.held", &now());
                 });
             }
             "forecast" => {
@@ -6897,10 +6940,10 @@ mod tests {
         p.locations = vec!["Toronto".into()];
         s.agent.save_profile(&p).unwrap();
         assert_eq!(s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap().new, 0, "a normal search skips it");
-        let r = s.agent.search_with(Some(vec![posting("Technical Program Manager", "1")]), true).unwrap();
+        let r = s.agent.search_with(Some(vec![posting("Technical Program Manager", "1")]), true, None).unwrap();
         assert_eq!((r.rechecked, r.new, r.scored), (1, 1, 1));
         // Scored or tailored postings are never re-checked.
-        assert_eq!(s.agent.search_with(Some(vec![posting("Technical Program Manager", "1")]), true).unwrap().rechecked, 0);
+        assert_eq!(s.agent.search_with(Some(vec![posting("Technical Program Manager", "1")]), true, None).unwrap().rechecked, 0);
     }
 
     #[test]
@@ -7373,6 +7416,19 @@ mod tests {
         let r = s.agent.search(Some(vec![])).unwrap();
         assert_eq!((r.held, r.scored, r.deferred), (1, 1, 0));
         assert_eq!(s.agent.search(Some(vec![])).unwrap().held, 0);
+        // Through the day: small batches of what's held, without counting as a search.
+        let mut p = s.agent.profile();
+        p.max_scored_per_run = 40; // batches of 10
+        s.agent.save_profile(&p).unwrap();
+        let found: Vec<Posting> = (10..=24).map(|i| Posting { company: format!("Co {i}"), ..posting("Program Manager", &i.to_string()) }).collect();
+        s.agent.hold(found);
+        assert_eq!(s.agent.held_count(), 15);
+        let last = s.agent.secret("last.search");
+        assert!(due_tasks(&s.agent).contains(&"held"));
+        let r = s.agent.score_held().unwrap();
+        assert_eq!((r.scored, s.agent.held_count()), (10, 5));
+        assert_eq!(s.agent.secret("last.search"), last, "not a search");
+        assert!(!due_tasks(&s.agent).contains(&"held"), "not again for 90 minutes");
     }
 
     #[test]

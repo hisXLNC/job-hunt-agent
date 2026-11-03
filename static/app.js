@@ -1017,7 +1017,8 @@ function stepHtml(o, step, tracked) {
     <div class="row" style="margin:2px 0 8px">${picking.length > 5 ? '<button class="btn sm" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost sm" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork}…</span>` : ''}</div>
     <div class="pick-filters">
       <label class="small">Sort by <select data-pickf="sort">${opt('fit', 'Best fit')}${opt('reach', 'Fit after tailoring')}${opt('new', 'Newest')}${opt('pay', 'Highest pay')}${opt('rating', 'Best-rated company')}</select></label>
-      <label class="small">Fit <select data-pickf="min">${opt('0', 'Any')}${opt('60', '60 or more')}${opt('70', '70 or more')}${opt('80', '80 or more')}</select></label>
+      <label class="small">Fit <select data-pickf="min">${opt('0', 'Any')}${opt('60', '60 or more')}${opt('70', '70 or more')}${opt('80', '80 or more')}${opt('-60', 'Under 60')}${opt('-70', 'Under 70')}</select></label>
+      <label class="small">Found <select data-pickf="age">${opt('', 'Any time')}${opt('3', 'Last 3 days')}${opt('7', 'Last 7 days')}${opt('-14', 'Over 2 weeks ago')}</select></label>
       ${places.length > 1 || o.remote_ok ? `<label class="small">Where <select data-pickf="place">${opt('', 'Anywhere')}${places.map(p => opt(esc(p.toLowerCase()), esc(p))).join('')}${opt('remote', 'Remote')}</select></label>` : ''}
       <label class="check small"><input type="checkbox" data-pickf="pay"> Shows pay</label>
       <label class="check small"><input type="checkbox" data-pickf="flags"> No red flags</label>
@@ -1857,8 +1858,12 @@ async function showSettings(tab, sub) {
           <label class="field">Model<select name="tailor_model">${[['opus', 'Opus (best writing)'], ['sonnet', 'Sonnet (faster, uses less of your plan)'], ['', 'Same as for everything else']].map(([v, n]) => `<option value="${v}" ${st.claude.tailor_model === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <label class="field">How hard Claude thinks<select name="tailor_effort">${[['low', 'Low (fastest)'], ['medium', 'Medium (recommended)'], ['high', 'High (slowest, a few minutes each)']].map(([v, n]) => `<option value="${v}" ${st.claude.tailor_effort === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         </div>
+        <h3 class="sub">Scoring postings</h3>
+        <div class="form">
+          <label class="field">Model<select name="score_model">${[['sonnet', 'Sonnet (recommended: nearly the same scores, much less of your plan)'], ['opus', 'Opus'], ['', 'Same as for everything else']].map(([v, n]) => `<option value="${v}" ${st.claude.score_model === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Every new posting a search finds is scored, so this is most of what Job Hunt asks of Claude.</span></label>
+        </div>
         <div class="form" style="margin-top:10px">
-          <label class="field">Model for everything else<input type="text" name="model" value="${esc(st.claude.model)}" placeholder="Default"><span class="hint">Scoring, email sorting and the rest. Blank: Claude Code's own choice, or Opus for the API.</span></label>
+          <label class="field">Model for everything else<input type="text" name="model" value="${esc(st.claude.model)}" placeholder="Default"><span class="hint">Email sorting and the rest. Blank: Claude Code's own choice, or Opus for the API.</span></label>
           <label class="field">Claude Code location<input type="text" name="path" value="${esc(st.claude.path)}" placeholder="C:\\Users\\you\\.local\\bin\\claude.exe"><span class="hint">Only if Job Hunt can't find it.</span></label>
         </div></details>
         <div class="row"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-act="checkClaude">Check again</button>${st.claude.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="claude">Remove API key</button>' : ''}</div>
@@ -2410,7 +2415,10 @@ function applyPickView(box, saved) {
   const rows = [...list.children].sort((a, b) => Number(b.dataset[key]) - Number(a.dataset[key]) || Number(b.dataset.score) - Number(a.dataset.score));
   let shown = 0;
   for (const r of rows) {
-    const hide = Number(r.dataset.score) < Number(v.min || 0) || (v.pay && !(Number(r.dataset.pay) > 0))
+    // Fit: "70" is 70 or more, "-70" under 70. Found: "7" within 7 days, "-14" over 14 days ago.
+    const min = Number(v.min || 0), score = Number(r.dataset.score), age = Number(v.age || 0);
+    const days = (Date.now() - Number(r.dataset.age || 0)) / 86400000;
+    const hide = (min >= 0 ? score < min : score >= -min) || (age > 0 && days > age) || (age < 0 && days <= -age) || (v.pay && !(Number(r.dataset.pay) > 0))
       || (v.flags && Number(r.dataset.flags) > 0) || (v.place && !r.dataset.place.includes(v.place));
     r.hidden = hide;
     if (hide) r.querySelector('[data-pick]').checked = false; // never tailor what you can't see
@@ -3115,9 +3123,12 @@ async function act(el) {
   }
   if (a === 'dismissPicked') {
     const ids = [...el.closest('[data-pickbox]').querySelectorAll('[data-pick]:checked')].map(c => c.dataset.pick);
-    if (!ids.length || !await ask(`Not interested in these ${ids.length}? Job Hunt learns from them and scores roles like them lower.`, 'Not interested')) return;
+    // A few: your choice, which scoring learns from. Many at once is a clear-out (old or weak
+    // matches), which would crowd out the choices scoring learns from.
+    const learn = ids.length <= 5;
+    if (!ids.length || !await ask(`Not interested in these ${ids.length}? ${learn ? 'Job Hunt learns from them and scores roles like them lower.' : 'They go to All jobs under Not interested. (Clearing out this many at once doesn\'t change how Job Hunt scores.)'}`, 'Not interested')) return;
     return busy(async () => {
-      for (const id of ids) await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'dismissed', note: '', learn: true } });
+      for (const id of ids) await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'dismissed', note: '', learn } });
       await refreshOverview(); route(); toast(`${ids.length} set aside as not interested.`);
     });
   }
@@ -3760,7 +3771,7 @@ document.addEventListener('submit', async e => {
       toast(claude ? 'Added. Once it\'s scored and tailored it appears under Ready to approve; you get a notice.' : 'Saved. It\'s under Applications, Saved for later.');
       location.hash = '#overview';
     } else if (kind === 'claude') {
-      await api('/api/settings/claude', { method: 'POST', body: { engine: form.querySelector('[name=engine]:checked').value, claude_key: f.claude_key.value, model: f.model.value, tailor_model: f.tailor_model.value, tailor_effort: f.tailor_effort.value, path: f.path.value } });
+      await api('/api/settings/claude', { method: 'POST', body: { engine: form.querySelector('[name=engine]:checked').value, claude_key: f.claude_key.value, model: f.model.value, tailor_model: f.tailor_model.value, tailor_effort: f.tailor_effort.value, score_model: f.score_model.value, path: f.path.value } });
       toast('Saved.');
       await refreshOverview(); route();
     } else if (kind === 'apify') {

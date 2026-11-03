@@ -326,6 +326,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
             "model": get("claude.model"),
             "tailor_model": db.get("claude.tailor_model")?.unwrap_or_else(|| claude::TAILOR_MODEL.into()),
             "tailor_effort": Some(get("claude.tailor_effort")).filter(|e| !e.is_empty()).unwrap_or_else(|| claude::TAILOR_EFFORT.into()),
+            "score_model": db.get("claude.score_model")?.unwrap_or_else(|| claude::SCORE_MODEL.into()),
             "path": get("claude.path"),
             "code_found": crate::claude_code::find(&get("claude.path")).is_some(),
         },
@@ -1046,6 +1047,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             if let Some(m) = b.get("tailor_model").and_then(|v| v.as_str()) {
                 agent.db().set("claude.tailor_model", if ["opus", "sonnet"].contains(&m) { m } else { "" })?;
+            }
+            if let Some(m) = b.get("score_model").and_then(|v| v.as_str()) {
+                agent.db().set("claude.score_model", if ["opus", "sonnet"].contains(&m) { m } else { "" })?;
             }
             if let Some(e) = b.get("tailor_effort").and_then(|v| v.as_str()) {
                 if !["low", "medium", "high"].contains(&e) {
