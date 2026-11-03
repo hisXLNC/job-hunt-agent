@@ -226,6 +226,17 @@ fn label(category: &str) -> Option<&'static str> {
     })
 }
 
+/// What a change of CV (replaced or removed) leaves to redo: see Agent::cv_changed.
+#[derive(Serialize, Default, Debug, Clone, PartialEq)]
+pub struct CvChange {
+    /// Jobs whose fit was against the old CV: to score again.
+    pub unscored: Vec<String>,
+    /// Applications waiting for your approval: to tailor again from your CVs as they are now.
+    pub retailor: Vec<String>,
+    /// Applications with your own file or your edits: kept as they are, with a note.
+    pub kept: usize,
+}
+
 #[derive(Serialize, Default, Debug, Clone)]
 pub struct Report {
     pub found: usize,
@@ -3653,7 +3664,15 @@ replies and interviews, and a little lower for kinds that got none from several 
     }
 
     /// Replace a CV's file, keeping its name, titles and keywords.
-    pub fn replace_cv(&self, id: &str, filename: &str, bytes: &[u8], convert: bool) -> R<Track> {
+    /// A new file for a CV. Fits worked out against the old one, and applications tailored from it
+    /// that are waiting for your approval, are redone with the new one: see CvChange.
+    pub fn replace_cv(&self, id: &str, filename: &str, bytes: &[u8], convert: bool) -> R<(Track, CvChange)> {
+        let t = self.write_cv(id, filename, bytes, convert)?;
+        let change = self.cv_changed(id, &t.label, false)?;
+        Ok((t, change))
+    }
+
+    fn write_cv(&self, id: &str, filename: &str, bytes: &[u8], convert: bool) -> R<Track> {
         let mut profile = self.profile();
         let Some(pos) = profile.tracks.iter().position(|t| t.name == id) else { return err("That CV no longer exists.") };
         let (docx, kind) = self.cv_bytes(filename, bytes, convert)?;
@@ -3673,13 +3692,12 @@ replies and interviews, and a little lower for kinds that got none from several 
     pub fn convert_existing_cv(&self, id: &str) -> R<Track> {
         let bytes = std::fs::read(self.cv_path(id)).map_err(|_| Error("That CV's file is missing.".into()))?;
         let original = self.profile().tracks.iter().find(|t| t.name == id).map(|t| t.original.clone()).unwrap_or_else(|| format!("{id}.docx"));
-        self.replace_cv(id, &original, &bytes, true)
+        // Only the layout changes, not what the CV says: nothing to score or tailor again.
+        self.write_cv(id, &original, &bytes, true)
     }
 
-    /// Remove a CV. Jobs scored against it that you haven't acted on lose that fit (it described a
-    /// CV you no longer have); returns their ids, for rescore_jobs to score against the CVs left.
-    /// Jobs you've tailored, applied to or taken further keep theirs.
-    pub fn remove_cv(&self, id: &str) -> R<Vec<String>> {
+    /// Remove a CV. What it scored and tailored is redone with the CVs left: see CvChange.
+    pub fn remove_cv(&self, id: &str) -> R<CvChange> {
         let mut profile = self.profile();
         let before = profile.tracks.len();
         let label = profile.tracks.iter().find(|t| t.name == id).map(|t| t.label.clone()).unwrap_or_else(|| id.to_string());
@@ -3689,7 +3707,21 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         self.save_profile(&profile)?;
         let _ = std::fs::remove_file(self.cv_path(id));
-        let mut cleared = vec![];
+        let change = self.cv_changed(id, &label, true)?;
+        self.db().log(None, "cv", &format!("removed {id}; {} fit{} to score again, {} application{} to tailor again",
+            change.unscored.len(), if change.unscored.len() == 1 { "" } else { "s" }, change.retailor.len(), if change.retailor.len() == 1 { "" } else { "s" }))?;
+        Ok(change)
+    }
+
+    /// Your CV `id` was replaced or removed. Fits it gave to jobs you haven't acted on are cleared
+    /// (to score again: `unscored`). Applications tailored from it and waiting for your approval are
+    /// to be tailored again from the CV as it is now (`retailor`), so the CV and cover letter you
+    /// send use it; when it was removed, they're scored again first and tailored from the CV that
+    /// fits best. Ones with your own file or your edits since tailoring keep them (`kept`, noted on
+    /// each), as do ones you approved or sent: what's gone out stays as it went.
+    fn cv_changed(&self, id: &str, label: &str, removed: bool) -> R<CvChange> {
+        let mut c = CvChange::default();
+        let what = if removed { "was removed" } else { "was replaced" };
         for st in ["queued", "skipped", "saved", "dismissed"] {
             // Read first: the lock would otherwise be held through the loop, which takes it again.
             let jobs = self.db().jobs(Some(st), 100_000)?;
@@ -3699,15 +3731,50 @@ replies and interviews, and a little lower for kinds that got none from several 
                 }
                 let db = self.db();
                 db.update_job(&j.id, &[
-                    ("score", Value::Null), ("score_potential", Value::Null), ("score_after", Value::Null), ("track", Value::Null),
-                    ("reasoning", format!("Not scored: the {label} CV it was scored against was removed.").into()),
+                    ("score", Value::Null), ("score_potential", Value::Null), ("score_after", Value::Null),
+                    ("track", if removed { Value::Null } else { id.into() }),
+                    ("reasoning", format!("Not scored: the {label} CV it was scored against {what}.").into()),
                 ])?;
-                db.log(Some(&j.id), "unscored", &format!("its fit of {} was against the {label} CV, now removed", j.score.unwrap_or(0)))?;
-                cleared.push(j.id);
+                db.log(Some(&j.id), "unscored", &format!("its fit of {} was against the {label} CV, which {what}", j.score.unwrap_or(0)))?;
+                c.unscored.push(j.id);
             }
         }
-        self.db().log(None, "cv", &format!("removed {id}; {} unscored job{} it had scored", cleared.len(), if cleared.len() == 1 { "" } else { "s" }))?;
-        Ok(cleared)
+        let ready = self.db().jobs(Some("ready"), 100_000)?;
+        for j in ready.into_iter().filter(|j| j.track.as_deref() == Some(id)) {
+            let own = self.own_file(&j.id, "cv") || self.own_file(&j.id, "letter");
+            // Newest first: a change of yours before the tailoring that made it is yours to keep.
+            let edited = self.db().history(&j.id)?.iter().take_while(|e| e.kind != "tailored").any(|e| e.kind == "revised");
+            if own || edited {
+                self.db().log(Some(&j.id), "cv-changed", &format!("the {label} CV {what} after this was tailored; it keeps {}. Tailor it again to use your CVs as they are now",
+                    if own { "your own file" } else { "your changes" }))?;
+                c.kept += 1;
+                continue;
+            }
+            // Its fit was against the old CV too: scored again before it's tailored again.
+            self.db().update_job(&j.id, &[("score", Value::Null), ("score_potential", Value::Null), ("track", if removed { Value::Null } else { id.into() })])?;
+            self.db().log(Some(&j.id), "cv-changed", &format!("the {label} CV {what}: tailoring it again"))?;
+            c.retailor.push(j.id);
+        }
+        Ok(c)
+    }
+
+    /// Redo what a change of CV left to redo, in the background: fits first, then tailoring (three
+    /// at a time, held for later if Claude reaches its usage limit).
+    pub fn apply_cv_change(self: &Arc<Self>, c: CvChange) {
+        if c.unscored.is_empty() && c.retailor.is_empty() {
+            return;
+        }
+        let a = self.clone();
+        std::thread::spawn(move || {
+            if let Ok(n) = a.rescore_jobs(&c.unscored) {
+                if n > 0 {
+                    a.note("Scored again", &format!("{n} job{} now {} a fit against your CVs as they are now.", if n == 1 { "" } else { "s" }, if n == 1 { "has" } else { "have" }));
+                }
+            }
+            if !c.retailor.is_empty() && !a.profile().tracks.is_empty() {
+                let _ = a.tailor_picked(&c.retailor);
+            }
+        });
     }
 
     /// Score these jobs against your CVs as they are now, up to the per-search cap (the rest can
@@ -4156,7 +4223,8 @@ replies and interviews, and a little lower for kinds that got none from several 
                 loop {
                     let next = queue.lock().unwrap().pop();
                     let Some((id, g)) = next else { break };
-                    match a.tailor(&id, None) {
+                    // Scored first if it isn't (its CV was removed, say), so it's tailored from the CV that fits.
+                    match a.tailor_anyway(&id, None) {
                         Ok(_) => {
                             done.fetch_add(1, SeqCst);
                         }
@@ -4220,7 +4288,12 @@ replies and interviews, and a little lower for kinds that got none from several 
         if self.own_file(job_id, "letter") {
             return err("You're using your own cover letter file for this role. Edit it in Word, or switch back to Job Hunt's letter.");
         }
-        self.db().update_job(job_id, &[("cover_letter", text.into())])?;
+        {
+            let db = self.db();
+            db.update_job(job_id, &[("cover_letter", text.into())])?;
+            // So a later change of CV doesn't tailor it again over your words.
+            db.log(Some(job_id), "revised", "cover letter: edited by you")?;
+        }
         if let (Some(path), Some(track)) = (&job.letter_path, &job.track) {
             if let Ok(doc) = cv::open(&self.cv_path(track)) {
                 std::fs::write(path, cv::cover_letter(&doc, text, self.signature().as_deref())?)?;
@@ -7069,21 +7142,49 @@ mod tests {
         s.agent.search(Some(vec![posting("Program Manager", "1"), Posting { company: "Globex".into(), ..posting("Program Manager", "2") }])).unwrap();
         let ids: Vec<String> = s.agent.db().jobs(None, 100).unwrap().into_iter().filter(|j| j.score.is_some()).map(|j| j.id).collect();
         assert_eq!(ids.len(), 2);
-        // Tailored: keeps its fit; still waiting: loses it.
+        // One tailored (waiting for approval), one waiting to be picked: both lose the old fit.
         s.agent.tailor(&ids[0], None).unwrap();
         let track = s.agent.db().job(&ids[1]).unwrap().unwrap().track.unwrap();
         // Another CV to score against once this one is gone.
         s.agent.add_cv("other.txt", "Alex Morgan\nProgram manager\n".repeat(20).as_bytes(), false).unwrap();
-        let cleared = s.agent.remove_cv(&track).unwrap();
+        let change = s.agent.remove_cv(&track).unwrap();
+        let cleared = change.unscored.clone();
+        // The tailored one waiting for approval is tailored again from the CV left.
+        assert_eq!(change.retailor, vec![ids[0].clone()]);
         assert!(cleared.contains(&ids[1]) && !cleared.contains(&ids[0]), "{cleared:?} {:?}", s.agent.db().jobs(None, 10).unwrap().iter().map(|j| (j.status.clone(), j.track.clone(), j.score)).collect::<Vec<_>>());
         let j = s.agent.db().job(&ids[1]).unwrap().unwrap();
         assert!(j.score.is_none() && j.reasoning.unwrap().contains("was removed"));
-        assert!(s.agent.db().job(&ids[0]).unwrap().unwrap().score.is_some());
-        // Against the CVs left (if any): scored again.
+        // Against the CVs left: scored again, and the tailored one tailored again.
+        let j = s.agent.tailor_anyway(&ids[0], None).unwrap();
+        assert!(j.score.is_some() && j.track.as_deref() != Some(track.as_str()) && j.status == "ready");
         let n = s.agent.rescore_jobs(&cleared).unwrap();
         assert_eq!(n, 1);
         let j = s.agent.db().job(&ids[1]).unwrap().unwrap();
         assert!(j.score.is_some() && j.track.as_deref() != Some(track.as_str()));
+    }
+
+    #[test]
+    fn a_new_cv_is_used_for_applications_waiting_for_approval() {
+        let s = setup();
+        s.agent.search(Some(vec![posting("Program Manager", "1"), Posting { company: "Globex".into(), ..posting("Program Manager", "2") }, Posting { company: "Initech".into(), ..posting("Program Manager", "3") }])).unwrap();
+        let ready: Vec<Job> = s.agent.db().jobs(Some("ready"), 10).unwrap();
+        assert_eq!(ready.len(), 3);
+        let track = ready[0].track.clone().unwrap();
+        // One with your own cover letter words, one sent: both stay as they are.
+        s.agent.save_cover_letter(&ready[1].id, "Dear team,\n\nMy own words.\n\nJane").unwrap();
+        s.agent.db().set_status(&ready[2].id, "applied", "sent").unwrap();
+        let bytes = std::fs::read(s.agent.cv_path(&track)).unwrap();
+        let (_, change) = s.agent.replace_cv(&track, "new.docx", &bytes, false).unwrap();
+        assert_eq!((change.retailor.clone(), change.kept), (vec![ready[0].id.clone()], 1));
+        assert!(s.agent.db().history(&ready[1].id).unwrap().iter().any(|e| e.kind == "cv-changed"), "told why it was kept");
+        // Tailored again: scored against the new CV first, then a fresh CV and cover letter.
+        assert!(s.agent.db().job(&ready[0].id).unwrap().unwrap().score.is_none());
+        let j = s.agent.tailor_anyway(&ready[0].id, None).unwrap();
+        assert_eq!(j.status, "ready");
+        assert!(j.score.is_some() && j.cover_letter.is_some());
+        let h = s.agent.db().history(&ready[0].id).unwrap();
+        assert!(h.iter().position(|e| e.kind == "tailored") < h.iter().position(|e| e.kind == "cv-changed"), "tailored after the change");
+        assert_eq!(s.agent.db().job(&ready[1].id).unwrap().unwrap().cover_letter.as_deref(), Some("Dear team,\n\nMy own words.\n\nJane"));
     }
 
     #[test]

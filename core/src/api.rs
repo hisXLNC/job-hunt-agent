@@ -1565,8 +1565,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             match *action {
                 "file" => {
                     let name = req.query.get("filename").cloned().unwrap_or_else(|| "CV.docx".into());
-                    let t = agent.replace_cv(id, &name, &req.body, req.query.get("convert").is_some())?;
-                    Ok(Resp::json(&json!({ "ok": true, "track": t })))
+                    let (t, change) = agent.replace_cv(id, &name, &req.body, req.query.get("convert").is_some())?;
+                    let summary = json!(change);
+                    agent.apply_cv_change(change);
+                    Ok(Resp::json(&json!({ "ok": true, "track": t, "change": summary })))
                 }
                 "meta" => {
                     let mut p = agent.profile();
@@ -1593,20 +1595,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 "suggest" => Ok(Resp::json(&json!({ "track": agent.suggest_for_cv(id)? }))),
                 "convert" => Ok(Resp::json(&json!({ "track": agent.convert_existing_cv(id)? }))),
                 "remove" => {
-                    let cleared = agent.remove_cv(id)?;
-                    let unscored = cleared.len();
-                    // Their fits were against the removed CV: score them against the CVs left.
-                    if !cleared.is_empty() && !agent.profile().tracks.is_empty() {
-                        let a = agent.clone();
-                        std::thread::spawn(move || {
-                            if let Ok(n) = a.rescore_jobs(&cleared) {
-                                if n > 0 {
-                                    a.note("Scored again", &format!("{n} job{} scored against the removed CV now {} against your other CVs.", if n == 1 { "" } else { "s" }, if n == 1 { "has its fit" } else { "have their fits" }));
-                                }
-                            }
-                        });
-                    }
-                    Ok(Resp::json(&json!({ "ok": true, "unscored": unscored })))
+                    let change = agent.remove_cv(id)?;
+                    let summary = json!(change);
+                    agent.apply_cv_change(change);
+                    Ok(Resp::json(&json!({ "ok": true, "change": summary })))
                 }
                 "open" => give_file(host, req, &agent.cv_path(id), format!("/api/cvs/{id}/download")),
                 _ => not_found(),

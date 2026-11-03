@@ -3289,11 +3289,11 @@ async function act(el) {
     return busy(async () => { toast('Converting with Claude. This can take a minute…'); await api(`/api/cvs/${encodeURIComponent(cvId)}/convert`, { method: 'POST' }); await refreshOverview(); route(); }, 'Converted. Open it to check.');
   }
   if (a === 'removeCv') {
-    if (!await ask('Remove this CV from Job Hunt? Applications already tailored from it keep their fit. Jobs it scored that you haven\'t acted on lose that fit and are scored again against your other CVs (or wait, unscored, if this was your only one).')) return;
+    if (!await ask('Remove this CV from Job Hunt? Jobs it scored are scored again against your other CVs, and applications tailored from it that are waiting for your approval are tailored again from the CV that fits best. Ones you\'ve edited, approved or sent stay as they are. If this is your only CV, they keep what they have until you add another and tailor them again.')) return;
     return busy(async () => {
       const r = await api(`/api/cvs/${encodeURIComponent(cvId)}/remove`, { method: 'POST' });
       await refreshOverview(); route();
-      toast(r.unscored ? `Removed. ${r.unscored} job${r.unscored === 1 ? '' : 's'} it scored ${(overview?.setup?.cvs) ? 'are being scored again against your other CVs' : 'are unscored until you add a CV'}.` : 'Removed.');
+      toast(overview?.setup?.cvs ? `Removed.${cvChangeNote(r.change)}` : 'Removed. Jobs it scored are unscored until you add a CV; tailored applications keep their files until you tailor them again.');
     });
   }
   if (a === 'checkClaude') { const w = $('#welcomeClaude'); if (w) return welcomeClaude(true); return checkClaude(true); }
@@ -3305,6 +3305,17 @@ async function act(el) {
   }
 }
 
+/** What a replaced or removed CV set going: fits scored again, applications tailored again. */
+function cvChangeNote(c) {
+  if (!c) return '';
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  const parts = [];
+  if (c.retailor?.length) parts.push(`${n(c.retailor.length, 'application waiting for your approval is', 'applications waiting for your approval are')} being tailored again with it`);
+  if (c.unscored?.length) parts.push(`${n(c.unscored.length, 'job is', 'jobs are')} being scored again`);
+  if (c.kept) parts.push(`${n(c.kept, 'application keeps', 'applications keep')} your own file or edits (tailor ${c.kept === 1 ? 'it' : 'them'} again to use the new CV)`);
+  return parts.length ? ` ${parts.join('; ')}.` : '';
+}
+
 async function uploadCvs(files, replace) {
   let done = 0;
   for (const f of files) {
@@ -3314,7 +3325,7 @@ async function uploadCvs(files, replace) {
       const q = `filename=${encodeURIComponent(f.name)}`;
       const r = await api(replace ? `/api/cvs/${encodeURIComponent(replace)}/file?${q}` : `/api/cvs?${q}`, { method: 'POST', raw: await f.arrayBuffer() });
       done++;
-      toast(`${replace ? 'Replaced' : 'Added'} “${r.track.label}”.`);
+      toast(`${replace ? 'Replaced' : 'Added'} “${r.track.label}”.${cvChangeNote(r.change)}`);
     } catch (err) { toast(`${f.name}: ${err.message}`, true); }
   }
   if (done) { await refreshOverview(); route(); }

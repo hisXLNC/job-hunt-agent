@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.15.0] - 2026-11-03
+
+A new CV is used everywhere.
+
+### Changes
+
+- Replace or remove a CV and applications waiting for your approval are tailored again with your CVs as they are now: a new tailored CV and a new cover letter.
+- Their fit is scored again first, so each one is tailored from the CV that fits it best, and jobs waiting to be picked get fits from the new CV too.
+- Applications with your own file or your own edits keep them, with a note on each saying the CV changed. Ones you've approved or sent stay exactly as they went.
+
 ## [2.14.0] - 2026-11-03
 
 Fit scores follow your CVs.
@@ -866,6 +876,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.15.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.15.0
 [2.14.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.14.0
 [2.13.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.13.0
 [2.12.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.12.0

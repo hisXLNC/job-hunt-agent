@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.15.0",
+    "date": "2026-11-03",
+    "title": "A new CV is used everywhere",
+    "changes": [
+      "Replace or remove a CV and applications waiting for your approval are tailored again with your CVs as they are now: a new tailored CV and a new cover letter.",
+      "Their fit is scored again first, so each one is tailored from the CV that fits it best, and jobs waiting to be picked get fits from the new CV too.",
+      "Applications with your own file or your own edits keep them, with a note on each saying the CV changed. Ones you've approved or sent stay exactly as they went."
+    ]
+  },
+  {
     "version": "2.14.0",
     "date": "2026-11-03",
     "title": "Fit scores follow your CVs",
