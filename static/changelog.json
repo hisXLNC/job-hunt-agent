@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.17.0",
+    "date": "2026-11-03",
+    "title": "Pause searches, more from recruiters, and less of your Claude plan",
+    "changes": [
+      "Pause a search while it runs and resume it from the same step, or stop it. The search button shows what it's doing on hover, and on click the posting it's on and what it has found; it always agrees with the sidebar.",
+      "Postings are scored with Sonnet by default (Settings, Connections, Advanced): nearly the same scores on much less of your plan. Tailoring stays on Opus.",
+      "Postings a search couldn't get to are scored in small batches through the day, instead of waiting for tomorrow's search.",
+      "Adecco, Altis Recruitment and Randstad are read through their own job searches, so they find postings again. Recruiters are searched around the area's main city (Toronto for the GTA), where they list their jobs. Aerotek, which lists US jobs only, is skipped for searches in Canada.",
+      "Add a company by pasting its careers link: Job Hunt works out its job board (Greenhouse, Lever, Ashby, Workday and others).",
+      "Click a company's rating on the Overview to see what its employees say, without leaving the page.",
+      "Pick list: filter by when a role was found, and by fits under 60 or 70, to clear out old or weak matches in a few clicks.",
+      "A Google sign-out shows one notice with a Reconnect button, instead of a message cut off mid-sentence."
+    ]
+  },
+  {
     "version": "2.16.0",
     "date": "2026-11-03",
     "title": "Progress bars",

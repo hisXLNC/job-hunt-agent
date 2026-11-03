@@ -7424,6 +7424,9 @@ mod tests {
         s.agent.hold(found);
         assert_eq!(s.agent.held_count(), 15);
         let last = s.agent.secret("last.search");
+        // Claude "connected" whatever this machine has installed (an API key counts).
+        s.agent.db().set("claude.engine", "api").unwrap();
+        s.agent.db().set("claude.key", "sk-test").unwrap();
         assert!(due_tasks(&s.agent).contains(&"held"));
         let r = s.agent.score_held().unwrap();
         assert_eq!((r.scored, s.agent.held_count()), (10, 5));

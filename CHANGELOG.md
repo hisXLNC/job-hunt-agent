@@ -4,6 +4,21 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.17.0] - 2026-11-03
+
+Pause searches, more from recruiters, and less of your Claude plan.
+
+### Changes
+
+- Pause a search while it runs and resume it from the same step, or stop it. The search button shows what it's doing on hover, and on click the posting it's on and what it has found; it always agrees with the sidebar.
+- Postings are scored with Sonnet by default (Settings, Connections, Advanced): nearly the same scores on much less of your plan. Tailoring stays on Opus.
+- Postings a search couldn't get to are scored in small batches through the day, instead of waiting for tomorrow's search.
+- Adecco, Altis Recruitment and Randstad are read through their own job searches, so they find postings again. Recruiters are searched around the area's main city (Toronto for the GTA), where they list their jobs. Aerotek, which lists US jobs only, is skipped for searches in Canada.
+- Add a company by pasting its careers link: Job Hunt works out its job board (Greenhouse, Lever, Ashby, Workday and others).
+- Click a company's rating on the Overview to see what its employees say, without leaving the page.
+- Pick list: filter by when a role was found, and by fits under 60 or 70, to clear out old or weak matches in a few clicks.
+- A Google sign-out shows one notice with a Reconnect button, instead of a message cut off mid-sentence.
+
 ## [2.16.0] - 2026-11-03
 
 Progress bars.
@@ -893,6 +908,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.17.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.0
 [2.16.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.16.0
 [2.15.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.15.1
 [2.15.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.15.0

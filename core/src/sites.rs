@@ -427,7 +427,8 @@ pub fn parse_adecco(t: &Target, v: &Value) -> Vec<Posting> {
 }
 
 fn adecco(c: &reqwest::blocking::Client, t: &Target, title: &str) -> Result<Vec<Posting>, String> {
-    let q = url::form_urlencoded::byte_serialize(title.as_bytes()).collect::<String>();
+    // In quotes: the words together ("Program Manager"), not either word (any "Manager").
+    let q = url::form_urlencoded::byte_serialize(format!("\"{}\"", title.replace('"', "")).as_bytes()).collect::<String>();
     let body = serde_json::json!({ "queryString": format!("&q={q}&sort=PostedDate desc&rows=50"), "filtersToDisplay": "", "range": 0,
         "siteName": "adecco", "brand": "adecco", "countryCode": "CA", "languageCode": "en-CA" });
     Ok(parse_adecco(t, &post_api(c, "https://www.adecco.com/api/data/jobs/summarized", "https://www.adecco.com/en-ca/job-search", &body)?))
@@ -442,7 +443,8 @@ pub fn parse_altis(t: &Target, v: &Value) -> Vec<Posting> {
             return None;
         }
         let place = text(&j["location"]);
-        let description = html_to_text(&text(&j["jobDescription"]));
+        // The search gives only the start of each description: read the posting's page for the rest.
+        let description = Some(html_to_text(&text(&j["jobDescription"]))).filter(|d| d.chars().count() >= 300).unwrap_or_default();
         // "11/3/2026 12:00:00 AM" as 2026-11-03.
         let posted = chrono::NaiveDateTime::parse_from_str(&text(&j["datePosted"]), "%m/%d/%Y %I:%M:%S %p").ok().map(|d| d.date().to_string());
         let pay = salary_from_text(&description);
@@ -470,37 +472,37 @@ fn altis(c: &reqwest::blocking::Client, t: &Target, title: &str) -> Result<Vec<P
     Ok(parse_altis(t, &post_api(c, "https://apis.altisexcel.com/Applicant/jobs/ads/Search", "https://jobportal.altis.com/", &body)?))
 }
 
-/// Randstad Canada's job search (Elasticsearch hits): each hit's _source has the posting.
+/// Randstad Canada's job search (Elasticsearch hits): each hit's _source has the posting, under
+/// BlueXJobData (City, Region, Title, Description, JobId) and BlueXSanitized (the same as slugs,
+/// which make up its page: /jobs/<title>_<city>_<id>/).
 pub fn parse_randstad(t: &Target, v: &Value) -> Vec<Posting> {
     let hits = v["searchResults"]["hits"]["hits"].as_array().cloned().unwrap_or_default();
     hits.iter().filter_map(|h| {
         let s = &h["_source"];
-        let pick = |keys: &[&str]| keys.iter().map(|k| text(&s[*k])).find(|x| !x.is_empty()).unwrap_or_default();
-        let title = pick(&["Title", "JobTitle", "title", "jobTitle"]);
-        let id = Some(text(&h["_id"])).filter(|x| !x.is_empty()).unwrap_or_else(|| pick(&["JobId", "jobId", "Id"]));
+        let (d, slugs) = (&s["BlueXJobData"], &s["BlueXSanitized"]);
+        let pick = |keys: &[&str]| keys.iter().map(|k| text(&d[*k])).chain(keys.iter().map(|k| text(&s[*k]))).find(|x| !x.is_empty()).unwrap_or_default();
+        let title = pick(&["Title", "JobTitle"]);
+        let id = Some(text(&h["_id"])).filter(|x| !x.is_empty()).unwrap_or_else(|| pick(&["JobId"]));
         if title.is_empty() || id.is_empty() {
             return None;
         }
-        let city = pick(&["City", "city", "Location", "location"]);
-        let region = pick(&["Province", "Region", "State", "region"]);
-        let place = [city.clone(), region].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", ");
-        let description = html_to_text(&pick(&["Description", "JobDescription", "description"]));
-        let link = pick(&["Url", "URL", "JobUrl", "url", "Slug"]);
-        let url = if link.starts_with("http") { link } else if link.starts_with('/') { format!("https://www.randstad.ca{link}") } else {
-            format!("https://www.randstad.ca/jobs/{}_{}_{id}/", slug(&title), slug(&city))
-        };
-        let pay = salary_from_text(&description);
+        let city = pick(&["City"]);
+        let place = [city.clone(), pick(&["Region", "Province"])].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", ");
+        // The search gives the start of the description; a short one is read from the page later.
+        let description = Some(html_to_text(&pick(&["Description"]))).filter(|d| d.chars().count() >= 600).unwrap_or_default();
+        let (ts, cs) = (Some(text(&slugs["Title"])).filter(|x| !x.is_empty()).unwrap_or_else(|| slug(&title)), Some(text(&slugs["City"])).filter(|x| !x.is_empty()).unwrap_or_else(|| slug(&city)));
+        let pay = salary_from_text(&html_to_text(&pick(&["Description"])));
         Some(Posting {
             source: t.id.clone(),
-            external_id: id,
+            external_id: id.clone(),
             company: t.name.clone(),
             remote: is_remote(&[&place, &title]),
             apply_email: find_apply_email(&description),
-            url,
+            url: format!("https://www.randstad.ca/jobs/{ts}_{cs}_{id}/"),
             title,
             location: place,
             description,
-            posted_at: Some(pick(&["PostedDate", "DatePosted", "postedDate", "CreatedDate"])).filter(|d| !d.is_empty()),
+            posted_at: Some(text(&s["JobDates"]["DateCreated"])).filter(|d| !d.is_empty()),
             salary_max: pay.as_ref().and_then(|p| p.1),
             salary: pay.map(|p| p.0),
             ..Posting::default()
@@ -682,11 +684,18 @@ mod tests {
         let p = &super::parse_altis(&t("altis", "Altis Recruitment"), &l)[0];
         assert_eq!((p.title.as_str(), p.location.as_str(), p.posted_at.as_deref()), ("Production Supervisor (Evening Shift)", "Brampton, ON", Some("2026-11-03")));
         assert_eq!(p.url, "https://jobportal.altis.com/jobs/25635/production-supervisor-evening-shift");
-        assert!(p.description.contains("evening shift"));
+        assert!(p.description.is_empty(), "the search gives only the start of it: read from the page later");
+        let full = serde_json::json!([{ "jobId": 1, "jobTitle": "Program Manager", "location": "Mississauga, ON", "jobDescription": format!("<p>{}</p>", "Lead the evening shift program. ".repeat(20)) }]);
+        assert!(super::parse_altis(&t("altis", "Altis Recruitment"), &full)[0].description.contains("evening shift"));
         // Randstad's hits: the posting is in each hit's _source.
-        let r = serde_json::json!({ "searchResults": { "hits": { "total": 1, "hits": [{ "_id": "47703962", "_source": { "Title": "Program Manager", "City": "Toronto", "Province": "Ontario" } }] } } });
+        // As Randstad's search answered (trimmed).
+        let r = serde_json::json!({ "searchResults": { "hits": { "total": 3772, "hits": [{ "_id": "47704060", "_source": {
+            "BlueXJobData": { "City": "Edmonton", "Description": "We provide the essential industrial cables...", "JobId": "47704060", "Region": "Alberta", "Title": "Warehouse Associate /Forklift Operator" },
+            "BlueXSanitized": { "City": "edmonton", "Title": "warehouse-associate-forklift-operator" }, "JobDates": { "DateCreated": "2026-11-03" } } }] } } });
         let p = &super::parse_randstad(&t("randstad", "Randstad"), &r)[0];
-        assert_eq!((p.title.as_str(), p.location.as_str(), p.external_id.as_str()), ("Program Manager", "Toronto, Ontario", "47703962"));
+        assert_eq!((p.title.as_str(), p.location.as_str(), p.posted_at.as_deref()), ("Warehouse Associate /Forklift Operator", "Edmonton, Alberta", Some("2026-11-03")));
+        assert_eq!(p.url, "https://www.randstad.ca/jobs/warehouse-associate-forklift-operator_edmonton_47704060/");
+        assert!(p.description.is_empty(), "only the start of it: read from the page later");
     }
 
     #[test]
