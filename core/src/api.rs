@@ -968,6 +968,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             Ok(Resp::json(&json!({ "started": run_in_background(agent, task) })))
         }
         ["api", "search", "stop"] => Ok(Resp::json(&json!({ "stopping": agent.stop_search() }))),
+        // Pause the running search where it is, or carry on from there.
+        ["api", "search", "hold"] => Ok(Resp::json(&json!({ "running": agent.hold_search(b["on"].as_bool().unwrap_or(true)) }))),
         ["api", "search", "pause"] => {
             // days: a number (0 resumes), or "off" until you turn them on again.
             let days = match &b["days"] {

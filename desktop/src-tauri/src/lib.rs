@@ -324,7 +324,9 @@ fn keep_awake(app: AppHandle) {
         let mut awake = false;
         loop {
             let busy = app.try_state::<Arc<Ctx>>().is_some_and(|ctx| {
-                !ctx.agent.running().is_empty() && ctx.agent.secret("app.keep_awake") != "0"
+                // A search you paused can wait with the PC asleep.
+                let held = ctx.agent.search_held();
+                ctx.agent.running().iter().any(|n| !(held && n == "search")) && ctx.agent.secret("app.keep_awake") != "0"
             });
             if busy != awake {
                 set_awake(busy);

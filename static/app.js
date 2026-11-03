@@ -134,7 +134,10 @@ function homeHead(on, about, between = '') {
           <button data-act="run" data-task="inbox" ${o.setup?.google ? '' : 'disabled title="Connect Google first"'}>${svg('mail')}Check email now</button>
         </div></details>
         ${scheduleMenu(o.side?.paused)}
-        ${searching ? `<button class="btn danger" data-act="searchStop" title="Stops after the step it's on; what it found so far is kept"><span class="spin" data-p="${o.progress?.percent ?? 0}"></span>Stop search · ${o.progress?.percent ?? 0}%</button>`
+        ${searching ? (o.progress?.paused
+            ? `<button class="btn primary" data-act="searchHold" data-on="0" title="Carries on from where it paused">${svg('search')}Resume search · ${o.progress?.percent ?? 0}%</button>`
+            : `<button class="btn" data-act="searchHold" data-on="1" title="Pauses after the step it's on; Resume carries on from there"><span class="spin" data-p="${o.progress?.percent ?? 0}"></span>Pause · ${o.progress?.percent ?? 0}%</button>`)
+          + `<button class="btn ghost danger" data-act="searchStop" title="Ends the search after the step it's on; what it found so far is kept">Stop</button>`
           : `<button class="btn primary" data-act="run" data-task="search" ${!o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${svg('search')}Search for jobs now</button>`}
       </div>
     </div>
@@ -338,7 +341,7 @@ function renderNav() {
   $('#nav').innerHTML = NAV.map(([id, name]) =>
     `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && ready ? `<span class="badge">${ready}</span>` : ''}</a>`).join('');
   const running = overview?.running || [];
-  const busy = running.includes('search') ? `Searching for jobs… ${overview?.progress?.percent ?? 0}%` : running.includes('inbox') ? 'Checking email…'
+  const busy = running.includes('search') ? `${overview?.progress?.paused ? 'Search paused' : 'Searching for jobs…'} ${overview?.progress?.percent ?? 0}%` : running.includes('inbox') ? 'Checking email…'
     : running.some(r => r.startsWith('tailor') || r === 'add') ? 'Tailoring…' : '';
   const side = overview?.side || {};
   const nextSearch = side.next_search ? new Date(side.next_search) : null;
@@ -1062,9 +1065,10 @@ function progressHtml(pr) {
   if (!pr) return '';
   const count = pr.total ? ` ${Math.min(pr.done + 1, pr.total)} of ${pr.total}` : '';
   return `<section class="card progress-card" id="progressCard">
-    <header><h2>${esc(pr.stage || 'Starting the search')}${count}</h2><b class="pct">${pr.percent}%</b></header>
-    <div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pr.percent}"><i style="width:${pr.percent}%"></i></div>
-    <p class="muted small">${esc(pr.detail || '')}</p>
+    <header><h2>${pr.paused ? 'Paused: ' : ''}${esc(pr.stage || 'Starting the search')}${count}</h2><b class="pct">${pr.percent}%</b></header>
+    <div class="pbar${pr.paused ? ' paused' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pr.percent}"><i style="width:${pr.percent}%"></i></div>
+    <p class="muted small">${pr.paused ? 'Everything found so far is kept. Resume carries on from this step.' : esc(pr.detail || '')}</p>
+    ${pr.paused ? '<div class="row"><button class="btn primary sm" data-act="searchHold" data-on="0">Resume search</button><button class="btn ghost danger sm" data-act="searchStop">Stop</button></div>' : ''}
     <div class="facts small"><span><b>${pr.found}</b> postings found</span><span><b>${pr.new}</b> new</span><span><b>${pr.scored}</b> scored</span><span><b>${pr.tailored}</b> tailored</span></div>
   </section>`;
 }
@@ -2753,6 +2757,14 @@ async function act(el) {
         document.querySelectorAll('[data-act=updateInstall]').forEach(b => { b.disabled = true; b.textContent = `Installs after ${what}`; });
       } else if (!r.installed) { toast("You're already on the newest version."); checkUpdate(); }
       else toast('Installing the update… Job Hunt restarts by itself in a moment.');
+    });
+  }
+  if (a === 'searchHold') {
+    const on = el.dataset.on === '1';
+    return busy(async () => {
+      const r = await api('/api/search/hold', { method: 'POST', body: { on } });
+      toast(!r.running ? 'No search is running.' : on ? 'Pausing the search after the step it\'s on. Resume carries on from there.' : 'Resuming the search.');
+      await refreshOverview(); route();
     });
   }
   if (a === 'searchStop') {

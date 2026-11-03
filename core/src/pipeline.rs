@@ -312,6 +312,8 @@ pub struct Agent {
     pub usage: Arc<Mutex<crate::usage::Log>>,
     /// You pressed Stop: the running search ends at its next step, keeping what it has.
     stop: std::sync::atomic::AtomicBool,
+    /// The running search is paused: it waits at its next step until resumed (or stopped).
+    hold: std::sync::atomic::AtomicBool,
 }
 
 /// Where the running search is, for the progress bar.
@@ -330,6 +332,8 @@ pub struct Progress {
     pub new: usize,
     pub scored: usize,
     pub tailored: usize,
+    /// Paused by you: waiting at this step until you resume it.
+    pub paused: bool,
 }
 
 /// The search's stages and the share of the bar each one fills.
@@ -377,6 +381,7 @@ impl Agent {
             running: Mutex::new(HashSet::new()),
             progress: Mutex::new(Progress::default()),
             stop: std::sync::atomic::AtomicBool::new(false),
+            hold: std::sync::atomic::AtomicBool::new(false),
             sync_mark: std::sync::atomic::AtomicU64::new(u64::MAX),
             presence: Mutex::new(crate::sync::Presence::default()),
             usage: Arc::new(Mutex::new(crate::usage::Log::default())),
@@ -674,12 +679,30 @@ impl Agent {
     }
 
     /// Stop the running search: it ends at its next step and keeps what it found and scored.
+    /// A paused search stops too.
     pub fn stop_search(&self) -> bool {
         let running = self.is_running("search");
         if running {
             self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.hold.store(false, std::sync::atomic::Ordering::SeqCst);
         }
         running
+    }
+
+    /// Pause the running search at its next step, keeping everything it has found so far, or
+    /// resume it from there. Returns whether a search is running.
+    pub fn hold_search(&self, on: bool) -> bool {
+        let running = self.is_running("search");
+        if running {
+            self.hold.store(on, std::sync::atomic::Ordering::SeqCst);
+            self.progress.lock().unwrap().paused = on;
+        }
+        running
+    }
+
+    /// Whether the running search is paused (or about to pause at its next step).
+    pub fn search_held(&self) -> bool {
+        self.is_running("search") && self.hold.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn stopping(&self) -> bool {
@@ -721,6 +744,13 @@ impl Agent {
         p.total = total;
         p.detail = detail.into();
         p.percent = from + ((to - from) as f64 * share).round() as u32;
+        drop(p);
+        // Paused: wait here, with everything found so far, until you resume or stop it.
+        while self.hold.load(std::sync::atomic::Ordering::SeqCst) && !self.stopping() {
+            self.progress.lock().unwrap().paused = true;
+            std::thread::sleep(std::time::Duration::from_millis(if cfg!(test) { 5 } else { 400 }));
+        }
+        self.progress.lock().unwrap().paused = false;
     }
 
     fn tally(&self, r: &Report) {
@@ -1347,7 +1377,16 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         let _guard = self.claim("search")?;
         self.stop.store(false, std::sync::atomic::Ordering::SeqCst);
-        *self.progress.lock().unwrap() = Progress::default();
+        // A pause belongs to this search only: cleared when it ends, however it ends.
+        struct Unhold<'a>(&'a std::sync::atomic::AtomicBool);
+        impl Drop for Unhold<'_> {
+            fn drop(&mut self) {
+                self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let _unhold = Unhold(&self.hold);
+        let held = self.hold.load(std::sync::atomic::Ordering::SeqCst);
+        *self.progress.lock().unwrap() = Progress { paused: held, ..Progress::default() };
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
@@ -7256,6 +7295,31 @@ mod tests {
         let c = s.agent.after_cv_added();
         assert_eq!(c.retailor, vec![j.id.clone()]);
         assert!(s.agent.secret("cv.waiting").is_empty());
+    }
+
+    #[test]
+    fn a_search_pauses_and_resumes_where_it_was() {
+        let s = setup();
+        assert!(!s.agent.hold_search(true), "no search running");
+        let a = s.agent.clone();
+        let found: Vec<Posting> = (1..=4).map(|i| Posting { company: format!("Co {i}"), ..posting("Program Manager", &i.to_string()) }).collect();
+        let _g = s.agent.claim("search").unwrap(); // a search "running", so it can be paused before it starts work
+        assert!(s.agent.hold_search(true));
+        drop(_g);
+        let t = std::thread::spawn(move || a.search(Some(found)).unwrap());
+        // It waits at its first step, having scored nothing.
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !s.agent.progress().is_some_and(|p| p.paused) && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(s.agent.search_held() && s.agent.progress().unwrap().paused);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert_eq!(s.agent.db().jobs(None, 100).unwrap().len(), 0, "nothing scored while paused");
+        // Resumed: it carries on and finishes the same work.
+        assert!(s.agent.hold_search(false));
+        let r = t.join().unwrap();
+        assert_eq!(r.scored, 4);
+        assert!(!s.agent.search_held());
     }
 
     #[test]

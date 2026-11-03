@@ -319,6 +319,7 @@ input.filter { width: 260px; max-width: 100%; }
 .progress-card .pct { font-variant-numeric: tabular-nums; }
 .pbar { height: 10px; border-radius: 5px; background: var(--line-2); overflow: hidden; margin: 4px 0 8px; }
 .pbar > i { display: block; height: 100%; background: var(--accent); border-radius: 5px; transition: width .6s ease; }
+.pbar.paused > i { background: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .pbar > i { transition: none; } }
 /* Interview prep */
 .prep h3 { font-size: 15px; margin: 14px 0 6px; }
