@@ -5,6 +5,8 @@
 //! strangers, so prompts wrap them in tags and say to treat them as data.
 
 use crate::{Error, R};
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -348,8 +350,65 @@ per skill line, separated by newlines. Leave unused fields as empty strings or e
 }
 
 fn posting_block(title: &str, company: &str, location: &str, salary: &str, url: &str, description: &str) -> String {
-    let d: String = description.chars().take(15000).collect();
+    posting_block_max(title, company, location, salary, url, description, 15000)
+}
+
+/// A posting for Claude, its text tidied (see tidy_posting) and cut at `max` characters.
+fn posting_block_max(title: &str, company: &str, location: &str, salary: &str, url: &str, description: &str, max: usize) -> String {
+    let d: String = tidy_posting(description).chars().take(max).collect();
     format!("<posting>\nTitle: {title}\nCompany: {company}\nLocation: {location}\nSalary: {salary}\nURL: {url}\n\n{d}\n</posting>")
+}
+
+/// What every posting ends with that says nothing about the job or the company: equal-opportunity
+/// and accommodation statements, privacy and fraud notices, "only those selected will be contacted".
+/// Each pair is (a phrase, and one of these with it, or "" for the phrase alone).
+const BOILERPLATE: &[(&str, &[&str])] = &[
+    ("equal opportunity", &[""]), ("equal employment opportunity", &[""]), ("affirmative action", &[""]),
+    ("regardless of race", &[""]), ("without regard to race", &[""]), ("protected veteran", &[""]), ("e-verify", &[""]),
+    ("accommodation", &["disabilit", "accessib", "aoda", "human rights code", "selection process", "recruitment process", "hiring process"]),
+    ("we thank all applicants", &[""]), ("only those selected", &[""]), ("only candidates selected", &[""]), ("only shortlisted", &[""]),
+    ("privacy", &["notice", "policy", "personal information", "personal data"]),
+    ("fraud", &["recruit", "scam", "never ask", "phishing"]), ("land acknowledg", &[""]), ("traditional territor", &[""]),
+    ("diversity", &["inclusive workplace", "all qualified applicants", "encourage applications from", "underrepresented"]),
+];
+
+/// A posting's text as Claude needs it: runs of spaces and blank lines closed up, and boilerplate
+/// paragraphs (see BOILERPLATE) left out. They're often a fifth of a posting, and every request
+/// about it would pay for them. A paragraph with the role in it is never long boilerplate, so
+/// only short ones go.
+pub fn tidy_posting(text: &str) -> String {
+    let mut out: Vec<String> = vec![];
+    for line in text.lines() {
+        let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+        if line.is_empty() {
+            if out.last().is_some_and(|l| !l.is_empty()) {
+                out.push(String::new());
+            }
+            continue;
+        }
+        let low = line.to_lowercase();
+        let junk = line.chars().count() < 1500
+            && BOILERPLATE.iter().any(|(a, with)| low.contains(a) && with.iter().any(|w| w.is_empty() || low.contains(w)));
+        if !junk {
+            out.push(line);
+        }
+    }
+    out.join("\n").trim().to_string()
+}
+
+/// An email's newest message: the history quoted below a reply ("On … wrote:", "-----Original
+/// Message-----", lines starting with ">") is cut to a short tail, since the newest message is what
+/// needs reading and the thread's history is mostly what Job Hunt has already seen.
+pub fn newest_message(body: &str) -> String {
+    static QUOTE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^(?:On .{4,200}wrote:\s*$|-{2,} ?Original Message ?-{2,}|_{10,}\s*$|From: .+\n(?:.*\n)?Sent: )").unwrap());
+    let Some(m) = QUOTE.find(body) else { return body.to_string() };
+    if m.start() < 40 {
+        return body.to_string(); // nothing above it: the quote is the message
+    }
+    let (new, old) = body.split_at(m.start());
+    let old: String = old.lines().map(|l| l.trim_start_matches('>').trim()).filter(|l| !l.is_empty()).collect::<Vec<_>>().join("\n");
+    let tail: String = old.chars().take(1500).collect();
+    format!("{}\n\n[Earlier in the thread, shortened]\n{tail}", new.trim_end())
 }
 
 pub struct EmailIn<'a> {
@@ -361,7 +420,7 @@ pub struct EmailIn<'a> {
 }
 
 fn email_block(e: &EmailIn, limit: usize) -> String {
-    let b: String = e.body.chars().take(limit).collect();
+    let b: String = newest_message(e.body).chars().take(limit).collect();
     format!("<email>\nFrom: {}\nTo: {}\nDate: {}\nSubject: {}\n\n{b}\n</email>", e.from, e.to, e.date, e.subject)
 }
 
@@ -1242,7 +1301,9 @@ pub fn check_key(key: &str) -> R<()> {
 
 impl Llm for Claude {
     fn score(&self, cvs: &[(String, String)], guidance: &str, job: &crate::db::Job) -> R<JobScore> {
-        let user = posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description);
+        // Scoring needs the role and its requirements, which come well within the first 10,000
+        // characters once the boilerplate is out; it's the most frequent request, so it's kept lean.
+        let user = posting_block_max(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description, 10000);
         let mut s: JobScore = self.call(&scorer_system(cvs, guidance), &user, score_schema(), "medium")?;
         s.score = s.score.clamp(0, 100);
         s.potential = s.potential.map(|p| p.clamp(s.score, 100));
@@ -1640,6 +1701,27 @@ note says; no company name, no filler. Return them in the same order, one for ea
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn postings_and_emails_trimmed_for_claude() {
+        let posting = "Senior Business Analyst\n\n\n\nYou'll lead   requirements and UAT for payments.\n\
+- 5+ years as a BA; SQL\n\n\
+We are an equal opportunity employer and value diversity.\n\
+Accommodations are available on request for candidates with disabilities taking part in the selection process.\n\
+We thank all applicants; however, only those selected for an interview will be contacted.\n\
+Read our privacy notice at example.com.\n\
+Hybrid in Oakville; accommodation of flexible hours for the team.";
+        let t = tidy_posting(posting);
+        assert_eq!(t, "Senior Business Analyst\n\nYou'll lead requirements and UAT for payments.\n- 5+ years as a BA; SQL\n\nHybrid in Oakville; accommodation of flexible hours for the team.");
+        let long = format!("Equal opportunity: {}", "the role is to lead program delivery. ".repeat(60));
+        assert_eq!(tidy_posting(&long), long.trim(), "a long paragraph isn't boilerplate");
+
+        let reply = "Tuesday at 2 works, see you then.\n\nThanks,\nSam\n\nOn Mon, Oct 20, 2026 at 9:14 AM Jane <jane@example.com> wrote:\n> Could we meet Tuesday at 2 or Wednesday at 10?\n> ".to_string() + &"> old text\n".repeat(400);
+        let n = newest_message(&reply);
+        assert!(n.starts_with("Tuesday at 2 works") && n.contains("[Earlier in the thread, shortened]") && n.contains("Could we meet Tuesday"));
+        assert!(n.len() < 1700, "{}", n.len());
+        assert_eq!(newest_message("Just a note, nothing quoted."), "Just a note, nothing quoted.");
+    }
+
     use super::*;
 
     fn walk(v: &Value, f: &mut dyn FnMut(&Value)) {

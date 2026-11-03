@@ -986,6 +986,18 @@ pub fn linkedin_job_id(link: &str) -> Option<String> {
         .or_else(|| VIEW.captures(u.path()).map(|m| m[1].to_string()))
 }
 
+/// The LinkedIn job numbers an email links to (a job alert's "View job" links), in order, once each.
+pub fn linkedin_ids_in(text: &str) -> Vec<String> {
+    static VIEW: Lazy<Regex> = Lazy::new(|| Regex::new(r"linkedin\.com/(?:comm/)?jobs/view/(?:[A-Za-z0-9%_-]*-)?(\d{6,})").unwrap());
+    let mut out: Vec<String> = vec![];
+    for m in VIEW.captures_iter(text) {
+        if !out.contains(&m[1].to_string()) {
+            out.push(m[1].to_string());
+        }
+    }
+    out
+}
+
 /// The title, company and place at the top of a signed-out LinkedIn posting.
 pub fn parse_linkedin_top(html: &str) -> (String, String, String) {
     static TITLE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?s)<h[12][^>]*top-card-layout__title[^>]*>(.*?)</h[12]>"#).unwrap());
@@ -1969,6 +1981,15 @@ mod tests {
     }
 
     #[test]
+    fn linkedin_alert_links() {
+        let body = "Senior Business Analyst\nMaple Bank · Oakville, ON\nView job: https://www.linkedin.com/comm/jobs/view/4012345678/?trackingId=abc%3D&refId=x\n\
+Program Manager\nAcme · Toronto, ON\nhttps://www.linkedin.com/jobs/view/program-manager-at-acme-4087654321?trk=eml\n\
+https://www.linkedin.com/comm/jobs/view/4012345678/ (again)\nhttps://www.linkedin.com/comm/jobs/search/?keywords=x";
+        assert_eq!(linkedin_ids_in(body), vec!["4012345678", "4087654321"]);
+        assert!(linkedin_ids_in("no links here").is_empty());
+    }
+
+    #[test]
     fn jsearch_and_jooble() {
         let j = parse_jsearch(&json!({ "status": "OK", "data": [{ "job_id": "abc==", "employer_name": "Maple Bank", "job_title": "Senior Program Manager",
             "job_description": "Lead delivery of payments programs.", "job_apply_link": "https://careers.maplebank.example/1", "job_city": "Toronto",
@@ -1984,17 +2005,18 @@ mod tests {
             "salary": "$110k", "source": "indeed.ca", "type": "Full-time", "link": "https://jooble.org/desc/1", "company": "Acme", "updated": "2026-10-14T00:00:00", "id": 123 }] }));
         assert_eq!((o[0].id().as_str(), o[0].title.as_str(), o[0].company.as_str()), ("jooble:123", "Program Manager", "Acme"));
         let p = crate::testkit::sample_profile();
-        let q = searches(&p, 50);
-        assert!(q.len() > 2 && q.len() < 50);
-        // The GTA cities are one search around Toronto; each title is searched in every place before
+        let q = searches(&p, 100);
+        assert!(q.len() > 2 && q.len() < 100, "{} {:?}", q.len(), p.search_places());
+        // The GTA is searched around Toronto, and around the first GTA town listed (Mississauga);
+        // the towns after it add no searches. Each title is searched in every place before
         // the next. Senior versions come after every regular search.
         let first_senior = q.iter().position(|(t, _)| t.starts_with("Senior ") && !p.tracks.iter().any(|x| x.titles.contains(t))).unwrap();
         assert!(q[first_senior..].iter().all(|(t, _)| t.starts_with("Senior ")), "{q:?}");
         let places: Vec<&str> = q[..first_senior].iter().map(|(_, w)| w.as_str()).collect();
-        assert_eq!(&places[..4], &["Toronto, ON", "Ontario", "Toronto, ON", "Ontario"], "{places:?}");
+        assert_eq!(&places[..4], &["Toronto, ON", "Mississauga, ON", "Ontario", "Toronto, ON"], "{places:?}");
         assert_eq!(searches(&p, 3).len(), 3);
-        // Two searches reach both places.
-        assert_eq!(searches(&p, 2).iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>(), vec!["Toronto, ON", "Ontario"]);
+        // Three searches reach all three places.
+        assert_eq!(searches(&p, 3).iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>(), vec!["Toronto, ON", "Mississauga, ON", "Ontario"]);
         // More searches than a source runs: the first ones every day, the rest take turns, so
         // within a few days every one has run.
         let all = searches_on(&p, 1000, 0);

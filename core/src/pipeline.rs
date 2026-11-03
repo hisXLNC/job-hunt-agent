@@ -898,6 +898,38 @@ replies and interviews, and a little lower for kinds that got none from several 
         list.into_iter().map(|j| alert_posting(j)).collect()
     }
 
+    /// The new postings a LinkedIn job alert links to, read from LinkedIn without Claude. None when
+    /// the email has no job links or LinkedIn wouldn't show any of them (Claude reads it instead).
+    fn linkedin_alert(&self, body: &str) -> Option<Vec<crate::claude::FoundJob>> {
+        let ids = crate::sources::linkedin_ids_in(body);
+        if ids.is_empty() {
+            return None;
+        }
+        let c = crate::sources::http();
+        let (mut out, mut failed) = (vec![], 0);
+        for id in ids.into_iter().take(20) {
+            let url = format!("https://www.linkedin.com/jobs/view/{id}/");
+            if self.db().url_exists(&url).unwrap_or(false) {
+                continue; // seen before: nothing to read
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            match crate::sources::linkedin_posting(&c, &id) {
+                Ok(p) if !p.title.is_empty() && !p.company.is_empty() => out.push(crate::claude::FoundJob {
+                    title: p.title, company: p.company, location: p.location, url, description: p.description,
+                    posted: format!("linkedin|{}", p.posted_at.unwrap_or_default()), salary: p.salary.unwrap_or_default(),
+                }),
+                Ok(_) => failed += 1,
+                Err(e) => {
+                    failed += 1;
+                    if e.contains("limiting") {
+                        break;
+                    }
+                }
+            }
+        }
+        (!out.is_empty() || failed == 0).then_some(out)
+    }
+
     /// Read job-alert emails from LinkedIn, Indeed and Glassdoor, and score the postings in them.
     pub fn process_alerts(&self, mail: &Arc<dyn Mail>, limit: usize) -> R<usize> {
         let mut found: Vec<crate::claude::FoundJob> = vec![];
@@ -906,6 +938,16 @@ replies and interviews, and a little lower for kinds that got none from several 
                 continue;
             }
             let msg = mail.get(&id)?;
+            // LinkedIn's alerts link each job by its number: read them from LinkedIn's public pages,
+            // with no Claude request (and with their full text, which the email doesn't have).
+            if alert_site(&msg.from) == "linkedin" && !cfg!(test) {
+                if let Some(jobs) = self.linkedin_alert(&msg.body) {
+                    let n = jobs.len();
+                    found.extend(jobs);
+                    self.db().record_email(&msg.id, &msg.thread_id, None, &msg.from, &msg.subject, "job_alert", &format!("{n} new postings from a linkedin job alert"), None, &msg.received_at)?;
+                    continue;
+                }
+            }
             let input = EmailIn { from: &msg.from, to: &msg.to, date: &msg.date, subject: &msg.subject, body: &msg.body };
             match self.llm().alert_jobs(&input) {
                 Ok(mut jobs) => {
@@ -1532,7 +1574,8 @@ replies and interviews, and a little lower for kinds that got none from several 
             return err("No CV uploaded yet. Add one in CV & Career.");
         }
         let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
-        let status = if s.score >= profile.score_threshold { "queued" } else { "skipped" };
+        // One you saved (added without Claude, say) stays saved when it scores below your bar.
+        let status = if s.score >= profile.score_threshold { "queued" } else if job.status == "saved" { "saved" } else { "skipped" };
         {
             let db = self.db();
             db.update_job(job_id, &[
@@ -1576,22 +1619,49 @@ replies and interviews, and a little lower for kinds that got none from several 
         self.db().insert_job(&job)
     }
 
-    /// A job you found yourself (LinkedIn, referral), scored and tailored like any other.
-    pub fn add_manual(&self, company: &str, title: &str, url: &str, location: &str, description: &str) -> R<String> {
-        self.add_found("manual", company, title, url, location, description)
+    /// A job you found yourself (LinkedIn, referral), scored and tailored like any other. With
+    /// `use_claude` off (or Claude out of reach) it's saved as it is, for you to tailor later.
+    pub fn add_manual(&self, company: &str, title: &str, url: &str, location: &str, description: &str, use_claude: bool) -> R<String> {
+        self.add_found("manual", company, title, url, location, description, use_claude)
+    }
+
+    /// The notice after adding a posting: tailored, scored, or saved without Claude.
+    pub fn added_notice(&self, id: &str) -> (String, String) {
+        let Ok(Some(j)) = self.db().job(id) else { return ("Added to Job Hunt".into(), String::new()) };
+        match (j.status.as_str(), j.score) {
+            ("ready", s) => ("Application ready".into(), format!("{} at {} (fit {}) has a tailored CV and cover letter waiting for your approval.", j.title, j.company, s.unwrap_or(0))),
+            (_, Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}.", j.title, j.company)),
+            _ => ("Saved to Job Hunt".into(), format!("{} at {} is saved under Applications. Use Tailor anyway when you want a tailored CV and cover letter.", j.title, j.company)),
+        }
+    }
+
+    /// A posting read from its link without Claude: LinkedIn's signed-out page, or the page's own
+    /// job data. For filling in the Add a job form.
+    pub fn read_link(&self, url: &str) -> R<Posting> {
+        let url = url.trim();
+        if !url.starts_with("http") {
+            return err("Paste the posting's full link, starting with https://");
+        }
+        let c = crate::sources::http();
+        let p = match crate::sources::linkedin_job_id(url) {
+            Some(id) => crate::sources::linkedin_posting(&c, &id),
+            None => crate::sites::read_posting_link(&c, url),
+        };
+        p.map_err(|e| Error(format!("Couldn't read that posting ({e}). Paste its details instead.")))
     }
 
     /// A posting sent from your browser with the Send to Job Hunt button: {url, title, company,
-    /// location, text, structured}. When the page didn't describe the job in a standard way,
-    /// Claude reads the page to find it.
+    /// location, text, structured}. When the page didn't describe the job in a standard way, its
+    /// own page is read for the job data, and only then does Claude read the page to find it.
     pub fn add_clip(&self, clip: &Value) -> R<Job> {
         let f = |k: &str| clip[k].as_str().unwrap_or("").trim().to_string();
+        let use_claude = clip["claude"].as_bool().unwrap_or(true);
         // A LinkedIn job: read it as LinkedIn shows it signed out, which is far cleaner than the
         // signed-in page (a list of other jobs, the feed, messages).
         if let Some(id) = crate::sources::linkedin_job_id(&f("url")).filter(|_| !cfg!(test)) {
             if let Ok(p) = crate::sources::linkedin_posting(&crate::sources::http(), &id) {
                 if !p.title.is_empty() && !p.company.is_empty() {
-                    let jid = self.add_found("linkedin", &p.company, &p.title, &p.url, &p.location, &p.description)?;
+                    let jid = self.add_found("linkedin", &p.company, &p.title, &p.url, &p.location, &p.description, use_claude)?;
                     let mut set: Vec<(&str, Value)> = vec![];
                     if let Some(u) = p.apply_url { set.push(("apply_url", u.into())); }
                     if let Some(e) = p.apply_email { set.push(("apply_email", e.into())); }
@@ -1609,18 +1679,35 @@ replies and interviews, and a little lower for kinds that got none from several 
             return err("That page had no posting text. Select the job description on the page and click the button again.");
         }
         if clip["structured"].as_bool() != Some(true) || title.is_empty() || company.is_empty() {
-            let j = self.llm().read_posting(&url, &text)?;
-            if j.title.trim().is_empty() || j.description.trim().chars().count() < 40 {
-                return err("That page doesn't look like a job posting. Open the posting itself, then click the button.");
+            // The page's own job data first: it costs no Claude usage.
+            let page = if cfg!(test) || !url.starts_with("http") { None } else {
+                crate::sites::read_posting_link(&crate::sources::http(), &url).ok()
+                    .filter(|p| !p.title.is_empty() && !p.company.is_empty() && p.description.chars().count() >= 200)
+            };
+            let read = match page {
+                Some(p) => Some(crate::claude::FoundJob { title: p.title, company: p.company, location: p.location, description: p.description, ..Default::default() }),
+                None if use_claude && self.claude_ready() => match self.llm().read_posting(&url, &text) {
+                    Ok(j) if j.title.trim().is_empty() || j.description.trim().chars().count() < 40 => {
+                        return err("That page doesn't look like a job posting. Open the posting itself, then click the button.");
+                    }
+                    Ok(j) => Some(j),
+                    // Claude out of reach: the page as you sent it.
+                    Err(_) => None,
+                },
+                None => None,
+            };
+            if let Some(j) = read {
+                title = j.title.trim().to_string();
+                if !j.company.trim().is_empty() {
+                    company = j.company.trim().to_string();
+                }
+                if !j.location.trim().is_empty() {
+                    location = j.location.trim().to_string();
+                }
+                description = j.description;
+            } else if title.is_empty() {
+                title = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("").chars().take(120).collect();
             }
-            title = j.title.trim().to_string();
-            if !j.company.trim().is_empty() {
-                company = j.company.trim().to_string();
-            }
-            if !j.location.trim().is_empty() {
-                location = j.location.trim().to_string();
-            }
-            description = j.description;
         }
         if company.is_empty() {
             company = url::Url::parse(&url).ok().and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_string())).unwrap_or_else(|| "Unknown".into());
@@ -1628,19 +1715,22 @@ replies and interviews, and a little lower for kinds that got none from several 
         let host = url::Url::parse(&url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default();
         let source = ["linkedin", "indeed", "glassdoor", "jobbank", "workopolis", "eluta", "ziprecruiter", "monster"].iter()
             .find(|s| host.contains(*s)).map(|s| s.to_string()).unwrap_or_else(|| "browser".into());
-        let id = self.add_found(&source, &company, &title, &url, &location, &description)?;
+        let id = self.add_found(&source, &company, &title, &url, &location, &description, use_claude)?;
         self.db().job(&id)?.ok_or_else(|| Error("That job no longer exists.".into()))
     }
 
-    fn add_found(&self, source: &str, company: &str, title: &str, url: &str, location: &str, description: &str) -> R<String> {
-        if company.trim().is_empty() || title.trim().is_empty() || description.trim().len() < 40 {
+    /// Add a posting you found. With Claude it's scored and tailored; without (you said so, it isn't
+    /// connected, there's no CV yet, or it's at its usage limit) it's saved for later as it is, and
+    /// Tailor anyway scores and tailors it whenever you like.
+    fn add_found(&self, source: &str, company: &str, title: &str, url: &str, location: &str, description: &str, use_claude: bool) -> R<String> {
+        if company.trim().is_empty() || title.trim().is_empty() {
+            return err("Add the company and the title.");
+        }
+        if use_claude && description.trim().len() < 40 {
             return err("Add the company, the title and the full job description.");
         }
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
-        if cvs.is_empty() {
-            return err("No CV uploaded yet. Add one in CV & Career.");
-        }
         let p = Posting {
             source: source.into(),
             external_id: short_hash(&format!("{company}|{title}|{url}")),
@@ -1666,21 +1756,50 @@ replies and interviews, and a little lower for kinds that got none from several 
             self.db().delete_job(&p.id())?;
         }
         let mut job = p.to_job();
-        let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
+        let how = if source == "manual" { "added by hand" } else { "sent from the browser" };
+        // Why it's saved without Claude, if it is.
+        let without = if !use_claude {
+            Some("you added it without Claude".to_string())
+        } else if cvs.is_empty() {
+            Some("no CV uploaded yet".to_string())
+        } else if !self.claude_ready() {
+            Some("Claude isn't connected".to_string())
+        } else if self.limited().is_some() {
+            Some("Claude is at its usage limit".to_string())
+        } else {
+            match self.llm().score(&cvs, &self.scoring_guidance(&profile), &job) {
+                Ok(s) => {
+                    job.score = Some(s.score);
+                    job.score_potential = s.potential;
+                    job.track = Some(s.track);
+                    job.reasoning = Some(s.reasoning);
+                    job.red_flags = s.red_flags;
+                    job.keywords = s.keywords;
+                    job.deadline = deadline_of(&s.deadline, &job.description);
+                    None
+                }
+                Err(e) => Some(format!("Claude couldn't score it ({e})")),
+            }
+        };
+        if let Some(why) = without {
+            job.status = "saved".into();
+            job.reasoning = Some(format!("Saved without scoring: {why}. Use Tailor anyway when you want a tailored CV and cover letter."));
+            job.deadline = deadline_of("", &job.description);
+            let db = self.db();
+            db.insert_job(&job)?;
+            db.log(Some(&job.id), "added", &format!("{how}; saved without Claude: {why}"))?;
+            return Ok(job.id);
+        }
         job.status = "queued".into();
-        job.score = Some(s.score);
-        job.score_potential = s.potential;
-        job.track = Some(s.track);
-        job.reasoning = Some(s.reasoning);
-        job.red_flags = s.red_flags;
-        job.keywords = s.keywords;
-        job.deadline = deadline_of(&s.deadline, &job.description);
         {
             let db = self.db();
             db.insert_job(&job)?;
-            db.log(Some(&job.id), "added", if source == "manual" { "added by hand" } else { "sent from the browser" })?;
+            db.log(Some(&job.id), "added", how)?;
         }
-        self.tailor(&job.id, None)?;
+        // Scored and kept even if tailoring fails now (a usage limit, say): it waits to be picked.
+        if let Err(e) = self.tailor(&job.id, None) {
+            self.db().log(Some(&job.id), "tailor:error", &e.0)?;
+        }
         Ok(job.id)
     }
 
@@ -6805,6 +6924,27 @@ mod tests {
         assert!(again.unwrap_err().0.contains("already in Job Hunt"));
         assert!(s.agent.add_clip(&json!({ "url": "https://example.com", "text": "A recipe for banana bread with walnuts and a little cinnamon." })).unwrap_err().0.contains("doesn't look like a job posting"));
         assert!(crate::api::parse_clip("JOBHUNT-CLIP:{\"url\":\"x\"}").is_some() && crate::api::parse_clip("hello").is_none());
+    }
+
+    #[test]
+    fn postings_added_without_claude() {
+        let s = setup();
+        let before = s.llm.calls.lock().unwrap().len();
+        // You said no Claude: saved as it is, no description needed, nothing asked of Claude.
+        let id = s.agent.add_manual("Maple Bank", "Senior Business Analyst", "https://jobs.maple.example/9", "Oakville, ON", "", false).unwrap();
+        let j = s.agent.db().job(&id).unwrap().unwrap();
+        assert_eq!((j.status.as_str(), j.score), ("saved", None));
+        assert!(j.reasoning.unwrap().contains("without Claude"));
+        assert_eq!(s.llm.calls.lock().unwrap().len(), before, "no Claude usage");
+        assert_eq!(s.agent.added_notice(&id).0, "Saved to Job Hunt");
+        // From the browser without Claude: the page as sent, its first line as the title.
+        let j = s.agent.add_clip(&json!({ "url": "https://careers.globex.example/7", "claude": false,
+            "text": "Delivery Lead\nGlobex is hiring a delivery lead to run release planning across its payments teams." })).unwrap();
+        assert_eq!((j.title.as_str(), j.company.as_str(), j.status.as_str()), ("Delivery Lead", "careers.globex.example", "saved"));
+        assert!(!s.llm.calls.lock().unwrap().iter().any(|c| c.starts_with("read_posting")));
+        // Scoring it later is one click; one below your bar stays saved, not skipped.
+        s.llm.scores.lock().unwrap().insert("Senior Business Analyst".into(), 30);
+        assert_eq!(s.agent.score_anyway(&id).unwrap().status, "saved");
     }
 
     #[test]

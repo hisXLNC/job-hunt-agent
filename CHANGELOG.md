@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.12.0] - 2026-11-03
+
+GTA searches, adding jobs without Claude, and lighter Claude use.
+
+### Changes
+
+- Oakville and the rest of the GTA are picked up however you write them ("Oakville, ON", "Oakville, Ontario"), including postings that name a district or region (Meadowvale, Peel Region, GTA) and remote roles open across Ontario.
+- A GTA town you list, like Oakville, is searched around itself as well as around Toronto, so jobs west and east of the city aren't missed.
+- Add a job without Claude: paste its link and Fill in from link reads the posting, then Just save it. Tailor it whenever you like.
+- A job you add or send from the browser is saved instead of lost when Claude isn't connected or is at its usage limit.
+- Uses less of your Claude plan for the same results: postings are sent without their legal boilerplate, emails without the quoted thread, LinkedIn job alerts are read without Claude, and browser postings are read from the page's own job data first.
+
 ## [2.11.0] - 2026-10-28
 
 Career coach, pause searches, and a clearer job page.
@@ -831,6 +843,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.12.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.12.0
 [2.11.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.11.0
 [2.10.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.10.0
 [2.9.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.9.1

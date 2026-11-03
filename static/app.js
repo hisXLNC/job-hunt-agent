@@ -1138,7 +1138,7 @@ async function togglePosting(tr) {
           <div class="muted small">${ageTag(j)} · found on ${esc(sourceName(j.source))}</div></div>
         <div class="row">
           ${j.url ? `<button class="btn" data-act="open" data-what="posting" data-job="${id}">${svg('open')}Open posting</button>` : ''}
-          ${j.status === 'skipped' && j.score == null ? `<button class="btn" data-act="scoreAnyway" data-job="${id}">Score it anyway</button>` : ''}
+          ${['skipped', 'saved'].includes(j.status) && j.score == null ? `<button class="btn" data-act="scoreAnyway" data-job="${id}">Score it anyway</button>` : ''}
           ${CAN_CHOOSE.includes(j.status) ? `<button class="btn primary" data-act="tailorAnyway" data-job="${id}">Tailor anyway</button>` : ''}
           <a class="btn ghost" href="#job/${encodeURIComponent(j.id)}">Full details</a>
         </div>
@@ -1674,15 +1674,22 @@ async function showInbox() {
 // ---- Add a job ----
 function showAdd() {
   const noCv = overview && !overview.setup?.cvs;
-  page(`<div class="head"><div class="grow"><div class="eyebrow"><a href="#pipeline">Applications</a> / Add a job</div><h1>Add a job you found</h1><p class="muted">For roles on LinkedIn, company sites or from referrals. Paste the posting and it gets scored and tailored like any other.</p></div></div>
-    ${noCv ? '<section class="card"><p>Add your CV first: Job Hunt compares the posting with it and tailors it for the role.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>' : ''}
+  // Without Claude connected (or a CV to compare with) the posting is saved as it is.
+  const canClaude = !!(overview?.setup?.claude && overview?.setup?.cvs);
+  page(`<div class="head"><div class="grow"><div class="eyebrow"><a href="#pipeline">Applications</a> / Add a job</div><h1>Add a job you found</h1><p class="muted">For roles on LinkedIn, company sites or from referrals. Paste the link to fill this in, then have it scored and tailored, or just save it to track.</p></div></div>
+    ${noCv ? '<section class="card"><p>No CV yet, so a job you add here is saved without a score. Add your CV and Job Hunt can score it and tailor your CV for it.</p><div class="row"><a class="btn" href="#cvs">Add your CV</a></div></section>' : ''}
     <form class="card" data-form="add"><div class="form">
+      <div class="field wide">Posting link<div class="row" style="flex-wrap:nowrap"><input type="url" name="url" placeholder="https://" style="flex:1"><button class="btn" type="button" data-act="fillFromLink">Fill in from link</button></div>
+        <span class="hint">Reads the posting from its page (LinkedIn and most company job sites), without using Claude.</span></div>
       <label class="field">Company<input type="text" name="company" required></label>
       <label class="field">Job title<input type="text" name="title" required></label>
-      <label class="field">Posting link<input type="url" name="url" placeholder="https://"></label>
       <label class="field">Location<input type="text" name="location"></label>
-      <label class="field wide">Full job description<textarea name="description" required style="min-height:300px"></textarea></label>
-    </div><div class="row"><button class="btn primary" type="submit">Score and tailor</button></div></form>
+      <label class="field wide">Full job description<textarea name="description" style="min-height:300px" placeholder="Needed to score and tailor; optional if you only save it."></textarea></label>
+      <div class="field wide">What to do with it
+        <label class="check"><input type="radio" name="claude" value="1" ${canClaude ? 'checked' : 'disabled'}> <span>Score it and tailor my CV and a cover letter<br><span class="muted small">${canClaude ? 'Uses Claude: two or three requests.' : 'Needs Claude connected and your CV added.'}</span></span></label>
+        <label class="check"><input type="radio" name="claude" value="0" ${canClaude ? '' : 'checked'}> <span>Just save it, without Claude<br><span class="muted small">Saved under Applications. Use Tailor anyway on it whenever you like.</span></span></label>
+      </div>
+    </div><div class="row"><button class="btn primary" type="submit">Add the job</button></div></form>
     <p class="muted small desktop-only">Used the <a href="#settings/sources">Send to Job Hunt</a> button? Press Ctrl+V on this page to add that posting.</p>`);
 }
 
@@ -3153,6 +3160,16 @@ async function act(el) {
   if (a === 'setupSkip') {
     return busy(async () => { await api('/api/setup-skip', { method: 'POST', body: { what: el.dataset.what } }); await refreshOverview(); route(); });
   }
+  if (a === 'fillFromLink') {
+    const f = el.closest('form').elements;
+    if (!f.url.value.trim()) { toast('Paste the posting\'s link first.', true); return; }
+    toast('Reading the posting…');
+    return busy(async () => {
+      const p = await api('/api/read-link', { method: 'POST', body: { url: f.url.value } });
+      for (const k of ['company', 'title', 'location', 'description']) if (p[k] && !f[k].value.trim()) f[k].value = p[k];
+      toast(p.company && p.title ? 'Filled in from the posting. Check it, then add it.' : 'Read the posting; fill in what\'s missing.');
+    });
+  }
   if (a === 'scoreAnyway') {
     return busy(async () => {
       await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/score`, { method: 'POST' });
@@ -3551,8 +3568,9 @@ document.addEventListener('submit', async e => {
     const kind = form.dataset.form;
     const f = form.elements;
     if (kind === 'add') {
-      await api('/api/add', { method: 'POST', body: { company: f.company.value, title: f.title.value, url: f.url.value, location: f.location.value, description: f.description.value } });
-      toast('Added. It appears under Ready to approve in a minute or two.');
+      const claude = form.querySelector('[name=claude]:checked')?.value === '1';
+      await api('/api/add', { method: 'POST', body: { company: f.company.value, title: f.title.value, url: f.url.value, location: f.location.value, description: f.description.value, claude } });
+      toast(claude ? 'Added. Once it\'s scored and tailored it appears under Ready to approve; you get a notice.' : 'Saved. It\'s under Applications, Saved for later.');
       location.hash = '#overview';
     } else if (kind === 'claude') {
       await api('/api/settings/claude', { method: 'POST', body: { engine: form.querySelector('[name=engine]:checked').value, claude_key: f.claude_key.value, model: f.model.value, tailor_model: f.tailor_model.value, tailor_effort: f.tailor_effort.value, path: f.path.value } });

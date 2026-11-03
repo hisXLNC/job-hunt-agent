@@ -406,6 +406,47 @@ pub fn parse_posting_page(html: &str) -> Option<(String, Option<Value>)> {
     (t.len() > 200).then_some((t, None))
 }
 
+/// A posting read from its own page, without Claude: its JobPosting data (title, company, place,
+/// pay and text), or failing that the page's title and main text. None when there's no job text.
+pub fn parse_posting_link(html: &str) -> Option<Posting> {
+    let (description, ld) = parse_posting_page(html)?;
+    let mut p = Posting { description, ..Posting::default() };
+    if let Some(j) = ld {
+        p.title = html_to_text(&text(&j["title"]));
+        p.company = text(&j["hiringOrganization"]);
+        let (place, remote) = ld_place(&j);
+        p.location = place;
+        p.remote = remote;
+        p.posted_at = Some(text(&j["datePosted"])).filter(|d| !d.is_empty());
+        if let Some((t, max)) = ld_pay(&j) {
+            p.salary = Some(t);
+            p.salary_max = max;
+        }
+    }
+    if p.title.is_empty() {
+        // "Senior Analyst | Acme Careers": the part before the site's name.
+        static TITLE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<title[^>]*>(.*?)</title>").unwrap());
+        let t = TITLE.captures(html).map(|m| html_to_text(&m[1])).unwrap_or_default();
+        p.title = t.split(['|', '–', '—']).next().unwrap_or("").split(" - ").next().unwrap_or("").trim().to_string();
+    }
+    if p.salary.is_none() {
+        if let Some((t, max)) = salary_from_text(&p.description) {
+            p.salary = Some(t);
+            p.salary_max = max;
+        }
+    }
+    p.apply_email = find_apply_email(&p.description);
+    Some(p)
+}
+
+/// Read a posting from its link without Claude (see parse_posting_link).
+pub fn read_posting_link(c: &reqwest::blocking::Client, url: &str) -> Result<Posting, String> {
+    let (html, _) = read(c, url, false)?;
+    let mut p = parse_posting_link(&html).ok_or("that page has no job description Job Hunt can read")?;
+    p.url = url.to_string();
+    Ok(p)
+}
+
 /// Fill in the text of new postings found as links, at most `max`, a couple of seconds apart.
 pub fn details(c: &reqwest::blocking::Client, postings: &mut [&mut Posting], max: usize) -> usize {
     let mut n = 0;
@@ -448,6 +489,22 @@ pub fn details(c: &reqwest::blocking::Client, postings: &mut [&mut Posting], max
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn posting_from_its_page() {
+        let ld = r#"<html><head><title>x</title><script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting",
+          "title":"Senior Business Analyst","hiringOrganization":{"@type":"Organization","name":"Maple Bank"},"datePosted":"2026-10-30",
+          "jobLocation":{"@type":"Place","address":{"addressLocality":"Oakville","addressRegion":"ON"}},
+          "description":"<p>Lead requirements, UAT and process mapping for our payments platform. Hybrid in Oakville.</p>"}</script></head><body></body></html>"#;
+        let p = super::parse_posting_link(ld).unwrap();
+        assert_eq!((p.title.as_str(), p.company.as_str(), p.location.as_str()), ("Senior Business Analyst", "Maple Bank", "Oakville, ON"));
+        assert!(p.description.contains("UAT"));
+        let plain = format!("<html><head><title>Data Lead | Acme Careers</title></head><body><main><h1>Data Lead</h1><p>{}</p></main></body></html>", "Own the data platform roadmap. ".repeat(10));
+        let p = super::parse_posting_link(&plain).unwrap();
+        assert_eq!(p.title, "Data Lead");
+        assert!(p.company.is_empty() && p.description.contains("roadmap"));
+        assert!(super::parse_posting_link("<html><body>Sign in</body></html>").is_none());
+    }
+
     use super::*;
 
     fn site(id: &str) -> Target {

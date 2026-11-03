@@ -94,12 +94,13 @@ pub fn outside_locations(p: &Posting, profile: &Profile) -> Option<String> {
     if loc.trim().is_empty() {
         return Some("location not given".into());
     }
-    // Whole words: Milton isn't in "Hamilton", nor York in "New York".
-    if places.iter().any(|l| has_words(&loc, l)) {
-        return None;
-    }
     let country = &profile.sources.adzuna_country;
     let in_country = crate::profile::country_names(country).iter().any(|c| has_words(&loc, c));
+    // Whole words: Milton isn't in "Hamilton", nor York in "New York". A place of the same name in
+    // another country ("London, United Kingdom" when you're in London, Ontario) doesn't count.
+    if places.iter().any(|l| has_words(&loc, l)) && (in_country || !in_other_country(&loc, country)) {
+        return None;
+    }
     // In a small country (Qatar, Bahrain, Singapore...) anywhere in it is within reach.
     if in_country && crate::profile::small_country(country) {
         return None;
@@ -109,7 +110,17 @@ pub fn outside_locations(p: &Posting, profile: &Profile) -> Option<String> {
     if remote && profile.remote_ok && in_country {
         return None;
     }
+    // "Remote - Ontario": open across your province.
+    if remote && profile.remote_ok && profile.home_provinces().iter().any(|p| has_words(&loc, &p.to_lowercase())) {
+        return None;
+    }
     Some(format!("location “{}”", p.location))
+}
+
+/// Whether a (lowercased) location names a country other than yours.
+fn in_other_country(loc: &str, yours: &str) -> bool {
+    crate::profile::COUNTRIES.iter().filter(|c| !c.0.eq_ignore_ascii_case(yours))
+        .any(|c| std::iter::once(c.1).chain(c.2.iter().copied()).any(|n| has_words(loc, &n.to_lowercase())))
 }
 
 /// The reason given when a posting's title and text match none of your CVs' titles or keywords.
@@ -178,7 +189,27 @@ mod tests {
         let alone = Profile { include_metro: false, ..oakville.clone() };
         assert!(prefilter(&Posting { location: "Mississauga, ON".into(), ..far.clone() }, &alone).is_some());
         assert_eq!(alone.search_places(), vec!["Oakville"], "on its own: searched around itself");
-        assert_eq!(oakville.search_places(), vec!["Toronto, ON"], "the GTA: searched around Toronto");
+        assert_eq!(oakville.search_places(), vec!["Oakville, ON", "Toronto, ON"], "the GTA: around Oakville and around Toronto");
+        // Written with its province, the way people type it, Oakville still brings in the GTA.
+        for written in ["Oakville, ON", "Oakville, Ontario", "Oakville, ON, Canada", "oakville"] {
+            let o = Profile { locations: vec![written.into()], ..oakville.clone() };
+            for (l, ok) in [("Oakville, Ontario, Canada", true), ("Mississauga, ON", true), ("Burlington, ON", true), ("Meadowvale, ON", true),
+                ("Toronto, ON", true), ("Peel Region, ON", true), ("GTA", true), ("Hamilton, ON", false), ("Vancouver, BC", false)] {
+                assert_eq!(prefilter(&Posting { location: l.into(), ..far.clone() }, &o).is_none(), ok, "{written}: {l}");
+            }
+            assert_eq!(o.search_places().last().unwrap(), "Toronto, ON", "{written}");
+        }
+        let gta_only = Profile { locations: vec!["GTA".into()], ..profile() };
+        assert_eq!(gta_only.search_places(), vec!["Toronto, ON"], "the area itself: one search around its centre");
+        let gta_on = Profile { locations: vec!["Greater Toronto Area, ON".into()], include_metro: false, ..profile() };
+        assert_eq!(prefilter(&Posting { location: "Oakville, ON".into(), ..far.clone() }, &gta_on), None);
+        // Remote across your province, but not someone else's.
+        assert_eq!(prefilter(&Posting { location: "Remote - Ontario".into(), ..far.clone() }, &oakville), None);
+        assert!(prefilter(&Posting { location: "Remote - Alberta".into(), ..far.clone() }, &oakville).is_some());
+        // London, Ontario isn't London, England.
+        let ldn = Profile { locations: vec!["London, ON".into()], ..profile() };
+        assert_eq!(prefilter(&Posting { location: "London, Ontario".into(), ..far.clone() }, &ldn), None);
+        assert!(prefilter(&Posting { location: "London, England, United Kingdom".into(), ..far.clone() }, &ldn).is_some());
         // Qatar: a small country, so anywhere in it is in reach of Doha.
         let mut kw = Profile { locations: vec!["Doha".into()], remote_ok: false, ..profile() };
         kw.sources.adzuna_country = "qa".into();

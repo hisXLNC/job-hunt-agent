@@ -231,8 +231,10 @@ pub fn start_clip(agent: &Arc<Agent>, clip: Value) {
         let title = clip["title"].as_str().filter(|t| !t.is_empty()).unwrap_or("the posting").to_string();
         a.note("Adding to Job Hunt", &format!("Reading {title} and checking how well it fits…"));
         match a.add_clip(&clip) {
-            Ok(j) if j.status == "ready" => a.note("Application ready", &format!("{} at {} (fit {}) has a tailored CV and cover letter waiting for your approval.", j.title, j.company, j.score.unwrap_or(0))),
-            Ok(j) => a.note("Added to Job Hunt", &format!("{} at {}: fit {}.", j.title, j.company, j.score.unwrap_or(0))),
+            Ok(j) => {
+                let (head, body) = a.added_notice(&j.id);
+                a.note(&head, &body);
+            }
             // Already there: not a problem, and noted on that job (see add_found).
             Err(e) if e.0.ends_with("is already in Job Hunt.") => a.note("Already in Job Hunt", &e.0),
             Err(e) => {
@@ -933,14 +935,21 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         ["api", "add"] => {
             let (a, f) = (agent.clone(), b.clone());
-            if s(&f, "company").trim().is_empty() || s(&f, "title").trim().is_empty() || s(&f, "description").trim().len() < 40 {
-                return Err(Error("Add the company, the title and the full job description.".into()));
+            // Without Claude (you chose so, or it isn't connected) the posting is saved as it is.
+            let use_claude = f["claude"].as_bool().unwrap_or(true);
+            if s(&f, "company").trim().is_empty() || s(&f, "title").trim().is_empty() {
+                return Err(Error("Add the company and the job title.".into()));
             }
-            ready_to_search(agent)?;
+            if use_claude && s(&f, "description").trim().len() < 40 {
+                return Err(Error("Add the full job description, so Claude can score it and tailor your CV (or choose Just save it).".into()));
+            }
             std::thread::spawn(move || {
                 let Ok(_g) = a.claim("add") else { return };
-                match a.add_manual(s(&f, "company"), s(&f, "title"), s(&f, "url"), s(&f, "location"), s(&f, "description")) {
-                    Ok(_) => a.note("Application ready", &format!("{} at {} is tailored and waiting for your approval.", s(&f, "title"), s(&f, "company"))),
+                match a.add_manual(s(&f, "company"), s(&f, "title"), s(&f, "url"), s(&f, "location"), s(&f, "description"), use_claude) {
+                    Ok(id) => {
+                        let (head, body) = a.added_notice(&id);
+                        a.note(&head, &body);
+                    }
                     Err(e) => {
                         let _ = a.db().log(None, "add:error", &e.0);
                         a.note("Couldn't add that job", &e.0);
@@ -1271,6 +1280,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
             });
             Ok(Resp::json(&json!({ "started": true })))
+        }
+        ["api", "read-link"] => {
+            // Fill in the Add a job form from a link, without Claude.
+            let p = agent.read_link(s(&b, "url"))?;
+            Ok(Resp::json(&json!({ "title": p.title, "company": p.company, "location": p.location, "description": p.description, "url": p.url })))
         }
         ["api", "clip"] => {
             // A posting sent with the Send to Job Hunt button, pasted into Job Hunt.

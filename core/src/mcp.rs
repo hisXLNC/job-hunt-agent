@@ -165,9 +165,9 @@ pub fn call(agent: &Arc<Agent>, name: &str, a: &Value) -> R<Value> {
             }
             let msg = format!("Adding {title} at {company}. Job Hunt is scoring it now; if it fits, the tailored CV and cover letter are ready in a few minutes under Ready to approve.");
             background(agent, "add".into(), String::new(), move |ag| {
-                let id = ag.add_manual(&company, &title, &url, &location, &description)?;
-                ag.note("Application ready", &format!("{title} at {company} is tailored and waiting for your approval."));
-                let _ = id;
+                let id = ag.add_manual(&company, &title, &url, &location, &description, true)?;
+                let (head, body) = ag.added_notice(&id);
+                ag.note(&head, &body);
                 Ok(())
             })?;
             Ok(text(msg))

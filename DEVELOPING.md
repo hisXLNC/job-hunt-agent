@@ -38,3 +38,11 @@ servers and session history switched off, and asks for schema-checked JSON (`--j
 Each new posting that passes the filters is one scoring request, and each tailored application
 one more. "Most new postings scored per search" (default 40) keeps a big search from using up
 your plan's limits. With an API key, calls go to `claude-opus-5-5` by default.
+
+To keep requests small without changing what Claude sees of a job: postings are sent without
+their boilerplate (equal-opportunity, accommodation, privacy and fraud notices; `tidy_posting`),
+scoring sends at most 10,000 characters of a posting, and emails are sent without the quoted
+history of the thread (`newest_message`). Work that needs no judgement skips Claude: LinkedIn
+job-alert emails are read from LinkedIn's public job pages, and a posting sent from the browser is
+read from its page's job data before Claude is asked to find it. A job can be added without Claude
+at all (saved for later, tailored when you choose).

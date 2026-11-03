@@ -278,13 +278,15 @@ impl Profile {
     }
 
     /// Every place name a job's location may contain to count as one of yours: each location you
-    /// listed, with a region like "GTA" spread into its cities and districts.
+    /// listed (and its city alone when you wrote "Oakville, ON"), with a region like "GTA" spread
+    /// into its cities and districts.
     pub fn place_names(&self) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         for l in self.locations.iter().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+            let bare = self.bare_place(l);
             let more = self.region(l).map(|r| r.members).unwrap_or(&[]);
-            for n in std::iter::once(l).chain(more.iter().copied()) {
-                if !out.iter().any(|x| x.eq_ignore_ascii_case(n)) {
+            for n in [l, bare.as_str()].into_iter().chain(more.iter().copied()) {
+                if !n.is_empty() && !out.iter().any(|x| x.eq_ignore_ascii_case(n)) {
                     out.push(n.to_lowercase());
                 }
             }
@@ -292,24 +294,97 @@ impl Profile {
         out
     }
 
-    /// The places to give job-search services: your locations, with a region searched once around
-    /// its centre ("GTA", "Mississauga" and "Markham" are all one search around Toronto) since the
-    /// services search a radius around the place. Empty when you search anywhere.
+    /// A place without the province, state or country after it: "Oakville, ON" → "Oakville",
+    /// "Toronto, Ontario, Canada" → "Toronto", "Toronto (GTA)" → "Toronto".
+    pub fn bare_place(&self, l: &str) -> String {
+        let mut l = l.trim().to_string();
+        if let Some(i) = l.find('(') {
+            if i > 0 && l.ends_with(')') {
+                l = l[..i].trim().to_string();
+            }
+        }
+        let country = country_names(&self.sources.adzuna_country);
+        while let Some((head, tail)) = l.rsplit_once(',') {
+            let t = tail.trim().to_lowercase();
+            let regional = t.len() == 2 && t.chars().all(|c| c.is_ascii_alphabetic())
+                || country.contains(&t)
+                || PROVINCES.iter().any(|p| p.0 == self.sources.adzuna_country && (p.1.eq_ignore_ascii_case(&t) || p.2.eq_ignore_ascii_case(&t)));
+            if !regional || head.trim().is_empty() {
+                break;
+            }
+            l = head.trim().to_string();
+        }
+        l
+    }
+
+    /// The provinces your places are in, by name ("Ontario"): a remote role open across one of them
+    /// is within reach, like one open across the country.
+    pub fn home_provinces(&self) -> Vec<&'static str> {
+        let code = &self.sources.adzuna_country;
+        let mut out = vec![];
+        for l in self.locations.iter().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+            let full = self.region(l).map(|r| r.centre.to_string()).unwrap_or_else(|| l.to_string());
+            for part in full.split(',').skip(1).map(|x| x.trim()) {
+                if let Some(p) = PROVINCES.iter().find(|p| p.0 == code && (p.1.eq_ignore_ascii_case(part) || p.2.eq_ignore_ascii_case(part))) {
+                    if !out.contains(&p.2) {
+                        out.push(p.2);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// The places to give job-search services: your locations, with a region searched around its
+    /// centre ("GTA" and "Toronto" are one search around Toronto) since the services search a
+    /// radius around the place. A town in a region you named ("Oakville") is searched around
+    /// itself as well as the centre: the radius around Toronto barely reaches it, and none of the
+    /// towns past it (only the first town you list in each area, to keep searches few). Empty when
+    /// you search anywhere.
     pub fn search_places(&self) -> Vec<String> {
         // Older versions had a separate list for the search services; it's used only when there
         // are no locations.
         let listed = if self.locations.iter().any(|l| !l.trim().is_empty()) { &self.locations } else { &self.sources.adzuna_where };
         let mut out: Vec<String> = vec![];
+        let mut towns: Vec<&str> = vec![]; // regions that already have a town searched
+        let mut add = |p: String| {
+            if !out.iter().any(|x| x.eq_ignore_ascii_case(&p)) {
+                out.push(p);
+            }
+        };
         for l in listed.iter().map(|l| l.trim()).filter(|l| !l.is_empty()) {
-            // A whole area is searched once around its centre; a city on its own, around itself.
-            let centre = self.region(l).map(|r| r.centre).unwrap_or(l);
-            if !out.iter().any(|x| x.eq_ignore_ascii_case(centre)) {
-                out.push(centre.to_string());
+            match self.region(l) {
+                Some(r) => {
+                    let bare = self.bare_place(l);
+                    // A town, not the centre or a name for the area ("GTA", "Peel Region").
+                    let town = r.members.iter().skip(2).any(|m| m.eq_ignore_ascii_case(&bare)) && !r.city.eq_ignore_ascii_case(&bare)
+                        && !r.name.eq_ignore_ascii_case(&bare) && !bare.to_lowercase().contains("region") && bare.chars().any(|c| c.is_lowercase());
+                    // Only the first town you list in each area: every one more would be another
+                    // search of each title on every service.
+                    if town && !towns.contains(&r.name) {
+                        towns.push(r.name);
+                        // "Oakville" → "Oakville, ON", the way the centre names its province.
+                        let suffix = r.centre.split_once(',').map(|x| x.1.trim()).unwrap_or("");
+                        add(if l.contains(',') || suffix.is_empty() || bare.contains(',') { l.to_string() } else { format!("{bare}, {suffix}") });
+                    }
+                    add(r.centre.to_string());
+                }
+                None => add(l.to_string()),
             }
         }
         out
     }
 }
+
+/// Provinces and states postings name after a city: (country, code, name).
+pub const PROVINCES: &[(&str, &str, &str)] = &[
+    ("ca", "ON", "Ontario"), ("ca", "QC", "Quebec"), ("ca", "QC", "Québec"), ("ca", "BC", "British Columbia"), ("ca", "AB", "Alberta"),
+    ("ca", "MB", "Manitoba"), ("ca", "SK", "Saskatchewan"), ("ca", "NS", "Nova Scotia"), ("ca", "NB", "New Brunswick"),
+    ("ca", "NL", "Newfoundland and Labrador"), ("ca", "PE", "Prince Edward Island"), ("ca", "PEI", "Prince Edward Island"),
+    ("us", "NY", "New York"), ("us", "CA", "California"), ("us", "NJ", "New Jersey"), ("us", "TX", "Texas"), ("us", "IL", "Illinois"),
+    ("us", "MA", "Massachusetts"), ("us", "WA", "Washington"), ("us", "FL", "Florida"), ("us", "GA", "Georgia"),
+    ("au", "NSW", "New South Wales"), ("au", "VIC", "Victoria"), ("au", "QLD", "Queensland"), ("au", "WA", "Western Australia"),
+];
 
 /// Countries Job Hunt knows: (code, name, other names postings use, time zones). The code is the
 /// ISO one Google for Jobs and LinkedIn understand.
@@ -483,6 +558,11 @@ pub const REGIONS: &[Region] = &[
         "Mississauga", "Brampton", "Caledon", "Markham", "Vaughan", "Richmond Hill", "Concord, ON", "Maple, ON", "Woodbridge",
         "Thornhill", "Unionville", "Stouffville", "Aurora", "Newmarket", "King City", "Oakville", "Burlington", "Milton",
         "Halton Hills", "Georgetown, ON", "Pickering", "Ajax", "Whitby", "Oshawa", "Uxbridge", "Bolton, ON",
+        // What postings call the area and its regions, and the districts they name instead of the city.
+        "GTA", "GTHA", "Peel Region", "Region of Peel", "York Region", "Durham Region", "Region of Durham", "Halton Region", "Halton",
+        "Downtown Toronto", "Don Mills", "Willowdale", "Downsview", "Rexdale", "Leaside", "Agincourt", "Weston, ON", "Liberty Village",
+        "Meadowvale", "Streetsville", "Port Credit", "Erin Mills", "Malton", "Cooksville", "Bramalea", "Kleinburg", "Nobleton",
+        "Bronte, ON", "Acton, ON", "East Gwillimbury", "Georgina", "Clarington", "Bowmanville", "Courtice", "Scugog",
     ] },
     Region { name: "Metro Vancouver", city: "Vancouver", country: "ca", centre: "Vancouver, BC", members: &[
         "Greater Vancouver", "Lower Mainland", "Vancouver", "Burnaby", "Richmond, BC", "Richmond, British Columbia", "Surrey, BC",
@@ -520,7 +600,13 @@ impl Profile {
     /// The area a location names, in your country: "GTA" or "Greater Toronto Area", "Toronto area",
     /// or, with `include_metro`, any city in it ("Toronto", "Oakville").
     pub fn region(&self, l: &str) -> Option<&'static Region> {
-        let l = l.trim();
+        self.region_named(l.trim()).or_else(|| {
+            let bare = self.bare_place(l);
+            (bare != l.trim()).then(|| self.region_named(&bare)).flatten()
+        })
+    }
+
+    fn region_named(&self, l: &str) -> Option<&'static Region> {
         let l = l.strip_suffix(" area").or_else(|| l.strip_suffix(" Area")).filter(|_| l.len() > 5).map(|c| (c, true)).unwrap_or((l, false));
         REGIONS.iter().filter(|r| r.country == self.sources.adzuna_country).find(|r| {
             let in_it = r.city.eq_ignore_ascii_case(l.0) || r.members.iter().any(|n| n.eq_ignore_ascii_case(l.0));
@@ -554,7 +640,7 @@ mod tests {
         let p = Profile { locations: vec!["Toronto".into(), "GTA".into(), "Mississauga".into(), "Ottawa".into()], ..Profile::default() };
         let names = p.place_names();
         assert!(names.contains(&"markham".to_string()) && names.contains(&"ottawa".to_string()) && names.contains(&"etobicoke".to_string()));
-        assert_eq!(p.search_places(), vec!["Toronto, ON", "Ottawa, ON"]);
+        assert_eq!(p.search_places(), vec!["Toronto, ON", "Mississauga, ON", "Ottawa, ON"]);
         let only_city = Profile { locations: vec!["Toronto".into()], include_metro: false, ..Profile::default() };
         assert_eq!(only_city.place_names(), vec!["toronto"], "a city alone isn't widened when you say so");
         let metro = Profile { include_metro: true, ..only_city.clone() };
