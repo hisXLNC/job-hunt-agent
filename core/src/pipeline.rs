@@ -1686,7 +1686,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             };
             let read = match page {
                 Some(p) => Some(crate::claude::FoundJob { title: p.title, company: p.company, location: p.location, description: p.description, ..Default::default() }),
-                None if use_claude && self.claude_ready() => match self.llm().read_posting(&url, &text) {
+                None if use_claude && self.limited().is_none() => match self.llm().read_posting(&url, &text) {
                     Ok(j) if j.title.trim().is_empty() || j.description.trim().chars().count() < 40 => {
                         return err("That page doesn't look like a job posting. Open the posting itself, then click the button.");
                     }
@@ -1762,8 +1762,6 @@ replies and interviews, and a little lower for kinds that got none from several 
             Some("you added it without Claude".to_string())
         } else if cvs.is_empty() {
             Some("no CV uploaded yet".to_string())
-        } else if !self.claude_ready() {
-            Some("Claude isn't connected".to_string())
         } else if self.limited().is_some() {
             Some("Claude is at its usage limit".to_string())
         } else {
@@ -1778,6 +1776,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                     job.deadline = deadline_of(&s.deadline, &job.description);
                     None
                 }
+                // Not connected, signed out, or any other failure: saved, not lost.
                 Err(e) => Some(format!("Claude couldn't score it ({e})")),
             }
         };

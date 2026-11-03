@@ -1,8 +1,7 @@
 # Sharing Job Hunt, and using it on any computer
 
 Each person who installs Job Hunt gets their own copy: their own CVs, applications, Claude, Gmail, Calendar
-and Google Drive. Nothing is shared between people. One person can use Job Hunt on several computers (and
-on a server, see [server/ORACLE.md](server/ORACLE.md)) by syncing through their own Google Drive.
+and Google Drive. Nothing is shared between people. One person can use Job Hunt on several computers by syncing through their own Google Drive.
 
 ## Once: build Google into Job Hunt
 

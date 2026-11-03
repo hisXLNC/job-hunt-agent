@@ -8,7 +8,7 @@ name: Build the Job Hunt server image
 on:
   push:
     branches: [main]
-    paths: ["static/changelog.json", ".github/workflows/server-image.yml"]
+    paths: ["static/changelog.json", ".github/workflows/server-image.yml"]  # move back to .github/workflows/ to run again
   workflow_dispatch:
 
 permissions:
@@ -56,7 +56,7 @@ jobs:
         if: steps.have.outputs.skip != 'true'
         with:
           context: .
-          file: server/Dockerfile
+          file: archive/server/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |

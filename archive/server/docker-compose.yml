@@ -1,5 +1,5 @@
 # Job Hunt on a Synology NAS: Container Manager → Project → Create, and paste this in.
-# Fill in the three values marked FILL IN. See server/README.md for the full steps.
+# Fill in the three values marked FILL IN. See archive/server/README.md for the full steps.
 services:
   job-hunt:
     image: ghcr.io/hisxlnc/job-hunt-server:latest

@@ -53,8 +53,8 @@ in), your CV, where you want to work, where to look, and your first search.
 - **Backups:** one zip a day with everything, the last 14 kept (Settings → Sync & backup).
 - **Giving it to a friend:** they install their own copy and use their own Claude and Google. See
   [SHARING.md](SHARING.md).
-- **On a server, with your PC off:** possible, but technical. See [server/ORACLE.md](server/ORACLE.md)
-  or [server/README.md](server/README.md) (a Synology NAS).
+- **On a server, with your PC off:** the NAS and Oracle Cloud versions are no longer built or
+  updated; their instructions are kept in [archive/server](archive/server/README.md).
 
 ## What it does, and doesn't
 

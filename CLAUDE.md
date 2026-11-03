@@ -1,7 +1,7 @@
 # Working on Job Hunt
 
-Every push to `main` builds and publishes a release (the Windows app, and the server image for
-Oracle and NAS users). A broken push to main is a broken build people see, so:
+Every push to `main` builds and publishes a release (the Windows app; the NAS / Oracle server
+image is no longer built, see `archive/`). A broken push to main is a broken build people see, so:
 
 ## Before pushing to main
 
@@ -28,10 +28,9 @@ double), and running out stops every build. So:
 - `build.yml` (Windows): a quick Linux job checks whether the version is already published (then it
   stops) and runs `verify --quick`; only then does the Windows build run and publish to
   hisXLNC/job-hunt-releases. A newer release cancels an older one still building.
-- `checks.yml` runs only by hand (Actions → Checks → Run workflow); use it before changing
-  `server/Dockerfile`, which can't be built locally here.
-- `server-image.yml` publishes ghcr.io/hisxlnc/job-hunt-server. It cross-compiles the ARM program
-  (no emulation), and a running build is never cancelled by a newer push.
+- `checks.yml` runs only by hand (Actions → Checks → Run workflow).
+- The NAS / Oracle server image (`server-image.yml`, `server/`) is archived in `archive/server/` and
+  not built; see `archive/README.md` to bring it back.
 
 ## Disk
 

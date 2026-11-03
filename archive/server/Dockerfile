@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Job Hunt server: the app in a browser, running on a Synology NAS (Container Manager) or any Docker host.
-# Build from the repository root:  docker build -f server/Dockerfile -t job-hunt-server .
+# Build from the repository root:  docker build -f archive/server/Dockerfile -t job-hunt-server .
 
 # The program is compiled on the build machine's own processor for both Intel and ARM (cross-compiling),
 # which takes minutes; compiling the ARM one under emulation took over half an hour.
@@ -34,7 +34,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl bash libreoffice-writer-nogui fonts-liberation2 fonts-dejavu-core fonts-crosextra-carlito fonts-crosextra-caladea \
     && rm -rf /var/lib/apt/lists/*
-# Claude Code, for using your Claude subscription (sign in with CLAUDE_CODE_OAUTH_TOKEN; see server/README.md).
+# Claude Code, for using your Claude subscription (sign in with CLAUDE_CODE_OAUTH_TOKEN; see archive/server/README.md).
 RUN curl -fsSL https://claude.ai/install.sh | bash \
     && cp -L /root/.local/bin/claude /usr/local/bin/claude \
     && claude --version
