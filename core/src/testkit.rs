@@ -170,7 +170,8 @@ impl Llm for FakeLlm {
         let tailored = cvs.iter().any(|c| c.1.contains("Led vendor management"));
         Ok(JobScore {
             score: *self.scores.lock().unwrap().get(&job.title).unwrap_or(&85) + if tailored { 7 } else { 0 },
-            track: "program".into(),
+            // One of the CVs it was given, as the real scorer makes sure of.
+            track: cvs.iter().find(|c| c.0 == "program").or(cvs.first()).map(|c| c.0.clone()).unwrap_or_else(|| "program".into()),
             reasoning: "Strong delivery match.".into(),
             red_flags: vec![],
             keywords: vec!["Technical Program Manager".into(), "UAT".into(), "vendor management".into(), "Kubernetes".into()],

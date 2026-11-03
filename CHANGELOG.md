@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.14.0] - 2026-11-03
+
+Fit scores follow your CVs.
+
+### Changes
+
+- Removing a CV clears the fit it gave to jobs you haven't acted on, and scores them again against your other CVs. If it was your only CV, they wait unscored until you add one.
+- Jobs you've already tailored, applied to or taken further keep their fit.
+- Unscored jobs on the Overview have a Score it button, and sending an unscored job again from the browser scores it.
+
 ## [2.13.0] - 2026-11-03
 
 Every role searched, update notices you'll see, and browser jobs to pick.
@@ -856,6 +866,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.14.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.14.0
 [2.13.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.13.0
 [2.12.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.12.0
 [2.11.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.11.0

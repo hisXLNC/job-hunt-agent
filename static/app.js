@@ -982,7 +982,7 @@ function stepHtml(o, step, tracked) {
       <span class="grow"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${oneTag(j)}<br><span class="muted small">${ageTag(j)}</span>${coLocLine(j)}</span>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span></label>
       <span class="why small">${whyFits(j)}</span>
-      <span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('');
+      <span class="row todo-act">${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('');
     groups.push([`Pick from ${picking.length} new match${picking.length === 1 ? '' : 'es'}`, `<div data-pickbox>
     <div class="row" style="margin:2px 0 8px">${picking.length > 5 ? '<button class="btn sm" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost sm" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin"></span>Tailoring ${inWork}…</span>` : ''}</div>
     <div class="pick-filters">
@@ -1138,7 +1138,7 @@ async function togglePosting(tr) {
           <div class="muted small">${ageTag(j)} · found on ${esc(sourceName(j.source))}</div></div>
         <div class="row">
           ${j.url ? `<button class="btn" data-act="open" data-what="posting" data-job="${id}">${svg('open')}Open posting</button>` : ''}
-          ${['skipped', 'saved'].includes(j.status) && j.score == null ? `<button class="btn" data-act="scoreAnyway" data-job="${id}">Score it anyway</button>` : ''}
+          ${['skipped', 'saved', 'queued'].includes(j.status) && j.score == null ? `<button class="btn" data-act="scoreAnyway" data-job="${id}">Score it anyway</button>` : ''}
           ${CAN_CHOOSE.includes(j.status) ? `<button class="btn primary" data-act="tailorAnyway" data-job="${id}">Tailor anyway</button>` : ''}
           <a class="btn ghost" href="#job/${encodeURIComponent(j.id)}">Full details</a>
         </div>
@@ -3289,8 +3289,12 @@ async function act(el) {
     return busy(async () => { toast('Converting with Claude. This can take a minute…'); await api(`/api/cvs/${encodeURIComponent(cvId)}/convert`, { method: 'POST' }); await refreshOverview(); route(); }, 'Converted. Open it to check.');
   }
   if (a === 'removeCv') {
-    if (!await ask('Remove this CV from Job Hunt? Applications already tailored from it are kept.')) return;
-    return busy(async () => { await api(`/api/cvs/${encodeURIComponent(cvId)}/remove`, { method: 'POST' }); await refreshOverview(); route(); }, 'Removed.');
+    if (!await ask('Remove this CV from Job Hunt? Applications already tailored from it keep their fit. Jobs it scored that you haven\'t acted on lose that fit and are scored again against your other CVs (or wait, unscored, if this was your only one).')) return;
+    return busy(async () => {
+      const r = await api(`/api/cvs/${encodeURIComponent(cvId)}/remove`, { method: 'POST' });
+      await refreshOverview(); route();
+      toast(r.unscored ? `Removed. ${r.unscored} job${r.unscored === 1 ? '' : 's'} it scored ${(overview?.setup?.cvs) ? 'are being scored again against your other CVs' : 'are unscored until you add a CV'}.` : 'Removed.');
+    });
   }
   if (a === 'checkClaude') { const w = $('#welcomeClaude'); if (w) return welcomeClaude(true); return checkClaude(true); }
   if (a === 'claudeSetup') {

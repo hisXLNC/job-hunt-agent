@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.14.0",
+    "date": "2026-11-03",
+    "title": "Fit scores follow your CVs",
+    "changes": [
+      "Removing a CV clears the fit it gave to jobs you haven't acted on, and scores them again against your other CVs. If it was your only CV, they wait unscored until you add one.",
+      "Jobs you've already tailored, applied to or taken further keep their fit.",
+      "Unscored jobs on the Overview have a Score it button, and sending an unscored job again from the browser scores it."
+    ]
+  },
+  {
     "version": "2.13.0",
     "date": "2026-11-03",
     "title": "Every role searched, update notices you'll see, and browser jobs to pick",

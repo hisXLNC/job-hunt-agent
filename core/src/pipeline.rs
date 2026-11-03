@@ -1629,7 +1629,8 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
         // One you saved (added without Claude, say) stays saved when it scores below your bar.
-        let status = if s.score >= profile.score_threshold { "queued" } else if job.status == "saved" { "saved" } else { "skipped" };
+        // One you chose (sent from the browser, say) stays where it is, and so does one you saved.
+        let status = if s.score >= profile.score_threshold { "queued" } else if job.status == "saved" { "saved" } else if self.chosen(job_id) && job.status == "queued" { "queued" } else { "skipped" };
         {
             let db = self.db();
             db.update_job(job_id, &[
@@ -1808,6 +1809,11 @@ replies and interviews, and a little lower for kinds that got none from several 
                 let mut earlier = String::new();
                 if let Some(id) = existing {
                     self.db().log(Some(&id), "added-again", "you sent this posting again; it's already in Job Hunt")?;
+                    // Not scored (added without Claude, or its CV was removed): score it now.
+                    let unscored = self.db().job(&id)?.is_some_and(|j| j.score.is_none());
+                    if unscored && use_claude && !cvs.is_empty() && self.score_anyway(&id).is_ok() {
+                        return Ok(id);
+                    }
                     // Its fit is the one worked out when it was first found, against your CVs as they were then.
                     let old = self.db().job(&id)?;
                     if let Some((score, found)) = old.and_then(|j| j.score.map(|s| (s, j.found_at))) {
@@ -3670,17 +3676,73 @@ replies and interviews, and a little lower for kinds that got none from several 
         self.replace_cv(id, &original, &bytes, true)
     }
 
-    pub fn remove_cv(&self, id: &str) -> R<()> {
+    /// Remove a CV. Jobs scored against it that you haven't acted on lose that fit (it described a
+    /// CV you no longer have); returns their ids, for rescore_jobs to score against the CVs left.
+    /// Jobs you've tailored, applied to or taken further keep theirs.
+    pub fn remove_cv(&self, id: &str) -> R<Vec<String>> {
         let mut profile = self.profile();
         let before = profile.tracks.len();
+        let label = profile.tracks.iter().find(|t| t.name == id).map(|t| t.label.clone()).unwrap_or_else(|| id.to_string());
         profile.tracks.retain(|t| t.name != id);
         if profile.tracks.len() == before {
             return err("That CV no longer exists.");
         }
         self.save_profile(&profile)?;
         let _ = std::fs::remove_file(self.cv_path(id));
-        self.db().log(None, "cv", &format!("removed {id}"))?;
-        Ok(())
+        let mut cleared = vec![];
+        for st in ["queued", "skipped", "saved", "dismissed"] {
+            // Read first: the lock would otherwise be held through the loop, which takes it again.
+            let jobs = self.db().jobs(Some(st), 100_000)?;
+            for j in jobs {
+                if j.track.as_deref() != Some(id) || j.score.is_none() {
+                    continue;
+                }
+                let db = self.db();
+                db.update_job(&j.id, &[
+                    ("score", Value::Null), ("score_potential", Value::Null), ("score_after", Value::Null), ("track", Value::Null),
+                    ("reasoning", format!("Not scored: the {label} CV it was scored against was removed.").into()),
+                ])?;
+                db.log(Some(&j.id), "unscored", &format!("its fit of {} was against the {label} CV, now removed", j.score.unwrap_or(0)))?;
+                cleared.push(j.id);
+            }
+        }
+        self.db().log(None, "cv", &format!("removed {id}; {} unscored job{} it had scored", cleared.len(), if cleared.len() == 1 { "" } else { "s" }))?;
+        Ok(cleared)
+    }
+
+    /// Score these jobs against your CVs as they are now, up to the per-search cap (the rest can
+    /// be scored with Score it anyway). A job found by a search goes on the Overview or is set
+    /// aside by its new fit; one you saved or chose stays where it is. Returns how many were scored.
+    pub fn rescore_jobs(&self, ids: &[String]) -> R<usize> {
+        let profile = self.profile();
+        let cvs = self.cv_texts(&profile);
+        if cvs.is_empty() || ids.is_empty() {
+            return Ok(0);
+        }
+        let _g = self.claim("rescore")?;
+        let guidance = self.scoring_guidance(&profile);
+        let mut n = 0;
+        for id in ids.iter().take(profile.max_scored_per_run.max(1)) {
+            let Some(j) = self.db().job(id)? else { continue };
+            if j.score.is_some() || self.limited().is_some() {
+                continue;
+            }
+            let s = match self.llm().score(&cvs, &guidance, &j) {
+                Ok(s) => s,
+                Err(e) if e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("API key") => break,
+                Err(_) => continue,
+            };
+            let keep = j.status == "saved" || j.status == "dismissed" || self.chosen(id);
+            let status = if keep { j.status.clone() } else if s.score >= profile.score_threshold { "queued".into() } else { "skipped".into() };
+            let db = self.db();
+            db.update_job(id, &[
+                ("status", status.into()), ("score", s.score.into()), ("score_potential", json!(s.potential)), ("track", s.track.clone().into()),
+                ("reasoning", s.reasoning.into()), ("red_flags", json!(s.red_flags)), ("keywords", json!(s.keywords)),
+            ])?;
+            db.log(Some(id), "scored", &format!("{} on the {} track (your CVs changed)", s.score, s.track))?;
+            n += 1;
+        }
+        Ok(n)
     }
 
     /// Ask Claude again for this CV's titles and keywords.
@@ -6996,6 +7058,32 @@ mod tests {
         assert!(again.unwrap_err().0.contains("already in Job Hunt"));
         assert!(s.agent.add_clip(&json!({ "url": "https://example.com", "text": "A recipe for banana bread with walnuts and a little cinnamon." })).unwrap_err().0.contains("doesn't look like a job posting"));
         assert!(crate::api::parse_clip("JOBHUNT-CLIP:{\"url\":\"x\"}").is_some() && crate::api::parse_clip("hello").is_none());
+    }
+
+    #[test]
+    fn removing_a_cv_clears_the_fits_it_gave() {
+        let s = setup();
+        let mut p = s.agent.profile();
+        p.auto_tailor = false;
+        s.agent.save_profile(&p).unwrap();
+        s.agent.search(Some(vec![posting("Program Manager", "1"), Posting { company: "Globex".into(), ..posting("Program Manager", "2") }])).unwrap();
+        let ids: Vec<String> = s.agent.db().jobs(None, 100).unwrap().into_iter().filter(|j| j.score.is_some()).map(|j| j.id).collect();
+        assert_eq!(ids.len(), 2);
+        // Tailored: keeps its fit; still waiting: loses it.
+        s.agent.tailor(&ids[0], None).unwrap();
+        let track = s.agent.db().job(&ids[1]).unwrap().unwrap().track.unwrap();
+        // Another CV to score against once this one is gone.
+        s.agent.add_cv("other.txt", "Alex Morgan\nProgram manager\n".repeat(20).as_bytes(), false).unwrap();
+        let cleared = s.agent.remove_cv(&track).unwrap();
+        assert!(cleared.contains(&ids[1]) && !cleared.contains(&ids[0]), "{cleared:?} {:?}", s.agent.db().jobs(None, 10).unwrap().iter().map(|j| (j.status.clone(), j.track.clone(), j.score)).collect::<Vec<_>>());
+        let j = s.agent.db().job(&ids[1]).unwrap().unwrap();
+        assert!(j.score.is_none() && j.reasoning.unwrap().contains("was removed"));
+        assert!(s.agent.db().job(&ids[0]).unwrap().unwrap().score.is_some());
+        // Against the CVs left (if any): scored again.
+        let n = s.agent.rescore_jobs(&cleared).unwrap();
+        assert_eq!(n, 1);
+        let j = s.agent.db().job(&ids[1]).unwrap().unwrap();
+        assert!(j.score.is_some() && j.track.as_deref() != Some(track.as_str()));
     }
 
     #[test]
