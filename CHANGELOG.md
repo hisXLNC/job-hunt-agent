@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.17.2] - 2026-11-03
+
+A tidier All jobs table.
+
+### Changes
+
+- All jobs: the Next step column shows just its button (Tailor, Approve, Apply); what it means is in the button's tooltip. The table fits the window again.
+
 ## [2.17.1] - 2026-11-03
 
 Pick counts that match what you see.
@@ -916,6 +924,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.17.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.2
 [2.17.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.1
 [2.17.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.0
 [2.16.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.16.0

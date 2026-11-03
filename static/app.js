@@ -579,7 +579,7 @@ async function showPipeline(view) {
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td>
         <td class="fit" data-v="${j.score_after ?? j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td>
         <td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)}</td>
-        <td class="next" data-v="${nextKey(j)}">${next(j)}${rowActions(j) ? `<div class="row-act">${rowActions(j)}</div>` : ''}</td>
+        <td class="next" data-v="${nextKey(j)}">${rowActions(j) ? `<div class="row-act" title="${esc(next(j).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())}">${rowActions(j)}</div>` : next(j)}</td>
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}" title="Found on ${esc(sourceName(j.source))}">${ageTag(j)}</td></tr>`).join('')}
     </tbody></table>${jobs.length ? '' : `<p class="empty">${{ applied: 'Nothing applied to yet. Jobs show here once you apply (or Job Hunt sees the confirmation email).', active: 'Nothing in progress: no tailored applications waiting.', new: 'No new postings to pick from.' }[view] || 'No jobs yet. Search for jobs from the Overview.'}</p>`}</section>`);
   restoreAllFilters();

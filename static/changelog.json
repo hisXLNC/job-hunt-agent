@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.17.2",
+    "date": "2026-11-03",
+    "title": "A tidier All jobs table",
+    "changes": [
+      "All jobs: the Next step column shows just its button (Tailor, Approve, Apply); what it means is in the button's tooltip. The table fits the window again."
+    ]
+  },
+  {
     "version": "2.17.1",
     "date": "2026-11-03",
     "title": "Pick counts that match what you see",

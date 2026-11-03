@@ -745,7 +745,8 @@ table.jobs td { padding: 10px 7px; }
 /* All jobs: one sortable table. */
 .all-bar { justify-content: space-between; margin-bottom: 8px; }
 .all-bar .views-x { color: var(--accent); }
-#t-all td.next { min-width: 140px; max-width: 200px; }
+#t-all td.next { max-width: 200px; }
+#t-all td.next .row-act { display: flex; gap: 4px; flex-wrap: nowrap; white-space: nowrap; }
 #t-all td.role { min-width: 170px; }
 #t-all td.salary { min-width: 90px; max-width: 110px; }
 #t-all td.next .who { display: block; font-size: 11px; }
@@ -829,7 +830,7 @@ a.qt:hover { text-decoration: underline; }
 .all-filters input[type=search] { width: 220px; }
 .all-filters select { width: auto; }
 .all-filters .views-x { margin-left: auto; }
-#t-all td.next .row-act { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+#t-all td.next .row-act { margin-top: 0; display: flex; gap: 6px; flex-wrap: nowrap; align-items: center; }
 .xpand { position: sticky; left: 0; box-sizing: border-box; }
 .xpand .posting, .xpand p { overflow-wrap: anywhere; }
 
