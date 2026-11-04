@@ -8,7 +8,7 @@ use crate::filters::{prefilter, NO_TITLE_MATCH};
 use crate::google::{self, Cal, Email, Mail, NewEvent};
 use crate::profile::Profile;
 use crate::slots::{free_slots, is_free, parse_time, weekday_after};
-use crate::sources::{fetch_all, Posting};
+use crate::sources::Posting;
 use crate::util::now;
 use crate::util::{short_hash, slug};
 use crate::{err, Error, R};
@@ -1419,6 +1419,107 @@ replies and interviews, and a little lower for kinds that got none from several 
 
     /// `batch`: only score held postings, at most this many, quietly (see score_held).
     fn search_with(&self, postings: Option<Vec<Posting>>, force: bool, batch: Option<usize>) -> R<Report> {
+        self.search_in(postings, force, batch, None)
+    }
+
+    /// Search one source only (an id from sources::SEARCHABLE, or "site:<id>" for one recruiter or
+    /// job site), and score and file what's new like any search. What it found, posting by posting,
+    /// and what became of each, is kept in "source.searches" for the screen (see source_results).
+    /// It leaves the daily search alone: its time, its report and the postings it held over.
+    pub fn search_source(&self, only: &str) -> R<Report> {
+        let name = self.source_name(only).ok_or_else(|| Error("Job Hunt doesn't know that source.".into()))?;
+        let p = self.profile();
+        let off = match only.strip_prefix("site:") {
+            Some(_) => p.sources.is_off("agencies"),
+            None => p.sources.is_off(only),
+        };
+        if off {
+            return err(&format!("{name} is turned off. Turn it on in Settings \u{2192} Job sources first."));
+        }
+        if self.is_running("search") {
+            return err("A search is running. Wait for it to finish, or stop it, then search this one.");
+        }
+        let started = now();
+        self.save_source_result(only, json!({ "id": only, "name": name, "started": started, "running": true }));
+        let r = self.search_in(None, false, None, Some(only));
+        if let Err(e) = &r {
+            self.save_source_result(only, json!({ "id": only, "name": name, "started": started, "finished": now(), "running": false, "error": e.0 }));
+        }
+        r
+    }
+
+    /// A source's name, for an id search_source takes.
+    pub fn source_name(&self, only: &str) -> Option<String> {
+        match only.strip_prefix("site:") {
+            Some(id) => {
+                let p = self.profile();
+                crate::sites::targets(&p.sources.sites, &p.sources.custom_sites).into_iter().find(|t| t.id == id).map(|t| t.name)
+            }
+            None => crate::sources::SEARCHABLE.iter().find(|s| s.0 == only).map(|s| s.1.to_string()),
+        }
+    }
+
+    /// The last search of each source searched on its own: {id: {id, name, started, finished,
+    /// running, error, report, postings: [{title, company, location, url, job, score, status, outcome, detail}]}}.
+    pub fn source_results(&self) -> Value {
+        let mut all: Value = serde_json::from_str(&self.secret("source.searches")).unwrap_or(json!({}));
+        // One left "running" by a search that ended without saying (Job Hunt closed mid-search).
+        let running = self.is_running("search");
+        if let Some(o) = all.as_object_mut() {
+            for v in o.values_mut().filter(|v| v["running"] == true && !running) {
+                v["running"] = json!(false);
+                v["error"] = json!("Stopped before it finished.");
+            }
+        }
+        all
+    }
+
+    fn save_source_result(&self, only: &str, v: Value) {
+        let mut all: Value = serde_json::from_str(&self.secret("source.searches")).unwrap_or(json!({}));
+        if !all.is_object() {
+            all = json!({});
+        }
+        all[only] = v;
+        let _ = self.db().set("source.searches", &all.to_string());
+    }
+
+    /// What became of each posting a one-source search found, read back from what's stored now.
+    /// `known`: ids of the postings Job Hunt had before this search. outcome: "match" (scored at or
+    /// above your fit score), "low" (scored below it), "new" (stored, not scored), "filtered" (detail
+    /// says why), "known" (found before) or "waiting" (scored with a later search).
+    fn posting_outcomes(&self, found: &[Posting], known: &HashSet<String>) -> Vec<Value> {
+        let mut out = vec![];
+        let mut seen: HashSet<String> = HashSet::new();
+        for p in found {
+            let job = {
+                let db = self.db();
+                db.existing_job(&p.id(), &p.company, &p.title).and_then(|id| db.job(&id).ok().flatten())
+            };
+            // Two listings of one role: shown once.
+            if !seen.insert(job.as_ref().map(|j| j.id.clone()).unwrap_or_else(|| p.id())) {
+                continue;
+            }
+            let (outcome, detail) = match &job {
+                _ if known.contains(&p.id()) => ("known", String::new()),
+                None => ("waiting", String::new()),
+                Some(j) => match j.reasoning.as_deref().and_then(|r| r.strip_prefix("Filtered out: ")) {
+                    Some(why) if j.score.is_none() => ("filtered", why.to_string()),
+                    _ if j.score.is_none() => ("new", String::new()),
+                    _ if j.status == "skipped" => ("low", String::new()),
+                    _ => ("match", String::new()),
+                },
+            };
+            out.push(json!({ "title": p.title, "company": p.company, "location": p.location, "url": p.url, "remote": p.remote,
+                "posted": p.posted_at, "job": job.as_ref().map(|j| j.id.clone()), "score": job.as_ref().and_then(|j| j.score),
+                "status": job.as_ref().map(|j| j.status.clone()), "outcome": outcome, "detail": detail }));
+        }
+        // Matches first, best first; then the rest, and what was filtered out last.
+        let rank = |v: &Value| match v["outcome"].as_str().unwrap_or("") { "match" => 0, "new" => 1, "low" => 2, "waiting" => 3, "known" => 4, _ => 5 };
+        out.sort_by(|a, b| rank(a).cmp(&rank(b)).then(b["score"].as_i64().unwrap_or(-1).cmp(&a["score"].as_i64().unwrap_or(-1))));
+        out
+    }
+
+    fn search_in(&self, postings: Option<Vec<Posting>>, force: bool, batch: Option<usize>, only: Option<&str>) -> R<Report> {
         if self.is_running("update") {
             return err("Job Hunt is about to restart for an update; it searches again after.");
         }
@@ -1454,7 +1555,8 @@ replies and interviews, and a little lower for kinds that got none from several 
             Some(p) => p,
             None => {
                 let keys = self.search_keys();
-                let f = fetch_all(&profile, &keys, &|i, n, name| { self.step("Searching job sites", i, n, name); !self.stopping() });
+                let f = if only == Some("indeed") { crate::sources::Fetched::default() }
+                    else { crate::sources::fetch_only(&profile, &keys, only, &|i, n, name| { self.step("Searching job sites", i, n, name); !self.stopping() }) };
                 report.source_problems = f.problems;
                 report.by_source = f.by_source.iter().map(|(n, k, p, e)| json!({ "name": n, "searches": k, "found": p, "failed": e })).collect();
                 report.broken_boards = f.failed.iter().map(|(s, n)| json!({ "source": s, "name": n })).collect();
@@ -1465,11 +1567,12 @@ replies and interviews, and a little lower for kinds that got none from several 
                 let ids: HashSet<String> = f.postings.iter().map(|p| p.id()).collect();
                 report.closed += self.close_missing(&profile, &f.complete, &ids)?;
                 let mut all = f.postings;
-                if profile.sources.indeed && !self.stopping() {
+                let indeed_on = profile.sources.indeed && only.is_none_or(|o| o == "indeed");
+                if indeed_on && !self.stopping() {
                     self.step("Searching Indeed", 0, 0, "through the Indeed connector");
                 }
-                let indeed = if self.stopping() { Ok(vec![]) } else { self.indeed_postings(&profile) };
-                if profile.sources.indeed {
+                let indeed = if self.stopping() || !indeed_on { Ok(vec![]) } else { self.indeed_postings(&profile) };
+                if indeed_on {
                     let (found, failed) = match &indeed { Ok(f) => (f.len(), 0), Err(_) => (0, 1) };
                     report.by_source.push(json!({ "name": "Indeed", "searches": 1, "found": found, "failed": failed }));
                 }
@@ -1484,13 +1587,22 @@ replies and interviews, and a little lower for kinds that got none from several 
                     Err(e) => report.source_problems.push(format!("Indeed: {}", e.0)),
                 }
                 // Postings from job-alert emails that arrived while a search was running.
-                all.extend(self.take_pending_alerts());
+                if only.is_none() {
+                    all.extend(self.take_pending_alerts());
+                }
                 all
             }
         };
-        // What the last search found but didn't get to: first, so it's scored this time.
+        // One source's search: what it found, and which of those Job Hunt had already.
+        let found_here: Vec<Posting> = if only.is_some() { postings.clone() } else { vec![] };
+        let known_before: HashSet<String> = found_here.iter().filter(|p| {
+            let db = self.db();
+            db.job_exists(&p.id(), &p.company, &p.title).unwrap_or(false) || db.url_exists(&p.url).unwrap_or(false)
+        }).map(|p| p.id()).collect();
+        // What the last search found but didn't get to: first, so it's scored this time (not in a
+        // search of one source: they wait for the next full one).
         let postings = {
-            let mut held = self.take_held();
+            let mut held = if only.is_some() { vec![] } else { self.take_held() };
             held.retain(|h| !postings.iter().any(|a| a.id() == h.id()));
             report.held = held.len();
             held.extend(postings);
@@ -1701,6 +1813,15 @@ replies and interviews, and a little lower for kinds that got none from several 
             let db = self.db();
             db.log(None, "held", &format!("scored {} of the postings the last search left, {} cleared your fit score; {waiting} still waiting", report.scored, report.to_pick))?;
             db.set("last.held", &crate::util::now())?;
+            return Ok(report);
+        }
+        if let Some(o) = only {
+            let name = self.source_name(o).unwrap_or_else(|| o.to_string());
+            let started = self.source_results()[o]["started"].as_str().map(String::from).unwrap_or_else(now);
+            let postings = self.posting_outcomes(&found_here, &known_before);
+            self.db().log(None, "search", &format!("{name} only: {report}"))?;
+            self.save_source_result(o, json!({ "id": o, "name": name, "started": started, "finished": now(), "running": false,
+                "report": report, "postings": postings }));
             return Ok(report);
         }
         {
@@ -6925,6 +7046,39 @@ mod tests {
         // Interview prep is written and kept.
         assert!(s.agent.make_prep(&id).unwrap().contains("The role in brief"));
         assert!(s.agent.prep(&id).is_some());
+    }
+
+    #[test]
+    fn one_source_searched_on_its_own_shows_each_posting() {
+        let s = setup();
+        let mut p = s.agent.profile();
+        p.locations = vec!["Toronto".into()];
+        p.remote_ok = false;
+        s.agent.save_profile(&p).unwrap();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        let searched = s.agent.secret("last.search");
+        let mut far = posting("Senior Technical Program Manager", "3");
+        far.location = "Vancouver, BC".into();
+        let found = vec![posting("Technical Program Manager", "1"), posting("Program Manager", "2"), far];
+        let r = s.agent.search_in(Some(found), false, None, Some("linkedin")).unwrap();
+        assert_eq!((r.known, r.new), (1, 2));
+        let res = &s.agent.source_results()["linkedin"];
+        assert_eq!((res["name"].as_str(), res["running"].as_bool()), (Some("LinkedIn"), Some(false)));
+        let list = res["postings"].as_array().unwrap();
+        let of = |t: &str| list.iter().find(|x| x["title"] == t).unwrap_or_else(|| panic!("{t} in {list:?}"));
+        assert_eq!(of("Technical Program Manager")["outcome"], "known");
+        assert!(["match", "low"].contains(&of("Program Manager")["outcome"].as_str().unwrap()), "scored: {list:?}");
+        assert!(of("Program Manager")["score"].is_number() && of("Program Manager")["job"].is_string());
+        assert_eq!(of("Senior Technical Program Manager")["outcome"], "filtered");
+        assert!(of("Senior Technical Program Manager")["detail"].as_str().unwrap().starts_with("location"), "{list:?}");
+        assert_eq!(s.agent.secret("last.search"), searched, "the daily search's time stays as it was");
+        // Names and ids it knows; off sources and unknown ones aren't searched.
+        assert_eq!(s.agent.source_name("jobbank").as_deref(), Some("Job Bank"));
+        assert!(s.agent.source_name("nowhere").is_none() && s.agent.search_source("nowhere").is_err());
+        let mut p = s.agent.profile();
+        p.sources.linkedin = false;
+        s.agent.save_profile(&p).unwrap();
+        assert!(s.agent.search_source("linkedin").unwrap_err().0.contains("turned off"));
     }
 
     #[test]

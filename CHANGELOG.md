@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.18.0] - 2026-11-04
+
+Search one source at a time.
+
+### Changes
+
+- Every job source on Settings → Job sources has a Search now button, and each recruiter or job site has its own Search: it searches just that source, for all your job titles, and shows every posting it found and what became of it: its fit score, already in Job Hunt, or skipped and why.
+- New postings it finds are scored and go on your Overview like any search's; your daily search, its time and its report stay as they were.
+- Last results opens a source's latest search again.
+
 ## [2.17.2] - 2026-11-03
 
 A tidier All jobs table.
@@ -924,6 +934,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.18.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.18.0
 [2.17.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.2
 [2.17.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.1
 [2.17.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.0

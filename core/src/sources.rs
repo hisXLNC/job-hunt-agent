@@ -1520,6 +1520,7 @@ fn all_searches(p: &Profile) -> (Vec<(String, String)>, usize) {
     (out, places.len())
 }
 
+#[derive(Default)]
 pub struct Fetched {
     pub postings: Vec<Posting>,
     /// One line per source that failed, e.g. "greenhouse:acme: not found".
@@ -1658,11 +1659,29 @@ pub fn board_label(source: &str, name: &str) -> String {
 /// `on_step` is told each request before it's made; when it answers false the rest are skipped
 /// (the search was stopped).
 pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) -> bool) -> Fetched {
+    fetch_only(p, keys, None, on_step)
+}
+
+/// The sources one search can be limited to (see fetch_only), as (id, name). Indeed and single
+/// recruiters or job sites ("site:<id>") are searched on their own too.
+pub const SEARCHABLE: &[(&str, &str)] = &[("boards", "Company job boards"), ("linkedin", "LinkedIn"), ("jobbank", "Job Bank"),
+    ("freehire", "FreeHire"), ("jsearch", "Google for Jobs"), ("jooble", "Jooble"), ("adzuna", "Adzuna"), ("indeed", "Indeed"),
+    ("agencies", "Recruiters and job sites")];
+
+/// fetch_all, limited to one source when `only` names one: an id from SEARCHABLE, or "site:<id>"
+/// for one recruiter or job site. Sources you turned off stay off.
+pub fn fetch_only(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn Fn(usize, usize, &str) -> bool) -> Fetched {
     type Call<'a> = Box<dyn Fn() -> Result<(Vec<Posting>, bool), String> + 'a>;
     let c = http();
     // (what's being searched, the kind of source, the company board if it is one, the request)
     let mut calls: Vec<(String, String, Option<(String, String, String)>, Call)> = vec![];
-    let off = |id: &str| p.sources.is_off(id);
+    let site = only.and_then(|o| o.strip_prefix("site:"));
+    let chosen = |id: &str| match only {
+        None => true,
+        Some(_) if site.is_some() => id == "agencies",
+        Some(o) => o == id,
+    };
+    let off = |id: &str| p.sources.is_off(id) || !chosen(id);
     for (src, name) in boards(p).into_iter().filter(|_| !off("boards")) {
         let c = c.clone();
         let board = (board_prefix(src, &name), src.to_string(), name.clone());
@@ -1684,7 +1703,7 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) 
         }
     }
     // LinkedIn: through Apify when there's a token, else its signed-out search, when it's on.
-    if p.sources.linkedin {
+    if p.sources.linkedin && chosen("linkedin") {
         let list = linkedin_searches(p, 10);
         if let Some((token, actor)) = &keys.apify {
             let (c, token, actor) = (c.clone(), token.clone(), actor.clone());
@@ -1725,7 +1744,7 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) 
         }
     }
     // Job Bank: a few searches, 5 seconds apart; once it turns one away, the rest wait.
-    if !p.sources.is_off("jobbank") {
+    if !off("jobbank") {
         let refused = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         for (title, w) in searches(p, 10) {
             let (c, refused) = (c.clone(), refused.clone());
@@ -1755,7 +1774,7 @@ pub fn fetch_all(p: &Profile, keys: &Keys, on_step: &dyn Fn(usize, usize, &str) 
         }
         // A site that only lists another country's jobs (Aerotek: the US) has nothing in reach.
         let foreign = |id: &str| crate::sites::SITES.iter().any(|s| s.id == id && !s.country.eq_ignore_ascii_case(&p.sources.adzuna_country));
-        for t in crate::sites::targets(&p.sources.sites, &p.sources.custom_sites).into_iter().filter(|t| !foreign(&t.id)) {
+        for t in crate::sites::targets(&p.sources.sites, &p.sources.custom_sites).into_iter().filter(|t| !foreign(&t.id) && site.is_none_or(|s| s == t.id)) {
             let t = std::sync::Arc::new(t);
             for (title, w) in crate::sites::searches_for(&t, &tp) {
                 let (c, t2) = (c.clone(), t.clone());
@@ -1827,6 +1846,28 @@ mod tests {
         assert!(p.sources.is_off("jobbank") && p.sources.is_off("adzuna"), "Canada's Job Bank and Adzuna don't search Qatar");
         p.sources.adzuna_country = "gb".into();
         assert!(!p.sources.is_off("adzuna"));
+    }
+
+    #[test]
+    fn one_source_only() {
+        let mut p = crate::profile::Profile::default();
+        p.tracks = vec![crate::profile::Track { name: "a".into(), titles: vec!["Program Manager".into()], ..Default::default() }];
+        p.sources.adzuna_country = "ca".into();
+        p.sources.linkedin = true;
+        p.sources.jobbank = true;
+        p.sources.greenhouse = vec!["acme".into()];
+        // Told nothing may run: what each search would have asked, without asking.
+        let planned = |only: Option<&str>| {
+            let names = std::cell::RefCell::new(vec![]);
+            fetch_only(&p, &Keys::default(), only, &|_, _, n| { names.borrow_mut().push(n.to_string()); false });
+            let first = names.borrow().first().cloned().unwrap_or_default();
+            first
+        };
+        assert!(planned(None).starts_with("Greenhouse board acme"), "everything: the boards come first");
+        assert!(planned(Some("linkedin")).starts_with("LinkedIn"));
+        assert!(planned(Some("jobbank")).starts_with("Job Bank"));
+        assert!(planned(Some("freehire")).starts_with("FreeHire"));
+        assert_eq!(planned(Some("jooble")), "", "no Jooble key: nothing to search");
     }
 
     #[test]

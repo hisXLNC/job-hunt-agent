@@ -890,3 +890,15 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 .stars.open-reviews:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .reviews-modal { max-width: 620px; width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow: auto; }
 .reviews-modal .card { box-shadow: none; border: 0; padding: 0; margin: 8px 0 0; }
+
+/* One source searched on its own: its results */
+.src-modal { max-width: 760px; width: calc(100vw - 32px); max-height: calc(100vh - 48px); overflow: auto; }
+.src-modal .pbar { margin: 12px 0 8px; }
+.src-chips { margin: 6px 0 8px; }
+.src-list { max-height: 55vh; overflow: auto; border-top: 1px solid var(--line); }
+.src-list table { width: 100%; }
+.src-list td { vertical-align: top; }
+.src-list tr.src-filtered td, .src-list tr.src-known td { opacity: .72; }
+.crit-text { color: var(--crit); }
+.site-search { margin-left: 6px; padding: 1px 8px; }
+.chip.on .muted { color: inherit; opacity: .8; }

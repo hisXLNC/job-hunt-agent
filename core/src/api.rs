@@ -499,6 +499,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let last: Value = serde_json::from_str(&agent.secret("sources.test")).unwrap_or(Value::Null);
                 return Ok(Resp::json(&json!({ "running": agent.is_running("test-sources"), "last": last })));
             }
+            ["api", "sources", "search"] => {
+                return Ok(Resp::json(&json!({ "results": agent.source_results(), "running": agent.is_running("search"), "progress": agent.progress() })));
+            }
             ["api", "tracker"] => return Ok(Resp::json(&json!({ "rows": agent.tracker(None)? }))),
             ["api", "connections"] => {
                 let testing = agent.is_running("test-sources");
@@ -972,6 +975,24 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Err(Error("Connect Google first, in Settings → Accounts.".into()));
             }
             Ok(Resp::json(&json!({ "started": run_in_background(agent, task) })))
+        }
+        // Search one source on its own; its results come from GET /api/sources/search.
+        ["api", "sources", "search"] => {
+            let id = s(&b, "id").to_string();
+            if agent.source_name(&id).is_none() {
+                return Err(Error("Job Hunt doesn't know that source.".into()));
+            }
+            ready_to_search(agent)?;
+            if agent.is_running("search") {
+                return Err(Error("A search is running. Wait for it to finish, or stop it, then search this one.".into()));
+            }
+            let a = agent.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = a.search_source(&id) {
+                    let _ = a.db().log(None, "search:error", &e.0);
+                }
+            });
+            Ok(Resp::json(&json!({ "started": true })))
         }
         ["api", "search", "stop"] => Ok(Resp::json(&json!({ "stopping": agent.stop_search() }))),
         // Pause the running search where it is, or carry on from there.

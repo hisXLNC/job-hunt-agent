@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.18.0",
+    "date": "2026-11-04",
+    "title": "Search one source at a time",
+    "changes": [
+      "Every job source on Settings → Job sources has a Search now button, and each recruiter or job site has its own Search: it searches just that source, for all your job titles, and shows every posting it found and what became of it: its fit score, already in Job Hunt, or skipped and why.",
+      "New postings it finds are scored and go on your Overview like any search's; your daily search, its time and its report stay as they were.",
+      "Last results opens a source's latest search again."
+    ]
+  },
+  {
     "version": "2.17.2",
     "date": "2026-11-03",
     "title": "A tidier All jobs table",

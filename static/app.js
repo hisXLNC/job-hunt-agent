@@ -2581,10 +2581,11 @@ function sitesForm(st) {
   const ALERTS_OK = ['randstad', 'adecco', 'hays', 'roberthalf', 'michaelpage', 'altis', 'lro', 'peoplefirst', 'techtalent', 'jobsca', 'aplin'];
   const line = id => status[id] && status[id].state !== 'unknown' ? `<br><span class="small ${status[id].state === 'problem' ? '' : 'muted'}">${esc(status[id].detail)}${status[id].at ? ` · ${esc(ago(status[id].at))}` : ''}</span>${['problem', 'quiet'].includes(status[id].state) && ALERTS_OK.includes(id) ? '<br><span class="small">Tip: set up job alerts on its website for your titles, sent to your Gmail. Job Hunt reads them on every email check.</span>' : ''}` : '';
   const here = x => x.country === st.profile.sources.adzuna_country || on.includes(x.id);
+  const search = id => `<button class="btn ghost sm site-search" type="button" data-act="srcSearch" data-id="site:${esc(id)}" title="Search this site only, and see what it finds">Search</button>`;
   const group = kind => (st.sites?.catalog || []).filter(x => x.kind === kind && here(x)).map(x => `<label class="check"><input type="checkbox" name="site" value="${esc(x.id)}" ${on.includes(x.id) ? 'checked' : ''}>
-      <span><b>${esc(x.name)}</b> ${on.includes(x.id) ? pill(x.id) : ''}<br><span class="muted small">${esc(x.about)}</span>${on.includes(x.id) ? line(x.id) : ''}</span></label>`).join('');
+      <span><b>${esc(x.name)}</b> ${on.includes(x.id) ? pill(x.id) + search(x.id) : ''}<br><span class="muted small">${esc(x.about)}</span>${on.includes(x.id) ? line(x.id) : ''}</span></label>`).join('');
   const own = mine.map((c, i) => { const id = (st.sites?.status || []).find(x => x.template === c.url.replace('{title}', '{q}').replace('{place}', '{l}'))?.id;
-    return `<div class="row site-own" data-i="${i}"><input type="text" name="own_name" value="${esc(c.name)}" placeholder="Name" style="max-width:180px"><input type="text" name="own_url" value="${esc(c.url)}" placeholder="Search address" style="flex:1">${id ? pill(id) : ''}<button class="btn ghost sm" type="button" data-act="siteDrop" data-i="${i}">Remove</button></div>`; }).join('');
+    return `<div class="row site-own" data-i="${i}"><input type="text" name="own_name" value="${esc(c.name)}" placeholder="Name" style="max-width:180px"><input type="text" name="own_url" value="${esc(c.url)}" placeholder="Search address" style="flex:1">${id ? pill(id) + search(id) : ''}<button class="btn ghost sm" type="button" data-act="siteDrop" data-i="${i}">Remove</button></div>`; }).join('');
   return `<p class="small muted" style="margin-top:8px">Job Hunt reads their own search pages for your titles, as a browser would. Agencies usually don't name their client, so the company shows as the agency.</p>
     <form data-form="sites" class="form">
       <div style="grid-column:1/-1">${group('Agency') ? `<h3 class="sub">Agencies</h3>${group('Agency')}` : ''}
@@ -2595,6 +2596,95 @@ function sitesForm(st) {
         <button class="btn ghost sm" type="button" data-act="siteAdd" style="margin-top:6px">Add a site</button></div>
       <div class="row"><button class="btn primary" type="submit">Save</button></div>
     </form>`;
+}
+
+/** Sources that can be searched on their own (see /api/sources/search). */
+const SEARCHABLE = ['boards', 'linkedin', 'jobbank', 'freehire', 'jsearch', 'jooble', 'adzuna', 'indeed', 'agencies'];
+/** A source's last search on its own, by id: kept from the last look, for the tiles' buttons. */
+let srcResults = {};
+const srcSearchBtns = r => !SEARCHABLE.includes(r.id) || ['off', 'setup', 'na'].includes(r.status) ? ''
+  : srcResults[r.id]?.running ? `<button class="btn sm" data-act="srcResults" data-id="${esc(r.id)}"><span class="spin" data-kind="search"></span>Searching… see how far</button>`
+  : `<button class="btn sm" data-act="srcSearch" data-id="${esc(r.id)}" title="Search ${esc(r.name)} only, for all your job titles, and see what it finds">Search now</button>`
+    + (srcResults[r.id]?.finished ? `<button class="btn ghost sm" data-act="srcResults" data-id="${esc(r.id)}">Last results${srcResults[r.id].postings ? ` (${srcResults[r.id].postings.length})` : ''}</button>` : '');
+const SRC_OUTCOME = {
+  match: ['good', 'Fits'], low: ['', 'Below your fit score'], new: ['', 'Added'], waiting: ['warn', 'Scored with the next search'],
+  known: ['', 'Already in Job Hunt'], filtered: ['', 'Skipped'],
+};
+const SRC_FILTERS = [['all', 'All'], ['match', 'Fits'], ['new', 'New'], ['known', 'Already had'], ['filtered', 'Skipped']];
+let srcPoll;
+/** One source's search on its own: how far along it is, then every posting it found and what became of it. */
+async function showSourceResults(id, start) {
+  clearTimeout(srcPoll);
+  document.querySelector('.src-modal')?.closest('.modal-back')?.remove();
+  if (start) {
+    try { await api('/api/sources/search', { method: 'POST', body: { id } }); } catch (e) { toast(e.message, true); return; }
+  }
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = '<div class="modal src-modal" role="dialog" aria-modal="true"><p class="muted">Loading…</p></div>';
+  const done = () => { clearTimeout(srcPoll); back.remove(); document.removeEventListener('keydown', key); if (location.hash.startsWith('#settings')) renderConnStatus(); };
+  const key = e => { if (e.key === 'Escape') done(); };
+  let filter = 'all';
+  back.addEventListener('click', e => {
+    if (e.target === back || e.target.closest('[data-close]')) return done();
+    const f = e.target.closest('[data-srcfilter]');
+    if (f) { filter = f.dataset.srcfilter; draw(last); }
+    if (e.target.closest('[data-srcagain]')) showSourceResults(id, true);
+    if (e.target.closest('a[href^="#job/"]')) done();
+  });
+  document.addEventListener('keydown', key);
+  document.body.appendChild(back);
+  let last;
+  const box = back.querySelector('.src-modal');
+  const draw = d => {
+    const r = d.results[id] || {};
+    const name = r.name || id;
+    box.setAttribute('aria-label', `Search results: ${name}`);
+    if (r.running || (start && !r.finished && d.running)) {
+      const pr = d.progress || { percent: 0, stage: 'Starting', detail: '' };
+      box.innerHTML = `<h2>Searching ${esc(name)}</h2>
+        <p class="muted small">All your job titles, in your places. New postings are scored like any search's and go on your Overview.</p>
+        <div class="pbar${pr.paused ? ' paused' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pr.percent}"><i style="width:${pr.percent}%"></i></div>
+        <p class="small"><b>${esc(pr.stage || '')}</b>${pr.detail ? ` <span class="muted">· ${esc(pr.detail)}</span>` : ''}${pr.found ? ` <span class="muted">· ${pr.found} found${pr.new ? `, ${pr.new} new` : ''}${pr.scored ? `, ${pr.scored} scored` : ''}</span>` : ''}</p>
+        <div class="modal-btns"><button class="btn ghost" data-act="searchStop">Stop</button><button class="btn primary" data-close>Close</button></div>`;
+      return;
+    }
+    const list = r.postings || [];
+    const count = k => list.filter(p => k === 'all' || p.outcome === k || (k === 'match' && p.outcome === 'match')).length;
+    const NEW = ['match', 'new', 'low', 'waiting'];
+    const shown = list.filter(p => filter === 'all' || p.outcome === filter || (filter === 'new' && NEW.includes(p.outcome)));
+    const rep = r.report || {};
+    const when = r.finished ? ago(r.finished) : '';
+    const summary = r.error ? `<p class="crit-text">${esc(r.error)}</p>`
+      : `<p class="small">${list.length ? `<b>${list.length}</b> posting${list.length === 1 ? '' : 's'} found` : 'No postings found'}${rep.new ? `, <b>${rep.new}</b> new` : ''}${rep.scored ? `, ${rep.scored} scored` : ''}${count('match') ? `, <b>${count('match')}</b> fit${count('match') === 1 ? 's' : ''} you` : ''}.${when ? ` <span class="muted">${esc(when)}</span>` : ''}</p>
+        ${(rep.source_problems || []).length ? `<p class="small crit-text">${rep.source_problems.slice(0, 4).map(esc).join('<br>')}</p>` : ''}
+        ${(rep.errors || []).filter(e => !e.startsWith('Stopped')).length ? `<p class="small muted">${rep.errors.slice(0, 3).map(esc).join('<br>')}</p>` : ''}`;
+    const counts = { all: list.length, match: count('match'), new: list.filter(p => NEW.includes(p.outcome)).length, known: count('known'), filtered: count('filtered') };
+    const chips = list.length ? `<div class="chips src-chips">${SRC_FILTERS.filter(([k]) => k === 'all' || counts[k]).map(([k, n]) => `<button class="chip ${filter === k ? 'on' : ''}" data-srcfilter="${k}">${n} <span class="muted">${counts[k]}</span></button>`).join('')}</div>` : '';
+    const row = p => {
+      const [cls, label] = SRC_OUTCOME[p.outcome] || ['', p.outcome];
+      const fit = p.score != null ? `<span class="pill ${p.outcome === 'match' ? 'good' : ''}">${p.score}</span>` : '';
+      const what = p.outcome === 'filtered' ? `Skipped: ${p.detail}` : p.outcome === 'known' && p.status ? `Already in Job Hunt · ${STAGES[p.status] || p.status}` : p.outcome === 'match' && p.status ? `${label} · ${STAGES[p.status] || p.status}` : label;
+      const title = p.job ? `<a href="#job/${encodeURIComponent(p.job)}">${esc(p.title)}</a>` : p.url ? `<a href="#" data-act="link" data-url="${esc(p.url)}">${esc(p.title)}</a>` : esc(p.title);
+      return `<tr class="src-${esc(p.outcome)}"><td>${title}<br><span class="muted small">${esc(p.company)}${p.location ? ` · ${esc(p.location)}` : ''}${p.remote ? ' · Remote' : ''}</span></td>
+        <td class="num">${fit}</td><td class="small ${cls === 'warn' ? '' : 'muted'}">${esc(what)}</td></tr>`;
+    };
+    box.innerHTML = `<h2>${esc(name)}: what the search found</h2>${summary}${chips}
+      ${shown.length ? `<div class="src-list"><table><thead><tr><th>Posting</th><th class="num">Fit</th><th>What happened</th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table></div>` : ''}
+      <div class="modal-btns"><button class="btn" data-srcagain>Search again</button>${count('match') ? '<a class="btn" href="#overview" data-close>Pick on the Overview</a>' : ''}<button class="btn primary" data-close>Close</button></div>`;
+  };
+  const tick = async () => {
+    let d;
+    try { d = await api('/api/sources/search'); } catch (e) { box.innerHTML = `<p>${esc(e.message)}</p><div class="modal-btns"><button class="btn primary" data-close>Close</button></div>`; return; }
+    if (!document.body.contains(back)) return;
+    srcResults = d.results || {};
+    last = d;
+    draw(d);
+    const r = d.results[id] || {};
+    if (r.running || (start && !r.finished && d.running)) srcPoll = setTimeout(tick, 1200);
+  };
+  await tick();
+  back.querySelector('[data-close]')?.focus();
 }
 
 const CONN_ACT = {
@@ -2659,6 +2749,7 @@ async function renderConnStatus() {
   clearTimeout(connPoll);
   let d;
   try { d = await api('/api/connections'); } catch (e) { return; }
+  try { srcResults = (await api('/api/sources/search')).results || {}; } catch (e) { /* the buttons go without Last results */ }
   document.querySelectorAll('[data-tile]').forEach(t => {
     const r = d.rows.find(x => x.id === t.dataset.tile);
     if (!r) return;
@@ -2670,7 +2761,7 @@ async function renderConnStatus() {
       : `${esc(r.detail)}${r.at ? ` <span class="muted">· ${esc(ago(r.at))}</span>` : ''}`;
     // The one being tested shows how far along it is instead of its buttons.
     t.querySelector('.tile-acts').innerHTML = d.progress && d.progress.only === r.id ? testBar(d.progress)
-      : (r.actions || []).filter(a => !a.startsWith('goto:')).map(a => connBtn(r, a, d.testing)).join('');
+      : srcSearchBtns(r) + (r.actions || []).filter(a => !a.startsWith('goto:')).map(a => connBtn(r, a, d.testing)).join('');
   });
   const box = $('#connStatus');
   if (box) {
@@ -2946,6 +3037,8 @@ async function act(el) {
   if (a === 'ownOff') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/own-file-off`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Back to Job Hunt\'s version.');
   }
+  if (a === 'srcSearch') return showSourceResults(el.dataset.id, true);
+  if (a === 'srcResults') return showSourceResults(el.dataset.id, false);
   if (a === 'connTest') {
     const sites = el.dataset.id === 'agencies' ? document.querySelectorAll('#tile-agencies [name=site]:checked, #tile-agencies .site-own').length : 0;
     return busy(async () => { await api('/api/connections/test', { method: 'POST', body: { id: el.dataset.id } }); renderConnStatus(); },
