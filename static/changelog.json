@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.19.0",
+    "date": "2026-11-04",
+    "title": "Search has its own page",
+    "changes": [
+      "Search is in the sidebar now. Its Sources tab lists every job source and recruiter with how it's doing, what it found last, and a Search button for searching it on its own.",
+      "Each source that has found postings gets its own tab: every posting, its fit score, and whether it was new, already in Job Hunt, or skipped and why. Filter by outcome, and on Recruiters and job sites, by site.",
+      "The daily search fills these tabs too, so you can see what each source brought in today, not only what you searched by hand.",
+      "Search everything now, the search's progress, when the next one runs and how many postings wait to be scored are at the top. Keys and choices stay in Settings → Job sources."
+    ]
+  },
+  {
     "version": "2.18.0",
     "date": "2026-11-04",
     "title": "Search one source at a time",

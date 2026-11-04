@@ -1424,8 +1424,8 @@ replies and interviews, and a little lower for kinds that got none from several 
 
     /// Search one source only (an id from sources::SEARCHABLE, or "site:<id>" for one recruiter or
     /// job site), and score and file what's new like any search. What it found, posting by posting,
-    /// and what became of each, is kept in "source.searches" for the screen (see source_results).
-    /// It leaves the daily search alone: its time, its report and the postings it held over.
+    /// and what became of each, is kept for the Search page (see source_results). It leaves the
+    /// daily search alone: its time, its report and the postings it held over.
     pub fn search_source(&self, only: &str) -> R<Report> {
         let name = self.source_name(only).ok_or_else(|| Error("Job Hunt doesn't know that source.".into()))?;
         let p = self.profile();
@@ -1434,16 +1434,15 @@ replies and interviews, and a little lower for kinds that got none from several 
             None => p.sources.is_off(only),
         };
         if off {
-            return err(&format!("{name} is turned off. Turn it on in Settings \u{2192} Job sources first."));
+            return err(&format!("{name} is turned off. Turn it on first (Search \u{2192} Sources, or Settings \u{2192} Job sources)."));
         }
         if self.is_running("search") {
             return err("A search is running. Wait for it to finish, or stop it, then search this one.");
         }
-        let started = now();
-        self.save_source_result(only, json!({ "id": only, "name": name, "started": started, "running": true }));
+        self.save_source_result(only, json!({ "running": true, "started": now(), "searching": name, "error": null }));
         let r = self.search_in(None, false, None, Some(only));
         if let Err(e) = &r {
-            self.save_source_result(only, json!({ "id": only, "name": name, "started": started, "finished": now(), "running": false, "error": e.0 }));
+            self.save_source_result(only, json!({ "running": false, "finished": now(), "error": e.0 }));
         }
         r
     }
@@ -1459,8 +1458,12 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
     }
 
-    /// The last search of each source searched on its own: {id: {id, name, started, finished,
-    /// running, error, report, postings: [{title, company, location, url, job, score, status, outcome, detail}]}}.
+    /// The latest results of each source, from its own search or the last full one: {id: {id, name,
+    /// started, finished, running, searching (what's being searched now), via ("own": searched on its
+    /// own; "search": the full search), error, report (own searches), counts {found, new, fits, known,
+    /// filtered}, postings: [{title, company, location, url, source, job, score, status, outcome,
+    /// detail}]}}. Recruiters and job sites are one entry ("agencies"); a site searched on its own
+    /// replaces that site's postings in it.
     pub fn source_results(&self) -> Value {
         let mut all: Value = serde_json::from_str(&self.secret("source.searches")).unwrap_or(json!({}));
         // One left "running" by a search that ended without saying (Job Hunt closed mid-search).
@@ -1474,16 +1477,90 @@ replies and interviews, and a little lower for kinds that got none from several 
         all
     }
 
-    fn save_source_result(&self, only: &str, v: Value) {
+    /// Where a search of `only` keeps its results: a single site's go with the other sites'.
+    fn results_key(only: &str) -> &str {
+        if only.starts_with("site:") { "agencies" } else { only }
+    }
+
+    /// Merge `patch` into the results kept for `only` (see source_results).
+    fn save_source_result(&self, only: &str, patch: Value) {
         let mut all: Value = serde_json::from_str(&self.secret("source.searches")).unwrap_or(json!({}));
         if !all.is_object() {
             all = json!({});
         }
-        all[only] = v;
+        let key = Self::results_key(only);
+        if !all[key].is_object() {
+            let name = self.source_name(key).unwrap_or_else(|| key.to_string());
+            all[key] = json!({ "id": key, "name": name });
+        }
+        if let (Some(o), Some(p)) = (all[key].as_object_mut(), patch.as_object()) {
+            for (k, v) in p {
+                o.insert(k.clone(), v.clone());
+            }
+        }
         let _ = self.db().set("source.searches", &all.to_string());
     }
 
-    /// What became of each posting a one-source search found, read back from what's stored now.
+    /// Which source a posting came from, as the Search page groups them (see sources::SEARCHABLE).
+    fn source_group(source: &str) -> String {
+        if ["greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable", "bamboohr"].contains(&source) {
+            "boards".into()
+        } else if crate::sites::is_site_source(source) {
+            "agencies".into()
+        } else {
+            source.to_string()
+        }
+    }
+
+    /// Keep what a search found for the Search page. `only`: the one source searched; None: a full
+    /// search, kept source by source.
+    fn keep_found(&self, only: Option<&str>, found: &[Posting], known: &HashSet<String>, report: &Report) {
+        // A source's list is kept to its best few hundred; filtered-out postings go first.
+        const MAX: usize = 600;
+        let count = |list: &[Value]| {
+            let n = |o: &str| list.iter().filter(|p| p["outcome"] == o).count();
+            json!({ "found": list.len(), "new": n("match") + n("new") + n("low") + n("waiting"), "fits": n("match"), "known": n("known"), "filtered": n("filtered") })
+        };
+        let finished = now();
+        match only {
+            Some(o) => {
+                let mut list = self.posting_outcomes(found, known);
+                if let Some(site) = o.strip_prefix("site:") {
+                    // The other sites' postings from before stay.
+                    let before = self.source_results()["agencies"]["postings"].as_array().cloned().unwrap_or_default();
+                    list.extend(before.into_iter().filter(|p| p["source"] != site));
+                    sort_outcomes(&mut list);
+                }
+                list.truncate(MAX);
+                self.save_source_result(o, json!({ "running": false, "finished": finished, "error": null, "via": "own",
+                    "report": report, "counts": count(&list), "postings": list }));
+            }
+            None => {
+                let mut groups: BTreeMap<String, Vec<Posting>> = BTreeMap::new();
+                for p in found {
+                    groups.entry(Self::source_group(&p.source)).or_default().push(p.clone());
+                }
+                // Which source a line of the search's report is about: by its name, or else a recruiter or job site.
+                let group_of = |line: &str| -> String {
+                    if line.contains(" board ") { return "boards".into() }
+                    crate::sources::SEARCHABLE.iter().find(|s| line.starts_with(s.1)).map(|s| s.0.to_string()).unwrap_or_else(|| "agencies".into())
+                };
+                // A source that was searched and found nothing says so too.
+                for b in report.by_source.iter().filter_map(|b| b["name"].as_str()) {
+                    groups.entry(group_of(b)).or_default();
+                }
+                for (id, list) in groups {
+                    let mut list = self.posting_outcomes(&list, known);
+                    list.truncate(MAX);
+                    let problems: Vec<&String> = report.source_problems.iter().filter(|x| group_of(x) == id).collect();
+                    self.save_source_result(&id, json!({ "running": false, "finished": finished, "error": null, "via": "search",
+                        "report": { "source_problems": problems }, "counts": count(&list), "postings": list }));
+                }
+            }
+        }
+    }
+
+    /// What became of each posting a search found, read back from what's stored now.
     /// `known`: ids of the postings Job Hunt had before this search. outcome: "match" (scored at or
     /// above your fit score), "low" (scored below it), "new" (stored, not scored), "filtered" (detail
     /// says why), "known" (found before) or "waiting" (scored with a later search).
@@ -1510,12 +1587,10 @@ replies and interviews, and a little lower for kinds that got none from several 
                 },
             };
             out.push(json!({ "title": p.title, "company": p.company, "location": p.location, "url": p.url, "remote": p.remote,
-                "posted": p.posted_at, "job": job.as_ref().map(|j| j.id.clone()), "score": job.as_ref().and_then(|j| j.score),
+                "source": p.source, "posted": p.posted_at, "job": job.as_ref().map(|j| j.id.clone()), "score": job.as_ref().and_then(|j| j.score),
                 "status": job.as_ref().map(|j| j.status.clone()), "outcome": outcome, "detail": detail }));
         }
-        // Matches first, best first; then the rest, and what was filtered out last.
-        let rank = |v: &Value| match v["outcome"].as_str().unwrap_or("") { "match" => 0, "new" => 1, "low" => 2, "waiting" => 3, "known" => 4, _ => 5 };
-        out.sort_by(|a, b| rank(a).cmp(&rank(b)).then(b["score"].as_i64().unwrap_or(-1).cmp(&a["score"].as_i64().unwrap_or(-1))));
+        sort_outcomes(&mut out);
         out
     }
 
@@ -1551,6 +1626,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         if purged > 0 {
             self.db().log(None, "purge", &format!("removed {purged} old posting{} you never acted on", if purged == 1 { "" } else { "s" }))?;
         }
+        let searched = postings.is_none() && batch.is_none();
         let postings = match postings {
             Some(p) => p,
             None => {
@@ -1593,8 +1669,8 @@ replies and interviews, and a little lower for kinds that got none from several 
                 all
             }
         };
-        // One source's search: what it found, and which of those Job Hunt had already.
-        let found_here: Vec<Posting> = if only.is_some() { postings.clone() } else { vec![] };
+        // What this search found (kept for the Search page), and which of those Job Hunt had already.
+        let found_here: Vec<Posting> = if only.is_some() || searched { postings.clone() } else { vec![] };
         let known_before: HashSet<String> = found_here.iter().filter(|p| {
             let db = self.db();
             db.job_exists(&p.id(), &p.company, &p.title).unwrap_or(false) || db.url_exists(&p.url).unwrap_or(false)
@@ -1817,12 +1893,12 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         if let Some(o) = only {
             let name = self.source_name(o).unwrap_or_else(|| o.to_string());
-            let started = self.source_results()[o]["started"].as_str().map(String::from).unwrap_or_else(now);
-            let postings = self.posting_outcomes(&found_here, &known_before);
             self.db().log(None, "search", &format!("{name} only: {report}"))?;
-            self.save_source_result(o, json!({ "id": o, "name": name, "started": started, "finished": now(), "running": false,
-                "report": report, "postings": postings }));
+            self.keep_found(only, &found_here, &known_before, &report);
             return Ok(report);
+        }
+        if searched {
+            self.keep_found(None, &found_here, &known_before, &report);
         }
         {
             let db = self.db();
@@ -5764,6 +5840,12 @@ pub fn backup_in_background(agent: &Arc<Agent>) {
     });
 }
 
+/// Matches first, best first; then the rest, and what was filtered out last.
+fn sort_outcomes(list: &mut [Value]) {
+    let rank = |v: &Value| match v["outcome"].as_str().unwrap_or("") { "match" => 0, "new" => 1, "low" => 2, "waiting" => 3, "known" => 4, _ => 5 };
+    list.sort_by(|a, b| rank(a).cmp(&rank(b)).then(b["score"].as_i64().unwrap_or(-1).cmp(&a["score"].as_i64().unwrap_or(-1))));
+}
+
 pub fn run_in_background(agent: &Arc<Agent>, task: &str) -> bool {
     if agent.is_running(task) {
         return false;
@@ -7072,6 +7154,23 @@ mod tests {
         assert_eq!(of("Senior Technical Program Manager")["outcome"], "filtered");
         assert!(of("Senior Technical Program Manager")["detail"].as_str().unwrap().starts_with("location"), "{list:?}");
         assert_eq!(s.agent.secret("last.search"), searched, "the daily search's time stays as it was");
+        // A full search keeps what it found source by source; a source searched with nothing found says so.
+        let from = |src: &str, t: &str, ext: &str| { let mut p = posting(t, ext); p.source = src.into(); p };
+        let found = vec![from("greenhouse", "Program Manager", "g1"), from("randstad", "Project Manager", "r1"), from("jobbank", "PMO Lead", "j1")];
+        let report = Report { by_source: vec![json!({ "name": "FreeHire", "searches": 3, "found": 0, "failed": 0 }), json!({ "name": "Randstad", "searches": 1, "found": 1, "failed": 0 })],
+            source_problems: vec!["Adecco “Program Manager”: timed out".into()], ..Report::default() };
+        s.agent.keep_found(None, &found, &HashSet::new(), &report);
+        let res = s.agent.source_results();
+        assert_eq!((res["boards"]["counts"]["found"].as_u64(), res["jobbank"]["counts"]["found"].as_u64(), res["freehire"]["counts"]["found"].as_u64()), (Some(1), Some(1), Some(0)), "{res}");
+        assert_eq!((res["agencies"]["via"].as_str(), res["agencies"]["name"].as_str()), (Some("search"), Some("Recruiters and job sites")));
+        assert_eq!(res["agencies"]["report"]["source_problems"][0], "Adecco “Program Manager”: timed out");
+        assert_eq!(res["linkedin"]["via"], "own", "the source searched on its own keeps its own results");
+        // One site searched on its own replaces that site's postings, and keeps the other sites'.
+        let found = vec![from("adecco", "Program Director", "a1")];
+        s.agent.keep_found(Some("site:adecco"), &found, &HashSet::new(), &Report::default());
+        let ag = &s.agent.source_results()["agencies"];
+        let srcs: Vec<&str> = ag["postings"].as_array().unwrap().iter().map(|p| p["source"].as_str().unwrap()).collect();
+        assert!(srcs.contains(&"randstad") && srcs.contains(&"adecco") && ag["via"] == "own", "{ag}");
         // Names and ids it knows; off sources and unknown ones aren't searched.
         assert_eq!(s.agent.source_name("jobbank").as_deref(), Some("Job Bank"));
         assert!(s.agent.source_name("nowhere").is_none() && s.agent.search_source("nowhere").is_err());

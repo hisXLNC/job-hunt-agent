@@ -500,7 +500,14 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&json!({ "running": agent.is_running("test-sources"), "last": last })));
             }
             ["api", "sources", "search"] => {
-                return Ok(Resp::json(&json!({ "results": agent.source_results(), "running": agent.is_running("search"), "progress": agent.progress() })));
+                // The Search page: every job source and how it's doing, each recruiter or job site, and
+                // what each found last.
+                let sources: Vec<Value> = agent.connections()?.into_iter().filter(|r| r["group"] == "Job listings").collect();
+                let side = agent.side_status();
+                return Ok(Resp::json(&json!({ "results": agent.source_results(), "running": agent.is_running("search"), "progress": agent.progress(),
+                    "sources": sources, "sites": agent.site_status(), "testing": agent.is_running("test-sources"),
+                    "last_search": Some(agent.secret("last.search")).filter(|x| !x.is_empty()), "next_search": side["next_search"], "paused": side["paused"],
+                    "held": agent.held_count() })));
             }
             ["api", "tracker"] => return Ok(Resp::json(&json!({ "rows": agent.tracker(None)? }))),
             ["api", "connections"] => {

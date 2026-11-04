@@ -92,7 +92,7 @@ const ICON = {
 };
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
-const NAV = [['overview', 'Overview'], ['applications', 'Applications'], ['cvs', 'CV &amp; Career'], ['calendar', 'Calendar'], ['inbox', 'Inbox'], ['results', 'Results'], ['settings', 'Settings']];
+const NAV = [['overview', 'Overview'], ['search', 'Search'], ['applications', 'Applications'], ['cvs', 'CV &amp; Career'], ['calendar', 'Calendar'], ['inbox', 'Inbox'], ['results', 'Results'], ['settings', 'Settings']];
 /** Pages that live under a menu item: jobs and applications under the Overview, Recruiters under Inbox. */
 const NAV_HOME = { job: 'overview', apply: 'overview', documents: 'overview', add: 'overview', pipeline: 'applications', recruiters: 'inbox', review: 'overview', welcome: 'overview' };
 /** The job hunt, step by step: each a tab of the Overview, with how many are in it and what to do there. */
@@ -454,6 +454,7 @@ async function showRoute() {
     else if (name === 'apply') await showApply(arg);
     else if (name === 'calendar') await showCalendar();
     else if (name === 'results') await showResults();
+    else if (name === 'search') await showSearch(arg);
     else if (name === 'inbox' && arg === 'recruiters' || name === 'recruiters') await showRecruiters();
     else if (name === 'inbox') await showInbox();
     else if (name === 'add') showAdd();
@@ -1902,7 +1903,7 @@ async function showSettings(tab, sub) {
       <div class="row tile-acts"></div>${more ? `<details ${open ? 'open' : ''}>${more}</details>` : ''}</article>`;
     const keyNote = (site, url) => `<p class="small">Get a key at <a href="#" data-act="link" data-url="${url}">${site}</a>, paste it here and press Save.</p>`;
     body = `<section class="card"><header><h2>Where Job Hunt looks</h2><button class="btn" data-act="testSources">Check them all</button></header>
-      <p class="muted">Turn on the places you'd like searched. The free ones need nothing else; a few need a free key from their own website, pasted in once. Every search looks for the job titles from your CVs, in your locations.</p>
+      <p class="muted">Turn on the places you'd like searched. The free ones need nothing else; a few need a free key from their own website, pasted in once. Every search looks for the job titles from your CVs, in your locations. To search one on its own and see what each found, open <a href="#search">Search</a>.</p>
       <div id="sourceTest"></div></section>
     <div class="tiles">
       ${tile('boards', 'Company job boards', 'Free', 'Job Hunt finds employers near you and searches their own careers pages. Nothing to set up.',
@@ -2581,11 +2582,10 @@ function sitesForm(st) {
   const ALERTS_OK = ['randstad', 'adecco', 'hays', 'roberthalf', 'michaelpage', 'altis', 'lro', 'peoplefirst', 'techtalent', 'jobsca', 'aplin'];
   const line = id => status[id] && status[id].state !== 'unknown' ? `<br><span class="small ${status[id].state === 'problem' ? '' : 'muted'}">${esc(status[id].detail)}${status[id].at ? ` · ${esc(ago(status[id].at))}` : ''}</span>${['problem', 'quiet'].includes(status[id].state) && ALERTS_OK.includes(id) ? '<br><span class="small">Tip: set up job alerts on its website for your titles, sent to your Gmail. Job Hunt reads them on every email check.</span>' : ''}` : '';
   const here = x => x.country === st.profile.sources.adzuna_country || on.includes(x.id);
-  const search = id => `<button class="btn ghost sm site-search" type="button" data-act="srcSearch" data-id="site:${esc(id)}" title="Search this site only, and see what it finds">Search</button>`;
   const group = kind => (st.sites?.catalog || []).filter(x => x.kind === kind && here(x)).map(x => `<label class="check"><input type="checkbox" name="site" value="${esc(x.id)}" ${on.includes(x.id) ? 'checked' : ''}>
-      <span><b>${esc(x.name)}</b> ${on.includes(x.id) ? pill(x.id) + search(x.id) : ''}<br><span class="muted small">${esc(x.about)}</span>${on.includes(x.id) ? line(x.id) : ''}</span></label>`).join('');
+      <span><b>${esc(x.name)}</b> ${on.includes(x.id) ? pill(x.id) : ''}<br><span class="muted small">${esc(x.about)}</span>${on.includes(x.id) ? line(x.id) : ''}</span></label>`).join('');
   const own = mine.map((c, i) => { const id = (st.sites?.status || []).find(x => x.template === c.url.replace('{title}', '{q}').replace('{place}', '{l}'))?.id;
-    return `<div class="row site-own" data-i="${i}"><input type="text" name="own_name" value="${esc(c.name)}" placeholder="Name" style="max-width:180px"><input type="text" name="own_url" value="${esc(c.url)}" placeholder="Search address" style="flex:1">${id ? pill(id) + search(id) : ''}<button class="btn ghost sm" type="button" data-act="siteDrop" data-i="${i}">Remove</button></div>`; }).join('');
+    return `<div class="row site-own" data-i="${i}"><input type="text" name="own_name" value="${esc(c.name)}" placeholder="Name" style="max-width:180px"><input type="text" name="own_url" value="${esc(c.url)}" placeholder="Search address" style="flex:1">${id ? pill(id) : ''}<button class="btn ghost sm" type="button" data-act="siteDrop" data-i="${i}">Remove</button></div>`; }).join('');
   return `<p class="small muted" style="margin-top:8px">Job Hunt reads their own search pages for your titles, as a browser would. Agencies usually don't name their client, so the company shows as the agency.</p>
     <form data-form="sites" class="form">
       <div style="grid-column:1/-1">${group('Agency') ? `<h3 class="sub">Agencies</h3>${group('Agency')}` : ''}
@@ -2598,93 +2598,118 @@ function sitesForm(st) {
     </form>`;
 }
 
-/** Sources that can be searched on their own (see /api/sources/search). */
-const SEARCHABLE = ['boards', 'linkedin', 'jobbank', 'freehire', 'jsearch', 'jooble', 'adzuna', 'indeed', 'agencies'];
-/** A source's last search on its own, by id: kept from the last look, for the tiles' buttons. */
-let srcResults = {};
-const srcSearchBtns = r => !SEARCHABLE.includes(r.id) || ['off', 'setup', 'na'].includes(r.status) ? ''
-  : srcResults[r.id]?.running ? `<button class="btn sm" data-act="srcResults" data-id="${esc(r.id)}"><span class="spin" data-kind="search"></span>Searching… see how far</button>`
-  : `<button class="btn sm" data-act="srcSearch" data-id="${esc(r.id)}" title="Search ${esc(r.name)} only, for all your job titles, and see what it finds">Search now</button>`
-    + (srcResults[r.id]?.finished ? `<button class="btn ghost sm" data-act="srcResults" data-id="${esc(r.id)}">Last results${srcResults[r.id].postings ? ` (${srcResults[r.id].postings.length})` : ''}</button>` : '');
+/** Sources that can be searched on their own (see /api/sources/search), in the Search page's order. */
+const SEARCHABLE = ['linkedin', 'boards', 'jobbank', 'freehire', 'jsearch', 'indeed', 'jooble', 'adzuna', 'agencies'];
 const SRC_OUTCOME = {
   match: ['good', 'Fits'], low: ['', 'Below your fit score'], new: ['', 'Added'], waiting: ['warn', 'Scored with the next search'],
   known: ['', 'Already in Job Hunt'], filtered: ['', 'Skipped'],
 };
 const SRC_FILTERS = [['all', 'All'], ['match', 'Fits'], ['new', 'New'], ['known', 'Already had'], ['filtered', 'Skipped']];
+const SRC_NEW = ['match', 'new', 'low', 'waiting'];
+/** The Search page's filters, per source tab: {outcome, site}. */
+const srcFilter = {};
 let srcPoll;
-/** One source's search on its own: how far along it is, then every posting it found and what became of it. */
-async function showSourceResults(id, start) {
+/** Start a search of one source, then show its tab. */
+async function searchSource(id) {
+  await api('/api/sources/search', { method: 'POST', body: { id } });
+  const tab = id.startsWith('site:') ? 'agencies' : id;
+  if (location.hash === `#search/${tab}`) route(); else location.hash = `#search/${tab}`;
+}
+/** A source's latest results in a line: "42 found · 5 new · 2 fit you · 3 hours ago". */
+function srcLastLine(r) {
+  if (!r) return '<span class="muted">Not searched yet</span>';
+  if (r.running) return `<span class="spin" data-kind="search"></span>Searching${r.searching && r.searching !== r.name ? ` ${esc(r.searching)}` : ''}…`;
+  const c = r.counts || {};
+  const bits = [`${c.found ?? (r.postings || []).length} found`];
+  if (c.new) bits.push(`${c.new} new`);
+  if (c.fits) bits.push(`<b>${c.fits} fit${c.fits === 1 ? 's' : ''} you</b>`);
+  return `${bits.join(' · ')}${r.finished ? ` <span class="muted">· ${esc(ago(r.finished))}</span>` : ''}${r.error ? `<br><span class="crit-text">${esc(r.error)}</span>` : ''}`;
+}
+async function showSearch(arg) {
   clearTimeout(srcPoll);
-  document.querySelector('.src-modal')?.closest('.modal-back')?.remove();
-  if (start) {
-    try { await api('/api/sources/search', { method: 'POST', body: { id } }); } catch (e) { toast(e.message, true); return; }
-  }
-  const back = document.createElement('div');
-  back.className = 'modal-back';
-  back.innerHTML = '<div class="modal src-modal" role="dialog" aria-modal="true"><p class="muted">Loading…</p></div>';
-  const done = () => { clearTimeout(srcPoll); back.remove(); document.removeEventListener('keydown', key); if (location.hash.startsWith('#settings')) renderConnStatus(); };
-  const key = e => { if (e.key === 'Escape') done(); };
-  let filter = 'all';
-  back.addEventListener('click', e => {
-    if (e.target === back || e.target.closest('[data-close]')) return done();
-    const f = e.target.closest('[data-srcfilter]');
-    if (f) { filter = f.dataset.srcfilter; draw(last); }
-    if (e.target.closest('[data-srcagain]')) showSourceResults(id, true);
-    if (e.target.closest('a[href^="#job/"]')) done();
-  });
-  document.addEventListener('keydown', key);
-  document.body.appendChild(back);
-  let last;
-  const box = back.querySelector('.src-modal');
-  const draw = d => {
-    const r = d.results[id] || {};
-    const name = r.name || id;
-    box.setAttribute('aria-label', `Search results: ${name}`);
-    if (r.running || (start && !r.finished && d.running)) {
-      const pr = d.progress || { percent: 0, stage: 'Starting', detail: '' };
-      box.innerHTML = `<h2>Searching ${esc(name)}</h2>
-        <p class="muted small">All your job titles, in your places. New postings are scored like any search's and go on your Overview.</p>
-        <div class="pbar${pr.paused ? ' paused' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pr.percent}"><i style="width:${pr.percent}%"></i></div>
-        <p class="small"><b>${esc(pr.stage || '')}</b>${pr.detail ? ` <span class="muted">· ${esc(pr.detail)}</span>` : ''}${pr.found ? ` <span class="muted">· ${pr.found} found${pr.new ? `, ${pr.new} new` : ''}${pr.scored ? `, ${pr.scored} scored` : ''}</span>` : ''}</p>
-        <div class="modal-btns"><button class="btn ghost" data-act="searchStop">Stop</button><button class="btn primary" data-close>Close</button></div>`;
-      return;
-    }
+  const d = await api('/api/sources/search');
+  if (!location.hash.startsWith('#search')) return;
+  const results = d.results || {};
+  const own = Object.values(results).find(r => r.running);
+  const full = d.running && !own;
+  const rows = Object.fromEntries((d.sources || []).map(r => [r.id, r]));
+  // The ones searched first, then those off or not set up.
+  const isOff = id => ['off', 'setup', 'na'].includes(rows[id].status);
+  const order = [...SEARCHABLE, 'alerts'].filter(id => rows[id]).sort((a, b) => isOff(a) - isOff(b));
+  const tabs = [['sources', 'Sources'], ...SEARCHABLE.filter(id => results[id] && (results[id].postings || results[id].running || results[id].error))
+    .map(id => [id, `${esc(results[id].name || rows[id]?.name || id)}${results[id].counts?.fits ? ` <span class="tab-n">${results[id].counts.fits}</span>` : ''}`])];
+  const view = tabs.some(([id]) => id === arg) ? arg : 'sources';
+  const next = d.next_search ? new Date(d.next_search) : null;
+  const status = `<p class="muted small search-when">${d.last_search ? `Last full search ${esc(ago(d.last_search))}` : 'No full search yet'}${d.paused ? ` · ${esc(pausedWords(d.paused))}` : next ? ` · next ${esc(next.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}${d.held ? ` · ${d.held} posting${d.held === 1 ? '' : 's'} waiting to be scored` : ''} · <a href="#settings/search">What and where to search</a></p>`;
+  const actions = d.running ? `<button class="btn ghost danger" data-act="searchStop">Stop</button>`
+    : `<button class="btn primary" data-act="run" data-task="search">${svg('search')}Search everything now</button>`;
+  const ownCard = own ? `<section class="card progress-card"><header><h2>Searching ${esc(own.searching || own.name)}</h2><b class="pct">${d.progress?.percent ?? 0}%</b></header>
+      <div class="pbar${d.progress?.paused ? ' paused' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${d.progress?.percent ?? 0}"><i style="width:${d.progress?.percent ?? 0}%"></i></div>
+      <p class="muted small">${esc(d.progress?.stage || 'Starting')}${d.progress?.detail ? ` · ${esc(d.progress.detail)}` : ''}</p>
+      <div class="facts small"><span><b>${d.progress?.found ?? 0}</b> found</span><span><b>${d.progress?.new ?? 0}</b> new</span><span><b>${d.progress?.scored ?? 0}</b> scored</span></div></section>` : '';
+  const head = `${tabbedHead('Search', 'Where Job Hunt looks for jobs, and what each place found. Search one on its own any time; the daily search covers them all.', actions, 'search', tabs, view)}
+    ${status}${full ? progressHtml(d.progress) : ownCard}`;
+  let body;
+  if (view === 'sources') {
+    const busy = d.running;
+    const btns = (r, res) => {
+      const b = [];
+      const on = !['off', 'setup', 'na'].includes(r.status);
+      if (SEARCHABLE.includes(r.id) && on) b.push(`<button class="btn sm" data-act="srcSearch" data-id="${esc(r.id)}" ${busy ? 'disabled' : ''} title="Search ${esc(r.name)} only, for all your job titles">${svg('search')}Search</button>`);
+      if (res?.postings) b.push(`<a class="btn ghost sm" href="#search/${esc(r.id)}">Results</a>`);
+      if (r.status === 'off' && (r.actions || []).includes('on')) b.push(`<button class="btn primary sm" data-act="connIndeed" data-id="${esc(r.id)}" data-on="1">Turn on</button>`);
+      if (r.status === 'setup' || r.status === 'problem') b.push(`<button class="btn ghost sm" data-act="connGoto" data-to="tile-${esc(r.id)}">${r.status === 'setup' ? 'Set up' : 'Fix'}</button>`);
+      return b.join('');
+    };
+    const sites = d.sites || [];
+    const siteRows = sites.map(x => { const [cls, label] = SITE_STATE[x.state] || ['', x.state];
+      return `<div class="src-site"><span class="grow"><b>${esc(x.name)}</b> <span class="pill ${cls}">${label}</span><br><span class="small muted">${esc(x.detail)}${x.at ? ` · ${esc(ago(x.at))}` : ''}</span></span>
+        ${rows.agencies && !['off', 'setup'].includes(rows.agencies.status) ? `<button class="btn ghost sm" data-act="srcSearch" data-id="site:${esc(x.id)}" ${busy ? 'disabled' : ''}>Search</button>` : ''}</div>`; }).join('');
+    body = `<section class="card src-table">${order.map(id => {
+      const r = rows[id], res = results[id];
+      const [cls, label] = CONN_PILL[r.status] || ['', r.status];
+      const off = ['off', 'setup', 'na'].includes(r.status);
+      return `<div class="src-row${off ? ' off' : ''}">
+        <div class="src-name"><b>${esc(r.name.replace(' (through your Claude account)', ''))}</b> <span class="pill ${cls}">${label}</span><br><span class="small muted">${esc(r.detail)}</span></div>
+        <div class="src-last small">${id === 'alerts' ? '<span class="muted">Read on every email check</span>' : off ? '' : res?.postings || res?.running || res?.error ? `<a href="#search/${esc(id)}" class="plain">${srcLastLine(res)}</a>` : srcLastLine(res)}</div>
+        <div class="src-acts row">${btns(r, res)}</div>
+        ${id === 'agencies' && sites.length ? `<details class="src-sites"><summary class="small">${sites.length} recruiter${sites.length === 1 ? '' : 's'} and job site${sites.length === 1 ? '' : 's'}</summary>${siteRows}</details>` : ''}
+      </div>`; }).join('')}</section>
+      <p class="muted small">Keys, company boards and which recruiters to search are set, and tested, in <a href="#settings/sources">Settings → Job sources</a>.</p>`;
+  } else {
+    const r = results[view];
+    const f = srcFilter[view] || (srcFilter[view] = { outcome: 'all', site: '' });
     const list = r.postings || [];
-    const count = k => list.filter(p => k === 'all' || p.outcome === k || (k === 'match' && p.outcome === 'match')).length;
-    const NEW = ['match', 'new', 'low', 'waiting'];
-    const shown = list.filter(p => filter === 'all' || p.outcome === filter || (filter === 'new' && NEW.includes(p.outcome)));
-    const rep = r.report || {};
-    const when = r.finished ? ago(r.finished) : '';
-    const summary = r.error ? `<p class="crit-text">${esc(r.error)}</p>`
-      : `<p class="small">${list.length ? `<b>${list.length}</b> posting${list.length === 1 ? '' : 's'} found` : 'No postings found'}${rep.new ? `, <b>${rep.new}</b> new` : ''}${rep.scored ? `, ${rep.scored} scored` : ''}${count('match') ? `, <b>${count('match')}</b> fit${count('match') === 1 ? 's' : ''} you` : ''}.${when ? ` <span class="muted">${esc(when)}</span>` : ''}</p>
-        ${(rep.source_problems || []).length ? `<p class="small crit-text">${rep.source_problems.slice(0, 4).map(esc).join('<br>')}</p>` : ''}
-        ${(rep.errors || []).filter(e => !e.startsWith('Stopped')).length ? `<p class="small muted">${rep.errors.slice(0, 3).map(esc).join('<br>')}</p>` : ''}`;
-    const counts = { all: list.length, match: count('match'), new: list.filter(p => NEW.includes(p.outcome)).length, known: count('known'), filtered: count('filtered') };
-    const chips = list.length ? `<div class="chips src-chips">${SRC_FILTERS.filter(([k]) => k === 'all' || counts[k]).map(([k, n]) => `<button class="chip ${filter === k ? 'on' : ''}" data-srcfilter="${k}">${n} <span class="muted">${counts[k]}</span></button>`).join('')}</div>` : '';
+    const siteNames = Object.fromEntries((d.sites || []).map(x => [x.id, x.name]));
+    const inSite = list.filter(p => !f.site || p.source === f.site);
+    const n = k => inSite.filter(p => k === 'all' || (k === 'new' ? SRC_NEW.includes(p.outcome) : p.outcome === k)).length;
+    const shown = inSite.filter(p => f.outcome === 'all' || (f.outcome === 'new' ? SRC_NEW.includes(p.outcome) : p.outcome === f.outcome));
+    const probs = (r.report?.source_problems || []);
+    const errs = (r.report?.errors || []).filter(e => !e.startsWith('Stopped'));
+    const sitesHere = view === 'agencies' ? [...new Set(list.map(p => p.source))] : [];
     const row = p => {
       const [cls, label] = SRC_OUTCOME[p.outcome] || ['', p.outcome];
       const fit = p.score != null ? `<span class="pill ${p.outcome === 'match' ? 'good' : ''}">${p.score}</span>` : '';
       const what = p.outcome === 'filtered' ? `Skipped: ${p.detail}` : p.outcome === 'known' && p.status ? `Already in Job Hunt · ${STAGES[p.status] || p.status}` : p.outcome === 'match' && p.status ? `${label} · ${STAGES[p.status] || p.status}` : label;
       const title = p.job ? `<a href="#job/${encodeURIComponent(p.job)}">${esc(p.title)}</a>` : p.url ? `<a href="#" data-act="link" data-url="${esc(p.url)}">${esc(p.title)}</a>` : esc(p.title);
-      return `<tr class="src-${esc(p.outcome)}"><td>${title}<br><span class="muted small">${esc(p.company)}${p.location ? ` · ${esc(p.location)}` : ''}${p.remote ? ' · Remote' : ''}</span></td>
-        <td class="num">${fit}</td><td class="small ${cls === 'warn' ? '' : 'muted'}">${esc(what)}</td></tr>`;
+      return `<tr class="src-${esc(p.outcome)}"><td>${title}<br><span class="muted small">${esc(p.company)}${p.location ? ` · ${esc(p.location)}` : ''}${p.remote ? ' · Remote' : ''}${view === 'agencies' && siteNames[p.source] && siteNames[p.source] !== p.company ? ` · via ${esc(siteNames[p.source])}` : ''}</span></td>
+        <td class="num">${fit}</td><td class="small ${cls === 'warn' ? '' : 'muted'}">${esc(what)}</td>
+        <td class="num">${p.url ? `<button class="btn ghost sm icon-only" data-act="link" data-url="${esc(p.url)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`;
     };
-    box.innerHTML = `<h2>${esc(name)}: what the search found</h2>${summary}${chips}
-      ${shown.length ? `<div class="src-list"><table><thead><tr><th>Posting</th><th class="num">Fit</th><th>What happened</th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table></div>` : ''}
-      <div class="modal-btns"><button class="btn" data-srcagain>Search again</button>${count('match') ? '<a class="btn" href="#overview" data-close>Pick on the Overview</a>' : ''}<button class="btn primary" data-close>Close</button></div>`;
-  };
-  const tick = async () => {
-    let d;
-    try { d = await api('/api/sources/search'); } catch (e) { box.innerHTML = `<p>${esc(e.message)}</p><div class="modal-btns"><button class="btn primary" data-close>Close</button></div>`; return; }
-    if (!document.body.contains(back)) return;
-    srcResults = d.results || {};
-    last = d;
-    draw(d);
-    const r = d.results[id] || {};
-    if (r.running || (start && !r.finished && d.running)) srcPoll = setTimeout(tick, 1200);
-  };
-  await tick();
-  back.querySelector('[data-close]')?.focus();
+    const searchBtn = rows[view] && !['off', 'setup', 'na'].includes(rows[view].status) ? `<button class="btn" data-act="srcSearch" data-id="${esc(view)}" ${d.running ? 'disabled' : ''}>${svg('search')}Search again</button>` : '';
+    body = `<section class="card"><header><h2>${esc(r.name)}</h2><div class="row">${searchBtn}${n('match') ? '<a class="btn primary" href="#overview/pick">Pick on the Overview</a>' : ''}</div></header>
+      <p class="small">${r.running ? 'Searching now; the list below is from before.' : r.via === 'search' ? `From the full search ${esc(ago(r.finished))}.` : r.finished ? `Searched on its own ${esc(ago(r.finished))}.` : ''}
+        ${list.length ? ` <b>${list.length}</b> posting${list.length === 1 ? '' : 's'}, <b>${n('new')}</b> new, <b>${n('match')}</b> fit${n('match') === 1 ? 's' : ''} you.` : r.finished ? ' Nothing found.' : ''}</p>
+      ${r.error ? `<p class="small crit-text">${esc(r.error)}</p>` : ''}
+      ${probs.length ? `<details class="small"><summary class="crit-text">${probs.length} search${probs.length === 1 ? '' : 'es'} couldn't be read</summary><p class="muted">${probs.slice(0, 12).map(esc).join('<br>')}</p></details>` : ''}
+      ${errs.length ? `<p class="small muted">${errs.slice(0, 3).map(esc).join('<br>')}</p>` : ''}
+      ${sitesHere.length > 1 ? `<div class="chips src-chips"><button class="chip ${f.site ? '' : 'on'}" data-act="srcFilter" data-site="">All sites</button>${sitesHere.map(s => `<button class="chip ${f.site === s ? 'on' : ''}" data-act="srcFilter" data-site="${esc(s)}">${esc(siteNames[s] || s)} <span class="muted">${list.filter(p => p.source === s).length}</span></button>`).join('')}</div>` : ''}
+      ${list.length ? `<div class="chips src-chips">${SRC_FILTERS.filter(([k]) => k === 'all' || n(k)).map(([k, name]) => `<button class="chip ${f.outcome === k ? 'on' : ''}" data-act="srcFilter" data-outcome="${k}">${name} <span class="muted">${n(k)}</span></button>`).join('')}</div>` : ''}
+      ${shown.length ? `<div class="src-list"><table><thead><tr><th>Posting</th><th class="num">Fit</th><th>What happened</th><th></th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table></div>` : list.length ? '<p class="empty">None of these.</p>' : ''}
+    </section>`;
+  }
+  page(head + body);
+  if (d.running) srcPoll = setTimeout(() => { if (location.hash.startsWith('#search')) route(); }, 1500);
 }
 
 const CONN_ACT = {
@@ -2749,7 +2774,6 @@ async function renderConnStatus() {
   clearTimeout(connPoll);
   let d;
   try { d = await api('/api/connections'); } catch (e) { return; }
-  try { srcResults = (await api('/api/sources/search')).results || {}; } catch (e) { /* the buttons go without Last results */ }
   document.querySelectorAll('[data-tile]').forEach(t => {
     const r = d.rows.find(x => x.id === t.dataset.tile);
     if (!r) return;
@@ -2761,7 +2785,7 @@ async function renderConnStatus() {
       : `${esc(r.detail)}${r.at ? ` <span class="muted">· ${esc(ago(r.at))}</span>` : ''}`;
     // The one being tested shows how far along it is instead of its buttons.
     t.querySelector('.tile-acts').innerHTML = d.progress && d.progress.only === r.id ? testBar(d.progress)
-      : srcSearchBtns(r) + (r.actions || []).filter(a => !a.startsWith('goto:')).map(a => connBtn(r, a, d.testing)).join('');
+      : (r.actions || []).filter(a => !a.startsWith('goto:')).map(a => connBtn(r, a, d.testing)).join('');
   });
   const box = $('#connStatus');
   if (box) {
@@ -2968,6 +2992,7 @@ async function act(el) {
       toast(r.stopping ? 'Stopping the search after the step it\'s on. What it found so far is kept.' : 'No search is running.');
       el.disabled = true;
       await refreshOverview();
+      if (location.hash.startsWith('#search')) route();
     });
   }
   if (a === 'searchPause') {
@@ -2985,7 +3010,7 @@ async function act(el) {
       const r = await api(`/api/run/${el.dataset.task}`, { method: 'POST' });
       toast(r.started ? (el.dataset.task.startsWith('search') ? (el.dataset.task === 'search-force' ? 'Searching and re-checking postings filtered out before…' : 'Searching for jobs. New matches appear as they are tailored.') : 'Checking your email…') : 'Already running.');
       await refreshOverview();
-      if (location.hash === '' || location.hash === '#overview') route();
+      if (location.hash === '' || location.hash === '#overview' || location.hash.startsWith('#search')) route();
     });
   }
   if (a === 'pickFolder') {
@@ -3037,8 +3062,14 @@ async function act(el) {
   if (a === 'ownOff') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/own-file-off`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Back to Job Hunt\'s version.');
   }
-  if (a === 'srcSearch') return showSourceResults(el.dataset.id, true);
-  if (a === 'srcResults') return showSourceResults(el.dataset.id, false);
+  if (a === 'srcSearch') return busy(() => searchSource(el.dataset.id));
+  if (a === 'srcFilter') {
+    const tab = location.hash.split('/')[1] || '';
+    const f = srcFilter[tab] || (srcFilter[tab] = { outcome: 'all', site: '' });
+    if (el.dataset.outcome != null) f.outcome = el.dataset.outcome;
+    if (el.dataset.site != null) { f.site = el.dataset.site; f.outcome = 'all'; }
+    route(); return;
+  }
   if (a === 'connTest') {
     const sites = el.dataset.id === 'agencies' ? document.querySelectorAll('#tile-agencies [name=site]:checked, #tile-agencies .site-own').length : 0;
     return busy(async () => { await api('/api/connections/test', { method: 'POST', body: { id: el.dataset.id } }); renderConnStatus(); },
