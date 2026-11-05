@@ -38,13 +38,15 @@
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
         <button class="b" data-k="stop" hidden>Stop: I'll submit it</button>
-        <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button></div></div>`;
+        <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button>
+        <button class="b" data-k="drop" title="Not for you after all (the pay, say): Job Hunt sets it aside${JOB.queue ? ' and opens the next one' : ''}">Not interested</button></div></div>`;
     statusEl = root.querySelector('.s');
     root.querySelectorAll('[data-k]').forEach(b => { buttons[b.dataset.k] = b; });
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
     buttons.fill.onclick = () => start();
     buttons.next.onclick = () => nextAmber();
     buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
+    buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
     buttons.stop.onclick = () => { clearTimeout(autoTimer); autoTimer = null; buttons.stop.hidden = true; status('Stopped. Read the form over, then press its Submit button yourself.'); };
     headEl = root.querySelector('.t');
     buttons.applied.onclick = () => { recorded = true; window.name = ''; status('Marked as applied in Job Hunt. You can close this window.'); buttons.applied.hidden = true; send('applied', { url: location.href }); };
@@ -246,6 +248,7 @@
     amberAt++;
   }
   function start() {
+    checkPay();
     const list = collect();
     if (!list.length) { status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
     buttons.fill.disabled = true;
@@ -296,12 +299,22 @@
   if (pressedAt()) watchForConfirmation(30);
   window.__jobhuntAfterFill = () => { if (!recorded && !formHere()) watchForConfirmation(30, true); };
 
+  // Pay stated on the page (the company's posting often has it when the job board's copy didn't):
+  // sent once per page, and Job Hunt keeps it if the job had none.
+  const PAY = /(?:CA\$|C\$|CAD\s*\$?|US\$|\$)\s?\d[\d,]*(?:\.\d+)?\s?[kK]?\s*(?:-|–|—|to)\s*(?:CA\$|C\$|CAD\s*\$?|US\$|\$)?\s?\d[\d,]*(?:\.\d+)?\s?[kK]?[^.\n]{0,40}/;
+  let payChecked = false;
+  function checkPay() {
+    if (payChecked || !document.body) return;
+    const m = (document.body.innerText || '').slice(0, 60000).match(PAY);
+    if (m) { payChecked = true; send('salary', { text: m[0] }); }
+  }
   // On each page: fill the form by itself the first time one appears, or point the way to it.
   async function look() {
     for (let i = 0; i < 20; i++) {
       await wait(1000);
       if (!document.body) continue;
       panel();
+      if (i === 2 || i === 8) checkPay();
       if (filled || recorded) return;
       if (formHere()) {
         const k = 'jobhunt-filled:' + location.href;

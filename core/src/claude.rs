@@ -29,6 +29,9 @@ pub struct JobScore {
     /// The score a CV tailored to this posting could reach, from the same experience.
     #[serde(default)]
     pub potential: Option<i64>,
+    /// The pay as the posting states it, or empty.
+    #[serde(default)]
+    pub salary: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
@@ -144,7 +147,7 @@ fn nullable_string() -> Value {
 
 pub fn score_schema() -> Value {
     obj(json!({"score": {"type": "integer"}, "track": {"type": "string"}, "reasoning": {"type": "string"},
-               "red_flags": strings(), "keywords": strings(), "deadline": {"type": "string"}, "potential": {"type": "integer"}}))
+               "red_flags": strings(), "keywords": strings(), "deadline": {"type": "string"}, "potential": {"type": "integer"}, "salary": {"type": "string"}}))
 }
 
 pub fn tailor_schema() -> Value {
@@ -238,7 +241,10 @@ reworded in the posting's terms, with the most relevant work moved up and keywor
 visible. Never higher than their actual experience supports, and no higher than score when the gap is something \
 tailoring can't fix (a missing licence, degree, clearance, years or seniority). Usually 0-15 points above score.\n\
 - deadline: the last day to apply as YYYY-MM-DD if the posting states one (\"apply by\", \"closing date\"), \
-else an empty string. Today is {today}.{guidance}"
+else an empty string. Today is {today}.\n\
+- salary: the pay the posting states, wherever it says it (a range, \"up to\", hourly, monthly), short and with \
+its currency and period, e.g. \"$95,000–$110,000 a year\" or \"$45–$52 an hour\". Empty if the posting states no \
+pay; never an estimate.{guidance}"
     )
 }
 

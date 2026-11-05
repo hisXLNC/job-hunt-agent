@@ -29,6 +29,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     ask('/ext/fill', data)
       .then(a => run(tabId, a => window.__jobhunt && window.__jobhunt.fill(a), [a]))
       .catch(e => run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), ['Couldn\'t fill it in: ' + e.message]));
+  } else if (kind === 'salary' || kind === 'dismiss') {
+    ask('/ext/' + kind, data).catch(() => {});
   } else if (kind === 'learn') {
     ask('/ext/learn', data).catch(() => {});
   } else if (kind === 'applied') {

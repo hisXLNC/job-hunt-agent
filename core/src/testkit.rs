@@ -177,6 +177,9 @@ impl Llm for FakeLlm {
             keywords: vec!["Technical Program Manager".into(), "UAT".into(), "vendor management".into(), "Kubernetes".into()],
             deadline: if job.description.contains("apply by Halloween") { "2099-10-31".into() } else { String::new() },
             potential: Some(92),
+            // As Claude reads pay the patterns miss: a "Salary note:" line, as written.
+            // ("$80K~$90K": the search's patterns can't read it; Claude gives it back as a range.)
+            salary: job.description.lines().find_map(|l| l.strip_prefix("Salary note: ")).unwrap_or("").replace('~', " to "),
         })
     }
     fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], stories: &str, _style: &str) -> R<Tailored> {

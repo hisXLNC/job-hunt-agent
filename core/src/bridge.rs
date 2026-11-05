@@ -66,6 +66,8 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
             a["job"] = page_job(&j, url)["job"].clone();
             Ok(a)
         }),
+        ("POST", "/ext/salary") => crate::fill::job_for_page(agent, url, title).and_then(|j| agent.found_salary(&j.id, b["text"].as_str().unwrap_or(""), "on the company's page")).map(|n| json!({ "new": n })),
+        ("POST", "/ext/dismiss") => crate::fill::job_for_page(agent, url, title).and_then(|j| agent.db().set_status(&j.id, "dismissed", "not interested (from your browser)").map(|_| json!({ "ok": true }))),
         ("POST", "/ext/learn") => crate::fill::learn(agent, &fields).map(|n| json!({ "kept": n })),
         ("POST", "/ext/applied") => crate::fill::job_for_page(agent, url, title)
             .and_then(|j| crate::fill::submitted_with(agent, &j.id, url, b["auto"].as_bool().unwrap_or(false), &fields).map(|_| json!({ "ok": true }))),

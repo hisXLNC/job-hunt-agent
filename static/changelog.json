@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.24.0",
+    "date": "2026-11-05",
+    "title": "Salaries you can count on",
+    "changes": [
+      "Changed your mind about a role you approved? Submit's list has a Not interested button (the ×), and so does the Apply window, which then goes on to the next one in the queue.",
+      "Salaries are read more reliably: Claude reads the pay wherever the posting states it while scoring (\"$95K to $110K\", \"up to\", hourly), and Job Hunt also reads it from the company's own posting when it finds one, and from pages you open in the Apply window or with the extension.",
+      "Pay below your minimum (Search → What to search) is tagged Below your minimum. A new posting found below it is set aside like the search filter would; one you've already tailored or approved gets a notice so you can drop it."
+    ]
+  },
+  {
     "version": "2.23.0",
     "date": "2026-11-05",
     "title": "Applying, faster",

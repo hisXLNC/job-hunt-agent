@@ -99,6 +99,7 @@ impl Llm for DemoLlm {
             keywords: vec!["Technical Program Management".into(), "Stakeholder Management".into(), "UAT".into(), "vendor management".into(), "Agile".into(), "Kubernetes".into(), "Release Management".into(), "PMP".into()],
             deadline: String::new(),
             potential: Some((score + 8 + score % 7).min(97)),
+            salary: String::new(),
         })
     }
     fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], _stories: &str, _style: &str) -> R<Tailored> {

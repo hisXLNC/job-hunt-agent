@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.24.0] - 2026-11-05
+
+Salaries you can count on.
+
+### Changes
+
+- Changed your mind about a role you approved? Submit's list has a Not interested button (the ×), and so does the Apply window, which then goes on to the next one in the queue.
+- Salaries are read more reliably: Claude reads the pay wherever the posting states it while scoring ("$95K to $110K", "up to", hourly), and Job Hunt also reads it from the company's own posting when it finds one, and from pages you open in the Apply window or with the extension.
+- Pay below your minimum (Search → What to search) is tagged Below your minimum. A new posting found below it is set aside like the search filter would; one you've already tailored or approved gets a notice so you can drop it.
+
 ## [2.23.0] - 2026-11-05
 
 Applying, faster.
@@ -991,6 +1001,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.24.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.24.0
 [2.23.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.23.0
 [2.22.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.22.0
 [2.21.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.21.0

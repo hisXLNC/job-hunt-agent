@@ -663,6 +663,27 @@ fn on_fill_message(app: AppHandle, job_id: String, kind: String, data: serde_jso
                 let _ = jobhunt_core::fill::learn(&agent, &data["fields"].as_array().cloned().unwrap_or_default());
                 return;
             }
+            // Pay stated on a page in the window: kept when the job had none (flagged if below your minimum).
+            "salary" => {
+                let _ = agent.found_salary(&job_id, data["text"].as_str().unwrap_or(""), "on the company's page");
+                return;
+            }
+            // Not for you after all: set aside, and on with the queue.
+            "dismiss" => {
+                let _ = agent.db().set_status(&job_id, "dismissed", "not interested (from the Apply window)");
+                agent.after_stage(&job_id, "dismissed", "", true);
+                if jobhunt_core::fill::queue(&agent).is_empty() {
+                    let a = app.clone();
+                    let _ = app.run_on_main_thread(move || {
+                        if let Some(w) = a.get_webview_window("apply") {
+                            let _ = w.destroy();
+                        }
+                    });
+                } else {
+                    next_in_queue(&app, &agent, &job_id);
+                }
+                return;
+            }
             // Leave this one for later and go on with the queue.
             "skip" => {
                 next_in_queue(&app, &agent, &job_id);

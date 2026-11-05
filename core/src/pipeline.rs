@@ -1839,6 +1839,16 @@ replies and interviews, and a little lower for kinds that got none from several 
                     job.red_flags = s.red_flags;
                     job.keywords = s.keywords;
                     job.deadline = deadline_of(&s.deadline, &job.description);
+                    // Pay the search's patterns missed, as Claude read it; below your minimum, set aside like the filter would.
+                    if job.salary.is_none() {
+                        if let Some((text, max)) = salary_parts(&s.salary) {
+                            job.salary = Some(text);
+                            if let Some(flag) = below_minimum(&profile, max) {
+                                job.status = "skipped".into();
+                                job.red_flags.insert(0, flag);
+                            }
+                        }
+                    }
                     let db = self.db();
                     db.insert_job(&job)?;
                     db.log(Some(&job.id), "scored", &format!("{} on the {} track", s.score, s.track))?;
@@ -1923,6 +1933,37 @@ replies and interviews, and a little lower for kinds that got none from several 
         Ok(report)
     }
 
+    /// Pay found for a job that didn't show one: as Claude read it in the posting, on the company's own
+    /// posting, or on a page in the Apply window (`from` says which, for the history). Below your
+    /// minimum: a red flag, and a notice when you've already tailored or approved it. Returns whether
+    /// it was new.
+    pub fn found_salary(&self, job_id: &str, stated: &str, from: &str) -> R<bool> {
+        let Some((text, max)) = salary_parts(stated) else { return Ok(false) };
+        let Some(job) = self.db().job(job_id)? else { return Ok(false) };
+        // Known already (and with a yearly figure, when this has one too): nothing new.
+        let known_max = job.salary.as_deref().and_then(crate::sources::salary_range).map(|r| r.1);
+        if job.salary.as_deref().is_some_and(|s| !s.is_empty()) && (known_max.is_some() || max.is_none()) {
+            return Ok(false);
+        }
+        let profile = self.profile();
+        let mut flags = job.red_flags.clone();
+        let low = below_minimum(&profile, max);
+        if let Some(f) = &low {
+            if !flags.iter().any(|x| x.starts_with("Pays up to")) {
+                flags.insert(0, f.clone());
+            }
+        }
+        {
+            let db = self.db();
+            db.update_job(job_id, &[("salary", text.clone().into()), ("red_flags", json!(flags))])?;
+            db.log(Some(job_id), "salary", &format!("{text}, {from}"))?;
+        }
+        if let (Some(f), true) = (low, ["ready", "approved"].contains(&job.status.as_str())) {
+            self.note(&format!("{} at {}: below your minimum", job.title, job.company), &format!("{f}. If it's not worth it, mark it Not interested."));
+        }
+        Ok(true)
+    }
+
     /// Score a posting that was skipped (filtered out or scored low) now; tailor it if it clears your bar.
     pub fn score_anyway(&self, job_id: &str) -> R<Job> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
@@ -1947,6 +1988,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             ])?;
             db.log(Some(job_id), "scored", &format!("{} on the {} track (scored on request)", s.score, s.track))?;
         }
+        let _ = self.found_salary(job_id, &s.salary, "in the posting");
         if status == "queued" && profile.auto_tailor {
             return self.tailor(job_id, None);
         }
@@ -2149,6 +2191,14 @@ replies and interviews, and a little lower for kinds that got none from several 
                     job.red_flags = s.red_flags;
                     job.keywords = s.keywords;
                     job.deadline = deadline_of(&s.deadline, &job.description);
+                    if job.salary.is_none() {
+                        if let Some((text, max)) = salary_parts(&s.salary) {
+                            job.salary = Some(text);
+                            if let Some(flag) = below_minimum(&profile, max) {
+                                job.red_flags.insert(0, flag);
+                            }
+                        }
+                    }
                     None
                 }
                 // Not connected, signed out, or any other failure: saved, not lost.
@@ -4260,12 +4310,20 @@ publish your Google project (Settings \u{2192} Connections explains how).", what
             };
             let keep = j.status == "saved" || j.status == "dismissed" || self.chosen(id);
             let status = if keep { j.status.clone() } else if s.score >= profile.score_threshold { "queued".into() } else { "skipped".into() };
-            let db = self.db();
-            db.update_job(id, &[
-                ("status", status.into()), ("score", s.score.into()), ("score_potential", json!(s.potential)), ("track", s.track.clone().into()),
-                ("reasoning", s.reasoning.into()), ("red_flags", json!(s.red_flags)), ("keywords", json!(s.keywords)),
-            ])?;
-            db.log(Some(id), "scored", &format!("{} on the {} track (your CVs changed)", s.score, s.track))?;
+            // A known salary below your minimum stays flagged.
+            let mut flags = s.red_flags.clone();
+            if let Some(f) = below_minimum(&profile, j.salary.as_deref().and_then(crate::sources::salary_range).map(|r| r.1)) {
+                flags.insert(0, f);
+            }
+            {
+                let db = self.db();
+                db.update_job(id, &[
+                    ("status", status.into()), ("score", s.score.into()), ("score_potential", json!(s.potential)), ("track", s.track.clone().into()),
+                    ("reasoning", s.reasoning.clone().into()), ("red_flags", json!(flags)), ("keywords", json!(s.keywords)),
+                ])?;
+                db.log(Some(id), "scored", &format!("{} on the {} track (your CVs changed)", s.score, s.track))?;
+            }
+            let _ = self.found_salary(id, &s.salary, "in the posting");
             n += 1;
         }
         Ok(n)
@@ -4776,6 +4834,12 @@ publish your Google project (Settings \u{2192} Connections explains how).", what
             Some(u) => {
                 self.db().update_job(job_id, &[("apply_url", u.clone().into())])?;
                 self.db().log(Some(job_id), "apply-link", &format!("found on the company's site: {u}"))?;
+                // The company's own posting often states the pay the job board's copy left out.
+                if let Ok(p) = crate::sites::read_posting_link(&crate::sources::http(), u) {
+                    if let Some((text, _)) = crate::sources::salary_from_text(&p.description) {
+                        let _ = self.found_salary(job_id, &text, "on the company's own posting");
+                    }
+                }
             }
             None => self.db().log(Some(job_id), "apply-link", "not found on the company's own site; apply through the posting")?,
         }
@@ -5949,6 +6013,39 @@ pub fn backup_in_background(agent: &Arc<Agent>) {
     });
 }
 
+/// Pay as a posting states it, tidied, with its yearly maximum when it's yearly: "$95K–$110K a
+/// year" -> ("$95,000–$110,000", Some(110000)). Empty text: None.
+pub fn salary_parts(stated: &str) -> Option<(String, Option<f64>)> {
+    let t = stated.trim();
+    if t.is_empty() {
+        return None;
+    }
+    if let Some(found) = crate::sources::salary_from_text(t) {
+        return Some(found);
+    }
+    let shown: String = t.chars().take(80).collect();
+    Some((shown, crate::sources::salary_range(t).map(|r| r.1)))
+}
+
+/// Why a yearly maximum is below your minimum, as a red flag, or None.
+fn below_minimum(profile: &crate::profile::Profile, max: Option<f64>) -> Option<String> {
+    let (min, max) = (profile.min_salary?, max?);
+    (max < min).then(|| format!("Pays up to ${}, below your minimum of ${}", fmt_money(max), fmt_money(min)))
+}
+
+fn fmt_money(x: f64) -> String {
+    let n = x.round() as i64;
+    let s = n.abs().to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// When a contact was sent a message ("sent_at") or the follow-up ("followed_at"), if they were.
 fn contact_time(c: &Value, key: &str) -> Option<chrono::DateTime<Utc>> {
     c[key].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| t.with_timezone(&Utc))
@@ -6067,6 +6164,7 @@ impl Agent {
             "track_labels": profile.tracks.iter().map(|t| (t.name.clone(), t.label.clone())).collect::<BTreeMap<_, _>>(),
             "quiet": quiet,
             "auto_tailor": profile.auto_tailor,
+            "min_salary": profile.min_salary,
             "approved": approved,
             "interviews": interviews,
             "events": db.recent_events(12)?,
@@ -7543,6 +7641,38 @@ mod tests {
         assert_eq!(s.agent.messaged_at("Acme").len(), 1);
         let job = s.agent.db().job("test:1").unwrap().unwrap();
         assert_eq!(s.agent.playbook(&job)["kind"], "private");
+    }
+
+    #[test]
+    fn salary_read_by_claude_and_found_later() {
+        let s = setup();
+        assert_eq!(salary_parts("$95K–$110K a year"), Some(("$95,000–$110,000".to_string(), Some(110000.0))));
+        assert_eq!(salary_parts("Up to $120,000 annually").map(|x| x.1), Some(Some(120000.0)));
+        assert!(salary_parts("  ").is_none());
+        let mut p = s.agent.profile();
+        p.min_salary = Some(100000.0);
+        s.agent.save_profile(&p).unwrap();
+        // The patterns miss pay written in words; Claude reads it while scoring.
+        let mut low = posting("Technical Program Manager", "1");
+        low.description.push_str("\nSalary note: $80K~$90K a year");
+        let mut fine = posting("Senior Program Manager", "2");
+        fine.description.push_str("\nSalary note: $110K~$130K a year");
+        s.agent.search(Some(vec![low, fine])).unwrap();
+        let j1 = s.agent.db().job("test:1").unwrap().unwrap();
+        assert_eq!(j1.salary.as_deref(), Some("$80,000–$90,000"));
+        assert_eq!(j1.status, "skipped", "below your minimum: set aside, as the filter would");
+        assert!(j1.red_flags[0].starts_with("Pays up to $90,000, below your minimum of $100,000"), "{:?}", j1.red_flags);
+        assert_ne!(s.agent.db().job("test:2").unwrap().unwrap().status, "skipped", "above your minimum: kept");
+        // Found later (the company's own posting, the Apply window) for a job you approved: flagged, and you're told.
+        let mut third = posting("Delivery Manager", "3");
+        third.description = "Lead delivery.".into();
+        s.agent.search(Some(vec![third])).unwrap();
+        s.agent.db().set_status("test:3", "approved", "").unwrap();
+        assert!(s.agent.found_salary("test:3", "Salary range: $70,000 - $85,000 per year", "on the company's page").unwrap());
+        let j3 = s.agent.db().job("test:3").unwrap().unwrap();
+        assert_eq!(j3.salary.as_deref(), Some("$70,000–$85,000"));
+        assert!(j3.red_flags.iter().any(|f| f.starts_with("Pays up to $85,000")));
+        assert!(!s.agent.found_salary("test:3", "$60,000 - $65,000", "again").unwrap(), "known already: kept as it was");
     }
 
     #[test]

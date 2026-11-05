@@ -792,7 +792,7 @@ async function showJob(id) {
       <div class="grow">
         <div class="eyebrow"><a href="#pipeline">Applications</a> / ${esc(STAGES[j.status] || j.status)}</div>
         <h1>${esc(j.title)}</h1>
-        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}</div>
+        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}</div>
       </div>
     </div>
     ${jobActions(j, tailoring)}
@@ -991,6 +991,7 @@ const stretchTag = j => { const m = mustHaves(j); return m.length ? ` <span clas
  *  someone you know there. The rest are on the job itself. */
 function oneTag(j) {
   const closed = closedTag(j); if (closed) return ` ${closed}`;
+  const low = belowMinTag(j); if (low) return low;
   const dl = deadlineTag(j); if (dl && /crit|bad|warn/.test(dl)) return ` ${dl}`;
   const st = stretchTag(j); if (st) return st;
   if (j.recruiter) return ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>`;
@@ -1009,6 +1010,11 @@ async function applyNow(id) {
     return true;
   } catch (e) { return false; }
 }
+/** A salary below your minimum (Search → What to search), as a tag. */
+const minSalary = () => overview?.min_salary ?? settingsCache?.profile?.min_salary ?? null;
+const money = n => '$' + Math.round(n).toLocaleString();
+const belowMin = j => { const m = minSalary(); const top = m && j.salary ? salaryValue(j.salary) : -1; return top > 1000 && top < m ? top : null; };
+const belowMinTag = j => belowMin(j) ? ` <span class="pill crit" title="Pays up to ${money(belowMin(j))}, below your minimum of ${money(minSalary())}">Below your minimum</span>` : '';
 /** How you'd apply, and how long it takes: email, a quick form, an account to make first… */
 const EFFORT_CLS = { email: 'good', quick: 'good', account: 'warn', board: 'warn', site: '' };
 const effortTag = j => j.effort && ['ready', 'approved'].includes(j.status) ? ` <span class="pill effort ${EFFORT_CLS[j.effort.kind] || ''}" title="${esc(j.effort.about || 'How you apply to this one')}">${esc(j.effort.label)}</span>` : '';
@@ -1115,7 +1121,8 @@ function stepHtml(o, step, tracked) {
   const formable = toSubmit.filter(j => j.url && j.effort?.kind !== 'email');
   if (toSubmit.length) groups.push([`Submit on the company's site${formable.length > 1 && o.can_fill ? ` <button class="btn primary sm" data-act="applyAll" data-ids="${esc(JSON.stringify(formable.map(j => j.id)))}" style="margin-left:8px" title="Each opens filled in, with your files attached; you check it and press Submit, and the next one opens">Apply to all ${formable.length}</button>` : ''}`, toSubmit.map(j => row(j, onCompanySite(j),
     `<a class="btn sm" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
-     <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>`)).join('')]);
+     <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>
+     <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="approved" title="Not interested after all (the pay, say)">${svg('close')}</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,
     o.quiet.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}, no reply`,
       `<button class="btn sm" data-act="stage" data-status="no_response" data-job="${id(j)}" data-from="applied">No response</button>`)).join('')]);
@@ -1430,7 +1437,7 @@ async function showReview() {
   const flags = j.red_flags || [];
   j.warnings = warnings || [];
   page(`<div class="head"><div class="grow"><div class="eyebrow">Review · ${queue.length} to go${done ? ` · ${done} skipped` : ''}</div>
-      <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${deadlineTag(j)}${effortTag(j)}</div></div>
+      <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${effortTag(j)}</div></div>
       <a class="btn ghost" href="#overview">Exit review</a></div>
     ${expiredWhy(j) ? `<div class="card" style="border-color:var(--crit)"><b>This opening has expired.</b> <span class="muted">${esc(expiredWhy(j).replace(/^Expired: /, ''))}. Check the posting before approving it.</span></div>` : ''}
     ${revising ? '<section class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this updates by itself.</p></section>' : ''}
