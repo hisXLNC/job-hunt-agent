@@ -177,12 +177,36 @@ fn check_for_update(app: &AppHandle) -> serde_json::Value {
 fn update_watch(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(30));
+        // Updated by itself while you were away: say so, once.
+        if let Some(ctx) = app.try_state::<Arc<Ctx>>() {
+            let done = ctx.agent.secret("update.auto_installed");
+            let now_v = app.package_info().version.to_string();
+            if !done.is_empty() && done == now_v {
+                let _ = ctx.agent.db().set("update.auto_installed", "");
+                notify(&app, &format!("Job Hunt updated to {now_v}"), "It installed by itself while you weren't using it. See what's new in Settings \u{2192} App.");
+            }
+        }
         loop {
             let u = check_for_update(&app);
+            let auto = app.try_state::<Arc<Ctx>>().is_some_and(|c| c.agent.secret("update.auto") == "1");
             if u.get("available").and_then(|v| v.as_bool()) == Some(true) {
                 let v = u.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 update_found(&app, &v);
-                if let Some(ctx) = app.try_state::<Arc<Ctx>>() {
+                // Installing by itself: once nothing's running and you're not using Job Hunt's windows.
+                if auto && quiet_for_update(&app) {
+                    if let Some(ctx) = app.try_state::<Arc<Ctx>>() {
+                        let _ = ctx.agent.db().set("update.auto_installed", &v);
+                        let req = api::Req { method: "POST".into(), path: "/api/update/install".into(), query: Default::default(), body: vec![], remote: false };
+                        let r = api::handle(&ctx.agent, &ctx.host, &req);
+                        if r.status >= 400 {
+                            let _ = ctx.agent.db().set("update.auto_installed", "");
+                            let _ = ctx.agent.db().log(None, "update:error", &String::from_utf8_lossy(&r.body));
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(5 * 60));
+                    continue;
+                }
+                if let Some(ctx) = app.try_state::<Arc<Ctx>>().filter(|_| !auto) {
                     let now = chrono::Utc::now().timestamp();
                     let at: i64 = ctx.agent.secret("update.notified_at").parse().unwrap_or(0);
                     if ctx.agent.secret("update.notified") != v || now - at >= 24 * 3600 {
@@ -193,9 +217,25 @@ fn update_watch(app: AppHandle) {
                     }
                 }
             }
-            std::thread::sleep(std::time::Duration::from_secs(30 * 60));
+            // Waiting to install by itself: look again in a few minutes, not half an hour.
+            let wait = if auto && u.get("available").and_then(|v| v.as_bool()) == Some(true) { 3 * 60 } else { 30 * 60 };
+            std::thread::sleep(std::time::Duration::from_secs(wait));
         }
     });
+}
+
+/// Whether an update can install by itself now: nothing running that it would interrupt (a search,
+/// tailoring, an email check, anything), no application form open, and you're not using Job Hunt's window.
+fn quiet_for_update(app: &AppHandle) -> bool {
+    let Some(ctx) = app.try_state::<Arc<Ctx>>() else { return false };
+    // Nothing at all running: unlike installing on request, nobody's waiting, so it can wait for a lull.
+    if !ctx.agent.running().is_empty() || app.get_webview_window("apply").is_some() {
+        return false;
+    }
+    match app.get_webview_window("main") {
+        Some(w) => !(w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false)),
+        None => true,
+    }
 }
 
 /// Tell the window and the tray that version `v` is out.
@@ -311,17 +351,43 @@ fn run_task(app: &AppHandle, task: &str) -> bool {
 }
 
 /// Keeps Windows from sleeping while Job Hunt is working (searching, tailoring, checking email,
-/// backing up), unless you turned that off in Settings → App. The request is per thread, so one
-/// thread makes it and lifts it.
+/// backing up), unless you turned that off in Settings → App. It holds on for a few minutes after
+/// the work stops, so the gap between one step and the next (a search, then tailoring) isn't a
+/// chance to sleep: after a wake-up Windows sleeps again after only two idle minutes. And if
+/// Windows sleeps during work all the same, that's kept for Settings → App to show.
 fn keep_awake(app: AppHandle) {
     std::thread::spawn(move || {
+        const GRACE: u64 = 3 * 60;
         let mut awake = false;
+        let mut last_busy = std::time::SystemTime::UNIX_EPOCH;
+        let mut last_tick = std::time::SystemTime::now();
+        let mut was_running: Vec<String> = vec![];
         loop {
-            let busy = app.try_state::<Arc<Ctx>>().is_some_and(|ctx| {
+            let now = std::time::SystemTime::now();
+            let gap = now.duration_since(last_tick).map(|d| d.as_secs()).unwrap_or(0);
+            let ctx = app.try_state::<Arc<Ctx>>();
+            // Asleep in the middle of work: the loop runs every 15 seconds, so a long gap while work
+            // was running means Windows slept anyway.
+            if gap > 120 && !was_running.is_empty() {
+                if let Some(c) = &ctx {
+                    let v = serde_json::json!({ "at": jobhunt_core::util::now(), "minutes": gap / 60, "during": was_running });
+                    let _ = c.agent.db().set("awake.slept", &v.to_string());
+                    let _ = c.agent.db().log(None, "awake", &format!("Windows slept for {} minutes while {} was running", gap / 60, was_running.join(", ")));
+                }
+            }
+            last_tick = now;
+            let (running, wanted) = ctx.as_ref().map(|ctx| {
                 // A search you paused can wait with the PC asleep.
                 let held = ctx.agent.search_held();
-                ctx.agent.running().iter().any(|n| !(held && n == "search")) && ctx.agent.secret("app.keep_awake") != "0"
-            });
+                let r: Vec<String> = ctx.agent.running().into_iter().filter(|n| !(held && n == "search")).collect();
+                (r, ctx.agent.secret("app.keep_awake") != "0")
+            }).unwrap_or_default();
+            if !running.is_empty() {
+                last_busy = now;
+            }
+            let recent = now.duration_since(last_busy).map(|d| d.as_secs() < GRACE).unwrap_or(false);
+            let busy = wanted && (!running.is_empty() || recent);
+            was_running = if wanted { running } else { vec![] };
             if busy != awake {
                 set_awake(busy);
                 awake = busy;
@@ -331,17 +397,57 @@ fn keep_awake(app: AppHandle) {
     });
 }
 
+/// Hold the PC awake, or let it go. Two ways at once: the classic per-thread request, and Windows'
+/// power requests, which newer laptops ("Modern Standby", which pauses desktop apps once the
+/// screen is off) honour: "system required" keeps it from sleeping, "execution required" keeps
+/// Job Hunt running with the screen off.
 #[cfg(windows)]
 fn set_awake(on: bool) {
+    use std::ffi::c_void;
+    use std::sync::OnceLock;
+    #[repr(C)]
+    struct ReasonContext {
+        version: u32,
+        flags: u32,
+        reason: *const u16,
+        _rest: [usize; 2], // the union's larger (detailed) form
+    }
     #[link(name = "kernel32")]
     extern "system" {
         fn SetThreadExecutionState(flags: u32) -> u32;
+        fn PowerCreateRequest(context: *const ReasonContext) -> *mut c_void;
+        fn PowerSetRequest(request: *mut c_void, kind: i32) -> i32;
+        fn PowerClearRequest(request: *mut c_void, kind: i32) -> i32;
     }
     const ES_CONTINUOUS: u32 = 0x8000_0000;
     const ES_SYSTEM_REQUIRED: u32 = 0x0000_0001;
-    // SAFETY: a plain Win32 call with flag values; it only changes this thread's power request.
+    const SYSTEM_REQUIRED: i32 = 1;
+    const EXECUTION_REQUIRED: i32 = 3;
+    struct Handle(*mut c_void);
+    // SAFETY: a kernel handle, used only through these calls.
+    unsafe impl Send for Handle {}
+    unsafe impl Sync for Handle {}
+    static REQUEST: OnceLock<Handle> = OnceLock::new();
+    static REASON: OnceLock<Vec<u16>> = OnceLock::new();
+    let reason = REASON.get_or_init(|| "Job Hunt is searching for jobs or tailoring applications".encode_utf16().chain([0]).collect());
+    // SAFETY: plain Win32 calls; the reason string lives for the program's life (a static), and the
+    // request handle is created once and kept.
     unsafe {
         SetThreadExecutionState(if on { ES_CONTINUOUS | ES_SYSTEM_REQUIRED } else { ES_CONTINUOUS });
+        let h = REQUEST.get_or_init(|| {
+            let ctx = ReasonContext { version: 0, flags: 0x1, reason: reason.as_ptr(), _rest: [0; 2] };
+            Handle(PowerCreateRequest(&ctx))
+        });
+        let invalid = h.0.is_null() || h.0 as isize == -1;
+        if !invalid {
+            for kind in [SYSTEM_REQUIRED, EXECUTION_REQUIRED] {
+                if on {
+                    PowerSetRequest(h.0, kind);
+                } else {
+                    PowerClearRequest(h.0, kind);
+                }
+            }
+        }
     }
 }
 

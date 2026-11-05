@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.26.0] - 2026-11-05
+
+Updates by themselves, and a PC that stays on.
+
+### Changes
+
+- New option (Settings → App → Updates): Install updates by themselves. When a new version is out, Job Hunt installs it and restarts once nothing is running (no search, tailoring, email check or form filling) and you're not using its window, then tells you it updated.
+- The PC stays on through a whole search, not just long enough to start one: Job Hunt now holds it awake for a few minutes after each step too, so it can't drop off between the search and the tailoring that follows (after a wake-up, Windows sleeps again after two idle minutes), and it uses Windows' power requests, which newer laptops with Modern Standby honour, so it keeps running with the screen off.
+- If Windows sleeps during Job Hunt's work anyway (a closed lid, the power button), Settings → App says when and how to keep it on.
+- The Overview drops its To do / All jobs switch: every job is on Applications, in the sidebar.
+
 ## [2.25.0] - 2026-11-05
 
 Salaries found for your postings.
@@ -1011,6 +1022,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.26.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.26.0
 [2.25.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.25.0
 [2.24.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.24.0
 [2.23.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.23.0

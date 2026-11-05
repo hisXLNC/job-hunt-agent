@@ -147,8 +147,8 @@ function homeHead(on, about, between = '') {
       let lastView = 'tracker';
       try { if (all) localStorage.setItem('jh.view', on); else lastView = localStorage.getItem('jh.view') || 'tracker'; } catch (e) {}
       if (!VIEWS.some(([id]) => id === lastView)) lastView = 'tracker';
-      return `<nav class="mode" aria-label="What to show"><a href="#overview" class="${all ? '' : 'on'}">To do</a><a href="#applications" class="${all ? 'on' : ''}">All jobs</a></nav>
-    ${all ? '' : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n], i) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-n">${i + 1}</span><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
+      // (Every job is on Applications, in the sidebar: no To do / All jobs switch here.)
+      return `${all ? '' : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n], i) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-n">${i + 1}</span><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
     })()}
     ${about ? `<p class="muted flow-about">${about}</p>` : ''}`;
 }
@@ -2300,7 +2300,8 @@ async function showSettings(tab, sub, host) {
 `;
     body = `<section class="card"><header><h2>Updates</h2><span class="muted small">Version ${esc(shortVersion(st.app.version))}</span></header>
       <p class="muted small" id="updateStatus">${server ? 'The server version updates with its container image: when a new version is out, update the image in Container Manager.' : 'Job Hunt checks for updates every 30 minutes and lets you know when one is ready.'}</p>
-      <div class="row"><button class="btn" data-act="updateCheck">Check for updates</button><button class="btn primary" data-act="updateInstall" id="updateInstallBtn" hidden>Install and restart</button></div></section>
+      <div class="row"><button class="btn" data-act="updateCheck">Check for updates</button><button class="btn primary" data-act="updateInstall" id="updateInstallBtn" hidden>Install and restart</button></div>
+      ${server ? '' : `<label class="check" style="margin-top:10px"><input type="checkbox" data-act="updateAuto" ${st.app.update_auto ? 'checked' : ''}> <span>Install updates by themselves<br><span class="muted small">When a new version is out, Job Hunt installs it and restarts once it isn't busy (no search, tailoring or form filling running) and you're not using its window, then tells you what changed. Your applications and settings stay as they are.</span></span></label>`}</section>
       ${remote}
       <section class="card"><header><h2>Know when your CV links are opened</h2>${st.links?.base ? '<span class="pill good">On</span>' : ''}</header>
         <p class="muted">The web links in each tailored CV and cover letter (your LinkedIn, a portfolio) go through Job Hunt first, which notes the click and sends the reader straight on. The text they see doesn't change. Each job then shows whether its links were opened: a sign someone read your application.</p>
@@ -2311,8 +2312,10 @@ async function showSettings(tab, sub, host) {
       <section class="card" id="whatsnew"><header><h2>What's new</h2></header><p class="muted small">Loading…</p></section>
       ${server || here ? `<section class="card"><header><h2>App</h2></header><p class="muted small">Your data: ${esc(st.app.data)}</p></section>` : `<section class="card"><header><h2>App</h2></header>
       <label class="check"><input type="checkbox" data-act="autostart" ${st.app.autostart ? 'checked' : ''}> Start Job Hunt when I sign in to Windows (in the tray, so searches and email checks keep running)</label>
+      ${st.app.slept && st.app.keep_awake && Date.now() - new Date(st.app.slept.at) < 14 * 864e5 ? `<div class="card" style="box-shadow:none;border-color:var(--warn);margin:6px 0"><b>Windows put this PC to sleep during Job Hunt's work</b> <span class="muted small">(${esc(ago(st.app.slept.at))}, for ${st.app.slept.minutes} minutes, while ${esc((st.app.slept.during || []).join(', '))} was running)</span>
+        <p class="small">Job Hunt asks Windows to stay on while it works, but closing a laptop's lid, the power button, or a power plan that forces sleep still win. To keep it on: plug it in, and in Control Panel → Power Options → Choose what closing the lid does, set it to Do nothing when plugged in.</p></div>` : ''}
       <label class="check"><input type="checkbox" data-act="wakePc" ${st.app.wake ? 'checked' : ''}> <span>Wake this PC from sleep to run Job Hunt's tasks<br><span class="muted small">For the daily search, the weekly review and interview prep, while Job Hunt is in the tray. It can't wake a PC that's shut down. Not waking? Windows' wake timers may be off: Control Panel → Power Options → Change plan settings → Change advanced power settings → Sleep → Allow wake timers → Enable.${st.app.wake && st.app.next_wake ? `<br>Next wake: ${esc(new Date(st.app.next_wake).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}` : ''}${st.app.last_wake ? ` · last ${esc(ago(st.app.last_wake))}` : ''}</span></span></label>
-      <label class="check"><input type="checkbox" data-act="keepAwake" ${st.app.keep_awake ? 'checked' : ''}> <span>Keep this PC awake while Job Hunt is working<br><span class="muted small">While it searches, tailors, checks email or backs up, Windows won't go to sleep (the screen can still turn off). Once it's done, your usual sleep settings apply.</span></span></label>
+      <label class="check"><input type="checkbox" data-act="keepAwake" ${st.app.keep_awake ? 'checked' : ''}> <span>Keep this PC awake while Job Hunt is working<br><span class="muted small">While it searches, tailors, checks email or backs up, and for a few minutes after (so it doesn't sleep between one step and the next), Windows won't go to sleep, including after it woke the PC for the daily search. The screen can still turn off. Once it's done, your usual sleep settings apply. Closing a laptop's lid still puts it to sleep unless you set the lid to Do nothing when plugged in.</span></span></label>
       <label class="field" style="max-width:420px">When I close the window<select data-act="closeMode"><option value="tray" ${st.app.close === 'tray' ? 'selected' : ''}>Keep running in the tray</option><option value="exit" ${st.app.close === 'exit' ? 'selected' : ''}>Exit Job Hunt</option></select></label>
       <div class="row"><button class="btn" data-act="folder" data-which="data">${svg('folder')}Open data folder</button><button class="btn" data-act="folder" data-which="applications">${svg('folder')}Open tailored applications</button></div>
       <p class="muted small">Your data: ${esc(st.app.data)}</p></section>`}`;
@@ -3998,6 +4001,10 @@ document.addEventListener('change', async e => {
   }
   if (el.dataset.act === 'clipWatch') {
     await api('/api/settings/clip-watch', { method: 'POST', body: { on: el.checked } }).catch(err => toast(err.message, true));
+  }
+  if (el.dataset.act === 'updateAuto') {
+    await api('/api/settings/app', { method: 'POST', body: { update_auto: el.checked } }).then(() => { settingsCache = null; toast(el.checked ? 'On: updates install by themselves when Job Hunt isn\'t busy and you\'re not using it.' : 'Off: Job Hunt tells you when an update is ready, and you install it.'); }).catch(err => { el.checked = !el.checked; toast(err.message, true); });
+    return;
   }
   if (el.dataset.act === 'wakePc') {
     await api('/api/settings/app', { method: 'POST', body: { wake: el.checked } }).then(() => { settingsCache = null; route(); toast(el.checked ? 'Job Hunt will wake this PC for its tasks. Check that Windows allows wake timers (see below).' : 'Job Hunt won\'t wake this PC.'); }).catch(err => toast(err.message, true));

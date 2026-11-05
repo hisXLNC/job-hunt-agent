@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.26.0",
+    "date": "2026-11-05",
+    "title": "Updates by themselves, and a PC that stays on",
+    "changes": [
+      "New option (Settings → App → Updates): Install updates by themselves. When a new version is out, Job Hunt installs it and restarts once nothing is running (no search, tailoring, email check or form filling) and you're not using its window, then tells you it updated.",
+      "The PC stays on through a whole search, not just long enough to start one: Job Hunt now holds it awake for a few minutes after each step too, so it can't drop off between the search and the tailoring that follows (after a wake-up, Windows sleeps again after two idle minutes), and it uses Windows' power requests, which newer laptops with Modern Standby honour, so it keeps running with the screen off.",
+      "If Windows sleeps during Job Hunt's work anyway (a closed lid, the power button), Settings → App says when and how to keep it on.",
+      "The Overview drops its To do / All jobs switch: every job is on Applications, in the sidebar."
+    ]
+  },
+  {
     "version": "2.25.0",
     "date": "2026-11-05",
     "title": "Salaries found for your postings",
