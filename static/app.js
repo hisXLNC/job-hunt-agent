@@ -770,7 +770,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, playbook, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
   const tracks = st.profile.tracks;
@@ -912,12 +912,11 @@ async function showJob(id) {
     </section>` : ''}
     ${!['skipped', 'dismissed'].includes(j.status) ? `<section class="card">
       <header><h2>People at ${esc(j.company)}</h2>${writing_to ? '<span class="muted small"><span class="spin" data-kind="outreach"></span>Writing…</span>' : ''}</header>
-      <p class="muted small">A recruiter, the hiring manager or someone you know there. A short note to the right person often counts for more than a perfect CV. <a href="#" data-act="link" data-url="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(j.company + ' ' + j.title.split(/[,(-]/)[0])}">Look on LinkedIn</a></p>
+      <p class="muted small">A recruiter, the hiring manager or someone you know there. A short note to the right person often counts for more than a perfect CV. <a href="#" data-act="link" data-url="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(j.company + ' ' + (playbook?.kind === 'agency' ? 'recruiter' : j.title.split(/[,(-]/)[0]))}">Look on LinkedIn</a></p>
+      ${playbookHtml(playbook, contacts || [], j)}
       ${(know || []).filter(p => !(contacts || []).some(c => c.name === p.name)).map(p => `<div class="qa"><div class="row" style="justify-content:space-between"><span><span class="pill good">You know them</span> <b>${esc(p.name)}</b>${p.position ? ` · ${esc(p.position)}` : ''}${p.link ? ` · <a href="#" data-act="link" data-url="${esc(p.link)}">profile</a>` : ''}</span>
         <button class="btn primary" data-act="askReferral" data-person="${esc(JSON.stringify(p))}" ${writing_to ? 'disabled' : ''}>Ask ${esc(firstName(p.name))} for a referral</button></div></div>`).join('')}
-      ${(contacts || []).map((c, i) => `<div class="qa"><div class="row" style="justify-content:space-between"><span><b>${esc(c.name)}</b>${c.role ? ` · ${esc(c.role)}` : ''}${c.email ? ` · ${esc(c.email)}` : ''}${c.link ? ` · <a href="#" data-act="link" data-url="${esc(c.link)}">profile</a>` : ''}</span>
-        <span class="row"><button class="btn" data-act="outreach" data-i="${i}" ${writing_to ? 'disabled' : ''}>${c.message ? 'Write again' : 'Write a message'}</button><button class="btn ghost" data-act="removeContact" data-i="${i}">Remove</button></span></div>
-        ${c.message ? `<div class="posting" id="msg${i}">${esc(c.message)}</div><button class="btn ghost" data-act="copy" data-from="msg${i}">Copy</button>` : ''}</div>`).join('')}
+      ${(contacts || []).map((c, i) => contactHtml(c, i, writing_to, playbook)).join('')}
       <div class="row contact-add"><input type="text" id="cName" placeholder="Name"><input type="text" id="cRole" placeholder="Role (e.g. hiring manager)"><input type="text" id="cEmail" placeholder="Email or LinkedIn link (optional)">
         <button class="btn" data-act="addContact">Add</button></div>
     </section>` : ''}    ${offer || advising || j.status === 'offer' ? `<section class="card prep">
@@ -1000,6 +999,44 @@ function oneTag(j) {
 /** Where Apply goes, for a posting found on a job board: the company's own site, once Job Hunt finds it there. */
 const onCompanySite = j => j.apply_url ? `<span class="good-text" title="${esc(j.apply_url)}">applies on ${esc(j.company)}'s own site</span>` : '';
 
+/** Reaching out to recruiters (see core/src/playbook.rs): the advice for this kind of employer, and a
+ *  word if you've already messaged someone at the company. */
+const PLAYBOOK_LABEL = { private: 'Private employer', agency: 'Staffing agency', federal: 'Government of Canada', public: 'Provincial or municipal government' };
+function playbookHtml(pb, contacts, j) {
+  if (!pb) return '';
+  // Anyone messaged at the company (for this job or another), when there's someone else you might write to.
+  const messaged = pb.messaged || [];
+  const warn = messaged.length && (contacts.some(c => !c.sent_at) || messaged.some(m => m.job !== j.id));
+  const names = [...new Set(messaged.map(m => m.name))];
+  return `<div class="playbook ${esc(pb.kind)}"><b>${esc(PLAYBOOK_LABEL[pb.kind] || '')}.</b> ${esc(pb.advice)}
+    ${warn ? `<p class="small"><b>You've messaged ${esc(names.join(', '))} at ${esc(j.company)}</b> (${esc(ago(messaged.map(m => m.at).sort().pop()))}). One recruiter at a company at a time: wait for a reply before writing to someone else there.</p>` : ''}
+    <details class="small"><summary class="muted">How to reach out</summary><ul>
+      <li>One short message: the role and its job ID, one concrete line on your strongest proof for what they need, your availability, and an offer of a quick call.</li>
+      <li>Don't ask “what's the status?”, paste your CV into the message, or send attachments unless they ask.</li>
+      <li>No reply? One follow-up ${pb.follow_up_after} to ${pb.follow_up_by} days later, then stop. Never more than twice.</li>
+      <li>Don't message several recruiters at the same company at once.</li></ul></details></div>`;
+}
+/** One person at the company, and where your messages to them stand: write, send, follow up once, done. */
+function contactHtml(c, i, writing, pb) {
+  const day = t => fmtDate(t);
+  const sent = c.sent_at && new Date(c.sent_at), followed = c.followed_at && new Date(c.followed_at);
+  const due = sent && !followed && Date.now() - sent >= (pb?.follow_up_after || 7) * 86400000;
+  const writtenNow = c.message && (followed ? false : sent ? c.message_kind === 'follow-up' : true);
+  let state = '', acts = '';
+  if (followed) state = `Messaged ${esc(day(c.sent_at))}, followed up ${esc(day(c.followed_at))}. That's it: no more messages to ${esc(firstName(c.name))}.`;
+  else if (sent && !due) state = `Sent ${esc(day(c.sent_at))}. No reply by ${esc(day(new Date(+sent + (pb?.follow_up_after || 7) * 86400000).toISOString()))}? Follow up once then.`;
+  else if (due) state = `Sent ${esc(day(c.sent_at))}, no reply yet: time for the one follow-up.`;
+  if (!followed) {
+    if (writtenNow) acts += `<button class="btn primary" data-act="contactSent" data-i="${i}" title="Mark it sent, so Job Hunt knows when to follow up">I sent it</button>`;
+    if (!sent || due) acts += `<button class="btn${writtenNow ? ' ghost' : ''}" data-act="outreach" data-i="${i}" ${writing ? 'disabled' : ''}>${writtenNow ? 'Write again' : due ? 'Write the follow-up' : 'Write a message'}</button>`;
+  }
+  acts += `<button class="btn ghost" data-act="removeContact" data-i="${i}">Remove</button>`;
+  return `<div class="qa"><div class="row" style="justify-content:space-between"><span><b>${esc(c.name)}</b>${c.role ? ` · ${esc(c.role)}` : ''}${c.email ? ` · ${esc(c.email)}` : ''}${c.link ? ` · <a href="#" data-act="link" data-url="${esc(c.link)}">profile</a>` : ''}
+      ${state ? `<br><span class="small ${due ? '' : 'muted'}">${state}</span>` : ''}</span>
+    <span class="row">${acts}</span></div>
+    ${c.message && !followed ? `<div class="posting" id="msg${i}">${esc(c.message)}</div><button class="btn ghost" data-act="copy" data-from="msg${i}">Copy</button>` : ''}</div>`;
+}
+
 /** One step of the job hunt on the Overview: its roles, each with the next thing to do. `tracked`
  *  (the Tracker's rows) fills in the steps after you apply. */
 function stepHtml(o, step, tracked) {
@@ -1063,11 +1100,15 @@ function stepHtml(o, step, tracked) {
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,
     o.quiet.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}, no reply`,
       `<button class="btn sm" data-act="stage" data-status="no_response" data-job="${id(j)}" data-from="applied">No response</button>`)).join('')]);
+  if (o.reach_out?.length) groups.push(['Just applied: message the recruiter', o.reach_out.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}. A short note within 1 to 3 days helps`,
+    `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="apply">Write a note</a>`)).join('')]);
+  if (o.contact_follow_ups?.length) groups.push(['No reply from the recruiter: follow up once', o.contact_follow_ups.slice(0, 6).map(f => row(f.job, `messaged ${esc(f.name)} ${esc(ago(f.sent_at))}${f.late ? '. Follow up now or let it go' : ''}`,
+    `<a class="btn sm" href="#job/${encodeURIComponent(f.job.id)}" data-tab-to="apply">Write the follow-up</a>`)).join('')]);
   if (o.follow_ups?.length) groups.push(['No reply yet: follow up', o.follow_ups.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
     `<button class="btn sm" data-act="followUp" data-job="${id(j)}">Write follow-up</button>`)).join('')]);
   // Each step's groups; the ones above were made for all of them.
   const has = h => groups.find(g => String(g[0]).startsWith(h));
-  const listed = new Set([...(o.follow_ups || []), ...(o.quiet || []), ...(o.approved || [])].map(j => j.id));
+  const listed = new Set([...(o.follow_ups || []), ...(o.reach_out || []), ...(o.contact_follow_ups || []).map(f => f.job), ...(o.quiet || []), ...(o.approved || [])].map(j => j.id));
   const rest = (title, keep) => {
     const rows = tracked.filter(r => keep(r) && !listed.has(r.id));
     return rows.length ? [[title, rows.map(trackRow).join('')]] : [];
@@ -1076,7 +1117,7 @@ function stepHtml(o, step, tracked) {
     pick: [has('Pick'), has('Tailoring')].filter(Boolean),
     approve: ready,
     submit: [has('Ask your recruiters'), has('Submit')].filter(Boolean),
-    waiting: [has('No reply yet'), has('Quiet'), ...rest('Everything else you applied to', r => r.status === 'applied')].filter(Boolean),
+    waiting: [has('Just applied'), has('No reply from the recruiter'), has('No reply yet'), has('Quiet'), ...rest('Everything else you applied to', r => r.status === 'applied')].filter(Boolean),
     interviews: [has('Interviews in the next'), ...rest('Interviewing and offers', r => ['interviewing', 'offer'].includes(r.status))].filter(Boolean),
   }[step];
   const empty = {
@@ -3105,6 +3146,7 @@ async function act(el) {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/own-file-off`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Back to Job Hunt\'s version.');
   }
   if (a === 'srcSearch') return busy(() => searchSource(el.dataset.id));
+  if (a === 'contactSent') return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/contact-sent`, { method: 'POST', body: { index: Number(el.dataset.i) } }); route(); }, 'Marked sent. Job Hunt reminds you once if there\'s no reply in a week.');
   if (a === 'srcFilter') {
     const tab = location.hash.split('/')[1] || '';
     const f = srcFilter[tab] || (srcFilter[tab] = { outcome: 'all', site: '' });

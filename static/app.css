@@ -924,3 +924,9 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 .tabs a.tab-end svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-elsewhere { margin: -4px 0 14px; }
 @media (max-width: 760px) { .tabs a.tab-end { margin-left: 0; } }
+/* Reaching out: the advice for this kind of employer */
+.playbook { background: var(--info-soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0 12px; font-size: 14px; }
+.playbook.federal, .playbook.public { background: var(--warn-soft); }
+.playbook p { margin: 6px 0 0; }
+.playbook details { margin-top: 6px; }
+.playbook ul { margin: 6px 0 0 18px; padding: 0; }

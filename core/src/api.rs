@@ -629,6 +629,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "links": crate::links::for_job(agent, id),
                     "chat": agent.chat(id), "chatting": agent.is_running(&format!("chat:{id}")),
                     "contacts": agent.contacts(id), "writing_to": agent.is_running(&format!("contact:{id}")),
+                    "playbook": agent.playbook(&job),
                     "ats": job.cv_path.as_deref().and_then(|p| crate::cv::open(Path::new(p)).ok()).map(|d| crate::cv::ats_check(&d)),
                     "claude_desktop": crate::mcp::claude_desktop_config().as_deref().map(crate::mcp::in_claude_desktop).unwrap_or(false),
                 })));
@@ -860,6 +861,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         }
                     });
                     Ok(Resp::json(&json!({ "started": true })))
+                }
+                // You sent the message written to a contact (the first, or the follow-up).
+                "contact-sent" => {
+                    agent.contact_sent(id, b["index"].as_u64().unwrap_or(0) as usize)?;
+                    ok()
                 }
                 "contacts" => {
                     let list = b.get("contacts").and_then(|v| v.as_array()).cloned().unwrap_or_default();

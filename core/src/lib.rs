@@ -16,6 +16,7 @@ pub mod links;
 pub mod mcp;
 pub mod network;
 pub mod pipeline;
+pub mod playbook;
 pub mod profile;
 pub mod recruiters;
 pub mod slots;

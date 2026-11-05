@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.22.0] - 2026-11-05
+
+Reaching out to recruiters, the right way.
+
+### Changes
+
+- Each job's People section says how to reach out for that kind of employer: private companies (message the recruiter within 1 to 3 days of applying), staffing agencies (yes, strongly), Government of Canada (skip outreach; focus on the screening questions) and provincial or municipal governments (one question at most).
+- Messages to recruiters follow one short structure: the role and its job ID, one concrete line on your strongest proof, your availability or move (from your facts for forms), and an offer of a quick call. Never asking for the status, pasting your CV or mentioning attachments.
+- Mark a message sent, and Job Hunt reminds you once if there's no reply in 7 to 10 days, writes the one follow-up, and then stops: never more than two messages to a person. It warns you before messaging a second person at the same company.
+- The Overview's Waiting step lists roles you just applied to with "message the recruiter", and recruiters due their one follow-up. Automatic follow-up drafts skip government roles, and roles where you're already following up with the recruiter.
+
 ## [2.21.0] - 2026-11-05
 
 Menus in the order you use them.
@@ -968,6 +979,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.22.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.22.0
 [2.21.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.21.0
 [2.20.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.20.0
 [2.19.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.19.0

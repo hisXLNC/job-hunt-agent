@@ -478,7 +478,9 @@ pub trait Llm: Send + Sync {
         Err(Error("Offer advice isn't available.".into()))
     }
     /// A short note to someone at the company: a LinkedIn message, or an email when there's an address.
-    fn outreach(&self, _candidate: &str, _cv: &str, _job: &crate::db::Job, _contact: &str) -> R<String> {
+    /// `brief`: what the playbook says about this message (see playbook.rs): the kind of employer,
+    /// first message or the one follow-up, when they applied, and their availability.
+    fn outreach(&self, _candidate: &str, _cv: &str, _job: &crate::db::Job, _contact: &str, _brief: &str) -> R<String> {
         Err(Error("Writing messages isn't available.".into()))
     }
     /// One reply in the job's chat: the job, your CV and notes, the conversation so far (you, Claude
@@ -636,13 +638,24 @@ Never invent numbers the offer or posting don't give; say when something is unkn
 
 fn outreach_system() -> String {
     format!(
-        "You write a short message from a job candidate to someone at a company they're applying to.\n\n\
+        "You write a short message from a job candidate to a recruiter or someone else at a company they're applying to.\n\n\
 {UNTRUSTED}\n\n{HUMAN}\n\n\
-The person is in <contact> (name, role, how the candidate knows them, if at all). If there's an email address, \
-write an email of at most 120 words with a subject line first (\"Subject: ...\"). Otherwise write a LinkedIn \
-connection note of at most 280 characters. Mention the role by name, one specific reason the candidate fits \
-(from their CV), and ask for something small: a 15-minute chat, advice, or a referral if they know the \
-person. Warm, direct, no flattery or clichés. Sign with the candidate's first name. Never invent facts."
+The person is in <contact> (name, role, how the candidate knows them, if at all); <brief> says what kind of \
+employer this is, whether this is the first message or the one follow-up, when the candidate applied, and their \
+availability.\n\
+A first message is 3 to 4 sentences, in this order:\n\
+1. The role they applied for (or are applying for), with the job ID or reference number if the posting shows one.\n\
+2. One concrete line linking their strongest proof (a specific achievement, system, scale or figure from the CV) \
+to what this role needs.\n\
+3. Their availability, and a move or relocation if the brief states one; leave this sentence out when it states none.\n\
+4. An offer of a quick call.\n\
+For a staffing agency, also say they're open to similar roles the recruiter is filling. A follow-up is 2 to 3 \
+sentences: refer back to the first message, add one new specific point of fit (not a repeat), and offer the call \
+again; it's the last message, so don't promise more.\n\
+Never ask about the status or for an update; never paste the CV or list its contents; mention no attachments. \
+If there's an email address in <contact>, write an email (\"Subject: ...\" first, then at most 110 words); \
+otherwise a LinkedIn note of at most 300 characters. Warm, direct, no flattery or clichés. Sign with the \
+candidate's first name. Never invent facts."
     )
 }
 
@@ -906,10 +919,12 @@ fn follow_up_system() -> String {
     format!(
         "You write a short follow-up email from a job candidate about an application that hasn't had a reply.\n\n\
 {UNTRUSTED}\n\n{HUMAN}\n\n\
-Write in the candidate's voice: warm, brief (80-130 words), confident and not pushy. Name the role and when they \
-applied, restate in one sentence the strongest reason they fit (from the posting and their application), ask \
-whether there's an update on the timeline or anything else they can provide, and thank them. Sign with the \
-candidate's name. subject: \"Following up: <job title> application\". Never invent facts."
+Write in the candidate's voice: warm, brief (60-110 words), confident and not pushy. Name the role (with its \
+job ID or reference number if the posting shows one) and when they applied, restate in one sentence the \
+strongest concrete reason they fit (from the posting and their application), offer a quick call or anything \
+else that would help, and thank them. Never ask about the status or for an update, never paste the CV, and \
+mention no attachments. Sign with the candidate's name. subject: \"Following up: <job title> application\". \
+Never invent facts."
     )
 }
 
@@ -1529,9 +1544,9 @@ impl Llm for Claude {
         Ok(self.call::<T>(&offer_system(), &user, obj(json!({"advice": {"type": "string"}})), "high")?.advice)
     }
 
-    fn outreach(&self, candidate: &str, cv: &str, job: &crate::db::Job, contact: &str) -> R<String> {
+    fn outreach(&self, candidate: &str, cv: &str, job: &crate::db::Job, contact: &str, brief: &str) -> R<String> {
         let user = format!(
-            "Candidate: {candidate}\n\n<cv>\n{cv}\n</cv>\n\n{}\n\n<contact>\n{contact}\n</contact>",
+            "Candidate: {candidate}\n\n<cv>\n{cv}\n</cv>\n\n{}\n\n<contact>\n{contact}\n</contact>\n\n<brief>\n{brief}\n</brief>",
             posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description)
         );
         Ok(self.call::<Reply>(&outreach_system(), &user, reply_schema(), "low")?.body)

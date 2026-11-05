@@ -537,11 +537,14 @@ Name the earlier role and this one. Don't ask for a call.",
             if applied { "I've just applied for this role." } else { "I'm applying for this role." }, if applied { "just applied" } else { "seen the posting" })
     } else {
         format!(
-            "name: {}\nrole: named in the job posting as the contact\nemail: {to}\nnote: I've {} for this role. Write a short email (under 120 words) to say so: \
-one line on why I fit, with a real figure from my CV, and ask them to make sure my application reaches the hiring manager. No request for a call.",
+            "name: {}\nrole: named in the job posting as the contact\nemail: {to}\nnote: I've {} for this role. They're the contact the posting names.",
             if name.is_empty() { "unknown (start with \"Hello,\")" } else { name }, if applied { "just applied" } else { "applied" })
     };
-    let text = crate::cv::humanize(&agent.llm().outreach(&profile.name, &cv, job, &contact)?, &agent.own_words(job, &profile));
+    let mut brief = format!("Employer: {}\nMessage: the first one\nApplied: {}", crate::playbook::kind(job).describe(), if applied { "yes" } else { "not yet (applying now)" });
+    if !profile.application_facts.trim().is_empty() {
+        brief.push_str(&format!("\nAvailability and other facts the candidate gave (use only what's about availability, notice or relocation):\n{}", profile.application_facts.trim()));
+    }
+    let text = crate::cv::humanize(&agent.llm().outreach(&profile.name, &cv, job, &contact, &brief)?, &agent.own_words(job, &profile));
     let (subject, body) = match text.trim().strip_prefix("Subject:") {
         Some(rest) => {
             let (s, b) = rest.split_once('\n').unwrap_or((rest, ""));

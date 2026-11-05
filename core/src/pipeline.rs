@@ -2481,6 +2481,11 @@ replies and interviews, and a little lower for kinds that got none from several 
             if age < days || age > 45 || j.closed_at.is_some() || self.follow_up(&j.id).is_some() {
                 continue;
             }
+            // Government hiring is formal: chasing doesn't help. And a recruiter you're already
+            // messaging gets their own follow-up (contact_follow_ups_due): one channel, not two.
+            if !crate::playbook::kind(&j).reach_out() || self.contacts(&j.id).iter().any(|c| contact_time(c, "sent_at").is_some()) {
+                continue;
+            }
             let heard = emails.iter().any(|(id, cat, _, _)| *id == j.id && !["application_received", "job_alert", "not_job"].contains(&cat.as_str()));
             if !heard {
                 out.push(j);
@@ -3170,27 +3175,130 @@ replies and interviews, and a little lower for kinds that got none from several 
     pub fn save_contacts(&self, job_id: &str, list: &[Value]) -> R<()> {
         let clean: Vec<Value> = list.iter().filter(|c| c["name"].as_str().is_some_and(|n| !n.trim().is_empty())).map(|c| {
             let f = |k: &str| c[k].as_str().unwrap_or("").trim().to_string();
-            json!({ "name": f("name"), "role": f("role"), "email": f("email"), "link": f("link"), "note": f("note"), "message": f("message") })
+            // sent_at: when you sent the first message; followed_at: the one follow-up (see playbook).
+            json!({ "name": f("name"), "role": f("role"), "email": f("email"), "link": f("link"), "note": f("note"), "message": f("message"),
+                "sent_at": f("sent_at"), "followed_at": f("followed_at") })
         }).collect();
         self.db().set(&format!("contacts:{job_id}"), &json!(clean).to_string())
     }
 
-    /// Write a short message to one of the contacts (a LinkedIn note, or an email when there's an address).
+    /// Write a short message to one of the contacts (a LinkedIn note, or an email when there's an
+    /// address), the way the playbook says: the first one, or once you've sent that and had no reply
+    /// for a week, the one follow-up. Never a third.
     pub fn write_outreach(&self, job_id: &str, index: usize) -> R<String> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let mut list = self.contacts(job_id);
         let c = list.get(index).cloned().ok_or_else(|| Error("That contact is gone.".into()))?;
+        let name = c["name"].as_str().unwrap_or("").to_string();
+        let (sent, followed) = (contact_time(&c, "sent_at"), contact_time(&c, "followed_at"));
+        if followed.is_some() {
+            return err(&format!("You've sent {name} a message and a follow-up already. That's enough: more would read as chasing."));
+        }
+        if let Some(t) = sent.filter(|t| (Utc::now() - *t).num_days() < crate::playbook::FOLLOW_UP_AFTER) {
+            let by = (t + chrono::Duration::days(crate::playbook::FOLLOW_UP_AFTER)).with_timezone(&self.profile().tz()).format("%B %-d");
+            return err(&format!("You messaged {name} on {}. Give them a week: if there's no reply by {by}, Job Hunt helps you follow up once.", t.with_timezone(&self.profile().tz()).format("%B %-d")));
+        }
+        let follow_up = sent.is_some();
         let profile = self.profile();
         let cv = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
             .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
             .map(|d| d.plain_text())
             .unwrap_or_default();
         let who = ["name", "role", "email", "note"].iter().map(|k| format!("{k}: {}", c[*k].as_str().unwrap_or(""))).collect::<Vec<_>>().join("\n");
-        let msg = cv::humanize(&self.llm().outreach(&profile.name, &cv, &job, &who)?, &self.own_words(&job, &profile));
+        let kind = crate::playbook::kind(&job);
+        let day = |t: chrono::DateTime<Utc>| t.with_timezone(&profile.tz()).format("%B %-d").to_string();
+        let applied = job.applied_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok()).map(|t| day(t.with_timezone(&Utc)));
+        let mut brief = vec![
+            format!("Employer: {}", kind.describe()),
+            match sent {
+                Some(t) => format!("Message: the one follow-up, to the first message sent {} with no reply", day(t)),
+                None => "Message: the first one".into(),
+            },
+            match &applied {
+                Some(d) => format!("Applied: {d}"),
+                None => "Applied: not yet (applying now)".into(),
+            },
+        ];
+        let facts = profile.application_facts.trim();
+        if !facts.is_empty() {
+            brief.push(format!("Availability and other facts the candidate gave (use only what's about availability, notice or relocation):\n{facts}"));
+        }
+        let msg = cv::humanize(&self.llm().outreach(&profile.name, &cv, &job, &who, &brief.join("\n"))?, &self.own_words(&job, &profile));
         list[index]["message"] = json!(msg);
+        list[index]["message_kind"] = json!(if follow_up { "follow-up" } else { "first" });
         self.save_contacts(job_id, &list)?;
-        self.db().log(Some(job_id), "contact", &format!("message written to {}", c["name"].as_str().unwrap_or("")))?;
+        self.db().log(Some(job_id), "contact", &format!("{} written to {name}", if follow_up { "follow-up" } else { "message" }))?;
         Ok(msg)
+    }
+
+    /// You sent the message written to a contact: the first one, or the follow-up (see write_outreach).
+    pub fn contact_sent(&self, job_id: &str, index: usize) -> R<()> {
+        let mut list = self.contacts(job_id);
+        let c = list.get_mut(index).ok_or_else(|| Error("That contact is gone.".into()))?;
+        let key = if contact_time(c, "sent_at").is_some() { "followed_at" } else { "sent_at" };
+        c[key] = json!(now());
+        let name = c["name"].as_str().unwrap_or("").to_string();
+        self.save_contacts(job_id, &list)?;
+        self.db().log(Some(job_id), "contact", &format!("{} sent to {name}", if key == "sent_at" { "message" } else { "follow-up" }))
+    }
+
+    /// Who you've messaged at a company, across its jobs: [(name, job id, when)]. The playbook says one
+    /// recruiter at a company at a time.
+    pub fn messaged_at(&self, company: &str) -> Vec<(String, String, String)> {
+        let key = crate::db::dupe_key(company, "");
+        let jobs: Vec<Job> = self.db().jobs(None, 5000).unwrap_or_default().into_iter().filter(|j| crate::db::dupe_key(&j.company, "") == key).collect();
+        let mut out = vec![];
+        for j in jobs {
+            for c in self.contacts(&j.id) {
+                if let Some(at) = c["sent_at"].as_str().filter(|x| !x.is_empty()) {
+                    out.push((c["name"].as_str().unwrap_or("").to_string(), j.id.clone(), at.to_string()));
+                }
+            }
+        }
+        out
+    }
+
+    /// What the playbook says for a job, for its page: {kind, advice, reach_out (worth messaging the
+    /// recruiter), messaged: [{name, job, at}] (anyone you've messaged at the company)}.
+    pub fn playbook(&self, job: &Job) -> Value {
+        let kind = crate::playbook::kind(job);
+        let messaged: Vec<Value> = self.messaged_at(&job.company).into_iter().map(|(n, j, at)| json!({ "name": n, "job": j, "at": at })).collect();
+        json!({ "kind": kind.id(), "advice": kind.advice(), "reach_out": kind.reach_out(), "messaged": messaged,
+            "follow_up_after": crate::playbook::FOLLOW_UP_AFTER, "follow_up_by": crate::playbook::FOLLOW_UP_BY })
+    }
+
+    /// Applications where the playbook says to message the recruiter now: private employers and
+    /// agencies, applied to in the last few days, with nobody messaged yet.
+    pub fn reach_out_due(&self) -> R<Vec<Job>> {
+        let now = Utc::now();
+        let applied = self.db().jobs(Some("applied"), 2000)?;
+        Ok(applied.into_iter().filter(|j| {
+            let age = j.applied_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok()).map(|t| (now - t.with_timezone(&Utc)).num_days());
+            age.is_some_and(|d| d <= crate::playbook::REACH_OUT_WITHIN) && j.closed_at.is_none() && crate::playbook::kind(j).reach_out()
+                && self.messaged_at(&j.company).is_empty()
+        }).collect())
+    }
+
+    /// Contacts you messaged a week or more ago with no reply and no follow-up yet: [{job, name, index, sent_at}].
+    pub fn contact_follow_ups_due(&self) -> R<Vec<Value>> {
+        let now = Utc::now();
+        let emails = self.db().job_emails()?;
+        let mut out = vec![];
+        let applied = self.db().jobs(Some("applied"), 2000)?; // read first: contacts() takes the database too
+        for j in applied {
+            // They wrote back (anything but an automatic acknowledgement): no chasing.
+            if emails.iter().any(|(id, cat, _, _)| *id == j.id && !["application_received", "job_alert", "not_job"].contains(&cat.as_str())) {
+                continue;
+            }
+            for (i, c) in self.contacts(&j.id).iter().enumerate() {
+                let Some(sent) = contact_time(c, "sent_at") else { continue };
+                let days = (now - sent).num_days();
+                if contact_time(c, "followed_at").is_none() && (crate::playbook::FOLLOW_UP_AFTER..=30).contains(&days) {
+                    out.push(json!({ "job": j.brief(), "name": c["name"], "index": i, "sent_at": c["sent_at"], "late": days > crate::playbook::FOLLOW_UP_BY }));
+                }
+            }
+        }
+        Ok(out)
     }
 
     // --- chat about one job ---------------------------------------------------------------------------
@@ -5841,6 +5949,11 @@ pub fn backup_in_background(agent: &Arc<Agent>) {
     });
 }
 
+/// When a contact was sent a message ("sent_at") or the follow-up ("followed_at"), if they were.
+fn contact_time(c: &Value, key: &str) -> Option<chrono::DateTime<Utc>> {
+    c[key].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| t.with_timezone(&Utc))
+}
+
 /// Matches first, best first; then the rest, and what was filtered out last.
 fn sort_outcomes(list: &mut [Value]) {
     let rank = |v: &Value| match v["outcome"].as_str().unwrap_or("") { "match" => 0, "new" => 1, "low" => 2, "waiting" => 3, "known" => 4, _ => 5 };
@@ -5879,6 +5992,9 @@ impl Agent {
         let newer = crate::sync::newer_elsewhere(self).map(|(d, i)| json!({ "folder": d, "device": i.device_name, "saved_at": i.saved_at, "jobs": i.jobs }));
         let in_use = crate::sync::presence_status(self);
         let follow_ups: Vec<Value> = self.follow_ups_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
+        // The playbook's nudges: message the recruiter now, or follow up once (read before taking the database).
+        let reach_out: Vec<Value> = self.reach_out_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
+        let contact_follow_ups = self.contact_follow_ups_due().unwrap_or_default();
         let closing: Vec<Value> = self.closing_soon(7).unwrap_or_default().iter().map(|j| j.brief()).collect();
         let health = self.health();
         let (claude_ready, engine) = (self.claude_ready(), self.engine_name());
@@ -5961,6 +6077,8 @@ impl Agent {
             "sync_newer": newer,
             "in_use": in_use,
             "follow_ups": follow_ups,
+            "reach_out": reach_out,
+            "contact_follow_ups": contact_follow_ups,
             "closing_soon": closing,
             "health": health,
             "weekly_goal": profile.weekly_goal,
@@ -7409,7 +7527,50 @@ mod tests {
         assert_eq!(s.agent.contacts("test:1").len(), 1, "blank rows dropped");
         let m = s.agent.write_outreach("test:1", 0).unwrap();
         assert!(m.contains("Technical Program Manager"));
+        assert!(m.contains("Employer: a private employer") && m.contains("Message: the first one") && m.contains("two weeks' notice"), "the playbook's brief: {m}");
         assert_eq!(s.agent.contacts("test:1")[0]["message"], json!(m));
+        // Sent: no second message for a week; then the one follow-up; then no more.
+        s.agent.contact_sent("test:1", 0).unwrap();
+        assert!(s.agent.write_outreach("test:1", 0).unwrap_err().0.contains("Give them a week"));
+        let mut list = s.agent.contacts("test:1");
+        list[0]["sent_at"] = json!((Utc::now() - chrono::Duration::days(8)).to_rfc3339());
+        s.agent.save_contacts("test:1", &list).unwrap();
+        assert!(s.agent.write_outreach("test:1", 0).unwrap().contains("Message: the one follow-up"));
+        s.agent.contact_sent("test:1", 0).unwrap();
+        assert!(s.agent.contacts("test:1")[0]["followed_at"].as_str().is_some_and(|t| !t.is_empty()));
+        assert!(s.agent.write_outreach("test:1", 0).unwrap_err().0.contains("enough"));
+        // Who you've messaged at the company, for its other jobs.
+        assert_eq!(s.agent.messaged_at("Acme").len(), 1);
+        let job = s.agent.db().job("test:1").unwrap().unwrap();
+        assert_eq!(s.agent.playbook(&job)["kind"], "private");
+    }
+
+    #[test]
+    fn recruiter_playbook_nudges() {
+        let s = setup();
+        let mut gov = posting("Senior Program Manager", "3");
+        gov.company = "Canada Revenue Agency".into();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2"), gov])).unwrap();
+        let id = |company: &str, title: &str| s.agent.db().jobs(None, 10).unwrap().into_iter().find(|j| j.company == company && j.title == title).unwrap().id;
+        let (new, old, gc) = (id("Acme", "Technical Program Manager"), id("Acme", "Senior Program Manager"), id("Canada Revenue Agency", "Senior Program Manager"));
+        let at = |days: i64| (Utc::now() - chrono::Duration::days(days)).to_rfc3339();
+        for (id, days) in [(&new, 1), (&old, 12), (&gc, 1)] {
+            s.agent.db().update_job(id, &[("status", "applied".into()), ("applied_at", at(days).into())]).unwrap();
+        }
+        // Just applied to a private employer: message the recruiter. Not the Government of Canada one.
+        let due: Vec<String> = s.agent.reach_out_due().unwrap().into_iter().map(|j| j.id).collect();
+        assert_eq!(due, vec![new.clone()], "only the private one applied to in the last 3 days");
+        let fu: Vec<String> = s.agent.follow_ups_due().unwrap().into_iter().map(|j| j.id).collect();
+        assert_eq!(fu, vec![old.clone()], "the older private one gets an application follow-up");
+        // Someone at Acme messaged a week ago: no nudge for Acme's other job, the recruiter's follow-up instead of the application's.
+        s.agent.save_contacts(&old, &[json!({ "name": "Sam Lee", "role": "Recruiter", "sent_at": at(8) })]).unwrap();
+        assert!(s.agent.reach_out_due().unwrap().is_empty(), "someone at Acme has been messaged");
+        assert!(s.agent.follow_ups_due().unwrap().is_empty(), "the recruiter is followed up instead: one channel, not two");
+        let f = s.agent.contact_follow_ups_due().unwrap();
+        assert_eq!((f.len(), f[0]["name"].as_str()), (1, Some("Sam Lee")));
+        // And the Government of Canada one never gets an automatic follow-up.
+        s.agent.db().update_job(&gc, &[("applied_at", at(12).into())]).unwrap();
+        assert!(s.agent.follow_ups_due().unwrap().is_empty(), "no chasing a GC Jobs process");
     }
 
     #[test]

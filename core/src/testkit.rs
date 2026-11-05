@@ -76,8 +76,8 @@ impl Llm for FakeLlm {
     fn offer_advice(&self, _c: &str, job: &Job, offer: &str, context: &str) -> R<String> {
         Ok(format!("## The offer in brief\n{offer} at {}\n\n{context}", job.company))
     }
-    fn outreach(&self, c: &str, _cv: &str, job: &Job, contact: &str) -> R<String> {
-        Ok(format!("Hi {}, I applied for {}. {c}", contact.lines().next().unwrap_or(""), job.title))
+    fn outreach(&self, c: &str, _cv: &str, job: &Job, contact: &str, brief: &str) -> R<String> {
+        Ok(format!("Hi {}, I applied for {}. {c}\n[{brief}]", contact.lines().next().unwrap_or(""), job.title))
     }
     fn chat(&self, _c: &str, _cv: &str, job: &Job, _notes: &str, history: &[(String, String)], message: &str) -> R<String> {
         Ok(format!("About {} ({} before): {message}", job.title, history.len()))
