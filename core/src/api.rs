@@ -298,6 +298,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
     let cd_config = crate::mcp::claude_desktop_config();
     // Before taking the database below: these need it too.
     let (weekly_to, next_wake) = (agent.weekly_to(), agent.next_wake().map(|t| t.to_rfc3339()));
+    let ext_key = if host.kind() == "server" { String::new() } else { crate::bridge::key(agent) };
     let site_status = agent.site_status();
     let builtin_google = google::builtin_client().is_some();
     let site_catalog: Vec<Value> = crate::sites::SITES.iter().map(|x| json!({ "id": x.id, "name": x.name, "kind": x.kind, "about": x.about, "country": x.country })).collect();
@@ -372,6 +373,8 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "weekly": { "day": if get("weekly.day") == "mon" { "mon" } else { "sun" }, "email": get("weekly.email") != "0", "to": weekly_to },
         "phone": { "topic": get("phone.topic"), "server": get("phone.server"), "urgent_only": get("phone.urgent_only") == "1", "details": get("phone.details") == "1" },
         "clip_watch": get("clip.watch") != "0",
+        // The browser extension's key for Fill this form (see bridge.rs), on this computer only.
+        "ext_key": ext_key,
         "ratings_auto": get("ratings.auto") != "0",
         "claude_desktop": {
             "available": host.mcp_command().is_some(),
@@ -407,6 +410,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 o["version"] = json!(host.version());
                 o["side"] = agent.side_status();
                 o["title_ideas"] = json!(agent.title_ideas());
+                // Whether forms can be filled in here (the app on your PC), for Approve and Apply to all.
+                o["can_fill"] = json!(host.can_fill() && !req.remote);
                 return Ok(Resp::json(&o));
             }
             ["api", "coach"] => {
@@ -430,11 +435,14 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
                 let fail = |_| Error("Couldn't pack the extension.".into());
                 for (name, from) in [("manifest.json", "extension/manifest.json"), ("popup.html", "extension/popup.html"), ("popup.js", "extension/popup.js"),
-                    ("icon-48.png", "extension/icon-48.png"), ("icon-128.png", "extension/icon-128.png"), ("clip.js", "clip.js")] {
+                    ("background.js", "extension/background.js"), ("icon-48.png", "extension/icon-48.png"), ("icon-128.png", "extension/icon-128.png"), ("clip.js", "clip.js")] {
                     let bytes = host.asset(from).ok_or_else(|| Error(format!("The extension's {name} is missing from this copy of Job Hunt.")))?;
                     zip.start_file(format!("Send to Job Hunt/{name}"), opts).map_err(fail)?;
                     zip.write_all(&bytes)?;
                 }
+                // Fill this form: the Apply window's script, set up for the extension.
+                zip.start_file("Send to Job Hunt/fill.js", opts).map_err(fail)?;
+                zip.write_all(crate::fill::extension_script().as_bytes())?;
                 let body = zip.finish().map_err(fail)?.into_inner();
                 return Ok(Resp {
                     status: 200,
@@ -509,6 +517,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "last_search": Some(agent.secret("last.search")).filter(|x| !x.is_empty()), "next_search": side["next_search"], "paused": side["paused"],
                     "held": agent.held_count() })));
             }
+            ["api", "answer-bank"] => return Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent) }))),
             ["api", "tracker"] => return Ok(Resp::json(&json!({ "rows": agent.tracker(None)? }))),
             ["api", "connections"] => {
                 let testing = agent.is_running("test-sources");
@@ -605,7 +614,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let pdf = |p: &Option<String>| p.as_deref().map(|p| !crate::util::pdf_stale(Path::new(p))).unwrap_or(false);
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
-                    "job": job, "history": history, "progress": agent.tracker(Some(id))?.pop(),
+                    "effort": crate::fill::effort(&job), "job": job, "history": history, "progress": agent.tracker(Some(id))?.pop(),
                     "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
                     "rating": agent.db().rating(&job.company), "rating_busy": agent.is_running(&format!("rating:{}", crate::db::company_key(&job.company))),
                     "cv_pdf": pdf(&job.cv_path), "letter_pdf": pdf(&job.letter_path),
@@ -675,6 +684,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ["api", "settings"] => {
                 let mut v = settings(agent, host)?;
                 v["remote"]["here"] = json!(req.remote);
+                if req.remote {
+                    v["ext_key"] = json!(""); // only on the computer itself
+                }
                 return Ok(Resp::json(&v));
             }
             // Runs `claude --version` and `claude auth status`, so it's asked for separately.
@@ -712,6 +724,15 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     }
                     host.fill_application(id, job.apply_url.as_deref().unwrap_or(&job.url))?;
                     ok()
+                }
+                // Applying in your own browser: remember which job, so the extension's Fill this form
+                // knows, and hand back the link to open (the company's own posting first).
+                "fill-browser" => {
+                    agent.db().set("apply.browser", &format!("{id}|{}", crate::util::now()))?;
+                    if job.status == "ready" {
+                        agent.db().set_status(id, "approved", "approved; applying on the company site")?;
+                    }
+                    Ok(Resp::json(&json!({ "url": crate::fill::form_link(&job) })))
                 }
                 "approve" => {
                     let outcome = agent.approve(id)?;
@@ -1018,6 +1039,32 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             };
             agent.pause_searches(days)?;
             Ok(Resp::json(&json!({ "paused": agent.search_paused() })))
+        }
+        // Your saved answers to the questions forms keep asking, and whether Job Hunt may submit simple forms for you.
+        ["api", "answer-bank"] => {
+            if let Some(list) = b.get("answers").and_then(|v| v.as_array()) {
+                crate::fill::save_bank(agent, list)?;
+            }
+            if let Some(on) = b["auto_submit"].as_bool() {
+                agent.db().set("apply.auto_submit", if on { "1" } else { "0" })?;
+            }
+            Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent) })))
+        }
+        // Apply to several in a row: each opens in the Apply window, filled in, when the one before is sent.
+        ["api", "apply-queue"] => {
+            if req.remote || !host.can_fill() {
+                return Err(Error("Applying from a queue works in the Job Hunt app on your PC.".into()));
+            }
+            if !agent.claude_ready() {
+                return Err(Error("Set up Claude in Settings \u{2192} Accounts first: it writes the answers.".into()));
+            }
+            let ids: Vec<String> = b["ids"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+            let jobs: Vec<crate::db::Job> = ids.iter().filter_map(|id| agent.db().job(id).ok().flatten()).filter(|j| j.status == "approved" && !j.url.trim().is_empty()).collect();
+            let Some(first) = jobs.first() else { return Err(Error("Nothing to apply to: approve some roles first.".into())) };
+            crate::fill::start_queue(agent, &jobs.iter().map(|j| j.id.clone()).collect::<Vec<_>>())?;
+            agent.db().log(None, "fill", &format!("applying to {} in a row", jobs.len()))?;
+            host.fill_application(&first.id, &crate::fill::form_link(first))?;
+            Ok(Resp::json(&json!({ "started": jobs.len() })))
         }
         ["api", "open-url"] => {
             let url = s(&b, "url");

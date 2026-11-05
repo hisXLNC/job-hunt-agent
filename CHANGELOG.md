@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.23.0] - 2026-11-05
+
+Applying, faster.
+
+### Changes
+
+- Approve now opens the form straight away in Job Hunt's Apply window, filled in from your CV with your files attached. The Submit step's Apply to all goes through every approved role in a row: check each one, press Submit, and the next one opens (Skip leaves one for later).
+- Your saved answers: when you submit a form, Job Hunt keeps your answers to the questions forms keep asking (work authorization, notice period, salary, how you heard about it) and fills them in next time without asking Claude. See and edit them in CV & Career → Your details.
+- The company's own website comes first: a role still only on a job board is looked for on the company's site before its form opens, and the Approve and Submit lists say how each one is applied to (email, quick form, an account like Workday, or a job board), quickest first.
+- Fill in forms in your own browser: the Send to Job Hunt extension (download it again) has Fill this form, using your sign-ins and saved passwords. Best for Workday, iCIMS and other sites with accounts. On a job board's copy of a posting, it offers the company's own site.
+- Optional, off unless you turn it on (Your details → Submitting for you): Job Hunt submits simple Greenhouse, Lever and Ashby forms answered entirely from your saved answers, after a 10-second countdown you can stop. Never with a captcha or a box left for you to tick.
+
 ## [2.22.0] - 2026-11-05
 
 Reaching out to recruiters, the right way.
@@ -979,6 +991,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.23.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.23.0
 [2.22.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.22.0
 [2.21.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.21.0
 [2.20.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.20.0

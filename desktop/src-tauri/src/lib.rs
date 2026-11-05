@@ -63,18 +63,12 @@ impl Host for TauriHost {
     }
 
     fn fill_application(&self, job_id: &str, url: &str) -> jobhunt_core::R<()> {
-        let url: tauri::Url = url.parse().map_err(|_| jobhunt_core::Error("That posting's link isn't a web address.".into()))?;
-        if !["http", "https"].contains(&url.scheme()) {
+        let parsed: tauri::Url = url.parse().map_err(|_| jobhunt_core::Error("That posting's link isn't a web address.".into()))?;
+        if !["http", "https"].contains(&parsed.scheme()) {
             return Err(jobhunt_core::Error("That posting's link isn't a web address.".into()));
         }
-        let (app, id) = (self.app.clone(), job_id.to_string());
-        self.app
-            .run_on_main_thread(move || {
-                if let Err(e) = apply_window(&app, &id, url) {
-                    notify(&app, "Couldn't open the application form", &e);
-                }
-            })
-            .map_err(|e| jobhunt_core::Error(format!("Couldn't open the window: {e}")))
+        open_application(self.app.clone(), job_id.to_string());
+        Ok(())
     }
 
     fn can_console(&self) -> bool {
@@ -448,7 +442,7 @@ fn apply_window(app: &AppHandle, job_id: &str, url: tauri::Url) -> Result<(), St
         .title(format!("Apply: {} at {} \u{2013} Job Hunt", job.title, job.company))
         .inner_size(1200.0, 900.0)
         .center()
-        .initialization_script(fill::script(&token, &job.title, &job.company))
+        .initialization_script(fill::script_with(&token, &fill::panel_job(&ctx.agent, &job)))
         .on_navigation(move |u| {
             if u.host_str() != Some(fill::MESSAGE_HOST) {
                 return true;
@@ -595,6 +589,51 @@ fn read_in_browser(app: &AppHandle, url: &str) -> Result<String, String> {
 }
 
 /// A message from the Apply window's script: the form's fields to answer, or "I submitted it".
+/// Open a job's form in the Apply window. The company's own site is preferred: a posting still only
+/// on a job board is looked for there first (unless that was tried in the last week).
+fn open_application(app: AppHandle, job_id: String) {
+    std::thread::spawn(move || {
+        let Some(ctx) = app.try_state::<Arc<Ctx>>() else { return };
+        let agent = ctx.agent.clone();
+        let Ok(Some(job)) = agent.db().job(&job_id) else { return };
+        let week_ago = (chrono::Utc::now() - chrono::Duration::days(7)).to_rfc3339();
+        let tried = agent.secret(&format!("applylink.tried:{job_id}"));
+        if job.apply_url.as_deref().is_none_or(|u| u.is_empty()) && job.apply_email.is_none() && jobhunt_core::sources::is_job_board(&job.url)
+            && tried < week_ago && agent.engine_name() == "code" && agent.claude_ready()
+        {
+            notify(&app, &format!("Finding {}'s own posting", job.company), "Applying on the company's site goes straight to them. The form opens in a minute.");
+            let _ = agent.db().set(&format!("applylink.tried:{job_id}"), &jobhunt_core::util::now());
+            if let Err(e) = agent.find_company_apply(&job_id) {
+                let _ = agent.db().log(Some(&job_id), "apply-link:error", &e.0);
+            }
+        }
+        let Ok(Some(job)) = agent.db().job(&job_id) else { return };
+        let Ok(url) = jobhunt_core::fill::form_link(&job).parse::<tauri::Url>() else {
+            notify(&app, "Couldn't open the application form", "That posting's link isn't a web address.");
+            return;
+        };
+        let (a, id) = (app.clone(), job_id.clone());
+        let _ = app.run_on_main_thread(move || {
+            if let Err(e) = apply_window(&a, &id, url) {
+                notify(&a, "Couldn't open the application form", &e);
+            }
+        });
+    });
+}
+
+/// Done with a job in the Apply window (sent, or skipped): the next one in the queue, or the end.
+fn next_in_queue(app: &AppHandle, agent: &Arc<Agent>, job_id: &str) {
+    let had_queue = !jobhunt_core::fill::queue(agent).is_empty();
+    match jobhunt_core::fill::queue_next(agent, job_id) {
+        Some(next) => open_application(app.clone(), next),
+        None if had_queue => {
+            let _ = jobhunt_core::fill::set_queue(agent, &[]);
+            notify(app, "That's the last one", "Every application in the queue has been through the Apply window.");
+        }
+        None => {}
+    }
+}
+
 fn on_fill_message(app: AppHandle, job_id: String, kind: String, data: serde_json::Value) {
     std::thread::spawn(move || {
         let Some(ctx) = app.try_state::<Arc<Ctx>>() else { return };
@@ -608,9 +647,25 @@ fn on_fill_message(app: AppHandle, job_id: String, kind: String, data: serde_jso
                 }
             }
             "applied" => {
-                if let Err(e) = jobhunt_core::fill::submitted(&agent, &job_id, data["url"].as_str().unwrap_or(""), data["auto"].as_bool().unwrap_or(false)) {
+                let fields = data["fields"].as_array().cloned().unwrap_or_default();
+                if let Err(e) = jobhunt_core::fill::submitted_with(&agent, &job_id, data["url"].as_str().unwrap_or(""), data["auto"].as_bool().unwrap_or(false), &fields) {
                     let _ = agent.db().log(Some(&job_id), "fill:error", &e.0);
                 }
+                // Applying from a queue: the next one, after a moment to see the confirmation.
+                if !jobhunt_core::fill::queue(&agent).is_empty() {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    next_in_queue(&app, &agent, &job_id);
+                }
+                return;
+            }
+            // The answers you gave, as you pressed Submit: kept for the next form.
+            "learn" => {
+                let _ = jobhunt_core::fill::learn(&agent, &data["fields"].as_array().cloned().unwrap_or_default());
+                return;
+            }
+            // Leave this one for later and go on with the queue.
+            "skip" => {
+                next_in_queue(&app, &agent, &job_id);
                 return;
             }
             _ => return,
@@ -765,6 +820,8 @@ pub fn run() {
                 let _ = jobhunt_core::web::ensure_started(agent.clone(), host.clone(), api::remote_port(&agent));
             }
             clip_watch(agent.clone());
+            // The browser extension's Fill this form talks to Job Hunt here (this computer only).
+            jobhunt_core::bridge::start(agent.clone());
             // Job sites behind a bot check, or that list their jobs with scripts, are read in a browser.
             let reader = app.handle().clone();
             jobhunt_core::sites::set_browser(Box::new(move |url| read_in_browser(&reader, url)));

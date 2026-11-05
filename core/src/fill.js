@@ -6,7 +6,9 @@
   if (window.top !== window || window.__jobhunt) return;
   const TOKEN = '__TOKEN__';
   const JOB = __JOB__;
-  const send = (kind, data) => {
+  // In the browser extension (no token): messages go through the extension, which asks Job Hunt.
+  const EXT = !TOKEN && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id;
+  const send = EXT ? (kind, data) => chrome.runtime.sendMessage({ jobhunt: kind, data: { ...data, url: location.href, title: document.title } }) : (kind, data) => {
     const json = JSON.stringify({ t: TOKEN, ...data });
     let bin = '';
     for (const b of new TextEncoder().encode(json)) bin += String.fromCharCode(b);
@@ -17,7 +19,7 @@
   const ATS = /greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|icims\.com|jobvite\.com|bamboohr\.com|myworkdayjobs\.com|recruitee\.com|teamtailor\.com|breezy\.hr|jazzhr\.com|applytojob\.com/i;
 
   // --- the panel, in its own shadow root so the page's styles don't reach it ---
-  let ui, statusEl, buttons = {}, amber = [], amberAt = 0, filled = false;
+  let ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
   function panel() {
     if (ui) return;
     const host = document.createElement('div');
@@ -31,15 +33,20 @@
       button.b{font:inherit;border:1px solid #c8c8d0;background:#f6f6f8;border-radius:8px;padding:6px 10px;cursor:pointer}
       button.b.pr{background:#2f5bd3;border-color:#2f5bd3;color:#fff}button.b[hidden]{display:none}button.b:disabled{opacity:.6;cursor:default}
       .min .s,.min .r{display:none}
-    </style><div class="p"><div class="h"><span>Job Hunt · ${JOB.company.replace(/[<>&]/g, '')}</span><button class="x" title="Smaller">–</button></div>
+    </style><div class="p"><div class="h"><span class="t">Job Hunt · ${(JOB.company || '').replace(/[<>&]/g, '')}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
       <p class="s"></p><div class="r">
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
-        <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button></div></div>`;
+        <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
+        <button class="b" data-k="stop" hidden>Stop: I'll submit it</button>
+        <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button></div></div>`;
     statusEl = root.querySelector('.s');
     root.querySelectorAll('[data-k]').forEach(b => { buttons[b.dataset.k] = b; });
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
     buttons.fill.onclick = () => start();
     buttons.next.onclick = () => nextAmber();
+    buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
+    buttons.stop.onclick = () => { clearTimeout(autoTimer); autoTimer = null; buttons.stop.hidden = true; status('Stopped. Read the form over, then press its Submit button yourself.'); };
+    headEl = root.querySelector('.t');
     buttons.applied.onclick = () => { recorded = true; window.name = ''; status('Marked as applied in Job Hunt. You can close this window.'); buttons.applied.hidden = true; send('applied', { url: location.href }); };
     (document.body || document.documentElement).appendChild(host);
     ui = host;
@@ -99,7 +106,9 @@
         continue;
       }
       const key = 'f' + n++;
-      const f = { key, type: el.getAttribute('role') === 'combobox' ? 'combobox' : type, label: labelOf(el), required: el.required || el.getAttribute('aria-required') === 'true', value: type === 'file' ? (el.files && el.files.length ? 'attached' : '') : choice ? '' : clean(el.value) };
+      const chosen = type === 'select' && el.selectedIndex >= 0 && el.value !== '' ? clean(el.options[el.selectedIndex].text) : '';
+      const f = { key, type: el.getAttribute('role') === 'combobox' ? 'combobox' : type, label: labelOf(el), required: el.required || el.getAttribute('aria-required') === 'true', value: type === 'file' ? (el.files && el.files.length ? 'attached' : '') : choice ? '' : type === 'select' ? chosen : clean(el.value) };
+      if (type === 'checkbox') f.checked = el.checked;
       if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text)).slice(0, 60);
       if (type === 'checkbox') f.context = question(el);
       fields.push(f); byKey[key] = [el];
@@ -187,6 +196,7 @@
   window.__jobhunt = {
     status,
     async fill(answer) {
+      if (answer.job && headEl) headEl.textContent = `Job Hunt · ${answer.job.company}`;
       collect();
       amber = []; amberAt = 0;
       let ok = 0, todo = 0;
@@ -201,13 +211,35 @@
       filled = true;
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
       buttons.next.hidden = !todo; buttons.applied.hidden = false;
+      const saved = (answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '';
       status(todo
-        ? `Filled ${ok}. ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
-        : `Filled ${ok}. Read the form over (green is what Job Hunt filled), then press its Submit button.`);
+        ? `Filled ${ok}.${saved} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
+        : `Filled ${ok}.${saved} Read the form over (green is what Job Hunt filled), then press its Submit button.`);
       if (todo) nextAmber();
+      // Submitting for you (only if you turned it on, and Job Hunt said this form qualifies): not with
+      // anything left for you, a box still unticked or a captcha on the page. Ten seconds to stop it.
+      if (answer.auto && !todo && !captcha() && !unticked()) {
+        const btn = submitButton();
+        if (btn) {
+          let left = 10;
+          buttons.stop.hidden = false;
+          const tick = () => {
+            if (!autoTimer && left < 10) return;
+            if (left <= 0) { autoTimer = null; buttons.stop.hidden = true; status('Submitting…'); btn.click(); return; }
+            status(`Everything's answered from your saved answers and facts. Submitting in ${left}s; press Stop to check it yourself.`);
+            left--; autoTimer = setTimeout(tick, 1000);
+          };
+          autoTimer = setTimeout(tick, 0);
+        }
+      }
     },
+    start: () => start(),
     failed(msg) { buttons.fill.disabled = false; status(msg); },
   };
+  // What stops Job Hunt submitting for you: a captcha, or a required box you haven't ticked.
+  const captcha = () => !!document.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="turnstile"], .g-recaptcha, .h-captcha, [data-sitekey]');
+  const unticked = () => [...document.querySelectorAll('input[type=checkbox]')].some(c => !own(c) && !c.checked && (c.required || c.getAttribute('aria-required') === 'true'));
+  const submitButton = () => [...document.querySelectorAll('button,input[type=submit]')].find(b => !own(b) && shown(b) && (b.type === 'submit' || /submit( application)?|send application/i.test(b.textContent || b.value || '')));
   function nextAmber() {
     if (!amber.length) return;
     amber[amberAt % amber.length].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -253,6 +285,8 @@
     const b = e.target.closest && e.target.closest('button,input[type=submit]');
     if (!b || own(b)) return;
     if (b.type === 'submit' || /submit|send application|apply now/i.test(b.textContent || b.value || '')) {
+      // The answers as you send them: Job Hunt keeps the ones forms keep asking for, for next time.
+      if (filled) { try { send('learn', { fields: collect().filter(f => f.type !== 'file').map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options })) }); } catch (err) { /* the form changed */ } }
       window.name = MARK + Date.now();
       watchForConfirmation(120);
     }
@@ -286,5 +320,6 @@
       if (i === 2 && !pressedAt()) status('Use the page\'s Apply button to get to the form. Job Hunt fills it in when it appears.');
     }
   }
+  if (EXT) { panel(); status('Press Fill in this form when the application form is on screen.'); return; }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', look); else look();
 })();

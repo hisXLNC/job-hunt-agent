@@ -770,7 +770,8 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, playbook, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, playbook, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  j.effort = effort;
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
   const tracks = st.profile.tracks;
@@ -791,7 +792,7 @@ async function showJob(id) {
       <div class="grow">
         <div class="eyebrow"><a href="#pipeline">Applications</a> / ${esc(STAGES[j.status] || j.status)}</div>
         <h1>${esc(j.title)}</h1>
-        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}${stretchTag(j)}</div>
+        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}</div>
       </div>
     </div>
     ${jobActions(j, tailoring)}
@@ -996,6 +997,21 @@ function oneTag(j) {
   if (j.know?.length) return ` <span class="pill good" title="Connected on LinkedIn: ${esc(j.know.join(', '))}">You know ${esc(j.know.length === 1 ? firstName(j.know[0]) : `${j.know.length} people`)}</span>`;
   return dl ? ` ${dl}` : '';
 }
+/** After Approve: open the job's form in Job Hunt's Apply window, filled in, when that works here
+ *  (the app on your PC) and suits the job; else false, and the Apply page takes over. Forms that need
+ *  an account go to the Apply page, where your own browser (with your sign-ins) is offered. */
+async function applyNow(id) {
+  const j = [...(overview?.approved || []), ...(overview?.ready || [])].find(x => x.id === id);
+  if (!overview?.can_fill || j?.effort?.kind === 'account') return false;
+  try {
+    await api(`/api/jobs/${encodeURIComponent(id)}/fill`, { method: 'POST' });
+    toast('Approved. The form opens in its own window, filled in from your CV; check it and press Submit.');
+    return true;
+  } catch (e) { return false; }
+}
+/** How you'd apply, and how long it takes: email, a quick form, an account to make first… */
+const EFFORT_CLS = { email: 'good', quick: 'good', account: 'warn', board: 'warn', site: '' };
+const effortTag = j => j.effort && ['ready', 'approved'].includes(j.status) ? ` <span class="pill effort ${EFFORT_CLS[j.effort.kind] || ''}" title="${esc(j.effort.about || 'How you apply to this one')}">${esc(j.effort.label)}</span>` : '';
 /** Where Apply goes, for a posting found on a job board: the company's own site, once Job Hunt finds it there. */
 const onCompanySite = j => j.apply_url ? `<span class="good-text" title="${esc(j.apply_url)}">applies on ${esc(j.company)}'s own site</span>` : '';
 
@@ -1043,7 +1059,7 @@ function stepHtml(o, step, tracked) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
   const row = (j, sub, actions, tick = '') => `<div class="todo-row${expiredWhy(j) ? ' expired-row' : ''}">${tick || '<span></span>'}
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span>${oneTag(j)}${coLocLine(j)}</a>
+      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span>${oneTag(j)}${effortTag(j)}${coLocLine(j)}</a>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span>
       <span class="why small muted">${sub || ''}</span>
       <span class="row todo-act">${actions}</span></div>`;
@@ -1094,7 +1110,10 @@ function stepHtml(o, step, tracked) {
     ${many ? `<div class="select-bar" hidden><span class="select-n"></span><button class="btn primary" data-act="approvePicked">Approve selected</button><button class="btn ghost" data-act="approveClear">Clear</button></div>` : ''}</div>`]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
     `<button class="btn sm" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
-  if (o.approved?.length) groups.push(['Submit on the company\'s site', o.approved.map(j => row(j, onCompanySite(j),
+  // Quickest first: one-click emails and short forms, then the ones that need an account.
+  const toSubmit = [...(o.approved || [])].sort((a, b) => (a.effort?.minutes ?? 10) - (b.effort?.minutes ?? 10));
+  const formable = toSubmit.filter(j => j.url && j.effort?.kind !== 'email');
+  if (toSubmit.length) groups.push([`Submit on the company's site${formable.length > 1 && o.can_fill ? ` <button class="btn primary sm" data-act="applyAll" data-ids="${esc(JSON.stringify(formable.map(j => j.id)))}" style="margin-left:8px" title="Each opens filled in, with your files attached; you check it and press Submit, and the next one opens">Apply to all ${formable.length}</button>` : ''}`, toSubmit.map(j => row(j, onCompanySite(j),
     `<a class="btn sm" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
      <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,
@@ -1405,12 +1424,13 @@ async function showReview() {
   }
   const j0 = queue[0];
   pageKey = j0.id;
-  const [{ job: j, warnings, revising, answers }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(j0.id)}`), settingsCache ? Promise.resolve(settingsCache) : api('/api/settings')]);
+  const [{ job: j, effort, warnings, revising, answers }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(j0.id)}`), settingsCache ? Promise.resolve(settingsCache) : api('/api/settings')]);
+  j.effort = effort;
   const done = jobs.length - queue.length;
   const flags = j.red_flags || [];
   j.warnings = warnings || [];
   page(`<div class="head"><div class="grow"><div class="eyebrow">Review · ${queue.length} to go${done ? ` · ${done} skipped` : ''}</div>
-      <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${deadlineTag(j)}</div></div>
+      <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${deadlineTag(j)}${effortTag(j)}</div></div>
       <a class="btn ghost" href="#overview">Exit review</a></div>
     ${expiredWhy(j) ? `<div class="card" style="border-color:var(--crit)"><b>This opening has expired.</b> <span class="muted">${esc(expiredWhy(j).replace(/^Expired: /, ''))}. Check the posting before approving it.</span></div>` : ''}
     ${revising ? '<section class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this updates by itself.</p></section>' : ''}
@@ -1460,9 +1480,9 @@ async function showApply(id) {
       <p class="muted">${!done && expiredWhy(j) ? `<b style="color:var(--crit)">${esc(expiredWhy(j))}.</b> Check the posting is still open before you apply.` : done ? 'You\'ve applied to this one.' : can_fill && j.url ? 'Job Hunt can fill in the form for you, or use the files and answers below yourself.' : 'Four steps. Your files and answers are ready below.'}</p></div></div>
     <ol class="apply-steps">
       ${can_fill && j.url && !done ? `<li class="card"><h2>Let Job Hunt fill it in</h2>
-        <p class="muted">Opens ${j.apply_url ? 'the job on the company\'s own site' : 'the posting'} in a Job Hunt window. Use the company's Apply button (sign in or make an account if it asks); when the form appears, Job Hunt fills it in from your CV, letter and facts, and attaches your files. It never presses Submit: check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>I submitted it</b> in that window (or <b>Mark applied</b> here) to do it yourself.</p>
-        <div class="row"><button class="btn primary" data-act="fillForm" data-job="${esc(j.id)}">${svg('check')}Fill it in for me</button><button class="btn ghost" data-act="open" data-what="${j.apply_url ? 'company' : 'posting'}" data-job="${esc(j.id)}">${svg('open')}Open in my browser instead</button></div>
-        <p class="muted small">The steps below are there if you'd rather do it yourself, or for anything it couldn't fill.</p></li>` : ''}
+        <p class="muted">Opens ${j.apply_url ? 'the job on the company\'s own site' : 'the posting'} in a Job Hunt window. Use the company's Apply button (sign in or make an account if it asks); when the form appears, Job Hunt fills it in from your CV, letter, facts and saved answers, and attaches your files. It doesn't press Submit (unless you turned that on for simple forms): check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>I submitted it</b> in that window (or <b>Mark applied</b> here) to do it yourself.</p>
+        <div class="row"><button class="btn primary" data-act="fillForm" data-job="${esc(j.id)}">${svg('check')}Fill it in for me</button><button class="btn" data-act="fillBrowser" data-job="${esc(j.id)}" title="Opens it in Chrome or Edge, where your sign-ins and saved passwords work; the Job Hunt extension fills it in">${svg('open')}Fill it in my own browser</button></div>
+        <p class="muted small">${j.effort?.kind === 'account' ? `<b>${esc(j.effort.label.split(' · ')[0])} makes you sign in or create an account:</b> your own browser is easier, with your saved passwords. ` : ''}In your own browser, click the Job Hunt extension on the form and press <b>Fill this form</b> (set it up in <a href="#search/setup">Search → Set up sources</a>). The steps below are there if you'd rather do it yourself, or for anything it couldn't fill.</p></li>` : ''}
       <li class="card"><h2>${j.apply_url ? 'Open it on the company\'s site' : 'Open the posting'}</h2><p class="muted">${j.apply_url ? 'Applying on the company\'s own site goes straight to them, not through a job board.' : 'Use the company\'s Apply button.'} If it asks you to sign in or make an account, do that first.</p>
         <div class="row">${j.apply_url ? `<button class="btn ${can_fill ? '' : 'primary'}" data-act="open" data-what="company" data-job="${esc(j.id)}">${svg('open')}Apply on the company's site</button>` : ''}
         ${j.url ? `<button class="btn ${j.apply_url ? 'ghost' : can_fill ? '' : 'primary'}" data-act="open" data-what="posting" data-job="${esc(j.id)}">${svg('open')}${j.apply_url ? 'The job board posting' : 'Open the posting'}</button>` : ''}
@@ -1902,6 +1922,21 @@ const lines = v => (v || []).join('\n');
 const fromLines = s => s.split(/\n|,/).map(x => x.trim()).filter(Boolean);
 let settingsCache = null;
 
+/** Your answers to the questions application forms keep asking, learned as you submit forms, and
+ *  whether Job Hunt may submit simple forms for you. */
+async function renderBank() {
+  const box = $('#bankCard'); if (!box) return;
+  let b;
+  try { b = await api('/api/answer-bank'); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  box.innerHTML = `<header><h2>Your saved answers</h2>${b.answers.length ? `<span class="pill">${b.answers.length}</span>` : ''}</header>
+    <p class="muted">When you submit a form, Job Hunt keeps your answers to the questions forms keep asking (work authorization, notice period, salary, how you heard about the job…) and fills them in next time without asking Claude: faster, the same answer everywhere, and less of your plan. Answers about one employer (why this role, your cover letter) aren't kept.</p>
+    ${b.answers.length ? `<div class="bank">${b.answers.map((x, i) => `<div class="bank-row" data-i="${i}"><input type="text" class="bank-q" value="${esc(x.q)}" aria-label="Question"><input type="text" class="bank-a" value="${esc(x.a)}" aria-label="Your answer"><span class="muted small" title="Times used">${x.uses ? `used ${x.uses}×` : ''}</span><button class="btn ghost sm icon-only" data-act="bankDrop" data-i="${i}" title="Forget this answer">${svg('close')}</button></div>`).join('')}</div>` : '<p class="empty small">None yet: they appear after your first form.</p>'}
+    <div class="row"><button class="btn" data-act="bankAdd">Add one</button>${b.answers.length ? '<button class="btn primary" data-act="bankSave">Save changes</button>' : ''}</div>
+    <h3 class="sub">Submitting for you</h3>
+    <label class="check"><input type="checkbox" data-act="autoSubmit" ${b.auto_submit ? 'checked' : ''}> <span>Submit simple forms for me<br><span class="muted small">Only on Greenhouse, Lever and Ashby forms, and only when every required question is answered from your saved answers, facts and files, nothing long was written for this job, there's no captcha and no box left for you to tick. It counts down 10 seconds first, with a Stop button. Anything else waits for you to press Submit.</span></span></label>`;
+}
+const bankRows = () => [...document.querySelectorAll('#bankCard .bank-row')].map(r => ({ q: r.querySelector('.bank-q').value, a: r.querySelector('.bank-a').value }));
+
 /** host: the Search page's top, for its What to search and Set up sources tabs (Settings' Search and Job sources, moved there). */
 async function showSettings(tab, sub, host) {
   // Older links: Extras went to App; Schedule became Email & calendar.
@@ -2029,10 +2064,12 @@ async function showSettings(tab, sub, host) {
     <section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
       <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and puts it on your Overview to pick. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
       ${desk ? `<div class="row"><button class="btn primary" data-act="bookmarkSetup"><img src="/static/logo.svg" alt="" width="16" height="16">Set up the button</button><span class="muted small">Opens a page in your browser that walks you through it, so the button gets the Job Hunt logo.</span></div>
-      <details class="small"><summary class="muted">Or install it as a browser extension (Chrome or Edge)</summary><ol class="small steps-list">
+      <details class="small" ${st.ext_key ? '' : ''}><summary class="muted">Or install it as a browser extension (Chrome or Edge): it also fills in application forms</summary><ol class="small steps-list">
         <li><a class="btn sm" href="/api/extension.zip" download>${svg('download')}Download the extension</a> and unzip it (right-click → <b>Extract All</b>). Keep the <b>Send to Job Hunt</b> folder somewhere it stays, like Documents.</li>
         <li>In Chrome open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>), turn on <b>Developer mode</b>, press <b>Load unpacked</b> and choose the <b>Send to Job Hunt</b> folder.</li>
-        <li>Pin it: the puzzle-piece icon by the address bar → the pin next to <b>Send to Job Hunt</b>. Then on a posting, click the Job Hunt logo.</li></ol>
+        <li>Pin it: the puzzle-piece icon by the address bar → the pin next to <b>Send to Job Hunt</b>. Then on a posting, click the Job Hunt logo.</li>
+        ${st.ext_key ? `<li>To fill in application forms in your own browser (with your sign-ins and saved passwords: best for Workday, iCIMS and the like), click the extension once and paste this key: <span class="copy-row" style="display:inline-flex;gap:6px;align-items:center"><code id="extKey">${esc(st.ext_key)}</code><button class="btn ghost sm" data-act="copy" data-from="extKey">Copy</button></span> Then on any application form, click the extension and press <b>Fill this form</b>. Job Hunt needs to be running on this computer.</li>` : ''}
+        <li>Had the extension before version 2.23? Download it again and replace the folder, then press the reload arrow on its card in <code>chrome://extensions</code>.</li></ol>
         <p class="muted small">The browser may remind you about developer-mode extensions when it starts; keep it. It reads only the tab you click it on.</p></details>
       <details class="small"><summary class="muted">Or add it yourself</summary><ol class="small steps-list">
         <li><button class="btn sm" data-act="copyBookmarklet">Copy the button</button>, or drag <a class="btn sm bookmarklet" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Drag this onto your browser's bookmarks bar">${BOOKMARK_NAME}</a> to your bookmarks bar.</li>
@@ -2090,7 +2127,8 @@ async function showSettings(tab, sub, host) {
       <p class="muted">True achievements and stories that aren't in your CV, for cover letters to draw on, like a hard delivery you pulled off or a problem only you solved. Cover letters may use them; your CV is never changed with them.</p>
       <label class="field">Stories<textarea name="stories" style="min-height:160px" placeholder="e.g. Managed a key shipment for a \$2B oil project in Iran.\nCoordinated urgent delivery of medical supplies to Iraq.">${esc(st.profile.stories || '')}</textarea><span class="hint">One per line or paragraph. Keep the real numbers.</span></label>
       <label class="field">Facts for application forms<textarea name="application_facts" placeholder="e.g. Citizen, no visa sponsorship needed.\nNotice period: one month.\nSalary expectation: (your range and currency).\nOpen to hybrid; not relocating.">${esc(st.profile.application_facts || '')}</textarea><span class="hint">Used to answer application questions. Anything not here is left as “[Fill in]”.</span></label>
-      <div class="row"><button class="btn primary" type="submit">Save</button></div></section></form>`;
+      <div class="row"><button class="btn primary" type="submit">Save</button></div></section></form>
+    <section class="card" id="bankCard"><header><h2>Your saved answers</h2></header><p class="muted small">Loading…</p></section>`;
     const view = ['career', 'details'].includes(sub) ? sub : 'cvs';
     body = `${cvsTabs(view, st.cvs.length)}
       ${view === 'career' ? career : view === 'details' ? details : body}`;
@@ -2276,6 +2314,7 @@ async function showSettings(tab, sub, host) {
     page(`<div class="head"><div class="grow"><h1>CV &amp; Career</h1><p class="muted">Where everything starts: your CVs and the job titles they search for, where your career could go next, and the details that go on every application.</p></div><span class="save-state" id="saveState" aria-live="polite">Changes save by themselves</span></div>
       ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${body}`);
     if (st.career_thinking) watchCareer(location.hash);
+    if ($('#bankCard')) renderBank();
     return;
   }
   if (host) page(`${host}<p class="save-state right-note" id="saveState" aria-live="polite">Changes save by themselves</p>
@@ -3187,6 +3226,7 @@ async function act(el) {
       const r = await api(`/api/jobs/${encodeURIComponent(id)}/approve`, { method: 'POST' });
       await refreshOverview();
       if (r.outcome === 'applied') { toast('Sent and marked applied.'); route(); }
+      else if (await applyNow(id)) route(); // on to the next to review; the form fills in its own window
       else { reviewReturn = location.hash === '#review'; location.hash = `#apply/${encodeURIComponent(id)}`; }
     });
   }
@@ -3309,7 +3349,8 @@ async function act(el) {
       const r = await api(`/api/jobs/${encodeURIComponent(id)}/approve`, { method: 'POST' });
       await refreshOverview();
       if (r.outcome === 'applied') { toast('Sent. Marked as applied.'); route(); }
-      else location.hash = `#apply/${encodeURIComponent(id)}`;
+      else if (!await applyNow(id)) location.hash = `#apply/${encodeURIComponent(id)}`;
+      else route();
     });
   }
   if (a === 'syncResume') {
@@ -3419,6 +3460,29 @@ async function act(el) {
     return busy(async () => {
       const track = sel ? sel.value : (settingsCache || await api('/api/settings')).profile.tracks[0].name;
       const x = await api('/api/results/add-titles', { method: 'POST', body: { track, titles } }); settingsCache = null; route(); toast(x.added ? `Added ${x.added} title${x.added === 1 ? '' : 's'}. The next search looks for them.` : 'Those titles are already in your search.'); });
+  }
+  if (a === 'bankAdd') {
+    const list = $('#bankCard .bank') || (() => { $('#bankCard .empty')?.remove(); const d = document.createElement('div'); d.className = 'bank'; $('#bankCard .row').before(d); return d; })();
+    list.insertAdjacentHTML('beforeend', `<div class="bank-row"><input type="text" class="bank-q" placeholder="The question, as forms ask it" aria-label="Question"><input type="text" class="bank-a" placeholder="Your answer" aria-label="Your answer"><span></span><span></span></div>`);
+    if (!$('#bankCard [data-act=bankSave]')) $('#bankCard .row').insertAdjacentHTML('beforeend', '<button class="btn primary" data-act="bankSave">Save changes</button>');
+    list.lastElementChild.querySelector('input').focus();
+    return;
+  }
+  if (a === 'bankSave' || a === 'bankDrop') {
+    const rows = bankRows().filter((_, i) => a !== 'bankDrop' || i !== Number(el.dataset.i));
+    return busy(async () => { await api('/api/answer-bank', { method: 'POST', body: { answers: rows } }); renderBank(); }, a === 'bankDrop' ? 'Forgotten.' : 'Saved.');
+  }
+  if (a === 'applyAll') {
+    const ids = JSON.parse(el.dataset.ids || '[]');
+    return busy(async () => { await api('/api/apply-queue', { method: 'POST', body: { ids } }); refreshOverview(); },
+      `Applying to ${ids.length} in a row. Each opens filled in, with your CV and letter attached: check it, press Submit, and the next one opens. Skip any to leave it for later.`);
+  }
+  if (a === 'fillBrowser') {
+    return busy(async () => {
+      const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/fill-browser`, { method: 'POST' });
+      await api('/api/open-url', { method: 'POST', body: { url: r.url } });
+      refreshOverview();
+    }, 'Opened in your browser. On the form, click the Job Hunt extension and press Fill this form.');
   }
   if (a === 'fillForm') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/fill`, { method: 'POST' }); refreshOverview(); },
@@ -3884,6 +3948,11 @@ document.addEventListener('click', e => {
 document.addEventListener('change', async e => {
   const el = e.target;
   if (el.dataset.act === 'smallSources') { smallSources = el.checked; route(); return; }
+  if (el.dataset.act === 'autoSubmit') {
+    try { await api('/api/answer-bank', { method: 'POST', body: { auto_submit: el.checked } }); toast(el.checked ? 'On: simple forms answered entirely from your saved answers are submitted after a 10-second countdown you can stop.' : 'Off: Job Hunt fills forms in, and you press Submit.'); }
+    catch (e) { el.checked = !el.checked; toast(e.message, true); }
+    return;
+  }
   if (el.dataset.act === 'phoneDetails') {
     try { await api('/api/settings/phone', { method: 'POST', body: { details: el.checked } }); toast(el.checked ? 'Notices now show the company and role.' : 'Notices now keep details private.'); }
     catch (err) { el.checked = !el.checked; toast(err.message, true); }

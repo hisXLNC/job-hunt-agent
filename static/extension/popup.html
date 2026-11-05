@@ -1,5 +1,17 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Send to Job Hunt</title>
-<style>body{font:14px/1.5 system-ui,"Segoe UI",sans-serif;color:#1f201d;background:#fff;margin:0;padding:14px 16px;width:280px}
-b{display:block;margin-bottom:4px}p{margin:0;color:#636361}.bad b{color:#b42318}</style></head>
-<body><b id="what">Sending…</b><p id="more"></p><script src="popup.js"></script></body></html>
+<html lang="en"><head><meta charset="utf-8"><title>Job Hunt</title>
+<style>body{font:14px/1.5 system-ui,"Segoe UI",sans-serif;color:#1f201d;background:#fff;margin:0;padding:14px 16px;width:300px}
+b{display:block;margin-bottom:4px}p{margin:0 0 10px;color:#636361}.bad b{color:#b42318}
+button{font:inherit;border:1px solid #c8c8d0;background:#f6f6f8;border-radius:8px;padding:7px 10px;cursor:pointer;width:100%;margin-top:6px;text-align:left}
+button.pr{background:#2f5bd3;border-color:#2f5bd3;color:#fff}input{font:inherit;width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #c8c8d0;border-radius:6px;margin-top:4px}
+[hidden]{display:none}.small{font-size:12px}</style></head>
+<body><b id="what">Job Hunt</b><p id="more"></p>
+<div id="acts">
+  <button class="pr" id="fill">Fill this form</button>
+  <button id="company" hidden>Apply on the company's site instead</button>
+  <button id="send">Send this job to Job Hunt</button>
+</div>
+<div id="setup" hidden><p class="small">To fill in forms, paste your key from Job Hunt: <b style="display:inline">Search → Set up sources → Jobs you find yourself</b>.</p>
+  <input id="key" placeholder="jh-…" autocomplete="off"><button class="pr" id="save">Save the key</button></div>
+<p class="small" id="keyline"><a href="#" id="change">Change the Job Hunt key</a></p>
+<script src="popup.js"></script></body></html>

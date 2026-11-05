@@ -114,15 +114,15 @@ pub fn ensure_started(agent: Arc<Agent>, host: Arc<dyn Host>, port: u16) -> Resu
     Ok(())
 }
 
-struct Request {
-    method: String,
-    path: String,
+pub(crate) struct Request {
+    pub(crate) method: String,
+    pub(crate) path: String,
     query: HashMap<String, String>,
-    headers: HashMap<String, String>,
-    body: Vec<u8>,
+    pub(crate) headers: HashMap<String, String>,
+    pub(crate) body: Vec<u8>,
 }
 
-fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request>> {
+pub(crate) fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request>> {
     let mut r = BufReader::new(stream);
     let mut line = String::new();
     if r.read_line(&mut line)? == 0 {
@@ -160,7 +160,7 @@ fn cookie<'a>(req: &'a Request, name: &str) -> Option<&'a str> {
     req.headers.get("cookie")?.split(';').filter_map(|c| c.trim().split_once('=')).find(|(k, _)| *k == name).map(|(_, v)| v)
 }
 
-fn write(mut stream: TcpStream, r: Resp) -> std::io::Result<()> {
+pub(crate) fn write(mut stream: TcpStream, r: Resp) -> std::io::Result<()> {
     let reason = match r.status { 200 => "OK", 302 => "Found", 303 => "See Other", 401 => "Unauthorized", 403 => "Forbidden", 404 => "Not Found", 429 => "Too Many Requests", _ => "Error" };
     let mut head = format!("HTTP/1.1 {} {reason}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n", r.status, r.ctype, r.body.len());
     for (k, v) in &r.headers {

@@ -5,6 +5,7 @@
 
 pub mod api;
 pub mod backup;
+pub mod bridge;
 pub mod claude;
 pub mod claude_code;
 pub mod cv;

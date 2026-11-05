@@ -930,3 +930,10 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 .playbook p { margin: 6px 0 0; }
 .playbook details { margin-top: 6px; }
 .playbook ul { margin: 6px 0 0 18px; padding: 0; }
+/* How you'd apply: email, a quick form, an account… */
+.pill.effort { font-weight: 500; }
+/* Your saved answers */
+.bank { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.bank-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+@media (max-width: 760px) { .bank-row { grid-template-columns: 1fr auto; } .bank-row .bank-a { grid-column: 1; } }
+.pill.effort { white-space: nowrap; }

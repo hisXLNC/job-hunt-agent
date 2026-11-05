@@ -304,6 +304,8 @@ impl Job {
             for k in ["description", "cover_letter", "cv_changes", "notes"] {
                 o.remove(k);
             }
+            // How you'd apply, and how long it takes (email, a quick form, an account…).
+            o.insert("effort".into(), crate::fill::effort(self));
         }
         v
     }
