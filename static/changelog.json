@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.20.0",
+    "date": "2026-11-05",
+    "title": "Settings live where they're used",
+    "changes": [
+      "Search's settings are on the Search page now: What to search (places, roles to skip, schedule, tailoring) and Set up sources (keys, company boards, recruiters, the browser button).",
+      "The email, interview and reminder settings are on the Calendar page, under Settings.",
+      "Settings keeps Accounts, Sync & backup and App. Old links to the moved settings open them in their new place."
+    ]
+  },
+  {
     "version": "2.19.0",
     "date": "2026-11-04",
     "title": "Search has its own page",
@@ -7,7 +17,7 @@
       "Search is in the sidebar now. Its Sources tab lists every job source and recruiter with how it's doing, what it found last, and a Search button for searching it on its own.",
       "Each source that has found postings gets its own tab: every posting, its fit score, and whether it was new, already in Job Hunt, or skipped and why. Filter by outcome, and on Recruiters and job sites, by site.",
       "The daily search fills these tabs too, so you can see what each source brought in today, not only what you searched by hand.",
-      "Search everything now, the search's progress, when the next one runs and how many postings wait to be scored are at the top. Keys and choices stay in Settings → Job sources."
+      "Search everything now, the search's progress, when the next one runs and how many postings wait to be scored are at the top. Keys and choices stay in Search → Set up sources."
     ]
   },
   {
@@ -15,7 +25,7 @@
     "date": "2026-11-04",
     "title": "Search one source at a time",
     "changes": [
-      "Every job source on Settings → Job sources has a Search now button, and each recruiter or job site has its own Search: it searches just that source, for all your job titles, and shows every posting it found and what became of it: its fit score, already in Job Hunt, or skipped and why.",
+      "Every job source on Search → Set up sources has a Search now button, and each recruiter or job site has its own Search: it searches just that source, for all your job titles, and shows every posting it found and what became of it: its fit score, already in Job Hunt, or skipped and why.",
       "New postings it finds are scored and go on your Overview like any search's; your daily search, its time and its report stay as they were.",
       "Last results opens a source's latest search again."
     ]
@@ -276,7 +286,7 @@
     "date": "2026-10-27",
     "title": "The Job Hunt logo on your Send to Job Hunt button",
     "changes": [
-      "Send to Job Hunt now gets the Job Hunt logo as its icon in your bookmarks bar: in Settings → Job sources, press Set up the button and follow the three steps on the page that opens. (Added it before? Do this once to replace it.)"
+      "Send to Job Hunt now gets the Job Hunt logo as its icon in your bookmarks bar: in Search → Set up sources, press Set up the button and follow the three steps on the page that opens. (Added it before? Do this once to replace it.)"
     ]
   },
   {

@@ -452,12 +452,15 @@ async function showRoute() {
     else if (name === 'review') await showReview();
     else if (name === 'welcome') await showWelcome();
     else if (name === 'apply') await showApply(arg);
+    else if (name === 'calendar' && arg === 'settings') await showSettings('calendar', '', calHead('settings'));
     else if (name === 'calendar') await showCalendar();
     else if (name === 'results') await showResults();
     else if (name === 'search') await showSearch(arg);
     else if (name === 'inbox' && arg === 'recruiters' || name === 'recruiters') await showRecruiters();
     else if (name === 'inbox') await showInbox();
     else if (name === 'add') showAdd();
+    else if (name === 'settings' && ['search', 'preferences', 'sources'].includes(arg)) { location.replace(arg === 'sources' ? '#search/setup' : '#search/what'); return; }
+    else if (name === 'settings' && ['calendar', 'schedule'].includes(arg)) { location.replace('#calendar/settings'); return; }
     else if (name === 'cvs' || (name === 'settings' && arg === 'cvs')) await showSettings('cvs', name === 'cvs' ? arg : '');
     else if (name === 'settings') await showSettings(arg || 'connections');
     else location.hash = '#overview';
@@ -484,7 +487,7 @@ async function showOverview(tab) {
     [setup.claude, setup.engine === 'api' ? 'Add your Claude API key' : 'Connect Claude Code', setup.engine === 'api' ? 'Needed to score jobs and tailor your CV.' : 'Uses Claude Code on this PC and your Claude subscription. No API key needed.', '#settings/connections'],
     [setup.cvs > 0 && !setup.cvs_missing.length, setup.cvs ? 'Your CVs' : 'Add your CV', setup.cvs ? (setup.cvs_missing.length ? `Missing a file: ${setup.cvs_missing.join(', ')}` : `${setup.cvs} CV${setup.cvs === 1 ? '' : 's'} ready.`) : 'Word, PDF or text. Add as many as you like.', '#cvs'],
     [setup.google, 'Connect Gmail and Calendar (optional)', 'For job email, replies and interview booking.', '#settings/connections', 'google'],
-    [setup.adzuna, 'Add a job-search service (optional)', 'Google for Jobs listings from LinkedIn, Indeed, Glassdoor and more.', '#settings/sources', 'search_service'],
+    [setup.adzuna, 'Add a job-search service (optional)', 'Google for Jobs listings from LinkedIn, Indeed, Glassdoor and more.', '#search/setup', 'search_service'],
   ].filter(st => !(st[4] && (setup.skipped || []).includes(st[4])));
   // Shown until the steps you need are done; optional ones can be put off with Not now.
   const showSteps = steps.some(s => !s[0]);
@@ -1159,8 +1162,8 @@ function reportHtml(r) {
       ${overview?.auto_boards ? 'Job Hunt is looking for more employers in your locations by itself and will search them when it finds some. To speed things up:' : 'More sources bring more postings:'}</p>
     <div class="row">
       <button class="btn primary" data-act="suggestBoards" data-into="moreIdeas">Find employers near me now</button>
-      ${s.adzuna ? '' : '<a class="btn" href="#settings/sources">Add Google for Jobs listings</a>'}
-      <a class="btn desktop-only" href="#settings/sources">Send to Job Hunt from LinkedIn</a>
+      ${s.adzuna ? '' : '<a class="btn" href="#search/setup">Add Google for Jobs listings</a>'}
+      <a class="btn desktop-only" href="#search/setup">Send to Job Hunt from LinkedIn</a>
       <button class="btn ghost" data-act="run" data-task="search-force" title="Looks again at postings set aside earlier, with your current settings">Search again, including set-aside postings</button>
     </div>
     <p class="muted small">Also set up daily job alerts on LinkedIn, Indeed or your country's job sites for your titles, sent to your Gmail: Job Hunt reads them on every email check. If many postings are set aside for their location or title, widen your locations or add titles in <a href="#cvs">Your CVs</a>.</p>
@@ -1300,7 +1303,7 @@ async function showWelcome() {
           <label class="check"><input type="checkbox" data-act="welcomeSource" data-id="linkedin" ${p.sources.linkedin ? 'checked' : ''}> <span><b>LinkedIn</b> <span class="muted small">free, in any country; never touches your LinkedIn account</span></span></label>
           ${p.sources.adzuna_country === 'ca' ? `<label class="check"><input type="checkbox" data-act="welcomeSource" data-id="jobbank" ${p.sources.jobbank ? 'checked' : ''}> <span><b>Job Bank</b> <span class="muted small">Canada's national job board, free</span></span></label>` : ''}
         </div>
-        <p class="muted small" style="margin-top:8px">More (Google for Jobs, recruiters, job-alert emails) in <a href="#settings/sources">Job sources</a>. Connecting Gmail lets Job Hunt read replies and book interviews.</p>
+        <p class="muted small" style="margin-top:8px">More (Google for Jobs, recruiters, job-alert emails) in <a href="#search/setup">Search → Set up sources</a>. Connecting Gmail lets Job Hunt read replies and book interviews.</p>
         <div class="row"><a class="btn" href="#settings/connections">Connect Gmail (optional)</a></div>`)}
       ${step(5, !!overview.last_search, 'Run your first search', `<p class="muted">It takes a few minutes. Roles that fit appear on the Overview for you to pick; tick the ones you want and Job Hunt tailors your CV and a cover letter for each.</p>
         <div class="row"><button class="btn primary" data-act="welcomeSearch" ${s.claude && st.cvs.length ? '' : 'disabled'}>Search for jobs now</button>${s.claude && st.cvs.length ? '' : '<span class="muted small">After steps 1 and 2.</span>'}</div>`)}
@@ -1436,6 +1439,9 @@ const CAL_KIND = { interview: ['Interview', 'interviewing'], prep: ['Prep', 'que
 const dayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const timeOf = iso => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
+/** The Calendar page's tabs: the calendar, and its settings (email, interviews, reminders; moved from Settings). */
+const CAL_TABS = on => `<nav class="tabs">${[['calendar', 'Calendar'], ['settings', 'Settings']].map(([id, n]) => `<a href="#calendar${id === 'calendar' ? '' : '/settings'}" class="${id === on ? 'on' : ''}">${n}</a>`).join('')}</nav>`;
+const calHead = on => `<div class="head"><div class="grow"><h1>Calendar</h1><p class="muted">How Job Hunt reads your job email, books interviews, and reminds you.</p></div></div>${CAL_TABS(on)}`;
 async function showCalendar() {
   const [{ items, google, synced, show_google, syncing }, { jobs }] = await Promise.all([api('/api/calendar?back=60&ahead=120'), api('/api/jobs')]);
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1483,6 +1489,7 @@ async function showCalendar() {
         <a class="btn" href="/api/calendar.ics" download="Job Hunt.ics" title="Import into Outlook or Apple Calendar">Download for Outlook / Apple</a>
         ${google ? `<button class="btn" data-act="calSync" ${syncing ? 'disabled' : ''} title="Copy Job Hunt's entries there, and bring back interviews you moved or deleted">${syncing ? 'Syncing…' : 'Sync with Google'}</button>
           <button class="btn ghost" data-act="link" data-url="https://calendar.google.com">Google Calendar</button>` : ''}</div></div>
+      ${CAL_TABS('calendar')}
     ${google ? `<p class="muted small" style="margin:-6px 0 12px">${synced ? `Synced with Google Calendar ${esc(ago(synced))}; it syncs every 30 minutes.` : 'Not synced with Google Calendar yet.'}
       <label class="check inline"><input type="checkbox" data-act="calShowGoogle" ${show_google ? 'checked' : ''}> Show my other Google Calendar events</label></p>` : ''}
     <section class="card" id="calAddCard" hidden><header><h2>Add an interview</h2></header>
@@ -1628,7 +1635,7 @@ function payHtml(p) {
     <div class="kpis" style="margin:0 0 14px"><div class="kpi"><span class="kpi-l">Lowest</span><span class="kpi-v">${k(p.low)}</span></div>
       <div class="kpi"><span class="kpi-l">Typical (middle)</span><span class="kpi-v">${k(p.median)}</span></div>
       <div class="kpi"><span class="kpi-l">Highest</span><span class="kpi-v">${k(p.high)}</span></div>
-      <div class="kpi"><span class="kpi-l">Your minimum</span><span class="kpi-v">${p.minimum ? k(p.minimum) : '–'}</span><span class="kpi-s">${p.minimum ? `${p.below_minimum} role${p.below_minimum === 1 ? '' : 's'} top out below it` : '<a href="#settings/search">Set one</a>'}</span></div></div>
+      <div class="kpi"><span class="kpi-l">Your minimum</span><span class="kpi-v">${p.minimum ? k(p.minimum) : '–'}</span><span class="kpi-s">${p.minimum ? `${p.below_minimum} role${p.below_minimum === 1 ? '' : 's'} top out below it` : '<a href="#search/what">Set one</a>'}</span></div></div>
     <div class="payline"><span class="payband" style="left:${at(p.low)}%;right:${100 - at(p.high)}%"></span>
       <span class="paymark" style="left:${at(p.median)}%" title="Typical ${k(p.median)}"></span>
       ${p.minimum ? `<span class="paymark min" style="left:${at(p.minimum)}%" title="Your minimum ${k(p.minimum)}"></span>` : ''}</div>
@@ -1770,7 +1777,7 @@ function showAdd() {
         <label class="check"><input type="radio" name="claude" value="0" ${canClaude ? '' : 'checked'}> <span>Just save it, without Claude<br><span class="muted small">Saved under Applications. Use Tailor anyway on it whenever you like.</span></span></label>
       </div>
     </div><div class="row"><button class="btn primary" type="submit">Add the job</button></div></form>
-    <p class="muted small desktop-only">Used the <a href="#settings/sources">Send to Job Hunt</a> button? Press Ctrl+V on this page to add that posting.</p>`);
+    <p class="muted small desktop-only">Used the <a href="#search/setup">Send to Job Hunt</a> button? Press Ctrl+V on this page to add that posting.</p>`);
 }
 
 // A posting from the Send to Job Hunt button, pasted on the Add a job page.
@@ -1837,12 +1844,13 @@ const lines = v => (v || []).join('\n');
 const fromLines = s => s.split(/\n|,/).map(x => x.trim()).filter(Boolean);
 let settingsCache = null;
 
-async function showSettings(tab, sub) {
+/** host: the Search page's top, for its What to search and Set up sources tabs (Settings' Search and Job sources, moved there). */
+async function showSettings(tab, sub, host) {
   // Older links: Extras went to App; Schedule became Email & calendar.
   tab = { extras: 'app', schedule: 'calendar', preferences: 'search' }[tab] || tab;
   const st = settingsCache = await api('/api/settings');
   const p = st.profile;
-  const tabs = [['connections', 'Accounts'], ['search', 'Search'], ['sources', 'Job sources'], ['calendar', 'Email & calendar'], ['sync', 'Sync & backup'], ['app', 'App']];
+  const tabs = [['connections', 'Accounts'], ['sync', 'Sync & backup'], ['app', 'App']];
   let body = '';
   if (tab === 'connections') {
     body = `<section class="card attention" id="connStatus" hidden></section>
@@ -1894,7 +1902,7 @@ async function showSettings(tab, sub) {
       </details>
       <div id="googlePaste" ${st.google.pasting ? '' : 'hidden'}>${googlePasteBox(st.google.paste_url)}</div></section>
     <section class="card" id="usageCard"><p class="muted small"><span class="spin" data-kind="load" data-secs="3"></span> Loading…</p></section>
-    <p class="muted small">Looking for LinkedIn, Google for Jobs or recruiters? They're in <a href="#settings/sources">Job sources</a>.</p>`;
+    <p class="muted small">Looking for LinkedIn, Google for Jobs or recruiters? They're in <a href="#search/setup">Search → Set up sources</a>.</p>`;
   } else if (tab === 'sources') {
     const desk = st.kind !== 'server' && !st.remote.here;
     const tile = (id, name, tag, about, more = '', open = false) => `<article class="tile" data-tile="${id}" id="tile-${id}">
@@ -1903,7 +1911,7 @@ async function showSettings(tab, sub) {
       <div class="row tile-acts"></div>${more ? `<details ${open ? 'open' : ''}>${more}</details>` : ''}</article>`;
     const keyNote = (site, url) => `<p class="small">Get a key at <a href="#" data-act="link" data-url="${url}">${site}</a>, paste it here and press Save.</p>`;
     body = `<section class="card"><header><h2>Where Job Hunt looks</h2><button class="btn" data-act="testSources">Check them all</button></header>
-      <p class="muted">Turn on the places you'd like searched. The free ones need nothing else; a few need a free key from their own website, pasted in once. Every search looks for the job titles from your CVs, in your locations. To search one on its own and see what each found, open <a href="#search">Search</a>.</p>
+      <p class="muted">Turn on the places you'd like searched. The free ones need nothing else; a few need a free key from their own website, pasted in once. Every search looks for the job titles from your CVs, in your locations. To search one on its own and see what each found, use the <a href="#search">Sources</a> tab.</p>
       <div id="sourceTest"></div></section>
     <div class="tiles">
       ${tile('boards', 'Company job boards', 'Free', 'Job Hunt finds employers near you and searches their own careers pages. Nothing to set up.',
@@ -2202,7 +2210,9 @@ async function showSettings(tab, sub) {
     if (st.career_thinking) watchCareer(location.hash);
     return;
   }
-  page(`<div class="head"><div class="grow"><h1>Settings</h1></div><span class="save-state" id="saveState" aria-live="polite">${['search', 'calendar', 'cvs', 'sources'].includes(tab) ? 'Changes save by themselves' : ''}</span></div>
+  if (host) page(`${host}<p class="save-state right-note" id="saveState" aria-live="polite">Changes save by themselves</p>
+    ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${body}`);
+  else page(`<div class="head"><div class="grow"><h1>Settings</h1></div><span class="save-state" id="saveState" aria-live="polite">${['search', 'calendar', 'cvs', 'sources'].includes(tab) ? 'Changes save by themselves' : ''}</span></div>
     ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
     <nav class="tabs">${tabs.map(([id, n]) => `<a href="#settings/${id}" class="${id === tab ? 'on' : ''}">${n}</a>`).join('')}</nav>${body}`);
   if (tab === 'connections' && st.claude.engine !== 'api') checkClaude(false);
@@ -2637,10 +2647,11 @@ async function showSearch(arg) {
   const isOff = id => ['off', 'setup', 'na'].includes(rows[id].status);
   const order = [...SEARCHABLE, 'alerts'].filter(id => rows[id]).sort((a, b) => isOff(a) - isOff(b));
   const tabs = [['sources', 'Sources'], ...SEARCHABLE.filter(id => results[id] && (results[id].postings || results[id].running || results[id].error))
-    .map(id => [id, `${esc(results[id].name || rows[id]?.name || id)}${results[id].counts?.fits ? ` <span class="tab-n">${results[id].counts.fits}</span>` : ''}`])];
+    .map(id => [id, `${esc(results[id].name || rows[id]?.name || id)}${results[id].counts?.fits ? ` <span class="tab-n">${results[id].counts.fits}</span>` : ''}`]),
+    ['what', 'What to search'], ['setup', 'Set up sources']];
   const view = tabs.some(([id]) => id === arg) ? arg : 'sources';
   const next = d.next_search ? new Date(d.next_search) : null;
-  const status = `<p class="muted small search-when">${d.last_search ? `Last full search ${esc(ago(d.last_search))}` : 'No full search yet'}${d.paused ? ` · ${esc(pausedWords(d.paused))}` : next ? ` · next ${esc(next.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}${d.held ? ` · ${d.held} posting${d.held === 1 ? '' : 's'} waiting to be scored` : ''} · <a href="#settings/search">What and where to search</a></p>`;
+  const status = `<p class="muted small search-when">${d.last_search ? `Last full search ${esc(ago(d.last_search))}` : 'No full search yet'}${d.paused ? ` · ${esc(pausedWords(d.paused))}` : next ? ` · next ${esc(next.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}${d.held ? ` · ${d.held} posting${d.held === 1 ? '' : 's'} waiting to be scored` : ''} · <a href="#search/what">What and where to search</a></p>`;
   const actions = d.running ? `<button class="btn ghost danger" data-act="searchStop">Stop</button>`
     : `<button class="btn primary" data-act="run" data-task="search">${svg('search')}Search everything now</button>`;
   const ownCard = own ? `<section class="card progress-card"><header><h2>Searching ${esc(own.searching || own.name)}</h2><b class="pct">${d.progress?.percent ?? 0}%</b></header>
@@ -2649,6 +2660,8 @@ async function showSearch(arg) {
       <div class="facts small"><span><b>${d.progress?.found ?? 0}</b> found</span><span><b>${d.progress?.new ?? 0}</b> new</span><span><b>${d.progress?.scored ?? 0}</b> scored</span></div></section>` : '';
   const head = `${tabbedHead('Search', 'Where Job Hunt looks for jobs, and what each place found. Search one on its own any time; the daily search covers them all.', actions, 'search', tabs, view)}
     ${status}${full ? progressHtml(d.progress) : ownCard}`;
+  // Settings' Search and Job sources, kept here: drawn by showSettings under this page's top.
+  if (view === 'what' || view === 'setup') return showSettings(view === 'what' ? 'search' : 'sources', '', head);
   let body;
   if (view === 'sources') {
     const busy = d.running;
@@ -2675,7 +2688,7 @@ async function showSearch(arg) {
         <div class="src-acts row">${btns(r, res)}</div>
         ${id === 'agencies' && sites.length ? `<details class="src-sites"><summary class="small">${sites.length} recruiter${sites.length === 1 ? '' : 's'} and job site${sites.length === 1 ? '' : 's'}</summary>${siteRows}</details>` : ''}
       </div>`; }).join('')}</section>
-      <p class="muted small">Keys, company boards and which recruiters to search are set, and tested, in <a href="#settings/sources">Settings → Job sources</a>.</p>`;
+      <p class="muted small">Keys, company boards and which recruiters to search are set, and tested, in <a href="#search/setup">Set up sources</a>; your job titles' places and schedule in <a href="#search/what">What to search</a>.</p>`;
   } else {
     const r = results[view];
     const f = srcFilter[view] || (srcFilter[view] = { outcome: 'all', site: '' });
@@ -2755,7 +2768,7 @@ function connBtn(r, a, testing) {
   if (a.startsWith('goto:')) {
     const to = a.slice(5);
     if (to.endsWith('Card')) return `<button class="btn ghost sm" data-act="connGoto" data-to="${esc(CONN_HOME[to] || to)}">Open</button>`;
-    return `<a class="btn ghost sm" href="#settings/${esc(to)}">Open</a>`;
+    return `<a class="btn ghost sm" href="${{ calendar: '#calendar/settings', sources: '#search/setup', search: '#search/what' }[to] || `#settings/${esc(to)}`}">Open</a>`;
   }
   if (a.startsWith('link:')) return `<button class="btn sm" data-act="link" data-url="${esc(a.slice(5))}">Open Claude connectors</button>`;
   const [label, act, extra] = (CONN_ACT[a] || (() => [a, a]))(r);
@@ -2796,9 +2809,9 @@ async function renderConnStatus() {
       <span class="row todo-act">${(r.actions || []).map(a => connBtn(r, a, d.testing)).join('')}</span></div>`).join('')}`;
   }
   // Done testing: the sources page shows each site's result.
-  if (connWasTesting && !d.testing && location.hash.startsWith('#settings/sources')) { connWasTesting = false; settingsCache = null; route(); return; }
+  if (connWasTesting && !d.testing && location.hash.startsWith('#search/setup')) { connWasTesting = false; settingsCache = null; route(); return; }
   connWasTesting = d.testing;
-  if (d.testing) connPoll = setTimeout(() => { if (location.hash.startsWith('#settings')) renderConnStatus(); }, 1500);
+  if (d.testing) connPoll = setTimeout(() => { if (location.hash.startsWith('#settings') || location.hash.startsWith('#search/setup')) renderConnStatus(); }, 1500);
 }
 
 // ---- Settings save themselves ----
@@ -3092,7 +3105,7 @@ async function act(el) {
   if (a === 'connGoto') {
     const id = CONN_HOME[el.dataset.to] || el.dataset.to, target = document.getElementById(id);
     if (target) { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); target.querySelector('details')?.setAttribute('open', ''); return; }
-    connScrollTo = id; location.hash = id.startsWith('tile-') ? '#settings/sources' : '#settings/connections'; return;
+    connScrollTo = id; location.hash = id.startsWith('tile-') ? '#search/setup' : '#settings/connections'; return;
   }
   if (a === 'reviewSkip') { reviewSkipped.add(el.dataset.job); route(); return; }
   if (a === 'reviewReset') { reviewSkipped.clear(); route(); return; }
@@ -3423,7 +3436,7 @@ async function act(el) {
           <table><tbody>${boards.map((b, i) => `<tr><td><label class="check"><input type="checkbox" data-idea="${i}" ${b.matching ? 'checked' : ''}> ${esc(b.company)}</label></td>
             <td class="small muted">${esc(b.board)}</td><td class="small">${b.matching} of ${b.jobs} jobs match</td></tr>`).join('')}</tbody></table>
           <div class="row"><button class="btn primary" type="button" data-act="addIdeas">Add ticked and search</button></div></div>`
-          : '<p class="muted">None of the suggested employers had a live job board this time. Try again later, or add companies yourself in Settings → Job sources → Company job boards.</p>';
+          : '<p class="muted">None of the suggested employers had a live job board this time. Try again later, or add companies yourself in Search → Set up sources → Company job boards.</p>';
       } catch (e) { box.innerHTML = ''; throw e; }
     });
   }
@@ -3444,7 +3457,7 @@ async function act(el) {
     return busy(async () => {
       await api('/api/settings/sites-off', { method: 'POST', body: { ids } });
       settingsCache = null; await refreshOverview(); route();
-    }, `Turned off ${ids.length} site${ids.length === 1 ? '' : 's'} that couldn't be read. Turn any back on in Job sources.`);
+    }, `Turned off ${ids.length} site${ids.length === 1 ? '' : 's'} that couldn't be read. Turn any back on in Search → Set up sources.`);
   }
   if (a === 'removeBroken' || a === 'removeBoard') {
     const boards = a === 'removeBoard' ? [{ source: el.dataset.source, name: el.dataset.name }] : JSON.parse(el.dataset.boards || '[]');
@@ -3659,7 +3672,7 @@ async function showSourceTest(start) {
       <td>${x.kind === 'board' && !x.ok && x.source ? `<button class="btn ghost" data-act="removeBoard" data-source="${esc(x.source)}" data-name="${esc(x.board)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>
     ${broken.length || rows.some(x => x.kind === 'board' && x.ok && !x.matching) ? `<div class="row"><button class="btn primary" data-act="suggestBoards" data-into="testIdeas">Suggest companies to add</button><span class="muted small">Claude suggests employers near you whose job boards have matching roles.</span></div><div id="testIdeas" class="ideas"></div>` : ''}
     <p class="muted small">${t.running ? `${testBar(t.last)} Indeed goes through Claude Code and can take a minute.` : t.last?.finished ? `Tested ${esc(ago(t.last.finished))}.` : ''}</p>`;
-  if (t.running) sourcePoll = setTimeout(() => { if (location.hash.startsWith('#settings/sources')) showSourceTest(); }, 2000);
+  if (t.running) sourcePoll = setTimeout(() => { if (location.hash.startsWith('#search/setup')) showSourceTest(); }, 2000);
 }
 
 /** Your career paths, for choosing a direction: Claude's advice, a comparison of where each path leads
@@ -3775,7 +3788,7 @@ function pollSettings() {
   clearTimeout(settingsPoll);
   settingsPoll = setTimeout(async () => {
     // Settings, or the Welcome page (continuing from another computer starts there).
-    if (!location.hash.startsWith('#settings') && location.hash !== '#welcome') return;
+    if (!location.hash.startsWith('#settings') && !/^#(search\/(what|setup)|calendar\/settings)/.test(location.hash) && location.hash !== '#welcome') return;
     const st = await api('/api/settings').catch(() => null);
     if (!st) return;
     await refreshOverview();

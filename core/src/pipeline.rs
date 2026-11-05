@@ -1381,7 +1381,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             return Ok(vec![]);
         }
         if self.engine_name() != "code" {
-            return err("searching Indeed needs Claude Code on this PC. Choose it in Settings → Accounts, or turn Indeed off in Job sources.");
+            return err("searching Indeed needs Claude Code on this PC. Choose it in Settings → Accounts, or turn Indeed off in Search → Set up sources.");
         }
         // Your titles across all your places (each title in every place before the next).
         let mut searches = crate::sources::searches(&profile, 8);
@@ -1434,7 +1434,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             None => p.sources.is_off(only),
         };
         if off {
-            return err(&format!("{name} is turned off. Turn it on first (Search \u{2192} Sources, or Settings \u{2192} Job sources)."));
+            return err(&format!("{name} is turned off. Turn it on first (Search \u{2192} Sources, or Search \u{2192} Set up sources)."));
         }
         if self.is_running("search") {
             return err("A search is running. Wait for it to finish, or stop it, then search this one.");
@@ -2828,7 +2828,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         // Recruiters' and job sites' own listings
         let sites = self.site_status();
         if sites.is_empty() {
-            out.push(row("agencies", "Recruiters and job sites", "Job listings", "setup", "None turned on. Choose them in Settings \u{2192} Job sources.".into(), String::new(), json!(["goto:sitesCard"])));
+            out.push(row("agencies", "Recruiters and job sites", "Job listings", "setup", "None turned on. Choose them in Search \u{2192} Set up sources.".into(), String::new(), json!(["goto:sitesCard"])));
         } else {
             let of = |st: &str| sites.iter().filter(|x| x["state"] == st).map(|x| x["name"].as_str().unwrap_or("").to_string()).collect::<Vec<_>>();
             let (ok, quiet, bad) = (of("ok"), of("quiet"), of("problem"));
@@ -2842,7 +2842,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             if !bad.is_empty() { parts.push(format!("couldn't read {}", bad.join(", "))) }
             let at = sites.iter().filter_map(|x| x["at"].as_str()).max().unwrap_or("").to_string();
             let actions = if bad_ids.is_empty() { json!(["test", "goto:sitesCard"]) } else { json!(["test", "sitesOff", "goto:sitesCard"]) };
-            out.push(row("agencies", "Recruiters and job sites", "Job listings", status, format!("{}. Details in Settings \u{2192} Job sources.", parts.join("; ")), at, actions)
+            out.push(row("agencies", "Recruiters and job sites", "Job listings", status, format!("{}. Details in Search \u{2192} Set up sources.", parts.join("; ")), at, actions)
                 .as_object().cloned().map(|mut o| { o.insert("data".into(), json!(bad_ids)); Value::Object(o) }).unwrap());
         }
         // Company job boards
@@ -2954,29 +2954,29 @@ replies and interviews, and a little lower for kinds that got none from several 
         let place = p.search_places().into_iter().next().unwrap_or_default();
         let (id, key) = (self.secret("adzuna.id"), self.secret("adzuna.key"));
         if want("adzuna") { results.push(match (&first_title, id.is_empty() || key.is_empty()) {
-            (_, true) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No Adzuna key.", "hint": "Add an Adzuna key in Settings \u{2192} Job sources to search thousands of listings for your titles." }),
+            (_, true) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No Adzuna key.", "hint": "Add an Adzuna key in Search \u{2192} Set up sources to search thousands of listings for your titles." }),
             (None, _) => json!({ "name": "Adzuna", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." }),
             (Some(t), false) => timed(format!("Adzuna \u{201c}{t}\u{201d}{}", if place.is_empty() { String::new() } else { format!(" in {place}") }), "search",
-                &|| crate::sources::adzuna(&c, &id, &key, &p.sources.adzuna_country, t, &place, p.sources.adzuna_days), "Check the Adzuna app ID and key in Settings \u{2192} Job sources."),
+                &|| crate::sources::adzuna(&c, &id, &key, &p.sources.adzuna_country, t, &place, p.sources.adzuna_days), "Check the Adzuna app ID and key in Search \u{2192} Set up sources."),
         }); }
         save(&results, false);
         let keys = self.search_keys();
         let first = crate::sources::searches(&p, 1).into_iter().next();
         let country = p.sources.adzuna_country.clone();
         if want("jsearch") { results.push(match (&keys.jsearch, &first) {
-            (None, _) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No JSearch key.", "hint": "Postings from LinkedIn, Indeed, Glassdoor and company sites, through Google for Jobs. Add a key in Settings \u{2192} Job sources." }),
+            (None, _) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No JSearch key.", "hint": "Postings from LinkedIn, Indeed, Glassdoor and company sites, through Google for Jobs. Add a key in Search \u{2192} Set up sources." }),
             (_, None) => json!({ "name": "Google for Jobs", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." }),
             (Some((provider, key)), Some((t, place))) => {
                 let q = if place.is_empty() { t.clone() } else { format!("{t} in {place}") };
-                timed(format!("Google for Jobs \u{201c}{q}\u{201d}"), "search", &|| crate::sources::jsearch(&c, provider, key, &q, &country), "Check the key and where it's from (OpenWeb Ninja or RapidAPI) in Settings \u{2192} Job sources.")
+                timed(format!("Google for Jobs \u{201c}{q}\u{201d}"), "search", &|| crate::sources::jsearch(&c, provider, key, &q, &country), "Check the key and where it's from (OpenWeb Ninja or RapidAPI) in Search \u{2192} Set up sources.")
             }
         }); }
         save(&results, false);
         if want("jooble") { results.push(match (&keys.jooble, &first) {
-            (None, _) => json!({ "name": "Jooble", "kind": "search", "ok": false, "skipped": true, "error": "No Jooble key.", "hint": "Listings gathered from many job sites. Add a key in Settings \u{2192} Job sources." }),
+            (None, _) => json!({ "name": "Jooble", "kind": "search", "ok": false, "skipped": true, "error": "No Jooble key.", "hint": "Listings gathered from many job sites. Add a key in Search \u{2192} Set up sources." }),
             (_, None) => json!({ "name": "Jooble", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "" }),
             (Some(key), Some((t, place))) => timed(format!("Jooble \u{201c}{t}\u{201d}{}", if place.is_empty() { String::new() } else { format!(" in {place}") }), "search",
-                &|| crate::sources::jooble(&c, key, t, place), "Check the Jooble key in Settings \u{2192} Job sources."),
+                &|| crate::sources::jooble(&c, key, t, place), "Check the Jooble key in Search \u{2192} Set up sources."),
         }); }
         save(&results, false);
         if want("indeed") { results.push(if !p.sources.indeed {
@@ -2993,21 +2993,21 @@ replies and interviews, and a little lower for kinds that got none from several 
         }); }
         save(&results, false);
         if want("linkedin") { results.push(if !p.sources.linkedin {
-            json!({ "name": "LinkedIn", "kind": "search", "ok": false, "skipped": true, "error": "Turned off.", "hint": "Turn LinkedIn on in Settings \u{2192} Job sources to include it." })
+            json!({ "name": "LinkedIn", "kind": "search", "ok": false, "skipped": true, "error": "Turned off.", "hint": "Turn LinkedIn on in Search \u{2192} Set up sources to include it." })
         } else if let Some((t, w, r)) = crate::sources::linkedin_searches(&p, 1).into_iter().next() {
             match &keys.apify {
                 Some((token, actor)) => timed(format!("LinkedIn (through Apify) \u{201c}{t}\u{201d} in {w}"), "search",
                     &|| crate::sources::apify_linkedin(&c, token, actor, &[(t.clone(), w.clone(), r)], 10),
-                    "Check the Apify token and the scraper's name in Settings \u{2192} Job sources, and that your Apify account has credit."),
+                    "Check the Apify token and the scraper's name in Search \u{2192} Set up sources, and that your Apify account has credit."),
                 None => timed(format!("LinkedIn \u{201c}{t}\u{201d} in {w}"), "search", &|| crate::sources::linkedin(&c, &t, &w, r),
-                    "LinkedIn may be turning away searches from this connection for now; it usually passes in a day. For steadier results, add an Apify token in Settings \u{2192} Job sources."),
+                    "LinkedIn may be turning away searches from this connection for now; it usually passes in a day. For steadier results, add an Apify token in Search \u{2192} Set up sources."),
             }
         } else {
             json!({ "name": "LinkedIn", "kind": "search", "ok": false, "skipped": true, "error": "No job titles to search for.", "hint": "Add job titles to your CVs in CV & Career." })
         }); }
         save(&results, false);
         if want("freehire") { results.push(if p.sources.is_off("freehire") {
-            json!({ "name": "FreeHire", "kind": "search", "ok": false, "skipped": true, "error": "Turned off.", "hint": "Turn FreeHire on in Settings \u{2192} Job sources to include it." })
+            json!({ "name": "FreeHire", "kind": "search", "ok": false, "skipped": true, "error": "Turned off.", "hint": "Turn FreeHire on in Search \u{2192} Set up sources to include it." })
         } else if let Some((t, _)) = crate::sources::searches(&p, 1).into_iter().next() {
             timed(format!("FreeHire \u{201c}{t}\u{201d}"), "search", &|| crate::sources::freehire(&c, &t, &p.sources.adzuna_country),
                 "FreeHire didn't answer; it's a free service, so try again later.")
@@ -3016,7 +3016,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         }); }
         save(&results, false);
         if want("jobbank") || (only == Some("jobbank")) { results.push(if !p.sources.jobbank {
-            json!({ "name": "Job Bank", "kind": "search", "ok": false, "skipped": true, "error": "Turned off.", "hint": "Turn Job Bank on in Settings \u{2192} Job sources to include it." })
+            json!({ "name": "Job Bank", "kind": "search", "ok": false, "skipped": true, "error": "Turned off.", "hint": "Turn Job Bank on in Search \u{2192} Set up sources to include it." })
         } else if let Some((t, w)) = crate::sources::searches(&p, 1).into_iter().next() {
             timed(format!("Job Bank \u{201c}{t}\u{201d}{}", if w.is_empty() { String::new() } else { format!(" in {w}") }), "search", &|| crate::sources::jobbank(&c, &t, &w),
                 "Job Bank may be limiting searches from this connection for now; it usually passes in a day.")
@@ -3030,7 +3030,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 let (title, w) = crate::sites::searches_for(&t, &tp).into_iter().next().unwrap_or_default();
                 let label = if title.is_empty() { format!("{} (all jobs)", t.name) } else { format!("{} \u{201c}{title}\u{201d}", t.name) };
                 let mut row = timed(label, "site", &|| crate::sites::search(&c, &t, &title, &w),
-                    "Its search address may have changed, or it may block automated reading. Turn it off in Settings \u{2192} Job sources if it keeps failing.");
+                    "Its search address may have changed, or it may block automated reading. Turn it off in Search \u{2192} Set up sources if it keeps failing.");
                 row["site"] = json!(t.id);
                 if row["ok"] == true && row["found"] == 0 {
                     row["hint"] = json!("Read the page, but found no postings on it: the site may list them in a way Job Hunt can't read.");
@@ -3438,7 +3438,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 .filter(|c| c["group"] == "Job listings" && c["status"] == "problem" && c["id"] != "boards")
                 .filter_map(|c| c["name"].as_str().map(String::from)).collect();
             if !broken.is_empty() {
-                add(&mut out, "warn", format!("{} isn't working. See why and fix it in Settings \u{2192} Job sources.", broken.join(", ")), "#settings/sources");
+                add(&mut out, "warn", format!("{} isn't working. See why and fix it in Search \u{2192} Set up sources.", broken.join(", ")), "#settings/sources");
             }
             if r["errors"].as_array().is_some_and(|e| e.iter().any(|x| x.as_str().is_some_and(|t| t.contains("usage limit")))) {
                 add(&mut out, "warn", "The last search hit your Claude usage limit, so some postings wait for the next search.".into(), "#overview");
@@ -6123,7 +6123,7 @@ mod tests {
         s.agent.db().set("last.search", &(Utc::now() + Duration::minutes(1)).to_rfc3339()).unwrap();
         assert_eq!(indeed(&s)["status"], "problem");
         let h = s.agent.health();
-        assert!(h.iter().any(|h| h["text"] == "Indeed (through your Claude account) isn't working. See why and fix it in Settings \u{2192} Job sources."), "{h:?}");
+        assert!(h.iter().any(|h| h["text"] == "Indeed (through your Claude account) isn't working. See why and fix it in Search \u{2192} Set up sources."), "{h:?}");
         // Turned off.
         let mut p = s.agent.profile();
         p.sources.indeed = false;

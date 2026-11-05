@@ -1211,9 +1211,9 @@ pub fn apify_linkedin(c: &reqwest::blocking::Client, token: &str, actor: &str, s
     let _ = c;
     match r.status().as_u16() {
         200 | 201 => {}
-        401 | 403 => return Err("the Apify token was refused. Check it in Settings → Job sources".into()),
+        401 | 403 => return Err("the Apify token was refused. Check it in Search → Set up sources".into()),
         402 => return Err("your Apify credit is used up for this month".into()),
-        404 => return Err(format!("there's no Apify scraper called {actor}. Check its name in Settings → Job sources")),
+        404 => return Err(format!("there's no Apify scraper called {actor}. Check its name in Search → Set up sources")),
         408 => return Err("the Apify scraper took too long; the next search tries again".into()),
         s => return Err(format!("Apify answered HTTP {s}")),
     }
@@ -1336,7 +1336,7 @@ pub fn jsearch(c: &reqwest::blocking::Client, provider: &str, key: &str, query: 
     let r = req.query(&params).send().map_err(|e| format!("couldn't connect ({e})"))?;
     match r.status().as_u16() {
         200 => {}
-        401 | 403 => return Err("the key was refused. Check it, and which site it's from, in Settings → Job sources".into()),
+        401 | 403 => return Err("the key was refused. Check it, and which site it's from, in Search → Set up sources".into()),
         429 => return Err("this month's requests are used up (your plan's limit), or too many at once".into()),
         s => return Err(format!("HTTP {s}")),
     }
@@ -1380,7 +1380,7 @@ pub fn jooble(c: &reqwest::blocking::Client, key: &str, keywords: &str, location
         .send().map_err(|e| format!("couldn't connect ({e})"))?;
     match r.status().as_u16() {
         200 => {}
-        401 | 403 | 404 => return Err("the key was refused. Check it in Settings → Job sources".into()),
+        401 | 403 | 404 => return Err("the key was refused. Check it in Search → Set up sources".into()),
         s => return Err(format!("HTTP {s}")),
     }
     let v: Value = r.json().map_err(|e| format!("unexpected response ({e})"))?;

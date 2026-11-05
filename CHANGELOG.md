@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.20.0] - 2026-11-05
+
+Settings live where they're used.
+
+### Changes
+
+- Search's settings are on the Search page now: What to search (places, roles to skip, schedule, tailoring) and Set up sources (keys, company boards, recruiters, the browser button).
+- The email, interview and reminder settings are on the Calendar page, under Settings.
+- Settings keeps Accounts, Sync & backup and App. Old links to the moved settings open them in their new place.
+
 ## [2.19.0] - 2026-11-04
 
 Search has its own page.
@@ -13,7 +23,7 @@ Search has its own page.
 - Search is in the sidebar now. Its Sources tab lists every job source and recruiter with how it's doing, what it found last, and a Search button for searching it on its own.
 - Each source that has found postings gets its own tab: every posting, its fit score, and whether it was new, already in Job Hunt, or skipped and why. Filter by outcome, and on Recruiters and job sites, by site.
 - The daily search fills these tabs too, so you can see what each source brought in today, not only what you searched by hand.
-- Search everything now, the search's progress, when the next one runs and how many postings wait to be scored are at the top. Keys and choices stay in Settings → Job sources.
+- Search everything now, the search's progress, when the next one runs and how many postings wait to be scored are at the top. Keys and choices stay in Search → Set up sources.
 
 ## [2.18.0] - 2026-11-04
 
@@ -21,7 +31,7 @@ Search one source at a time.
 
 ### Changes
 
-- Every job source on Settings → Job sources has a Search now button, and each recruiter or job site has its own Search: it searches just that source, for all your job titles, and shows every posting it found and what became of it: its fit score, already in Job Hunt, or skipped and why.
+- Every job source on Search → Set up sources has a Search now button, and each recruiter or job site has its own Search: it searches just that source, for all your job titles, and shows every posting it found and what became of it: its fit score, already in Job Hunt, or skipped and why.
 - New postings it finds are scored and go on your Overview like any search's; your daily search, its time and its report stay as they were.
 - Last results opens a source's latest search again.
 
@@ -282,7 +292,7 @@ The Job Hunt logo on your Send to Job Hunt button.
 
 ### Changes
 
-- Send to Job Hunt now gets the Job Hunt logo as its icon in your bookmarks bar: in Settings → Job sources, press Set up the button and follow the three steps on the page that opens. (Added it before? Do this once to replace it.)
+- Send to Job Hunt now gets the Job Hunt logo as its icon in your bookmarks bar: in Search → Set up sources, press Set up the button and follow the three steps on the page that opens. (Added it before? Do this once to replace it.)
 
 ## [2.0.0] - 2026-10-27
 
@@ -945,6 +955,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.20.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.20.0
 [2.19.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.19.0
 [2.18.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.18.0
 [2.17.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.17.2
