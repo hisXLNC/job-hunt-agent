@@ -1588,7 +1588,8 @@ replies and interviews, and a little lower for kinds that got none from several 
             };
             out.push(json!({ "title": p.title, "company": p.company, "location": p.location, "url": p.url, "remote": p.remote,
                 "source": p.source, "posted": p.posted_at, "job": job.as_ref().map(|j| j.id.clone()), "score": job.as_ref().and_then(|j| j.score),
-                "status": job.as_ref().map(|j| j.status.clone()), "outcome": outcome, "detail": detail }));
+                "status": job.as_ref().map(|j| j.status.clone()), "closed_at": job.as_ref().and_then(|j| j.closed_at.clone()),
+                "deadline": job.as_ref().and_then(|j| j.deadline.clone()), "outcome": outcome, "detail": detail }));
         }
         sort_outcomes(&mut out);
         out

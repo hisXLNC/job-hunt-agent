@@ -345,8 +345,18 @@ function deadlineTag(j) {
 }
 /** Filtered out for being outside your locations: hidden from every list. */
 const outsideYours = j => j.status === 'skipped' && /^Filtered out: location/.test(j.reasoning || '');
-/** A tag for postings that have closed since they were found. */
-const closedTag = j => (j.closed_at ? `<span class="pill crit" title="Closed ${esc(fmtDate(j.closed_at))}: the company took it down or stopped taking applications">Closed</span>` : '')
+/** Stages where a posting that's no longer open still matters: you haven't applied yet. */
+const BEFORE_APPLYING = ['queued', 'ready', 'approved', 'saved', 'skipped'];
+/** Why a posting you haven't applied to is no longer open, or '': taken down (closed_at), or its last
+ *  day to apply has passed. */
+function expiredWhy(j) {
+  if (!BEFORE_APPLYING.includes(j.status)) return '';
+  if (j.closed_at) return `Expired: Job Hunt noticed on ${fmtDate(j.closed_at)} that the company took it down or stopped taking applications`;
+  if (j.deadline && new Date(j.deadline + 'T23:59:59') < Date.now()) return `Expired: the last day to apply was ${fmtDate(j.deadline + 'T12:00:00')}`;
+  return '';
+}
+/** A tag for postings that are no longer open, and for ones to check before putting time in. */
+const closedTag = j => (expiredWhy(j) ? `<span class="pill crit expired" title="${esc(expiredWhy(j))}">Expired</span>` : '')
   + ((j.warnings || []).length ? ` <span class="pill warn" title="${esc(j.warnings.join('\n'))}">Check first</span>` : '');
 function eventText(e) {
   const k = e.kind;
@@ -783,7 +793,7 @@ async function showJob(id) {
     </div>
     ${jobActions(j, tailoring)}
     ${j.warnings.length && !j.closed_at && !['applied', 'interviewing', 'offer'].includes(j.status) ? `<div class="card" style="border-color:var(--warn)"><b>Check this posting is real and open before you put time in.</b><ul class="flags">${j.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
-    ${j.closed_at && ['queued', 'ready', 'approved', 'skipped'].includes(j.status) ? `<div class="card" style="border-color:var(--crit)"><b>This posting has closed.</b><p class="muted">Job Hunt noticed on ${esc(fmtDate(j.closed_at))} that the company took it down or stopped taking applications. Open the posting to make sure, then mark it Not interested.</p></div>` : ''}
+    ${expiredWhy(j) ? `<div class="card" style="border-color:var(--crit)"><b>This opening has expired.</b><p class="muted">${esc(expiredWhy(j).replace(/^Expired: /, '').replace(/^./, c => c.toUpperCase()))}. Open the posting to make sure, then mark it Not interested.</p></div>` : ''}
     ${j.status === 'approved' ? `<div class="card row" style="border-color:var(--accent);justify-content:space-between"><span><b>Next: submit it on the company's site.</b><br><span class="muted">The Apply screen has the posting, your files and your answers in one place.</span></span><a class="btn primary" href="#apply/${encodeURIComponent(j.id)}">Apply</a></div>` : ''}
     ${(recruiters_here || []).length ? `<div class="card"><b>Recruiter${recruiters_here.length === 1 ? '' : 's'} for this application</b>${recruiters_here.map(r => `<div class="small" style="margin-top:6px"><b>${esc(r.name)}</b> <span class="muted">${esc(r.company_of || '')}</span> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>${r.phone ? ` · <a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a>` : ''}${r.linkedin ? ` · <a href="#" data-act="link" data-url="${esc(r.linkedin)}">LinkedIn</a>` : ''}<br><span class="muted">${esc(r.emails)} email${r.emails === 1 ? '' : 's'} · last ${esc(ago(r.last_at))}${r.last_subject ? ` · “${esc(r.last_subject)}”` : ''}</span></div>`).join('')}<a class="small" href="#inbox/recruiters">All recruiters</a></div>` : ''}
     ${recruiter && !['rejected', 'offer', 'no_response', 'dismissed'].includes(j.status) && !(recruiters_here || []).some(r => r.email === recruiter.email && ['applied', 'interviewing'].includes(j.status)) ? recruiterCard(recruiter, j) : ''}
@@ -991,7 +1001,7 @@ const onCompanySite = j => j.apply_url ? `<span class="good-text" title="${esc(j
  *  (the Tracker's rows) fills in the steps after you apply. */
 function stepHtml(o, step, tracked) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
-  const row = (j, sub, actions, tick = '') => `<div class="todo-row">${tick || '<span></span>'}
+  const row = (j, sub, actions, tick = '') => `<div class="todo-row${expiredWhy(j) ? ' expired-row' : ''}">${tick || '<span></span>'}
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
       <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span>${oneTag(j)}${coLocLine(j)}</a>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span>
@@ -1009,7 +1019,7 @@ function stepHtml(o, step, tracked) {
     // One list, best fit first; the filters reorder and hide rows in place (see applyPickView).
     const places = [...new Set((o.places || []).map(p => String(p).split(',')[0].trim()).filter(Boolean))];
     const opt = (v, n) => `<option value="${v}">${n}</option>`;
-    const rows = [...picking].sort((a, b) => (b.score || 0) - (a.score || 0)).map(j => `<div class="todo-row pick" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}"
+    const rows = [...picking].sort((a, b) => !!expiredWhy(a) - !!expiredWhy(b) || (b.score || 0) - (a.score || 0)).map(j => `<div class="todo-row pick${expiredWhy(j) ? ' expired-row' : ''}" data-expired="${expiredWhy(j) ? 1 : 0}" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}"
         data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}"
         data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"><label style="display:contents"><input type="checkbox" data-pick="${esc(j.id)}">
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
@@ -1217,7 +1227,7 @@ async function togglePosting(tr) {
     const id = esc(j.id);
     box.innerHTML = `
       <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div><b>${esc(j.title)}</b> · ${esc(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''}
+        <div><b>${esc(j.title)}</b> ${closedTag(j)} · ${esc(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}${j.salary ? ` · ${esc(j.salary)}` : ''}
           <div class="muted small">${ageTag(j)} · found on ${esc(sourceName(j.source))}</div></div>
         <div class="row">
           ${j.url ? `<button class="btn" data-act="open" data-what="posting" data-job="${id}">${svg('open')}Open posting</button>` : ''}
@@ -1358,6 +1368,7 @@ async function showReview() {
   page(`<div class="head"><div class="grow"><div class="eyebrow">Review · ${queue.length} to go${done ? ` · ${done} skipped` : ''}</div>
       <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${deadlineTag(j)}</div></div>
       <a class="btn ghost" href="#overview">Exit review</a></div>
+    ${expiredWhy(j) ? `<div class="card" style="border-color:var(--crit)"><b>This opening has expired.</b> <span class="muted">${esc(expiredWhy(j).replace(/^Expired: /, ''))}. Check the posting before approving it.</span></div>` : ''}
     ${revising ? '<section class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this updates by itself.</p></section>' : ''}
     <div class="grid-2">
       <div class="stack">
@@ -1401,8 +1412,8 @@ async function showApply(id) {
   const facts = [p.name, p.email, ...(p.application_facts || '').split('\n')].map(x => (x || '').trim()).filter(Boolean);
   const copyRow = (label, text, i) => `<div class="copy-row"><span class="grow"><span class="muted small">${esc(label)}</span><br><span id="cp${i}">${esc(text)}</span></span><button class="btn ghost sm" data-act="copy" data-from="cp${i}">Copy</button></div>`;
   const done = ['applied', 'interviewing', 'offer', 'rejected'].includes(j.status);
-  page(`<div class="head"><div class="grow"><div class="eyebrow"><a href="#job/${encodeURIComponent(j.id)}">${esc(j.company)}</a> / Apply</div><h1>Apply: ${esc(j.title)}</h1>
-      <p class="muted">${done ? 'You\'ve applied to this one.' : can_fill && j.url ? 'Job Hunt can fill in the form for you, or use the files and answers below yourself.' : 'Four steps. Your files and answers are ready below.'}</p></div></div>
+  page(`<div class="head"><div class="grow"><div class="eyebrow"><a href="#job/${encodeURIComponent(j.id)}">${esc(j.company)}</a> / Apply</div><h1>Apply: ${esc(j.title)} ${closedTag(j)}</h1>
+      <p class="muted">${!done && expiredWhy(j) ? `<b style="color:var(--crit)">${esc(expiredWhy(j))}.</b> Check the posting is still open before you apply.` : done ? 'You\'ve applied to this one.' : can_fill && j.url ? 'Job Hunt can fill in the form for you, or use the files and answers below yourself.' : 'Four steps. Your files and answers are ready below.'}</p></div></div>
     <ol class="apply-steps">
       ${can_fill && j.url && !done ? `<li class="card"><h2>Let Job Hunt fill it in</h2>
         <p class="muted">Opens ${j.apply_url ? 'the job on the company\'s own site' : 'the posting'} in a Job Hunt window. Use the company's Apply button (sign in or make an account if it asks); when the form appears, Job Hunt fills it in from your CV, letter and facts, and attaches your files. It never presses Submit: check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>I submitted it</b> in that window (or <b>Mark applied</b> here) to do it yourself.</p>
@@ -1469,8 +1480,11 @@ async function showCalendar() {
     if (i.kind === 'interview' && !past && i.job_id) acts = `<a class="btn sm" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prep</a>`;
     if (i.kind === 'interview' && past && i.job_id) acts = `<span class="muted small">How did it go?</span><button class="btn sm" data-act="calNext" data-job="${id}" data-label="${esc(`${i.company || ''} – ${i.job_title || ''}`)}">Next round</button><button class="btn sm" data-act="stage" data-status="offer" data-job="${id}">Offer</button><button class="btn ghost sm" data-act="stage" data-status="rejected" data-job="${id}">Rejected</button>`;
     if (i.kind === 'follow-up' && i.job_id) acts = `<button class="btn sm" data-act="followUp" data-job="${id}">Write follow-up</button>`;
-    if (i.kind === 'deadline' && i.status === 'queued') acts = `<button class="btn sm" data-act="tailorPicked" data-job="${id}">Tailor</button>`;
-    if (i.kind === 'deadline' && i.status === 'ready') acts = `<button class="btn primary sm" data-act="approve" data-job="${id}" data-email="${esc(i.apply_email || '')}">Approve</button>`;
+    // A last day to apply that has passed: expired, nothing left to do there.
+    const gone = i.kind === 'deadline' && new Date(new Date(i.at).setHours(23, 59, 59)) < new Date();
+    if (gone) acts = '<span class="pill crit expired" title="The last day to apply has passed">Expired</span>';
+    else if (i.kind === 'deadline' && i.status === 'queued') acts = `<button class="btn sm" data-act="tailorPicked" data-job="${id}">Tailor</button>`;
+    else if (i.kind === 'deadline' && i.status === 'ready') acts = `<button class="btn primary sm" data-act="approve" data-job="${id}" data-email="${esc(i.apply_email || '')}">Approve</button>`;
     if (i.kind === 'google' && i.suggest) acts = `<span class="muted small">Interview for ${esc(i.suggest.company)}?</span><button class="btn sm" data-act="calLink" data-id="${esc(i.id)}" data-job="${esc(i.suggest.job_id)}" title="Show it with that application and move it to Interviewing">Link to application</button>`;
     if (i.local && i.kind === 'interview') acts += `<button class="btn ghost sm" data-act="calDelete" data-id="${esc(i.id)}" title="Remove this interview, its prep time and reminders">${svg('close')}</button>`;
     return `<div class="cal-row ${past ? 'past' : ''} ${i.kind === 'google' ? 'gcal' : ''}"><span class="cal-t">${i.all_day ? (i.overdue ? '<b style="color:var(--crit)">Due</b>' : 'All day') : esc(timeOf(i.at))}</span>
@@ -1578,7 +1592,7 @@ async function showDocuments() {
     ${docs.length ? `<section class="card" style="padding:6px 10px"><table class="jobs" id="t-docs"><thead><tr>${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Stage', 'rank')}${sortTh('Fit', 'num')}${sortTh('Updated', 'date')}<th>Files</th></tr></thead><tbody>
       ${docs.map(j => `<tr class="docrow-t" data-text="${esc((j.company + ' ' + j.title).toLowerCase())}">
         <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td>
-        <td class="role" data-v="${esc(j.title.toLowerCase())}"><a href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs"><b>${esc(j.title)}</b></a></td>
+        <td class="role" data-v="${esc(j.title.toLowerCase())}"><a href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs"><b>${esc(j.title)}</b></a>${closedTag(j)}</td>
         <td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
         <td data-v="${stageOrder(j.status)}">${stagePill(j.status)}</td>
         <td data-v="${j.score_after ?? j.score ?? -1}">${j.score != null ? scoreBadge(j.score_after ?? j.score) : '<span class="muted">–</span>'}</td>
@@ -2423,7 +2437,8 @@ function applyPickView(box, saved) {
   const list = box.querySelector('.pick-list');
   if (!list) return;
   const key = { fit: 'score', reach: 'reach', new: 'age', pay: 'pay', rating: 'rating' }[v.sort] || 'score';
-  const rows = [...list.children].sort((a, b) => Number(b.dataset[key]) - Number(a.dataset[key]) || Number(b.dataset.score) - Number(a.dataset.score));
+  // Expired postings last, whatever the order.
+  const rows = [...list.children].sort((a, b) => (a.dataset.expired === '1') - (b.dataset.expired === '1') || Number(b.dataset[key]) - Number(a.dataset[key]) || Number(b.dataset.score) - Number(a.dataset.score));
   let shown = 0;
   for (const r of rows) {
     // Fit: "70" is 70 or more, "-70" under 70. Found: "7" within 7 days, "-14" over 14 days ago.
@@ -2705,7 +2720,7 @@ async function showSearch(arg) {
       const fit = p.score != null ? `<span class="pill ${p.outcome === 'match' ? 'good' : ''}">${p.score}</span>` : '';
       const what = p.outcome === 'filtered' ? `Skipped: ${p.detail}` : p.outcome === 'known' && p.status ? `Already in Job Hunt · ${STAGES[p.status] || p.status}` : p.outcome === 'match' && p.status ? `${label} · ${STAGES[p.status] || p.status}` : label;
       const title = p.job ? `<a href="#job/${encodeURIComponent(p.job)}">${esc(p.title)}</a>` : p.url ? `<a href="#" data-act="link" data-url="${esc(p.url)}">${esc(p.title)}</a>` : esc(p.title);
-      return `<tr class="src-${esc(p.outcome)}"><td>${title}<br><span class="muted small">${esc(p.company)}${p.location ? ` · ${esc(p.location)}` : ''}${p.remote ? ' · Remote' : ''}${view === 'agencies' && siteNames[p.source] && siteNames[p.source] !== p.company ? ` · via ${esc(siteNames[p.source])}` : ''}</span></td>
+      return `<tr class="src-${esc(p.outcome)}"><td>${title}${p.job && p.status ? closedTag({ status: p.status, closed_at: p.closed_at, deadline: p.deadline }).replace(/^/, ' ') : ''}<br><span class="muted small">${esc(p.company)}${p.location ? ` · ${esc(p.location)}` : ''}${p.remote ? ' · Remote' : ''}${view === 'agencies' && siteNames[p.source] && siteNames[p.source] !== p.company ? ` · via ${esc(siteNames[p.source])}` : ''}</span></td>
         <td class="num">${fit}</td><td class="small ${cls === 'warn' ? '' : 'muted'}">${esc(what)}</td>
         <td class="num">${p.url ? `<button class="btn ghost sm icon-only" data-act="link" data-url="${esc(p.url)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`;
     };
@@ -2866,7 +2881,7 @@ async function jobPalette() {
     list.innerHTML = shown.length ? shown.map((j, i) => {
       const head = j.status !== last ? `<h3>${esc(STAGES[j.status] || j.status)}</h3>` : '';
       last = j.status;
-      return `${head}<a class="palette-row ${i === sel ? 'on' : ''}" href="#job/${encodeURIComponent(j.id)}" data-i="${i}">${scoreBadge(j.score)}<span class="grow"><b>${esc(j.company)}</b> · ${esc(j.title)}<br><span class="muted small">${esc(j.location || '')}</span></span></a>`;
+      return `${head}<a class="palette-row ${i === sel ? 'on' : ''}" href="#job/${encodeURIComponent(j.id)}" data-i="${i}">${scoreBadge(j.score)}<span class="grow"><b>${esc(j.company)}</b> · ${esc(j.title)}${expiredWhy(j) ? ' <span class="pill crit expired">Expired</span>' : ''}<br><span class="muted small">${esc(j.location || '')}</span></span></a>`;
     }).join('') : `<p class="muted small">${paletteJobs ? 'No job matches.' : 'Loading…'}</p>`;
     list.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
   };

@@ -916,3 +916,6 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 .crit-text { color: var(--crit); }
 .chip.on .muted { color: inherit; opacity: .8; }
 .src-site .grow { flex: 1; min-width: 0; }
+/* A posting that's no longer open: tagged Expired, and dimmed in lists */
+.pill.expired { font-weight: 600; }
+.todo-row.expired-row .qt, .todo-row.expired-row .todo-fit { opacity: .6; }

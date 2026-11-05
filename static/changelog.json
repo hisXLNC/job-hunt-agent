@@ -2,11 +2,13 @@
   {
     "version": "2.20.0",
     "date": "2026-11-05",
-    "title": "Settings live where they're used",
+    "title": "Settings where they're used, and expired postings marked",
     "changes": [
       "Search's settings are on the Search page now: What to search (places, roles to skip, schedule, tailoring) and Set up sources (keys, company boards, recruiters, the browser button).",
       "The email, interview and reminder settings are on the Calendar page, under Settings.",
-      "Settings keeps Accounts, Sync & backup and App. Old links to the moved settings open them in their new place."
+      "Settings keeps Accounts, Sync & backup and App. Old links to the moved settings open them in their new place.",
+      "Postings that are no longer open are marked Expired wherever they show: the Overview's steps (and moved to the bottom of the Pick list), All jobs, the job page, Review, Apply, the calendar, tailored files, search results and quick search. That covers ones the company took down and ones whose last day to apply has passed (those had no tag before).",
+      "The job page, Review and Apply say why it expired, so you can check the posting before putting time in. Roles you've already applied to don't get the tag."
     ]
   },
   {
