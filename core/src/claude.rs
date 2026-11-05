@@ -447,6 +447,11 @@ pub trait Llm: Send + Sync {
     fn pick_titles(&self, _targets: &str, _titles: &[String]) -> R<Vec<usize>> {
         Ok(vec![])
     }
+    /// The pay each posting states, from its lines that mention pay: [(index, salary as stated)],
+    /// only for the ones that state it.
+    fn salaries(&self, _postings: &[String]) -> R<Vec<(usize, String)>> {
+        Ok(vec![])
+    }
     /// The postings listed in a job-alert email (LinkedIn, Indeed, Glassdoor).
     fn alert_jobs(&self, _email: &EmailIn) -> R<Vec<FoundJob>> {
         Ok(vec![])
@@ -975,6 +980,14 @@ struct Prep {
     prep: String,
 }
 
+fn salaries_system() -> String {
+    format!("You read the pay that job postings state.\n\n{UNTRUSTED}\n\n\
+You get a numbered list: for each posting, the lines of its text that mention pay. For each posting that states \
+its pay (a range, \"up to\", a single figure, hourly or monthly), return its number and the pay, short and with its \
+currency and period, e.g. \"$95,000–$110,000 a year\" or \"$45–$52 an hour\". Leave out postings that state no \
+pay, or only benefits, bonuses or other numbers. Never estimate.")
+}
+
 fn pick_titles_system() -> String {
     format!("You screen job posting titles for a job seeker before their postings are read in full.\n\n{UNTRUSTED}\n\n\
 You get the kinds of role the candidate wants and a numbered list of posting titles that didn't match those \
@@ -1413,6 +1426,23 @@ impl Llm for Claude {
             t.category = "other_job_related".into();
         }
         Ok(t)
+    }
+
+    fn salaries(&self, postings: &[String]) -> R<Vec<(usize, String)>> {
+        if postings.is_empty() {
+            return Ok(vec![]);
+        }
+        let list: Vec<String> = postings.iter().enumerate().map(|(i, t)| format!("{i}. {t}")).collect();
+        let user = format!("<posting>\n{}\n</posting>", list.join("\n\n"));
+        let schema = json!({"type": "object", "additionalProperties": false, "required": ["found"],
+            "properties": {"found": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["n", "salary"],
+                "properties": {"n": {"type": "integer"}, "salary": {"type": "string"}}}}}});
+        let v: Value = self.call(&salaries_system(), &user, schema, "low")?;
+        Ok(v["found"].as_array().map(|a| a.iter().filter_map(|x| {
+            let n = x["n"].as_u64()? as usize;
+            let s = x["salary"].as_str()?.trim().to_string();
+            (n < postings.len() && !s.is_empty()).then_some((n, s))
+        }).collect()).unwrap_or_default())
     }
 
     fn pick_titles(&self, targets: &str, titles: &[String]) -> R<Vec<usize>> {

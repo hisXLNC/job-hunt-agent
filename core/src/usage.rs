@@ -180,6 +180,9 @@ impl Llm for Metered {
     fn indeed(&self, searches: &[(String, String)], country: &str, details: usize) -> R<Vec<FoundJob>> {
         self.run("indeed", |l| l.indeed(searches, country, details))
     }
+    fn salaries(&self, postings: &[String]) -> R<Vec<(usize, String)>> {
+        self.run("salaries", |l| l.salaries(postings))
+    }
     fn pick_titles(&self, targets: &str, titles: &[String]) -> R<Vec<usize>> {
         self.run("titles", |l| l.pick_titles(targets, titles))
     }

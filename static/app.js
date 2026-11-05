@@ -2153,7 +2153,7 @@ async function showSettings(tab, sub, host) {
       <section class="card"><header><h2>Which roles</h2></header><div class="form">
         <label class="field">Skip these companies<textarea name="exclude_companies">${esc(lines(p.exclude_companies))}</textarea></label>
         <label class="field">Skip titles containing<textarea name="exclude_title_keywords">${esc(lines(p.exclude_title_keywords))}</textarea></label>
-        <label class="field">Minimum yearly salary<input type="number" name="min_salary" min="0" step="1000" value="${p.min_salary ?? ''}" placeholder="No minimum, e.g. 120000"><span class="hint">Digits only. Jobs whose stated maximum is lower are skipped; jobs with no salary are kept.</span></label>
+        <label class="field">Minimum yearly salary<input type="number" name="min_salary" min="0" step="1000" value="${p.min_salary ?? ''}" placeholder="No minimum, e.g. 120000"><span class="hint">Digits only. Jobs whose stated maximum is lower are skipped; jobs with no salary are kept. Job Hunt looks for missing salaries once a week. <a href="#" data-act="rescanSalaries">Look now</a></span></label>
         <label class="field">Skip companies rated below<select name="min_rating">${[['', 'Any rating'], ['3', '3.0 out of 5'], ['3.5', '3.5 out of 5'], ['4', '4.0 out of 5']].map(([x, n]) => `<option value="${x}" ${String(p.min_rating ?? '') === x || (x && Number(x) === p.min_rating) ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">From what employees say (Glassdoor and the like). Companies not rated yet are kept until they are.</span></label>
       </div>
         <label class="field" style="margin-top:14px">What matters to you<textarea name="guidance" placeholder="e.g. Prefer hybrid roles in fintech or government. Avoid pure sales roles. Open to contract roles.">${esc(p.guidance || '')}</textarea><span class="hint">Claude weighs this when scoring. Job titles and keywords for each CV are set in CV & Career.</span></label>
@@ -2849,7 +2849,7 @@ const CONN_ACT = {
   phoneTest: () => ['Send a test', 'phoneTest'], syncNow: () => ['Sync now', 'syncNow'], backupNow: () => ['Back up now', 'backupNow'],
 };
 let connPoll;
-const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', coach: 'Career coach', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', chat: 'Ask Claude (job chat)', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters' };
+const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', coach: 'Career coach', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', chat: 'Ask Claude (job chat)', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters', salaries: 'Finding salaries' };
 async function renderUsage() {
   const box = $('#usageCard'); if (!box) return;
   let u;
@@ -3478,6 +3478,10 @@ async function act(el) {
   if (a === 'bankSave' || a === 'bankDrop') {
     const rows = bankRows().filter((_, i) => a !== 'bankDrop' || i !== Number(el.dataset.i));
     return busy(async () => { await api('/api/answer-bank', { method: 'POST', body: { answers: rows } }); renderBank(); }, a === 'bankDrop' ? 'Forgotten.' : 'Saved.');
+  }
+  if (a === 'rescanSalaries') {
+    return busy(async () => { const r = await api('/api/salaries/rescan', { method: 'POST' }); if (!r.started) toast('Already looking.'); },
+      'Looking for the pay of every posting without one: its text, its page and the company\'s own posting. A notice says what was found.');
   }
   if (a === 'applyAll') {
     const ids = JSON.parse(el.dataset.ids || '[]');

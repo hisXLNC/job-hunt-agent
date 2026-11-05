@@ -1805,7 +1805,14 @@ replies and interviews, and a little lower for kinds that got none from several 
         // Not read yet: held, so the next search reads and scores them. Read: the filters again, now
         // that there's a description to check.
         let (unread, read): (Vec<Posting>, Vec<Posting>) = candidates.into_iter().partition(|p| thin_source(&p.source) && p.description.trim().is_empty());
-        let candidates = read;
+        let mut candidates = read;
+        // Read just now (LinkedIn, Job Bank, job sites list postings without their text): their pay too.
+        for p in candidates.iter_mut().filter(|p| p.salary.is_none() && thin_source(&p.source)) {
+            if let Some((text, max)) = crate::sources::salary_from_text(&p.description) {
+                p.salary = Some(text);
+                p.salary_max = p.salary_max.or(max);
+            }
+        }
         report.deferred += unread.len();
         self.hold(unread);
         let mut kept = vec![];
@@ -1938,6 +1945,12 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// minimum: a red flag, and a notice when you've already tailored or approved it. Returns whether
     /// it was new.
     pub fn found_salary(&self, job_id: &str, stated: &str, from: &str) -> R<bool> {
+        self.found_salary_as(job_id, stated, from, true)
+    }
+
+    /// found_salary; `tell`: whether a salary below your minimum on a role you've tailored or approved
+    /// sends a notice (a rescan sums them up in one instead).
+    fn found_salary_as(&self, job_id: &str, stated: &str, from: &str, tell: bool) -> R<bool> {
         let Some((text, max)) = salary_parts(stated) else { return Ok(false) };
         let Some(job) = self.db().job(job_id)? else { return Ok(false) };
         // Known already (and with a yearly figure, when this has one too): nothing new.
@@ -1958,10 +1971,98 @@ replies and interviews, and a little lower for kinds that got none from several 
             db.update_job(job_id, &[("salary", text.clone().into()), ("red_flags", json!(flags))])?;
             db.log(Some(job_id), "salary", &format!("{text}, {from}"))?;
         }
-        if let (Some(f), true) = (low, ["ready", "approved"].contains(&job.status.as_str())) {
+        if let (Some(f), true) = (low, tell && ["ready", "approved"].contains(&job.status.as_str())) {
             self.note(&format!("{} at {}: below your minimum", job.title, job.company), &format!("{f}. If it's not worth it, mark it Not interested."));
         }
         Ok(true)
+    }
+
+    /// Find the pay of every posting that doesn't show one: from its own text (the patterns),
+    /// from its page and the company's own posting (their listed salary or text), then by Claude,
+    /// which reads only the lines that mention pay, many postings at a time. Returns (checked,
+    /// found, below your minimum among the ones you're working on).
+    pub fn rescan_salaries(&self) -> R<(usize, usize, usize)> {
+        let _g = self.claim("salaries")?;
+        let jobs: Vec<Job> = self.db().jobs(None, 5000)?.into_iter().filter(|j| j.salary.as_deref().is_none_or(|s| s.trim().is_empty())).collect();
+        let checked = jobs.len();
+        let mut found = 0;
+        let mut left: Vec<Job> = vec![];
+        // 1. The posting's own text.
+        for j in jobs {
+            match crate::sources::salary_from_text(&j.description) {
+                Some((text, _)) if self.found_salary_as(&j.id, &text, "in the posting", false)? => found += 1,
+                _ => left.push(j),
+            }
+        }
+        // 2. The page, and the company's own posting, for roles still in play (a few seconds each, so at most 60).
+        let live = ["queued", "ready", "approved", "saved", "applied", "interviewing"];
+        let c = crate::sources::http();
+        let mut fetched = 0;
+        let mut still: Vec<Job> = vec![];
+        for j in left {
+            let mut got = false;
+            if live.contains(&j.status.as_str()) && j.closed_at.is_none() && fetched < 60 {
+                for link in [j.apply_url.clone().unwrap_or_default(), j.url.clone()].into_iter().filter(|l| l.starts_with("http")) {
+                    fetched += 1;
+                    if let Some(text) = crate::sites::read_posting_link(&c, &link).ok().and_then(|p| p.salary) {
+                        let from = if Some(&link) == j.apply_url.as_ref() { "on the company's own posting" } else { "on the posting's page" };
+                        if self.found_salary_as(&j.id, &text, from, false)? {
+                            found += 1;
+                            got = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if !got {
+                still.push(j);
+            }
+        }
+        // 3. Claude, for pay written in ways the patterns miss: only the lines that mention pay.
+        static PAYLINE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| regex::Regex::new(r"(?i)(\$|salary|salaries|pay\b|compensation|wage|per hour|hourly|/hr|annual|a year|per year|cad|k\b)").unwrap());
+        let mut asks: Vec<(String, String)> = vec![];
+        for j in &still {
+            let lines: Vec<&str> = j.description.lines().map(str::trim).filter(|l| l.chars().any(|c| c.is_ascii_digit()) && PAYLINE.is_match(l)).collect();
+            if !lines.is_empty() {
+                let text: String = lines.join("\n").chars().take(500).collect();
+                asks.push((j.id.clone(), text));
+            }
+        }
+        if !asks.is_empty() && self.claude_ready() {
+            for batch in asks.chunks(20) {
+                if self.limited().is_some() {
+                    break;
+                }
+                let texts: Vec<String> = batch.iter().map(|(_, t)| t.clone()).collect();
+                match self.llm().salaries(&texts) {
+                    Ok(list) => {
+                        for (i, pay) in list {
+                            if self.found_salary_as(&batch[i].0, &pay, "in the posting (read by Claude)", false)? {
+                                found += 1;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = self.db().log(None, "salaries:error", &e.0);
+                        break;
+                    }
+                }
+            }
+        }
+        // Below your minimum among the roles you're working on: one notice for all of them.
+        let profile = self.profile();
+        let low: Vec<Job> = ["queued", "ready", "approved"].iter().flat_map(|s| self.db().jobs(Some(s), 500).unwrap_or_default())
+            .filter(|j| below_minimum(&profile, j.salary.as_deref().and_then(crate::sources::salary_range).map(|r| r.1)).is_some()).collect();
+        let _ = self.db().set("last.salaries", &now());
+        self.db().log(None, "salaries", &format!("looked for the pay of {checked} postings without one: found {found}"))?;
+        if found > 0 || checked > 0 {
+            let more = if low.is_empty() { String::new() } else {
+                format!(" {} of the roles you're working on pay below your minimum: {}. They're tagged Below your minimum.", low.len(),
+                    low.iter().take(4).map(|j| format!("{} at {}", j.title, j.company)).collect::<Vec<_>>().join(", "))
+            };
+            self.note(&format!("Salaries found for {found} postings"), &format!("Looked at the {checked} postings without a salary: their text, their pages and the companies' own postings.{more}"));
+        }
+        Ok((checked, found, low.len()))
     }
 
     /// Score a posting that was skipped (filtered out or scored low) now; tailor it if it clears your bar.
@@ -4836,7 +4937,7 @@ publish your Google project (Settings \u{2192} Connections explains how).", what
                 self.db().log(Some(job_id), "apply-link", &format!("found on the company's site: {u}"))?;
                 // The company's own posting often states the pay the job board's copy left out.
                 if let Ok(p) = crate::sites::read_posting_link(&crate::sources::http(), u) {
-                    if let Some((text, _)) = crate::sources::salary_from_text(&p.description) {
+                    if let Some(text) = p.salary {
                         let _ = self.found_salary(job_id, &text, "on the company's own posting");
                     }
                 }
@@ -5732,6 +5833,13 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     if ready && !reasons_lately && !agent.budget_wait() && !agent.is_running("reasons") && !agent.is_running("search") && !agent.long_reasons().is_empty() {
         out.push("reasons");
     }
+    // Postings without a salary: looked for once a week (and once right after this version arrives).
+    let salaries_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.salaries"))
+        .map(|t| (now - t.with_timezone(&Utc)).num_days() < 7)
+        .unwrap_or(false);
+    if ready && !salaries_lately && !agent.budget_wait() && !agent.is_running("salaries") && !agent.is_running("search") {
+        out.push("salaries");
+    }
     // Job board postings you've tailored: found on the company's own site, a few every 10 minutes.
     let links_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.applylinks"))
         .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 10)
@@ -5899,6 +6007,16 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                     let Ok(_g) = a.claim("reasons") else { return };
                     a.shorten_old_reasons(10);
                     let _ = a.db().set("last.reasons", &now());
+                });
+            }
+            "salaries" => {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = a.rescan_salaries() {
+                        if !e.0.contains("already running") {
+                            let _ = a.db().log(None, "salaries:error", &e.0);
+                        }
+                    }
                 });
             }
             "applylinks" => {
@@ -7673,6 +7791,29 @@ mod tests {
         assert_eq!(j3.salary.as_deref(), Some("$70,000–$85,000"));
         assert!(j3.red_flags.iter().any(|f| f.starts_with("Pays up to $85,000")));
         assert!(!s.agent.found_salary("test:3", "$60,000 - $65,000", "again").unwrap(), "known already: kept as it was");
+    }
+
+    #[test]
+    fn rescan_finds_missing_salaries() {
+        let s = setup();
+        let mut a = posting("Technical Program Manager", "1");
+        a.description.push_str("\nThe base pay for this role is $98,000 - $112,000 per year.");
+        let mut b = posting("Senior Program Manager", "2");
+        b.description.push_str("\nSalary note: $80K~$90K a year");
+        let c = posting("Delivery Manager", "3");
+        s.agent.search(Some(vec![a, b, c])).unwrap();
+        // As found before this version: no salary kept, and set aside so their pages aren't fetched here.
+        for id in ["test:1", "test:2", "test:3"] {
+            s.agent.db().update_job(id, &[("salary", serde_json::Value::Null), ("status", "skipped".into())]).unwrap();
+        }
+        s.agent.db().set("claude.engine", "api").unwrap();
+        s.agent.db().set("claude.key", "sk-test").unwrap();
+        let (checked, found, _) = s.agent.rescan_salaries().unwrap();
+        assert_eq!((checked, found), (3, 2));
+        assert_eq!(s.agent.db().job("test:1").unwrap().unwrap().salary.as_deref(), Some("$98,000–$112,000"), "from the text");
+        assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().salary.as_deref(), Some("$80,000–$90,000"), "read by Claude");
+        assert!(s.agent.db().job("test:3").unwrap().unwrap().salary.is_none(), "states no pay: none made up");
+        assert_eq!(s.llm.calls.lock().unwrap().iter().filter(|c| c.starts_with("salaries:")).count(), 1, "one request, only for the posting with pay lines");
     }
 
     #[test]

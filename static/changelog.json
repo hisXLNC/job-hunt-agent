@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.25.0",
+    "date": "2026-11-05",
+    "title": "Salaries found for your postings",
+    "changes": [
+      "Job Hunt looks for the pay of every posting that doesn't show one: in its own text, on its page and the company's own posting, and, for pay written in ways its patterns miss, with Claude (which reads only the lines that mention pay, many postings at once). It runs once by itself after this update, then weekly; Look now (Search → What to search, under Minimum yearly salary) runs it any time.",
+      "Fixed: salaries in LinkedIn, Job Bank and job sites' postings were missed, because Job Hunt looked for them before reading those postings' full text.",
+      "A notice says how many it found, and which of the roles you're working on pay below your minimum."
+    ]
+  },
+  {
     "version": "2.24.0",
     "date": "2026-11-05",
     "title": "Salaries you can count on",

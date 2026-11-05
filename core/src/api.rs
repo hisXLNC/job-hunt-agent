@@ -1050,6 +1050,19 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent) })))
         }
+        // Look for the pay of every posting without one (in the background; a notice says what was found).
+        ["api", "salaries", "rescan"] => {
+            if agent.is_running("salaries") {
+                return Ok(Resp::json(&json!({ "started": false })));
+            }
+            let a = agent.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = a.rescan_salaries() {
+                    a.note("Couldn't look for salaries", &e.0);
+                }
+            });
+            Ok(Resp::json(&json!({ "started": true })))
+        }
         // Apply to several in a row: each opens in the Apply window, filled in, when the one before is sent.
         ["api", "apply-queue"] => {
             if req.remote || !host.can_fill() {

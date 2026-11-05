@@ -30,6 +30,10 @@ pub struct FakeLlm {
 }
 
 impl Llm for FakeLlm {
+    fn salaries(&self, postings: &[String]) -> R<Vec<(usize, String)>> {
+        self.calls.lock().unwrap().push(format!("salaries:{}", postings.len()));
+        Ok(postings.iter().enumerate().filter_map(|(i, t)| t.lines().find_map(|l| l.strip_prefix("Salary note: ")).map(|s| (i, s.replace('~', " to ")))).collect())
+    }
     fn pick_titles(&self, _targets: &str, titles: &[String]) -> R<Vec<usize>> {
         self.calls.lock().unwrap().push("pick_titles".into());
         Ok(titles.iter().enumerate().filter(|(_, t)| t.contains("Transformation")).map(|(i, _)| i).collect())

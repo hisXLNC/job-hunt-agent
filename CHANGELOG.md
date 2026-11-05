@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.25.0] - 2026-11-05
+
+Salaries found for your postings.
+
+### Changes
+
+- Job Hunt looks for the pay of every posting that doesn't show one: in its own text, on its page and the company's own posting, and, for pay written in ways its patterns miss, with Claude (which reads only the lines that mention pay, many postings at once). It runs once by itself after this update, then weekly; Look now (Search → What to search, under Minimum yearly salary) runs it any time.
+- Fixed: salaries in LinkedIn, Job Bank and job sites' postings were missed, because Job Hunt looked for them before reading those postings' full text.
+- A notice says how many it found, and which of the roles you're working on pay below your minimum.
+
 ## [2.24.0] - 2026-11-05
 
 Salaries you can count on.
@@ -1001,6 +1011,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.25.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.25.0
 [2.24.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.24.0
 [2.23.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.23.0
 [2.22.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.22.0
