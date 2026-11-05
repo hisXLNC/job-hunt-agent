@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.21.0",
+    "date": "2026-11-05",
+    "title": "Menus in the order you use them",
+    "changes": [
+      "The sidebar follows a job hunt: Overview, Search, Applications, Inbox, Calendar, CV & Career, Results, Settings. On a phone, the bottom bar has Search in place of CVs (CVs are under More).",
+      "Each page's own settings sit in a Settings tab at the right of its tabs: Search (What to search, Set up sources), Inbox (how often email is checked, follow-ups) and Calendar (time zone, interviews, reminders).",
+      "Settings now has Accounts, Notifications (weekly review, phone notices), Sync & backup and App, and points to the settings kept on other pages.",
+      "The spreadsheet of your applications downloads from the Applications page."
+    ]
+  },
+  {
     "version": "2.20.0",
     "date": "2026-11-05",
     "title": "Settings where they're used, and expired postings marked",

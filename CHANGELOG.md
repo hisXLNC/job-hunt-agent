@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.21.0] - 2026-11-05
+
+Menus in the order you use them.
+
+### Changes
+
+- The sidebar follows a job hunt: Overview, Search, Applications, Inbox, Calendar, CV & Career, Results, Settings. On a phone, the bottom bar has Search in place of CVs (CVs are under More).
+- Each page's own settings sit in a Settings tab at the right of its tabs: Search (What to search, Set up sources), Inbox (how often email is checked, follow-ups) and Calendar (time zone, interviews, reminders).
+- Settings now has Accounts, Notifications (weekly review, phone notices), Sync & backup and App, and points to the settings kept on other pages.
+- The spreadsheet of your applications downloads from the Applications page.
+
 ## [2.20.0] - 2026-11-05
 
 Settings where they're used, and expired postings marked.
@@ -957,6 +968,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.21.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.21.0
 [2.20.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.20.0
 [2.19.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.19.0
 [2.18.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.18.0

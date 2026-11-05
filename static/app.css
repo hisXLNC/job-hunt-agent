@@ -919,3 +919,8 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 /* A posting that's no longer open: tagged Expired, and dimmed in lists */
 .pill.expired { font-weight: 600; }
 .todo-row.expired-row .qt, .todo-row.expired-row .todo-fit { opacity: .6; }
+/* A page's own settings tabs sit at the end of its tabs, set apart from the views */
+.tabs a.tab-end { margin-left: auto; }
+.tabs a.tab-end svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.settings-elsewhere { margin: -4px 0 14px; }
+@media (max-width: 760px) { .tabs a.tab-end { margin-left: 0; } }
