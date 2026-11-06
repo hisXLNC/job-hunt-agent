@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.32.1",
+    "date": "2026-11-06",
+    "title": "Work history filled from your CV",
+    "changes": [
+      "Job Hunt no longer saves or reuses work-history and education answers (Job Title, Company, From, Degree…): an old saved job title went into every form.",
+      "Boxes the site had filled in already (its own CV reader) aren't painted green any more, and when they contradict your CV, such as a job title cut short, Job Hunt corrects them from your CV.",
+      "Work Experience 1, 2, 3… (and Education 1, 2…) each get their own entry from your CV, most recent first, so jobs aren't mixed together or repeated."
+    ]
+  },
+  {
     "version": "2.32.0",
     "date": "2026-11-06",
     "title": "Opens in Edge",

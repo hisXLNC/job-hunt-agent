@@ -83,11 +83,26 @@ pub fn question_key(label: &str) -> String {
 /// Questions the bank never keeps: agreeing to terms and certifying (yours to tick each time),
 /// and anything that's about this one employer.
 fn personal_to_the_role(label: &str) -> bool {
+    work_history(label) || {
     let l = label.to_lowercase();
     ["agree", "consent", "certify", "acknowledge", "attest", "privacy", "terms", "why do you want", "why are you interested", "why this",
         "cover letter", "tell us about", "describe", "what interests you", "anything else", "additional information", "captcha"]
         .iter().any(|w| l.contains(w))
         || l.contains(" at ") && l.contains("why")
+    }
+}
+
+/// A box in a work-history or education entry ("Job Title", "Company", "From", "Degree"…): it
+/// differs from entry to entry, so one saved answer would put the same job in every entry. Those
+/// come from your CV each time.
+fn work_history(label: &str) -> bool {
+    const KEYS: &[&str] = &["job title", "title", "position", "position title", "role", "role title", "company", "company name",
+        "employer", "employer name", "organization", "organisation", "role description", "description", "job description",
+        "responsibilities", "duties", "from", "to", "start date", "end date", "dates", "location", "city", "school",
+        "school name", "school or university", "university", "college", "institution", "degree", "field of study", "major",
+        "discipline", "gpa", "grade", "overall result gpa", "i currently work here", "currently work here", "current job"];
+    let k = question_key(label);
+    KEYS.contains(&k.as_str())
 }
 
 /// Your answers to questions forms ask again and again (work authorization, notice, salary…):
@@ -303,7 +318,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     // Everything else, from Claude: one line per field, without the file fields and what the bank answered.
     let lines: Vec<String> = fields.iter().filter(|f| f["type"] != "file" && !f["key"].as_str().is_some_and(|k| banked.iter().any(|b| b == k))).map(|f| {
         let mut o = json!({ "key": f["key"], "type": f["type"], "label": f["label"] });
-        for k in ["options", "context", "value", "required"] {
+        for k in ["section", "options", "context", "value", "required"] {
             if f.get(k).is_some_and(|v| !v.is_null() && v != "" && v != false) {
                 o[k] = f[k].clone();
             }
@@ -410,6 +425,17 @@ mod tests {
         assert_eq!(file_for("Attach", true), Some("cv"));
         let s = script(&tok, "Tax Manager", "Acme <b>");
         assert!(s.contains(&tok) && s.contains(r#""company":"Acme <b>""#) && !s.contains("__TOKEN__"));
+    }
+
+    #[test]
+    fn work_history_isnt_banked() {
+        for l in ["Job Title*", "Company", "Role Description", "From", "Degree", "Location"] {
+            assert!(personal_to_the_role(l), "{l}");
+        }
+        assert!(!personal_to_the_role("Are you legally eligible to work in Canada?"));
+        assert!(!personal_to_the_role("Notice period"));
+        let list = vec![json!({ "q": "Job Title", "key": "job title", "a": "Assistant" })];
+        assert_eq!(from_bank(&list, &json!({ "label": "Job Title", "type": "text" })), None, "an old saved job title isn't reused");
     }
 
     #[test]

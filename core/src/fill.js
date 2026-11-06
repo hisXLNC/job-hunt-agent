@@ -97,8 +97,17 @@
     return question(el) || clean(el.placeholder || el.name || el.id);
   }
   let fields = [], byKey = {};
+  // The part of the form a box is in: the nearest heading before it ("Work Experience 2",
+  // "Education 1"), so each entry gets its own job or school from the CV.
+  let heads = [];
+  const sectionOf = el => {
+    let t = '';
+    for (const h of heads) { if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) t = h; else break; }
+    return t ? textOf(t).slice(0, 80) : '';
+  };
   function collect() {
     fields = []; byKey = {};
+    heads = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,[role=heading]')].filter(h => !own(h) && shown(h) && textOf(h).length > 1);
     const groups = {};
     let n = 0;
     for (const el of document.querySelectorAll('input,select,textarea')) {
@@ -119,6 +128,7 @@
       if (type === 'checkbox') f.checked = el.checked;
       if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text)).slice(0, 60);
       if (type === 'checkbox') f.context = question(el);
+      const sec = sectionOf(el); if (sec) f.section = sec;
       fields.push(f); byKey[key] = [el];
     }
     for (const g of Object.values(groups)) {
@@ -127,7 +137,7 @@
         const f = { key: g.key, type: 'checkbox', label: g.options[0] || labelOf(first), context: question(first), required: first.required, value: '' };
         fields.push(f); byKey[g.key] = g.els; continue;
       }
-      fields.push({ key: g.key, type: g.type, label: question(first) || clean(first.name), options: g.options.slice(0, 40), required: g.els.some(e => e.required), value: g.els.filter(e => e.checked).map((e, i) => g.options[g.els.indexOf(e)]).join('; ') });
+      fields.push({ key: g.key, type: g.type, label: question(first) || clean(first.name), section: sectionOf(first) || undefined, options: g.options.slice(0, 40), required: g.els.some(e => e.required), value: g.els.filter(e => e.checked).map((e, i) => g.options[g.els.indexOf(e)]).join('; ') });
       byKey[g.key] = g.els;
     }
     return fields.slice(0, 120);
@@ -190,7 +200,9 @@
       if (/^(yes|true|checked|tick)/i.test(String(v)) && !el.checked) el.click();
       return el.checked;
     }
-    if (f.value) return true; // already has an answer: yours or the site's
+    // Already has an answer (yours or the site's): kept, unless Job Hunt corrects it from your CV
+    // (a site's CV reader often cuts a job title short or puts it in the wrong box).
+    if (f.value && same(f.value, v)) return true;
     el.focus();
     setter(el, String(v));
     if (f.type === 'combobox') {
@@ -210,8 +222,12 @@
       let ok = 0, todo = 0;
       for (const f of fields) {
         const file = answer.files && answer.files[f.key];
-        const done = await fillOne(f, answer.values && answer.values[f.key], file);
-        const matters = f.required || done || (answer.values && answer.values[f.key]) || f.type === 'file';
+        const v = answer.values && answer.values[f.key];
+        const done = await fillOne(f, v, file);
+        // Green is what Job Hunt filled; a box the site (or you) had filled already isn't marked.
+        const theirs = f.value !== '' && f.type !== 'file' && (v == null || v === '' || same(f.value, v));
+        if (theirs && done) continue;
+        const matters = f.required || done || v || f.type === 'file';
         if (!matters) continue;
         mark((byKey[f.key] || [])[0], done);
         if (done) ok++; else todo++;

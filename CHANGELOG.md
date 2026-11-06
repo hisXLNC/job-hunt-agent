@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.32.1] - 2026-11-06
+
+Work history filled from your CV.
+
+### Changes
+
+- Job Hunt no longer saves or reuses work-history and education answers (Job Title, Company, From, Degree…): an old saved job title went into every form.
+- Boxes the site had filled in already (its own CV reader) aren't painted green any more, and when they contradict your CV, such as a job title cut short, Job Hunt corrects them from your CV.
+- Work Experience 1, 2, 3… (and Education 1, 2…) each get their own entry from your CV, most recent first, so jobs aren't mixed together or repeated.
+
 ## [2.32.0] - 2026-11-06
 
 Opens in Edge.
@@ -1097,6 +1107,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.32.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.32.1
 [2.32.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.32.0
 [2.31.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.31.1
 [2.31.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.31.0
