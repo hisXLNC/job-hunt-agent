@@ -127,7 +127,7 @@ pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
     let mut n = 0;
     for f in fields {
         let (label, value, kind) = (f["label"].as_str().unwrap_or(""), f["value"].as_str().unwrap_or("").trim(), f["type"].as_str().unwrap_or(""));
-        if label.trim().len() < 3 || value.is_empty() || value.chars().count() > 200 || ["file", "password", "checkbox"].contains(&kind) || personal_to_the_role(label) {
+        if label.trim().len() < 3 || value.is_empty() || value.chars().count() > 200 || ["file", "password", "checkbox", "add"].contains(&kind) || personal_to_the_role(label) {
             continue;
         }
         let key = question_key(label);
@@ -142,7 +142,7 @@ pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
 /// The bank's answer to a field, if it has one that fits (for a list of options, one of them).
 fn from_bank(list: &[Value], f: &Value) -> Option<String> {
     let label = f["label"].as_str().unwrap_or("");
-    if personal_to_the_role(label) || ["file", "checkbox"].contains(&f["type"].as_str().unwrap_or("")) {
+    if personal_to_the_role(label) || ["file", "checkbox", "add"].contains(&f["type"].as_str().unwrap_or("")) {
         return None;
     }
     let key = question_key(label);
@@ -318,7 +318,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     // Everything else, from Claude: one line per field, without the file fields and what the bank answered.
     let lines: Vec<String> = fields.iter().filter(|f| f["type"] != "file" && !f["key"].as_str().is_some_and(|k| banked.iter().any(|b| b == k))).map(|f| {
         let mut o = json!({ "key": f["key"], "type": f["type"], "label": f["label"] });
-        for k in ["section", "options", "context", "value", "required"] {
+        for k in ["section", "entries", "options", "context", "value", "required"] {
             if f.get(k).is_some_and(|v| !v.is_null() && v != "" && v != false) {
                 o[k] = f[k].clone();
             }

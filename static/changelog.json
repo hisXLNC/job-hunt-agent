@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.33.0",
+    "date": "2026-11-06",
+    "title": "Fills every job on your CV",
+    "changes": [
+      "Application forms that show one work-experience or education entry until you press Add Another: Job Hunt presses it for each other job and school on your CV, then fills them all in, most recent first."
+    ]
+  },
+  {
     "version": "2.32.1",
     "date": "2026-11-06",
     "title": "Work history filled from your CV",

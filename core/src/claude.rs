@@ -622,7 +622,10 @@ candidate's voice, specific to this posting, with real figures from the CV; for 
 from the CV, entry by entry in its order. Fields with the same section are one entry: \"Work Experience 1\" is \
 the CV's most recent job, \"Work Experience 2\" the one before it, and so on (\"Education 1\" the most recent \
 school); never put two jobs in one entry or one job in two. A role at the same employer under a different title \
-is its own entry. More entries on the form than in the CV: leave the extra ones out. Copy each job title and \
+is its own entry. More entries on the form than in the CV: leave the extra ones out.\n\
+- add (a section's \"Add another\" button; entries is how many entries the section has now): how many more \
+entries the CV needs there, in digits: work history is every role in the CV's experience, education every degree \
+or school, less the entries already there. \"0\" when it has enough. Fill the entries that are there now as usual. Copy each job title and \
 employer exactly as the CV writes it, never shortened or split; a description is that role's own lines from the \
 CV.\n\
 - Skip file fields and captchas. A field already filled in (a value is given, often by the site reading the CV) \

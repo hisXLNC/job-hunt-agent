@@ -49,7 +49,7 @@
     statusEl = root.querySelector('.s');
     root.querySelectorAll('[data-k]').forEach(b => { buttons[b.dataset.k] = b; });
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
-    buttons.fill.onclick = () => start();
+    buttons.fill.onclick = () => { round = 0; start(); };
     buttons.next.onclick = () => nextAmber();
     buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
@@ -96,7 +96,33 @@
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
     return question(el) || clean(el.placeholder || el.name || el.id);
   }
-  let fields = [], byKey = {};
+  let fields = [], byKey = {}, adders = {}, round = 0;
+  const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
+  const ADD = /^\s*\+?\s*add\b/i;
+  const NOT_ADD = /\b(file|attachment|resume|cv|cover|link|website|document|photo|skill|language|reference)s?\b/i;
+  const HISTORY = /experience|employment|work|job|position|education|school|degree|qualification/i;
+  function collectAdders(n) {
+    adders = {};
+    const seen = new Set();
+    for (const b of document.querySelectorAll('button,[role=button],a')) {
+      if (own(b) || !shown(b)) continue;
+      const t = clean(b.textContent || b.getAttribute('aria-label') || '');
+      if (!t || t.length > 40 || !ADD.test(t) || NOT_ADD.test(t)) continue;
+      const sec = sectionOf(b);
+      if (!sec || !HISTORY.test(sec + ' ' + t)) continue;
+      const base = sec.replace(/\s*\d+\s*$/, '');
+      if (seen.has(base.toLowerCase())) continue;
+      seen.add(base.toLowerCase());
+      // How many entries it has now: its numbered headings ("Work Experience 1", "2"…), else its title boxes.
+      const numbered = new RegExp('^' + reEsc(base) + '\\s*\\d+$', 'i');
+      let have = heads.filter(h => numbered.test(textOf(h))).length;
+      if (!have) have = fields.filter(f => (f.section || '').toLowerCase().startsWith(base.toLowerCase()) && /title|position|degree|school|institution|employer|company/i.test(f.label)).length;
+      const key = 'a' + n++;
+      fields.push({ key, type: 'add', label: t, section: base, entries: have, value: '' });
+      adders[key] = b;
+    }
+  }
   // The part of the form a box is in: the nearest heading before it ("Work Experience 2",
   // "Education 1"), so each entry gets its own job or school from the CV.
   let heads = [];
@@ -140,7 +166,9 @@
       fields.push({ key: g.key, type: g.type, label: question(first) || clean(first.name), section: sectionOf(first) || undefined, options: g.options.slice(0, 40), required: g.els.some(e => e.required), value: g.els.filter(e => e.checked).map((e, i) => g.options[g.els.indexOf(e)]).join('; ') });
       byKey[g.key] = g.els;
     }
-    return fields.slice(0, 120);
+    fields = fields.slice(0, 120);
+    collectAdders(n);
+    return fields;
   }
   const formHere = () => collect().filter(f => f.type !== 'checkbox').length >= 3 && fields.some(f => f.type === 'email' || f.type === 'file' || /e-?mail|resume|cv/i.test(f.label));
 
@@ -221,6 +249,7 @@
       amber = []; amberAt = 0;
       let ok = 0, todo = 0;
       for (const f of fields) {
+        if (f.type === 'add') continue;
         const file = answer.files && answer.files[f.key];
         const v = answer.values && answer.values[f.key];
         const done = await fillOne(f, v, file);
@@ -231,6 +260,32 @@
         if (!matters) continue;
         mark((byKey[f.key] || [])[0], done);
         if (done) ok++; else todo++;
+      }
+      // Your CV has more jobs or schools than the form shows: press its Add button for each, then read
+      // the form again and fill the new entries (twice at most).
+      const adds = round < 2 ? fields.filter(f => f.type === 'add' && parseInt(answer.values && answer.values[f.key], 10) > 0) : [];
+      if (adds.length) {
+        round++;
+        let added = 0;
+        for (const f of adds) {
+          const want = Math.min(8, parseInt(answer.values[f.key], 10));
+          for (let i = 0; i < want; i++) {
+            let b = adders[f.key];
+            if (!b || !b.isConnected || !shown(b)) {
+              collect();
+              b = Object.keys(adders).map(k => fields.find(x => x.key === k)).filter(x => x && x.section === f.section).map(x => adders[x.key])[0];
+            }
+            if (!b) break;
+            b.click(); added++;
+            await wait(900);
+          }
+        }
+        if (added) {
+          status(`Added ${added} more ${added === 1 ? 'entry' : 'entries'} for the other jobs and schools on your CV; filling them in…`);
+          await wait(600);
+          start();
+          return;
+        }
       }
       filled = true;
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
@@ -257,7 +312,7 @@
         }
       }
     },
-    start: () => start(),
+    start: () => { round = 0; start(); },
     failed(msg) { buttons.fill.disabled = false; status(msg); },
   };
   // What stops Job Hunt submitting for you: a captcha, or a required box you haven't ticked.
