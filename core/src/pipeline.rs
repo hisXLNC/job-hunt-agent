@@ -353,16 +353,43 @@ pub struct Progress {
     pub tailored: usize,
     /// Paused by you: waiting at this step until you resume it.
     pub paused: bool,
+    /// Alongside the stage: the posting being scored while the sources are still searched.
+    #[serde(default)]
+    pub also: String,
 }
 
 /// The search's stages and the share of the bar each one fills.
+// Scoring runs alongside the search (see take_in), so searching is most of the bar.
 const STAGES: [(&str, u32, u32); 5] = [
-    ("Searching job sites", 0, 30),
-    ("Searching Indeed", 30, 45),
-    ("Checking near-miss titles", 45, 50),
-    ("Scoring postings", 50, 80),
-    ("Tailoring applications", 80, 100),
+    ("Searching job sites", 0, 70),
+    ("Searching Indeed", 70, 80),
+    ("Checking near-miss titles", 80, 85),
+    ("Scoring postings", 85, 90),
+    ("Tailoring applications", 90, 100),
 ];
+
+/// What a search keeps across the batches its sources send (see Agent::take_in).
+#[derive(Default)]
+struct SearchRun {
+    cap: usize,
+    scored: usize,
+    /// Claude can't score now (no key, usage limit…): the rest are held.
+    halted: bool,
+    seen: HashSet<String>,
+    all_ids: HashSet<String>,
+    near: Vec<Posting>,
+    found_here: Vec<Posting>,
+    known_before: HashSet<String>,
+}
+
+/// What every batch of a search is scored against.
+struct SearchCtx<'a> {
+    profile: &'a crate::profile::Profile,
+    cvs: &'a [(String, String)],
+    guidance: &'a str,
+    force: bool,
+    keep_found: bool,
+}
 
 /// Stops a background job from running twice at once; released when dropped.
 pub struct Running<'a> {
@@ -756,6 +783,20 @@ impl Agent {
     /// The running search's progress, or None when no search is running.
     pub fn progress(&self) -> Option<Progress> {
         self.is_running("search").then(|| self.progress.lock().unwrap().clone())
+    }
+
+    /// What the search is doing alongside its stage (scoring a posting while the sources are still
+    /// being searched): shown with the stage.
+    fn also(&self, what: &str) {
+        self.progress.lock().unwrap().also = what.to_string();
+    }
+
+    /// Paused by you: wait here until you resume or stop the search.
+    fn wait_while_held(&self) {
+        while self.hold.load(std::sync::atomic::Ordering::SeqCst) && !self.stopping() {
+            self.progress.lock().unwrap().paused = true;
+            std::thread::sleep(std::time::Duration::from_millis(if cfg!(test) { 5 } else { 400 }));
+        }
     }
 
     pub(crate) fn step(&self, stage: &str, done: usize, total: usize, detail: &str) {
@@ -1628,137 +1669,98 @@ replies and interviews, and a little lower for kinds that got none from several 
             self.db().log(None, "purge", &format!("removed {purged} old posting{} you never acted on", if purged == 1 { "" } else { "s" }))?;
         }
         let searched = postings.is_none() && batch.is_none();
-        let postings = match postings {
-            Some(p) => p,
+        let keep_found = only.is_some() || searched;
+        let guidance = self.scoring_guidance(&profile);
+        let mut run = SearchRun { cap, ..SearchRun::default() };
+        let ctx = SearchCtx { profile: &profile, cvs: &cvs, guidance: &guidance, force, keep_found };
+        match postings {
+            // Postings handed in (added by you, or held ones): one batch.
+            Some(list) => {
+                let mut list = list;
+                let held = self.take_held();
+                report.held = held.len();
+                let mut first = held;
+                first.retain(|h| !list.iter().any(|a| a.id() == h.id()));
+                first.append(&mut list);
+                self.take_in(first, &mut run, &mut report, &ctx)?;
+            }
+            // A search: the sources are searched in the background while what they find is scored
+            // here as it comes in, so matches show up from the first minutes, not at the end.
             None => {
                 let keys = self.search_keys();
-                let f = if only == Some("indeed") { crate::sources::Fetched::default() }
-                    else { crate::sources::fetch_only(&profile, &keys, only, &|i, n, name| { self.step("Searching job sites", i, n, name); !self.stopping() }) };
-                report.source_problems = f.problems;
-                report.by_source = f.by_source.iter().map(|(n, k, p, e)| json!({ "name": n, "searches": k, "found": p, "failed": e })).collect();
-                report.broken_boards = f.failed.iter().map(|(s, n)| json!({ "source": s, "name": n })).collect();
+                let (tx, rx) = std::sync::mpsc::channel::<Vec<Posting>>();
+                let fetched = std::thread::scope(|scope| -> R<crate::sources::Fetched> {
+                    let profile_ref = &profile;
+                    let fetcher = scope.spawn(move || {
+                        if only == Some("indeed") {
+                            return crate::sources::Fetched::default();
+                        }
+                        let send = |batch: &[Posting]| { let _ = tx.send(batch.to_vec()); };
+                        crate::sources::fetch_streaming(profile_ref, &keys, only, &|i, n, name| { self.step("Searching job sites", i, n, name); !self.stopping() }, &send)
+                    });
+                    // What the last search left: first, while the sources are being searched.
+                    if only.is_none() {
+                        let held = self.take_held();
+                        report.held = held.len();
+                        if !held.is_empty() {
+                            self.take_in(held, &mut run, &mut report, &ctx)?;
+                        }
+                    }
+                    // Each source's postings as they arrive, a few batches at a time.
+                    for batch in rx.iter() {
+                        let mut batch = batch;
+                        while let Ok(more) = rx.try_recv() {
+                            batch.extend(more);
+                        }
+                        self.take_in(batch, &mut run, &mut report, &ctx)?;
+                    }
+                    Ok(fetcher.join().unwrap_or_default())
+                })?;
+                report.source_problems = fetched.problems;
+                report.by_source = fetched.by_source.iter().map(|(n, k, p, e)| json!({ "name": n, "searches": k, "found": p, "failed": e })).collect();
+                report.broken_boards = fetched.failed.iter().map(|(s, n)| json!({ "source": s, "name": n })).collect();
                 if profile.sources.auto_boards {
-                    let dropped = self.drop_dead_boards(&f.failed);
+                    let dropped = self.drop_dead_boards(&fetched.failed);
                     report.broken_boards.retain(|b| !dropped.contains(b));
                 }
-                let ids: HashSet<String> = f.postings.iter().map(|p| p.id()).collect();
-                report.closed += self.close_missing(&profile, &f.complete, &ids)?;
-                let mut all = f.postings;
+                report.closed += self.close_missing(&profile, &fetched.complete, &run.all_ids)?;
+                // Indeed (through Claude), and job-alert emails that arrived meanwhile.
                 let indeed_on = profile.sources.indeed && only.is_none_or(|o| o == "indeed");
                 if indeed_on && !self.stopping() {
                     self.step("Searching Indeed", 0, 0, "through the Indeed connector");
-                }
-                let indeed = if self.stopping() || !indeed_on { Ok(vec![]) } else { self.indeed_postings(&profile) };
-                if indeed_on {
+                    let indeed = self.indeed_postings(&profile);
                     let (found, failed) = match &indeed { Ok(f) => (f.len(), 0), Err(_) => (0, 1) };
                     report.by_source.push(json!({ "name": "Indeed", "searches": 1, "found": found, "failed": failed }));
-                }
-                match indeed {
-                    Ok(found) => {
-                        for p in found {
-                            if !all.iter().any(|a| a.id() == p.id()) {
-                                all.push(p);
-                            }
-                        }
+                    match indeed {
+                        Ok(found) => self.take_in(found, &mut run, &mut report, &ctx)?,
+                        Err(e) => report.source_problems.push(format!("Indeed: {}", e.0)),
                     }
-                    Err(e) => report.source_problems.push(format!("Indeed: {}", e.0)),
                 }
-                // Postings from job-alert emails that arrived while a search was running.
                 if only.is_none() {
-                    all.extend(self.take_pending_alerts());
-                }
-                all
-            }
-        };
-        // What this search found (kept for the Search page), and which of those Job Hunt had already.
-        let found_here: Vec<Posting> = if only.is_some() || searched { postings.clone() } else { vec![] };
-        let known_before: HashSet<String> = found_here.iter().filter(|p| {
-            let db = self.db();
-            db.job_exists(&p.id(), &p.company, &p.title).unwrap_or(false) || db.url_exists(&p.url).unwrap_or(false)
-        }).map(|p| p.id()).collect();
-        // What the last search found but didn't get to: first, so it's scored this time (not in a
-        // search of one source: they wait for the next full one).
-        let postings = {
-            let mut held = if only.is_some() { vec![] } else { self.take_held() };
-            held.retain(|h| !postings.iter().any(|a| a.id() == h.id()));
-            report.held = held.len();
-            held.extend(postings);
-            held
-        };
-        report.found = postings.len();
-        self.tally(&report);
-        // Every source's listings, before copies are dropped, for how much the sources overlap.
-        let seen: Vec<(String, String, String)> = postings.iter().map(|p| (p.source.clone(), p.company.clone(), p.title.clone())).collect();
-        self.db().record_sightings(&seen)?;
-
-        // Sort what's new: filtered out, a near miss on the title (Claude takes a look), or worth scoring.
-        let mut candidates: Vec<Posting> = vec![];
-        let mut near: Vec<Posting> = vec![];
-        let mut seen: HashSet<String> = HashSet::new();
-        // Copies on the company's own site first, so a job board's copy of the same role is the one dropped.
-        let mut postings = postings;
-        postings.sort_by_key(|p| crate::sources::is_job_board(&p.url));
-        for mut p in postings {
-            if p.salary.is_none() {
-                if let Some((text, max)) = crate::sources::salary_from_text(&p.description) {
-                    p.salary = Some(text);
-                    p.salary_max = p.salary_max.or(max);
-                }
-            }
-            // The same role listed twice in one search (two sources, or twice on one board).
-            // Matched by company and title, or by the link (another source's copy of the same posting).
-            let link = crate::db::url_key(&p.url);
-            if !seen.insert(crate::db::dupe_key(&p.company, &p.title)) || (!link.is_empty() && !seen.insert(format!("url:{link}"))) {
-                continue;
-            }
-            if force {
-                let filtered = self.db().filtered_out(&p.id(), &p.company, &p.title)?;
-                if let Some(old) = filtered {
-                    self.db().delete_job(&old)?;
-                    report.rechecked += 1;
-                }
-            }
-            let known = self.db().job_exists(&p.id(), &p.company, &p.title)? || self.db().url_exists(&p.url)?;
-            if known {
-                // Found on the company's site this time: apply there rather than on the job board.
-                let existing = self.db().existing_job(&p.id(), &p.company, &p.title);
-                if let Some(id) = existing {
-                    if self.db().prefer_company_link(&id, &p.url)? {
-                        self.db().log(Some(&id), "company-site", &format!("found on the company's site: {}", p.url))?;
+                    let alerts = self.take_pending_alerts();
+                    if !alerts.is_empty() {
+                        self.take_in(alerts, &mut run, &mut report, &ctx)?;
                     }
                 }
-                let posted = p.posted_at.as_deref().and_then(posted_date);
-                self.db().record_repost(&p.id(), &p.company, &p.title, &p.url, posted)?;
-                report.known += 1;
-                continue;
-            }
-            report.new += 1;
-            // A company you've set a minimum employee rating for, already rated below it.
-            let low = profile.min_rating.and_then(|min| {
-                let r = self.db().rating(&p.company)?;
-                let got = r["rating"].as_f64().filter(|_| r["found"] == true)?;
-                (got < min).then(|| format!("rated {got:.1} by employees, below your minimum of {min:.1}"))
-            });
-            match low.or_else(|| prefilter(&p, &profile)) {
-                None => candidates.push(p),
-                Some(why) if why == NO_TITLE_MATCH => near.push(p),
-                Some(why) => self.skip(&p, &why, &mut report)?,
             }
         }
+        // Titles a word match missed: one request for them all, then scored like the rest.
+        let mut near = std::mem::take(&mut run.near);
         if !near.is_empty() && !self.stopping() {
-            // One request for the titles a word match missed; on failure they wait for the next search.
             let take: Vec<Posting> = near.drain(..near.len().min(NEAR_MISS_BATCH)).collect();
             self.step("Checking near-miss titles", 0, 1, &format!("{} titles", take.len()));
             let titles: Vec<String> = take.iter().map(|p| format!("{} ({})", p.title, p.company)).collect();
             match self.llm().pick_titles(&targets(&profile), &titles) {
                 Ok(keep) => {
+                    let mut picked = vec![];
                     for (i, p) in take.into_iter().enumerate() {
                         if keep.contains(&i) {
-                            candidates.push(p);
+                            picked.push(p);
                         } else {
                             self.skip(&p, NO_TITLE_MATCH, &mut report)?;
                         }
                     }
+                    self.score_these(picked, &mut run, &mut report, &ctx)?;
                 }
                 Err(e) => {
                     report.errors.push(format!("checking near-miss titles: {e}"));
@@ -1769,111 +1771,9 @@ replies and interviews, and a little lower for kinds that got none from several 
             report.deferred += near.len(); // over the batch size: next search
         }
         // Held for the next search, which looks at them first.
-        self.hold(std::mem::take(&mut near));
-        // Best first, so the scoring cap leaves out the weakest: titles that match one of yours,
-        // then postings that only mention your keywords or that Claude picked as near misses.
-        let wanted_title = |p: &Posting| profile.tracks.iter().flat_map(|t| t.titles.iter()).any(|t| crate::filters::title_matches(&p.title, t));
-        candidates.sort_by_key(|p| !wanted_title(p));
-        self.tally(&report);
-
-        // LinkedIn's and Job Bank's searches list postings without their text: read it for the ones
-        // about to be scored.
-        let thin_source = |s: &str| s == "linkedin" || s == "jobbank" || crate::sites::is_site_source(s);
-        for (src, name, max) in [("linkedin", "LinkedIn", 30), ("jobbank", "Job Bank", 20)].into_iter().filter(|_| !self.stopping()) {
-            let mut thin: Vec<&mut Posting> = candidates.iter_mut().take(cap).filter(|p| p.source == src && p.description.trim().is_empty()).collect();
-            if thin.is_empty() {
-                continue;
-            }
-            self.step(&format!("Reading {name} postings"), 0, 1, &format!("{} postings", thin.len()));
-            let total = thin.len();
-            let c = crate::sources::http();
-            let read = if src == "linkedin" { crate::sources::linkedin_details(&c, &mut thin, max) } else { crate::sources::jobbank_details(&c, &mut thin, max) };
-            if read < total {
-                report.errors.push(format!("{name}: read {read} of {total} new postings; the rest wait for the next search"));
-            }
-        }
-        // Recruiters' and job sites' postings found as links: read from their own pages.
-        let mut thin: Vec<&mut Posting> = candidates.iter_mut().take(cap).filter(|p| crate::sites::is_site_source(&p.source) && p.description.trim().is_empty()).collect();
-        if !thin.is_empty() && !self.stopping() {
-            self.step("Reading job sites' postings", 0, 1, &format!("{} postings", thin.len()));
-            let total = thin.len();
-            let read = crate::sites::details(&crate::sources::http(), &mut thin, 30);
-            if read < total {
-                report.errors.push(format!("Job sites: read {read} of {total} new postings; the rest wait for the next search"));
-            }
-        }
-        // Not read yet: held, so the next search reads and scores them. Read: the filters again, now
-        // that there's a description to check.
-        let (unread, read): (Vec<Posting>, Vec<Posting>) = candidates.into_iter().partition(|p| thin_source(&p.source) && p.description.trim().is_empty());
-        let mut candidates = read;
-        // Read just now (LinkedIn, Job Bank, job sites list postings without their text): their pay too.
-        for p in candidates.iter_mut().filter(|p| p.salary.is_none() && thin_source(&p.source)) {
-            if let Some((text, max)) = crate::sources::salary_from_text(&p.description) {
-                p.salary = Some(text);
-                p.salary_max = p.salary_max.or(max);
-            }
-        }
-        report.deferred += unread.len();
-        self.hold(unread);
-        let mut kept = vec![];
-        for p in candidates {
-            match thin_source(&p.source).then(|| prefilter(&p, &profile)).flatten() {
-                Some(why) => self.skip(&p, &why, &mut report)?,
-                None => kept.push(p),
-            }
-        }
-        let candidates = kept;
-        let llm = self.llm();
-        let guidance = self.scoring_guidance(&profile);
-        let to_score = candidates.len().min(cap);
-        report.deferred += candidates.len().saturating_sub(cap); // held: scored first next time
-        let mut candidates = candidates.into_iter();
-        for (i, p) in candidates.by_ref().take(cap).enumerate() {
-            if self.stopping() {
-                self.hold(vec![p]);
-                break;
-            }
-            self.step("Scoring postings", i, to_score, &format!("{} at {}", p.title, p.company));
-            let mut job = p.to_job();
-            match llm.score(&cvs, &guidance, &job) {
-                Ok(s) => {
-                    report.scored += 1;
-                    job.status = if s.score >= profile.score_threshold { "queued" } else { "skipped" }.into();
-                    job.score = Some(s.score);
-                    job.score_potential = s.potential;
-                    job.track = Some(s.track.clone());
-                    job.reasoning = Some(s.reasoning);
-                    job.red_flags = s.red_flags;
-                    job.keywords = s.keywords;
-                    job.deadline = deadline_of(&s.deadline, &job.description);
-                    // Pay the search's patterns missed, as Claude read it; below your minimum, set aside like the filter would.
-                    if job.salary.is_none() {
-                        if let Some((text, max)) = salary_parts(&s.salary) {
-                            job.salary = Some(text);
-                            if let Some(flag) = below_minimum(&profile, max) {
-                                job.status = "skipped".into();
-                                job.red_flags.insert(0, flag);
-                            }
-                        }
-                    }
-                    let db = self.db();
-                    db.insert_job(&job)?;
-                    db.log(Some(&job.id), "scored", &format!("{} on the {} track", s.score, s.track))?;
-                }
-                // Held, so the next search retries it.
-                Err(e) => {
-                    report.errors.push(format!("scoring {} / {}: {e}", p.company, p.title));
-                    let stop = e.0.contains("API key") || e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("wasn't found");
-                    self.hold(vec![p]);
-                    if stop {
-                        break; // every other posting would fail the same way
-                    }
-                }
-            }
-            self.tally(&report);
-        }
-        // Over the cap, or left when the search stopped: scored first next time.
-        self.hold(candidates.collect());
+        self.hold(near);
+        let found_here = std::mem::take(&mut run.found_here);
+        let known_before = std::mem::take(&mut run.known_before);
         // Unless tailoring is automatic, roles that cleared the bar wait for you to pick them. A batch
         // of held postings leaves tailoring to the next search.
         let queued = if profile.auto_tailor && batch.is_none() { self.db().jobs(Some("queued"), profile.max_per_run)? } else { vec![] };
@@ -2063,6 +1963,193 @@ replies and interviews, and a little lower for kinds that got none from several 
             self.note(&format!("Salaries found for {found} postings"), &format!("Looked at the {checked} postings without a salary: their text, their pages and the companies' own postings.{more}"));
         }
         Ok((checked, found, low.len()))
+    }
+
+    /// One batch of postings in a search: dedupe against the rest of the search, file what's known
+    /// or filtered out, keep near-miss titles for the end, and score the rest (see score_these).
+    fn take_in(&self, postings: Vec<Posting>, run: &mut SearchRun, report: &mut Report, ctx: &SearchCtx) -> R<()> {
+        if postings.is_empty() {
+            return Ok(());
+        }
+        let profile = ctx.profile;
+        run.all_ids.extend(postings.iter().map(|p| p.id()));
+        if ctx.keep_found {
+            for p in &postings {
+                let known = {
+                    let db = self.db();
+                    db.job_exists(&p.id(), &p.company, &p.title).unwrap_or(false) || db.url_exists(&p.url).unwrap_or(false)
+                };
+                if known {
+                    run.known_before.insert(p.id());
+                }
+            }
+            run.found_here.extend(postings.iter().cloned());
+        }
+        report.found += postings.len();
+        // Every source's listings, before copies are dropped, for how much the sources overlap.
+        let seen: Vec<(String, String, String)> = postings.iter().map(|p| (p.source.clone(), p.company.clone(), p.title.clone())).collect();
+        self.db().record_sightings(&seen)?;
+        let mut candidates: Vec<Posting> = vec![];
+        // Copies on the company's own site first, so a job board's copy of the same role is the one dropped.
+        let mut postings = postings;
+        postings.sort_by_key(|p| crate::sources::is_job_board(&p.url));
+        for mut p in postings {
+            if p.salary.is_none() {
+                if let Some((text, max)) = crate::sources::salary_from_text(&p.description) {
+                    p.salary = Some(text);
+                    p.salary_max = p.salary_max.or(max);
+                }
+            }
+            // The same role listed twice in one search (two sources, or twice on one board).
+            let link = crate::db::url_key(&p.url);
+            if !run.seen.insert(crate::db::dupe_key(&p.company, &p.title)) || (!link.is_empty() && !run.seen.insert(format!("url:{link}"))) {
+                continue;
+            }
+            if ctx.force {
+                let filtered = self.db().filtered_out(&p.id(), &p.company, &p.title)?;
+                if let Some(old) = filtered {
+                    self.db().delete_job(&old)?;
+                    report.rechecked += 1;
+                }
+            }
+            let known = self.db().job_exists(&p.id(), &p.company, &p.title)? || self.db().url_exists(&p.url)?;
+            if known {
+                // Found on the company's site this time: apply there rather than on the job board.
+                let existing = self.db().existing_job(&p.id(), &p.company, &p.title);
+                if let Some(id) = existing {
+                    if self.db().prefer_company_link(&id, &p.url)? {
+                        self.db().log(Some(&id), "company-site", &format!("found on the company's site: {}", p.url))?;
+                    }
+                }
+                let posted = p.posted_at.as_deref().and_then(posted_date);
+                self.db().record_repost(&p.id(), &p.company, &p.title, &p.url, posted)?;
+                report.known += 1;
+                continue;
+            }
+            report.new += 1;
+            // A company you've set a minimum employee rating for, already rated below it.
+            let low = profile.min_rating.and_then(|min| {
+                let r = self.db().rating(&p.company)?;
+                let got = r["rating"].as_f64().filter(|_| r["found"] == true)?;
+                (got < min).then(|| format!("rated {got:.1} by employees, below your minimum of {min:.1}"))
+            });
+            match low.or_else(|| prefilter(&p, profile)) {
+                None => candidates.push(p),
+                Some(why) if why == NO_TITLE_MATCH => run.near.push(p),
+                Some(why) => self.skip(&p, &why, report)?,
+            }
+        }
+        self.tally(report);
+        self.score_these(candidates, run, report, ctx)
+    }
+
+    /// Score new postings that passed the filters, as many as this search still has room for (the
+    /// rest are held for the next one). Postings listed without their text (LinkedIn, Job Bank, job
+    /// sites) are read first, and checked against the filters again.
+    fn score_these(&self, candidates: Vec<Posting>, run: &mut SearchRun, report: &mut Report, ctx: &SearchCtx) -> R<()> {
+        let profile = ctx.profile;
+        let mut candidates = candidates;
+        // Best first, so the scoring cap leaves out the weakest: titles that match one of yours first.
+        let wanted_title = |p: &Posting| profile.tracks.iter().flat_map(|t| t.titles.iter()).any(|t| crate::filters::title_matches(&p.title, t));
+        candidates.sort_by_key(|p| !wanted_title(p));
+        let room = run.cap.saturating_sub(run.scored);
+        if run.halted || room == 0 || self.stopping() {
+            report.deferred += candidates.len();
+            self.hold(candidates);
+            return Ok(());
+        }
+        let thin_source = |s: &str| s == "linkedin" || s == "jobbank" || crate::sites::is_site_source(s);
+        for (src, name, max) in [("linkedin", "LinkedIn", 30), ("jobbank", "Job Bank", 20)] {
+            let mut thin: Vec<&mut Posting> = candidates.iter_mut().take(room).filter(|p| p.source == src && p.description.trim().is_empty()).collect();
+            if thin.is_empty() || self.stopping() {
+                continue;
+            }
+            self.also(&format!("reading {} {name} postings", thin.len()));
+            let total = thin.len();
+            let c = crate::sources::http();
+            let read = if src == "linkedin" { crate::sources::linkedin_details(&c, &mut thin, max) } else { crate::sources::jobbank_details(&c, &mut thin, max) };
+            if read < total {
+                report.errors.push(format!("{name}: read {read} of {total} new postings; the rest wait for the next search"));
+            }
+        }
+        let mut thin: Vec<&mut Posting> = candidates.iter_mut().take(room).filter(|p| crate::sites::is_site_source(&p.source) && p.description.trim().is_empty()).collect();
+        if !thin.is_empty() && !self.stopping() {
+            self.also(&format!("reading {} job sites' postings", thin.len()));
+            let total = thin.len();
+            let read = crate::sites::details(&crate::sources::http(), &mut thin, 30);
+            if read < total {
+                report.errors.push(format!("Job sites: read {read} of {total} new postings; the rest wait for the next search"));
+            }
+        }
+        // Not read: held for the next search. Read: their pay, and the filters again.
+        let (unread, read): (Vec<Posting>, Vec<Posting>) = candidates.into_iter().partition(|p| thin_source(&p.source) && p.description.trim().is_empty());
+        report.deferred += unread.len();
+        self.hold(unread);
+        let mut kept = vec![];
+        for mut p in read {
+            if p.salary.is_none() && thin_source(&p.source) {
+                if let Some((text, max)) = crate::sources::salary_from_text(&p.description) {
+                    p.salary = Some(text);
+                    p.salary_max = p.salary_max.or(max);
+                }
+            }
+            match thin_source(&p.source).then(|| prefilter(&p, profile)).flatten() {
+                Some(why) => self.skip(&p, &why, report)?,
+                None => kept.push(p),
+            }
+        }
+        let llm = self.llm();
+        let mut left = kept.into_iter();
+        for p in left.by_ref() {
+            if self.stopping() || run.halted || run.scored >= run.cap {
+                self.hold(vec![p]);
+                report.deferred += 1;
+                continue;
+            }
+            self.wait_while_held();
+            self.also(&format!("scoring {} at {}", p.title, p.company));
+            run.scored += 1;
+            let mut job = p.to_job();
+            match llm.score(ctx.cvs, ctx.guidance, &job) {
+                Ok(s) => {
+                    report.scored += 1;
+                    job.status = if s.score >= profile.score_threshold { "queued" } else { "skipped" }.into();
+                    job.score = Some(s.score);
+                    job.score_potential = s.potential;
+                    job.track = Some(s.track.clone());
+                    job.reasoning = Some(s.reasoning);
+                    job.red_flags = s.red_flags;
+                    job.keywords = s.keywords;
+                    job.deadline = deadline_of(&s.deadline, &job.description);
+                    // Pay the search's patterns missed, as Claude read it; below your minimum, set aside like the filter would.
+                    if job.salary.is_none() {
+                        if let Some((text, max)) = salary_parts(&s.salary) {
+                            job.salary = Some(text);
+                            if let Some(flag) = below_minimum(profile, max) {
+                                job.status = "skipped".into();
+                                job.red_flags.insert(0, flag);
+                            }
+                        }
+                    }
+                    let db = self.db();
+                    db.insert_job(&job)?;
+                    db.log(Some(&job.id), "scored", &format!("{} on the {} track", s.score, s.track))?;
+                }
+                // Held, so the next search retries it.
+                Err(e) => {
+                    run.scored -= 1;
+                    report.errors.push(format!("scoring {} / {}: {e}", p.company, p.title));
+                    // Every other posting would fail the same way: stop scoring (they're held).
+                    if e.0.contains("API key") || e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("wasn't found") {
+                        run.halted = true;
+                    }
+                    self.hold(vec![p]);
+                }
+            }
+            self.tally(report);
+        }
+        self.also("");
+        Ok(())
     }
 
     /// Score a posting that was skipped (filtered out or scored low) now; tailor it if it clears your bar.
@@ -7618,8 +7705,11 @@ mod tests {
     fn progress_moves_through_the_stages() {
         let s = setup();
         assert!(s.agent.progress().is_none(), "no search, no progress");
+        // Searching is most of the bar now that scoring runs alongside it.
+        s.agent.step("Searching job sites", 1, 2, "x");
+        assert_eq!(s.agent.progress.lock().unwrap().percent, 35);
         s.agent.step("Scoring postings", 1, 2, "x");
-        assert_eq!(s.agent.progress.lock().unwrap().percent, 65);
+        assert_eq!(s.agent.progress.lock().unwrap().percent, 88);
         s.agent.step("Searching job sites", 0, 4, "y");
         assert_eq!(s.agent.progress.lock().unwrap().percent, 0);
         s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
@@ -8081,6 +8171,26 @@ mod tests {
         s.agent.save_company_notes("ACME Inc.", "Wait six months.").unwrap();
         assert_eq!(s.agent.company_notes("Acme"), "Wait six months.");
         assert!(s.agent.company_history("Elsewhere", "").is_empty());
+    }
+
+    #[test]
+    fn batches_arriving_during_a_search_share_it() {
+        let s = setup();
+        let profile = s.agent.profile();
+        let cvs = s.agent.cv_texts(&profile);
+        let guidance = s.agent.scoring_guidance(&profile);
+        let ctx = SearchCtx { profile: &profile, cvs: &cvs, guidance: &guidance, force: false, keep_found: true };
+        let mut run = SearchRun { cap: 1, ..SearchRun::default() };
+        let mut report = Report::default();
+        // The first source's postings are scored as soon as they're in.
+        s.agent.take_in(vec![posting("Technical Program Manager", "1")], &mut run, &mut report, &ctx).unwrap();
+        assert_eq!(report.scored, 1);
+        // The next source sends the same role again, and a new one: the copy is dropped, and the new one
+        // waits for the next search (this one's cap is reached).
+        s.agent.take_in(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")], &mut run, &mut report, &ctx).unwrap();
+        assert_eq!((report.found, report.new, report.scored, report.deferred), (3, 2, 1, 1));
+        assert_eq!(s.agent.held_count(), 1);
+        assert_eq!(run.found_here.len(), 3);
     }
 
     #[test]

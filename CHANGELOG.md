@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.30.0] - 2026-11-06
+
+Scored while it searches.
+
+### Changes
+
+- Postings are scored as each job site returns them, while the rest are still being searched, instead of after the whole search: the first matches show up within minutes, and a search finishes sooner. The search's progress shows what's being scored meanwhile.
+
 ## [2.29.0] - 2026-11-06
 
 Companies you've applied to before.
@@ -1061,6 +1069,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.30.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.30.0
 [2.29.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.29.0
 [2.28.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.28.0
 [2.27.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.27.0

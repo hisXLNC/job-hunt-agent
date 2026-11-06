@@ -1730,6 +1730,12 @@ pub const SEARCHABLE: &[(&str, &str)] = &[("boards", "Company job boards"), ("li
 /// fetch_all, limited to one source when `only` names one: an id from SEARCHABLE, or "site:<id>"
 /// for one recruiter or job site. Sources you turned off stay off.
 pub fn fetch_only(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn Fn(usize, usize, &str) -> bool) -> Fetched {
+    fetch_streaming(p, keys, only, on_step, &|_| {})
+}
+
+/// fetch_only, handing each request's postings to `on_batch` as soon as they're in (new to this
+/// search only), so they can be scored while the rest are searched.
+pub fn fetch_streaming(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn Fn(usize, usize, &str) -> bool, on_batch: &dyn Fn(&[Posting])) -> Fetched {
     type Call<'a> = Box<dyn Fn() -> Result<(Vec<Posting>, bool), String> + 'a>;
     let c = http();
     // (what's being searched, the kind of source, the company board if it is one, the request)
@@ -1874,8 +1880,15 @@ pub fn fetch_only(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn Fn
                 if all {
                     complete.extend(board.map(|b| b.0));
                 }
+                let mut fresh = vec![];
                 for p in list {
-                    found.entry(p.id()).or_insert(p);
+                    if !found.contains_key(&p.id()) {
+                        fresh.push(p.clone());
+                        found.insert(p.id(), p);
+                    }
+                }
+                if !fresh.is_empty() {
+                    on_batch(&fresh);
                 }
             }
             Err(e) => {

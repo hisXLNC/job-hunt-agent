@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.30.0",
+    "date": "2026-11-06",
+    "title": "Scored while it searches",
+    "changes": [
+      "Postings are scored as each job site returns them, while the rest are still being searched, instead of after the whole search: the first matches show up within minutes, and a search finishes sooner. The search's progress shows what's being scored meanwhile."
+    ]
+  },
+  {
     "version": "2.29.0",
     "date": "2026-11-06",
     "title": "Companies you've applied to before",
