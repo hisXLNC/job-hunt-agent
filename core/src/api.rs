@@ -299,6 +299,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
     // Before taking the database below: these need it too.
     let (weekly_to, next_wake) = (agent.weekly_to(), agent.next_wake().map(|t| t.to_rfc3339()));
     let ext_key = if host.kind() == "server" { String::new() } else { crate::bridge::key(agent) };
+    let repeat_mode = agent.repeat_mode();
     let site_status = agent.site_status();
     let builtin_google = google::builtin_client().is_some();
     let site_catalog: Vec<Value> = crate::sites::SITES.iter().map(|x| json!({ "id": x.id, "name": x.name, "kind": x.kind, "about": x.about, "country": x.country })).collect();
@@ -375,7 +376,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "clip_watch": get("clip.watch") != "0",
         // The browser extension's key for Fill this form (see bridge.rs), on this computer only.
         "ext_key": ext_key,
-        "repeat_mode": agent.repeat_mode(),
+        "repeat_mode": repeat_mode,
         "ratings_auto": get("ratings.auto") != "0",
         "claude_desktop": {
             "available": host.mcp_command().is_some(),
