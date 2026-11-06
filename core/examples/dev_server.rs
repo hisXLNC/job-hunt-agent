@@ -102,7 +102,7 @@ impl Llm for DemoLlm {
             salary: String::new(),
         })
     }
-    fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], _stories: &str, _style: &str) -> R<Tailored> {
+    fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], _stories: &str, _style: &str, _consistency: &str) -> R<Tailored> {
         let mut edits = vec![];
         for line in numbered.lines() {
             let Some(close) = line.find(']') else { continue };

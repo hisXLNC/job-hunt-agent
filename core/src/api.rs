@@ -375,6 +375,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "clip_watch": get("clip.watch") != "0",
         // The browser extension's key for Fill this form (see bridge.rs), on this computer only.
         "ext_key": ext_key,
+        "repeat_mode": agent.repeat_mode(),
         "ratings_auto": get("ratings.auto") != "0",
         "claude_desktop": {
             "available": host.mcp_command().is_some(),
@@ -621,6 +622,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "revising": agent.is_running(&format!("revise:{id}")),
                     "undo": { "cv": agent.can_undo(id, "cv"), "letter": agent.can_undo(id, "letter") },
                     "revision": agent.last_revision(id),
+                    // Your history with the company: where you applied before, your notes, and this CV beside the last one you sent them.
+                    "company_history": agent.company_history(&job.company, id).iter().map(|j| json!({ "id": j.id, "title": j.title, "status": j.status, "applied_at": j.applied_at })).collect::<Vec<_>>(),
+                    "company_notes": agent.company_notes(&job.company),
+                    "sent_compare": agent.compare_with_sent(&job),
+                    "repeat_mode": agent.repeat_mode(),
                     "follow_up": agent.follow_up(id), "following_up": agent.is_running(&format!("followup:{id}")),
                     "answers": agent.answers(id), "answering": agent.is_running(&format!("answers:{id}")),
                     "can_fill": host.can_fill() && !req.remote,
@@ -735,6 +741,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     }
                     Ok(Resp::json(&json!({ "url": crate::fill::form_link(&job) })))
                 }
+                // The CV you last sent this company, word for word, instead of this one.
+                "reuse-cv" => Ok(Resp::json(&json!({ "job": agent.reuse_sent_cv(id)? }))),
                 // Seen the highlighted changes of the last revision: no more highlights.
                 "revision-seen" => {
                     agent.revision_seen(id)?;
@@ -1060,6 +1068,19 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 agent.db().set("apply.auto_submit", if on { "1" } else { "0" })?;
             }
             Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent) })))
+        }
+        // Your notes on a company, and how companies you've applied to before are tailored for.
+        ["api", "company-notes"] => {
+            agent.save_company_notes(s(&b, "company"), s(&b, "notes"))?;
+            ok()
+        }
+        ["api", "settings", "repeat"] => {
+            let m = s(&b, "mode");
+            if !["light", "same", "usual"].contains(&m) {
+                return Err(Error("Choose light, same or usual.".into()));
+            }
+            agent.db().set("tailor.repeat", m)?;
+            ok()
         }
         // Look for the pay of every posting without one (in the background; a notice says what was found).
         ["api", "salaries", "rescan"] => {

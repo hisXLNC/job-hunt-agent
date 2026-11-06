@@ -536,7 +536,51 @@ fn header_value(s: &str) -> String {
     }
 }
 
-/// A MIME message: plain-text body, optional attachments.
+/// A body written with the letter's light markup (**bold**, "- " bullets, blank lines between
+/// paragraphs) as an email shows it: HTML with real bullets and bold, and plain text with "•"
+/// bullets and no asterisks. Plain text without markup comes out as simple paragraphs.
+pub fn email_parts(body: &str) -> (String, String) {
+    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let bold = |s: &str| {
+        let mut out = String::new();
+        for (i, part) in esc(s).split("**").enumerate() {
+            if i % 2 == 1 { out.push_str(&format!("<b>{part}</b>")) } else { out.push_str(part) }
+        }
+        out
+    };
+    let bullet = |l: &str| l.trim_start().strip_prefix("- ").or_else(|| l.trim_start().strip_prefix("• ")).or_else(|| l.trim_start().strip_prefix("* ")).map(str::to_string);
+    let mut html = String::from("<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f1f1f\">");
+    let mut text = String::new();
+    for block in body.replace("\r\n", "\n").split("\n\n").map(str::trim).filter(|b| !b.is_empty()) {
+        let lines: Vec<&str> = block.lines().map(str::trim_end).filter(|l| !l.trim().is_empty()).collect();
+        let mut i = 0;
+        while i < lines.len() {
+            if bullet(lines[i]).is_some() {
+                html.push_str("<ul style=\"margin:0 0 12px 0;padding-left:22px\">");
+                while i < lines.len() {
+                    let Some(item) = bullet(lines[i]) else { break };
+                    html.push_str(&format!("<li style=\"margin:0 0 6px 0\">{}</li>", bold(&item)));
+                    text.push_str(&format!("• {}\n", item.replace("**", "")));
+                    i += 1;
+                }
+                html.push_str("</ul>");
+            } else {
+                let mut para: Vec<String> = vec![];
+                while i < lines.len() && bullet(lines[i]).is_none() {
+                    para.push(lines[i].to_string());
+                    i += 1;
+                }
+                html.push_str(&format!("<p style=\"margin:0 0 12px 0\">{}</p>", para.iter().map(|l| bold(l)).collect::<Vec<_>>().join("<br>")));
+                text.push_str(&format!("{}\n", para.join("\n").replace("**", "")));
+            }
+        }
+        text.push('\n');
+    }
+    html.push_str("</div>");
+    (text.trim_end().to_string(), html)
+}
+
+/// A MIME message: the body as plain text and as formatted HTML (see email_parts), optional attachments.
 pub fn build_mime(from: &str, to: &str, subject: &str, body: &str, extra_headers: &[(&str, &str)], attachments: &[(String, Vec<u8>)]) -> Vec<u8> {
     let mut m = String::new();
     if !from.is_empty() {
@@ -548,17 +592,21 @@ pub fn build_mime(from: &str, to: &str, subject: &str, body: &str, extra_headers
             m.push_str(&format!("{k}: {}\r\n", header_value(v)));
         }
     }
-    let text = STANDARD.encode(body.replace("\r\n", "\n").replace('\n', "\r\n"));
+    let (plain, html) = email_parts(body);
+    let text = STANDARD.encode(plain.replace('\n', "\r\n"));
     let wrap = |s: &str| s.as_bytes().chunks(76).map(|c| String::from_utf8_lossy(c).to_string()).collect::<Vec<_>>().join("\r\n");
+    // Plain text and the same as HTML: Gmail and Outlook show the formatted one.
+    let alt = format!("jobhunt-alt-{}", URL_SAFE_NO_PAD.encode(rand::random::<[u8; 12]>()));
+    let alternative = format!(
+        "Content-Type: multipart/alternative; boundary=\"{alt}\"\r\n\r\n--{alt}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{}\r\n--{alt}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{}\r\n--{alt}--\r\n",
+        wrap(&text), wrap(&STANDARD.encode(html)));
     if attachments.is_empty() {
-        m.push_str("Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n");
-        m.push_str(&wrap(&text));
-        m.push_str("\r\n");
+        m.push_str(&alternative);
         return m.into_bytes();
     }
     let boundary = format!("jobhunt-{}", URL_SAFE_NO_PAD.encode(rand::random::<[u8; 12]>()));
     m.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n"));
-    m.push_str(&format!("--{boundary}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{}\r\n", wrap(&text)));
+    m.push_str(&format!("--{boundary}\r\n{alternative}"));
     for (name, bytes) in attachments {
         let ctype = if name.ends_with(".docx") {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -832,5 +880,16 @@ mod tests {
         assert!(raw.contains("In-Reply-To: <a@b>"));
         assert!(raw.contains("multipart/mixed") && raw.contains("filename=\"CV.docx\"") && raw.contains("AQID"));
         assert!(raw.contains(&STANDARD.encode("Hello\r\nThere")));
+        assert!(raw.contains("multipart/alternative") && raw.contains("text/html"));
+    }
+
+    #[test]
+    fn letter_as_email() {
+        let (text, html) = email_parts("Dear Hiring Team,\n\nHere is the work:\n\n- **Registration:** I delivered it.\n- **Vendors:** I ran the tender.\n\nAll the best,\nSam");
+        assert!(html.contains("<ul") && html.contains("<li style=\"margin:0 0 6px 0\"><b>Registration:</b> I delivered it.</li>"), "{html}");
+        assert!(html.contains("All the best,<br>Sam"));
+        assert!(text.contains("• Registration: I delivered it.") && !text.contains("**"), "{text}");
+        let (_, h) = email_parts("A < B & C");
+        assert!(h.contains("A &lt; B &amp; C"));
     }
 }

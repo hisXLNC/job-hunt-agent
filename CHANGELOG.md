@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.29.0] - 2026-11-06
+
+Companies you've applied to before.
+
+### Changes
+
+- Emailed applications look right in Gmail: real bullet points and bold themes, and the email starts at "Dear…" (the date, ATTN and Subject lines are for the printed letter).
+- Job Hunt keeps track of companies you've sent a CV to: roles there are tagged Applied here before, and each job shows Your history with the company (the roles you applied for, and when) with your own notes.
+- They keep every CV you send on file side by side, so for a company that has one already, tailoring stays close to it: the same headline, the same way of describing each achievement, and at most 4 paragraphs changed. Or choose the same CV as before, or tailoring as usual (Search → What to search → Tailoring).
+- Before you approve, the CV & letter tab and Review show this CV beside the one you sent them, word by word, with Use the CV you sent before.
+
 ## [2.28.0] - 2026-11-06
 
 See what changed.
@@ -1049,6 +1060,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.29.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.29.0
 [2.28.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.28.0
 [2.27.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.27.0
 [2.26.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.26.1

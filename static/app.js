@@ -664,6 +664,25 @@ function rowActions(j) {
 const empCell = j => j.employment ? `<span class="emp-${esc(empKind(j).toLowerCase().replace(/[^a-z]/g, ''))}">${esc(j.employment)}</span>` : '<span class="muted">—</span>';
 /** The kind alone, for the Type filter: "Contract · 12 months" is a Contract. */
 const empKind = j => !j.employment ? 'Not stated' : j.employment.startsWith('Full-time or') ? 'Part-time' : j.employment.split(' · ')[0];
+/** You've sent this company a CV before (for another role): a tag, with which ones. */
+const appliedBeforeTag = j => (j.applied_before || []).length ? ` <span class="pill info" title="${esc(`You applied to ${j.company} before: ${j.applied_before.map(x => `${x.title} (${STAGES[x.status] || x.status}${x.applied_at ? `, ${fmtDate(x.applied_at)}` : ''})`).join('; ')}`)}">Applied here before</span>` : '';
+/** Your history with the company: where you applied before, and your own notes. */
+function historyHtml(j, history, notes, mode) {
+  if (!(history || []).length && !notes) return '';
+  return `<section class="card company-history"><header><h2>Your history with ${esc(j.company)}</h2></header>
+    ${(history || []).length ? `<ul class="small">${history.map(x => `<li><a href="#job/${encodeURIComponent(x.id)}">${esc(x.title)}</a> · ${esc(STAGES[x.status] || x.status)}${x.applied_at ? ` · applied ${esc(fmtDate(x.applied_at))}` : ''}</li>`).join('')}</ul>
+      <p class="muted small">${mode === 'same' ? `This role gets the same CV you sent them.` : mode === 'usual' ? 'Tailored as usual (Search → What to search → Tailoring).' : `${esc(j.company)} keeps the CVs you sent on file, so this one stays close to the last: the same headline, at most 4 paragraphs changed.`}</p>` : ''}
+    <label class="field small">Your notes on ${esc(j.company)}<textarea id="companyNotes" placeholder="e.g. The recruiter said to wait six months before applying again." style="min-height:60px">${esc(notes || '')}</textarea></label>
+    <div class="row"><button class="btn sm" data-act="saveCompanyNotes" data-company="${esc(j.company)}">Save notes</button></div></section>`;
+}
+/** This CV beside the one you last sent the company: what differs, and a way back to that one. */
+function sentCompareHtml(j, c) {
+  if (!c || !j.cv_path) return '';
+  const n = (c.changes || []).length;
+  return `<section class="card sent-compare"><header><h2>Beside the CV you sent ${esc(j.company)} before</h2>${n ? '<button class="btn sm" data-act="reuseCv">Use the CV you sent before</button>' : ''}</header>
+    <p class="small">${n ? `<b>${n} paragraph${n === 1 ? '' : 's'}</b> differ from the CV you sent for <a href="#job/${encodeURIComponent(c.job.id)}">${esc(c.job.title)}</a>${c.job.applied_at ? ` (${esc(fmtDate(c.job.applied_at))})` : ''}. They keep both on file; small, keyword-level differences are normal, a different headline or story is what stands out.` : `The same as the CV you sent for <a href="#job/${encodeURIComponent(c.job.id)}">${esc(c.job.title)}</a>.`}</p>
+    ${n ? `<details ${n <= 4 ? 'open' : ''}><summary class="small muted">What differs</summary>${c.changes.map(x => `<div class="rev-para">${wordDiff(x.before, x.after)}</div>`).join('')}</details>` : ''}</section>`;
+}
 /** Two versions of a paragraph, word by word: removed words struck through, added ones highlighted. */
 function wordDiff(before, after) {
   const a = String(before || '').split(/(\s+)/).filter(Boolean), b = String(after || '').split(/(\s+)/).filter(Boolean);
@@ -808,7 +827,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, playbook, revision, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   j.effort = effort;
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
@@ -830,7 +849,7 @@ async function showJob(id) {
       <div class="grow">
         <div class="eyebrow"><a href="#pipeline">Applications</a> / ${esc(STAGES[j.status] || j.status)}</div>
         <h1>${esc(j.title)}</h1>
-        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}</div>
+        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}${(company_history || []).length ? ' <span class="pill info">Applied here before</span>' : ''}</div>
       </div>
     </div>
     ${jobActions(j, tailoring)}
@@ -883,6 +902,8 @@ async function showJob(id) {
       <div class="row"><button class="btn primary" data-act="tailorPicked" data-job="${esc(j.id)}">Tailor my CV for this role</button><label class="btn">${svg('doc')}Attach my own CV<input type="file" accept=".docx,.pdf" data-upload="own-cv" hidden></label></div></section>`}
     ${(links || []).length ? `<section class="card"><header><h2>Your links</h2></header>${links.map(l => `<p class="small"><b>${esc(l.site)}</b>: ${l.opened ? `<span class="good-text">opened ${l.opened} time${l.opened === 1 ? '' : 's'}</span>, last ${esc(ago(l.last))}` : '<span class="muted">not opened yet</span>'}${l.previews ? ` <span class="muted">(${l.previews} by link checkers)</span>` : ''}</p>`).join('')}</section>` : ''}
     ${revisionHtml(revision)}
+    ${sentCompareHtml(j, sent_compare)}
+    ${historyHtml(j, company_history, company_notes, repeat_mode)}
     ${j.cv_path || j.cover_letter ? `<section class="card">
       <div class="row file-row">${j.cv_path ? `<button class="btn" data-act="open" data-what="cv">${svg('doc')}${own?.cv ? 'Open your CV' : 'Open tailored CV'}</button><button class="btn" data-act="open" data-what="letter">${svg('doc')}Open cover letter</button>
         <button class="btn ghost" data-act="open" data-what="cv-pdf" title="${cv_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">CV PDF</button><button class="btn ghost" data-act="open" data-what="letter-pdf" title="${letter_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">Letter PDF</button>
@@ -1114,7 +1135,7 @@ function stepHtml(o, step, tracked) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
   const row = (j, sub, actions, tick = '') => `<div class="todo-row${expiredWhy(j) ? ' expired-row' : ''}">${tick || '<span></span>'}
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span>${oneTag(j)}${effortTag(j)}${coLocLine(j)}</a>
+      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span>${oneTag(j)}${effortTag(j)}${appliedBeforeTag(j)}${coLocLine(j)}</a>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}${j.employment ? `<br><span class="muted">${esc(j.employment)}</span>` : ''}</span>
       <span class="why small muted">${sub || ''}</span>
       <span class="row todo-act">${actions}</span></div>`;
@@ -1134,7 +1155,7 @@ function stepHtml(o, step, tracked) {
         data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}"
         data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"><label style="display:contents"><input type="checkbox" data-pick="${esc(j.id)}">
       <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <span class="grow"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${oneTag(j)}<br><span class="muted small">${ageTag(j)}</span>${coLocLine(j)}</span>
+      <span class="grow"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${oneTag(j)}${appliedBeforeTag(j)}<br><span class="muted small">${ageTag(j)}</span>${coLocLine(j)}</span>
       <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span></label>
       <span class="why small">${whyFits(j)}</span>
       <span class="row todo-act">${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('');
@@ -1486,7 +1507,7 @@ async function showReview() {
   }
   const j0 = queue[0];
   pageKey = j0.id;
-  const [{ job: j, effort, warnings, revising, answers, revision }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(j0.id)}`), settingsCache ? Promise.resolve(settingsCache) : api('/api/settings')]);
+  const [{ job: j, effort, warnings, revising, answers, revision, sent_compare }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(j0.id)}`), settingsCache ? Promise.resolve(settingsCache) : api('/api/settings')]);
   j.effort = effort;
   const done = jobs.length - queue.length;
   const flags = j.red_flags || [];
@@ -1496,6 +1517,7 @@ async function showReview() {
       <a class="btn ghost" href="#overview">Exit review</a></div>
     ${expiredWhy(j) ? `<div class="card" style="border-color:var(--crit)"><b>This opening has expired.</b> <span class="muted">${esc(expiredWhy(j).replace(/^Expired: /, ''))}. Check the posting before approving it.</span></div>` : ''}
     ${revising ? '<section class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this updates by itself.</p></section>' : revisionHtml(revision)}
+    ${sentCompareHtml(j, sent_compare)}
     <div class="grid-2">
       <div class="stack">
         <section class="card"><header><h2>Why it fits</h2>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}">${svg('open')}Posting</button>` : ''}</header>
@@ -2221,6 +2243,7 @@ async function showSettings(tab, sub, host) {
         <div class="field">Daily search<div class="row">${scheduleMenu(overview?.side?.paused, false)}</div><span class="hint">${overview?.side?.paused ? esc(pausedWords(overview.side.paused)) + '.' : 'On. Pause it for a while, or turn it off.'}</span></div>
       </div></section>
       <section class="card"><header><h2>Tailoring</h2></header>
+        <div class="field" style="margin-bottom:10px">A company you've applied to before<select data-act="repeatMode">${[['light', 'Light touch: the same headline, at most 4 paragraphs changed (recommended)'], ['same', 'The same CV as before, with a new cover letter'], ['usual', 'Tailor as usual']].map(([v, n]) => `<option value="${v}" ${(st.repeat_mode || 'light') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">They keep every CV you send on file, side by side. A different headline or a different story for the same achievement is what stands out.</span></div>
         <label class="check"><input type="checkbox" name="auto_tailor" ${p.auto_tailor ? 'checked' : ''}> <span>Tailor automatically<br><span class="muted small">Off (recommended): after each search you tick which roles to tailor your CV for, on the Overview. On: every role that fits well enough is tailored right away.</span></span></label>
         <details style="margin-top:10px"><summary class="small muted">Advanced</summary><div class="form" style="margin-top:8px">
         <label class="field">Fit score needed to tailor<input type="number" min="0" max="100" name="score_threshold" value="${p.score_threshold}"><span class="hint">0–100. Roles below it are skipped.</span></label>
@@ -3541,6 +3564,13 @@ async function act(el) {
     return busy(async () => { const r = await api('/api/salaries/rescan', { method: 'POST' }); if (!r.started) toast('Already looking.'); },
       'Looking for the pay of every posting without one: its text, its page and the company\'s own posting. A notice says what was found.');
   }
+  if (a === 'saveCompanyNotes') {
+    return busy(async () => { await api('/api/company-notes', { method: 'POST', body: { company: el.dataset.company, notes: $('#companyNotes').value } }); }, 'Saved. They show on every role at this company.');
+  }
+  if (a === 'reuseCv') {
+    if (!await ask('Use the CV you sent this company before, word for word? Undo puts this one back.', 'Use it')) return;
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/reuse-cv`, { method: 'POST' }); route(); }, 'Now the same CV as before. Undo last CV change puts this one back.');
+  }
   if (a === 'revisionSeen') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/revision-seen`, { method: 'POST' }); route(); });
   }
@@ -4028,6 +4058,11 @@ document.addEventListener('click', e => {
 document.addEventListener('change', async e => {
   const el = e.target;
   if (el.dataset.act === 'smallSources') { smallSources = el.checked; route(); return; }
+  if (el.dataset.act === 'repeatMode') {
+    try { await api('/api/settings/repeat', { method: 'POST', body: { mode: el.value } }); settingsCache = null; toast({ light: 'Companies you applied to before: the same headline and a few changes.', same: 'Companies you applied to before: the same CV as before.', usual: 'Companies you applied to before: tailored as usual.' }[el.value]); }
+    catch (e) { toast(e.message, true); }
+    return;
+  }
   if (el.dataset.act === 'autoSubmit') {
     try { await api('/api/answer-bank', { method: 'POST', body: { auto_submit: el.checked } }); toast(el.checked ? 'On: simple forms answered entirely from your saved answers are submitted after a 10-second countdown you can stop.' : 'Off: Job Hunt fills forms in, and you press Submit.'); }
     catch (e) { el.checked = !el.checked; toast(e.message, true); }

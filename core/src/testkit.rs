@@ -186,8 +186,11 @@ impl Llm for FakeLlm {
             salary: job.description.lines().find_map(|l| l.strip_prefix("Salary note: ")).unwrap_or("").replace('~', " to "),
         })
     }
-    fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], stories: &str, _style: &str) -> R<Tailored> {
+    fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], stories: &str, _style: &str, consistency: &str) -> R<Tailored> {
         *self.stories_seen.lock().unwrap() = stories.to_string();
+        if !consistency.is_empty() {
+            self.calls.lock().unwrap().push(format!("tailor-consistent:{}", consistency.lines().next().unwrap_or("")));
+        }
         self.calls.lock().unwrap().push("tailor".into());
         let line = numbered.lines().find(|l| l.contains("] Managed contracted")).unwrap();
         let index: usize = line[1..line.find('|').unwrap()].parse().unwrap();

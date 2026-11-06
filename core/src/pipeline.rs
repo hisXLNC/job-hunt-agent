@@ -4504,14 +4504,46 @@ publish your Google project (Settings \u{2192} Connections explains how).", what
         let profile = self.profile();
         let t = profile.track(track.or(job.track.as_deref())).cloned().ok_or_else(|| Error("No CV uploaded yet. Add one in CV & Career.".into()))?;
         let doc = cv::open(&self.cv_path(&t.name)).map_err(|_| Error(format!("No CV for the “{}” track yet. Upload it in CV & Career.", t.label)))?;
-        let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.stories, &t.letter_style)?;
+        // Applied to this company before: the CV they already have, and how close to stay to it.
+        let prior = self.sent_before(&job);
+        let mode = self.repeat_mode();
+        let prior_doc = prior.as_ref().filter(|_| mode != "usual").and_then(|p| p.cv_path.as_deref()).and_then(|p| cv::open(Path::new(p)).ok());
+        let consistency = match (&prior, &prior_doc) {
+            (Some(p), Some(d)) => format!("Sent to {} on {} for \"{}\". Change at most {MAX_REPEAT_EDITS} paragraphs. That CV:\n{}",
+                job.company, p.applied_at.as_deref().unwrap_or("").get(..10).unwrap_or(""), p.title, d.plain_text().chars().take(8000).collect::<String>()),
+            _ => String::new(),
+        };
+        let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.stories, &t.letter_style, &consistency)?;
+        // Held to it, whatever came back: the headline as they saw it, and only the few edits that add most.
+        if let Some(pd) = prior_doc.as_ref().filter(|_| mode == "light") {
+            let headline = headline_indices(&doc);
+            result.edits.retain(|e| !headline.contains(&e.index));
+            result.edits.sort_by_key(|e| std::cmp::Reverse(e.keywords_added.len()));
+            result.edits.truncate(MAX_REPEAT_EDITS);
+            // The same document (same paragraphs): their headline goes back in, word for word.
+            if pd.paras.len() == doc.paras.len() {
+                for i in headline {
+                    let (theirs, ours) = (pd.paras[i].plain(), doc.paras[i].plain());
+                    if theirs.trim() != ours.trim() && !theirs.trim().is_empty() {
+                        result.edits.push(crate::claude::ParagraphEdit { index: i, text: theirs, keywords_added: vec![] });
+                    }
+                }
+            }
+        }
         // Take out AI tells Claude slipped in (your CV's own style stays).
         let own = format!("{}\n{}", doc.plain_text(), profile.stories);
         result.cover_letter = cv::humanize(&result.cover_letter, &own);
         result.email_subject = cv::humanize(&result.email_subject, &own);
 
         let edits: BTreeMap<usize, String> = result.edits.iter().map(|e| (e.index, cv::humanize(&e.text, &own))).collect();
-        let applied = cv::apply_edits(&doc, &edits)?;
+        let mut applied = cv::apply_edits(&doc, &edits)?;
+        // Same CV as before: exactly the file that company has, with a new cover letter.
+        if let (Some(p), true) = (&prior, mode == "same") {
+            if let Some(bytes) = p.cv_path.as_deref().and_then(|x| std::fs::read(x).ok()) {
+                applied.bytes = bytes;
+                applied.changes = p.cv_changes.clone();
+            }
+        }
         let dir = self.application_dir(&job);
         std::fs::create_dir_all(&dir)?;
         let (cv_name, letter_name) = self.file_names(&job);
@@ -4552,6 +4584,13 @@ publish your Google project (Settings \u{2192} Connections explains how).", what
             detail.push_str(&format!("; refused: {}", applied.rejected.join("; ")));
         }
         db.log(Some(job_id), "tailored", &detail)?;
+        if let Some(p) = &prior {
+            db.log(Some(job_id), "tailored", &match mode.as_str() {
+                "same" => format!("the same CV as you sent {} for {}", job.company, p.title),
+                "light" => format!("kept close to the CV you sent {} for {}: the same headline, at most {MAX_REPEAT_EDITS} paragraphs changed", job.company, p.title),
+                _ => format!("tailored as usual, though you applied to {} before", job.company),
+            })?;
+        }
         drop(db);
         // The tailored CV scored the same way your CV was (one more request), once the
         // application is already waiting for you; on failure the page shows the score before.
@@ -4563,6 +4602,75 @@ publish your Google project (Settings \u{2192} Connections explains how).", what
             }
         }
         self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
+    }
+
+    /// Your applications to a company: every job there you sent a CV to (applied, or further), newest
+    /// first, other than `except`.
+    pub fn company_history(&self, company: &str, except: &str) -> Vec<Job> {
+        let key = crate::db::company_key(company);
+        if key.is_empty() {
+            return vec![];
+        }
+        let mut out: Vec<Job> = SENT.iter().flat_map(|s| self.db().jobs(Some(s), 2000).unwrap_or_default())
+            .filter(|j| j.id != except && crate::db::company_key(&j.company) == key).collect();
+        out.sort_by(|a, b| b.applied_at.cmp(&a.applied_at));
+        out
+    }
+
+    /// The last CV you sent this job's company (another job there, with its file still on disk).
+    pub fn sent_before(&self, job: &Job) -> Option<Job> {
+        self.company_history(&job.company, &job.id).into_iter().find(|j| j.cv_path.as_deref().is_some_and(|p| Path::new(p).is_file()))
+    }
+
+    /// How a company you've applied to before is tailored for: "light" (the same headline, a few
+    /// paragraphs changed: the default), "same" (the CV you sent them) or "usual".
+    pub fn repeat_mode(&self) -> String {
+        match self.secret("tailor.repeat").as_str() {
+            "same" => "same".into(),
+            "usual" => "usual".into(),
+            _ => "light".into(),
+        }
+    }
+
+    /// Your own notes on a company ("the recruiter said to wait six months").
+    pub fn company_notes(&self, company: &str) -> String {
+        self.secret(&format!("company.notes:{}", crate::db::company_key(company)))
+    }
+
+    pub fn save_company_notes(&self, company: &str, notes: &str) -> R<()> {
+        let key = crate::db::company_key(company);
+        if key.is_empty() {
+            return err("Which company?");
+        }
+        self.db().set(&format!("company.notes:{key}"), notes.trim())
+    }
+
+    /// This job's tailored CV beside the one you last sent its company: which paragraphs differ.
+    /// {job: {id, title, status, applied_at}, changes: [{before, after}]}, or None (no CV sent
+    /// there before, or not tailored yet).
+    pub fn compare_with_sent(&self, job: &Job) -> Option<Value> {
+        let prior = self.sent_before(job)?;
+        let ours = cv::open(Path::new(job.cv_path.as_deref()?)).ok()?.plain_text();
+        let theirs = cv::open(Path::new(prior.cv_path.as_deref()?)).ok()?.plain_text();
+        let changes: Vec<Value> = paragraph_changes(&theirs, &ours).into_iter().map(|(b, a)| json!({ "before": b, "after": a })).collect();
+        Some(json!({ "job": { "id": prior.id, "title": prior.title, "status": prior.status, "applied_at": prior.applied_at }, "changes": changes }))
+    }
+
+    /// Use exactly the CV you last sent this job's company (Put back as it was undoes it).
+    pub fn reuse_sent_cv(&self, job_id: &str) -> R<Job> {
+        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        let prior = self.sent_before(&job).ok_or_else(|| Error(format!("No CV sent to {} before.", job.company)))?;
+        let path = job.cv_path.clone().ok_or_else(|| Error("Tailor this application first.".into()))?;
+        let bytes = std::fs::read(prior.cv_path.as_deref().unwrap_or(""))?;
+        let backup = Path::new(&path).with_extension("before-revision.docx");
+        std::fs::copy(&path, &backup)?;
+        std::fs::write(&path, &bytes)?;
+        let _ = std::fs::remove_file(Path::new(&path).with_extension("pdf"));
+        let db = self.db();
+        db.set(&format!("undo:{job_id}:cv"), &json!({ "file": backup, "cv_changes": job.cv_changes, "coverage_after": job.coverage_after, "keyword_gaps": job.keyword_gaps }).to_string())?;
+        db.update_job(job_id, &[("cv_changes", json!(prior.cv_changes))])?;
+        db.log(Some(job_id), "revised", &format!("CV: the same one you sent {} for {}", job.company, prior.title))?;
+        db.job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
     }
 
     /// Take roles you haven't acted on yet (waiting to tailor, or ready to approve) out of your
@@ -5212,8 +5320,9 @@ publish your Google project (Settings \u{2192} Connections explains how).", what
         if let (Some(to), Some(mail)) = (&job.apply_email, mail) {
             let files: Vec<PathBuf> = [&job.cv_path, &job.letter_path].iter().filter_map(|p| p.as_ref().map(PathBuf::from)).collect();
             let subject = job.email_subject.clone().unwrap_or_else(|| format!("Application: {}", job.title));
-            // The email body is plain text, so drop the bold markers the Word letter uses.
-            let body = job.cover_letter.as_deref().unwrap_or("").replace("**", "");
+            // The letter from "Dear…" on (the date, ATTN and Subject lines are for paper; the email
+            // has its own subject), formatted as an email: bullets and bold (see google::email_parts).
+            let body = email_letter(job.cover_letter.as_deref().unwrap_or(""));
             let id = mail.send(to, &subject, &body, &files)?;
             self.db().set_status(job_id, "applied", &format!("emailed to {to} (message {id})"))?;
             return Ok("applied");
@@ -6230,6 +6339,26 @@ pub fn paragraph_changes(old: &str, new: &str) -> Vec<(String, String)> {
     out
 }
 
+/// A cover letter as an email body: from the greeting on, without the printed letter's header
+/// (date, ATTN, company) and Subject line.
+pub fn email_letter(letter: &str) -> String {
+    let blocks: Vec<&str> = letter.split("\n\n").collect();
+    match blocks.iter().position(|b| b.trim_start().starts_with("Dear ") || b.trim_start().starts_with("Hello") || b.trim_start().starts_with("Hi ")) {
+        Some(i) => blocks[i..].join("\n\n").trim().to_string(),
+        None => letter.trim().to_string(),
+    }
+}
+
+/// Stages where a CV went to the company.
+const SENT: &[&str] = &["applied", "interviewing", "offer", "rejected", "no_response"];
+/// At most this many paragraphs change for a company that has your CV already (see tailor).
+const MAX_REPEAT_EDITS: usize = 4;
+
+/// The headline area: the reworded lines under your name, before the first section.
+fn headline_indices(doc: &cv::Doc) -> Vec<usize> {
+    doc.paras.iter().take(8).filter(|p| p.editable && !p.bullet).map(|p| p.index).take(2).collect()
+}
+
 /// When a contact was sent a message ("sent_at") or the follow-up ("followed_at"), if they were.
 fn contact_time(c: &Value, key: &str) -> Option<chrono::DateTime<Utc>> {
     c[key].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| t.with_timezone(&Utc))
@@ -6273,6 +6402,13 @@ impl Agent {
         let newer = crate::sync::newer_elsewhere(self).map(|(d, i)| json!({ "folder": d, "device": i.device_name, "saved_at": i.saved_at, "jobs": i.jobs }));
         let in_use = crate::sync::presence_status(self);
         let follow_ups: Vec<Value> = self.follow_ups_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
+        // Companies you've applied to: for "Applied here before" on the roles in your lists.
+        let mut sent_to: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        for s in SENT {
+            for j in self.db().jobs(Some(s), 5000).unwrap_or_default() {
+                sent_to.entry(crate::db::company_key(&j.company)).or_default().push(json!({ "id": j.id, "title": j.title, "status": j.status, "applied_at": j.applied_at }));
+            }
+        }
         // Approved roles whose form Job Hunt filled in, still not marked applied: did they go through?
         // (Before 2.26.1, the Apply window's I submitted it could fail without a word.)
         let filled_unconfirmed: Vec<Value> = self.db().jobs(Some("approved"), 500).unwrap_or_default().into_iter()
@@ -6304,6 +6440,10 @@ impl Agent {
             b["warnings"] = json!(posting_warnings(j, reposts.get(&j.id).copied().unwrap_or(0), at));
             if let Some(r) = crate::recruiters::for_company(&recruiters, &j.company) {
                 b["recruiter"] = json!(r.name);
+            }
+            let before: Vec<Value> = sent_to.get(&crate::db::company_key(&j.company)).map(|l| l.iter().filter(|x| x["id"] != j.id.as_str()).cloned().collect()).unwrap_or_default();
+            if !before.is_empty() {
+                b["applied_before"] = json!(before);
             }
             let know: Vec<Value> = crate::network::at_company(&network, &j.company).iter().map(|p| p["name"].clone()).collect();
             if !know.is_empty() {
@@ -7906,6 +8046,39 @@ mod tests {
             (String::new(), "Thank you for your time.".to_string()),
         ]);
         assert!(paragraph_changes(old, old).is_empty());
+    }
+
+    #[test]
+    fn companies_you_applied_to_before() {
+        let s = setup();
+        assert_eq!(email_letter("Nov 6, 2026\nATTN: Acme Hiring Team\nAcme\n\n**Subject: Application for PM**\n\nDear Hiring Team,\n\nHello.\n\nAll the best,\nSam"),
+            "Dear Hiring Team,\n\nHello.\n\nAll the best,\nSam", "the email starts at the greeting");
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
+        // Both were tailored by the search (auto-tailor); you applied to the first.
+        s.agent.db().update_job("test:1", &[("status", "applied".into()), ("applied_at", now().into())]).unwrap();
+        let two = s.agent.db().job("test:2").unwrap().unwrap();
+        assert_eq!(s.agent.company_history("Acme", "test:2").len(), 1);
+        assert_eq!(s.agent.sent_before(&two).unwrap().id, "test:1");
+        // Tailored again: the CV they have goes with it, and stays close.
+        s.llm.calls.lock().unwrap().clear();
+        s.agent.tailor("test:2", None).unwrap();
+        assert!(s.llm.calls.lock().unwrap().iter().any(|c| c.starts_with("tailor-consistent:Sent to Acme")), "{:?}", s.llm.calls.lock().unwrap());
+        assert!(s.agent.db().history("test:2").unwrap().iter().any(|e| e.detail.contains("kept close to the CV you sent Acme")));
+        let two = s.agent.db().job("test:2").unwrap().unwrap();
+        let cmp = s.agent.compare_with_sent(&two).unwrap();
+        assert_eq!(cmp["job"]["id"], "test:1");
+        assert_eq!(cmp["changes"].as_array().unwrap().len(), 0, "the same edits as before: nothing differs");
+        // The same CV as before: their file, exactly.
+        s.agent.db().set("tailor.repeat", "same").unwrap();
+        s.agent.tailor("test:2", None).unwrap();
+        let a = s.agent.db().job("test:1").unwrap().unwrap();
+        let b = s.agent.db().job("test:2").unwrap().unwrap();
+        assert_eq!(std::fs::read(a.cv_path.unwrap()).unwrap(), std::fs::read(b.cv_path.clone().unwrap()).unwrap());
+        assert!(s.agent.reuse_sent_cv("test:2").is_ok() && s.agent.can_undo("test:2", "cv"));
+        // Your notes, kept by company.
+        s.agent.save_company_notes("ACME Inc.", "Wait six months.").unwrap();
+        assert_eq!(s.agent.company_notes("Acme"), "Wait six months.");
+        assert!(s.agent.company_history("Elsewhere", "").is_empty());
     }
 
     #[test]

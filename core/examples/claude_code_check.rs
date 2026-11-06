@@ -32,7 +32,7 @@ fn main() {
     println!("\n[score {:?}] {} on {} – {}\nflags: {:?}\nkeywords: {:?}", t.elapsed(), s.score, s.track, s.reasoning, s.red_flags, s.keywords);
 
     let t = Instant::now();
-    let tl = claude.tailor("Sam Rivera", &doc.numbered(), &job, &s.keywords, "", "standard").unwrap();
+    let tl = claude.tailor("Sam Rivera", &doc.numbered(), &job, &s.keywords, "", "standard", "").unwrap();
     println!("\n[tailor {:?}] {} edits, gaps {:?}", t.elapsed(), tl.edits.len(), tl.keyword_gaps);
     let edits: BTreeMap<usize, String> = tl.edits.iter().map(|e| (e.index, e.text.clone())).collect();
     let applied = cv::apply_edits(&doc, &edits).unwrap();

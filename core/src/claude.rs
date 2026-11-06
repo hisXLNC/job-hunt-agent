@@ -264,7 +264,11 @@ fine; adding facts is not.\n\
 - Keep every figure exactly as written. Do not add figures.\n\
 - Keep each paragraph about the same length (at most ~30% longer). No tabs or line breaks inside a paragraph.\n\
 - For competency lines that start with a bold label like \"**Tools:**\", return the whole line, label included.\n\
-- If a posting keyword has no honest support in the CV, do not add it; list it in keyword_gaps.\n\n\
+- If a posting keyword has no honest support in the CV, do not add it; list it in keyword_gaps.\n\
+- When <sent_before> is given, the candidate already sent this company the CV in it, and the company keeps it on \
+file beside this one, so stay consistent with it: keep the headline under the name exactly as that CV has it; \
+describe each achievement the way that CV does (you may reorder points and use this posting's words for the same \
+thing, never a different story or emphasis that contradicts it); and change no more paragraphs than it says.\n\n\
 edits: one entry per paragraph you change, with its index, the full new text, and which posting keywords it now \
 contains. Leave unchanged paragraphs out.\n\n\
 cover_letter: 300-450 words of plain text. Separate blocks with a blank line, in this order:\n\
@@ -436,7 +440,9 @@ pub trait Llm: Send + Sync {
     fn score(&self, cvs: &[(String, String)], guidance: &str, job: &crate::db::Job) -> R<JobScore>;
     fn cv_profile(&self, cv_text: &str) -> R<CvProfile>;
     fn convert_cv(&self, cv: &CvSource) -> R<StructuredCv>;
-    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, keywords: &[String], stories: &str, style: &str) -> R<Tailored>;
+    /// `consistency`: when the candidate already sent this company a CV, that CV and how close to
+    /// stay to it (see Agent::tailor); empty otherwise.
+    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, keywords: &[String], stories: &str, style: &str, consistency: &str) -> R<Tailored>;
     fn triage(&self, candidate: &str, tz: &str, email: &EmailIn, applications: &[(String, String, String, String)]) -> R<Triage>;
     fn scheduling_reply(&self, candidate: &str, tz: &str, email: &EmailIn, accept: Option<&TimeSlot>, free: &[TimeSlot]) -> R<String>;
     /// Postings from Indeed, through the Indeed connector on your Claude account (Claude Code only).
@@ -1388,12 +1394,16 @@ impl Llm for Claude {
         Ok(cv)
     }
 
-    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, keywords: &[String], stories: &str, style: &str) -> R<Tailored> {
-        let stories = if stories.trim().is_empty() {
+    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, keywords: &[String], stories: &str, style: &str, consistency: &str) -> R<Tailored> {
+        let mut stories = if stories.trim().is_empty() {
             String::new()
         } else {
             format!("\n\n<stories>\n{}\n</stories>", stories.trim())
         };
+        // Applied to this company before: they keep that CV on file beside this one.
+        if !consistency.trim().is_empty() {
+            stories.push_str(&format!("\n\n<sent_before>\n{}\n</sent_before>", consistency.trim()));
+        }
         let user = format!(
             "Candidate: {candidate}\nToday's date: {}\n\n<cv>\n{numbered_cv}\n</cv>{stories}\n\n{}\n\nKeywords to work in where the CV supports them: {}",
             chrono::Local::now().format("%B %-d, %Y"),
