@@ -107,14 +107,31 @@ pub fn outside_locations(p: &Posting, profile: &Profile) -> Option<String> {
     }
     // A location like "Remote - Canada" counts as remote even when the source doesn't flag it.
     let remote = p.remote || loc.contains("remote");
-    if remote && profile.remote_ok && in_country {
+    // A remote role tied to a city that isn't yours ("Ottawa, ON (Remote)": often office days there)
+    // isn't open across the country; "Remote - Ontario" or "Remote, Canada" are.
+    let other_city = names_other_city(&loc, profile);
+    if remote && profile.remote_ok && in_country && !other_city {
         return None;
     }
     // "Remote - Ontario": open across your province.
-    if remote && profile.remote_ok && profile.home_provinces().iter().any(|p| has_words(&loc, &p.to_lowercase())) {
+    if remote && profile.remote_ok && !other_city && profile.home_provinces().iter().any(|p| has_words(&loc, &p.to_lowercase())) {
         return None;
     }
     Some(format!("location “{}”", p.location))
+}
+
+/// Whether a (lowercased) location starts with a city that isn't one of yours: "ottawa, on (remote)"
+/// does, "remote - ontario", "ontario, canada (remote)" and "canada" don't.
+fn names_other_city(loc: &str, profile: &Profile) -> bool {
+    let first = loc.split([',', '(', '|', '·', '/']).next().unwrap_or("").replace("remote", "").replace(" in ", " ").replace(['-', '–'], " ");
+    let first = first.trim();
+    if first.is_empty() || ["hybrid", "remote", "anywhere", "work from home", "wfh"].contains(&first) {
+        return false;
+    }
+    let country = &profile.sources.adzuna_country;
+    let region = crate::profile::country_names(country).iter().any(|c| first == c.as_str())
+        || crate::profile::PROVINCES.iter().any(|(_, full, short)| first == full.to_lowercase() || first == short.to_lowercase());
+    !region && !profile.place_names().iter().any(|l| has_words(first, l) || has_words(l, first))
 }
 
 /// Whether a (lowercased) location names a country other than yours.
@@ -139,6 +156,19 @@ mod tests {
             tracks: vec![Track { name: "p".into(), titles: vec!["Program Manager".into()], keywords: vec!["snowflake".into()], ..Track::default() }],
             ..Profile::default()
         }
+    }
+
+    #[test]
+    fn remote_roles_tied_to_another_city() {
+        let mut p = Profile { locations: vec!["Oakville".into(), "Toronto".into()], remote_ok: true, ..Profile::default() };
+        p.sources.adzuna_country = "ca".into();
+        let out = |loc: &str| outside_locations(&Posting { location: loc.into(), ..Posting::default() }, &p).is_some();
+        assert!(out("Ottawa, Ontario (Remote)"), "a remote role tied to Ottawa");
+        assert!(out("Ottawa, ON, Canada (Remote)"));
+        assert!(!out("Remote - Ontario"), "open across your province");
+        assert!(!out("Remote, Canada") && !out("Canada (Remote)") && !out("Ontario, Canada (Remote)"));
+        assert!(!out("Toronto, ON (Remote)") && !out("Ottawa or Toronto, ON") && !out("Oakville, ON"));
+        assert!(out("Ottawa, ON") && out("Hybrid remote in Ottawa, ON"));
     }
 
     fn posting(title: &str) -> Posting {

@@ -946,3 +946,15 @@ td.emp { white-space: nowrap; }
 .revision del, .rev-para del { color: var(--crit); text-decoration: line-through; opacity: .8; }
 .rev-para { padding: 8px 0; border-top: 1px solid var(--line); line-height: 1.6; }
 .paper .just-changed { background: var(--warn-soft); box-shadow: -6px 0 0 var(--warn-soft), 6px 0 0 var(--warn-soft); border-radius: 2px; }
+
+/* Tabs that don't fit: the rest in a More menu (see fitTabs) */
+.tabs.fitted { overflow: visible; }
+.tabs-more { flex: none; }
+.tabs-more > summary { padding: 8px 14px; color: var(--ink-2); font-weight: 500; white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs-more[open] > summary, .tabs-more > summary:hover { color: var(--accent); }
+.tabs-more .menu-list { top: calc(100% + 2px); }
+.tabs-more .menu-list a { padding: 8px 12px; border: 0; margin: 0; border-radius: 8px; white-space: nowrap; }
+.tabs-more .menu-list a:hover { background: var(--bg); }
+/* A page's settings, as buttons at its top (see settingsButtons) */
+.btn.set-btn svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.btn.set-btn.on { background: var(--info-soft); border-color: var(--info); color: var(--info); }

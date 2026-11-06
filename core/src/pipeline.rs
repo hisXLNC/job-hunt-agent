@@ -1854,7 +1854,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let Some((text, max)) = salary_parts(stated) else { return Ok(false) };
         let Some(job) = self.db().job(job_id)? else { return Ok(false) };
         // Known already (and with a yearly figure, when this has one too): nothing new.
-        let known_max = job.salary.as_deref().and_then(crate::sources::salary_range).map(|r| r.1);
+        let known_max = job.salary.as_deref().and_then(crate::sources::salary_max_of);
         if job.salary.as_deref().is_some_and(|s| !s.is_empty()) && (known_max.is_some() || max.is_none()) {
             return Ok(false);
         }
@@ -1952,7 +1952,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         // Below your minimum among the roles you're working on: one notice for all of them.
         let profile = self.profile();
         let low: Vec<Job> = ["queued", "ready", "approved"].iter().flat_map(|s| self.db().jobs(Some(s), 500).unwrap_or_default())
-            .filter(|j| below_minimum(&profile, j.salary.as_deref().and_then(crate::sources::salary_range).map(|r| r.1)).is_some()).collect();
+            .filter(|j| below_minimum(&profile, j.salary.as_deref().and_then(crate::sources::salary_max_of)).is_some()).collect();
         let _ = self.db().set("last.salaries", &now());
         self.db().log(None, "salaries", &format!("looked for the pay of {checked} postings without one: found {found}"))?;
         if found > 0 || checked > 0 {
@@ -4526,7 +4526,7 @@ publish your Google project (Settings \u{2192} Connections explains how).", what
             let status = if keep { j.status.clone() } else if s.score >= profile.score_threshold { "queued".into() } else { "skipped".into() };
             // A known salary below your minimum stays flagged.
             let mut flags = s.red_flags.clone();
-            if let Some(f) = below_minimum(&profile, j.salary.as_deref().and_then(crate::sources::salary_range).map(|r| r.1)) {
+            if let Some(f) = below_minimum(&profile, j.salary.as_deref().and_then(crate::sources::salary_max_of)) {
                 flags.insert(0, f);
             }
             {
@@ -6364,7 +6364,7 @@ pub fn salary_parts(stated: &str) -> Option<(String, Option<f64>)> {
         return Some(found);
     }
     let shown: String = t.chars().take(80).collect();
-    Some((shown, crate::sources::salary_range(t).map(|r| r.1)))
+    Some((shown, crate::sources::salary_max_of(t)))
 }
 
 /// Why a yearly maximum is below your minimum, as a red flag, or None.

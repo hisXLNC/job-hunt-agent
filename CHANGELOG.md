@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.31.0] - 2026-11-06
+
+Fits any window.
+
+### Changes
+
+- Tabs that don't fit the window go into a More menu instead of out of sight, and each page's settings (Search's What to search and Set up sources, Inbox's and Calendar's Settings) are buttons at the top of the page, beside its main action.
+- The Overview opens faster again: the employment type of each job was worked out on every visit (up to half a second with hundreds of jobs); now once per posting.
+- Your minimum salary keeps every role whose range reaches it, and no longer cuts roles that state only a starting figure ("From $90,000", "$90,000+").
+- Remote roles tied to a city that isn't yours ("Ottawa, ON (Remote)") are left out, like on-site ones there; "Remote - Ontario" and "Remote, Canada" still count. A source's results on the Search page show what Job Hunt kept; postings it skipped (outside your locations, say) are under Skipped.
+
 ## [2.30.0] - 2026-11-06
 
 Scored while it searches.
@@ -1069,6 +1080,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.31.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.31.0
 [2.30.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.30.0
 [2.29.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.29.0
 [2.28.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.28.0

@@ -181,7 +181,13 @@ pub fn employment_type(title: &str, text: &str) -> Option<String> {
     static TEMP: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\btemporary (?:full[- ]time |part[- ]time )?(?:role|position|assignment|contract|opportunity|job)\b").unwrap());
     static LENGTH: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(\d{1,2})[- ]?(month|mo|year)s?\b").unwrap());
     static INTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(internship|intern|co-?op (?:student|placement|term|position))\b").unwrap());
-    let text: String = text.chars().take(20000).collect();
+    // The kind of employment is stated near the top or at the end: those parts are enough.
+    let text: String = if text.chars().count() > 9000 {
+        let all: Vec<char> = text.chars().collect();
+        all[..6000].iter().chain(['\n'].iter()).chain(all[all.len() - 3000..].iter()).collect()
+    } else {
+        text.to_string()
+    };
     let length = |t: &str| LENGTH.captures(t).and_then(|c| {
         let n: u32 = c[1].parse().ok()?;
         let unit = if c[2].to_lowercase().starts_with('y') { if n == 1 { "year" } else { "years" } } else if n == 1 { "month" } else { "months" };
@@ -227,6 +233,35 @@ pub fn employment_type(title: &str, text: &str) -> Option<String> {
         return Some("Full-time".into());
     }
     None
+}
+
+/// employment_type, worked out once per posting and remembered (by its id, title and text length):
+/// lists show it for hundreds of jobs on every load.
+pub fn employment_type_cached(id: &str, title: &str, text: &str) -> Option<String> {
+    static CACHE: Lazy<std::sync::Mutex<std::collections::HashMap<(String, usize), Option<String>>>> = Lazy::new(Default::default);
+    let key = (format!("{id}|{title}"), text.len());
+    if let Some(v) = CACHE.lock().unwrap().get(&key) {
+        return v.clone();
+    }
+    let v = employment_type(title, text);
+    let mut c = CACHE.lock().unwrap();
+    if c.len() > 20_000 {
+        c.clear();
+    }
+    c.insert(key, v.clone());
+    v
+}
+
+/// The most a role pays a year, for your minimum-salary filter: the top of its range. None when it
+/// doesn't say: no yearly figure, or only a starting point ("From $90,000", "$90,000+", "starting
+/// at…"), which mustn't count as the most it pays.
+pub fn salary_max_of(text: &str) -> Option<f64> {
+    static OPEN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(from|starting|starts? at|minimum|min\.?|at least|and up|or more|upwards)\b|\d\s*k?\s*\+").unwrap());
+    let (lo, hi) = salary_range(text)?;
+    if lo == hi && OPEN.is_match(text) {
+        return None;
+    }
+    Some(hi)
 }
 
 /// A yearly pay range from a salary as shown ("$110,000–$135,000", "CAD 120K–150K", "$95,000"),
@@ -982,7 +1017,7 @@ pub fn parse_linkedin_list(html: &str) -> Vec<Posting> {
             location: place,
             url: format!("https://www.linkedin.com/jobs/view/{id}/"),
             posted_at: DATE.captures(card).map(|m| m[1].to_string()),
-            salary_max: salary.as_deref().and_then(salary_range).map(|r| r.1),
+            salary_max: salary.as_deref().and_then(salary_max_of),
             salary,
             ..Posting::default()
         });
@@ -1193,7 +1228,7 @@ pub fn parse_jobbank_list(html: &str) -> Vec<Posting> {
             location: place,
             url: format!("https://www.jobbank.gc.ca/jobsearch/jobposting/{id}"),
             posted_at: f.get("date").and_then(|d| jobbank_date(d)),
-            salary_max: salary.as_deref().and_then(salary_range).map(|r| r.1),
+            salary_max: salary.as_deref().and_then(salary_max_of),
             salary,
             ..Posting::default()
         });
@@ -1326,7 +1361,7 @@ pub fn parse_apify_linkedin(v: &Value) -> Vec<Posting> {
             url: format!("https://www.linkedin.com/jobs/view/{id}/"),
             apply_email: find_apply_email(&desc),
             posted_at: Some(pick(j, &["postedAt", "publishedAt", "postedDate", "listedAt", "datePosted", "postedTime"])).filter(|x| !x.is_empty()),
-            salary_max: salary.as_deref().and_then(salary_range).map(|r| r.1),
+            salary_max: salary.as_deref().and_then(salary_max_of),
             salary,
             description: desc,
         });
@@ -1940,6 +1975,24 @@ mod tests {
         assert!(planned(Some("jobbank")).starts_with("Job Bank"));
         assert!(planned(Some("freehire")).starts_with("FreeHire"));
         assert_eq!(planned(Some("jooble")), "", "no Jooble key: nothing to search");
+    }
+
+    #[test]
+    fn the_most_a_role_pays() {
+        assert_eq!(salary_max_of("$90,000–$120,000"), Some(120000.0), "a range: its top");
+        assert_eq!(salary_max_of("Up to $95,000"), Some(95000.0));
+        assert_eq!(salary_max_of("From $90,000"), None, "a starting point isn't the most it pays");
+        assert_eq!(salary_max_of("$90,000+"), None);
+        assert_eq!(salary_max_of("Starting at $85K"), None);
+        assert_eq!(salary_max_of("$45–$52 an hour"), None, "not yearly");
+        // The filter: a range reaching your minimum stays; one wholly below it goes.
+        let mut p = crate::profile::Profile { min_salary: Some(100000.0), ..Default::default() };
+        p.tracks = vec![crate::profile::Track { name: "a".into(), titles: vec!["Program Manager".into()], ..Default::default() }];
+        let post = |salary: &str| Posting { source: "t".into(), external_id: "1".into(), company: "Co".into(), title: "Program Manager".into(),
+            location: "Toronto, ON".into(), salary: Some(salary.into()), salary_max: salary_max_of(salary), ..Posting::default() };
+        assert!(crate::filters::prefilter(&post("$90,000–$120,000"), &p).is_none(), "the range includes your minimum: kept");
+        assert!(crate::filters::prefilter(&post("From $90,000"), &p).is_none(), "open-ended: kept");
+        assert!(crate::filters::prefilter(&post("$70,000–$85,000"), &p).is_some_and(|w| w.starts_with("salary")), "wholly below: filtered");
     }
 
     #[test]

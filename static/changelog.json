@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.31.0",
+    "date": "2026-11-06",
+    "title": "Fits any window",
+    "changes": [
+      "Tabs that don't fit the window go into a More menu instead of out of sight, and each page's settings (Search's What to search and Set up sources, Inbox's and Calendar's Settings) are buttons at the top of the page, beside its main action.",
+      "The Overview opens faster again: the employment type of each job was worked out on every visit (up to half a second with hundreds of jobs); now once per posting.",
+      "Your minimum salary keeps every role whose range reaches it, and no longer cuts roles that state only a starting figure (\"From $90,000\", \"$90,000+\").",
+      "Remote roles tied to a city that isn't yours (\"Ottawa, ON (Remote)\") are left out, like on-site ones there; \"Remote - Ontario\" and \"Remote, Canada\" still count. A source's results on the Search page show what Job Hunt kept; postings it skipped (outside your locations, say) are under Skipped."
+    ]
+  },
+  {
     "version": "2.30.0",
     "date": "2026-11-06",
     "title": "Scored while it searches",

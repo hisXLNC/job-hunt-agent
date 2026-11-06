@@ -117,8 +117,12 @@ const filesCard = (st, setup) => `<section class="card"><header><h2>${setup ? 'W
 /** CV & Career's tabs: your CVs, the versions tailored from them, career paths, your details. */
 const cvsTabs = (view, n) => `<nav class="tabs">${[['cvs', `Your CVs${n ? ` (${n})` : ''}`], ['documents', 'Tailored files'], ['career', 'Career paths'], ['coach', 'Career coach'], ['details', 'Your details']].map(([id, name]) => `<a href="#cvs${id === 'cvs' ? '' : `/${id}`}" class="${id === view ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
 /** A page's heading with its tabs, for the pages that hold several views. */
-const tabbedHead = (title, about, actions, base, tabs, on) => `<div class="head"><div class="grow"><h1>${title}</h1><p class="muted">${about}</p></div>${actions ? `<div class="row">${actions}</div>` : ''}</div>
-  <nav class="tabs">${tabs.map(([id, n, cls]) => `<a href="#${base}/${id}" class="${id === on ? 'on' : ''} ${cls || ''}">${n}</a>`).join('')}</nav>`;
+/** A page's settings (tabs marked tab-end or tab-set) show as buttons at its top, by its main
+ *  action, where they're easy to find; its views stay as tabs. */
+const settingsButtons = (base, tabs, on) => tabs.filter(t => t[2]).map(([id, n]) =>
+  `<a class="btn ${id === on ? 'on' : ''} set-btn" href="#${base}/${id}" ${id === on ? 'aria-current="page"' : ''}>${n.includes('<svg') ? n : `${svg('settings')}${n}`}</a>`).join('');
+const tabbedHead = (title, about, actions, base, tabs, on) => `<div class="head"><div class="grow"><h1>${title}</h1><p class="muted">${about}</p></div>${actions || tabs.some(t => t[2]) ? `<div class="row">${settingsButtons(base, tabs, on)}${actions || ''}</div>` : ''}</div>
+  <nav class="tabs">${tabs.filter(t => !t[2]).map(([id, n]) => `<a href="#${base}/${id}" class="${id === on ? 'on' : ''}">${n}</a>`).join('')}</nav>`;
 /** The Overview's top: greeting, the buttons that start things, the steps and the views. */
 function homeHead(on, about, between = '') {
   const o = overview || { counts: {}, running: [], setup: {} }, c = o.counts || {}, first = (o.name || '').split(' ')[0];
@@ -432,10 +436,42 @@ document.addEventListener('input', e => { if (e.target.closest?.('#main') && !e.
 function page(html) {
   pageDirty = false;
   main().innerHTML = `<div class="page">${updateBarHtml()}${html}</div>`;
+  requestAnimationFrame(fitTabs);
   // Only the job page sets these; elsewhere actions name their job themselves.
   delete main().dataset.job;
   delete main().dataset.status;
 }
+
+/** Tab bars that don't fit the window: the tabs past the edge go into a "More" menu, so none is
+ *  hidden off screen. The tab you're on and a page's own settings tabs (⚙) always stay in view. Run
+ *  after each page is drawn and when the window is resized. Phones wrap their tabs instead. */
+function fitTabs() {
+  document.querySelectorAll('nav.tabs').forEach(nav => {
+    // Put back what an earlier fit moved, then measure afresh.
+    const old = nav.querySelector(':scope > .tabs-more');
+    if (old) { old.querySelectorAll('.menu-list > a').forEach(a => nav.insertBefore(a, old)); old.remove(); }
+    nav.classList.remove('fitted');
+    if (getComputedStyle(nav).flexWrap === 'wrap' || nav.scrollWidth <= nav.clientWidth + 1) return;
+    const links = [...nav.querySelectorAll(':scope > a')];
+    const more = document.createElement('details');
+    more.className = 'menu tabs-more';
+    more.innerHTML = '<summary>More <span class="caret">▾</span></summary><div class="menu-list right"></div>';
+    nav.insertBefore(more, nav.querySelector(':scope > a.tab-end') || null);
+    nav.classList.add('fitted'); // the menu opens past the bar's edge
+    const list = more.querySelector('.menu-list');
+    const keep = a => a === links[0] || a.classList.contains('on') || a.classList.contains('tab-end') || a.classList.contains('tab-set');
+    // From the last movable tab back, until the bar fits.
+    for (const a of links.filter(a => !keep(a)).reverse()) {
+      if (nav.scrollWidth <= nav.clientWidth + 1) break;
+      list.prepend(a);
+    }
+    if (!list.children.length) { more.remove(); nav.classList.remove('fitted'); return; }
+    more.querySelector('summary').firstChild.textContent = `More (${list.children.length}) `;
+    list.addEventListener('click', () => { more.open = false; });
+  });
+}
+let fitTimer;
+window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitTabs, 120); });
 
 let routeSeq = 0, routeDone = 0;
 async function route() {
@@ -464,7 +500,7 @@ async function showRoute() {
     else if (name === 'review') await showReview();
     else if (name === 'welcome') await showWelcome();
     else if (name === 'apply') await showApply(arg);
-    else if (name === 'calendar' && arg === 'settings') await showSettings('calendar', '', calHead('settings'));
+    else if (name === 'calendar' && arg === 'settings') await showSettings('calendar', '', calHead());
     else if (name === 'calendar') await showCalendar();
     else if (name === 'results') await showResults();
     else if (name === 'search') await showSearch(arg);
@@ -1083,7 +1119,10 @@ async function applyNow(id) {
 /** A salary below your minimum (Search → What to search), as a tag. */
 const minSalary = () => overview?.min_salary ?? settingsCache?.profile?.min_salary ?? null;
 const money = n => '$' + Math.round(n).toLocaleString();
-const belowMin = j => { const m = minSalary(); const top = m && j.salary ? salaryValue(j.salary) : -1; return top > 1000 && top < m ? top : null; };
+/** The top of a role's pay, against your minimum: a range that reaches it is fine, and a starting
+ *  point alone ("From $90,000", "$90,000+") isn't the most it pays. */
+const openEnded = s => /\b(from|starting|starts? at|minimum|at least|and up|or more)\b|\d\s*[kK]?\s*\+/i.test(s) && (String(s).match(/\d[\d,]*(?:\.\d+)?\s*[kK]?/g) || []).length < 2;
+const belowMin = j => { const m = minSalary(); if (!m || !j.salary || openEnded(j.salary)) return null; const top = salaryValue(j.salary); return top > 1000 && top < m ? top : null; };
 const belowMinTag = j => belowMin(j) ? ` <span class="pill crit" title="Pays up to ${money(belowMin(j))}, below your minimum of ${money(minSalary())}">Below your minimum</span>` : '';
 /** How you'd apply, and how long it takes: email, a quick form, an account to make first… */
 const EFFORT_CLS = { email: 'good', quick: 'good', account: 'warn', board: 'warn', site: '' };
@@ -1599,8 +1638,8 @@ const dayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '
 const timeOf = iso => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 /** The Calendar page's tabs: the calendar, and its settings (email, interviews, reminders; moved from Settings). */
-const CAL_TABS = on => `<nav class="tabs">${[['calendar', 'Calendar'], ['settings', `${svg('settings')}Settings`, 'tab-end']].map(([id, n, cls]) => `<a href="#calendar${id === 'calendar' ? '' : '/settings'}" class="${id === on ? 'on' : ''} ${cls || ''}">${n}</a>`).join('')}</nav>`;
-const calHead = on => `<div class="head"><div class="grow"><h1>Calendar</h1><p class="muted">Interviews, prep time and reminders, application deadlines and follow-ups that are due.</p></div></div>${CAL_TABS(on)}`;
+const calHead = () => `<div class="head"><div class="grow"><div class="eyebrow"><a href="#calendar">Calendar</a> / Settings</div><h1>Calendar settings</h1><p class="muted">Your time zone, and how Job Hunt books interviews and reminds you.</p></div>
+  <div class="row"><a class="btn" href="#calendar">${svg('calendar')}Back to the calendar</a></div></div>`;
 async function showCalendar() {
   const [{ items, google, synced, show_google, syncing }, { jobs }] = await Promise.all([api('/api/calendar?back=60&ahead=120'), api('/api/jobs')]);
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1647,11 +1686,10 @@ async function showCalendar() {
   const recent = items.filter(i => new Date(i.at) < today && new Date(i.at) >= new Date(+today - 14 * 86400000)).reverse();
   const pickable = jobs.filter(j => ['ready', 'approved', 'applied', 'interviewing', 'saved'].includes(j.status)).sort((a, b) => a.company.localeCompare(b.company));
   page(`<div class="head"><div class="grow"><h1>Calendar</h1><p class="muted">Interviews, prep time and reminders${google ? ' (also in your Google Calendar)' : ''}, application deadlines and follow-ups that are due.</p></div>
-      <div class="row"><button class="btn primary" data-act="calAdd">${svg('add')}Add interview</button>
+      <div class="row"><a class="btn set-btn" href="#calendar/settings">${svg('settings')}Settings</a><button class="btn primary" data-act="calAdd">${svg('add')}Add interview</button>
         <a class="btn" href="/api/calendar.ics" download="Job Hunt.ics" title="Import into Outlook or Apple Calendar">Download for Outlook / Apple</a>
         ${google ? `<button class="btn" data-act="calSync" ${syncing ? 'disabled' : ''} title="Copy Job Hunt's entries there, and bring back interviews you moved or deleted">${syncing ? 'Syncing…' : 'Sync with Google'}</button>
           <button class="btn ghost" data-act="link" data-url="https://calendar.google.com">Google Calendar</button>` : ''}</div></div>
-      ${CAL_TABS('calendar')}
     ${google ? `<p class="muted small" style="margin:-6px 0 12px">${synced ? `Synced with Google Calendar ${esc(ago(synced))}; it syncs every 30 minutes.` : 'Not synced with Google Calendar yet.'}
       <label class="check inline"><input type="checkbox" data-act="calShowGoogle" ${show_google ? 'checked' : ''}> Show my other Google Calendar events</label></p>` : ''}
     <section class="card" id="calAddCard" hidden><header><h2>Add an interview</h2></header>
@@ -2892,8 +2930,9 @@ async function showSearch(arg) {
     const list = r.postings || [];
     const siteNames = Object.fromEntries((d.sites || []).map(x => [x.id, x.name]));
     const inSite = list.filter(p => !f.site || p.source === f.site);
-    const n = k => inSite.filter(p => k === 'all' || (k === 'new' ? SRC_NEW.includes(p.outcome) : p.outcome === k)).length;
-    const shown = inSite.filter(p => f.outcome === 'all' || (f.outcome === 'new' ? SRC_NEW.includes(p.outcome) : p.outcome === f.outcome));
+    const n = k => inSite.filter(p => k === 'all' ? p.outcome !== 'filtered' : (k === 'new' ? SRC_NEW.includes(p.outcome) : p.outcome === k)).length;
+    // All: what Job Hunt kept. Postings it skipped (outside your locations, say) only under Skipped.
+    const shown = inSite.filter(p => f.outcome === 'all' ? p.outcome !== 'filtered' : (f.outcome === 'new' ? SRC_NEW.includes(p.outcome) : p.outcome === f.outcome));
     const probs = (r.report?.source_problems || []);
     const errs = (r.report?.errors || []).filter(e => !e.startsWith('Stopped'));
     const sitesHere = view === 'agencies' ? [...new Set(list.map(p => p.source))] : [];
