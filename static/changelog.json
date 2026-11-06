@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.28.0",
+    "date": "2026-11-06",
+    "title": "See what changed",
+    "changes": [
+      "After you ask for changes to a tailored CV or cover letter (or edit a paragraph yourself), the job's CV & letter tab, and Review, show What changed just now: each changed paragraph word by word, with what's gone struck through and what's new highlighted, and the changed paragraphs marked in the preview. Done clears it."
+    ]
+  },
+  {
     "version": "2.27.0",
     "date": "2026-11-06",
     "title": "Full-time or contract, at a glance",

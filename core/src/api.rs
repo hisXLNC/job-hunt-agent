@@ -620,6 +620,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "cv_pdf": pdf(&job.cv_path), "letter_pdf": pdf(&job.letter_path),
                     "revising": agent.is_running(&format!("revise:{id}")),
                     "undo": { "cv": agent.can_undo(id, "cv"), "letter": agent.can_undo(id, "letter") },
+                    "revision": agent.last_revision(id),
                     "follow_up": agent.follow_up(id), "following_up": agent.is_running(&format!("followup:{id}")),
                     "answers": agent.answers(id), "answering": agent.is_running(&format!("answers:{id}")),
                     "can_fill": host.can_fill() && !req.remote,
@@ -733,6 +734,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         agent.db().set_status(id, "approved", "approved; applying on the company site")?;
                     }
                     Ok(Resp::json(&json!({ "url": crate::fill::form_link(&job) })))
+                }
+                // Seen the highlighted changes of the last revision: no more highlights.
+                "revision-seen" => {
+                    agent.revision_seen(id)?;
+                    ok()
                 }
                 // You submitted it on the company's site (Job Hunt asked, after you closed the Apply window).
                 "submitted" => {

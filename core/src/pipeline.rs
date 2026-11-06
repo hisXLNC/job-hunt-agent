@@ -2457,6 +2457,8 @@ replies and interviews, and a little lower for kinds that got none from several 
                     detail.push_str(&format!("; refused: {}", applied.rejected.join("; ")));
                 }
                 db.log(Some(job_id), "revised", &detail)?;
+                drop(db);
+                self.keep_revision(job_id, "cv", note, applied.changes.iter().map(|c| (c.before.clone(), c.after.clone())).collect());
             }
             "letter" => {
                 let letter = job.cover_letter.clone().filter(|l| !l.trim().is_empty()).ok_or_else(|| Error("There's no cover letter yet. Tailor this application first.".into()))?;
@@ -2468,6 +2470,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 self.db().set(&undo_key, &json!({ "letter": letter }).to_string())?;
                 self.save_cover_letter(job_id, &new)?;
                 self.db().log(Some(job_id), "revised", &format!("cover letter: \u{201c}{note}\u{201d}"))?;
+                self.keep_revision(job_id, "letter", note, paragraph_changes(&letter, &new));
             }
             _ => return err("Choose the CV or the cover letter."),
         }
@@ -2511,7 +2514,30 @@ replies and interviews, and a little lower for kinds that got none from several 
         db.set(&format!("undo:{job_id}:cv"), &json!({ "file": backup, "cv_changes": job.cv_changes, "coverage_after": job.coverage_after, "keyword_gaps": job.keyword_gaps }).to_string())?;
         db.update_job(job_id, &[("cv_changes", json!(changes)), ("coverage_after", after.into())])?;
         db.log(Some(job_id), "revised", "CV: a paragraph edited by you")?;
-        db.job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
+        drop(db);
+        self.keep_revision(job_id, "cv", "your edit", applied.changes.iter().map(|c| (c.before.clone(), c.after.clone())).collect());
+        self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
+    }
+
+    /// What the last change to an application's CV or letter changed, for the page to highlight:
+    /// {what ("cv" or "letter"), note (what you asked), at, changes: [{before, after}]}, until you
+    /// say you've seen it.
+    pub fn last_revision(&self, job_id: &str) -> Option<Value> {
+        serde_json::from_str(&self.secret(&format!("revision.last:{job_id}"))).ok()
+    }
+
+    fn keep_revision(&self, job_id: &str, what: &str, note: &str, changes: Vec<(String, String)>) {
+        let changes: Vec<Value> = changes.into_iter().filter(|(b, a)| b.trim() != a.trim())
+            .map(|(b, a)| json!({ "before": b.replace("**", ""), "after": a.replace("**", "") })).collect();
+        if changes.is_empty() {
+            return;
+        }
+        let v = json!({ "what": what, "note": note, "at": now(), "changes": changes });
+        let _ = self.db().set(&format!("revision.last:{job_id}"), &v.to_string());
+    }
+
+    pub fn revision_seen(&self, job_id: &str) -> R<()> {
+        self.db().set(&format!("revision.last:{job_id}"), "")
     }
 
     /// Whether this application uses a CV or cover letter file you made yourself.
@@ -6164,6 +6190,46 @@ fn fmt_money(x: f64) -> String {
     out
 }
 
+/// The paragraphs of a text that changed between two versions, as (before, after) pairs: the same
+/// paragraphs line up (a longest common run), and what's left between them pairs in order; a
+/// paragraph only added or only removed pairs with an empty one.
+pub fn paragraph_changes(old: &str, new: &str) -> Vec<(String, String)> {
+    let split = |t: &str| t.split('\n').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect::<Vec<_>>();
+    let (a, b) = (split(old), split(new));
+    let (n, m) = (a.len(), b.len());
+    let mut l = vec![vec![0usize; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            l[i][j] = if a[i] == b[j] { l[i + 1][j + 1] + 1 } else { l[i + 1][j].max(l[i][j + 1]) };
+        }
+    }
+    let (mut i, mut j, mut out) = (0, 0, vec![]);
+    let (mut gone, mut came): (Vec<String>, Vec<String>) = (vec![], vec![]);
+    let flush = |gone: &mut Vec<String>, came: &mut Vec<String>, out: &mut Vec<(String, String)>| {
+        let k = gone.len().max(came.len());
+        for x in 0..k {
+            out.push((gone.get(x).cloned().unwrap_or_default(), came.get(x).cloned().unwrap_or_default()));
+        }
+        gone.clear();
+        came.clear();
+    };
+    while i < n || j < m {
+        if i < n && j < m && a[i] == b[j] {
+            flush(&mut gone, &mut came, &mut out);
+            i += 1;
+            j += 1;
+        } else if j < m && (i == n || l[i][j + 1] >= l[i + 1][j]) {
+            came.push(b[j].clone());
+            j += 1;
+        } else {
+            gone.push(a[i].clone());
+            i += 1;
+        }
+    }
+    flush(&mut gone, &mut came, &mut out);
+    out
+}
+
 /// When a contact was sent a message ("sent_at") or the follow-up ("followed_at"), if they were.
 fn contact_time(c: &Value, key: &str) -> Option<chrono::DateTime<Utc>> {
     c[key].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| t.with_timezone(&Utc))
@@ -7631,6 +7697,10 @@ mod tests {
         // Still one change against your own CV, now with the revised wording.
         assert_eq!(j.cv_changes.len(), 1);
         assert!(j.cv_changes[0].before.starts_with("Managed contracted") && j.cv_changes[0].after.contains("teams and integrators"));
+        // What this revision changed, against the version just before it (not your own CV), for the page to highlight.
+        let r = s.agent.last_revision("test:1").unwrap();
+        assert_eq!((r["what"].as_str(), r["note"].as_str()), (Some("cv"), Some("shorter bullets")));
+        assert!(r["changes"][0]["before"].as_str().unwrap().contains("contracted development teams") && r["changes"][0]["after"].as_str().unwrap().contains("teams and integrators"), "{r}");
         assert!(s.agent.can_undo("test:1", "cv"));
         s.agent.undo_revision("test:1", "cv").unwrap();
         let back = s.agent.db().job("test:1").unwrap().unwrap();
@@ -7640,6 +7710,11 @@ mod tests {
 
         let j = s.agent.revise("test:1", "letter", "make it shorter").unwrap();
         assert!(j.cover_letter.unwrap().ends_with("Shorter now."));
+        let r = s.agent.last_revision("test:1").unwrap();
+        assert_eq!(r["what"], "letter");
+        assert_eq!(r["changes"], json!([{ "before": "", "after": "P.S. Shorter now." }]), "only the paragraph that changed");
+        s.agent.revision_seen("test:1").unwrap();
+        assert!(s.agent.last_revision("test:1").is_none(), "seen: no more highlights");
         s.agent.undo_revision("test:1", "letter").unwrap();
         assert_eq!(s.agent.db().job("test:1").unwrap().unwrap().cover_letter, before.cover_letter);
         assert_eq!(s.agent.db().history("test:1").unwrap()[0].kind, "revised");
@@ -7820,6 +7895,17 @@ mod tests {
         assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().salary.as_deref(), Some("$80,000–$90,000"), "read by Claude");
         assert!(s.agent.db().job("test:3").unwrap().unwrap().salary.is_none(), "states no pay: none made up");
         assert_eq!(s.llm.calls.lock().unwrap().iter().filter(|c| c.starts_with("salaries:")).count(), 1, "one request, only for the posting with pay lines");
+    }
+
+    #[test]
+    fn paragraphs_that_changed() {
+        let old = "Dear Ms. Lee,\n\nI led a $40M program.\n\nI'd welcome a chat.\n\nSincerely,\nSam";
+        let new = "Dear Ms. Lee,\n\nI led a $40M program across three banks.\n\nI'd welcome a chat.\n\nThank you for your time.\n\nSincerely,\nSam";
+        assert_eq!(paragraph_changes(old, new), vec![
+            ("I led a $40M program.".to_string(), "I led a $40M program across three banks.".to_string()),
+            (String::new(), "Thank you for your time.".to_string()),
+        ]);
+        assert!(paragraph_changes(old, old).is_empty());
     }
 
     #[test]

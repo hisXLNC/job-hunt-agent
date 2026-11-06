@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.28.0] - 2026-11-06
+
+See what changed.
+
+### Changes
+
+- After you ask for changes to a tailored CV or cover letter (or edit a paragraph yourself), the job's CV & letter tab, and Review, show What changed just now: each changed paragraph word by word, with what's gone struck through and what's new highlighted, and the changed paragraphs marked in the preview. Done clears it.
+
 ## [2.27.0] - 2026-11-06
 
 Full-time or contract, at a glance.
@@ -1041,6 +1049,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.28.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.28.0
 [2.27.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.27.0
 [2.26.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.26.1
 [2.26.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.26.0

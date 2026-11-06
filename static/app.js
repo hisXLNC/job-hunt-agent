@@ -664,6 +664,37 @@ function rowActions(j) {
 const empCell = j => j.employment ? `<span class="emp-${esc(empKind(j).toLowerCase().replace(/[^a-z]/g, ''))}">${esc(j.employment)}</span>` : '<span class="muted">—</span>';
 /** The kind alone, for the Type filter: "Contract · 12 months" is a Contract. */
 const empKind = j => !j.employment ? 'Not stated' : j.employment.startsWith('Full-time or') ? 'Part-time' : j.employment.split(' · ')[0];
+/** Two versions of a paragraph, word by word: removed words struck through, added ones highlighted. */
+function wordDiff(before, after) {
+  const a = String(before || '').split(/(\s+)/).filter(Boolean), b = String(after || '').split(/(\s+)/).filter(Boolean);
+  if (a.length * b.length > 250000) return `<del>${esc(before)}</del> <ins>${esc(after)}</ins>`;
+  const n = a.length, m = b.length, l = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) l[i][j] = a[i] === b[j] ? l[i + 1][j + 1] + 1 : Math.max(l[i + 1][j], l[i][j + 1]);
+  let i = 0, j = 0, out = '';
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) { out += esc(a[i]); i++; j++; }
+    else if (i < n && (j === m || l[i + 1][j] >= l[i][j + 1])) { out += /^\s+$/.test(a[i]) ? '' : `<del>${esc(a[i])}</del>`; i++; }
+    else { out += /^\s+$/.test(b[j]) ? esc(b[j]) : `<ins>${esc(b[j])}</ins>`; j++; }
+  }
+  return out.replace(/<\/ins>(\s*)<ins>/g, '$1').replace(/<\/del><del>/g, ' ');
+}
+/** The last change you asked for (or made) to the tailored CV or letter, highlighted word by word. */
+function revisionHtml(r) {
+  if (!r || !(r.changes || []).length) return '';
+  const what = r.what === 'letter' ? 'cover letter' : 'CV';
+  return `<section class="card revision"><header><h2>What changed just now</h2><button class="btn sm" data-act="revisionSeen">Done</button></header>
+    <p class="muted small">In your ${what}${r.note && r.note !== 'your edit' ? `, for “${esc(r.note)}”` : r.note === 'your edit' ? ', by you' : ''} · ${esc(ago(r.at))}. <del>Struck through</del> is gone, <ins>highlighted</ins> is new; the paragraphs are marked in the preview too.</p>
+    ${r.changes.map(c => `<div class="rev-para">${!c.before ? '<span class="pill good">New paragraph</span> ' : !c.after ? '<span class="pill crit">Removed</span> ' : ''}${wordDiff(c.before, c.after)}</div>`).join('')}</section>`;
+}
+/** Mark the changed paragraphs in the preview, once it's drawn. */
+function markRevision(r) {
+  if (!r) return;
+  const norm = t => String(t || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const after = new Set((r.changes || []).map(c => norm(c.after)).filter(Boolean));
+  const box = document.getElementById(r.what === 'letter' ? 'pv-letter' : 'pv-cv');
+  if (!box || !after.size) return;
+  box.querySelectorAll('p, li, div').forEach(el => { if (!el.children.length || el.tagName !== 'DIV') { if (after.has(norm(el.textContent))) { el.classList.add('just-changed'); el.title = 'Changed just now'; } } });
+}
 const salaryCell = j => {
   if (!j.salary) return '<span class="muted">—</span>';
   const [pay, ...rest] = String(j.salary).split(/\s+[•·|]\s+/);
@@ -777,7 +808,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, playbook, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, playbook, revision, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   j.effort = effort;
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
@@ -851,6 +882,7 @@ async function showJob(id) {
     ${j.cv_path || j.cover_letter || tailoring ? '' : `<section class="card"><p class="muted">Not tailored yet. Let Job Hunt tailor your CV, or attach one you tailored yourself: it moves to Approve and is used when you apply.</p>
       <div class="row"><button class="btn primary" data-act="tailorPicked" data-job="${esc(j.id)}">Tailor my CV for this role</button><label class="btn">${svg('doc')}Attach my own CV<input type="file" accept=".docx,.pdf" data-upload="own-cv" hidden></label></div></section>`}
     ${(links || []).length ? `<section class="card"><header><h2>Your links</h2></header>${links.map(l => `<p class="small"><b>${esc(l.site)}</b>: ${l.opened ? `<span class="good-text">opened ${l.opened} time${l.opened === 1 ? '' : 's'}</span>, last ${esc(ago(l.last))}` : '<span class="muted">not opened yet</span>'}${l.previews ? ` <span class="muted">(${l.previews} by link checkers)</span>` : ''}</p>`).join('')}</section>` : ''}
+    ${revisionHtml(revision)}
     ${j.cv_path || j.cover_letter ? `<section class="card">
       <div class="row file-row">${j.cv_path ? `<button class="btn" data-act="open" data-what="cv">${svg('doc')}${own?.cv ? 'Open your CV' : 'Open tailored CV'}</button><button class="btn" data-act="open" data-what="letter">${svg('doc')}Open cover letter</button>
         <button class="btn ghost" data-act="open" data-what="cv-pdf" title="${cv_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">CV PDF</button><button class="btn ghost" data-act="open" data-what="letter-pdf" title="${letter_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">Letter PDF</button>
@@ -976,7 +1008,10 @@ async function showJob(id) {
   }));
   if (j.cv_path && !(own?.cv && /\.pdf$/i.test(j.cv_path))) api(`/api/jobs/${encodeURIComponent(id)}/preview`).then(({ cv }) => {
     const el = $('#pv-cv'); if (el) el.innerHTML = cv ? cvHtml(cv) : own?.cv ? '<p class="muted">Your own CV is a PDF: use <b>Open tailored CV</b> to see it.</p>' : '<p class="muted">The tailored CV file is missing. Re-tailor to make a new one.</p>';
+    if (revision?.what === 'cv') markRevision(revision);
   }).catch(e => { const el = $('#pv-cv'); if (el) el.innerHTML = `<p class="muted">${esc(e.message)}</p>`; });
+  // Just changed the letter: show it, with the changed paragraphs marked.
+  if (revision?.what === 'letter') { document.querySelector('#pvTabs [data-pv=letter]')?.click(); markRevision(revision); }
   main().dataset.contacts = JSON.stringify(contacts || []);
   if (tailoring || preparing || revising || following_up || answering || advising || writing_to || thanking || chatting) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
 }
@@ -1451,7 +1486,7 @@ async function showReview() {
   }
   const j0 = queue[0];
   pageKey = j0.id;
-  const [{ job: j, effort, warnings, revising, answers }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(j0.id)}`), settingsCache ? Promise.resolve(settingsCache) : api('/api/settings')]);
+  const [{ job: j, effort, warnings, revising, answers, revision }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(j0.id)}`), settingsCache ? Promise.resolve(settingsCache) : api('/api/settings')]);
   j.effort = effort;
   const done = jobs.length - queue.length;
   const flags = j.red_flags || [];
@@ -1460,7 +1495,7 @@ async function showReview() {
       <h1>${esc(j.title)}</h1><div class="facts" style="margin-top:6px"><b>${esc(j.company)}${ratingTag(j.rating)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)}</span>${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${effortTag(j)}</div></div>
       <a class="btn ghost" href="#overview">Exit review</a></div>
     ${expiredWhy(j) ? `<div class="card" style="border-color:var(--crit)"><b>This opening has expired.</b> <span class="muted">${esc(expiredWhy(j).replace(/^Expired: /, ''))}. Check the posting before approving it.</span></div>` : ''}
-    ${revising ? '<section class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this updates by itself.</p></section>' : ''}
+    ${revising ? '<section class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this updates by itself.</p></section>' : revisionHtml(revision)}
     <div class="grid-2">
       <div class="stack">
         <section class="card"><header><h2>Why it fits</h2>${j.url ? `<button class="btn ghost" data-act="open" data-what="posting" data-job="${esc(j.id)}">${svg('open')}Posting</button>` : ''}</header>
@@ -3505,6 +3540,9 @@ async function act(el) {
   if (a === 'rescanSalaries') {
     return busy(async () => { const r = await api('/api/salaries/rescan', { method: 'POST' }); if (!r.started) toast('Already looking.'); },
       'Looking for the pay of every posting without one: its text, its page and the company\'s own posting. A notice says what was found.');
+  }
+  if (a === 'revisionSeen') {
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/revision-seen`, { method: 'POST' }); route(); });
   }
   if (a === 'appliedAll') {
     const ids = JSON.parse(el.dataset.ids || '[]');
