@@ -105,19 +105,35 @@ pub fn outside_locations(p: &Posting, profile: &Profile) -> Option<String> {
     if in_country && crate::profile::small_country(country) {
         return None;
     }
-    // A location like "Remote - Canada" counts as remote even when the source doesn't flag it.
-    let remote = p.remote || loc.contains("remote");
-    // A remote role tied to a city that isn't yours ("Ottawa, ON (Remote)": often office days there)
-    // isn't open across the country; "Remote - Ontario" or "Remote, Canada" are.
-    let other_city = names_other_city(&loc, profile);
-    if remote && profile.remote_ok && in_country && !other_city {
+    // A location like "Remote - Canada" counts as remote even when the source doesn't flag it; a
+    // hybrid one ("Hybrid remote in Ottawa, ON") doesn't.
+    let remote = (p.remote || loc.contains("remote")) && !loc.contains("hybrid");
+    // A remote role based in another city ("Ottawa, ON (Remote)") is fine when it's fully remote,
+    // and out when its text ties you to that city: hybrid, office days, living there.
+    let tied = names_other_city(&loc, profile) && tied_to_its_city(&p.description);
+    if remote && profile.remote_ok && in_country && !tied {
         return None;
     }
-    // "Remote - Ontario": open across your province.
-    if remote && profile.remote_ok && !other_city && profile.home_provinces().iter().any(|p| has_words(&loc, &p.to_lowercase())) {
+    // "Remote - Ontario", or remote and based elsewhere in your province: open to you.
+    let in_province = profile.home_provinces().iter().any(|full| {
+        has_words(&loc, &full.to_lowercase())
+            || crate::profile::PROVINCES.iter().any(|(c, short, f)| f == full && c.eq_ignore_ascii_case(&profile.sources.adzuna_country) && has_words(&loc, &short.to_lowercase()))
+    });
+    if remote && profile.remote_ok && !tied && in_province {
         return None;
     }
     Some(format!("location “{}”", p.location))
+}
+
+/// Whether a remote posting's text ties you to its city after all: hybrid work, days in the office or
+/// on site, commuting, or having to live in or near it. A posting without its text yet (LinkedIn's
+/// lists) isn't tied; it's checked again once its text is read.
+fn tied_to_its_city(description: &str) -> bool {
+    static TIED: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| regex::Regex::new(
+        r"(?i)\bhybrid\b|\b(in[- ]office|on[- ]?site|in[- ]person) (days?|work|presence|attendance|requirement)|\b(\d|one|two|three|four)\s*(\+\s*)?days?\s*(a|per|each|/)\s*week\s*(in|at)\s*(the|our)?\s*(office|site)|\boffice days?\b|\bcommut(e|ing)\b|\bmust (reside|live|be (located|based)) (in|within|near)\b|\b(located|reside|live) within \d+\s*(km|kilomet|miles?)|\bwithin commuting distance\b|\breport(ing)? to (the|our) office\b"
+    ).unwrap());
+    let head: String = description.chars().take(12000).collect();
+    TIED.is_match(&head)
 }
 
 /// Whether a (lowercased) location starts with a city that isn't one of yours: "ottawa, on (remote)"
@@ -163,8 +179,15 @@ mod tests {
         let mut p = Profile { locations: vec!["Oakville".into(), "Toronto".into()], remote_ok: true, ..Profile::default() };
         p.sources.adzuna_country = "ca".into();
         let out = |loc: &str| outside_locations(&Posting { location: loc.into(), ..Posting::default() }, &p).is_some();
-        assert!(out("Ottawa, Ontario (Remote)"), "a remote role tied to Ottawa");
-        assert!(out("Ottawa, ON, Canada (Remote)"));
+        let out_with = |loc: &str, text: &str| outside_locations(&Posting { location: loc.into(), description: text.into(), ..Posting::default() }, &p).is_some();
+        // Based in Ottawa but fully remote: you can work from Toronto.
+        assert!(!out("Ottawa, Ontario (Remote)") && !out("Ottawa, ON, Canada (Remote)"), "remote, nothing tying it to Ottawa");
+        assert!(!out_with("Ottawa, ON (Remote)", "This is a fully remote role open to candidates anywhere in Canada."));
+        // Remote in name, tied to Ottawa in the text: out.
+        assert!(out_with("Ottawa, ON (Remote)", "Hybrid: 2 days a week in the office."));
+        assert!(out_with("Ottawa, Ontario (Remote)", "Candidates must reside in the National Capital Region."));
+        assert!(out_with("Ottawa, ON (Remote)", "Remote with occasional commuting to our Ottawa office."));
+        assert!(!out_with("Toronto, ON (Remote)", "Hybrid, 3 days a week in the office."), "your own city: hybrid is fine");
         assert!(!out("Remote - Ontario"), "open across your province");
         assert!(!out("Remote, Canada") && !out("Canada (Remote)") && !out("Ontario, Canada (Remote)"));
         assert!(!out("Toronto, ON (Remote)") && !out("Ottawa or Toronto, ON") && !out("Oakville, ON"));

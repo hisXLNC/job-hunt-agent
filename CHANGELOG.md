@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.31.1] - 2026-11-06
+
+Fully remote counts, wherever it's based.
+
+### Changes
+
+- A fully remote role based in another city ("Ottawa, ON (Remote)") is kept, since you can work from home; it's left out only when its text ties you to that city: hybrid, office or on-site days, commuting, or having to live there. (Needs Include remote roles open across the country, in Search → What to search.)
+
 ## [2.31.0] - 2026-11-06
 
 Fits any window.
@@ -1080,6 +1088,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.31.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.31.1
 [2.31.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.31.0
 [2.30.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.30.0
 [2.29.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.29.0

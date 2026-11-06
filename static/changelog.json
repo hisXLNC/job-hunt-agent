@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.31.1",
+    "date": "2026-11-06",
+    "title": "Fully remote counts, wherever it's based",
+    "changes": [
+      "A fully remote role based in another city (\"Ottawa, ON (Remote)\") is kept, since you can work from home; it's left out only when its text ties you to that city: hybrid, office or on-site days, commuting, or having to live there. (Needs Include remote roles open across the country, in Search → What to search.)"
+    ]
+  },
+  {
     "version": "2.31.0",
     "date": "2026-11-06",
     "title": "Fits any window",
