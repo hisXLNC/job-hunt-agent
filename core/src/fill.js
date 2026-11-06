@@ -25,10 +25,15 @@
   const ATS = /greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|icims\.com|jobvite\.com|bamboohr\.com|myworkdayjobs\.com|recruitee\.com|teamtailor\.com|breezy\.hr|jazzhr\.com|applytojob\.com/i;
 
   // --- the panel, in its own shadow root so the page's styles don't reach it ---
-  let ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
+  let retired = false, ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
+  // One Job Hunt per page: another copy (the extension and the window both, or two copies of the
+  // extension) would press each Add button twice and fill boxes the other one moved.
+  const other = () => [...document.querySelectorAll('[data-jobhunt-panel]')].some(h => h !== ui);
   function panel() {
     if (ui) return;
+    if (other()) { ui = document.createElement('div'); statusEl = document.createElement('p'); headEl = null; for (const k of ['fill', 'open', 'next', 'applied', 'stop', 'skip', 'drop']) buttons[k] = document.createElement('button'); retired = true; return; }
     const host = document.createElement('div');
+    host.setAttribute('data-jobhunt-panel', '');
     host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647';
     const root = host.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>
@@ -49,7 +54,7 @@
     statusEl = root.querySelector('.s');
     root.querySelectorAll('[data-k]').forEach(b => { buttons[b.dataset.k] = b; });
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
-    buttons.fill.onclick = () => { round = 0; start(); };
+    buttons.fill.onclick = () => start();
     buttons.next.onclick = () => nextAmber();
     buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
@@ -177,7 +182,10 @@
     const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, v);
     for (const e of ['input', 'change']) el.dispatchEvent(new Event(e, { bubbles: true }));
-    el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    // Sites built on React keep what you typed only once the box loses focus (focusout); without it a
+    // redraw (pressing Add, say) empties the box again.
+    el.dispatchEvent(new FocusEvent('blur'));
+    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
   };
   const same = (a, b) => clean(a).toLowerCase() === clean(b).toLowerCase();
   const near = (a, b) => { a = clean(a).toLowerCase(); b = clean(b).toLowerCase(); return a && b && (a === b || a.startsWith(b) || b.startsWith(a)); };
@@ -244,26 +252,16 @@
   window.__jobhunt = {
     status,
     async fill(answer) {
+      if (retired) return;
       if (answer.job && headEl) headEl.textContent = `Job Hunt · ${answer.job.company}`;
-      collect();
-      amber = []; amberAt = 0;
-      let ok = 0, todo = 0;
-      for (const f of fields) {
-        if (f.type === 'add') continue;
-        const file = answer.files && answer.files[f.key];
-        const v = answer.values && answer.values[f.key];
-        const done = await fillOne(f, v, file);
-        // Green is what Job Hunt filled; a box the site (or you) had filled already isn't marked.
-        const theirs = f.value !== '' && f.type !== 'file' && (v == null || v === '' || same(f.value, v));
-        if (theirs && done) continue;
-        const matters = f.required || done || v || f.type === 'file';
-        if (!matters) continue;
-        mark((byKey[f.key] || [])[0], done);
-        if (done) ok++; else todo++;
-      }
-      // Your CV has more jobs or schools than the form shows: press its Add button for each, then read
-      // the form again and fill the new entries (twice at most).
-      const adds = round < 2 ? fields.filter(f => f.type === 'add' && parseInt(answer.values && answer.values[f.key], 10) > 0) : [];
+      // The answers go to the boxes as they were when the form was sent (boxes added or moved since
+      // would shift them); read again only if the page replaced them.
+      if (sent && Object.values(sent.byKey).every(els => els.every(e => e.isConnected))) ({ fields, byKey, adders } = sent);
+      else collect();
+      sent = null;
+      // Your CV has more jobs or schools than the form shows: press its Add buttons first, then read
+      // the form again and fill every entry at once (a redraw after filling could empty the boxes).
+      const adds = round < 1 ? fields.filter(f => f.type === 'add' && parseInt(answer.values && answer.values[f.key], 10) > 0) : [];
       if (adds.length) {
         round++;
         let added = 0;
@@ -281,11 +279,26 @@
           }
         }
         if (added) {
-          status(`Added ${added} more ${added === 1 ? 'entry' : 'entries'} for the other jobs and schools on your CV; filling them in…`);
+          status(`Added ${added} more ${added === 1 ? 'entry' : 'entries'} for the other jobs and schools on your CV; filling in the form…`);
           await wait(600);
-          start();
+          start(true);
           return;
         }
+      }
+      amber = []; amberAt = 0;
+      let ok = 0, todo = 0;
+      for (const f of fields) {
+        if (f.type === 'add') continue;
+        const file = answer.files && answer.files[f.key];
+        const v = answer.values && answer.values[f.key];
+        const done = await fillOne(f, v, file);
+        // Green is what Job Hunt filled; a box the site (or you) had filled already isn't marked.
+        const theirs = f.value !== '' && f.type !== 'file' && (v == null || v === '' || same(f.value, v));
+        if (theirs && done) continue;
+        const matters = f.required || done || v || f.type === 'file';
+        if (!matters) continue;
+        mark((byKey[f.key] || [])[0], done);
+        if (done) ok++; else todo++;
       }
       filled = true;
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
@@ -312,7 +325,7 @@
         }
       }
     },
-    start: () => { round = 0; start(); },
+    start: () => start(),
     failed(msg) { buttons.fill.disabled = false; status(msg); },
   };
   // What stops Job Hunt submitting for you: a captcha, or a required box you haven't ticked.
@@ -324,9 +337,14 @@
     amber[amberAt % amber.length].scrollIntoView({ behavior: 'smooth', block: 'center' });
     amberAt++;
   }
-  function start() {
+  let sent = null;
+  function start(more) {
+    if (!more) round = 0;
+    panel();
+    if (retired) return;
     checkPay();
     const list = collect();
+    sent = { fields, byKey, adders };
     if (!list.length) { status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
     buttons.fill.disabled = true;
     status(`Reading ${list.length} questions and writing answers from your CV… this takes about half a minute.`);
@@ -405,6 +423,7 @@
       await wait(1000);
       if (!document.body) continue;
       panel();
+      if (retired) return;
       if (i === 2 || i === 8) checkPay();
       if (filled || recorded) return;
       if (formHere()) {

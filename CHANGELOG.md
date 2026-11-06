@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.33.1] - 2026-11-06
+
+Add Another, fixed.
+
+### Changes
+
+- When a form needs more Work Experience or Education entries, Job Hunt now presses Add first and fills the whole form afterwards, so a redraw can't empty what it already typed.
+- Only one Job Hunt panel works on a page at a time; a second copy no longer presses Add again or fills boxes the first one moved.
+- Answers go to the boxes as they were when the form was read, even if the page changes while Claude writes them.
+
 ## [2.33.0] - 2026-11-06
 
 Fills every job on your CV.
@@ -1115,6 +1125,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.33.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.1
 [2.33.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.0
 [2.32.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.32.1
 [2.32.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.32.0

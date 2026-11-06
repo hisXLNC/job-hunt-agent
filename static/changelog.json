@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.33.1",
+    "date": "2026-11-06",
+    "title": "Add Another, fixed",
+    "changes": [
+      "When a form needs more Work Experience or Education entries, Job Hunt now presses Add first and fills the whole form afterwards, so a redraw can't empty what it already typed.",
+      "Only one Job Hunt panel works on a page at a time; a second copy no longer presses Add again or fills boxes the first one moved.",
+      "Answers go to the boxes as they were when the form was read, even if the page changes while Claude writes them."
+    ]
+  },
+  {
     "version": "2.33.0",
     "date": "2026-11-06",
     "title": "Fills every job on your CV",
