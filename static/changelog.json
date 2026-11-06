@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.33.2",
+    "date": "2026-11-06",
+    "title": "Add no longer counts as Submit",
+    "changes": [
+      "Job Hunt pressing a form's Add button (or you pressing Add, Delete, Next or Save and Continue) no longer counts as submitting the application, so the panel keeps showing that it's writing your answers instead of \"Waiting for the site to confirm\".",
+      "If no answers come back within three minutes, the panel says so and Fill in this form works again."
+    ]
+  },
+  {
     "version": "2.33.1",
     "date": "2026-11-06",
     "title": "Add Another, fixed",

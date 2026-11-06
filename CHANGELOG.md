@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.33.2] - 2026-11-06
+
+Add no longer counts as Submit.
+
+### Changes
+
+- Job Hunt pressing a form's Add button (or you pressing Add, Delete, Next or Save and Continue) no longer counts as submitting the application, so the panel keeps showing that it's writing your answers instead of "Waiting for the site to confirm".
+- If no answers come back within three minutes, the panel says so and Fill in this form works again.
+
 ## [2.33.1] - 2026-11-06
 
 Add Another, fixed.
@@ -1125,6 +1134,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.33.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.2
 [2.33.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.1
 [2.33.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.0
 [2.32.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.32.1

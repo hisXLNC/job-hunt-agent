@@ -101,7 +101,8 @@
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
     return question(el) || clean(el.placeholder || el.name || el.id);
   }
-  let fields = [], byKey = {}, adders = {}, round = 0;
+  let fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0;
+  const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
   const ADD = /^\s*\+?\s*add\b/i;
@@ -253,6 +254,7 @@
     status,
     async fill(answer) {
       if (retired) return;
+      waitingSince = 0;
       if (answer.job && headEl) headEl.textContent = `Job Hunt · ${answer.job.company}`;
       // The answers go to the boxes as they were when the form was sent (boxes added or moved since
       // would shift them); read again only if the page replaced them.
@@ -274,7 +276,7 @@
               b = Object.keys(adders).map(k => fields.find(x => x.key === k)).filter(x => x && x.section === f.section).map(x => adders[x.key])[0];
             }
             if (!b) break;
-            b.click(); added++;
+            ownClick = true; b.click(); ownClick = false; added++;
             await wait(900);
           }
         }
@@ -326,7 +328,7 @@
       }
     },
     start: () => start(),
-    failed(msg) { buttons.fill.disabled = false; status(msg); },
+    failed(msg) { waitingSince = 0; buttons.fill.disabled = false; status(msg); },
   };
   // What stops Job Hunt submitting for you: a captcha, or a required box you haven't ticked.
   const captcha = () => !!document.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="turnstile"], .g-recaptcha, .h-captcha, [data-sitekey]');
@@ -345,6 +347,9 @@
     checkPay();
     const list = collect();
     sent = { fields, byKey, adders };
+    // No answer in three minutes (Job Hunt closed, Claude busy): the button comes back.
+    const mine = waitingSince = Date.now();
+    setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; buttons.fill.disabled = false; status('No answers came back from Job Hunt. Is it still running? Press Fill in this form to try again.'); } }, 180000);
     if (!list.length) { status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
     buttons.fill.disabled = true;
     status(`Reading ${list.length} questions and writing answers from your CV… this takes about half a minute.`);
@@ -387,7 +392,7 @@
       await wait(1000);
       if (pressedAt() && confirmedHere(false)) { recordApplied(); return; }
       if (vouched && confirmedHere(true)) { recordApplied(); return; }
-      if (i === 8 && !recorded && pressedAt()) { panel(); buttons.applied.hidden = false; status('Waiting for the site to confirm… If it says your application went through, press I submitted it (or just close this window: Job Hunt asks).'); }
+      if (i === 8 && !recorded && pressedAt() && !waitingSince) { panel(); buttons.applied.hidden = false; status('Waiting for the site to confirm… If it says your application went through, press I submitted it (or just close this window: Job Hunt asks).'); }
     }
   }
   // You sent the form: a Submit-like button, or the form itself (Enter, or a button Job Hunt can't name).
@@ -399,8 +404,12 @@
   }
   document.addEventListener('click', e => {
     const b = e.target.closest && e.target.closest('button,input[type=submit],[role=button]');
-    if (!b || own(b)) return;
-    if (b.type === 'submit' || /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|apply now|complete application|finish application/i.test(b.textContent || b.value || '')) onPressed();
+    if (!b || own(b) || ownClick) return;
+    const t = clean(b.textContent || b.value || b.getAttribute('aria-label') || '');
+    // A page's other buttons are often "submit" too (a button with no type is): Add another, Delete,
+    // Save and Continue, Next, Upload… aren't sending the application.
+    if (NOT_SEND.test(t)) return;
+    if ((b.type === 'submit' && b.form) || /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|apply now|complete application|finish application/i.test(b.textContent || b.value || '')) onPressed();
   }, true);
   document.addEventListener('submit', e => { if (!own(e.target) && filled) onPressed(); }, true);
   // Arrived on a new page after pressing Submit: is this the confirmation? (The app also asks each
