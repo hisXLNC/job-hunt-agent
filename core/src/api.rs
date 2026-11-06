@@ -376,6 +376,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "clip_watch": get("clip.watch") != "0",
         // The browser extension's key for Fill this form (see bridge.rs), on this computer only.
         "ext_key": ext_key,
+        "ext_last": Some(get("ext.last")).filter(|x| !x.is_empty()),
         "repeat_mode": repeat_mode,
         "ratings_auto": get("ratings.auto") != "0",
         "claude_desktop": {
@@ -387,7 +388,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
             use base64::Engine;
             format!("data:image/{ext};base64,{}", base64::engine::general_purpose::STANDARD.encode(&b))
         })),
-        "app": { "version": host.version(), "autostart": host.autostart(), "close": Some(get("app.close")).filter(|c| !c.is_empty()).unwrap_or_else(|| "tray".into()), "keep_awake": get("app.keep_awake") != "0", "wake": get("app.wake") == "1", "update_auto": get("update.auto") == "1", "slept": serde_json::from_str::<Value>(&get("awake.slept")).ok(), "next_wake": next_wake, "last_wake": get("last.wake"), "data": agent.data.to_string_lossy() },
+        "app": { "version": host.version(), "autostart": host.autostart(), "close": Some(get("app.close")).filter(|c| !c.is_empty()).unwrap_or_else(|| "tray".into()), "keep_awake": get("app.keep_awake") != "0", "wake": get("app.wake") == "1", "update_auto": get("update.auto") == "1", "browser": get("app.browser"), "slept": serde_json::from_str::<Value>(&get("awake.slept")).ok(), "next_wake": next_wake, "last_wake": get("last.wake"), "data": agent.data.to_string_lossy() },
     }))
 }
 
@@ -1841,6 +1842,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             if let Some(on) = b.get("keep_awake").and_then(|v| v.as_bool()) {
                 agent.db().set("app.keep_awake", if on { "1" } else { "0" })?;
+            }
+            // The browser links open in: "edge", "chrome", or "" (Windows' default).
+            if let Some(b) = b.get("browser").and_then(|v| v.as_str()) {
+                agent.db().set("app.browser", if ["edge", "chrome"].contains(&b) { b } else { "" })?;
             }
             // Install updates by themselves, when Job Hunt isn't busy and you're not using its window.
             if let Some(on) = b.get("update_auto").and_then(|v| v.as_bool()) {

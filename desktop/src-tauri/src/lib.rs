@@ -50,6 +50,12 @@ impl Host for TauriHost {
 
     fn open_url(&self, url: &str) -> jobhunt_core::R<()> {
         use tauri_plugin_opener::OpenerExt;
+        // The browser you chose in Settings → App (Edge or Chrome), where your sign-ins, password
+        // manager and the Job Hunt extension are; else Windows' default browser.
+        let browser = self.app.try_state::<Arc<Ctx>>().map(|c| c.agent.secret("app.browser")).unwrap_or_default();
+        if url.starts_with("http") && open_in(&browser, url) {
+            return Ok(());
+        }
         self.app.opener().open_url(url, None::<&str>).map_err(|e| jobhunt_core::Error(format!("Couldn't open the link: {e}")))
     }
 
@@ -703,6 +709,21 @@ fn read_in_browser(app: &AppHandle, url: &str) -> Result<String, String> {
 }
 
 /// A message from the Apply window's script: the form's fields to answer, or "I submitted it".
+/// Open a web address in Microsoft Edge or Google Chrome ("edge" / "chrome"): the browser itself,
+/// started with the address (no shell in between, so nothing in the address is read as a command).
+/// False when that browser isn't installed, or for any other choice.
+fn open_in(browser: &str, url: &str) -> bool {
+    let env = |k: &str| std::env::var(k).map(PathBuf::from).ok();
+    let candidates: Vec<PathBuf> = match browser {
+        "edge" => [env("ProgramFiles(x86)"), env("ProgramFiles"), env("LOCALAPPDATA")].into_iter().flatten()
+            .map(|d| d.join("Microsoft").join("Edge").join("Application").join("msedge.exe")).collect(),
+        "chrome" => [env("ProgramFiles"), env("ProgramFiles(x86)"), env("LOCALAPPDATA")].into_iter().flatten()
+            .map(|d| d.join("Google").join("Chrome").join("Application").join("chrome.exe")).collect(),
+        _ => return false,
+    };
+    candidates.into_iter().find(|p| p.is_file()).is_some_and(|exe| std::process::Command::new(exe).arg(url).spawn().is_ok())
+}
+
 /// Open a job's form in the Apply window. The company's own site is preferred: a posting still only
 /// on a job board is looked for there first (unless that was tried in the last week).
 fn open_application(app: AppHandle, job_id: String) {

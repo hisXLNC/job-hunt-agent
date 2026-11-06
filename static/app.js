@@ -2059,6 +2059,23 @@ async function renderBank() {
 }
 const bankRows = () => [...document.querySelectorAll('#bankCard .bank-row')].map(r => ({ q: r.querySelector('.bank-q').value, a: r.querySelector('.bank-a').value }));
 
+/** The browser extension, in Settings → App: what it does, the download, the key to paste into it,
+ *  the steps for Edge (and Chrome), and whether it has reached Job Hunt yet. */
+function extensionCard(st) {
+  const browser = st.app.browser === 'chrome' ? 'Chrome' : 'Edge';
+  const page = browser === 'Chrome' ? 'chrome://extensions' : 'edge://extensions';
+  return `<section class="card" id="extCard"><header><h2>Browser extension</h2>${st.ext_last ? `<span class="pill good" title="Last reached Job Hunt ${esc(ago(st.ext_last))}">Connected</span>` : '<span class="pill">Not connected yet</span>'}</header>
+    <p class="muted"><b>Send to Job Hunt</b> in ${browser}: send a posting you're looking at to Job Hunt, and fill in application forms in your own browser, with your sign-ins and password manager, from your tailored CV and letter.</p>
+    <label class="field" style="max-width:420px">Open links in<select data-act="browserPick">${[['', "Windows' default browser"], ['edge', 'Microsoft Edge'], ['chrome', 'Google Chrome']].map(([v, n]) => `<option value="${v}" ${(st.app.browser || '') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Postings, company sites, and Fill it in my own browser open there.</span></label>
+    <ol class="small steps-list">
+      <li><a class="btn sm" href="/api/extension.zip" download>${svg('download')}Download the extension</a> and unzip it (right-click → <b>Extract All</b>). Keep the <b>Send to Job Hunt</b> folder somewhere it stays, like Documents. Updating? Replace the old folder with the new one.</li>
+      <li>In ${browser}, open <code>${page}</code>, turn on <b>Developer mode</b>${browser === 'Edge' ? ' (at the bottom of the left side)' : ' (top right)'}, press <b>Load unpacked</b> and choose the <b>Send to Job Hunt</b> folder. Updating? Press the reload arrow on its card instead.</li>
+      <li>Pin it: the puzzle-piece icon by the address bar → the eye or pin next to <b>Send to Job Hunt</b>.</li>
+      ${st.ext_key ? `<li>Click it once and paste this key, then press <b>Save the key</b>: <span class="copy-row" style="display:inline-flex;gap:6px;align-items:center"><code id="extKey2">${esc(st.ext_key)}</code><button class="btn ghost sm" data-act="copy" data-from="extKey2">Copy</button></span></li>` : ''}
+    </ol>
+    <p class="muted small">Then on any application form, click it and press <b>Fill this form</b>; on a posting, <b>Send this job to Job Hunt</b>. Job Hunt needs to be running on this PC. The extension doesn't update itself: when a release note says so, download it again and replace the folder.</p></section>`;
+}
+
 /** host: the Search page's top, for its What to search and Set up sources tabs (Settings' Search and Job sources, moved there). */
 async function showSettings(tab, sub, host) {
   // Older links: Extras went to App; Schedule became Email & calendar.
@@ -2188,7 +2205,7 @@ async function showSettings(tab, sub, host) {
       ${desk ? `<div class="row"><button class="btn primary" data-act="bookmarkSetup"><img src="/static/logo.svg" alt="" width="16" height="16">Set up the button</button><span class="muted small">Opens a page in your browser that walks you through it, so the button gets the Job Hunt logo.</span></div>
       <details class="small" ${st.ext_key ? '' : ''}><summary class="muted">Or install it as a browser extension (Chrome or Edge): it also fills in application forms</summary><ol class="small steps-list">
         <li><a class="btn sm" href="/api/extension.zip" download>${svg('download')}Download the extension</a> and unzip it (right-click → <b>Extract All</b>). Keep the <b>Send to Job Hunt</b> folder somewhere it stays, like Documents.</li>
-        <li>In Chrome open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>), turn on <b>Developer mode</b>, press <b>Load unpacked</b> and choose the <b>Send to Job Hunt</b> folder.</li>
+        <li>In Edge open <code>edge://extensions</code> (Chrome: <code>chrome://extensions</code>), turn on <b>Developer mode</b> (Edge: at the bottom of the left side), press <b>Load unpacked</b> and choose the <b>Send to Job Hunt</b> folder.</li>
         <li>Pin it: the puzzle-piece icon by the address bar → the pin next to <b>Send to Job Hunt</b>. Then on a posting, click the Job Hunt logo.</li>
         ${st.ext_key ? `<li>To fill in application forms in your own browser (with your sign-ins and saved passwords: best for Workday, iCIMS and the like), click the extension once and paste this key: <span class="copy-row" style="display:inline-flex;gap:6px;align-items:center"><code id="extKey">${esc(st.ext_key)}</code><button class="btn ghost sm" data-act="copy" data-from="extKey">Copy</button></span> Then on any application form, click the extension and press <b>Fill this form</b>. Job Hunt needs to be running on this computer.</li>` : ''}
         <li>Had the extension before version 2.23? Download it again and replace the folder, then press the reload arrow on its card in <code>chrome://extensions</code>.</li></ol>
@@ -2426,6 +2443,7 @@ async function showSettings(tab, sub, host) {
         <div class="row"><button class="btn" type="submit">Save</button></div></form></section>
       ${extras}
       <section class="card" id="whatsnew"><header><h2>What's new</h2></header><p class="muted small">Loading…</p></section>
+      ${server || here ? '' : extensionCard(st)}
       ${server || here ? `<section class="card"><header><h2>App</h2></header><p class="muted small">Your data: ${esc(st.app.data)}</p></section>` : `<section class="card"><header><h2>App</h2></header>
       <label class="check"><input type="checkbox" data-act="autostart" ${st.app.autostart ? 'checked' : ''}> Start Job Hunt when I sign in to Windows (in the tray, so searches and email checks keep running)</label>
       ${st.app.slept && st.app.keep_awake && Date.now() - new Date(st.app.slept.at) < 14 * 864e5 ? `<div class="card" style="box-shadow:none;border-color:var(--warn);margin:6px 0"><b>Windows put this PC to sleep during Job Hunt's work</b> <span class="muted small">(${esc(ago(st.app.slept.at))}, for ${st.app.slept.minutes} minutes, while ${esc((st.app.slept.during || []).join(', '))} was running)</span>
@@ -4141,6 +4159,10 @@ document.addEventListener('change', async e => {
   }
   if (el.dataset.act === 'clipWatch') {
     await api('/api/settings/clip-watch', { method: 'POST', body: { on: el.checked } }).catch(err => toast(err.message, true));
+  }
+  if (el.dataset.act === 'browserPick') {
+    await api('/api/settings/app', { method: 'POST', body: { browser: el.value } }).then(() => { settingsCache = null; toast(`Links open in ${el.options[el.selectedIndex].text}.`); }).catch(err => toast(err.message, true));
+    return;
   }
   if (el.dataset.act === 'updateAuto') {
     await api('/api/settings/app', { method: 'POST', body: { update_auto: el.checked } }).then(() => { settingsCache = null; toast(el.checked ? 'On: updates install by themselves when Job Hunt isn\'t busy and you\'re not using it.' : 'Off: Job Hunt tells you when an update is ready, and you install it.'); }).catch(err => { el.checked = !el.checked; toast(err.message, true); });

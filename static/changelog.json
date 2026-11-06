@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.32.0",
+    "date": "2026-11-06",
+    "title": "Opens in Edge",
+    "changes": [
+      "Settings → App → Browser extension: choose Microsoft Edge (or Chrome) for the postings, company sites and forms Job Hunt opens, so your sign-ins, password manager and the extension are there.",
+      "The Browser extension card in Settings → App has the download, your key with a Copy button, the steps for Edge, and shows Connected once the extension has reached Job Hunt."
+    ]
+  },
+  {
     "version": "2.31.1",
     "date": "2026-11-06",
     "title": "Fully remote counts, wherever it's based",

@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.32.0] - 2026-11-06
+
+Opens in Edge.
+
+### Changes
+
+- Settings → App → Browser extension: choose Microsoft Edge (or Chrome) for the postings, company sites and forms Job Hunt opens, so your sign-ins, password manager and the extension are there.
+- The Browser extension card in Settings → App has the download, your key with a Copy button, the steps for Edge, and shows Connected once the extension has reached Job Hunt.
+
 ## [2.31.1] - 2026-11-06
 
 Fully remote counts, wherever it's based.
@@ -1088,6 +1097,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.32.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.32.0
 [2.31.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.31.1
 [2.31.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.31.0
 [2.30.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.30.0

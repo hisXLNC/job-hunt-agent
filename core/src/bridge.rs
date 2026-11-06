@@ -51,6 +51,7 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
     if sent_key.len() != want.len() || !sent_key.bytes().zip(want.bytes()).fold(true, |ok, (a, b)| ok & (a == b)) {
         return json_resp(401, json!({ "error": "The key doesn't match. Copy it again from Job Hunt: Search \u{2192} Set up sources \u{2192} Jobs you find yourself." }));
     }
+    let _ = agent.db().set("ext.last", &crate::util::now());
     let b: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
     let (url, title) = (b["url"].as_str().unwrap_or(""), b["title"].as_str().unwrap_or(""));
     let fields: Vec<Value> = b["fields"].as_array().cloned().unwrap_or_default();
