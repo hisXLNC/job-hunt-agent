@@ -10,6 +10,7 @@ Companies you've applied to before.
 
 ### Changes
 
+- Fixed: Job Hunt 2.27 and 2.28 could freeze when opening (the Overview's "did these go through?" list waited on itself).
 - Emailed applications look right in Gmail: real bullet points and bold themes, and the email starts at "Dear…" (the date, ATTN and Subject lines are for the printed letter).
 - Job Hunt keeps track of companies you've sent a CV to: roles there are tagged Applied here before, and each job shows Your history with the company (the roles you applied for, and when) with your own notes.
 - They keep every CV you send on file side by side, so for a company that has one already, tailoring stays close to it: the same headline, the same way of describing each achievement, and at most 4 paragraphs changed. Or choose the same CV as before, or tailoring as usual (Search → What to search → Tailoring).

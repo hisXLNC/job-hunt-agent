@@ -6411,7 +6411,9 @@ impl Agent {
         }
         // Approved roles whose form Job Hunt filled in, still not marked applied: did they go through?
         // (Before 2.26.1, the Apply window's I submitted it could fail without a word.)
-        let filled_unconfirmed: Vec<Value> = self.db().jobs(Some("approved"), 500).unwrap_or_default().into_iter()
+        // (The list is read first: the history of each takes the database again.)
+        let approved_now = self.db().jobs(Some("approved"), 500).unwrap_or_default();
+        let filled_unconfirmed: Vec<Value> = approved_now.into_iter()
             .filter(|j| self.db().history(&j.id).unwrap_or_default().iter().any(|e| e.kind == "fill" && e.detail.contains("filled in on the application form")))
             .map(|j| j.brief()).collect();
         // The playbook's nudges: message the recruiter now, or follow up once (read before taking the database).
