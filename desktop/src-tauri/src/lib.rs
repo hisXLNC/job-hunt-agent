@@ -536,6 +536,7 @@ fn apply_window(app: &AppHandle, job_id: &str, url: tauri::Url) -> Result<(), St
     let job = ctx.agent.db().job(job_id).map_err(|e| e.0)?.ok_or("That job no longer exists.")?;
     // One application at a time: a new one replaces the window.
     if let Some(w) = app.get_webview_window("apply") {
+        APP_CLOSED_APPLY.store(true, Ordering::SeqCst);
         let _ = w.destroy();
     }
     let token = fill::new_token();
@@ -544,7 +545,7 @@ fn apply_window(app: &AppHandle, job_id: &str, url: tauri::Url) -> Result<(), St
     // the site's confirmation, so the application is marked applied by itself (even on another site).
     let filled = Arc::new(AtomicBool::new(false));
     let (filled_msg, filled_load) = (filled.clone(), filled.clone());
-    WebviewWindowBuilder::new(app, "apply", WebviewUrl::External(url))
+    let win = WebviewWindowBuilder::new(app, "apply", WebviewUrl::External(url))
         .title(format!("Apply: {} at {} \u{2013} Job Hunt", job.title, job.company))
         .inner_size(1200.0, 900.0)
         .center()
@@ -584,6 +585,13 @@ fn apply_window(app: &AppHandle, job_id: &str, url: tauri::Url) -> Result<(), St
         })
         .build()
         .map_err(|e| e.to_string())?;
+    // Closed by you, after the form was filled: did it go through?
+    let (handle, id, filled_close) = (app.clone(), job_id.to_string(), filled.clone());
+    win.on_window_event(move |e| {
+        if matches!(e, WindowEvent::Destroyed) && !APP_CLOSED_APPLY.swap(false, Ordering::SeqCst) && filled_close.load(Ordering::SeqCst) {
+            ask_if_submitted(&handle, &id);
+        }
+    });
     Ok(())
 }
 
@@ -727,6 +735,37 @@ fn open_application(app: AppHandle, job_id: String) {
     });
 }
 
+/// Set when Job Hunt itself closes the Apply window (the next application opens, or this one is
+/// done), so closing it isn't taken as you closing it.
+static APP_CLOSED_APPLY: AtomicBool = AtomicBool::new(false);
+
+fn close_apply_window(app: &AppHandle) {
+    let a = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = a.get_webview_window("apply") {
+            APP_CLOSED_APPLY.store(true, Ordering::SeqCst);
+            let _ = w.destroy();
+        }
+    });
+}
+
+/// You closed the Apply window yourself after Job Hunt filled the form, and it's not marked
+/// applied: ask in Job Hunt whether it went through (the site's confirmation may not have been
+/// one Job Hunt recognises).
+fn ask_if_submitted(app: &AppHandle, job_id: &str) {
+    let Some(ctx) = app.try_state::<Arc<Ctx>>() else { return };
+    let Ok(Some(job)) = ctx.agent.db().job(job_id) else { return };
+    if job.status != "approved" && job.status != "ready" {
+        return;
+    }
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.eval(format!("window.askApplied && window.askApplied({})", serde_json::json!({ "id": job.id, "title": job.title, "company": job.company })));
+        if !w.is_visible().unwrap_or(false) {
+            notify(app, &format!("Did your application to {} go through?", job.company), "Open Job Hunt to mark it applied.");
+        }
+    }
+}
+
 /// Done with a job in the Apply window (sent, or skipped): the next one in the queue, or the end.
 fn next_in_queue(app: &AppHandle, agent: &Arc<Agent>, job_id: &str) {
     let had_queue = !jobhunt_core::fill::queue(agent).is_empty();
@@ -757,10 +796,13 @@ fn on_fill_message(app: AppHandle, job_id: String, kind: String, data: serde_jso
                 if let Err(e) = jobhunt_core::fill::submitted_with(&agent, &job_id, data["url"].as_str().unwrap_or(""), data["auto"].as_bool().unwrap_or(false), &fields) {
                     let _ = agent.db().log(Some(&job_id), "fill:error", &e.0);
                 }
-                // Applying from a queue: the next one, after a moment to see the confirmation.
+                // Applying from a queue: the next one, after a moment to see the confirmation. Else the
+                // window closes by itself.
+                std::thread::sleep(std::time::Duration::from_secs(4));
                 if !jobhunt_core::fill::queue(&agent).is_empty() {
-                    std::thread::sleep(std::time::Duration::from_secs(3));
                     next_in_queue(&app, &agent, &job_id);
+                } else {
+                    close_apply_window(&app);
                 }
                 return;
             }
@@ -779,12 +821,7 @@ fn on_fill_message(app: AppHandle, job_id: String, kind: String, data: serde_jso
                 let _ = agent.db().set_status(&job_id, "dismissed", "not interested (from the Apply window)");
                 agent.after_stage(&job_id, "dismissed", "", true);
                 if jobhunt_core::fill::queue(&agent).is_empty() {
-                    let a = app.clone();
-                    let _ = app.run_on_main_thread(move || {
-                        if let Some(w) = a.get_webview_window("apply") {
-                            let _ = w.destroy();
-                        }
-                    });
+                    close_apply_window(&app);
                 } else {
                     next_in_queue(&app, &agent, &job_id);
                 }

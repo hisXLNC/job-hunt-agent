@@ -734,6 +734,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     }
                     Ok(Resp::json(&json!({ "url": crate::fill::form_link(&job) })))
                 }
+                // You submitted it on the company's site (Job Hunt asked, after you closed the Apply window).
+                "submitted" => {
+                    crate::fill::submitted(agent, id, "", false)?;
+                    ok()
+                }
                 "approve" => {
                     let outcome = agent.approve(id)?;
                     agent.after_stage(id, outcome, "", true);

@@ -170,6 +170,65 @@ fn other_currency(text: &str) -> Option<(String, Option<f64>)> {
     None
 }
 
+/// The kind of employment a posting offers, from its title and text: "Full-time", "Part-time",
+/// "Contract" (with its length when it says, e.g. "Contract · 12 months"), "Temporary", "Internship",
+/// "Co-op" or "Freelance". None when it doesn't say. "Contract" alone isn't enough (vendor
+/// contracts, contract management): it takes a contract role, basis, length or label.
+pub fn employment_type(title: &str, text: &str) -> Option<String> {
+    static TITLE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(contract(or)?|temporary|temp|part[- ]time|intern(ship)?|co-?op|freelance|fixed[- ]term|casual|seasonal)\b").unwrap());
+    static LABEL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(?:employment|job|position|work|contract|role) type\s*[:\-–]?\s*(full[- ]time|part[- ]time|permanent|contract(?:or)?|temporary|temp|fixed[- ]term|internship|intern|co-?op|freelance|casual|seasonal)").unwrap());
+    static CONTRACT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bcontract(?:[- ]to[- ]hire)? (?:role|position|assignment|opportunity|basis|term|length|duration|employee|engagement|job)\b|\bon a contract\b|\bthis is a (?:\d+[- ]?months? )?contract\b|\b\d+[- ]?(?:month|mo|year)s?\b[^.\n]{0,20}\bcontract\b|\bcontract\b[^.\n]{0,20}\b\d+[- ]?months?\b|\bfixed[- ]term\b|\b(?:maternity|parental|mat) leave (?:coverage|cover|contract|replacement)\b").unwrap());
+    static TEMP: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\btemporary (?:full[- ]time |part[- ]time )?(?:role|position|assignment|contract|opportunity|job)\b").unwrap());
+    static LENGTH: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(\d{1,2})[- ]?(month|mo|year)s?\b").unwrap());
+    static INTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(internship|intern|co-?op (?:student|placement|term|position))\b").unwrap());
+    let text: String = text.chars().take(20000).collect();
+    let length = |t: &str| LENGTH.captures(t).and_then(|c| {
+        let n: u32 = c[1].parse().ok()?;
+        let unit = if c[2].to_lowercase().starts_with('y') { if n == 1 { "year" } else { "years" } } else if n == 1 { "month" } else { "months" };
+        (1..=36).contains(&n).then(|| format!("{n} {unit}"))
+    });
+    let named = |w: &str| -> &'static str {
+        let w = w.to_lowercase();
+        if w.starts_with("intern") { "Internship" } else if w.starts_with("co") && w.contains("op") { "Co-op" } else if w.starts_with("contract") || w.starts_with("fixed") { "Contract" }
+        else if w.starts_with("temp") || w == "seasonal" || w == "casual" { "Temporary" } else if w.starts_with("part") { "Part-time" } else if w.starts_with("free") { "Freelance" } else { "Full-time" }
+    };
+    let with_length = |kind: &str, near: &str| match (kind, length(near)) {
+        ("Contract" | "Temporary", Some(l)) => format!("{kind} · {l}"),
+        _ => kind.to_string(),
+    };
+    // The title says it, or a label in the text ("Employment type: Contract").
+    if let Some(m) = TITLE.find(title) {
+        let kind = named(m.as_str());
+        let near = CONTRACT.find(&text).map(|m| m.as_str().to_string()).unwrap_or_else(|| title.to_string());
+        return Some(with_length(kind, &near));
+    }
+    if let Some(c) = LABEL.captures(&text) {
+        let kind = named(&c[1]);
+        let near = CONTRACT.find(&text).map(|m| m.as_str().to_string()).unwrap_or_default();
+        return Some(with_length(kind, &near));
+    }
+    if INTERN.is_match(&text) && !text.to_lowercase().contains("interns") {
+        return Some(named(&INTERN.find(&text).unwrap().as_str().to_string()).to_string());
+    }
+    if let Some(m) = CONTRACT.find(&text) {
+        // The length can come just after ("Maternity leave coverage, 13 months").
+        let near: String = text[m.start()..].chars().take(m.as_str().chars().count() + 40).collect();
+        return Some(with_length("Contract", &near));
+    }
+    if let Some(m) = TEMP.find(&text) {
+        return Some(with_length("Temporary", m.as_str()));
+    }
+    let l = text.to_lowercase();
+    if l.contains("part-time") || l.contains("part time") {
+        // "Full-time or part-time": both offered.
+        return Some(if l.contains("full-time") || l.contains("full time") { "Full-time or part-time".into() } else { "Part-time".into() });
+    }
+    if l.contains("full-time") || l.contains("full time") || l.contains("permanent") {
+        return Some("Full-time".into());
+    }
+    None
+}
+
 /// A yearly pay range from a salary as shown ("$110,000–$135,000", "CAD 120K–150K", "$95,000"),
 /// or None for hourly rates and text without a yearly amount.
 pub fn salary_range(text: &str) -> Option<(f64, f64)> {
@@ -1868,6 +1927,21 @@ mod tests {
         assert!(planned(Some("jobbank")).starts_with("Job Bank"));
         assert!(planned(Some("freehire")).starts_with("FreeHire"));
         assert_eq!(planned(Some("jooble")), "", "no Jooble key: nothing to search");
+    }
+
+    #[test]
+    fn kind_of_employment() {
+        let t = |title: &str, text: &str| employment_type(title, text);
+        assert_eq!(t("Program Manager (12-Month Contract)", "Lead delivery."), Some("Contract · 12 months".into()));
+        assert_eq!(t("Program Manager", "This is a 6-month contract role with possible extension."), Some("Contract · 6 months".into()));
+        assert_eq!(t("Program Manager", "Employment type: Full-time"), Some("Full-time".into()));
+        assert_eq!(t("Program Manager", "Manage vendor contracts and contract management for the PMO. Full-time, hybrid."), Some("Full-time".into()), "vendor contracts aren't a contract job");
+        assert_eq!(t("Senior Analyst", "Maternity leave coverage, 13 months."), Some("Contract · 13 months".into()));
+        assert_eq!(t("Data Analyst - Part Time", ""), Some("Part-time".into()));
+        assert_eq!(t("Summer Intern, PMO", ""), Some("Internship".into()));
+        assert_eq!(t("Coordinator", "A temporary full-time assignment until March."), Some("Temporary".into()));
+        assert_eq!(t("Program Manager", "Join our permanent team."), Some("Full-time".into()));
+        assert_eq!(t("Program Manager", "Lead delivery and stakeholders."), None);
     }
 
     #[test]

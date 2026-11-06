@@ -1,5 +1,24 @@
 [
   {
+    "version": "2.27.0",
+    "date": "2026-11-06",
+    "title": "Full-time or contract, at a glance",
+    "changes": [
+      "A Type column in Applications shows each job's kind of employment, read from its title and posting: Full-time, Contract (with its length, like \"Contract · 12 months\"), Temporary, Part-time, Internship… Filter by it, sort by it; the Overview's lists show it under the salary.",
+      "Jobs whose form Job Hunt filled in but that aren't marked applied (I submitted it could fail before this version) are listed at the top of Submit, asking whether they went through: Yes, applied for each, or All went through."
+    ]
+  },
+  {
+    "version": "2.26.1",
+    "date": "2026-11-06",
+    "title": "Submitting in the Apply window, fixed",
+    "changes": [
+      "Submitted an application in Job Hunt's Apply window and it wasn't marked applied? Fixed: the form's \"Leave site?\" guard could stop Job Hunt hearing about it (even the I submitted it button), and more sites' confirmations are recognised (\"Thank you for your submission\", \"We've received your resume\", a confirmation page's address), however the form was sent.",
+      "Once it's marked applied, the window closes by itself (or the next one in Apply to all opens).",
+      "Closed the window yourself after Job Hunt filled the form in? It asks whether your application went through, and marks it applied with one click."
+    ]
+  },
+  {
     "version": "2.26.0",
     "date": "2026-11-05",
     "title": "Updates by themselves, and a PC that stays on",

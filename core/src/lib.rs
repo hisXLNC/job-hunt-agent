@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 //! Job Hunt's logic, kept apart from the window so it builds and tests on any machine.
 //!
 //! Search job boards, score postings against your CVs with Claude, tailor a copy of the matching

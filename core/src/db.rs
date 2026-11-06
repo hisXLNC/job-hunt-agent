@@ -306,6 +306,8 @@ impl Job {
             }
             // How you'd apply, and how long it takes (email, a quick form, an account…).
             o.insert("effort".into(), crate::fill::effort(self));
+            // Full-time, contract (and for how long), part-time…, from the title and text.
+            o.insert("employment".into(), json!(crate::sources::employment_type(&self.title, &self.description)));
         }
         v
     }

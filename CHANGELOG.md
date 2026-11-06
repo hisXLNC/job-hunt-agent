@@ -4,6 +4,25 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.27.0] - 2026-11-06
+
+Full-time or contract, at a glance.
+
+### Changes
+
+- A Type column in Applications shows each job's kind of employment, read from its title and posting: Full-time, Contract (with its length, like "Contract · 12 months"), Temporary, Part-time, Internship… Filter by it, sort by it; the Overview's lists show it under the salary.
+- Jobs whose form Job Hunt filled in but that aren't marked applied (I submitted it could fail before this version) are listed at the top of Submit, asking whether they went through: Yes, applied for each, or All went through.
+
+## [2.26.1] - 2026-11-06
+
+Submitting in the Apply window, fixed.
+
+### Changes
+
+- Submitted an application in Job Hunt's Apply window and it wasn't marked applied? Fixed: the form's "Leave site?" guard could stop Job Hunt hearing about it (even the I submitted it button), and more sites' confirmations are recognised ("Thank you for your submission", "We've received your resume", a confirmation page's address), however the form was sent.
+- Once it's marked applied, the window closes by itself (or the next one in Apply to all opens).
+- Closed the window yourself after Job Hunt filled the form in? It asks whether your application went through, and marks it applied with one click.
+
 ## [2.26.0] - 2026-11-05
 
 Updates by themselves, and a PC that stays on.
@@ -1022,6 +1041,8 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.27.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.27.0
+[2.26.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.26.1
 [2.26.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.26.0
 [2.25.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.25.0
 [2.24.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.24.0

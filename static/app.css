@@ -937,3 +937,7 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 .bank-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
 @media (max-width: 760px) { .bank-row { grid-template-columns: 1fr auto; } .bank-row .bank-a { grid-column: 1; } }
 .pill.effort { white-space: nowrap; }
+/* Kind of employment: contracts and temporary roles stand out */
+td.emp { white-space: nowrap; }
+.emp-contract, .emp-temporary { color: var(--warn); font-weight: 600; }
+.emp-parttime, .emp-internship, .emp-coop, .emp-freelance { color: var(--info); font-weight: 600; }

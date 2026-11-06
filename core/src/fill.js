@@ -8,7 +8,13 @@
   const JOB = __JOB__;
   // In the browser extension (no token): messages go through the extension, which asks Job Hunt.
   const EXT = !TOKEN && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id;
+  // In the window, messages go as an address Job Hunt catches and cancels. A filled-in form usually
+  // guards against leaving it ("Leave site? Changes may not be saved"), which would stop the message,
+  // so while one goes, that guard is stopped before it runs (this script runs before the page's own).
+  let sending = 0;
+  window.addEventListener('beforeunload', e => { if (Date.now() - sending < 2000) e.stopImmediatePropagation(); }, true);
   const send = EXT ? (kind, data) => chrome.runtime.sendMessage({ jobhunt: kind, data: { ...data, url: location.href, title: document.title } }) : (kind, data) => {
+    sending = Date.now();
     const json = JSON.stringify({ t: TOKEN, ...data });
     let bin = '';
     for (const b of new TextEncoder().encode(json)) bin += String.fromCharCode(b);
@@ -49,7 +55,7 @@
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
     buttons.stop.onclick = () => { clearTimeout(autoTimer); autoTimer = null; buttons.stop.hidden = true; status('Stopped. Read the form over, then press its Submit button yourself.'); };
     headEl = root.querySelector('.t');
-    buttons.applied.onclick = () => { recorded = true; window.name = ''; status('Marked as applied in Job Hunt. You can close this window.'); buttons.applied.hidden = true; send('applied', { url: location.href }); };
+    buttons.applied.onclick = () => { const p = pressed(); recorded = true; window.name = ''; status(JOB.queue && JOB.more ? 'Marked as applied. Opening the next one…' : 'Marked as applied in Job Hunt. This window closes in a few seconds.'); buttons.applied.hidden = true; send('applied', { url: location.href, fields: (p && p.fields) || [] }); };
     (document.body || document.documentElement).appendChild(host);
     ui = host;
   }
@@ -257,43 +263,57 @@
   }
 
   // When you press the form's Submit button, Job Hunt watches for the site's confirmation ("Thank you
-  // for applying", "We've received your application") and marks it applied by itself. The press is
-  // remembered in window.name, which stays with this window when the site moves to another page,
-  // even on another domain. Without a confirmation, it asks you instead.
+  // for applying", "We've received your application", a /confirmation address) and marks it applied
+  // by itself. The press, and the answers as you sent them (kept for next time), are remembered in
+  // window.name, which stays with this window when the site moves to another page, even on another
+  // domain. Without a confirmation, Job Hunt asks you when you close the window.
   const MARK = 'jobhunt-submitted:';
-  const DONE = /thanks? (you )?for (applying|your application|submitting your application)|application (has been |was |is )?(successfully )?(submitted|received|sent|complete)|we('ve| have)? (successfully )?received your application|your application (has been|was) (successfully )?(received|submitted|sent)|successfully (applied|submitted)|you('ve| have) (successfully )?applied/i;
-  const pressedAt = () => {
-    const n = (window.name || '').startsWith(MARK) ? Number(window.name.slice(MARK.length)) : 0;
-    return n && Date.now() - n < 10 * 60 * 1000 ? n : 0;
+  const DONE = /thanks? (you )?for (applying|your application|submitting( your application)?|your submission)|application (has been |was |is )?(successfully )?(submitted|received|sent|complete)|we('ve| have)? (successfully )?received your (application|submission|resume|résumé|cv)|your application (has been|was|is) (successfully )?(received|submitted|sent|complete|on its way)|successfully (applied|submitted)|you('ve| have) (successfully )?applied|submission (received|complete|successful)|application complete/i;
+  // Only once you've pressed Submit: a polite line many job pages show before you apply, too.
+  const DONE_AFTER_PRESS = /thank you for your interest|we('ll| will) (be in touch|review your application|contact you)|thanks?,? we('ve| have) got it/i;
+  const DONE_URL = /[/#?&](confirmation|confirm|thank-?you|thanks|success|submitted|application-?(complete|submitted|received)|applied)\b/i;
+  const pressed = () => {
+    const raw = (window.name || '').startsWith(MARK) ? window.name.slice(MARK.length) : '';
+    if (!raw) return null;
+    let v;
+    try { v = JSON.parse(raw); } catch (e) { v = { at: Number(raw) }; }
+    return v && v.at && Date.now() - v.at < 10 * 60 * 1000 ? v : null;
   };
+  const pressedAt = () => (pressed() || {}).at || 0;
   let recorded = false;
-  const confirmedHere = () => DONE.test((document.body ? document.body.innerText : '').slice(0, 40000));
+  const pageText = () => (document.body ? document.body.innerText : '').slice(0, 40000);
+  const confirmedHere = strict => DONE.test(pageText()) || (!strict && (DONE_AFTER_PRESS.test(pageText()) || DONE_URL.test(location.href)));
   function recordApplied() {
     if (recorded) return;
     recorded = true;
+    const p = pressed();
     window.name = '';
     panel();
     buttons.applied.hidden = true;
-    status('Submitted: the site confirmed it. Marked as applied in Job Hunt. You can close this window.');
-    send('applied', { url: location.href, auto: true });
+    status(JOB.queue && JOB.more ? 'Submitted: the site confirmed it. Marked as applied. Opening the next one…' : 'Submitted: the site confirmed it. Marked as applied in Job Hunt. This window closes in a few seconds.');
+    send('applied', { url: location.href, auto: true, fields: (p && p.fields) || [] });
   }
   async function watchForConfirmation(seconds, vouched) {
     for (let i = 0; i < seconds && !recorded; i++) {
       await wait(1000);
-      if ((pressedAt() || vouched) && confirmedHere()) { recordApplied(); return; }
-      if (i === 8 && !recorded) { panel(); buttons.applied.hidden = false; status('Waiting for the site to confirm… If it says your application went through, press I submitted it.'); }
+      if (pressedAt() && confirmedHere(false)) { recordApplied(); return; }
+      if (vouched && confirmedHere(true)) { recordApplied(); return; }
+      if (i === 8 && !recorded && pressedAt()) { panel(); buttons.applied.hidden = false; status('Waiting for the site to confirm… If it says your application went through, press I submitted it (or just close this window: Job Hunt asks).'); }
     }
   }
+  // You sent the form: a Submit-like button, or the form itself (Enter, or a button Job Hunt can't name).
+  function onPressed() {
+    let fields = [];
+    if (filled) { try { fields = collect().filter(f => f.type !== 'file').map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options })); } catch (err) { /* the form changed */ } }
+    try { window.name = MARK + JSON.stringify({ at: Date.now(), fields: fields.slice(0, 80) }); } catch (e) { window.name = MARK + JSON.stringify({ at: Date.now() }); }
+    watchForConfirmation(120);
+  }
   document.addEventListener('click', e => {
-    const b = e.target.closest && e.target.closest('button,input[type=submit]');
+    const b = e.target.closest && e.target.closest('button,input[type=submit],[role=button]');
     if (!b || own(b)) return;
-    if (b.type === 'submit' || /submit|send application|apply now/i.test(b.textContent || b.value || '')) {
-      // The answers as you send them: Job Hunt keeps the ones forms keep asking for, for next time.
-      if (filled) { try { send('learn', { fields: collect().filter(f => f.type !== 'file').map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options })) }); } catch (err) { /* the form changed */ } }
-      window.name = MARK + Date.now();
-      watchForConfirmation(120);
-    }
+    if (b.type === 'submit' || /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|apply now|complete application|finish application/i.test(b.textContent || b.value || '')) onPressed();
   }, true);
+  document.addEventListener('submit', e => { if (!own(e.target) && filled) onPressed(); }, true);
   // Arrived on a new page after pressing Submit: is this the confirmation? (The app also asks each
   // page that loads after it filled the form in this window, for confirmations on another site.)
   if (pressedAt()) watchForConfirmation(30);

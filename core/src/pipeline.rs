@@ -6207,6 +6207,11 @@ impl Agent {
         let newer = crate::sync::newer_elsewhere(self).map(|(d, i)| json!({ "folder": d, "device": i.device_name, "saved_at": i.saved_at, "jobs": i.jobs }));
         let in_use = crate::sync::presence_status(self);
         let follow_ups: Vec<Value> = self.follow_ups_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
+        // Approved roles whose form Job Hunt filled in, still not marked applied: did they go through?
+        // (Before 2.26.1, the Apply window's I submitted it could fail without a word.)
+        let filled_unconfirmed: Vec<Value> = self.db().jobs(Some("approved"), 500).unwrap_or_default().into_iter()
+            .filter(|j| self.db().history(&j.id).unwrap_or_default().iter().any(|e| e.kind == "fill" && e.detail.contains("filled in on the application form")))
+            .map(|j| j.brief()).collect();
         // The playbook's nudges: message the recruiter now, or follow up once (read before taking the database).
         let reach_out: Vec<Value> = self.reach_out_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
         let contact_follow_ups = self.contact_follow_ups_due().unwrap_or_default();
@@ -6294,6 +6299,7 @@ impl Agent {
             "in_use": in_use,
             "follow_ups": follow_ups,
             "reach_out": reach_out,
+            "filled_unconfirmed": filled_unconfirmed,
             "contact_follow_ups": contact_follow_ups,
             "closing_soon": closing,
             "health": health,
