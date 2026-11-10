@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.35.5",
+    "date": "2026-11-10",
+    "title": "Replace a file that's already there",
+    "changes": [
+      "When an upload box already has a file (often the CV you gave Workday at the start), Job Hunt doesn't add a second one: the panel asks whether to replace it with your tailored CV or cover letter (it deletes the old one with the page's bin button and attaches Job Hunt's) or keep it.",
+      "An upload that Workday took is no longer marked in amber as if it had failed."
+    ]
+  },
+  {
     "version": "2.35.4",
     "date": "2026-11-10",
     "title": "All your skills, and your CV once",

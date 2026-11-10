@@ -33,7 +33,7 @@
   const ATS = /greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|icims\.com|jobvite\.com|bamboohr\.com|myworkdayjobs\.com|recruitee\.com|teamtailor\.com|breezy\.hr|jazzhr\.com|applytojob\.com/i;
 
   // --- the panel, in its own shadow root so the page's styles don't reach it ---
-  let chooseEl = null, retired = false, barEl = null, barTimer = null, ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
+  let askEl = null, chooseEl = null, retired = false, barEl = null, barTimer = null, ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
   // One Job Hunt per page: another copy (the extension and the window both, or two copies of the
   // extension) would press each Add button twice and fill boxes the other one moved.
   // Which copy this is: the extension's (with its version) or the Apply window's. When the extension
@@ -61,9 +61,10 @@
       button.b.pr{background:#2f5bd3;border-color:#2f5bd3;color:#fff}button.b[hidden]{display:none}button.b:disabled{opacity:.6;cursor:default}
       .bar{height:6px;background:#e6e8ef;border-radius:3px;overflow:hidden;margin:0 0 10px}.bar i{display:block;height:100%;width:0;background:#2f5bd3;transition:width .45s}
       .min .s,.min .r,.min .bar,.min .c{display:none}
+      .q{margin:0 0 10px;padding:8px 10px;border:1px solid #e0a000;border-radius:8px;background:#fff8e6}.q[hidden]{display:none}.q p{margin:0 0 6px}.min .q{display:none}
       .c{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}.c[hidden]{display:none}.c select{font:inherit;padding:6px;border:1px solid #c8c8d0;border-radius:8px;max-width:100%}
     </style><div class="p"><div class="h"><span class="t">Job Hunt · ${(JOB.company || '').replace(/[<>&]/g, '')}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
-      <p class="s"></p><div class="c" hidden><select></select><button class="b pr" data-k="pick">Fill it in for this job</button></div><div class="bar" hidden><i></i></div><div class="r">
+      <p class="s"></p><div class="q" hidden><p class="qt"></p><div class="r"><button class="b pr" data-k="replace">Replace with Job Hunt's</button><button class="b" data-k="keep">Keep it</button></div></div><div class="c" hidden><select></select><button class="b pr" data-k="pick">Fill it in for this job</button></div><div class="bar" hidden><i></i></div><div class="r">
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
         <button class="b" data-k="stop" hidden>Stop: I'll submit it</button>
@@ -75,6 +76,14 @@
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
     buttons.fill.onclick = () => start();
     chooseEl = root.querySelector('.c');
+    askEl = root.querySelector('.q');
+    buttons.replace.onclick = async () => {
+      askEl.hidden = true;
+      status('Replacing the file with Job Hunt\'s…');
+      const n = await replaceFiles();
+      status(n ? `Replaced: Job Hunt's ${n === 1 ? 'file is' : 'files are'} attached now. Read the form over, then press its Submit button.` : 'Couldn\'t replace it here: delete the old file with its bin icon, then press Fill in again.');
+    };
+    buttons.keep.onclick = () => { askEl.hidden = true; replaceAsk = []; status('Kept the file that was there. Read the form over, then press its Submit button.'); };
     buttons.pick.onclick = () => {
       const id = chooseEl.querySelector('select').value;
       if (!id) return;
@@ -267,6 +276,51 @@
   };
   const pick = (list, v) => list.findIndex(o => same(o, v)) >= 0 ? list.findIndex(o => same(o, v)) : list.findIndex(o => near(o, v));
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  // An upload box that already has a file (any name: one you or the site attached before, often the
+  // CV you gave Workday at the start): the file's name is listed next to it. Looked for up the page
+  // from the box, but not past another upload box (the cover letter's).
+  const FILE_NAME = /[^\s\\/]\.(pdf|docx?|rtf|odt|txt|pages)(?![a-z])/i;
+  function hasFile(el) {
+    let node = el;
+    for (let i = 0; i < 7 && node.parentElement && node.parentElement !== document.body; i++) {
+      node = node.parentElement;
+      if ([...node.querySelectorAll('input[type=file]')].some(x => x !== el)) return null;
+      if (FILE_NAME.test(textOf(node))) return node;
+    }
+    return null;
+  }
+  // The files listed in a box, by name ("Jane - CV.pdf").
+  const fileNames = node => [...new Set([...node.querySelectorAll('*')].filter(x => !x.children.length || x.children.length === 1 && !x.firstElementChild.textContent.trim())
+    .map(x => clean(x.textContent)).filter(t => t.length < 150 && /\S\.(pdf|docx?|rtf|odt|txt|pages)$/i.test(t)))];
+  // Files the form has already, of another name: asked about once the form is filled (replace them
+  // with Job Hunt's, or keep them).
+  let replaceAsk = [];
+  function attach(el, file) {
+    const bytes = Uint8Array.from(atob(file.b64), c => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], file.name, { type: file.mime }));
+    el.files = dt.files;
+    for (const e of ['input', 'change']) el.dispatchEvent(new Event(e, { bubbles: true }));
+    // Workday takes the file and empties its box at once, so an empty box afterwards is fine.
+    return true;
+  }
+  async function replaceFiles() {
+    let done = 0;
+    for (const r of replaceAsk) {
+      // The box's Delete buttons (Workday's bin icon, or anything called delete or remove).
+      const bins = [...r.node.querySelectorAll('button,[role=button]')].filter(b => !own(b) && shown(b) &&
+        /delete|remove|trash|bin/i.test([b.getAttribute('aria-label'), b.getAttribute('title'), b.getAttribute('data-automation-id'), b.textContent].join(' ')));
+      for (const b of bins) { ownClick = true; b.click(); ownClick = false; await wait(700); }
+      // A dialog asking to confirm the delete: confirm it.
+      const ok = [...document.querySelectorAll('button')].find(b => !own(b) && shown(b) && /^(ok|yes|delete|remove|confirm)\b/i.test(clean(b.textContent)) && b.closest('[role=dialog],[role=alertdialog]'));
+      if (ok) { ownClick = true; ok.click(); ownClick = false; await wait(700); }
+      const box = r.el.isConnected ? r.el : r.node.querySelector('input[type=file]') || document.querySelector('input[type=file]');
+      if (box && attach(box, r.file)) { attached.add(r.label + '|' + r.file.name); done++; }
+      await wait(500);
+    }
+    replaceAsk = [];
+    return done;
+  }
   async function fillOne(f, v, file) {
     const els = byKey[f.key] || [];
     const el = els[0];
@@ -276,13 +330,13 @@
       // Attached already (this time, or the page lists the file): not again. Workday empties its
       // upload box after taking a file, so a second round would upload it twice.
       if (attached.has(f.label + '|' + file.name) || (document.body.innerText || '').includes(file.name)) return true;
+      const there = hasFile(el);
+      if (there) {
+        if (!replaceAsk.some(r => r.el === el)) replaceAsk.push({ el, node: there, file, label: f.label, names: fileNames(there) });
+        return true;
+      }
       attached.add(f.label + '|' + file.name);
-      const bytes = Uint8Array.from(atob(file.b64), c => c.charCodeAt(0));
-      const dt = new DataTransfer();
-      dt.items.add(new File([bytes], file.name, { type: file.mime }));
-      el.files = dt.files;
-      for (const e of ['input', 'change']) el.dispatchEvent(new Event(e, { bubbles: true }));
-      return el.files.length > 0;
+      return attach(el, file);
     }
     if (v == null || v === '') return f.value !== '' && f.type !== 'checkbox';
     if (f.type === 'select') {
@@ -418,7 +472,7 @@
           return;
         }
       }
-      amber = []; amberAt = 0; toggled = false;
+      amber = []; amberAt = 0; toggled = false; replaceAsk = []; if (askEl) askEl.hidden = true;
       let ok = 0, todo = 0, i = 0;
       const base = barAt(), total = fields.length || 1;
       progress(base);
@@ -455,6 +509,13 @@
         ? `Filled ${ok}.${saved} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
         : `Filled ${ok}.${saved} Read the form over (green is what Job Hunt filled), then press its Submit button.`);
       if (todo) nextAmber();
+      // A file was there already: replace it with Job Hunt's, or keep it?
+      if (replaceAsk.length && askEl) {
+        const names = replaceAsk.flatMap(r => r.names).filter(Boolean);
+        askEl.querySelector('.qt').textContent = `This form has ${names.length ? `"${names.slice(0, 2).join('", "')}"` : 'a file'} attached already. Replace it with Job Hunt's ${replaceAsk.map(r => /letter/i.test(r.file.name) ? 'cover letter' : 'tailored CV').join(' and ')} (${replaceAsk.map(r => r.file.name).join(', ')})?`;
+        askEl.hidden = false;
+        replaceAsk[0].node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       // Submitting for you (only if you turned it on, and Job Hunt said this form qualifies): not with
       // anything left for you, a box still unticked or a captcha on the page. Ten seconds to stop it.
       if (answer.auto && !todo && !captcha() && !unticked()) {

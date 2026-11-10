@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.5] - 2026-11-10
+
+Replace a file that's already there.
+
+### Changes
+
+- When an upload box already has a file (often the CV you gave Workday at the start), Job Hunt doesn't add a second one: the panel asks whether to replace it with your tailored CV or cover letter (it deletes the old one with the page's bin button and attaches Job Hunt's) or keep it.
+- An upload that Workday took is no longer marked in amber as if it had failed.
+
 ## [2.35.4] - 2026-11-10
 
 All your skills, and your CV once.
@@ -1239,6 +1248,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.5
 [2.35.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.4
 [2.35.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.3
 [2.35.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.2
