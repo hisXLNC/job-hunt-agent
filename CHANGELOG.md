@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.6] - 2026-11-10
+
+The right job on each company's site.
+
+### Changes
+
+- The extension no longer takes a job you chose on one company's site for another's: a page that names one of your approved jobs' companies (BMO's careers site, say) is that job, and a job you chose from the list counts only on the site you chose it on.
+- The extension's popup has "Not this job? Choose another" to pick the job yourself.
+
 ## [2.35.5] - 2026-11-10
 
 Replace a file that's already there.
@@ -1248,6 +1257,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.6
 [2.35.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.5
 [2.35.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.4
 [2.35.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.3

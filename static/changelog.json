@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.35.6",
+    "date": "2026-11-10",
+    "title": "The right job on each company's site",
+    "changes": [
+      "The extension no longer takes a job you chose on one company's site for another's: a page that names one of your approved jobs' companies (BMO's careers site, say) is that job, and a job you chose from the list counts only on the site you chose it on.",
+      "The extension's popup has \"Not this job? Choose another\" to pick the job yourself."
+    ]
+  },
+  {
     "version": "2.35.5",
     "date": "2026-11-10",
     "title": "Replace a file that's already there",

@@ -217,23 +217,29 @@ pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> 
     if let Some(j) = jobs.iter().find(|j| !key.is_empty() && (crate::db::url_key(&j.url) == key || j.apply_url.as_deref().is_some_and(|a| crate::db::url_key(a) == key))) {
         return Ok(j.clone());
     }
-    let recent = agent.secret("apply.browser");
-    if let Some((id, at)) = recent.split_once('|') {
-        let fresh = chrono::DateTime::parse_from_rfc3339(at).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_hours() < 2);
-        if let Some(j) = jobs.iter().find(|j| j.id == id).filter(|_| fresh) {
-            return Ok(j.clone());
-        }
-    }
+    // The page names one approved job's company (bmo.wd3.myworkdayjobs.com, "Careers at BMO"): that one.
     let page = format!("{} {}", host_of(url), title).to_lowercase();
     let named: Vec<&crate::db::Job> = jobs.iter().filter(|j| j.status == "approved").filter(|j| {
         let co = question_key(&j.company);
         let first = co.split(' ').next().unwrap_or("");
         first.len() >= 3 && (page.contains(&co) || page.contains(first))
     }).collect();
-    match named.as_slice() {
-        [one] => Ok((*one).clone()),
-        _ => Err(Error("Job Hunt can't tell which application this is. On the job's Apply page in Job Hunt, press Fill in my browser, then press Fill this form here again.".into())),
+    if let [one] = named.as_slice() {
+        return Ok((*one).clone());
     }
+    // The one you chose (Fill in my browser, or from the extension's list) in the last two hours, on
+    // the site you chose it on: not on another company's site.
+    let recent = agent.secret("apply.browser");
+    let mut parts = recent.splitn(3, '|');
+    if let (Some(id), Some(at)) = (parts.next(), parts.next()) {
+        let site = parts.next().unwrap_or("");
+        let fresh = chrono::DateTime::parse_from_rfc3339(at).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_hours() < 2);
+        let here = site.is_empty() || site == host_of(url);
+        if let Some(j) = jobs.iter().find(|j| j.id == id).filter(|_| fresh && here) {
+            return Ok(j.clone());
+        }
+    }
+    Err(Error("Job Hunt can't tell which application this is. On the job's Apply page in Job Hunt, press Fill in my browser, then press Fill this form here again.".into()))
 }
 
 /// A random token for one Apply window.
@@ -496,5 +502,9 @@ mod tests {
         assert!(job_for_page(&s.agent, "https://forms.example/apply/77", "Apply").is_err());
         s.agent.db().set("apply.browser", &format!("test:2|{}", now())).unwrap();
         assert_eq!(job_for_page(&s.agent, "https://forms.example/apply/77", "Apply").unwrap().id, "test:2");
+        // Chosen on one company's site: not taken for another company's.
+        s.agent.db().set("apply.browser", &format!("test:2|{}|trcareers.wd5.myworkdayjobs.com", now())).unwrap();
+        assert_eq!(job_for_page(&s.agent, "https://trcareers.wd5.myworkdayjobs.com/apply", "Apply").unwrap().id, "test:2");
+        assert!(job_for_page(&s.agent, "https://bmo.wd3.myworkdayjobs.com/apply", "Careers at BMO").is_err(), "BMO's site isn't the job chosen on Thomson Reuters'");
     }
 }

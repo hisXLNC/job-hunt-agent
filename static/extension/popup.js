@@ -57,10 +57,26 @@ async function fill() {
   if (!key) { $('setup').hidden = false; $('keyline').hidden = true; say('Job Hunt', 'Send a posting to Job Hunt, or set up Fill this form with your key below.'); return; }
   // Which application this page is, and whether the company's own site has it.
   const r = await ask('/ext/which', { url: tab.url, title: tab.title });
+  // Choose the job yourself: when Job Hunt guessed wrong, or couldn't tell.
+  const offerChoice = async () => {
+    const l = await ask('/ext/jobs');
+    const jobs = (l && l.ok && l.v.jobs) || [];
+    if (!jobs.length) return;
+    $('otherline').hidden = false;
+    $('jobs').innerHTML = '';
+    for (const j of jobs) { const o = document.createElement('option'); o.value = j.id; o.textContent = `${j.title} · ${j.company}`; $('jobs').appendChild(o); }
+    $('other').onclick = e => { e.preventDefault(); $('choose').hidden = false; $('otherline').hidden = true; };
+    $('pick').onclick = async () => {
+      const p = await ask('/ext/pick', { job_id: $('jobs').value, url: tab.url, title: tab.title });
+      if (p && p.ok) { $('choose').hidden = true; say(`${p.v.job.title} at ${p.v.job.company}`, 'Chosen for this site. Get to the application form, then press Fill this form.'); }
+      else say("Couldn't choose it", p ? p.error : '', true);
+    };
+  };
   if (r && r.ok) {
+    offerChoice();
     const j = r.v.job;
     say(`${j.title} at ${j.company}`, r.v.company_link ? 'Job Hunt found this job on the company\'s own site: applying there goes straight to them.' : 'Get to the application form, then press Fill this form.');
     if (r.v.company_link) { $('company').hidden = false; $('company').onclick = () => { chrome.tabs.update(tab.id, { url: r.v.company_link }); window.close(); }; }
   } else if (r && r.error && /running/.test(r.error)) say('Job Hunt isn\'t running', 'Open Job Hunt on this computer to fill in forms. Sending a posting still works.', true);
-  else say('Job Hunt', 'Send this posting to Job Hunt, or fill in the application form on this page.');
+  else { say('Job Hunt', 'Send this posting to Job Hunt, or fill in the application form on this page.'); offerChoice(); }
 })();

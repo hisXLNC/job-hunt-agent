@@ -119,7 +119,7 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
         ("POST", "/ext/pick") => {
             let job = agent.db().job(b["job_id"].as_str().unwrap_or(""));
             match job {
-                Ok(Some(j)) => agent.db().set("apply.browser", &format!("{}|{}", j.id, crate::util::now())).map(|_| page_job(&j, url)),
+                Ok(Some(j)) => agent.db().set("apply.browser", &format!("{}|{}|{}", j.id, crate::util::now(), url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default())).map(|_| page_job(&j, url)),
                 Ok(None) => Err(crate::Error("That job is no longer in Job Hunt.".into())),
                 Err(e) => Err(e),
             }
