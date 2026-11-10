@@ -173,7 +173,9 @@
       if (type !== 'file' && !choice && !shown(el)) continue;
       if (choice && !shown(el) && !(el.labels && [...el.labels].some(shown))) continue;
       if (choice && el.name) {
-        const g = groups[type + el.name] ||= { key: 'g' + n++, type: type === 'radio' ? 'radio' : 'checkboxes', els: [], options: [] };
+        // Grouped by name within one entry: Workday gives every entry's "I currently work here" the
+        // same name, and as one group, ticking it in one entry ticked it in all of them.
+        const g = groups[type + el.name + '|' + sectionOf(el)] ||= { key: 'g' + n++, type: type === 'radio' ? 'radio' : 'checkboxes', els: [], options: [] };
         g.els.push(el); g.options.push((el.labels && el.labels.length ? textOf(el.labels[0]) : '') || clean(el.value));
         continue;
       }
@@ -188,10 +190,16 @@
     }
     for (const g of Object.values(groups)) {
       const first = g.els[0];
-      if (g.type === 'checkboxes' && g.els.length === 1) {
-        const f = { key: g.key, type: 'checkbox', label: (g.options[0] !== 'on' && g.options[0]) || labelOf(first), context: question(first), required: first.required, value: '', checked: first.checked };
-        const sec = sectionOf(first); if (sec) f.section = sec;
-        fields.push(f); byKey[g.key] = g.els; continue;
+      // One box, or several that all say the same ("I currently work here" in each entry, with no
+      // headings between them): each is a lone checkbox of its own.
+      if (g.type === 'checkboxes' && (g.els.length === 1 || new Set(g.options).size === 1)) {
+        g.els.forEach((el, i) => {
+          const key = i ? g.key + '_' + i : g.key;
+          const f = { key, type: 'checkbox', label: (g.options[i] !== 'on' && g.options[i]) || labelOf(el), context: question(el), required: el.required, value: '', checked: el.checked };
+          const sec = sectionOf(el); if (sec) f.section = sec;
+          fields.push(f); byKey[key] = [el];
+        });
+        continue;
       }
       fields.push({ key: g.key, type: g.type, label: question(first) || clean(first.name), section: sectionOf(first) || undefined, options: g.options.slice(0, 40), required: g.els.some(e => e.required), value: g.els.filter(e => e.checked).map((e, i) => g.options[g.els.indexOf(e)]).join('; ') });
       byKey[g.key] = g.els;

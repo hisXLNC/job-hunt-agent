@@ -6,10 +6,11 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.34.5] - 2026-11-10
 
-No more system senders as recruiters.
+"I currently work here" on Workday, and system senders.
 
 ### Changes
 
+- Workday forms: "I currently work here" is answered for each job on its own. Workday names that box the same in every entry, so Job Hunt read them as one question and ticked them all; now only your current job is ticked, and past jobs get their end dates.
 - Automatic emails (like "WorkdaySystem_DoNotReply") are no longer taken for recruiters, and ones saved before are removed from your recruiters and job tags.
 
 ## [2.34.4] - 2026-11-10
