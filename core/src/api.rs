@@ -1157,7 +1157,6 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             crate::sync::resume_here(agent)?;
             Ok(Resp::json(&json!({ "sync": crate::sync::status(agent) })))
         }
-        ["api", "update", "install"] if req.remote && host.kind() != "server" => Err(Error("Install the update on the computer running Job Hunt.".into())),
         ["api", "settings", "claude"] => {
             if let Some(e) = b.get("engine").and_then(|v| v.as_str()) {
                 agent.db().set("claude.engine", if e == "api" { "api" } else { "code" })?;

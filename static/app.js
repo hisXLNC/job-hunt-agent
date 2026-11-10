@@ -2076,6 +2076,22 @@ function extensionCard(st) {
     <p class="muted small">Then on any application form, click it and press <b>Fill this form</b>; on a posting, <b>Send this job to Job Hunt</b>. Job Hunt needs to be running on this PC. It updates itself: after Job Hunt updates, the extension reloads with the new version when you next open it or start ${browser}. For another PC or browser profile, <a href="/api/extension.zip" download>download it</a> instead (that copy doesn't update itself).</p></section>`;
 }
 
+/** After Install and restart, from your phone (or a browser): Job Hunt on the PC goes away for a
+ *  moment while it installs and restarts; this page reloads once it's back on the new version. */
+async function waitForRestart(before) {
+  if (!before) return;
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 4000));
+    try {
+      const r = await fetch('/api/settings', { cache: 'no-store' });
+      if (!r.ok) continue;
+      const v = (await r.json())?.app?.version || '';
+      if (v && v !== before) { location.reload(); return; }
+    } catch (e) { /* restarting */ }
+  }
+  toast('Job Hunt hasn\'t come back yet. Check the PC: it may still be installing.', true);
+}
+
 /** Which model does what, in a line: from the Claude settings ({engine, model, tailor_model, score_model}). */
 function modelsLine(c) {
   const api = c.engine === 'api';
@@ -3237,13 +3253,14 @@ async function act(el) {
   if (a === 'updateInstall') {
     return busy(async () => {
       toast('Getting the update…');
+      const before = settingsCache?.app?.version || (await api('/api/settings').catch(() => null))?.app?.version || '';
       const r = await api('/api/update/install', { method: 'POST' });
       if (r.waiting) {
         const what = (r.for || []).some(n => n === 'search') ? 'the job search' : 'the tailoring';
         toast(`Installing after ${what} finishes: Job Hunt restarts by itself then. Nothing is lost.`);
         document.querySelectorAll('[data-act=updateInstall]').forEach(b => { b.disabled = true; b.textContent = `Installs after ${what}`; });
       } else if (!r.installed) { toast("You're already on the newest version."); checkUpdate(); }
-      else toast('Installing the update… Job Hunt restarts by itself in a moment.');
+      else { toast('Installing the update… Job Hunt restarts by itself in a moment.'); waitForRestart(before); }
     });
   }
   if (a === 'addBoardLink') {

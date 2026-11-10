@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.34.2",
+    "date": "2026-11-10",
+    "title": "Install updates from your phone",
+    "changes": [
+      "Install and restart now works from your phone (or any browser) over Tailscale: the PC installs the update and restarts Job Hunt by itself, and the page on your phone reloads once it's back on the new version. You stay signed in.",
+      "On phones, the tabs on Applications show a space before their counts again (\"Applied 0\", not \"Applied0\")."
+    ]
+  },
+  {
     "version": "2.34.1",
     "date": "2026-11-10",
     "title": "iPhone: Apple's guidelines, and phones held sideways",
