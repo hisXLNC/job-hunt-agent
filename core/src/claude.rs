@@ -659,7 +659,9 @@ is its own entry. More entries on the form than in the CV: leave the extra ones 
 more entries the CV needs there, in digits, always answered: work history is every role in the CV's experience \
 (each title counts, promotions included), education every degree or school, languages every language the CV or \
 facts list, less the entries already there. \"0\" when it has enough. Language entries: the language, and \
-proficiency from the CV (native, fluent, professional...), the closest option. Fill the entries that are there now as usual. Copy each job title and \
+proficiency from the CV or facts (native, fluent, professional, beginner...), the closest option, the same level for \
+reading, speaking and writing unless they say otherwise; \"I am fluent\" ticked (yes) only for a native or fluent \
+language, \"no\" for one learned only a little (a beginner). Fill the entries that are there now as usual. Copy each job title and \
 employer exactly as the CV writes it, never shortened or split; a description is that role's own lines from the \
 CV.\n\
 - Dates in an entry: From and To come from the CV's dates for that job or school. A school with one year in the \

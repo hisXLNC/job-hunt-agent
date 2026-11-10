@@ -354,7 +354,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
             }
         }
     }
-    tidy_answers(fields, &mut values, &cv_text);
+    tidy_answers(fields, &mut values, &cv_text, &profile.application_facts);
     let n = values.len() + files.len();
     agent.db().log(Some(job_id), "fill", &format!("{n} of {} fields filled in on the application form ({} from your saved answers)", fields.len(), banked.len()))?;
     // Count the bank's answers as used.
@@ -381,17 +381,17 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
 /// What Claude wrote, made right where it can be checked: links in full (a LinkedIn box given
 /// "linkedin.com/in/jane" gets "https://www.linkedin.com/in/jane"), and a work-history Add button
 /// Claude left at nothing pressed once for each role the CV has that the form doesn't.
-fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, cv_text: &str) {
+fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, cv_text: &str, facts: &str) {
     for f in fields {
         let (Some(key), label) = (f["key"].as_str(), f["label"].as_str().unwrap_or("").to_lowercase()) else { continue };
         if f["type"] == "add" {
             let section = f["section"].as_str().unwrap_or("").to_lowercase();
             let given = values.get(key).and_then(|v| v.as_str()).and_then(|v| v.trim().parse::<i64>().ok()).unwrap_or(0);
             let have = f["entries"].as_i64().unwrap_or(1);
-            // Languages: as many entries as languages on the CV, never more (Claude guessing added
-            // empty ones).
+            // Languages: as many entries as languages on the CV and in your application facts
+            // ("French: beginner"), never more (Claude guessing added empty ones).
             if section.contains("language") {
-                let langs = cv_languages(cv_text).len() as i64;
+                let langs = cv_languages(&format!("{cv_text}\n{facts}")).len() as i64;
                 let more = if langs > 0 { (langs - have).max(0) } else { given.min(1) };
                 values.insert(key.to_string(), json!(more.to_string()));
             } else if ["experience", "employment", "work", "job", "position"].iter().any(|w| section.contains(w)) {
@@ -504,7 +504,7 @@ mod tests {
         let fields = vec![json!({"key": "f1", "type": "text", "label": "Please provide your Linkedin profile:"}), json!({"key": "a1", "type": "add", "section": "Work Experience", "entries": 1})];
         let mut v = serde_json::Map::new();
         v.insert("f1".into(), json!("linkedin.com/in/jane-c"));
-        tidy_answers(&fields, &mut v, cv);
+        tidy_answers(&fields, &mut v, cv, "");
         assert_eq!(v["f1"], "https://www.linkedin.com/in/jane-c");
         assert_eq!(v["a1"], "2", "two more roles than the one entry there");
         // Headings in markdown or capitals, and a CV with no Experience heading at all.
@@ -515,8 +515,11 @@ mod tests {
         let fields = vec![json!({"key": "a2", "type": "add", "section": "Languages", "entries": 1})];
         let mut v = serde_json::Map::new();
         v.insert("a2".into(), json!("3"));
-        tidy_answers(&fields, &mut v, &cv);
+        tidy_answers(&fields, &mut v, &cv, "");
         assert_eq!(v["a2"], "1");
+        // A language only in your facts counts too.
+        tidy_answers(&fields, &mut v, &cv, "French: beginner (school, to grade 6)");
+        assert_eq!(v["a2"], "2");
     }
 
     #[test]

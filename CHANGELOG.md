@@ -11,7 +11,7 @@ Workday languages and dropdowns fixed.
 ### Changes
 
 - Workday dropdowns no longer get each other's answers: a list Job Hunt couldn't match an answer in was left open, and the next dropdown took its options from it (a language left on Select One, fluency levels mixed up). Lists are now closed every time, long lists are scrolled to find the answer, and "Fluent" matches "5 - Fluent".
-- Languages: Job Hunt adds as many language entries as your CV names, not more.
+- Languages: Job Hunt adds as many language entries as your CV and your application facts name, not more, with the level you give (a line such as "French: beginner" in your facts); the fluent box is ticked only for languages you're fluent in.
 - Every job on your CV: counting the jobs works with CVs whose Experience heading is in capitals or styled, or missing; the panel says what it added ("2 Work Experience").
 - Checkboxes: if a tick doesn't take (an open list can swallow the click), Job Hunt closes the list and tries the box's label.
 
