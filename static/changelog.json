@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.35.0",
+    "date": "2026-11-10",
+    "title": "Choose the job in your browser",
+    "changes": [
+      "When the extension can't tell which application a page is for, its panel lists your jobs from the Submit tab (the one the page names is chosen already): pick one and Job Hunt fills the form in for it, and remembers it for the form's other pages."
+    ]
+  },
+  {
     "version": "2.34.5",
     "date": "2026-11-10",
     "title": "\"I currently work here\" on Workday, and system senders",

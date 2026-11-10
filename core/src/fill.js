@@ -25,7 +25,7 @@
   const ATS = /greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|icims\.com|jobvite\.com|bamboohr\.com|myworkdayjobs\.com|recruitee\.com|teamtailor\.com|breezy\.hr|jazzhr\.com|applytojob\.com/i;
 
   // --- the panel, in its own shadow root so the page's styles don't reach it ---
-  let retired = false, barEl = null, barTimer = null, ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
+  let chooseEl = null, retired = false, barEl = null, barTimer = null, ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
   // One Job Hunt per page: another copy (the extension and the window both, or two copies of the
   // extension) would press each Add button twice and fill boxes the other one moved.
   const other = () => [...document.querySelectorAll('[data-jobhunt-panel]')].some(h => h !== ui);
@@ -44,9 +44,10 @@
       button.b{font:inherit;border:1px solid #c8c8d0;background:#f6f6f8;border-radius:8px;padding:6px 10px;cursor:pointer}
       button.b.pr{background:#2f5bd3;border-color:#2f5bd3;color:#fff}button.b[hidden]{display:none}button.b:disabled{opacity:.6;cursor:default}
       .bar{height:6px;background:#e6e8ef;border-radius:3px;overflow:hidden;margin:0 0 10px}.bar i{display:block;height:100%;width:0;background:#2f5bd3;transition:width .45s}
-      .min .s,.min .r,.min .bar{display:none}
+      .min .s,.min .r,.min .bar,.min .c{display:none}
+      .c{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}.c[hidden]{display:none}.c select{font:inherit;padding:6px;border:1px solid #c8c8d0;border-radius:8px;max-width:100%}
     </style><div class="p"><div class="h"><span class="t">Job Hunt · ${(JOB.company || '').replace(/[<>&]/g, '')}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
-      <p class="s"></p><div class="bar" hidden><i></i></div><div class="r">
+      <p class="s"></p><div class="c" hidden><select></select><button class="b pr" data-k="pick">Fill it in for this job</button></div><div class="bar" hidden><i></i></div><div class="r">
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
         <button class="b" data-k="stop" hidden>Stop: I'll submit it</button>
@@ -57,6 +58,14 @@
     root.querySelectorAll('[data-k]').forEach(b => { buttons[b.dataset.k] = b; });
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
     buttons.fill.onclick = () => start();
+    chooseEl = root.querySelector('.c');
+    buttons.pick.onclick = () => {
+      const id = chooseEl.querySelector('select').value;
+      if (!id) return;
+      chooseEl.hidden = true; buttons.fill.hidden = false; buttons.fill.disabled = true;
+      status('Filling it in for the job you chose…');
+      send('pick', { job_id: id });
+    };
     buttons.next.onclick = () => nextAmber();
     buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
@@ -378,6 +387,26 @@
     },
     start: () => start(),
     failed(msg) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status(msg); },
+    // Job Hunt can't tell which application this page is: choose it from your jobs (Submit's first).
+    choose(msg, list) {
+      waitingSince = 0; progress(null); buttons.fill.disabled = false;
+      status(msg);
+      if (!chooseEl || !list || !list.length) return;
+      const sel = chooseEl.querySelector('select');
+      sel.textContent = '';
+      const here = (document.title + ' ' + location.hostname).toLowerCase();
+      for (const j of list) {
+        const o = document.createElement('option');
+        o.value = j.id;
+        o.textContent = `${j.title} · ${j.company}${j.status === 'ready' ? ' (not approved yet)' : ''}`;
+        sel.appendChild(o);
+      }
+      // Chosen already: the first whose company the page names (its title or address).
+      const named = list.find(j => { const w = String(j.company || '').toLowerCase().split(/\s+/)[0]; return w.length >= 3 && here.includes(w); });
+      if (named) sel.value = named.id;
+      chooseEl.hidden = false;
+      buttons.fill.hidden = true; // one blue button: the one under the list
+    },
   };
   // What stops Job Hunt submitting for you: a captcha, or a required box you haven't ticked.
   const captcha = () => !!document.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="turnstile"], .g-recaptcha, .h-captcha, [data-sitekey]');

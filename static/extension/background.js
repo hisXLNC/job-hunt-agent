@@ -12,7 +12,7 @@ async function ask(path, body) {
     throw new Error('Job Hunt isn\'t running on this computer. Open it, then try again.');
   }
   const v = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(v.error || `Job Hunt said ${r.status}.`);
+  if (!r.ok) { const e = new Error(v.error || `Job Hunt said ${r.status}.`); e.data = v; throw e; }
   return v;
 }
 // Which Job Hunt wrote these files (filled in when Job Hunt writes the extension's folder). Job Hunt
@@ -55,7 +55,14 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (kind === 'fields') {
     ask('/ext/fill', data)
       .then(a => run(tabId, a => window.__jobhunt && window.__jobhunt.fill(a), [a]))
-      .catch(e => run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), ['Couldn\'t fill it in: ' + e.message]));
+      .catch(e => e.data && e.data.choose
+        // Job Hunt can't tell which application this is: the panel lists them to choose from.
+        ? run(tabId, (m, l) => window.__jobhunt && window.__jobhunt.choose(m, l), [e.message, e.data.choose])
+        : run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), ['Couldn\'t fill it in: ' + e.message]));
+  } else if (kind === 'pick') {
+    ask('/ext/pick', data)
+      .then(() => run(tabId, () => window.__jobhunt && window.__jobhunt.start(), []))
+      .catch(e => run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), ['Couldn\'t choose it: ' + e.message]));
   } else if (kind === 'salary' || kind === 'dismiss') {
     ask('/ext/' + kind, data).catch(() => {});
   } else if (kind === 'learn') {

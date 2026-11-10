@@ -113,6 +113,17 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
             a["job"] = page_job(&j, url)["job"].clone();
             Ok(a)
         }),
+        // You chose which application this page is (when Job Hunt couldn't tell): it stays chosen for
+        // the next two hours, through the form's other pages (see fill::job_for_page).
+        ("GET", "/ext/jobs") => Ok(json!({ "jobs": pick_list(agent) })),
+        ("POST", "/ext/pick") => {
+            let job = agent.db().job(b["job_id"].as_str().unwrap_or(""));
+            match job {
+                Ok(Some(j)) => agent.db().set("apply.browser", &format!("{}|{}", j.id, crate::util::now())).map(|_| page_job(&j, url)),
+                Ok(None) => Err(crate::Error("That job is no longer in Job Hunt.".into())),
+                Err(e) => Err(e),
+            }
+        }
         ("POST", "/ext/salary") => crate::fill::job_for_page(agent, url, title).and_then(|j| agent.found_salary(&j.id, b["text"].as_str().unwrap_or(""), "on the company's page")).map(|n| json!({ "new": n })),
         ("POST", "/ext/dismiss") => crate::fill::job_for_page(agent, url, title).and_then(|j| agent.db().set_status(&j.id, "dismissed", "not interested (from your browser)").map(|_| json!({ "ok": true }))),
         ("POST", "/ext/learn") => crate::fill::learn(agent, &fields).map(|n| json!({ "kept": n })),
@@ -122,8 +133,23 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
     };
     match r {
         Ok(v) => json_resp(200, v),
+        // Not sure which application this is: the jobs to choose from come with the answer.
+        Err(e) if e.0.contains("can't tell which application") => {
+            let jobs = pick_list(agent);
+            if jobs.is_empty() {
+                return json_resp(400, json!({ "error": e.0 }));
+            }
+            json_resp(400, json!({ "error": "Job Hunt can't tell which application this is. Choose it below.", "choose": jobs }))
+        }
         Err(e) => json_resp(400, json!({ "error": e.0 })),
     }
+}
+
+/// The jobs a page could be the application for, as the panel lists them: the Submit tab's
+/// (approved), then Approve's (ready).
+fn pick_list(agent: &Agent) -> Vec<Value> {
+    ["approved", "ready"].iter().flat_map(|s| agent.db().jobs(Some(s), 60).unwrap_or_default())
+        .map(|j| json!({ "id": j.id, "title": j.title, "company": j.company, "status": j.status })).collect()
 }
 
 /// The job, as the extension shows it, with the company's own link when the page isn't it.
@@ -144,5 +170,24 @@ mod tests {
         assert_eq!(handle(&s.agent, "GET", "/ext/ping", "wrong", b"").status, 401);
         assert_eq!(handle(&s.agent, "GET", "/ext/ping", &k, b"").status, 200);
         assert_eq!(handle(&s.agent, "GET", "/nope", &k, b"").status, 404);
+    }
+
+    #[test]
+    fn you_choose_the_job_when_job_hunt_cant_tell() {
+        let s = crate::testkit::setup();
+        let k = key(&s.agent);
+        for (id, co) in [("a1", "Thomson Reuters"), ("a2", "Thomson Reuters")] {
+            let j = crate::db::Job { id: id.into(), title: format!("Role {id}"), company: co.into(), url: format!("https://x.example/{id}"), status: "approved".into(), found_at: crate::util::now(), updated_at: crate::util::now(), ..Default::default() };
+            s.agent.db().insert_job(&j).unwrap();
+        }
+        let page = br#"{"url":"https://trcareers.wd5.myworkdayjobs.com/apply","title":"Careers at Thomson Reuters","fields":[]}"#;
+        let r = handle(&s.agent, "POST", "/ext/which", &k, page);
+        let v: Value = serde_json::from_slice(&r.body).unwrap();
+        assert_eq!(r.status, 400);
+        assert_eq!(v["choose"].as_array().unwrap().len(), 2, "two at that company: you choose");
+        let r = handle(&s.agent, "POST", "/ext/pick", &k, br#"{"job_id":"a2"}"#);
+        assert_eq!(r.status, 200);
+        let v: Value = serde_json::from_slice(&handle(&s.agent, "POST", "/ext/which", &k, page).body).unwrap();
+        assert_eq!(v["job"]["id"], "a2", "the one you chose, for the rest of the form");
     }
 }
