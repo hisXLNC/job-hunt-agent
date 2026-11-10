@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.35.11",
+    "date": "2026-11-10",
+    "title": "Extension kept up to date, and says what it didn't do",
+    "changes": [
+      "The extension now checks it matches Job Hunt every time you press Fill in this form, not only when you open its button. After a Job Hunt update the old copy kept filling forms with the old script, which is likely why the skill and Add Another fixes didn't show up. Now it updates first and asks you to reload the page.",
+      "The panel says what didn't happen: how many jobs your CV has when Workday's Add Another added none, and which skills Workday didn't take."
+    ]
+  },
+  {
     "version": "2.35.10",
     "date": "2026-11-10",
     "title": "Workday skills ticked, every job added",

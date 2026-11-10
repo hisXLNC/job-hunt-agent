@@ -158,7 +158,7 @@
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
     return question(el) || clean(el.placeholder || el.name || el.id);
   }
-  let attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
+  let addNote = '', skillMiss = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
@@ -525,7 +525,7 @@
       }
       await wait(250);
       list = options();
-      if (!list.length || sig() === before && before) { typeIn(box(), ''); continue; }
+      if (!list.length || sig() === before && before) { skillMiss.push(skill); typeIn(box(), ''); continue; }
       const t = o => clean(o.textContent).toLowerCase(), s = skill.toLowerCase();
       // Else the one sharing most of the skill's words ("Budgeting" for "Budget Planning"), if it shares at least half.
       const words = x => x.split(/[^a-z0-9+#]+/).filter(w => w.length > 2 && !['and', 'the', 'for'].includes(w)).map(w => w.slice(0, 6));
@@ -533,7 +533,7 @@
       const most = [...list].sort((a, b) => overlap(b) - overlap(a))[0];
       const best = list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => s.includes(t(o)))
         || (most && overlap(most) * 2 >= words(s).length && overlap(most) > 0 ? most : null);
-      if (!best) { pressKey(box(), 'Escape'); typeIn(box(), ''); continue; }
+      if (!best) { skillMiss.push(skill); pressKey(box(), 'Escape'); typeIn(box(), ''); continue; }
       // Workday takes a skill on the mouse press, not on a plain click: press it like a mouse, then
       // check it was taken (a pill with its name, or the option ticked); else its checkbox, the
       // row around it, then the keyboard (arrow down to it, Enter).
@@ -556,7 +556,7 @@
         await wait(600);
         ok = taken();
       }
-      if (ok) added++;
+      if (ok) added++; else skillMiss.push(skill);
       await wait(300);
       el = box();
       if (options().length) { pressKey(el, 'Escape'); await wait(250); }
@@ -600,6 +600,7 @@
           if (added > was) what.push(`${added - was} ${f.section}`);
         }
         if (added) {
+          addNote = `Added ${what.join(', ')} from your CV.`;
           progress(barAt());
           status(`Added ${what.join(', ')} from your CV; filling in the form…`);
           await wait(600);
@@ -607,6 +608,13 @@
           return;
         }
       }
+      // Why no job was added, when the form has fewer than your CV: said in the panel.
+      const work = fields.find(f => f.type === 'add' && /experience|employment|work|job|position/i.test(f.section || ''));
+      if (round < 1 && !addNote) {
+        if (work && answer.roles > (work.entries || 0)) addNote = `Your CV has ${answer.roles} jobs, but Workday's ${work.label} for ${work.section} didn't add any.`;
+        else if (!work && /work experience|employment/i.test(document.body.innerText || '') && answer.roles) addNote = `Job Hunt didn't find the Add button for your jobs on this page.`;
+      }
+      skillMiss = [];
       amber = []; amberAt = 0; toggled = false; replaceAsk = []; if (askEl) askEl.hidden = true;
       let ok = 0, todo = 0, i = 0;
       const base = barAt(), total = fields.length || 1;
@@ -639,7 +647,8 @@
       setTimeout(() => { if (!barTimer) progress(null); }, 2500);
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
       buttons.next.hidden = !todo; buttons.applied.hidden = false;
-      const saved = (answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '';
+      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (skillMiss.length ? ` Skills Workday didn't take: ${skillMiss.join(', ')}.` : '')
+        + (EXT && answer.app_version && /^\d/.test(answer.app_version) && answer.app_version.replace(/-.*/, '') !== chrome.runtime.getManifest().version ? ` (This extension is ${chrome.runtime.getManifest().version}, Job Hunt is ${answer.app_version}: open the extension's button once so it updates, then reload this page.)` : '');
       status(todo
         ? `Filled ${ok}.${saved} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
         : `Filled ${ok}.${saved} Read the form over (green is what Job Hunt filled), then press its Submit button.`);
@@ -702,7 +711,7 @@
   }
   let sent = null;
   async function start(more, dates) {
-    if (!more) { round = 0; reveals = 0; }
+    if (!more) { round = 0; reveals = 0; addNote = ''; }
     panel();
     if (retired) return;
     checkPay();

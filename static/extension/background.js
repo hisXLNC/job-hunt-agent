@@ -53,6 +53,13 @@ chrome.runtime.onInstalled.addListener(d => {
     });
   } catch (e) { /* no notifications: the badge and the popup still say it */ }
 });
+const fill = (tabId, data) =>
+  ask('/ext/fill', data)
+      .then(a => run(tabId, a => window.__jobhunt && window.__jobhunt.fill(a), [a]))
+      .catch(e => e.data && e.data.choose
+        // Job Hunt can't tell which application this is: the panel lists them to choose from.
+        ? run(tabId, (m, l) => window.__jobhunt && window.__jobhunt.choose(m, l), [e.message, e.data.choose])
+        : run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), ['Couldn\'t fill it in: ' + e.message]));
 const run = (tabId, func, args) => chrome.scripting.executeScript({ target: { tabId }, func, args });
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.check) {
@@ -68,12 +75,12 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg.jobhunt || !tabId) return;
   const { jobhunt: kind, data } = msg;
   if (kind === 'fields') {
-    ask('/ext/fill', data)
-      .then(a => run(tabId, a => window.__jobhunt && window.__jobhunt.fill(a), [a]))
-      .catch(e => e.data && e.data.choose
-        // Job Hunt can't tell which application this is: the panel lists them to choose from.
-        ? run(tabId, (m, l) => window.__jobhunt && window.__jobhunt.choose(m, l), [e.message, e.data.choose])
-        : run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), ['Couldn\'t fill it in: ' + e.message]));
+    // Older than Job Hunt: update first (the page has the old script; it's reloaded after).
+    checkVersion().then(c => {
+      if (c && c.updating) return run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), [`The extension is updating to ${c.updating} to match Job Hunt. Reload this page (F5) in a moment, then press Fill in this form.`]);
+      if (c && c.stale) return run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), [`This copy of the extension is older than Job Hunt (${c.stale.version}) and can't update itself. In chrome://extensions remove it, then press Load unpacked and choose ${c.stale.folder || 'the folder shown in Job Hunt: Settings → App'}.`]);
+      return fill(tabId, data);
+    }, () => fill(tabId, data));
   } else if (kind === 'pick') {
     ask('/ext/pick', data)
       .then(() => run(tabId, () => window.__jobhunt && window.__jobhunt.start(), []))

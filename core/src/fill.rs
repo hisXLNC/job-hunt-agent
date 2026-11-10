@@ -387,7 +387,10 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let required_open = fields.iter().any(|f| f["required"] == true && f["type"] != "file" && !values.contains_key(f["key"].as_str().unwrap_or("")) && f["value"].as_str().unwrap_or("").is_empty());
     let long_written = written.iter().any(|k| values.get(k).and_then(|v| v.as_str()).is_some_and(|v| v.chars().count() > 120));
     let auto = auto_submit_on(agent) && AUTO_FORMS.iter().any(|h| host.ends_with(h)) && !required_open && !long_written;
-    Ok(json!({ "values": values, "files": files, "banked": banked, "auto": auto }))
+    // For the panel: how many jobs the CV has (it says so when it added none), and which Job Hunt
+    // answered (an extension older than it says to reload).
+    let roles = if work_add { cv_roles(&cv_text).max(roles_listed) } else { 0 };
+    Ok(json!({ "values": values, "files": files, "banked": banked, "auto": auto, "roles": roles, "app_version": agent.secret("app.version") }))
 }
 
 /// What Claude wrote, made right where it can be checked: links in full (a LinkedIn box given
