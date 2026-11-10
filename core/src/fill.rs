@@ -392,7 +392,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let auto = auto_submit_on(agent) && AUTO_FORMS.iter().any(|h| host.ends_with(h)) && !required_open && !long_written;
     // For the panel: how many jobs the CV has (it says so when it added none), and which Job Hunt
     // answered (an extension older than it says to reload).
-    let roles = cv_roles(&cv_text).max(roles_listed);
+    let roles = if roles_listed > 0 { roles_listed } else { cv_roles(&cv_text) };
     Ok(json!({ "values": values, "files": files, "banked": banked, "auto": auto, "roles": roles, "app_version": agent.secret("app.version") }))
 }
 
@@ -413,7 +413,10 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
                 let more = if langs > 0 { (langs - have).max(0) } else { given.min(1) };
                 values.insert(key.to_string(), json!(more.to_string()));
             } else if is_work(&section) {
-                let more = cv_roles(cv_text).max(roles_listed) as i64 - have;
+                // Claude's list of the roles when it gave one (counting date lines can overcount:
+                // a career break, a degree's dates), else the CV's date lines.
+                let roles = if roles_listed > 0 { roles_listed } else { cv_roles(cv_text) };
+                let more = roles as i64 - have;
                 if more > given {
                     values.insert(key.to_string(), json!(more.min(12).to_string()));
                 }

@@ -140,7 +140,7 @@
     return clean(c.textContent);
   }
   // The question an input belongs to: the nearest label-like text before it.
-  function question(el) {
+  function question(el, group) {
     let node = el;
     for (let i = 0; i < 6 && node && node !== document.body; i++) {
       node = node.parentElement;
@@ -150,7 +150,7 @@
       if (lb && /group|radiogroup/.test(node.getAttribute('role') || '')) return clean(lb.split(/\s+/).map(id => textOf(document.getElementById(id))).join(' '));
       if (/group|radiogroup/.test(node.getAttribute('role') || '') && node.getAttribute('aria-label')) return clean(node.getAttribute('aria-label'));
       // Past the question's own box: the next level up holds other questions too.
-      const mine = x => x === el || (el.name && x.name === el.name && x.type === el.type);
+      const mine = x => x === el || (group && group.includes(x)) || (el.name && x.name === el.name && x.type === el.type);
       if ([...node.querySelectorAll('input,select,textarea')].some(x => !mine(x) && x.type !== 'hidden' && !own(x))) break;
       const cands = [...node.querySelectorAll('legend,label,h2,h3,h4,h5,p,span,div')].filter(x =>
         !x.contains(el) && !x.querySelector('input,select,textarea') && (x.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) && textOf(x).length > 1);
@@ -292,13 +292,72 @@
     await closeLists(b);
     return same(core(b.textContent), core(list[i].textContent || v)) || !/^select one$/i.test(clean(b.textContent));
   }
+  // Workday's dates: a box each for month, (day) and year, side by side in one wrapper.
+  const datePart = el => {
+    if (el.tagName !== 'INPUT') return '';
+    const id = (el.getAttribute('data-automation-id') || '') + ' ' + (el.id || '');
+    const m = /dateSection(Month|Day|Year)/i.exec(id) || (el.getAttribute('role') === 'spinbutton' && /^(month|day|year)$/i.exec(clean(el.getAttribute('aria-label') || '')));
+    return m ? m[1].toLowerCase() : '';
+  };
+  const dateParts = el => {
+    let box = el.parentElement;
+    for (let i = 0; i < 5 && box; i++, box = box.parentElement) {
+      const ps = [...box.querySelectorAll('input')].filter(x => datePart(x));
+      if (ps.length > 1 || box.getAttribute('data-automation-id') === 'dateInputWrapper') return ps.length ? ps : [el];
+    }
+    return [el];
+  };
+  // "07/2023", "2023-07", "Jul 2023", "July 1, 2023", "2023": month, day and year.
+  const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  function splitDate(v) {
+    v = String(v).trim().toLowerCase();
+    const y = (/\b(19|20)\d{2}\b/.exec(v) || [])[0] || '';
+    let m = '', d = '';
+    const name = MONTHS.findIndex(x => new RegExp('\\b' + x).test(v));
+    if (name >= 0) { m = String(name + 1); const dd = /\b(\d{1,2})(st|nd|rd|th)?\b/.exec(v.replace(y, '')); if (dd) d = dd[1]; }
+    else {
+      const nums = v.replace(y, ' ').match(/\d{1,2}/g) || [];
+      if (/^(19|20)\d{2}/.test(v)) { m = nums[0] || ''; d = nums[1] || ''; } else { m = nums[0] || ''; d = nums.length > 1 ? nums[1] : ''; }
+    }
+    const pad = x => x ? x.padStart(2, '0') : '';
+    return { month: +m >= 1 && +m <= 12 ? pad(m) : '', day: +d >= 1 && +d <= 31 ? pad(d) : '', year: y };
+  }
+  async function fillDate(parts, v) {
+    const want = splitDate(v);
+    if (!want.year) return false;
+    for (const el of parts) {
+      const k = datePart(el), val = want[k] || (k === 'day' ? '01' : '');
+      if (!val) continue;
+      el.focus();
+      setter(el, val);
+      await wait(120);
+    }
+    return parts.every(el => !datePart(el) || !want[datePart(el)] || clean(el.value).replace(/^0/, '') === want[datePart(el)].replace(/^0/, ''));
+  }
   function collect() {
     fields = []; byKey = {};
     heads = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,[role=heading]')].filter(h => !own(h) && shown(h) && textOf(h).length > 1);
     const groups = {};
     let n = 0;
+    const datesDone = new Set();
     for (const el of document.querySelectorAll('input,select,textarea')) {
       if (own(el) || el.disabled) continue;
+      // A date in parts (Workday's MM / YYYY boxes): one field for the whole date, filled part by part.
+      const part = datePart(el);
+      if (part) {
+        if (datesDone.has(el)) continue;
+        const parts = dateParts(el);
+        // The words around a date's own boxes ("From"), not one box's "Month".
+        parts.forEach(x => datesDone.add(x));
+        const kinds = parts.map(datePart);
+        const fmt = kinds.includes('day') ? 'MM/DD/YYYY' : kinds.includes('month') ? 'MM/YYYY' : 'YYYY';
+        const key = 'f' + n++;
+        const now = parts.map(x => clean(x.value)).filter(Boolean).join('/');
+        const f = { key, type: 'date', format: fmt, label: `${(question(el, parts) || labelOf(el)).replace(/\s*\b(month|day|year)\b\s*$/i, '') || 'Date'} (${fmt})`, required: parts.some(x => x.required || x.getAttribute('aria-required') === 'true'), value: kinds.includes('year') && parts.find(x => datePart(x) === 'year').value ? now : '' };
+        const sec = sectionOf(el); if (sec) f.section = sec;
+        fields.push(f); byKey[key] = parts;
+        continue;
+      }
       const type = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : (el.type || 'text').toLowerCase();
       if (['hidden', 'submit', 'button', 'reset', 'image', 'password'].includes(type)) continue;
       if (type === 'search' && !SKILLS.test(labelOf(el))) continue;
@@ -441,6 +500,7 @@
     }
     if (v == null || v === '') return f.value !== '' && f.type !== 'checkbox';
     if (f.drop) return fillDrop(el, v);
+    if (f.type === 'date' && f.format) return fillDate(els, v);
     if (f.type === 'select') {
       const opts = [...el.options];
       const i = pick(opts.map(o => o.text), v);
@@ -553,24 +613,39 @@
       el.focus(); el.click();
       typeIn(el, skill);
       pressKey(el, 'Enter');
-      // Wait for this skill's matches (a list that wasn't there before), up to about five seconds.
+      // Wait for this skill's own results: a list with an option sharing a word with it (not the last
+      // skill's results, nor "Searching…"), up to twelve seconds. Workday's search can be slow, and
+      // moving on before it answered typed the next skill over this one.
+      const key = skill.toLowerCase().split(/[^a-z0-9+#]+/).filter(w => w.length > 2).map(w => w.slice(0, 5));
+      const ours = l => l.some(o => { const x = clean(o.getAttribute('data-automation-label') || o.textContent).toLowerCase(); return key.some(w => x.includes(w)); });
       let list = [];
-      for (let i = 0; i < 32; i++) {
+      for (let i = 0; i < 75; i++) {
         await wait(160);
         list = options();
-        if (list.length && sig() !== before && !/^(searching|loading)/i.test(clean(list[0].textContent))) break;
+        const busy = !list.length || /^(searching|loading)/i.test(clean(list[0].textContent));
+        if (!busy && (ours(list) || (sig() !== before && i > 30))) break;
+        if (/no (items|results|matches)/i.test(clean(field.textContent || ''))) break;
       }
-      await wait(250);
+      await wait(400);
       list = options();
       if (!list.length || sig() === before && before) { skillMiss.push(skill); if (!diag.skill) diag.skill = { skill, noList: !list.length, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), box: htmlOf(field, 2500) }; typeIn(box(), ''); continue; }
-      const t = o => clean(o.textContent).toLowerCase(), s = skill.toLowerCase();
+      const t = o => clean(o.getAttribute('data-automation-label') || o.textContent).toLowerCase(), s = skill.toLowerCase();
       // Else the one sharing most of the skill's words ("Budgeting" for "Budget Planning"), if it shares at least half.
       const words = x => x.split(/[^a-z0-9+#]+/).filter(w => w.length > 2 && !['and', 'the', 'for'].includes(w)).map(w => w.slice(0, 6));
       const overlap = o => { const ow = words(t(o)); return words(s).filter(w => ow.includes(w)).length; };
-      const most = [...list].sort((a, b) => overlap(b) - overlap(a))[0];
-      const best = list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => s.includes(t(o)))
-        || (most && overlap(most) * 2 >= words(s).length && overlap(most) > 0 ? most : null);
-      if (!best) { skillMiss.push(skill); pressKey(box(), 'Escape'); typeIn(box(), ''); continue; }
+      const choose = () => {
+        const most = [...list].sort((a, b) => overlap(b) - overlap(a))[0];
+        return list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => t(o) && s.includes(t(o)))
+          || (most && overlap(most) * 2 >= words(s).length && overlap(most) > 0 ? most : null);
+      };
+      let best = choose();
+      // Not in the list yet (the last search's results still showing, or this one still coming): look again.
+      for (let i = 0; i < 2 && !best; i++) { await wait(1200); list = options(); best = choose(); }
+      if (!best) {
+        skillMiss.push(skill);
+        if (!diag.skill) diag.skill = { skill, notInList: true, options: list.slice(0, 10).map(o => ({ text: clean(o.textContent).slice(0, 60), label: o.getAttribute('data-automation-label'), at: where(o) })), typed: box().value, box: htmlOf(field, 2500) };
+        pressKey(box(), 'Escape'); typeIn(box(), ''); continue;
+      }
       // Workday takes a skill on the mouse press, not on a plain click: press it like a mouse, then
       // check it was taken (a pill with its name, or the option ticked); else its checkbox, the
       // row around it, then the keyboard (arrow down to it, Enter).
@@ -580,7 +655,7 @@
       const idx = list.indexOf(best);
       const tries = [best, best.querySelector('input[type=checkbox],input[type=radio],[role=checkbox]'), best.closest('[role=option],[data-automation-id=menuItem],li'), best.querySelector('[data-automation-id=promptOption]'), best.parentElement].filter((x, i, a) => x && a.indexOf(x) === i);
       let ok = false;
-      if (EXT && await realClick(best)) { await wait(700); ok = taken(); }
+      if (EXT && await realClick(best)) { for (let i = 0; i < 12 && !(ok = taken()); i++) await wait(250); }
       for (const t of ok ? [] : tries) {
         if (!t.isConnected) continue;
         mouse(t);
@@ -599,7 +674,7 @@
         skillMiss.push(skill);
         if (!diag.skill) diag.skill = { skill, chose: name, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), list: htmlOf(snap, 6000), pills: skillPills(box()), box: htmlOf(field, 2500) };
       }
-      await wait(300);
+      await wait(800);
       el = box();
       if (options().length) { pressKey(el, 'Escape'); await wait(250); }
       el = box();
@@ -621,6 +696,9 @@
       sent = null;
       // Your CV has more jobs or schools than the form shows: press its Add buttons first, then read
       // the form again and fill every entry at once (a redraw after filling could empty the boxes).
+      if (round < 1) diag = { version: ME, adds: fields.filter(f => f.type === 'add').map(f => ({ label: f.label, section: f.section, entries: f.entries, answer: answer.values && answer.values[f.key] })), roles: answer.roles,
+        addButtons: [...document.querySelectorAll('button,[role=button],a')].filter(b => !own(b) && /^\s*\+?\s*add\b/i.test(clean(b.textContent || b.getAttribute('aria-label') || ''))).slice(0, 12).map(b => ({ text: clean(b.textContent || '').slice(0, 50), aria: b.getAttribute('aria-label'), shown: shown(b), section: sectionOf(b), at: where(b) })),
+        headings: heads.map(h => textOf(h).slice(0, 50)).slice(0, 40) };
       // How many to add: Claude's answer, and for jobs at least what your CV has more than the form.
       const isWork = f => /experience|employment|work|job|position/i.test(f.section || '');
       const howMany = f => Math.max(parseInt(answer.values && answer.values[f.key], 10) || 0, isWork(f) ? (answer.roles || 0) - (f.entries || 0) : 0);
@@ -653,9 +731,6 @@
           return;
         }
       }
-      if (round < 1) diag = { version: ME, adds: fields.filter(f => f.type === 'add').map(f => ({ label: f.label, section: f.section, entries: f.entries, answer: answer.values && answer.values[f.key] })), roles: answer.roles,
-        addButtons: [...document.querySelectorAll('button,[role=button],a')].filter(b => !own(b) && /^\s*\+?\s*add\b/i.test(clean(b.textContent || b.getAttribute('aria-label') || ''))).slice(0, 12).map(b => ({ text: clean(b.textContent || '').slice(0, 50), aria: b.getAttribute('aria-label'), shown: shown(b), section: sectionOf(b), at: where(b) })),
-        headings: heads.map(h => textOf(h).slice(0, 50)).slice(0, 40) };
       // Why no job was added, when the form has fewer than your CV: said in the panel.
       const work = fields.find(f => f.type === 'add' && /experience|employment|work|job|position/i.test(f.section || ''));
       if (round < 1 && !addNote) {

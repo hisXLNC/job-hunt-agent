@@ -666,7 +666,8 @@ employer exactly as the CV writes it, never shortened or split; a description is
 CV.\n\
 - Dates in an entry: From and To come from the facts when they give them (\"American University of Kuwait: 2005 \u{2013} \
 2009\": From 2005, To 2009), else from the CV's dates for that job or school. A school with one year in the \
-CV and none in the facts is the year it ended (To); leave From out then, never the same year in both. GPA and grades only as the CV or \
+CV and none in the facts is the year it ended (To); leave From out then, never the same year in both. A date field \
+with its format in the label (\"From (MM/YYYY)\") is answered in that format: \"07/2023\", or \"2009\" for (YYYY). GPA and grades only as the CV or \
 facts give them.\n\
 - skills (a box that adds one skill at a time): 6-10 skills the CV shows that matter most for this posting, \
 most important first, joined by \"; \". Use the short, common name a list of skills would have (\"Project \

@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.14] - 2026-11-10
+
+Workday dates, one skill at a time, the right number of jobs.
+
+### Changes
+
+- Dates: Workday splits From and To into a month box and a year box, and Job Hunt put the whole date in each ("Invalid Date: /2023"). It now reads them as one date and puts the month and the year each in its own box.
+- Skills: Job Hunt typed the next skill before Workday had shown the last one's results, so they weren't selected. It now waits for results that match the skill it typed (up to twelve seconds), selects it, checks it was taken, and only then types the next.
+- Jobs: Job Hunt adds as many Work Experience entries as Claude lists roles on your CV, not as many date lines as the CV has (which added empty extras).
+- Copy details now also says what it saw when a skill wasn't in Workday's list.
+
 ## [2.35.13] - 2026-11-10
 
 Every job added on Workday, skills clicked where they are.
@@ -1332,6 +1343,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.14]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.14
 [2.35.13]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.13
 [2.35.12]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.12
 [2.35.11]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.11
