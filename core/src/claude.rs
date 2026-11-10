@@ -1595,7 +1595,9 @@ impl Llm for Claude {
         struct F {
             values: Vec<FieldValue>,
         }
-        Ok(self.call::<F>(&fill_system(), &user, obj(json!({"values": {"type": "array", "items": kv}})), "medium")?.values)
+        // Mostly copying from the CV, and a long form (every job, every school) is a lot to write:
+        // the faster searching model, at low effort, does it in a fraction of Opus's time.
+        Ok(self.call_as::<F>(self.search_model(), &fill_system(), &user, obj(json!({"values": {"type": "array", "items": kv}})), "low")?.values)
     }
 
     fn offer_advice(&self, candidate: &str, job: &crate::db::Job, offer: &str, context: &str) -> R<String> {

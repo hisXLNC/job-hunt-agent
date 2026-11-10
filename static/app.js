@@ -2105,7 +2105,7 @@ function modelsLine(c) {
   };
   const other = name(c.model);
   const pick = m => (m || '').trim() ? name(m) : other;
-  return `Searching and scoring: <b>${esc(pick(c.score_model))}</b> · CVs and cover letters: <b>${esc(pick(c.tailor_model))}</b> · Everything else (email, interview prep, forms): <b>${esc(other)}</b>.`;
+  return `Searching, scoring and filling in forms: <b>${esc(pick(c.score_model))}</b> · CVs and cover letters: <b>${esc(pick(c.tailor_model))}</b> · Everything else (email, interview prep): <b>${esc(other)}</b>.`;
 }
 
 /** host: the Search page's top, for its What to search and Set up sources tabs (Settings' Search and Job sources, moved there). */

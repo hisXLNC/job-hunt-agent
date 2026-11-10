@@ -13,7 +13,15 @@
   // so while one goes, that guard is stopped before it runs (this script runs before the page's own).
   let sending = 0;
   window.addEventListener('beforeunload', e => { if (Date.now() - sending < 2000) e.stopImmediatePropagation(); }, true);
-  const send = EXT ? (kind, data) => chrome.runtime.sendMessage({ jobhunt: kind, data: { ...data, url: location.href, title: document.title } }) : (kind, data) => {
+  const send = EXT ? (kind, data) => {
+    // The extension was updated (or turned off) since this page opened: this copy can't reach it.
+    const gone = () => { waitingSince = 0; progress(null); if (buttons.fill) buttons.fill.disabled = false; status('The Job Hunt extension was updated since this page opened. Reload this page (F5), then press Fill this form in the extension again.'); };
+    try {
+      if (!chrome.runtime || !chrome.runtime.id) return gone();
+      const r = chrome.runtime.sendMessage({ jobhunt: kind, data: { ...data, url: location.href, title: document.title } });
+      if (r && r.catch) r.catch(e => { if (/invalidated|receiving end/i.test(String(e && e.message))) gone(); });
+    } catch (e) { gone(); }
+  } : (kind, data) => {
     sending = Date.now();
     const json = JSON.stringify({ t: TOKEN, ...data });
     let bin = '';
@@ -28,12 +36,20 @@
   let chooseEl = null, retired = false, barEl = null, barTimer = null, ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
   // One Job Hunt per page: another copy (the extension and the window both, or two copies of the
   // extension) would press each Add button twice and fill boxes the other one moved.
-  const other = () => [...document.querySelectorAll('[data-jobhunt-panel]')].some(h => h !== ui);
+  // Which copy this is: the extension's (with its version) or the Apply window's. When the extension
+  // updates, the copy already on an open page (Workday's form never reloads) stops working; a new
+  // copy takes over from it instead of stepping aside.
+  const ME = EXT ? 'ext:' + chrome.runtime.getManifest().version : 'app';
+  const other = () => [...document.querySelectorAll('[data-jobhunt-panel]')].filter(h => h !== ui).some(h => {
+    const v = h.getAttribute('data-jobhunt-panel');
+    if (EXT && v !== 'app' && v !== ME) { h.remove(); return false; } // an older extension's: gone
+    return true;
+  });
   function panel() {
     if (ui) return;
     if (other()) { ui = document.createElement('div'); statusEl = document.createElement('p'); headEl = null; for (const k of ['fill', 'open', 'next', 'applied', 'stop', 'skip', 'drop']) buttons[k] = document.createElement('button'); retired = true; return; }
     const host = document.createElement('div');
-    host.setAttribute('data-jobhunt-panel', '');
+    host.setAttribute('data-jobhunt-panel', ME);
     host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647';
     const root = host.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>
@@ -474,15 +490,18 @@
     panel();
     if (retired) return;
     checkPay();
-    const list = collect();
+    const all = collect();
     sent = { fields, byKey, adders };
+    // The end dates that appeared: only the boxes still empty go (with the entries' checkboxes), not
+    // the whole form again.
+    const list = dates ? all.filter(f => f.type !== 'add' && f.type !== 'file' && (!f.value || f.type === 'checkbox')) : all;
     if (!list.length) { progress(null); status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
-    // No answer in three minutes (Job Hunt closed, Claude busy): the button comes back.
+    // No answer in six minutes (Job Hunt closed, Claude busy): the button comes back.
     const mine = waitingSince = Date.now();
-    setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status('No answers came back from Job Hunt. Is it still running? Press Fill in this form to try again.'); } }, 180000);
+    setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status('No answers came back from Job Hunt. Is it still running? Press Fill in this form to try again.'); } }, 360000);
     buttons.fill.disabled = true;
     // About how long Claude takes: longer with more questions (a form with several jobs on it, say).
-    const usual = Math.round(15 + list.length * 0.4);
+    const usual = Math.round(15 + list.length * 0.8);
     const n = list.filter(f => f.type !== 'add').length;
     if (!more) progress(0);
     creep(more ? 93 : 75, usual, s => dates

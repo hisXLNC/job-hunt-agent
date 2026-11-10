@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.2] - 2026-11-10
+
+Form filling works again after an update, and faster.
+
+### Changes
+
+- Fill this form stopped doing anything on a page that was open while Job Hunt updated (Workday's form never reloads): the extension's old copy on the page stopped working and the new one stepped aside for it. Now the new copy takes over, and if the page can't reach the extension it says to reload the page.
+- Forms are filled in by Sonnet (the searching model) instead of Opus: a long form with every job and school on it took Opus several minutes, which is why the panel gave up with "No answers came back".
+- After unticking "I currently work here" on past jobs, only the end dates that appeared are sent, not the whole form again.
+- The panel waits up to six minutes before giving up, and its time estimate is closer to the truth.
+
 ## [2.35.1] - 2026-11-10
 
 Tells you when it's updated.
@@ -1211,6 +1222,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.2
 [2.35.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.1
 [2.35.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.0
 [2.34.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.5
