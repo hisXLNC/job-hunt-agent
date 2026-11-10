@@ -145,7 +145,7 @@ form[data-form=profile] { display: flex; flex-direction: column; gap: 20px; }
 .kpis.small-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0 14px; }
 .small-kpis .kpi { box-shadow: none; padding: 10px 12px; background: var(--surface-2); }
 .small-kpis .kpi-v { font-size: 17px; }
-@media (max-width: 760px) { .kpis.small-kpis { grid-template-columns: 1fr; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .kpis.small-kpis { grid-template-columns: 1fr; } }
 @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .kpi { background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow); padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: inherit; }
 a.kpi:hover { border-color: var(--accent); }
@@ -440,7 +440,7 @@ form[data-form=profile] [type=submit] { display: none; }
 .tsteps li.done span { color: var(--ink); }
 .tsteps li.bad i { background: var(--crit); border-color: var(--crit); }
 .timeline { list-style: none; margin: 10px 0 0; padding: 0 0 0 14px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .trow { grid-template-columns: minmax(0, 1fr) auto; }
   .trow .tsteps, .trow .tnext { grid-column: 1 / -1; }
 }
@@ -476,7 +476,7 @@ form[data-form=profile] [type=submit] { display: none; }
 .cal-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-2); flex-wrap: wrap; }
 .cal-row.past { opacity: .75; }
 .cal-t { width: 72px; flex: none; font-size: 13px; color: var(--muted); }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .cal-d { min-height: 44px; }
   .cal-e { font-size: 0; height: 6px; padding: 0; }
 }
@@ -504,12 +504,12 @@ form[data-form=profile] [type=submit] { display: none; }
 .conn-row .conn-name { width: 210px; flex: none; }
 .conn-row .pill { flex: none; }
 .conn-row.problem .conn-name b { color: var(--crit); }
-@media (max-width: 760px) { .conn-row .conn-name { width: auto; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .conn-row .conn-name { width: auto; } }
 
 .todo-group h3 .btn { text-transform: none; letter-spacing: 0; font-size: 12px; vertical-align: 1px; }
 .card.optional-steps { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; text-align: left; gap: 6px 14px; font-size: 13px; padding-top: 14px; padding-bottom: 14px; }
 .optional-steps .opt { display: inline-flex; align-items: center; gap: 2px; }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .todo-row { flex-wrap: wrap; }
   .todo-row .grow { flex: 1 1 55%; }
   .todo-row .todo-act { margin-left: auto; }
@@ -526,7 +526,7 @@ form[data-form=profile] [type=submit] { display: none; }
 
 /* --- Phones -------------------------------------------------------------------------------- */
 .mtop, .tabbar { display: none; }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .app { display: block; }
   /* A slim bar on top: the name and what Job Hunt is doing. */
   .mtop { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 30; background: var(--side); color: var(--side-hi);
@@ -572,9 +572,9 @@ form[data-form=profile] [type=submit] { display: none; }
 .rec-apps { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 
 /* Things only a PC can use (the browser button, pasting with Ctrl+V) aren't shown on phones. */
-@media (hover: none) and (pointer: coarse), (max-width: 760px) { .desktop-only { display: none !important; } }
+@media (hover: none) and (pointer: coarse), (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .desktop-only { display: none !important; } }
 /* Phones: tabs wrap onto a second line as buttons instead of scrolling out of sight. */
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .tabs { flex-wrap: wrap; overflow: visible; border-bottom: 0; gap: 6px; margin-bottom: 4px; }
   .tabs a { border: 1px solid var(--line); border-radius: 999px; margin: 0; padding: 6px 12px; }
   .tabs a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -606,10 +606,10 @@ details.card[open] > summary { margin-bottom: 8px; }
 .tag { font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 2px 8px; }
 .steps-list { margin: 4px 0 8px; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .attention { border-color: var(--crit); }
-@media (max-width: 760px) { .tiles { grid-template-columns: 1fr; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .tiles { grid-template-columns: 1fr; } }
 
 /* Phones: wide tables scroll sideways inside their card instead of being cut off. */
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .card table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .review-bar .row { flex-wrap: wrap; }
 }
@@ -624,7 +624,7 @@ details.card[open] > summary { margin-bottom: 8px; }
 .proscons .pro b { color: var(--good); }
 .proscons .con b { color: var(--crit); }
 .areas { margin: 4px 0 10px; }
-@media (max-width: 760px) { .proscons { grid-template-columns: 1fr; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .proscons { grid-template-columns: 1fr; } }
 
 /* Place pickers */
 .places .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -641,14 +641,14 @@ details.card[open] > summary { margin-bottom: 8px; }
 .ladder .when { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 
 /* Postings on a phone: role (with its stage) and fit; age, pay, source and the link button only on wider screens. */
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   #t-all th:not(:nth-child(2)):not(:nth-child(5)), #t-all td:not(:nth-child(2)):not(:nth-child(5)) { display: none; }
   #t-all .reach { display: flex; margin: 4px 0 0; }
 }
 .phone-only { display: none; }
-@media (max-width: 760px) { .phone-only { display: inline; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .phone-only { display: inline; } }
 /* The other job tables on a phone: fit and role, with the stage (or why it was skipped) under the role. */
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .card > header { flex-wrap: wrap; }
 }
 /* A company's employee rating: a small tag in lists, a big one on the job page. */
@@ -675,7 +675,7 @@ td.loc { min-width: 110px; color: var(--ink-2); }
   .todo-row .co, .todo-row .loc, .trow .co, .trow .loc, .docrow .co, .docrow .loc { display: none; }
   .docrow { display: flex; }
 }
-@media (max-width: 1000px) and (min-width: 761px) { .todo-row .phone-only, .trow .phone-only, .docrow .phone-only { display: inline; } }
+@media (max-width: 1000px) and (min-width: 761px) and (not (pointer: coarse)), (max-width: 1000px) and (min-width: 761px) and (min-height: 701px) { .todo-row .phone-only, .trow .phone-only, .docrow .phone-only { display: inline; } }
 .docrow > a { min-width: 0; }
 td.salary { min-width: 110px; white-space: normal; max-width: 130px; }
 table.jobs td { padding: 10px 7px; }
@@ -703,7 +703,7 @@ table.jobs td { padding: 10px 7px; }
   .todo-row { grid-template-columns: 18px 118px minmax(0, 1fr) auto; }
   .todo-row .sal { display: none; }
 }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .todo-row { display: flex; flex-wrap: wrap; }
   .todo-row > span:empty { display: none; }
   .todo-row .why { flex: 1 1 100%; }
@@ -722,7 +722,7 @@ table.jobs td { padding: 10px 7px; }
 .tabs.views { font-size: 13px; }
 .tabs.views .views-x { margin-left: auto; color: var(--accent); }
 .flow-about { margin: 0; }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .flow { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
   .flow a { flex: none; }
   .flow-arrow { display: none; }
@@ -812,7 +812,7 @@ details.menu .caret { margin-left: 6px; font-size: 11px; }
 a.qt { color: inherit; text-decoration: none; }
 a.qt:hover { text-decoration: underline; }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .select-bar { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); flex-wrap: nowrap; gap: 6px; padding: 6px 8px 6px 12px; }
   .select-bar .btn { padding: 6px 10px; font-size: 13px; }
   .select-bar [data-act=dismissPicked] { font-size: 0; gap: 0; }
@@ -848,7 +848,7 @@ a.qt:hover { text-decoration: underline; }
 #t-docs .file-slots .btn { margin: 0; }
 #t-docs td.co { font-weight: 600; min-width: 140px; }
 #t-docs tr[hidden] { display: none; }
-@media (max-width: 760px) { #t-docs th:nth-child(3), #t-docs td:nth-child(3), #t-docs th:nth-child(5), #t-docs td:nth-child(5), #t-docs th:nth-child(6), #t-docs td:nth-child(6) { display: none; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { #t-docs th:nth-child(3), #t-docs td:nth-child(3), #t-docs th:nth-child(5), #t-docs td:nth-child(5), #t-docs th:nth-child(6), #t-docs td:nth-child(6) { display: none; } }
 .career-compare { table-layout: auto; }
 .career-compare th, .career-compare td { padding: 10px 12px; vertical-align: middle; }
 .career-compare td.num, .career-compare th.num { white-space: nowrap; text-align: right; }
@@ -856,7 +856,7 @@ a.qt:hover { text-decoration: underline; }
 .career-compare td.ceil { width: 110px; }
 .career-compare .ceilbar { width: 100%; margin-left: auto; }
 .career-compare .ceilbar span { margin-left: auto; }
-@media (max-width: 760px) { .career-compare th:nth-child(3), .career-compare td:nth-child(3), .career-compare th:nth-child(4), .career-compare td:nth-child(4), .career-compare th:nth-child(6), .career-compare td:nth-child(6) { display: none; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .career-compare th:nth-child(3), .career-compare td:nth-child(3), .career-compare th:nth-child(4), .career-compare td:nth-child(4), .career-compare th:nth-child(6), .career-compare td:nth-child(6) { display: none; } }
 .career-compare th:nth-child(n+2):nth-child(-n+6) { text-align: right; }
 /* The daily search's state, in the Overview header and Settings. */
 .sched-menu summary.paused { color: #A86E0B; border-color: #E3A83C; }
@@ -875,7 +875,7 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 #t-gaps td { vertical-align: middle; }
 .gap-bar { width: 120px; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-bottom: 4px; }
 .gap-bar span { display: block; height: 100%; background: var(--accent, #2E4FD0); }
-@media (max-width: 760px) { #t-gaps th:nth-child(4), #t-gaps td:nth-child(4) { display: none; } .title-ideas .idea-row { flex-wrap: wrap; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { #t-gaps th:nth-child(4), #t-gaps td:nth-child(4) { display: none; } .title-ideas .idea-row { flex-wrap: wrap; } }
 .title-ideas .idea-row .grow { flex: 1; min-width: 0; }
 .coach-skill > .row { flex-wrap: nowrap; gap: 8px; align-items: flex-start; }
 .coach-skill .pill { white-space: nowrap; }
@@ -904,7 +904,7 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 .src-sites { grid-column: 1 / -1; }
 .src-sites summary { cursor: pointer; color: var(--ink-2); }
 .src-site { display: flex; align-items: center; gap: 10px; padding: 8px 0 8px 14px; border-top: 1px dashed var(--line); }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .src-row { grid-template-columns: 1fr; }
   .src-row .src-acts { justify-content: flex-start; flex-wrap: wrap; }
 }
@@ -923,7 +923,7 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 .tabs a.tab-end { margin-left: auto; }
 .tabs a.tab-end svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-elsewhere { margin: -4px 0 14px; }
-@media (max-width: 760px) { .tabs a.tab-end { margin-left: 0; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .tabs a.tab-end { margin-left: 0; } }
 /* Reaching out: the advice for this kind of employer */
 .playbook { background: var(--info-soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0 12px; font-size: 14px; }
 .playbook.federal, .playbook.public { background: var(--warn-soft); }
@@ -935,7 +935,7 @@ section.card:has(> #t-docs) { overflow-x: auto; }
 /* Your saved answers */
 .bank { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
 .bank-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
-@media (max-width: 760px) { .bank-row { grid-template-columns: 1fr auto; } .bank-row .bank-a { grid-column: 1; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .bank-row { grid-template-columns: 1fr auto; } .bank-row .bank-a { grid-column: 1; } }
 .pill.effort { white-space: nowrap; }
 /* Kind of employment: contracts and temporary roles stand out */
 td.emp { white-space: nowrap; }
@@ -958,3 +958,12 @@ td.emp { white-space: nowrap; }
 /* A page's settings, as buttons at its top (see settingsButtons) */
 .btn.set-btn svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .btn.set-btn.on { background: var(--info-soft); border-color: var(--info); color: var(--info); }
+
+/* A phone held sideways (a foldable open on its side, say): the phone layout, clear of the camera
+   and the rounded corners at the sides. */
+@media (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) and (orientation: landscape) {
+  .page { padding-left: calc(14px + env(safe-area-inset-left)); padding-right: calc(14px + env(safe-area-inset-right)); }
+  .mtop, .tabbar { padding-left: calc(8px + env(safe-area-inset-left)); padding-right: calc(8px + env(safe-area-inset-right)); }
+}
+/* Keyboard shortcuts mean nothing on a touch screen. */
+@media (hover: none) and (pointer: coarse) { .find-box kbd { display: none; } }

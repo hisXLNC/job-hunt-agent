@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.34.1] - 2026-11-10
+
+Phones held sideways, and the iPhone Duo.
+
+### Changes
+
+- On a phone held sideways (the iPhone Duo open on its side, say), Job Hunt keeps the phone layout: a slim bar on top and tabs at the bottom, instead of the menu filling a third of the screen. It also keeps clear of the camera at the side.
+- No keyboard shortcut hints (Ctrl K) on touch screens.
+
 ## [2.34.0] - 2026-11-10
 
 Self-updating extension, progress bar, Sonnet for searching.
@@ -1145,6 +1154,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.34.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.1
 [2.34.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.0
 [2.33.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.2
 [2.33.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.1

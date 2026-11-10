@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.34.1",
+    "date": "2026-11-10",
+    "title": "Phones held sideways, and the iPhone Duo",
+    "changes": [
+      "On a phone held sideways (the iPhone Duo open on its side, say), Job Hunt keeps the phone layout: a slim bar on top and tabs at the bottom, instead of the menu filling a third of the screen. It also keeps clear of the camera at the side.",
+      "No keyboard shortcut hints (Ctrl K) on touch screens."
+    ]
+  },
+  {
     "version": "2.34.0",
     "date": "2026-11-10",
     "title": "Self-updating extension, progress bar, Sonnet for searching",
