@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.10] - 2026-11-10
+
+Workday skills ticked, every job added.
+
+### Changes
+
+- Skills: Job Hunt searched each skill and the match showed, but Workday didn't take it, because it selects on the mouse press and Job Hunt only clicked. Job Hunt now presses like a mouse, checks the skill was taken, and if not tries its checkbox, then the keyboard (arrow down, Enter).
+- Every job on your CV: Claude now lists each role on your CV (promotions included), and Job Hunt presses Work Experience's Add for each one the form doesn't have yet, instead of relying on a count.
+- Overview: the step numbers (1 to 5) are gone from Pick, Approve, Submit, Waiting and Interviews, so the only number on each is how many jobs are in it.
+
 ## [2.35.9] - 2026-11-10
 
 Workday languages and dropdowns fixed.
@@ -1292,6 +1302,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.10]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.10
 [2.35.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.9
 [2.35.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.8
 [2.35.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.7

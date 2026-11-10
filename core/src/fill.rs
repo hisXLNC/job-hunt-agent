@@ -341,12 +341,24 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     if let Some(prev) = agent.answers(job_id) {
         facts.push_str(&format!("\nAnswers already written for this application (use the same ones): {prev}"));
     }
+    // A work-history Add button: Claude lists every role on the CV (a list it gets right more often
+    // than a count), and the Add is pressed for each one the form doesn't have yet.
+    let work_add = fields.iter().any(|f| f["type"] == "add" && is_work(f["section"].as_str().unwrap_or("")));
+    let mut lines = lines;
+    if work_add {
+        lines.push(json!({"key": "_roles", "type": "textarea", "label": "Every role in the CV's work experience, newest first, one per line as: title | employer | dates. Each title counts, promotions at the same employer included."}).to_string());
+    }
+    let mut roles_listed = 0usize;
     let mut written: Vec<String> = vec![];
     // Only blank fields that Claude could answer: a form of nothing but what's already filled or banked needs no request.
     if lines.iter().any(|l| !l.contains("\"value\"")) {
         let own = agent.own_words(&job, &profile);
         let known: std::collections::HashSet<&str> = fields.iter().filter_map(|f| f["key"].as_str()).collect();
         for v in agent.llm().fill_form(&profile.name, &cv_text, &job, &lines.join("\n"), &facts, &profile.stories)? {
+            if v.key == "_roles" {
+                roles_listed = v.value.lines().filter(|l| l.trim().len() > 3).count();
+                continue;
+            }
             if known.contains(v.key.as_str()) && !v.value.trim().is_empty() {
                 let long = v.value.chars().count() > 120;
                 written.push(v.key.clone());
@@ -354,7 +366,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
             }
         }
     }
-    tidy_answers(fields, &mut values, &cv_text, &profile.application_facts);
+    tidy_answers(fields, &mut values, &cv_text, &profile.application_facts, roles_listed);
     let n = values.len() + files.len();
     agent.db().log(Some(job_id), "fill", &format!("{n} of {} fields filled in on the application form ({} from your saved answers)", fields.len(), banked.len()))?;
     // Count the bank's answers as used.
@@ -381,7 +393,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
 /// What Claude wrote, made right where it can be checked: links in full (a LinkedIn box given
 /// "linkedin.com/in/jane" gets "https://www.linkedin.com/in/jane"), and a work-history Add button
 /// Claude left at nothing pressed once for each role the CV has that the form doesn't.
-fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, cv_text: &str, facts: &str) {
+fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, cv_text: &str, facts: &str, roles_listed: usize) {
     for f in fields {
         let (Some(key), label) = (f["key"].as_str(), f["label"].as_str().unwrap_or("").to_lowercase()) else { continue };
         if f["type"] == "add" {
@@ -394,8 +406,8 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
                 let langs = cv_languages(&format!("{cv_text}\n{facts}")).len() as i64;
                 let more = if langs > 0 { (langs - have).max(0) } else { given.min(1) };
                 values.insert(key.to_string(), json!(more.to_string()));
-            } else if ["experience", "employment", "work", "job", "position"].iter().any(|w| section.contains(w)) {
-                let more = cv_roles(cv_text) as i64 - have;
+            } else if is_work(&section) {
+                let more = cv_roles(cv_text).max(roles_listed) as i64 - have;
                 if more > given {
                     values.insert(key.to_string(), json!(more.min(12).to_string()));
                 }
@@ -409,6 +421,11 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
             values.insert(key.to_string(), json!(full));
         }
     }
+}
+
+fn is_work(section: &str) -> bool {
+    let s = section.to_lowercase();
+    ["experience", "employment", "work", "job", "position"].iter().any(|w| s.contains(w))
 }
 
 /// How many roles a CV's experience lists: the lines with a date range ("2019 – Present",
@@ -504,9 +521,13 @@ mod tests {
         let fields = vec![json!({"key": "f1", "type": "text", "label": "Please provide your Linkedin profile:"}), json!({"key": "a1", "type": "add", "section": "Work Experience", "entries": 1})];
         let mut v = serde_json::Map::new();
         v.insert("f1".into(), json!("linkedin.com/in/jane-c"));
-        tidy_answers(&fields, &mut v, cv, "");
+        tidy_answers(&fields, &mut v, cv, "", 0);
         assert_eq!(v["f1"], "https://www.linkedin.com/in/jane-c");
         assert_eq!(v["a1"], "2", "two more roles than the one entry there");
+        // Claude's list of roles counts when the CV's own layout hides them.
+        let mut v = serde_json::Map::new();
+        tidy_answers(&fields, &mut v, "Jane\nno dates here", "", 5);
+        assert_eq!(v["a1"], "4");
         // Headings in markdown or capitals, and a CV with no Experience heading at all.
         assert_eq!(cv_roles("## PROFESSIONAL EXPERIENCE\n**Lead**, X | Jul 2023 \u{2013} Present\nB, Y | 2019 - 2023\n## EDUCATION\nBSc 2005 - 2009"), 2);
         assert_eq!(cv_roles("Jane\nLead, X | 2023 \u{2013} Present\nB, Y | 2019 - 2023\nEducation\nBSc 2005 - 2009"), 2);
@@ -515,10 +536,10 @@ mod tests {
         let fields = vec![json!({"key": "a2", "type": "add", "section": "Languages", "entries": 1})];
         let mut v = serde_json::Map::new();
         v.insert("a2".into(), json!("3"));
-        tidy_answers(&fields, &mut v, &cv, "");
+        tidy_answers(&fields, &mut v, &cv, "", 0);
         assert_eq!(v["a2"], "1");
         // A language only in your facts counts too.
-        tidy_answers(&fields, &mut v, &cv, "French: beginner (school, to grade 6)");
+        tidy_answers(&fields, &mut v, &cv, "French: beginner (school, to grade 6)", 0);
         assert_eq!(v["a2"], "2");
     }
 

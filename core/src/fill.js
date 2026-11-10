@@ -472,10 +472,22 @@
     }
     return true;
   }
+  // A click the way a mouse makes one: pointer and mouse press and release at the element's middle,
+  // then the click (sites that act on the press ignore a bare click()).
+  const mouse = el => {
+    el.scrollIntoView({ block: 'nearest' });
+    const r = el.getBoundingClientRect(), o = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
+    ownClick = true;
+    for (const t of ['pointerover', 'mouseover', 'pointerdown', 'mousedown']) el.dispatchEvent(t.startsWith('pointer') ? new PointerEvent(t, { ...o, pointerType: 'mouse', isPrimary: true }) : new MouseEvent(t, o));
+    if (el.focus) el.focus({ preventScroll: true });
+    for (const t of ['pointerup', 'mouseup']) el.dispatchEvent(t.startsWith('pointer') ? new PointerEvent(t, { ...o, pointerType: 'mouse', isPrimary: true }) : new MouseEvent(t, o));
+    el.click();
+    ownClick = false;
+  };
   const pressKey = (el, k) => {
     for (const t of ['keydown', 'keypress', 'keyup']) {
       const e = new KeyboardEvent(t, { key: k, code: k, bubbles: true, cancelable: true });
-      const n = k === 'Enter' ? 13 : k === 'Escape' ? 27 : 0;
+      const n = k === 'Enter' ? 13 : k === 'Escape' ? 27 : k === 'ArrowDown' ? 40 : 0;
       Object.defineProperty(e, 'keyCode', { get: () => n }); Object.defineProperty(e, 'which', { get: () => n });
       el.dispatchEvent(e);
     }
@@ -522,9 +534,30 @@
       const best = list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => s.includes(t(o)))
         || (most && overlap(most) * 2 >= words(s).length && overlap(most) > 0 ? most : null);
       if (!best) { pressKey(box(), 'Escape'); typeIn(box(), ''); continue; }
-      ownClick = true; (best.querySelector('input[type=checkbox],input[type=radio]') || best).click(); ownClick = false;
-      added++;
-      await wait(700);
+      // Workday takes a skill on the mouse press, not on a plain click: press it like a mouse, then
+      // check it was taken (a pill with its name, or the option ticked); else its checkbox, the
+      // row around it, then the keyboard (arrow down to it, Enter).
+      const name = clean(best.textContent);
+      const taken = () => skillPills(box()).some(p => same(p, name) || near(p, name)) || [...options()].some(o => same(o.textContent, name) && (o.getAttribute('aria-selected') === 'true' || o.closest('[aria-selected=true]')));
+      const idx = list.indexOf(best);
+      const tries = [best, best.querySelector('input[type=checkbox],input[type=radio],[role=checkbox]'), best.closest('[role=option],[data-automation-id=menuItem],li'), best.querySelector('[data-automation-id=promptOption]'), best.parentElement].filter((x, i, a) => x && a.indexOf(x) === i);
+      let ok = false;
+      for (const t of tries) {
+        if (!t.isConnected) continue;
+        mouse(t);
+        await wait(600);
+        if ((ok = taken())) break;
+      }
+      if (!ok && idx >= 0) {
+        const el2 = box();
+        el2.focus();
+        for (let k = 0; k <= idx; k++) { pressKey(el2, 'ArrowDown'); await wait(60); }
+        pressKey(el2, 'Enter');
+        await wait(600);
+        ok = taken();
+      }
+      if (ok) added++;
+      await wait(300);
       el = box();
       if (options().length) { pressKey(el, 'Escape'); await wait(250); }
       el = box();

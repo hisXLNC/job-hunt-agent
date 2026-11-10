@@ -152,7 +152,7 @@ function homeHead(on, about, between = '') {
       try { if (all) localStorage.setItem('jh.view', on); else lastView = localStorage.getItem('jh.view') || 'tracker'; } catch (e) {}
       if (!VIEWS.some(([id]) => id === lastView)) lastView = 'tracker';
       // (Every job is on Applications, in the sidebar: no To do / All jobs switch here.)
-      return `${all ? '' : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n], i) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-n">${i + 1}</span><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
+      return `${all ? '' : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
     })()}
     ${about ? `<p class="muted flow-about">${about}</p>` : ''}`;
 }
