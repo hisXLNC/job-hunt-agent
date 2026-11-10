@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.12] - 2026-11-10
+
+Workday skills selected with real clicks, jobs added from your CV.
+
+### Changes
+
+- Skills: the list showed each skill, but Workday ignores clicks a page script makes. The extension now clicks the skill through the browser itself, as your mouse would. Edge or Chrome shows a bar saying "Send to Job Hunt started debugging this browser" while it does; it goes a few seconds after the last skill.
+- Keys the extension presses (Enter, Escape, arrows) now reach the page's own code; before, it couldn't tell which key they were.
+- Work Experience: Job Hunt presses Add Another for each job on your CV that the form doesn't have, even when Claude's answer for the button comes back as nothing, and it counts the jobs on a CV more reliably (two-column layouts, roles listed on one line).
+- The panel has a Copy details button when a skill isn't taken or no jobs were added: it copies what Job Hunt saw on the page, to paste to Claude.
+
 ## [2.35.11] - 2026-11-10
 
 Extension kept up to date, and says what it didn't do.
@@ -1311,6 +1322,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.12]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.12
 [2.35.11]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.11
 [2.35.10]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.10
 [2.35.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.9

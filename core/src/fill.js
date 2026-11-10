@@ -68,6 +68,7 @@
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
         <button class="b" data-k="stop" hidden>Stop: I'll submit it</button>
+        <button class="b" data-k="diag" hidden title="Copies what Job Hunt saw on this page (the Add buttons, the skill list), to paste to Claude when something wasn't filled in">Copy details</button>
         <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button>
         <button class="b" data-k="drop" title="Not for you after all (the pay, say): Job Hunt sets it aside${JOB.queue ? ' and opens the next one' : ''}">Not interested</button></div></div>`;
     statusEl = root.querySelector('.s');
@@ -92,6 +93,12 @@
       send('pick', { job_id: id });
     };
     buttons.next.onclick = () => nextAmber();
+    buttons.diag.onclick = async () => {
+      const text = 'Job Hunt form details ' + JSON.stringify({ page: location.hostname, ...diag }, null, 1);
+      try { await navigator.clipboard.writeText(text); }
+      catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+      status('Copied. Paste it into your chat with Claude, with a word on what went wrong.');
+    };
     buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
     buttons.stop.onclick = () => { clearTimeout(autoTimer); autoTimer = null; buttons.stop.hidden = true; status('Stopped. Read the form over, then press its Submit button yourself.'); };
@@ -194,6 +201,11 @@
     for (const h of heads) { if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) t = h; else break; }
     return t ? textOf(t).slice(0, 80) : '';
   };
+  // What Job Hunt saw, for "Copy details": where an element sits (tags, ids, Workday's names, roles)
+  // and a short copy of its HTML, without styles or what you typed.
+  let diag = {};
+  const where = el => { const out = []; for (let x = el; x && x !== document.body && out.length < 9; x = x.parentElement) out.push(x.tagName.toLowerCase() + (x.id ? '#' + x.id : '') + (x.getAttribute('data-automation-id') ? `[da=${x.getAttribute('data-automation-id')}]` : '') + (x.getAttribute('role') ? `[role=${x.getAttribute('role')}]` : '') + (x.getAttribute('aria-selected') ? `[sel=${x.getAttribute('aria-selected')}]` : '')); return out.join(' < '); };
+  const htmlOf = (el, n) => el ? el.outerHTML.replace(/\s(style|class|d|viewBox|fill|xmlns)="[^"]*"/g, '').replace(/\svalue="[^"]*"/g, '').slice(0, n) : '';
   // A skills box (Workday's "Type to Add Skills"): type a skill, press Enter, choose the match from
   // the list that comes up; once per skill. Its value is the skills chosen so far.
   const SKILLS = /\bskills?\b/i;
@@ -479,15 +491,30 @@
     const r = el.getBoundingClientRect(), o = { bubbles: true, cancelable: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
     ownClick = true;
     for (const t of ['pointerover', 'mouseover', 'pointerdown', 'mousedown']) el.dispatchEvent(t.startsWith('pointer') ? new PointerEvent(t, { ...o, pointerType: 'mouse', isPrimary: true }) : new MouseEvent(t, o));
-    if (el.focus) el.focus({ preventScroll: true });
+    // No focus here: Workday closes the list when its box loses focus, before the click lands.
     for (const t of ['pointerup', 'mouseup']) el.dispatchEvent(t.startsWith('pointer') ? new PointerEvent(t, { ...o, pointerType: 'mouse', isPrimary: true }) : new MouseEvent(t, o));
     el.click();
     ownClick = false;
   };
+  // A real click, through the browser itself (the extension only): Workday's skill list ignores
+  // clicks a page script makes, however mouse-like. Chrome shows "started debugging this browser"
+  // while it clicks; it goes again a few seconds after.
+  const realClick = el => new Promise(res => {
+    if (!EXT || !el || !el.isConnected) return res(false);
+    el.scrollIntoView({ block: 'nearest' });
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return res(false);
+    const done = setTimeout(() => res(false), 4000);
+    try {
+      chrome.runtime.sendMessage({ jobhunt: 'click', data: { x: r.left + Math.min(r.width / 2, 60), y: r.top + r.height / 2 } }, v => { clearTimeout(done); void chrome.runtime.lastError; res(!!(v && v.ok)); });
+    } catch (e) { clearTimeout(done); res(false); }
+  });
   const pressKey = (el, k) => {
     for (const t of ['keydown', 'keypress', 'keyup']) {
-      const e = new KeyboardEvent(t, { key: k, code: k, bubbles: true, cancelable: true });
       const n = k === 'Enter' ? 13 : k === 'Escape' ? 27 : k === 'ArrowDown' ? 40 : 0;
+      // keyCode in the event itself as well: the extension's script runs beside the page's, which
+      // doesn't see properties added to the event afterwards.
+      const e = new KeyboardEvent(t, { key: k, code: k, keyCode: n, which: n, charCode: t === 'keypress' ? n : 0, bubbles: true, cancelable: true });
       Object.defineProperty(e, 'keyCode', { get: () => n }); Object.defineProperty(e, 'which', { get: () => n });
       el.dispatchEvent(e);
     }
@@ -525,7 +552,7 @@
       }
       await wait(250);
       list = options();
-      if (!list.length || sig() === before && before) { skillMiss.push(skill); typeIn(box(), ''); continue; }
+      if (!list.length || sig() === before && before) { skillMiss.push(skill); if (!diag.skill) diag.skill = { skill, noList: !list.length, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), box: htmlOf(field, 2500) }; typeIn(box(), ''); continue; }
       const t = o => clean(o.textContent).toLowerCase(), s = skill.toLowerCase();
       // Else the one sharing most of the skill's words ("Budgeting" for "Budget Planning"), if it shares at least half.
       const words = x => x.split(/[^a-z0-9+#]+/).filter(w => w.length > 2 && !['and', 'the', 'for'].includes(w)).map(w => w.slice(0, 6));
@@ -538,11 +565,13 @@
       // check it was taken (a pill with its name, or the option ticked); else its checkbox, the
       // row around it, then the keyboard (arrow down to it, Enter).
       const name = clean(best.textContent);
+      const snap = (best.closest('[role=listbox]') || best.parentElement?.parentElement || best).cloneNode(true);
       const taken = () => skillPills(box()).some(p => same(p, name) || near(p, name)) || [...options()].some(o => same(o.textContent, name) && (o.getAttribute('aria-selected') === 'true' || o.closest('[aria-selected=true]')));
       const idx = list.indexOf(best);
       const tries = [best, best.querySelector('input[type=checkbox],input[type=radio],[role=checkbox]'), best.closest('[role=option],[data-automation-id=menuItem],li'), best.querySelector('[data-automation-id=promptOption]'), best.parentElement].filter((x, i, a) => x && a.indexOf(x) === i);
       let ok = false;
-      for (const t of tries) {
+      if (EXT && await realClick(best)) { await wait(700); ok = taken(); }
+      for (const t of ok ? [] : tries) {
         if (!t.isConnected) continue;
         mouse(t);
         await wait(600);
@@ -556,7 +585,10 @@
         await wait(600);
         ok = taken();
       }
-      if (ok) added++; else skillMiss.push(skill);
+      if (ok) added++; else {
+        skillMiss.push(skill);
+        if (!diag.skill) diag.skill = { skill, chose: name, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), list: htmlOf(snap, 6000), pills: skillPills(box()), box: htmlOf(field, 2500) };
+      }
       await wait(300);
       el = box();
       if (options().length) { pressKey(el, 'Escape'); await wait(250); }
@@ -579,14 +611,17 @@
       sent = null;
       // Your CV has more jobs or schools than the form shows: press its Add buttons first, then read
       // the form again and fill every entry at once (a redraw after filling could empty the boxes).
-      const adds = round < 1 ? fields.filter(f => f.type === 'add' && parseInt(answer.values && answer.values[f.key], 10) > 0) : [];
+      // How many to add: Claude's answer, and for jobs at least what your CV has more than the form.
+      const isWork = f => /experience|employment|work|job|position/i.test(f.section || '');
+      const howMany = f => Math.max(parseInt(answer.values && answer.values[f.key], 10) || 0, isWork(f) ? (answer.roles || 0) - (f.entries || 0) : 0);
+      const adds = round < 1 ? fields.filter(f => f.type === 'add' && howMany(f) > 0) : [];
       if (adds.length) {
         round++;
         let added = 0;
         const what = [];
         for (const f of adds) {
           const was = added;
-          const want = Math.min(8, parseInt(answer.values[f.key], 10));
+          const want = Math.min(8, howMany(f));
           for (let i = 0; i < want; i++) {
             let b = adders[f.key];
             if (!b || !b.isConnected || !shown(b)) {
@@ -608,6 +643,9 @@
           return;
         }
       }
+      if (round < 1) diag = { version: ME, adds: fields.filter(f => f.type === 'add').map(f => ({ label: f.label, section: f.section, entries: f.entries, answer: answer.values && answer.values[f.key] })), roles: answer.roles,
+        addButtons: [...document.querySelectorAll('button,[role=button],a')].filter(b => !own(b) && /^\s*\+?\s*add\b/i.test(clean(b.textContent || b.getAttribute('aria-label') || ''))).slice(0, 12).map(b => ({ text: clean(b.textContent || '').slice(0, 50), aria: b.getAttribute('aria-label'), shown: shown(b), section: sectionOf(b), at: where(b) })),
+        headings: heads.map(h => textOf(h).slice(0, 50)).slice(0, 40) };
       // Why no job was added, when the form has fewer than your CV: said in the panel.
       const work = fields.find(f => f.type === 'add' && /experience|employment|work|job|position/i.test(f.section || ''));
       if (round < 1 && !addNote) {
@@ -647,6 +685,7 @@
       setTimeout(() => { if (!barTimer) progress(null); }, 2500);
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
       buttons.next.hidden = !todo; buttons.applied.hidden = false;
+      buttons.diag.hidden = !(addNote && !/^Added/.test(addNote) || skillMiss.length);
       const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (skillMiss.length ? ` Skills Workday didn't take: ${skillMiss.join(', ')}.` : '')
         + (EXT && answer.app_version && /^\d/.test(answer.app_version) && answer.app_version.replace(/-.*/, '') !== chrome.runtime.getManifest().version ? ` (This extension is ${chrome.runtime.getManifest().version}, Job Hunt is ${answer.app_version}: open the extension's button once so it updates, then reload this page.)` : '');
       status(todo

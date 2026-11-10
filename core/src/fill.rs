@@ -356,7 +356,10 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
         let known: std::collections::HashSet<&str> = fields.iter().filter_map(|f| f["key"].as_str()).collect();
         for v in agent.llm().fill_form(&profile.name, &cv_text, &job, &lines.join("\n"), &facts, &profile.stories)? {
             if v.key == "_roles" {
-                roles_listed = v.value.lines().filter(|l| l.trim().len() > 3).count();
+                // One per line, as asked; Claude sometimes joins them with "; " instead.
+                let by_line = v.value.lines().filter(|l| l.trim().len() > 3).count();
+                let by_semi = v.value.split(|c| c == '\n' || c == ';').filter(|l| l.trim().len() > 3).count();
+                roles_listed = by_line.max(if v.value.contains('|') && by_semi > by_line { by_semi } else { by_line });
                 continue;
             }
             if known.contains(v.key.as_str()) && !v.value.trim().is_empty() {
@@ -441,31 +444,32 @@ pub fn cv_roles(cv: &str) -> usize {
     static RANGE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(?:(?:19|20)\d{2}|\d{1,2}/(?:19|20)\d{2})\b.{0,12}?(?:\u{2013}|\u{2014}|-|\bto\b|\buntil\b).{0,12}?(?:\b(?:19|20)\d{2}\b|present|current|now|to date|date|ongoing)").unwrap());
     static START: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^[\s#*_|]*(?:professional |work |relevant |career |employment |selected )?(?:experience|employment(?: history)?|work history|career history|professional background)\b.{0,30}$").unwrap());
     static END: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^[\s#*_|]*(?:education|academic|qualifications|certifications?|skills|core skills|key skills|languages|training|volunteer|awards|references|publications|interests|professional development|memberships)\b.{0,30}$").unwrap());
-    let (mut on, mut off, mut seen_start) = (false, false, false);
+    static SCHOOL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(bachelor|master|b\.?sc|m\.?sc|mba|phd|degree|diploma|university|college|school|certificat|cpa|cfa|acca|cma|gpa)").unwrap());
+    // Experience sections (a two-column CV can put its skills column between them), and every date
+    // range outside education and the like: whichever finds more.
+    let (mut on, mut off) = (false, false);
     let (mut n, mut loose) = (0, 0);
     for line in cv.lines() {
         if START.is_match(line) {
             on = true;
             off = false;
-            seen_start = true;
             continue;
         }
         if END.is_match(line) {
-            if on {
-                break;
-            }
-            off = true;
+            on = false;
+            off = !line.to_lowercase().contains("skill") && !line.to_lowercase().contains("language");
             continue;
         }
         if RANGE.is_match(line) {
             if on {
                 n += 1;
-            } else if !off {
+            }
+            if !off && !SCHOOL.is_match(line) {
                 loose += 1;
             }
         }
     }
-    if seen_start { n } else { loose }
+    n.max(loose)
 }
 
 /// The languages a CV names (English, Arabic, French…), each once.
@@ -534,6 +538,8 @@ mod tests {
         // Headings in markdown or capitals, and a CV with no Experience heading at all.
         assert_eq!(cv_roles("## PROFESSIONAL EXPERIENCE\n**Lead**, X | Jul 2023 \u{2013} Present\nB, Y | 2019 - 2023\n## EDUCATION\nBSc 2005 - 2009"), 2);
         assert_eq!(cv_roles("Jane\nLead, X | 2023 \u{2013} Present\nB, Y | 2019 - 2023\nEducation\nBSc 2005 - 2009"), 2);
+        // A two-column CV: its skills column in the middle of the jobs.
+        assert_eq!(cv_roles("EXPERIENCE\nA, X | 2023 \u{2013} Present\nSKILLS\nExcel\nB, Y | 2019 - 2023\nC, Z | 2015 - 2019\nEDUCATION\nBSc, Uni | 2005 - 2009"), 3);
         // Languages: as many entries as the CV names, not Claude's guess.
         let cv = format!("{cv}Languages\nEnglish (fluent), Arabic (native)\n");
         let fields = vec![json!({"key": "a2", "type": "add", "section": "Languages", "entries": 1})];
