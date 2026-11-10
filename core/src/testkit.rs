@@ -83,6 +83,9 @@ impl Llm for FakeLlm {
     fn outreach(&self, c: &str, _cv: &str, job: &Job, contact: &str, brief: &str) -> R<String> {
         Ok(format!("Hi {}, I applied for {}. {c}\n[{brief}]", contact.lines().next().unwrap_or(""), job.title))
     }
+    fn find_recruiters(&self, job: &Job) -> R<Vec<crate::claude::FoundPerson>> {
+        Ok(vec![crate::claude::FoundPerson { name: "Priya Shah".into(), title: format!("Talent Acquisition Partner at {}", job.company), linkedin: "https://www.linkedin.com/in/priya-shah-ta".into(), why: "hires for PMO roles in Toronto".into() }])
+    }
     fn chat(&self, _c: &str, _cv: &str, job: &Job, _notes: &str, history: &[(String, String)], message: &str) -> R<String> {
         Ok(format!("About {} ({} before): {message}", job.title, history.len()))
     }

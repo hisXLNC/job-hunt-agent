@@ -538,6 +538,11 @@ pub trait Llm: Send + Sync {
     fn company_apply(&self, _job: &crate::db::Job) -> R<Option<String>> {
         Err(Error("Finding the company's own posting needs Claude Code (Settings \u{2192} Accounts \u{2192} Claude).".into()))
     }
+    /// Recruiters (and the likely hiring manager) at the company, found on LinkedIn with a web search:
+    /// best first, only people the search showed.
+    fn find_recruiters(&self, _job: &crate::db::Job) -> R<Vec<FoundPerson>> {
+        Err(Error("Finding people on LinkedIn needs Claude Code (Settings \u{2192} Accounts \u{2192} Claude).".into()))
+    }
     /// Fit reasons written before they were kept short, each made one line: the same strongest
     /// match and biggest gap, in at most 15 words. In the same order.
     fn shorten_reasons(&self, _reasons: &[String]) -> R<Vec<String>> {
@@ -591,6 +596,32 @@ about a role, and anything not about a job."
 }
 
 /// The value for one field of an application form, by the key the page gave it.
+/// Someone at a company, found on LinkedIn (see find_recruiters).
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct FoundPerson {
+    pub name: String,
+    pub title: String,
+    pub linkedin: String,
+    /// Why them: "Talent acquisition partner for technology roles in Toronto".
+    pub why: String,
+}
+
+fn find_recruiters_system() -> String {
+    format!(
+        "You find the people a job applicant should message about one job: the recruiter or talent acquisition \
+partner who hires for it, and if you can tell, the hiring manager.\n\n{UNTRUSTED}\n\n\
+Search the web for their LinkedIn profiles (searches like: site:linkedin.com/in \"<company>\" recruiter <city>; \
+\"<company>\" \"talent acquisition\" <field>; the job title's likely manager, such as \"Director, PMO\" at the \
+company). Prefer, in order: a recruiter who hires for this kind of role in this city or country, any recruiter or \
+talent acquisition person at the company in that country, then the likely hiring manager. People who now work \
+at the company, not former employees, and not recruiters at staffing agencies unless the posting is an \
+agency's. At most 3, best first. Each with their name, title as LinkedIn shows it, the linkedin.com/in/ link, \
+and why them in one short line. Only people your search results actually showed, with their real profile \
+link: never guess a name or make up a link. None found: an empty list."
+    )
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct FieldValue {
@@ -687,7 +718,16 @@ again; it's the last message, so don't promise more.\n\
 Never ask about the status or for an update; never paste the CV or list its contents; mention no attachments. \
 If there's an email address in <contact>, write an email (\"Subject: ...\" first, then at most 110 words); \
 otherwise a LinkedIn note of at most 300 characters. Warm, direct, no flattery or clichés. Sign with the \
-candidate's first name. Never invent facts."
+candidate's first name. Never invent facts.\n\
+It must read like the candidate typed it themselves in a couple of minutes, not like a template or an AI:\n\
+- Start \"Hi <first name>,\" (no name known: \"Hi,\" or \"Hello,\"). Never \"Dear\", never \"I hope this message \
+finds you well\", \"I'm reaching out\", \"I came across\", \"I wanted to\" or \"I am writing\".\n\
+- Contractions (I'm, I've, I'd). Short, plain sentences, the way people talk. One specific detail, not a summary \
+of the CV.\n\
+- None of: excited, thrilled, keen, passionate, love to, align, resonate, synergy, value-add, leverage, \
+opportunity to contribute, great fit, perfect fit, eager, delighted, honoured, \"would welcome the chance\".\n\
+- No exclamation marks, no emoji, no bullet points, no closing pleasantries beyond a plain \"Thanks,\" before the \
+name."
     )
 }
 
@@ -1739,6 +1779,20 @@ note says; no company name, no filler. Return them in the same order, one for ea
         })?;
         let url = v["url"].as_str().unwrap_or("").trim().to_string();
         Ok(Some(url).filter(|u| v["found"].as_bool() == Some(true) && u.starts_with("http") && !crate::sources::is_job_board(u)))
+    }
+
+    fn find_recruiters(&self, job: &crate::db::Job) -> R<Vec<FoundPerson>> {
+        let cc = self.code()?;
+        let user = posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description);
+        let person = obj(json!({"name": {"type": "string"}, "title": {"type": "string"}, "linkedin": {"type": "string"}, "why": {"type": "string"}}));
+        let schema = obj(json!({"people": {"type": "array", "items": person}}));
+        let v = crate::claude_code::ask(cc, &crate::claude_code::Ask {
+            system: &find_recruiters_system(), prompt: &user, schema: &schema, model: &model_id(self.search_model(), false), effort: "low", files: &[],
+            connectors: &[], web: true, limit: Duration::from_secs(6 * 60),
+        })?;
+        let people: Vec<FoundPerson> = serde_json::from_value(v["people"].clone()).unwrap_or_default();
+        // Only real profile links.
+        Ok(people.into_iter().filter(|p| !p.name.trim().is_empty() && p.linkedin.contains("linkedin.com/in/")).take(3).collect())
     }
 
     fn follow_up(&self, candidate: &str, job: &crate::db::Job, applied_on: &str) -> R<FollowUp> {

@@ -3452,6 +3452,40 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Write a short message to one of the contacts (a LinkedIn note, or an email when there's an
     /// address), the way the playbook says: the first one, or once you've sent that and had no reply
     /// for a week, the one follow-up. Never a third.
+    /// Find the recruiter (and likely hiring manager) on LinkedIn, add them to the job's people, and
+    /// write the note to the best one. Ok(how many were found).
+    pub fn find_recruiter(&self, job_id: &str) -> R<usize> {
+        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        let found = self.llm().find_recruiters(&job)?;
+        if found.is_empty() {
+            return err(&format!("Couldn't find a recruiter at {} on LinkedIn. Look on LinkedIn yourself, add their name here, and Job Hunt writes the note.", job.company));
+        }
+        let mut list = self.contacts(job_id);
+        let mut first_new = None;
+        for p in &found {
+            let link = p.linkedin.trim().trim_end_matches('/').to_string();
+            let same = |c: &Value| c["link"].as_str().is_some_and(|l| l.trim_end_matches('/') == link) || c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(p.name.trim()));
+            if let Some(i) = list.iter().position(same) {
+                first_new.get_or_insert(i);
+                continue;
+            }
+            list.push(json!({ "name": p.name.trim(), "role": p.title.trim(), "link": link, "email": "",
+                "note": format!("Found on LinkedIn by Job Hunt ({}). The candidate doesn't know them: a first, cold message.", p.why.trim()) }));
+            first_new.get_or_insert(list.len() - 1);
+        }
+        // A placeholder "Recruiter" with no message yet gives way to the real person.
+        list.retain(|c| !(c["name"] == "Recruiter" && c["link"].as_str().unwrap_or("").is_empty() && c["message"].as_str().unwrap_or("").is_empty() && c["sent_at"].as_str().unwrap_or("").is_empty()));
+        self.save_contacts(job_id, &list)?;
+        let list = self.contacts(job_id);
+        let best = found.first().and_then(|p| list.iter().position(|c| c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(p.name.trim())))).or(first_new).unwrap_or(0);
+        self.db().log(Some(job_id), "contact", &format!("found {} on LinkedIn", found.iter().map(|p| p.name.trim()).collect::<Vec<_>>().join(", ")))?;
+        // Already messaged them: no new note.
+        if list.get(best).is_some_and(|c| c["sent_at"].as_str().unwrap_or("").is_empty()) {
+            self.write_outreach(job_id, best)?;
+        }
+        Ok(found.len())
+    }
+
     pub fn write_outreach(&self, job_id: &str, index: usize) -> R<String> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let mut list = self.contacts(job_id);
@@ -8538,6 +8572,22 @@ mod tests {
         assert!(csv.starts_with('\u{feff}'));
         let row = csv.lines().nth(1).unwrap();
         assert!(row.starts_with("\"Acme, \"\"Inc\"\"\",\"Technical Program Manager\",\"Ready to approve\",\"85\""), "{row}");
+    }
+
+    #[test]
+    fn finds_the_recruiter_on_linkedin_and_writes_the_note() {
+        let s = setup();
+        s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        s.agent.save_contacts("test:1", &[json!({ "name": "Recruiter", "role": "Recruiter" })]).unwrap();
+        assert_eq!(s.agent.find_recruiter("test:1").unwrap(), 1);
+        let c = s.agent.contacts("test:1");
+        assert_eq!(c.len(), 1, "the unnamed placeholder gives way to the person found");
+        assert_eq!(c[0]["name"], "Priya Shah");
+        assert!(c[0]["link"].as_str().unwrap().contains("linkedin.com/in/"));
+        assert!(c[0]["message"].as_str().unwrap().starts_with("Hi"), "the note is written to her");
+        // Again: she isn't added twice.
+        s.agent.find_recruiter("test:1").unwrap();
+        assert_eq!(s.agent.contacts("test:1").len(), 1);
     }
 
     #[test]

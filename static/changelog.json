@@ -2,8 +2,10 @@
   {
     "version": "2.35.6",
     "date": "2026-11-10",
-    "title": "The right job on each site, and a note to the recruiter",
+    "title": "Find the recruiter on LinkedIn, and the right job on each site",
     "changes": [
+      "Find the recruiter on LinkedIn: on a job's People at the company, Job Hunt searches LinkedIn for the recruiter who hires for the role (or the hiring manager), adds them with their profile link, and writes your note to them, ready to copy and send from their profile.",
+      "Notes to recruiters read like you wrote them: \"Hi Priya,\", contractions, one specific detail, and none of the stock phrases (\"I hope this finds you well\", \"I'm reaching out\", \"excited\", \"great fit\").",
       "The extension no longer takes a job you chose on one company's site for another's: a page that names one of your approved jobs' companies (BMO's careers site, say) is that job, and a job you chose from the list counts only on the site you chose it on.",
       "The extension's popup has \"Not this job? Choose another\" to pick the job yourself.",
       "\"Just applied: message the recruiter\": Write a note now opens the job at People at the company, where a new Write a note to the recruiter button writes it, even when you don't know their name yet (it greets them without one). With a recruiter Job Hunt knows there, it's written to them."

@@ -1010,15 +1010,16 @@ async function showJob(id) {
         : `<p class="muted">${following_up ? 'Claude is writing a short, polite note asking about the timeline.' : `No reply yet? Job Hunt drafts a short follow-up ${st.profile.follow_up_after ? `${st.profile.follow_up_after} days after you apply` : 'when you ask'}.`}</p>`}
     </section>` : ''}
     ${!['skipped', 'dismissed'].includes(j.status) ? `<section class="card" id="people">
-      <header><h2>People at ${esc(j.company)}</h2>${writing_to ? '<span class="muted small"><span class="spin" data-kind="outreach"></span>Writing…</span>' : ''}</header>
+      <header><h2>People at ${esc(j.company)}</h2>${writing_to ? '<span class="muted small"><span class="spin" data-kind="outreach"></span>Working on it: finding people and writing the note…</span>' : (contacts || []).length ? '<button class="btn ghost" data-act="findPeople">Find the recruiter on LinkedIn</button>' : ''}</header>
       <p class="muted small">A recruiter, the hiring manager or someone you know there. A short note to the right person often counts for more than a perfect CV. <a href="#" data-act="link" data-url="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(j.company + ' ' + (playbook?.kind === 'agency' ? 'recruiter' : j.title.split(/[,(-]/)[0]))}">Look on LinkedIn</a></p>
       ${playbookHtml(playbook, contacts || [], j)}
       ${(know || []).filter(p => !(contacts || []).some(c => c.name === p.name)).map(p => `<div class="qa"><div class="row" style="justify-content:space-between"><span><span class="pill good">You know them</span> <b>${esc(p.name)}</b>${p.position ? ` · ${esc(p.position)}` : ''}${p.link ? ` · <a href="#" data-act="link" data-url="${esc(p.link)}">profile</a>` : ''}</span>
         <button class="btn primary" data-act="askReferral" data-person="${esc(JSON.stringify(p))}" ${writing_to ? 'disabled' : ''}>Ask ${esc(firstName(p.name))} for a referral</button></div></div>`).join('')}
       ${(contacts || []).map((c, i) => contactHtml(c, i, writing_to, playbook)).join('')}
       ${!(contacts || []).length && ['approved', 'applied', 'interviewing'].includes(j.status) ? `<div class="qa"><div class="row" style="justify-content:space-between;align-items:center">
-        <span class="small">${recruiter ? `You know <b>${esc(recruiter.name)}</b>, a recruiter there.` : 'No name yet? Job Hunt writes a short note to the recruiter you can send on LinkedIn or by email. Add a name below to make it personal.'}</span>
-        <button class="btn primary" data-act="noteRecruiter" data-name="${esc(recruiter?.name || '')}" data-email="${esc(recruiter?.email || '')}" ${writing_to ? 'disabled' : ''}>Write a note to ${recruiter ? esc(firstName(recruiter.name)) : 'the recruiter'}</button></div></div>` : ''}
+        <span class="small">${recruiter ? `You know <b>${esc(recruiter.name)}</b>, a recruiter there.` : 'Job Hunt looks on LinkedIn for the recruiter who hires for this role (or the hiring manager) and writes a short note to them, to send from their profile.'}</span>
+        <span class="row">${recruiter ? '' : `<button class="btn primary" data-act="findPeople" ${writing_to ? 'disabled' : ''}>Find the recruiter on LinkedIn</button>`}
+        <button class="btn${recruiter ? ' primary' : ''}" data-act="noteRecruiter" data-name="${esc(recruiter?.name || '')}" data-email="${esc(recruiter?.email || '')}" ${writing_to ? 'disabled' : ''}>${recruiter ? `Write a note to ${esc(firstName(recruiter.name))}` : 'Write it without a name'}</button></span></div></div>` : ''}
       <div class="row contact-add"><input type="text" id="cName" placeholder="Name"><input type="text" id="cRole" placeholder="Role (e.g. hiring manager)"><input type="text" id="cEmail" placeholder="Email or LinkedIn link (optional)">
         <button class="btn" data-act="addContact">Add</button></div>
     </section>` : ''}    ${offer || advising || j.status === 'offer' ? `<section class="card prep">
@@ -3639,6 +3640,10 @@ async function act(el) {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/outreach`, { method: 'POST', body: { index: Number(el.dataset.i) } }); setTimeout(route, 300); }, 'Writing the message…');
   }
   // A note to the recruiter, with no name needed: added as a contact, then written.
+  if (a === 'findPeople') {
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/find-people`, { method: 'POST' }); setTimeout(route, 300); },
+      'Looking on LinkedIn for the recruiter, then writing the note. This takes a minute or two.');
+  }
   if (a === 'noteRecruiter') {
     const list = JSON.parse(main().dataset.contacts || '[]');
     const name = el.dataset.name;

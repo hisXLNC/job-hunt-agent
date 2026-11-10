@@ -860,7 +860,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     });
                     Ok(Resp::json(&json!({ "started": true })))
                 }
-                "answers" | "offer" | "outreach" => {
+                "answers" | "offer" | "outreach" | "find-people" => {
                     let key = format!("{}:{id}", match *action { "answers" => "answers", "offer" => "offer", _ => "contact" });
                     if agent.is_running(&key) {
                         return Err(Error("That's being written already.".into()));
@@ -874,6 +874,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         let r = match what.as_str() {
                             "answers" => a.answer_questions(&id, s(&body, "questions")).map(|_| ()),
                             "offer" => a.offer_advice(&id, s(&body, "offer")).map(|_| ()),
+                            "find-people" => a.find_recruiter(&id).map(|_| ()),
                             _ => a.write_outreach(&id, body["index"].as_u64().unwrap_or(0) as usize).map(|_| ()),
                         };
                         if let Err(e) = r {
