@@ -387,9 +387,16 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
         if f["type"] == "add" {
             let section = f["section"].as_str().unwrap_or("").to_lowercase();
             let given = values.get(key).and_then(|v| v.as_str()).and_then(|v| v.trim().parse::<i64>().ok()).unwrap_or(0);
-            if given == 0 && ["experience", "employment", "work"].iter().any(|w| section.contains(w)) {
-                let more = cv_roles(cv_text) as i64 - f["entries"].as_i64().unwrap_or(1);
-                if more > 0 {
+            let have = f["entries"].as_i64().unwrap_or(1);
+            // Languages: as many entries as languages on the CV, never more (Claude guessing added
+            // empty ones).
+            if section.contains("language") {
+                let langs = cv_languages(cv_text).len() as i64;
+                let more = if langs > 0 { (langs - have).max(0) } else { given.min(1) };
+                values.insert(key.to_string(), json!(more.to_string()));
+            } else if ["experience", "employment", "work", "job", "position"].iter().any(|w| section.contains(w)) {
+                let more = cv_roles(cv_text) as i64 - have;
+                if more > given {
                     values.insert(key.to_string(), json!(more.min(12).to_string()));
                 }
             }
@@ -406,27 +413,50 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
 
 /// How many roles a CV's experience lists: the lines with a date range ("2019 – Present",
 /// "06/2010 - 05/2014", "Jan 2018 to Mar 2020") between its Experience heading and the next section.
+/// A CV without an Experience heading the reader knows: every date range outside its education,
+/// certificates and the like.
 pub fn cv_roles(cv: &str) -> usize {
     use once_cell::sync::Lazy;
     use regex::Regex;
-    static RANGE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(?:(?:19|20)\d{2}|\d{1,2}/(?:19|20)\d{2})\b.{0,12}?(?:\u{2013}|\u{2014}|-|\bto\b).{0,12}?(?:\b(?:19|20)\d{2}\b|present|current|now|to date|date)").unwrap());
-    static START: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*(?:professional |work |relevant |career )?(?:experience|employment(?: history)?|work history|career history)\s*:?\s*$").unwrap());
-    static END: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*(?:education|academic|qualifications|certifications?|skills|languages|training|volunteer|awards|references|publications|interests)\b.{0,30}$").unwrap());
-    let mut on = false;
-    let mut n = 0;
+    static RANGE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(?:(?:19|20)\d{2}|\d{1,2}/(?:19|20)\d{2})\b.{0,12}?(?:\u{2013}|\u{2014}|-|\bto\b|\buntil\b).{0,12}?(?:\b(?:19|20)\d{2}\b|present|current|now|to date|date|ongoing)").unwrap());
+    static START: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^[\s#*_|]*(?:professional |work |relevant |career |employment |selected )?(?:experience|employment(?: history)?|work history|career history|professional background)\b.{0,30}$").unwrap());
+    static END: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^[\s#*_|]*(?:education|academic|qualifications|certifications?|skills|core skills|key skills|languages|training|volunteer|awards|references|publications|interests|professional development|memberships)\b.{0,30}$").unwrap());
+    let (mut on, mut off, mut seen_start) = (false, false, false);
+    let (mut n, mut loose) = (0, 0);
     for line in cv.lines() {
         if START.is_match(line) {
             on = true;
+            off = false;
+            seen_start = true;
             continue;
         }
-        if on && END.is_match(line) {
-            break;
+        if END.is_match(line) {
+            if on {
+                break;
+            }
+            off = true;
+            continue;
         }
-        if on && RANGE.is_match(line) {
-            n += 1;
+        if RANGE.is_match(line) {
+            if on {
+                n += 1;
+            } else if !off {
+                loose += 1;
+            }
         }
     }
-    n
+    if seen_start { n } else { loose }
+}
+
+/// The languages a CV names (English, Arabic, French…), each once.
+pub fn cv_languages(cv: &str) -> Vec<&'static str> {
+    const ALL: &[&str] = &["English", "French", "Arabic", "Spanish", "Portuguese", "German", "Italian", "Dutch", "Russian", "Ukrainian", "Polish", "Turkish", "Persian", "Farsi", "Urdu", "Hindi", "Punjabi", "Bengali", "Gujarati", "Tamil", "Telugu", "Marathi", "Malayalam", "Kannada", "Mandarin", "Cantonese", "Chinese", "Japanese", "Korean", "Vietnamese", "Thai", "Indonesian", "Malay", "Tagalog", "Filipino", "Greek", "Hebrew", "Swahili", "Somali", "Amharic", "Romanian", "Hungarian", "Czech", "Slovak", "Serbian", "Croatian", "Bosnian", "Bulgarian", "Swedish", "Norwegian", "Danish", "Finnish", "Kurdish", "Pashto", "Dari", "Armenian", "Albanian", "Tigrinya", "Yoruba", "Igbo", "Hausa", "Sinhala", "Nepali"];
+    let words: std::collections::HashSet<String> = cv.split(|c: char| !c.is_alphabetic()).map(|w| w.to_lowercase()).collect();
+    let mut out: Vec<&'static str> = ALL.iter().copied().filter(|l| words.contains(&l.to_lowercase())).collect();
+    // Farsi is Persian, and Chinese with Mandarin or Cantonese is one of them.
+    if out.contains(&"Persian") { out.retain(|l| *l != "Farsi"); }
+    if out.contains(&"Mandarin") || out.contains(&"Cantonese") { out.retain(|l| *l != "Chinese"); }
+    out
 }
 
 /// You submitted the application in the Apply window: the site confirmed it (`auto`), or you pressed
@@ -477,6 +507,16 @@ mod tests {
         tidy_answers(&fields, &mut v, cv);
         assert_eq!(v["f1"], "https://www.linkedin.com/in/jane-c");
         assert_eq!(v["a1"], "2", "two more roles than the one entry there");
+        // Headings in markdown or capitals, and a CV with no Experience heading at all.
+        assert_eq!(cv_roles("## PROFESSIONAL EXPERIENCE\n**Lead**, X | Jul 2023 \u{2013} Present\nB, Y | 2019 - 2023\n## EDUCATION\nBSc 2005 - 2009"), 2);
+        assert_eq!(cv_roles("Jane\nLead, X | 2023 \u{2013} Present\nB, Y | 2019 - 2023\nEducation\nBSc 2005 - 2009"), 2);
+        // Languages: as many entries as the CV names, not Claude's guess.
+        let cv = format!("{cv}Languages\nEnglish (fluent), Arabic (native)\n");
+        let fields = vec![json!({"key": "a2", "type": "add", "section": "Languages", "entries": 1})];
+        let mut v = serde_json::Map::new();
+        v.insert("a2".into(), json!("3"));
+        tidy_answers(&fields, &mut v, &cv);
+        assert_eq!(v["a2"], "1");
     }
 
     #[test]

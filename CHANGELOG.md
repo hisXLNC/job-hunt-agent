@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.9] - 2026-11-10
+
+Workday languages and dropdowns fixed.
+
+### Changes
+
+- Workday dropdowns no longer get each other's answers: a list Job Hunt couldn't match an answer in was left open, and the next dropdown took its options from it (a language left on Select One, fluency levels mixed up). Lists are now closed every time, long lists are scrolled to find the answer, and "Fluent" matches "5 - Fluent".
+- Languages: Job Hunt adds as many language entries as your CV names, not more.
+- Every job on your CV: counting the jobs works with CVs whose Experience heading is in capitals or styled, or missing; the panel says what it added ("2 Work Experience").
+- Checkboxes: if a tick doesn't take (an open list can swallow the click), Job Hunt closes the list and tries the box's label.
+
 ## [2.35.8] - 2026-11-10
 
 Update check when you switch to Job Hunt.
@@ -1281,6 +1292,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.9
 [2.35.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.8
 [2.35.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.7
 [2.35.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.6

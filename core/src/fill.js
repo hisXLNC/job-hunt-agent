@@ -208,29 +208,70 @@
   const DROPS = 'button[aria-haspopup=listbox]';
   const dropOptions = new WeakMap();
   const openOptions = () => [...document.querySelectorAll('[role=listbox] [role=option], [data-automation-id=promptOption]')].filter(o => !own(o) && shown(o));
+  // Close whatever list is open: Escape where the focus is (Workday moves it into the list), then a
+  // click outside it. A list left open had its options taken for the next dropdown's, which put one
+  // dropdown's answers in another.
+  async function closeLists(b) {
+    for (let i = 0; i < 4 && openOptions().length; i++) {
+      for (const el of new Set([document.activeElement, openOptions()[0], b].filter(Boolean))) pressKey(el, 'Escape');
+      await wait(120);
+      if (!openOptions().length) break;
+      for (const t of ['mousedown', 'mouseup', 'click']) document.body.dispatchEvent(new MouseEvent(t, { bubbles: true }));
+      await wait(150);
+      if (i === 2 && b && openOptions().length) { ownClick = true; b.click(); ownClick = false; await wait(150); }
+    }
+  }
+  // Open a dropdown and return its options: the list it names (aria-controls), else the options that
+  // weren't on the page before it opened.
+  async function openDrop(b) {
+    await closeLists();
+    ownClick = true; b.click(); ownClick = false;
+    let list = [];
+    for (let i = 0; i < 12; i++) {
+      await wait(120);
+      const ctl = b.getAttribute('aria-controls') || b.getAttribute('aria-owns');
+      const box = ctl && document.getElementById(ctl);
+      list = box ? [...box.querySelectorAll('[role=option],[data-automation-id=promptOption]')].filter(shown) : openOptions();
+      if (list.length) break;
+    }
+    return list;
+  }
+  // A long list (every language) may show only part of itself until scrolled: scroll it to find more.
+  async function moreOptions(list, want) {
+    const scroller = list.length && (list[0].closest('[role=listbox]') || list[0].parentElement);
+    if (!scroller || scroller.scrollHeight <= scroller.clientHeight + 4) return list;
+    let all = [...list];
+    for (let i = 0; i < 25; i++) {
+      if (want && all.some(o => same(o.textContent, want))) break;
+      const top = scroller.scrollTop;
+      scroller.scrollTop = top + Math.max(80, scroller.clientHeight - 20);
+      scroller.dispatchEvent(new Event('scroll'));
+      await wait(100);
+      if (scroller.scrollTop === top) break;
+      for (const o of openOptions()) if (!all.includes(o)) all.push(o);
+    }
+    return all.filter(o => o.isConnected);
+  }
   async function readDrops() {
     let n = 0;
     for (const b of document.querySelectorAll(DROPS)) {
-      if (own(b) || !shown(b) || b.disabled || dropOptions.has(b) || n++ > 30) continue;
-      ownClick = true; b.click(); ownClick = false;
-      let list = [];
-      for (let i = 0; i < 8 && !(list = openOptions()).length; i++) await wait(120);
-      dropOptions.set(b, list.map(o => clean(o.textContent)).filter(t => t && !/^select one$/i.test(t)));
-      pressKey(b, 'Escape');
-      if (openOptions().length) { ownClick = true; b.click(); ownClick = false; }
-      await wait(120);
+      if (own(b) || !shown(b) || b.disabled || dropOptions.has(b) || n++ > 40) continue;
+      const list = await moreOptions(await openDrop(b));
+      dropOptions.set(b, [...new Set(list.map(o => clean(o.textContent)).filter(t => t && !/^select one$/i.test(t)))]);
+      await closeLists(b);
     }
   }
   async function fillDrop(b, v) {
-    if (same(clean(b.textContent), v)) return true;
-    ownClick = true; b.click(); ownClick = false;
-    let list = [];
-    for (let i = 0; i < 10 && !(list = openOptions()).length; i++) await wait(120);
-    const i = pick(list.map(o => clean(o.textContent)), v);
-    if (i < 0) { pressKey(b, 'Escape'); return false; }
+    if (same(clean(b.textContent), v) || same(core(b.textContent), core(v))) return true;
+    let list = await openDrop(b);
+    let i = pick(list.map(o => clean(o.textContent)), v);
+    if (i < 0) { list = await moreOptions(list, v); i = pick(list.map(o => clean(o.textContent)), v); }
+    if (i < 0) { await closeLists(b); return false; }
+    list[i].scrollIntoView({ block: 'nearest' });
     ownClick = true; list[i].click(); ownClick = false;
     await wait(300);
-    return true;
+    await closeLists(b);
+    return same(core(b.textContent), core(list[i].textContent || v)) || !/^select one$/i.test(clean(b.textContent));
   }
   function collect() {
     fields = []; byKey = {};
@@ -283,7 +324,7 @@
       const key = 'd' + n++;
       const now = clean(b.textContent);
       const f = { key, type: 'select', drop: true, label: labelOf(b).replace(/\s*(select one|required)\s*/gi, ' ').trim(), required: b.getAttribute('aria-required') === 'true' || /required/i.test(b.getAttribute('aria-label') || ''),
-        value: /^select one$/i.test(now) ? '' : now, options: (dropOptions.get(b) || []).slice(0, 60) };
+        value: /^select one$/i.test(now) ? '' : now, options: (dropOptions.get(b) || []).slice(0, 150) };
       const sec = sectionOf(b); if (sec) f.section = sec;
       fields.push(f); byKey[key] = [b];
     }
@@ -304,7 +345,9 @@
     el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
   };
   const same = (a, b) => clean(a).toLowerCase() === clean(b).toLowerCase();
-  const near = (a, b) => { a = clean(a).toLowerCase(); b = clean(b).toLowerCase(); return a && b && (a === b || a.startsWith(b) || b.startsWith(a)); };
+  // "5 - Fluent" is "Fluent": the numbering in front of an option doesn't have to be in the answer.
+  const core = t => clean(t).toLowerCase().replace(/^\d+\s*[-\u2013.:)]\s*/, '');
+  const near = (a, b) => { a = clean(a).toLowerCase(); b = clean(b).toLowerCase(); if (!a || !b) return false; if (a === b || a.startsWith(b) || b.startsWith(a)) return true; const x = core(a), y = core(b); return !!x && !!y && (x === y || x.startsWith(y) || y.startsWith(x)); };
   const mark = (el, ok) => {
     let box = ['radio', 'checkbox'].includes(el.type) ? (el.closest('fieldset,[role=radiogroup],[role=group]') || el.parentElement) : el;
     // A hidden upload box (behind an Attach button): mark what you can see around it.
@@ -395,13 +438,24 @@
     if (f.type === 'checkboxes') {
       const want = String(v).split(/;\s*/);
       let any = false;
-      els.forEach((e, i) => { if (want.some(w => near(f.options[i], w))) { if (!e.checked) e.click(); any = true; } });
+      for (const [i, e] of els.entries()) {
+        if (!want.some(w => near(f.options[i], w))) continue;
+        if (!e.checked) e.click();
+        if (!e.checked) { (e.labels && e.labels[0] || e.parentElement).click(); await wait(100); }
+        any = any || e.checked;
+      }
       return any;
     }
     if (f.type === 'checkbox') {
       // "yes" ticks it; "no" unticks a box that's ticked wrongly ("I currently work here" on a past job).
       const on = /^(yes|true|checked|tick)/i.test(String(v)), off = /^(no|false|unchecked|untick|clear)/i.test(String(v));
-      if ((on && !el.checked) || (off && el.checked)) { ownClick = true; el.click(); ownClick = false; toggled = true; }
+      for (let i = 0; i < 3 && ((on && !el.checked) || (off && el.checked)); i++) {
+        // A list still open can swallow the click: close it first. Then the box, else its label.
+        if (openOptions().length) await closeLists();
+        const target = i === 0 ? el : i === 1 ? (el.labels && el.labels[0]) || el.parentElement : el.parentElement;
+        ownClick = true; target.click(); ownClick = false; toggled = true;
+        await wait(150);
+      }
       return on ? el.checked : off ? !el.checked : false;
     }
     // Already has an answer (yours or the site's): kept, unless Job Hunt corrects it from your CV
@@ -496,7 +550,9 @@
       if (adds.length) {
         round++;
         let added = 0;
+        const what = [];
         for (const f of adds) {
+          const was = added;
           const want = Math.min(8, parseInt(answer.values[f.key], 10));
           for (let i = 0; i < want; i++) {
             let b = adders[f.key];
@@ -508,10 +564,11 @@
             ownClick = true; b.click(); ownClick = false; added++;
             await wait(900);
           }
+          if (added > was) what.push(`${added - was} ${f.section}`);
         }
         if (added) {
           progress(barAt());
-          status(`Added ${added} more ${added === 1 ? 'entry' : 'entries'} for the other jobs and schools on your CV; filling in the form…`);
+          status(`Added ${what.join(', ')} from your CV; filling in the form…`);
           await wait(600);
           start(true);
           return;
