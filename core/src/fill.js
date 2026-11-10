@@ -163,8 +163,8 @@
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
   const ADD = /^\s*\+?\s*add\b/i;
-  const NOT_ADD = /\b(file|attachment|resume|cv|cover|link|website|document|photo|skill|language|reference)s?\b/i;
-  const HISTORY = /experience|employment|work|job|position|education|school|degree|qualification/i;
+  const NOT_ADD = /\b(file|attachment|resume|cv|cover|link|website|document|photo|skill|reference)s?\b/i;
+  const HISTORY = /experience|employment|work|job|position|education|school|degree|qualification|language/i;
   function collectAdders(n) {
     adders = {};
     const seen = new Set();
@@ -203,6 +203,35 @@
     const area = box && box.parentElement ? box.parentElement.parentElement || box.parentElement : null;
     return area ? [...area.querySelectorAll('[data-automation-id=selectedItem],[data-automation-id=promptSelectionLabel],[role=listitem],.pill,.tag,.chip')].map(x => clean(x.textContent)).filter(Boolean) : [];
   };
+  // Dropdowns made of a button and a list (Workday's "Select One"): their options are only on the page
+  // while open, so each is opened once, read and closed before the form is read.
+  const DROPS = 'button[aria-haspopup=listbox]';
+  const dropOptions = new WeakMap();
+  const openOptions = () => [...document.querySelectorAll('[role=listbox] [role=option], [data-automation-id=promptOption]')].filter(o => !own(o) && shown(o));
+  async function readDrops() {
+    let n = 0;
+    for (const b of document.querySelectorAll(DROPS)) {
+      if (own(b) || !shown(b) || b.disabled || dropOptions.has(b) || n++ > 30) continue;
+      ownClick = true; b.click(); ownClick = false;
+      let list = [];
+      for (let i = 0; i < 8 && !(list = openOptions()).length; i++) await wait(120);
+      dropOptions.set(b, list.map(o => clean(o.textContent)).filter(t => t && !/^select one$/i.test(t)));
+      pressKey(b, 'Escape');
+      if (openOptions().length) { ownClick = true; b.click(); ownClick = false; }
+      await wait(120);
+    }
+  }
+  async function fillDrop(b, v) {
+    if (same(clean(b.textContent), v)) return true;
+    ownClick = true; b.click(); ownClick = false;
+    let list = [];
+    for (let i = 0; i < 10 && !(list = openOptions()).length; i++) await wait(120);
+    const i = pick(list.map(o => clean(o.textContent)), v);
+    if (i < 0) { pressKey(b, 'Escape'); return false; }
+    ownClick = true; list[i].click(); ownClick = false;
+    await wait(300);
+    return true;
+  }
   function collect() {
     fields = []; byKey = {};
     heads = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,[role=heading]')].filter(h => !own(h) && shown(h) && textOf(h).length > 1);
@@ -248,7 +277,17 @@
       fields.push({ key: g.key, type: g.type, label: question(first) || clean(first.name), section: sectionOf(first) || undefined, options: g.options.slice(0, 40), required: g.els.some(e => e.required), value: g.els.filter(e => e.checked).map((e, i) => g.options[g.els.indexOf(e)]).join('; ') });
       byKey[g.key] = g.els;
     }
-    fields = fields.slice(0, 120);
+    // Workday's dropdowns ("Select One"): buttons that open a list, read beforehand (readDrops).
+    for (const b of document.querySelectorAll(DROPS)) {
+      if (own(b) || !shown(b) || b.disabled) continue;
+      const key = 'd' + n++;
+      const now = clean(b.textContent);
+      const f = { key, type: 'select', drop: true, label: labelOf(b).replace(/\s*(select one|required)\s*/gi, ' ').trim(), required: b.getAttribute('aria-required') === 'true' || /required/i.test(b.getAttribute('aria-label') || ''),
+        value: /^select one$/i.test(now) ? '' : now, options: (dropOptions.get(b) || []).slice(0, 60) };
+      const sec = sectionOf(b); if (sec) f.section = sec;
+      fields.push(f); byKey[key] = [b];
+    }
+    fields = fields.slice(0, 160);
     collectAdders(n);
     return fields;
   }
@@ -339,6 +378,7 @@
       return attach(el, file);
     }
     if (v == null || v === '') return f.value !== '' && f.type !== 'checkbox';
+    if (f.drop) return fillDrop(el, v);
     if (f.type === 'select') {
       const opts = [...el.options];
       const i = pick(opts.map(o => o.text), v);
@@ -421,7 +461,12 @@
       list = options();
       if (!list.length || sig() === before && before) { typeIn(box(), ''); continue; }
       const t = o => clean(o.textContent).toLowerCase(), s = skill.toLowerCase();
-      const best = list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => s.includes(t(o)));
+      // Else the one sharing most of the skill's words ("Budgeting" for "Budget Planning"), if it shares at least half.
+      const words = x => x.split(/[^a-z0-9+#]+/).filter(w => w.length > 2 && !['and', 'the', 'for'].includes(w)).map(w => w.slice(0, 6));
+      const overlap = o => { const ow = words(t(o)); return words(s).filter(w => ow.includes(w)).length; };
+      const most = [...list].sort((a, b) => overlap(b) - overlap(a))[0];
+      const best = list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => s.includes(t(o)))
+        || (most && overlap(most) * 2 >= words(s).length && overlap(most) > 0 ? most : null);
       if (!best) { pressKey(box(), 'Escape'); typeIn(box(), ''); continue; }
       ownClick = true; (best.querySelector('input[type=checkbox],input[type=radio]') || best).click(); ownClick = false;
       added++;
@@ -566,11 +611,12 @@
     amberAt++;
   }
   let sent = null;
-  function start(more, dates) {
+  async function start(more, dates) {
     if (!more) { round = 0; reveals = 0; }
     panel();
     if (retired) return;
     checkPay();
+    if (document.querySelector(DROPS)) { status('Reading the form…'); await readDrops(); }
     const all = collect();
     sent = { fields, byKey, adders };
     // The end dates that appeared: only the boxes still empty go (with the entries' checkboxes), not
@@ -645,6 +691,11 @@
     const t = clean(b.textContent || b.value || b.getAttribute('aria-label') || '');
     // A page's other buttons are often "submit" too (a button with no type is): Add another, Delete,
     // Save and Continue, Next, Upload… aren't sending the application.
+    // Save and Continue / Next on a form of several pages (Workday): keep this page's answers for
+    // next time now (your GPA, notice period…), since only the last page is there when you submit.
+    if (/^\s*(save and continue|save & continue|next|continue)\b/i.test(t) && ui && !retired) {
+      try { send('learn', { fields: collect().filter(f => !['file', 'add', 'skills'].includes(f.type) && f.value).map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options })).slice(0, 80) }); } catch (err) { /* the form changed */ }
+    }
     if (NOT_SEND.test(t)) return;
     if ((b.type === 'submit' && b.form) || /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|apply now|complete application|finish application/i.test(b.textContent || b.value || '')) onPressed();
   }, true);

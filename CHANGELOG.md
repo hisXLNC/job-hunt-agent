@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.7] - 2026-11-10
+
+Workday forms, filled in fuller.
+
+### Changes
+
+- Every job and language on your CV: Job Hunt presses Add under Languages too, and if Claude leaves the work-history Add at nothing, Job Hunt counts the roles on your CV itself and adds that many.
+- Workday's dropdowns ("Select One": language, proficiency, yes/no questions) are filled in: Job Hunt opens each to read its options, then chooses.
+- Links in full: your LinkedIn goes in as https://www.linkedin.com/in/...
+- Skills: when the site's list has no exact match, the closest one is chosen (sharing most of the words).
+- Education dates: a school with only the year you finished on your CV gets that year as To, not in both boxes.
+- Answers on every page of a Workday form are kept for next time (your GPA, say) when you press Save and Continue, not only the last page's; and GPA is kept now.
+
 ## [2.35.6] - 2026-11-10
 
 Find the recruiter on LinkedIn, and the right job on each site.
@@ -1260,6 +1273,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.7
 [2.35.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.6
 [2.35.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.5
 [2.35.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.4

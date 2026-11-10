@@ -100,7 +100,7 @@ fn work_history(label: &str) -> bool {
         "employer", "employer name", "organization", "organisation", "role description", "description", "job description",
         "responsibilities", "duties", "from", "to", "start date", "end date", "dates", "location", "city", "school",
         "school name", "school or university", "university", "college", "institution", "degree", "field of study", "major",
-        "discipline", "gpa", "grade", "overall result gpa", "i currently work here", "currently work here", "current job"];
+        "discipline", "i currently work here", "currently work here", "current job"];
     let k = question_key(label);
     KEYS.contains(&k.as_str())
 }
@@ -354,6 +354,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
             }
         }
     }
+    tidy_answers(fields, &mut values, &cv_text);
     let n = values.len() + files.len();
     agent.db().log(Some(job_id), "fill", &format!("{n} of {} fields filled in on the application form ({} from your saved answers)", fields.len(), banked.len()))?;
     // Count the bank's answers as used.
@@ -375,6 +376,57 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let long_written = written.iter().any(|k| values.get(k).and_then(|v| v.as_str()).is_some_and(|v| v.chars().count() > 120));
     let auto = auto_submit_on(agent) && AUTO_FORMS.iter().any(|h| host.ends_with(h)) && !required_open && !long_written;
     Ok(json!({ "values": values, "files": files, "banked": banked, "auto": auto }))
+}
+
+/// What Claude wrote, made right where it can be checked: links in full (a LinkedIn box given
+/// "linkedin.com/in/jane" gets "https://www.linkedin.com/in/jane"), and a work-history Add button
+/// Claude left at nothing pressed once for each role the CV has that the form doesn't.
+fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, cv_text: &str) {
+    for f in fields {
+        let (Some(key), label) = (f["key"].as_str(), f["label"].as_str().unwrap_or("").to_lowercase()) else { continue };
+        if f["type"] == "add" {
+            let section = f["section"].as_str().unwrap_or("").to_lowercase();
+            let given = values.get(key).and_then(|v| v.as_str()).and_then(|v| v.trim().parse::<i64>().ok()).unwrap_or(0);
+            if given == 0 && ["experience", "employment", "work"].iter().any(|w| section.contains(w)) {
+                let more = cv_roles(cv_text) as i64 - f["entries"].as_i64().unwrap_or(1);
+                if more > 0 {
+                    values.insert(key.to_string(), json!(more.min(12).to_string()));
+                }
+            }
+            continue;
+        }
+        let Some(v) = values.get(key).and_then(|v| v.as_str()).map(|v| v.trim().to_string()) else { continue };
+        let linky = ["linkedin", "website", "url", "portfolio", "github", "profile link", "social"].iter().any(|w| label.contains(w)) || v.contains("linkedin.com/");
+        if linky && !v.starts_with("http") && !v.contains(' ') && v.contains('.') {
+            let full = if v.starts_with("linkedin.com") { format!("https://www.{v}") } else { format!("https://{v}") };
+            values.insert(key.to_string(), json!(full));
+        }
+    }
+}
+
+/// How many roles a CV's experience lists: the lines with a date range ("2019 – Present",
+/// "06/2010 - 05/2014", "Jan 2018 to Mar 2020") between its Experience heading and the next section.
+pub fn cv_roles(cv: &str) -> usize {
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+    static RANGE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(?:(?:19|20)\d{2}|\d{1,2}/(?:19|20)\d{2})\b.{0,12}?(?:\u{2013}|\u{2014}|-|\bto\b).{0,12}?(?:\b(?:19|20)\d{2}\b|present|current|now|to date|date)").unwrap());
+    static START: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*(?:professional |work |relevant |career )?(?:experience|employment(?: history)?|work history|career history)\s*:?\s*$").unwrap());
+    static END: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*(?:education|academic|qualifications|certifications?|skills|languages|training|volunteer|awards|references|publications|interests)\b.{0,30}$").unwrap());
+    let mut on = false;
+    let mut n = 0;
+    for line in cv.lines() {
+        if START.is_match(line) {
+            on = true;
+            continue;
+        }
+        if on && END.is_match(line) {
+            break;
+        }
+        if on && RANGE.is_match(line) {
+            n += 1;
+        }
+    }
+    n
 }
 
 /// You submitted the application in the Apply window: the site confirmed it (`auto`), or you pressed
@@ -414,6 +466,18 @@ pub fn submitted_with(agent: &Agent, job_id: &str, url: &str, auto: bool, fields
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn links_in_full_and_every_role_added() {
+        let cv = "Jane Candidate\nSummary\nPM.\nProfessional Experience\nSenior PM, Acme\n2021 \u{2013} Present\nPM, Acme\n2018 \u{2013} 2021\nAnalyst, Beta | 06/2010 - 05/2014\nEducation\nBSc, 2006 \u{2013} 2010\n";
+        assert_eq!(cv_roles(cv), 3);
+        let fields = vec![json!({"key": "f1", "type": "text", "label": "Please provide your Linkedin profile:"}), json!({"key": "a1", "type": "add", "section": "Work Experience", "entries": 1})];
+        let mut v = serde_json::Map::new();
+        v.insert("f1".into(), json!("linkedin.com/in/jane-c"));
+        tidy_answers(&fields, &mut v, cv);
+        assert_eq!(v["f1"], "https://www.linkedin.com/in/jane-c");
+        assert_eq!(v["a1"], "2", "two more roles than the one entry there");
+    }
 
     #[test]
     fn messages_need_the_token_and_files_go_by_label() {

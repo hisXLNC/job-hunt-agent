@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.35.7",
+    "date": "2026-11-10",
+    "title": "Workday forms, filled in fuller",
+    "changes": [
+      "Every job and language on your CV: Job Hunt presses Add under Languages too, and if Claude leaves the work-history Add at nothing, Job Hunt counts the roles on your CV itself and adds that many.",
+      "Workday's dropdowns (\"Select One\": language, proficiency, yes/no questions) are filled in: Job Hunt opens each to read its options, then chooses.",
+      "Links in full: your LinkedIn goes in as https://www.linkedin.com/in/...",
+      "Skills: when the site's list has no exact match, the closest one is chosen (sharing most of the words).",
+      "Education dates: a school with only the year you finished on your CV gets that year as To, not in both boxes.",
+      "Answers on every page of a Workday form are kept for next time (your GPA, say) when you press Save and Continue, not only the last page's; and GPA is kept now."
+    ]
+  },
+  {
     "version": "2.35.6",
     "date": "2026-11-10",
     "title": "Find the recruiter on LinkedIn, and the right job on each site",
