@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.8] - 2026-11-10
+
+Update check when you switch to Job Hunt.
+
+### Changes
+
+- Job Hunt now checks for a new version whenever you bring its window to the front (alt-tab or the taskbar), not only when you open it from the tray, at most once a minute.
+
 ## [2.35.7] - 2026-11-10
 
 Workday forms, filled in fuller.
@@ -1273,6 +1281,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.8
 [2.35.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.7
 [2.35.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.6
 [2.35.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.5

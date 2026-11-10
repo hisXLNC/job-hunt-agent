@@ -4434,13 +4434,14 @@ refreshOverview().then(route).then(noteUpdated);
 // Look for an update shortly after opening, then every 30 minutes.
 setTimeout(checkUpdate, 4000);
 setInterval(checkUpdate, 30 * 60 * 1000);
-// While Job Hunt sits in the tray its timers are paused, so look again whenever it comes back into
-// view (the app also calls onShown when you open it from the tray).
+// While Job Hunt sits in the tray or behind other windows, look again whenever it comes to the front
+// (the app also calls onShown when you open it from the tray or switch to its window).
 let lastShownCheck = Date.now();
 function onShown() {
-  if (Date.now() - lastShownCheck < 5 * 60 * 1000) return;
+  if (Date.now() - lastShownCheck < 60 * 1000) return;
   lastShownCheck = Date.now();
   checkUpdate();
   refreshOverview().catch(() => {}); // the counts; the page itself stays, so nothing you're typing is lost
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onShown(); });
+window.addEventListener('focus', onShown);

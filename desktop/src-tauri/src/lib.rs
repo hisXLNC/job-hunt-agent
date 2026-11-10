@@ -1053,6 +1053,13 @@ pub fn run() {
             if window.label() != "main" {
                 return;
             }
+            // Brought to the front (alt-tab, a click on the taskbar): look for an update now.
+            if let WindowEvent::Focused(true) = event {
+                if let Some(w) = window.app_handle().get_webview_window("main") {
+                    let _ = w.eval("typeof onShown === 'function' && onShown()");
+                }
+                return;
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if QUITTING.load(Ordering::SeqCst) {
                     return;

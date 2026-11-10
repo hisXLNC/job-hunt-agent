@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.35.8",
+    "date": "2026-11-10",
+    "title": "Update check when you switch to Job Hunt",
+    "changes": [
+      "Job Hunt now checks for a new version whenever you bring its window to the front (alt-tab or the taskbar), not only when you open it from the tray, at most once a minute."
+    ]
+  },
+  {
     "version": "2.35.7",
     "date": "2026-11-10",
     "title": "Workday forms, filled in fuller",
