@@ -967,3 +967,30 @@ td.emp { white-space: nowrap; }
 }
 /* Keyboard shortcuts mean nothing on a touch screen. */
 @media (hover: none) and (pointer: coarse) { .find-box kbd { display: none; } }
+
+/* Touch screens, following Apple's Human Interface Guidelines: every control at least 44 × 44
+   points, boxes big enough to tick, a press you can see, and text iOS doesn't resize on its own
+   when the phone turns sideways. Links inside sentences stay as they are. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+@media (hover: none) and (pointer: coarse) {
+  body { -webkit-tap-highlight-color: transparent; }
+  .btn, .btn.sm, summary.btn, .find-box, select,
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]) { min-height: 44px; }
+  .btn.icon-only, [data-act=calMonth] { min-width: 44px; justify-content: center; }
+  .btn.sm { padding: 8px 12px; }
+  nav.tabs a, nav.flow a, nav.mode a, .menu-list a, .menu-list button { min-height: 44px; display: inline-flex; align-items: center; }
+  .menu-list a, .menu-list button { display: flex; }
+  details > summary:not(.btn) { min-height: 44px; padding-top: 10px; padding-bottom: 10px; box-sizing: border-box; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; flex: none; }
+  .todo-row.pick input[type=checkbox] { width: 24px; height: 24px; }
+  .todo-row.pick label:has(> input[type=checkbox]) { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  label.check { min-height: 44px; align-items: center; }
+  a.views-x { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; }
+  /* A press shows. */
+  .btn:active, nav a:active, .tabbar a:active, .menu-list a:active, .menu-list button:active, summary:active { opacity: .6; }
+}
+@media (hover: none) and (pointer: coarse) and (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  /* The top bar: 44 points tall below the status bar, like an iOS navigation bar. */
+  .mtop { padding-top: env(safe-area-inset-top); padding-bottom: 0; }
+  .mtop a { min-height: 44px; display: inline-flex; align-items: center; }
+}

@@ -6,10 +6,12 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.34.1] - 2026-11-10
 
-Phones held sideways, and the iPhone Duo.
+iPhone: Apple's guidelines, and phones held sideways.
 
 ### Changes
 
+- On iPhone, every button, tab, menu item and checkbox is at least 44 points, as Apple's guidelines ask, so taps land where you mean them; a press dims the button so you can see it.
+- The top bar is 44 points below the status bar, like an iOS navigation bar, and iOS no longer enlarges the text on its own when you turn the phone.
 - On a phone held sideways (the iPhone Duo open on its side, say), Job Hunt keeps the phone layout: a slim bar on top and tabs at the bottom, instead of the menu filling a third of the screen. It also keeps clear of the camera at the side.
 - No keyboard shortcut hints (Ctrl K) on touch screens.
 
