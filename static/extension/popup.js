@@ -36,6 +36,14 @@ async function fill() {
     if (r && r.ok) { $('setup').hidden = true; say('Connected to Job Hunt', 'Fill this form now works on application pages.'); }
     else say("That didn't connect", r ? r.error : 'Is Job Hunt running?', true);
   };
+  // Just updated: say so once (the icon's NEW badge goes too).
+  const { updated: up } = await chrome.storage.local.get('updated');
+  if (up) {
+    $('updated').hidden = false;
+    $('updated').textContent = `✓ Updated to ${up.to}. Reload application forms that were open before the update.`;
+    chrome.storage.local.remove('updated');
+    chrome.action.setBadgeText({ text: '' });
+  }
   const { key } = await chrome.storage.local.get('key');
   // Older than Job Hunt: it reloads itself with the new files (then open it again).
   if (key) {

@@ -37,7 +37,22 @@ async function checkVersion() {
   return { updating: v.version };
 }
 chrome.runtime.onStartup.addListener(() => { checkVersion(); });
-chrome.runtime.onInstalled.addListener(() => { checkVersion(); });
+chrome.runtime.onInstalled.addListener(d => {
+  checkVersion();
+  // Updated (it reloads itself when Job Hunt updates): say so, once, and mark the icon until the
+  // popup is opened.
+  const now = chrome.runtime.getManifest().version;
+  if (d.reason !== 'update' || !d.previousVersion || d.previousVersion === now) return;
+  chrome.storage.local.set({ updated: { from: d.previousVersion, to: now } });
+  chrome.action.setBadgeText({ text: 'NEW' });
+  chrome.action.setBadgeBackgroundColor({ color: '#0B7A3B' });
+  try {
+    chrome.notifications.create('jobhunt-updated', {
+      type: 'basic', iconUrl: 'icon-128.png', title: `Job Hunt extension updated to ${now}`,
+      message: 'Reload any application form you have open (F5) before pressing Fill this form.',
+    });
+  } catch (e) { /* no notifications: the badge and the popup still say it */ }
+});
 const run = (tabId, func, args) => chrome.scripting.executeScript({ target: { tabId }, func, args });
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.check) {

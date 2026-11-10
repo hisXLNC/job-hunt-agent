@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.35.3",
+    "date": "2026-11-10",
+    "title": "Extension says when it's updated",
+    "changes": [
+      "When the browser extension updates itself (after Job Hunt updates), it shows a notification, puts NEW on its icon until you open it, and says in its popup to reload any application form that was open."
+    ]
+  },
+  {
     "version": "2.35.2",
     "date": "2026-11-10",
     "title": "Form filling works again after an update, and faster",
