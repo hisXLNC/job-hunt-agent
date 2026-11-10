@@ -978,7 +978,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]) { min-height: 44px; }
   .btn.icon-only, [data-act=calMonth] { min-width: 44px; justify-content: center; }
   .btn.sm { padding: 8px 12px; }
-  nav.tabs a, nav.flow a, nav.mode a, .menu-list a, .menu-list button { min-height: 44px; display: inline-flex; align-items: center; }
+  nav.tabs a, nav.flow a, nav.mode a, .menu-list a, .menu-list button { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
   .menu-list a, .menu-list button { display: flex; }
   details > summary:not(.btn) { min-height: 44px; padding-top: 10px; padding-bottom: 10px; box-sizing: border-box; }
   input[type=checkbox], input[type=radio] { width: 22px; height: 22px; flex: none; }
