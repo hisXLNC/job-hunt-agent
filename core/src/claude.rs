@@ -628,6 +628,9 @@ entries the CV needs there, in digits: work history is every role in the CV's ex
 or school, less the entries already there. \"0\" when it has enough. Fill the entries that are there now as usual. Copy each job title and \
 employer exactly as the CV writes it, never shortened or split; a description is that role's own lines from the \
 CV.\n\
+- skills (a box that adds one skill at a time): 6-10 skills the CV shows that matter most for this posting, \
+most important first, joined by \"; \". Use the short, common name a list of skills would have (\"Project \
+Management\", \"Stakeholder Management\", \"Budgeting\", \"Power BI\"), one to three words each, never a sentence.\n\
 - Skip file fields and captchas. A field already filled in (a value is given, often by the site reading the CV) \
 stays as it is when it's right; when it contradicts the CV or facts (a wrong or cut-off job title, employer, \
 date or school), return the right value from the CV. Never invent facts; a field left out is better than a guess."

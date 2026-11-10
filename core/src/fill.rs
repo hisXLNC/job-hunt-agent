@@ -127,7 +127,7 @@ pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
     let mut n = 0;
     for f in fields {
         let (label, value, kind) = (f["label"].as_str().unwrap_or(""), f["value"].as_str().unwrap_or("").trim(), f["type"].as_str().unwrap_or(""));
-        if label.trim().len() < 3 || value.is_empty() || value.chars().count() > 200 || ["file", "password", "checkbox", "add"].contains(&kind) || personal_to_the_role(label) {
+        if label.trim().len() < 3 || value.is_empty() || value.chars().count() > 200 || ["file", "password", "checkbox", "add", "skills"].contains(&kind) || personal_to_the_role(label) {
             continue;
         }
         let key = question_key(label);
@@ -142,7 +142,7 @@ pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
 /// The bank's answer to a field, if it has one that fits (for a list of options, one of them).
 fn from_bank(list: &[Value], f: &Value) -> Option<String> {
     let label = f["label"].as_str().unwrap_or("");
-    if personal_to_the_role(label) || ["file", "checkbox", "add"].contains(&f["type"].as_str().unwrap_or("")) {
+    if personal_to_the_role(label) || ["file", "checkbox", "add", "skills"].contains(&f["type"].as_str().unwrap_or("")) {
         return None;
     }
     let key = question_key(label);

@@ -6,11 +6,12 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.35.0] - 2026-11-10
 
-Choose the job in your browser.
+Skills on forms, and choosing the job in your browser.
 
 ### Changes
 
 - When the extension can't tell which application a page is for, its panel lists your jobs from the Submit tab (the one the page names is chosen already): pick one and Job Hunt fills the form in for it, and remembers it for the form's other pages.
+- Skills boxes (Workday's "Type to Add Skills"): Job Hunt adds 6-10 of your CV's skills that matter most for the job, one at a time: it types each, presses Enter and chooses the closest match from the list.
 
 ## [2.34.5] - 2026-11-10
 

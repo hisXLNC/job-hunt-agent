@@ -169,6 +169,15 @@
     for (const h of heads) { if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) t = h; else break; }
     return t ? textOf(t).slice(0, 80) : '';
   };
+  // A skills box (Workday's "Type to Add Skills"): type a skill, press Enter, choose the match from
+  // the list that comes up; once per skill. Its value is the skills chosen so far.
+  const SKILLS = /\bskills?\b/i;
+  const isSkills = (el, type) => ['text', 'search'].includes(type) && SKILLS.test(labelOf(el)) && !/years|level|describe|summary/i.test(labelOf(el));
+  const skillPills = el => {
+    const box = el.closest('[data-automation-id=multiSelectContainer],[data-uxi-widget-type=multiselect],[role=group],div');
+    const area = box && box.parentElement ? box.parentElement.parentElement || box.parentElement : null;
+    return area ? [...area.querySelectorAll('[data-automation-id=selectedItem],[data-automation-id=promptSelectionLabel],[role=listitem],.pill,.tag,.chip')].map(x => clean(x.textContent)).filter(Boolean) : [];
+  };
   function collect() {
     fields = []; byKey = {};
     heads = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,[role=heading]')].filter(h => !own(h) && shown(h) && textOf(h).length > 1);
@@ -177,7 +186,8 @@
     for (const el of document.querySelectorAll('input,select,textarea')) {
       if (own(el) || el.disabled) continue;
       const type = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : (el.type || 'text').toLowerCase();
-      if (['hidden', 'submit', 'button', 'reset', 'image', 'search', 'password'].includes(type)) continue;
+      if (['hidden', 'submit', 'button', 'reset', 'image', 'password'].includes(type)) continue;
+      if (type === 'search' && !SKILLS.test(labelOf(el))) continue;
       const choice = type === 'radio' || type === 'checkbox';
       if (type !== 'file' && !choice && !shown(el)) continue;
       if (choice && !shown(el) && !(el.labels && [...el.labels].some(shown))) continue;
@@ -190,7 +200,7 @@
       }
       const key = 'f' + n++;
       const chosen = type === 'select' && el.selectedIndex >= 0 && el.value !== '' ? clean(el.options[el.selectedIndex].text) : '';
-      const f = { key, type: el.getAttribute('role') === 'combobox' ? 'combobox' : type, label: labelOf(el), required: el.required || el.getAttribute('aria-required') === 'true', value: type === 'file' ? (el.files && el.files.length ? 'attached' : '') : choice ? '' : type === 'select' ? chosen : clean(el.value) };
+      const f = { key, type: isSkills(el, type) ? 'skills' : el.getAttribute('role') === 'combobox' ? 'combobox' : type, label: labelOf(el), required: el.required || el.getAttribute('aria-required') === 'true', value: type === 'file' ? (el.files && el.files.length ? 'attached' : '') : choice ? '' : type === 'select' ? chosen : clean(el.value) };
       if (type === 'checkbox') f.checked = el.checked;
       if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text)).slice(0, 60);
       if (type === 'checkbox') f.context = question(el);
@@ -285,6 +295,7 @@
     if (f.value && same(f.value, v)) return true;
     el.focus();
     setter(el, String(v));
+    if (f.type === 'skills') return fillSkills(el, v);
     if (f.type === 'combobox') {
       await wait(500);
       const opt = [...document.querySelectorAll('[role=option]')].find(o => near(o.textContent, v));
@@ -292,6 +303,46 @@
       opt.click();
     }
     return true;
+  }
+  const pressKey = (el, k) => {
+    for (const t of ['keydown', 'keypress', 'keyup']) {
+      const e = new KeyboardEvent(t, { key: k, code: k, bubbles: true, cancelable: true });
+      const n = k === 'Enter' ? 13 : k === 'Escape' ? 27 : 0;
+      Object.defineProperty(e, 'keyCode', { get: () => n }); Object.defineProperty(e, 'which', { get: () => n });
+      el.dispatchEvent(e);
+    }
+  };
+  const typeIn = (el, v) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].filter(o => !own(o) && shown(o) && clean(o.textContent));
+  // Each skill: type it, press Enter, wait for the list of matches, choose the closest (the same
+  // name, else one that starts with it or contains it, else the first), then the next.
+  async function fillSkills(el, v) {
+    const want = String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean).slice(0, 12);
+    let added = 0;
+    for (const skill of want) {
+      if (skillPills(el).some(p => same(p, skill))) { added++; continue; }
+      el.focus(); el.click();
+      typeIn(el, skill);
+      pressKey(el, 'Enter');
+      let list = [];
+      for (let i = 0; i < 25 && !(list = options()).length; i++) await wait(160);
+      await wait(250);
+      list = options();
+      if (!list.length) { typeIn(el, ''); continue; }
+      const t = o => clean(o.textContent).toLowerCase(), s = skill.toLowerCase();
+      const best = list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => s.includes(t(o)));
+      if (!best) { pressKey(el, 'Escape'); typeIn(el, ''); continue; }
+      ownClick = true; (best.querySelector('input[type=checkbox],input[type=radio]') || best).click(); ownClick = false;
+      added++;
+      await wait(400);
+      if (options().length) pressKey(el, 'Escape');
+      if (el.isConnected && el.value) typeIn(el, '');
+      await wait(200);
+    }
+    return added > 0;
   }
   window.__jobhunt = {
     status,
