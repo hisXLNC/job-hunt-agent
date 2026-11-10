@@ -459,6 +459,7 @@ pub fn beat(agent: &Agent) {
             }
             pr.handed_to = Some(u.device_name.clone());
             *agent.presence.lock().unwrap() = pr;
+            forget_view(agent);
             let _ = agent.db().log(None, "sync", &format!("handed over to {}", u.device_name));
             agent.note(&format!("Job Hunt moved to {}", u.device_name), "Your latest data is saved for it. Close Job Hunt on this computer.");
         }
@@ -514,6 +515,59 @@ pub fn release(agent: &Agent) {
     if u.device == device(&agent.data).0 {
         let _ = place.remove(IN_USE);
     }
+}
+
+/// newer_elsewhere, as the Overview shows it (null when there's none).
+pub fn newer_value(agent: &Agent) -> Value {
+    newer_elsewhere(agent).map(|(d, i)| json!({ "folder": d, "device": i.device_name, "saved_at": i.saved_at, "jobs": i.jobs })).unwrap_or(Value::Null)
+}
+
+/// The Overview's last look at the sync folder or Google Drive: (newer copy, in use elsewhere).
+#[derive(Default)]
+pub struct View {
+    at: Option<std::time::Instant>,
+    newer: Value,
+    in_use: Value,
+    looking: bool,
+    forgotten: bool,
+}
+
+/// How long a look at the sync folder or Google Drive is used before looking again.
+const VIEW_SECS: u64 = 30;
+
+/// newer_value and presence_status for the Overview, without making it wait: they read the sync
+/// folder (often a Google Drive or OneDrive folder, slow to answer) or Google Drive itself over the
+/// internet, and the Overview is asked for every few seconds. So the last look is shown and a new
+/// one is taken in the background when it's older than 30 seconds; the first look, when Job Hunt
+/// opens, shows the page first and the notice a few seconds later. After something you did here
+/// (any change through the app: see forget_view), the next look waits, so the notice is right.
+pub fn overview_view(agent: &std::sync::Arc<Agent>) -> (Value, Value) {
+    let mut v = agent.sync_view.lock().unwrap();
+    // A look you're waiting for: after a change you made here.
+    if v.at.is_none() && v.forgotten {
+        drop(v);
+        look(agent);
+        v = agent.sync_view.lock().unwrap();
+    } else if v.at.is_none_or(|at| at.elapsed().as_secs() >= VIEW_SECS) && !v.looking {
+        v.looking = true;
+        let a = agent.clone();
+        std::thread::spawn(move || look(&a));
+    }
+    (v.newer.clone(), v.in_use.clone())
+}
+
+fn look(agent: &Agent) {
+    let (newer, in_use) = (newer_value(agent), presence_status(agent));
+    let mut v = agent.sync_view.lock().unwrap();
+    *v = View { at: Some(std::time::Instant::now()), newer, in_use, looking: false, forgotten: false };
+}
+
+/// Something changed here (a setting, continuing from another computer's copy, taking over): the
+/// Overview's next look at the sync folder waits for the answer.
+pub fn forget_view(agent: &Agent) {
+    let mut v = agent.sync_view.lock().unwrap();
+    v.at = None;
+    v.forgotten = true;
 }
 
 /// For the Overview: another computer using Job Hunt now, a take-over waiting for the other
@@ -612,6 +666,33 @@ mod tests {
         assert!(due(&a.agent));
         assert!(push(&a.agent, false).unwrap());
         assert_eq!(status(&a.agent)["every"], 60);
+    }
+
+    #[test]
+    fn the_overview_doesnt_wait_for_the_sync_folder() {
+        let drive = tempfile::tempdir().unwrap();
+        let dir = drive.path().join("Job Hunt");
+        let a = setup();
+        a.agent.db().set("backup.dir", &dir.to_string_lossy()).unwrap();
+        a.agent.db().set("sync.on", "1").unwrap();
+        a.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        push(&a.agent, false).unwrap();
+        let b = setup();
+        b.agent.db().set("backup.dir", &dir.to_string_lossy()).unwrap();
+        // The first look is taken in the background: the page is drawn first, the notice comes after.
+        assert!(overview_view(&b.agent).0.is_null());
+        let mut seen = Value::Null;
+        for _ in 0..100 {
+            seen = overview_view(&b.agent).0;
+            if !seen.is_null() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(seen["jobs"].as_u64().unwrap() >= 1, "A's copy is offered once the look is back");
+        // After a change made here (declining it), the next look waits for the answer.
+        let at = seen["saved_at"].as_str().unwrap().to_string();
+        decline(&b.agent, &at);
+        forget_view(&b.agent);
+        assert!(overview_view(&b.agent).0.is_null(), "declined: not offered again");
     }
 
     #[test]

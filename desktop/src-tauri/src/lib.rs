@@ -992,8 +992,14 @@ pub fn run() {
             let host: Arc<dyn Host> = Arc::new(TauriHost { app: app.handle().clone() });
             let agent = Arc::new(agent);
             jobhunt_core::sync::apply_after_restore(&agent);
-            // Files saved with a path from another computer, or before they moved, are found again.
-            agent.fix_file_paths();
+            // Files saved with a path from another computer, or before they moved, are found again
+            // (in the background: it reads every job, and the window shouldn't wait for it).
+            {
+                let agent = agent.clone();
+                std::thread::spawn(move || {
+                    agent.fix_file_paths();
+                });
+            }
             // A brand-new install starts with Windows, so searches and email checks carry on after a
             // restart. (Settings → App turns it off; existing installs keep their choice.)
             if agent.secret("profile").is_empty() && agent.secret("app.version").is_empty() && !cfg!(debug_assertions) {

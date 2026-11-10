@@ -423,8 +423,9 @@ function renderNav() {
   if (overview?.version) $('#versionNote').textContent = `Job Hunt ${shortVersion(overview.version)}`;
 }
 
+let overviewAt = 0;
 async function refreshOverview() {
-  try { overview = await api('/api/overview'); } catch (e) { return; }
+  try { overview = await api('/api/overview'); overviewAt = Date.now(); } catch (e) { return; }
   renderNav();
 }
 
@@ -528,7 +529,8 @@ function greeting() {
 }
 
 async function showOverview(tab) {
-  overview = await api('/api/overview');
+  // Just fetched (opening Job Hunt fetches it before drawing the page): no need to ask twice.
+  if (!overview || Date.now() - overviewAt > 1500) { overview = await api('/api/overview'); overviewAt = Date.now(); }
   renderNav();
   const o = overview, c = o.counts;
   const setup = o.setup;

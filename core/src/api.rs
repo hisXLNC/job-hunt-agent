@@ -397,6 +397,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
     let p = req.path.as_str();
     let m = req.method.as_str();
     let parts: Vec<&str> = p.trim_matches('/').split('/').collect();
+    // A change to syncing (or Google, or the folder): the Overview's next look at the sync folder waits for it.
+    if m != "GET" && ["/api/sync", "/api/settings", "/api/google", "/api/restore", "/api/backup"].iter().any(|x| p.starts_with(x)) {
+        crate::sync::forget_view(agent);
+    }
 
     if m == "GET" {
         if p == "/" || p == "/index.html" {
@@ -410,7 +414,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         match parts.as_slice() {
             ["api", "overview"] => {
-                let mut o = agent.overview()?;
+                let (newer, in_use) = crate::sync::overview_view(agent);
+                let mut o = agent.overview_with(newer, in_use)?;
                 o["version"] = json!(host.version());
                 o["side"] = agent.side_status();
                 o["title_ideas"] = json!(agent.title_ideas());

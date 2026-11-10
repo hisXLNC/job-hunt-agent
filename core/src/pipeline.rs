@@ -327,6 +327,8 @@ pub struct Agent {
     pub(crate) sync_mark: std::sync::atomic::AtomicU64,
     /// Whether this computer is the one using Job Hunt (see sync::beat).
     pub(crate) presence: Mutex<crate::sync::Presence>,
+    /// The Overview's last look at the sync folder or Google Drive (see sync::overview_view).
+    pub(crate) sync_view: Mutex<crate::sync::View>,
     /// What Claude has been used for (Settings → Accounts → Claude usage).
     pub usage: Arc<Mutex<crate::usage::Log>>,
     /// You pressed Stop: the running search ends at its next step, keeping what it has.
@@ -430,6 +432,7 @@ impl Agent {
             hold: std::sync::atomic::AtomicBool::new(false),
             sync_mark: std::sync::atomic::AtomicU64::new(u64::MAX),
             presence: Mutex::new(crate::sync::Presence::default()),
+            sync_view: Mutex::new(crate::sync::View::default()),
             usage: Arc::new(Mutex::new(crate::usage::Log::default())),
         };
         if let Ok(log) = serde_json::from_str(&agent.secret("usage.log")) {
@@ -930,12 +933,12 @@ impl Agent {
         };
         let mut n = 0;
         // The list first: the database is used again inside the loop.
-        let jobs = self.db().jobs(None, 100_000).unwrap_or_default();
-        for j in jobs {
+        let jobs = self.db().file_paths().unwrap_or_default();
+        for (id, cv_path, letter_path) in jobs {
             let mut set: Vec<(&str, Value)> = vec![];
-            if let Some(p) = j.cv_path.as_deref().and_then(here) { set.push(("cv_path", p.into())); }
-            if let Some(p) = j.letter_path.as_deref().and_then(here) { set.push(("letter_path", p.into())); }
-            if !set.is_empty() && self.db().update_job(&j.id, &set).is_ok() {
+            if let Some(p) = cv_path.as_deref().and_then(here) { set.push(("cv_path", p.into())); }
+            if let Some(p) = letter_path.as_deref().and_then(here) { set.push(("letter_path", p.into())); }
+            if !set.is_empty() && self.db().update_job(&id, &set).is_ok() {
                 n += 1;
             }
         }
@@ -6485,9 +6488,13 @@ impl Agent {
     // --- dashboard ----------------------------------------------------------------------------------
 
     pub fn overview(&self) -> R<Value> {
+        self.overview_with(crate::sync::newer_value(self), crate::sync::presence_status(self))
+    }
+
+    /// The Overview, with what the sync folder or Google Drive says given (the app passes its last
+    /// look, so the page doesn't wait on the network; see sync::overview_view).
+    pub fn overview_with(&self, newer: Value, in_use: Value) -> R<Value> {
         let profile = self.profile();
-        let newer = crate::sync::newer_elsewhere(self).map(|(d, i)| json!({ "folder": d, "device": i.device_name, "saved_at": i.saved_at, "jobs": i.jobs }));
-        let in_use = crate::sync::presence_status(self);
         let follow_ups: Vec<Value> = self.follow_ups_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
         // Companies you've applied to: for "Applied here before" on the roles in your lists.
         let mut sent_to: BTreeMap<String, Vec<Value>> = BTreeMap::new();

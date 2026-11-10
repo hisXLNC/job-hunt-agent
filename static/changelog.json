@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.34.4",
+    "date": "2026-11-10",
+    "title": "Faster to open",
+    "changes": [
+      "The Overview no longer waits on Google Drive or your sync folder: it opens straight away, and a newer copy from another computer is noticed a moment later.",
+      "Opening Job Hunt fetches the Overview once instead of twice.",
+      "The window opens without first checking where every saved CV and letter is (that now happens in the background)."
+    ]
+  },
+  {
     "version": "2.34.3",
     "date": "2026-11-10",
     "title": "Past jobs and promotions on forms",

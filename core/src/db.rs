@@ -691,6 +691,13 @@ impl Db {
         Ok(self.con.query_row("SELECT * FROM jobs WHERE id = ?1", [id], Job::from_row).optional()?)
     }
 
+    /// Every job's saved files: (id, cv_path, letter_path), without the rest of the job.
+    pub fn file_paths(&self) -> R<Vec<(String, Option<String>, Option<String>)>> {
+        let mut st = self.con.prepare("SELECT id, cv_path, letter_path FROM jobs WHERE cv_path IS NOT NULL OR letter_path IS NOT NULL")?;
+        let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
     pub fn jobs(&self, status: Option<&str>, limit: usize) -> R<Vec<Job>> {
         let mut out = vec![];
         if let Some(s) = status {

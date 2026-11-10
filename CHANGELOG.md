@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.34.4] - 2026-11-10
+
+Faster to open.
+
+### Changes
+
+- The Overview no longer waits on Google Drive or your sync folder: it opens straight away, and a newer copy from another computer is noticed a moment later.
+- Opening Job Hunt fetches the Overview once instead of twice.
+- The window opens without first checking where every saved CV and letter is (that now happens in the background).
+
 ## [2.34.3] - 2026-11-10
 
 Past jobs and promotions on forms.
@@ -1175,6 +1185,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.34.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.4
 [2.34.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.3
 [2.34.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.2
 [2.34.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.1
