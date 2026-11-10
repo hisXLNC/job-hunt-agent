@@ -149,7 +149,7 @@
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
     return question(el) || clean(el.placeholder || el.name || el.id);
   }
-  let fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
+  let attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
@@ -273,6 +273,10 @@
     if (!el) return false;
     if (f.type === 'file') {
       if (!file) return el.files && el.files.length > 0;
+      // Attached already (this time, or the page lists the file): not again. Workday empties its
+      // upload box after taking a file, so a second round would upload it twice.
+      if (attached.has(f.label + '|' + file.name) || (document.body.innerText || '').includes(file.name)) return true;
+      attached.add(f.label + '|' + file.name);
       const bytes = Uint8Array.from(atob(file.b64), c => c.charCodeAt(0));
       const dt = new DataTransfer();
       dt.items.add(new File([bytes], file.name, { type: file.mime }));
@@ -335,28 +339,44 @@
   const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].filter(o => !own(o) && shown(o) && clean(o.textContent));
   // Each skill: type it, press Enter, wait for the list of matches, choose the closest (the same
   // name, else one that starts with it or contains it, else the first), then the next.
-  async function fillSkills(el, v) {
+  async function fillSkills(first, v) {
     const want = String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean).slice(0, 12);
+    // Workday redraws the box after each skill: find it again each time (by its id, else in its field).
+    const field = first.closest('[data-automation-id^=formField]') || first.parentElement?.parentElement?.parentElement || document.body;
+    const box = () => first.isConnected ? first : (first.id && document.getElementById(first.id)) || [...field.querySelectorAll('input')].find(x => shown(x) && !own(x)) || first;
+    const sig = () => options().map(o => clean(o.textContent)).join('|');
     let added = 0;
     for (const skill of want) {
+      let el = box();
       if (skillPills(el).some(p => same(p, skill))) { added++; continue; }
+      // The last skill's list still open: close it, so its matches aren't taken for this one's.
+      if (options().length) { pressKey(el, 'Escape'); await wait(300); }
+      el = box();
+      const before = sig();
       el.focus(); el.click();
       typeIn(el, skill);
       pressKey(el, 'Enter');
+      // Wait for this skill's matches (a list that wasn't there before), up to about five seconds.
       let list = [];
-      for (let i = 0; i < 25 && !(list = options()).length; i++) await wait(160);
+      for (let i = 0; i < 32; i++) {
+        await wait(160);
+        list = options();
+        if (list.length && sig() !== before && !/^(searching|loading)/i.test(clean(list[0].textContent))) break;
+      }
       await wait(250);
       list = options();
-      if (!list.length) { typeIn(el, ''); continue; }
+      if (!list.length || sig() === before && before) { typeIn(box(), ''); continue; }
       const t = o => clean(o.textContent).toLowerCase(), s = skill.toLowerCase();
       const best = list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => s.includes(t(o)));
-      if (!best) { pressKey(el, 'Escape'); typeIn(el, ''); continue; }
+      if (!best) { pressKey(box(), 'Escape'); typeIn(box(), ''); continue; }
       ownClick = true; (best.querySelector('input[type=checkbox],input[type=radio]') || best).click(); ownClick = false;
       added++;
-      await wait(400);
-      if (options().length) pressKey(el, 'Escape');
-      if (el.isConnected && el.value) typeIn(el, '');
-      await wait(200);
+      await wait(700);
+      el = box();
+      if (options().length) { pressKey(el, 'Escape'); await wait(250); }
+      el = box();
+      if (el.value) typeIn(el, '');
+      await wait(300);
     }
     return added > 0;
   }

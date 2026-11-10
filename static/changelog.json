@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.35.4",
+    "date": "2026-11-10",
+    "title": "All your skills, and your CV once",
+    "changes": [
+      "Skills boxes: Job Hunt adds every skill, not just the first. Workday redraws the box after each one and leaves the last list of matches open; Job Hunt now finds the box again and waits for each skill's own matches.",
+      "Your CV is attached once. Workday empties its upload box after taking a file, so filling in again uploaded it a second time; now a file the page already lists isn't attached again."
+    ]
+  },
+  {
     "version": "2.35.3",
     "date": "2026-11-10",
     "title": "Extension says when it's updated",
