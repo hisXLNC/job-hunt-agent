@@ -15,8 +15,35 @@ async function ask(path, body) {
   if (!r.ok) throw new Error(v.error || `Job Hunt said ${r.status}.`);
   return v;
 }
+// Which Job Hunt wrote these files (filled in when Job Hunt writes the extension's folder). Job Hunt
+// rewrites the folder when it updates; an extension older than the app reloads itself from there,
+// once per version. Still older after that: it was loaded from another folder (an old download).
+const BUILT = '__JH_VERSION__';
+async function checkVersion() {
+  let v;
+  try { v = await ask('/ext/ping'); } catch (e) { return { ok: true }; }
+  if (!v.version || !/^\d/.test(BUILT) || v.version === BUILT) {
+    await chrome.storage.local.remove('stale');
+    return { ok: true };
+  }
+  const { reloadedFor } = await chrome.storage.local.get('reloadedFor');
+  if (reloadedFor === v.version) {
+    const stale = { version: v.version, built: BUILT, folder: v.folder || '' };
+    await chrome.storage.local.set({ stale });
+    return { stale };
+  }
+  await chrome.storage.local.set({ reloadedFor: v.version });
+  setTimeout(() => chrome.runtime.reload(), 400);
+  return { updating: v.version };
+}
+chrome.runtime.onStartup.addListener(() => { checkVersion(); });
+chrome.runtime.onInstalled.addListener(() => { checkVersion(); });
 const run = (tabId, func, args) => chrome.scripting.executeScript({ target: { tabId }, func, args });
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg.check) {
+    checkVersion().then(reply, () => reply({ ok: true }));
+    return true;
+  }
   if (msg.popup) {
     // From the popup: check the key, or what Job Hunt knows about this page.
     ask(msg.popup, msg.body).then(v => reply({ ok: true, v }), e => reply({ ok: false, error: e.message }));

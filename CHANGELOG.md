@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.34.0] - 2026-11-10
+
+Self-updating extension, progress bar, Sonnet for searching.
+
+### Changes
+
+- The browser extension now lives in a folder Job Hunt keeps up to date (Settings → App shows it, with Copy and Open the folder). Load it from there once, and it reloads itself with each new version.
+- The fill panel shows a progress bar while Claude writes your answers, with a running count of seconds, then fills to the end as the boxes are filled in.
+- Searching uses one model throughout, Sonnet unless you change it: scoring, and also reading posting pages, Indeed, salaries, job titles and company ratings, which used the general model (Opus with an API key) before.
+- Settings → Accounts shows which model does what: searching, CVs and cover letters, and everything else.
+
 ## [2.33.2] - 2026-11-06
 
 Add no longer counts as Submit.
@@ -1134,6 +1145,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.34.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.0
 [2.33.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.2
 [2.33.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.1
 [2.33.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.33.0

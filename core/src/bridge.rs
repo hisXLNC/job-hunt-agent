@@ -7,6 +7,7 @@ use crate::pipeline::Agent;
 use crate::web::{read_request, write};
 use crate::api::Resp;
 use serde_json::{json, Value};
+use regex::Regex;
 use std::net::TcpListener;
 use std::sync::Arc;
 
@@ -22,6 +23,49 @@ pub fn key(agent: &Agent) -> String {
     let k = format!("jh-{}", crate::fill::new_token());
     let _ = agent.db().set("ext.key", &k);
     k
+}
+
+/// The extension's files, as the download and the folder carry them: (name, bytes). The manifest and
+/// background.js carry this Job Hunt's version, so the extension can tell when it's out of date.
+pub fn extension_files(host: &dyn crate::api::Host, version: &str) -> crate::R<Vec<(String, Vec<u8>)>> {
+    let mut out = vec![];
+    for (name, from) in [("manifest.json", "extension/manifest.json"), ("popup.html", "extension/popup.html"), ("popup.js", "extension/popup.js"),
+        ("background.js", "extension/background.js"), ("icon-48.png", "extension/icon-48.png"), ("icon-128.png", "extension/icon-128.png"), ("clip.js", "clip.js")] {
+        let mut bytes = host.asset(from).ok_or_else(|| crate::Error(format!("The extension's {name} is missing from this copy of Job Hunt.")))?;
+        // A browser takes up to four numbers as an extension's version: "2.34.0", not "2.34.0-dev".
+        let v: String = version.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+        if name == "manifest.json" && !v.is_empty() {
+            let text = String::from_utf8_lossy(&bytes).to_string();
+            let text = Regex::new(r#""version":\s*"[^"]*""#).unwrap().replace(&text, format!("\"version\": \"{v}\"").as_str()).to_string();
+            bytes = text.into_bytes();
+        }
+        if name == "background.js" {
+            bytes = String::from_utf8_lossy(&bytes).replacen("__JH_VERSION__", version, 1).into_bytes();
+        }
+        out.push((name.to_string(), bytes));
+    }
+    // Fill this form: the Apply window's script, set up for the extension.
+    out.push(("fill.js".into(), crate::fill::extension_script().into_bytes()));
+    Ok(out)
+}
+
+/// The folder Job Hunt keeps the extension in, for Load unpacked: rewritten when Job Hunt updates,
+/// and the extension reloads itself from it.
+pub fn extension_dir(agent: &Agent) -> std::path::PathBuf {
+    agent.data.join("Send to Job Hunt")
+}
+
+/// Write the extension's files to its folder (only those that changed). Returns the folder.
+pub fn write_extension(agent: &Agent, host: &dyn crate::api::Host) -> crate::R<std::path::PathBuf> {
+    let dir = extension_dir(agent);
+    std::fs::create_dir_all(&dir)?;
+    for (name, bytes) in extension_files(host, &host.version())? {
+        let path = dir.join(&name);
+        if std::fs::read(&path).ok().as_deref() != Some(&bytes[..]) {
+            std::fs::write(&path, &bytes)?;
+        }
+    }
+    Ok(dir)
 }
 
 /// Start listening, once, in the background. Quietly does nothing when the port is taken (another
@@ -56,7 +100,9 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
     let (url, title) = (b["url"].as_str().unwrap_or(""), b["title"].as_str().unwrap_or(""));
     let fields: Vec<Value> = b["fields"].as_array().cloned().unwrap_or_default();
     let r: crate::R<Value> = match (method, path) {
-        ("GET", "/ext/ping") => Ok(json!({ "app": "Job Hunt" })),
+        // With this Job Hunt's version and the extension's folder: an extension older than the app
+        // reloads itself from the folder (background.js).
+        ("GET", "/ext/ping") => Ok(json!({ "app": "Job Hunt", "version": agent.secret("app.version"), "folder": extension_dir(agent).to_string_lossy() })),
         // Which application a page is, and its company's own posting if this is a job board's copy.
         ("POST", "/ext/which") => crate::fill::job_for_page(agent, url, title).map(|j| page_job(&j, url)),
         ("POST", "/ext/fill") => crate::fill::job_for_page(agent, url, title).and_then(|j| {

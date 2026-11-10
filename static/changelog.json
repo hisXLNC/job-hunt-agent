@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.34.0",
+    "date": "2026-11-10",
+    "title": "Self-updating extension, progress bar, Sonnet for searching",
+    "changes": [
+      "The browser extension now lives in a folder Job Hunt keeps up to date (Settings → App shows it, with Copy and Open the folder). Load it from there once, and it reloads itself with each new version.",
+      "The fill panel shows a progress bar while Claude writes your answers, with a running count of seconds, then fills to the end as the boxes are filled in.",
+      "Searching uses one model throughout, Sonnet unless you change it: scoring, and also reading posting pages, Indeed, salaries, job titles and company ratings, which used the general model (Opus with an API key) before.",
+      "Settings → Accounts shows which model does what: searching, CVs and cover letters, and everything else."
+    ]
+  },
+  {
     "version": "2.33.2",
     "date": "2026-11-06",
     "title": "Add no longer counts as Submit",

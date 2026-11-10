@@ -1007,6 +1007,15 @@ pub fn run() {
             clip_watch(agent.clone());
             // The browser extension's Fill this form talks to Job Hunt here (this computer only).
             jobhunt_core::bridge::start(agent.clone());
+            // The extension's folder, up to date with this version (it reloads itself from there).
+            {
+                let (agent, host) = (agent.clone(), host.clone());
+                std::thread::spawn(move || {
+                    if let Err(e) = jobhunt_core::bridge::write_extension(&agent, host.as_ref()) {
+                        agent.note("Couldn't update the browser extension's folder", &e.0);
+                    }
+                });
+            }
             // Job sites behind a bot check, or that list their jobs with scripts, are read in a browser.
             let reader = app.handle().clone();
             jobhunt_core::sites::set_browser(Box::new(move |url| read_in_browser(&reader, url)));

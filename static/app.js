@@ -2068,12 +2068,26 @@ function extensionCard(st) {
     <p class="muted"><b>Send to Job Hunt</b> in ${browser}: send a posting you're looking at to Job Hunt, and fill in application forms in your own browser, with your sign-ins and password manager, from your tailored CV and letter.</p>
     <label class="field" style="max-width:420px">Open links in<select data-act="browserPick">${[['', "Windows' default browser"], ['edge', 'Microsoft Edge'], ['chrome', 'Google Chrome']].map(([v, n]) => `<option value="${v}" ${(st.app.browser || '') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Postings, company sites, and Fill it in my own browser open there.</span></label>
     <ol class="small steps-list">
-      <li><a class="btn sm" href="/api/extension.zip" download>${svg('download')}Download the extension</a> and unzip it (right-click → <b>Extract All</b>). Keep the <b>Send to Job Hunt</b> folder somewhere it stays, like Documents. Updating? Replace the old folder with the new one.</li>
-      <li>In ${browser}, open <code>${page}</code>, turn on <b>Developer mode</b>${browser === 'Edge' ? ' (at the bottom of the left side)' : ' (top right)'}, press <b>Load unpacked</b> and choose the <b>Send to Job Hunt</b> folder. Updating? Press the reload arrow on its card instead.</li>
+      <li>Job Hunt keeps the extension in this folder, and updates it with each new version: <span class="copy-row" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"><code id="extDir">${esc(st.ext_folder || '')}</code><button class="btn ghost sm" data-act="copy" data-from="extDir">Copy</button><button class="btn ghost sm" data-act="folder" data-which="extension">Open the folder</button></span></li>
+      <li>In ${browser}, open <code>${page}</code>, turn on <b>Developer mode</b>${browser === 'Edge' ? ' (at the bottom of the left side)' : ' (top right)'}, press <b>Load unpacked</b> and choose that folder (paste it into the folder box). Had it from a download before? Remove that copy first, so there's only one.</li>
       <li>Pin it: the puzzle-piece icon by the address bar → the eye or pin next to <b>Send to Job Hunt</b>.</li>
       ${st.ext_key ? `<li>Click it once and paste this key, then press <b>Save the key</b>: <span class="copy-row" style="display:inline-flex;gap:6px;align-items:center"><code id="extKey2">${esc(st.ext_key)}</code><button class="btn ghost sm" data-act="copy" data-from="extKey2">Copy</button></span></li>` : ''}
     </ol>
-    <p class="muted small">Then on any application form, click it and press <b>Fill this form</b>; on a posting, <b>Send this job to Job Hunt</b>. Job Hunt needs to be running on this PC. The extension doesn't update itself: when a release note says so, download it again and replace the folder.</p></section>`;
+    <p class="muted small">Then on any application form, click it and press <b>Fill this form</b>; on a posting, <b>Send this job to Job Hunt</b>. Job Hunt needs to be running on this PC. It updates itself: after Job Hunt updates, the extension reloads with the new version when you next open it or start ${browser}. For another PC or browser profile, <a href="/api/extension.zip" download>download it</a> instead (that copy doesn't update itself).</p></section>`;
+}
+
+/** Which model does what, in a line: from the Claude settings ({engine, model, tailor_model, score_model}). */
+function modelsLine(c) {
+  const api = c.engine === 'api';
+  const name = m => {
+    const k = (m || '').trim().toLowerCase();
+    if (k === 'opus' || k === 'claude-opus-5-5') return api ? 'Opus 5.5' : 'Opus';
+    if (k === 'sonnet' || k === 'claude-sonnet-5-5') return api ? 'Sonnet 5.5' : 'Sonnet';
+    return k ? m.trim() : api ? 'Opus 5.5' : "Claude Code's default";
+  };
+  const other = name(c.model);
+  const pick = m => (m || '').trim() ? name(m) : other;
+  return `Searching and scoring: <b>${esc(pick(c.score_model))}</b> · CVs and cover letters: <b>${esc(pick(c.tailor_model))}</b> · Everything else (email, interview prep, forms): <b>${esc(other)}</b>.`;
 }
 
 /** host: the Search page's top, for its What to search and Set up sources tabs (Settings' Search and Job sources, moved there). */
@@ -2093,15 +2107,16 @@ async function showSettings(tab, sub, host) {
         <div id="ccStatus" class="small muted" style="margin-left:26px" ${st.claude.engine === 'api' ? 'hidden' : ''}><span class="spin" data-kind="check" data-secs="6"></span> Checking…</div>
         <label class="check"><input type="radio" name="engine" value="api" ${st.claude.engine === 'api' ? 'checked' : ''}> <span><b>An API key instead</b><br><span class="muted small">For people without a Claude subscription: you pay Anthropic for what you use. Create a key at <a href="#" data-act="link" data-url="https://console.anthropic.com/settings/keys">console.anthropic.com</a>.</span></span></label>
         <label class="field" id="apiKeyField" style="margin-left:26px;max-width:420px" ${st.claude.engine === 'api' ? '' : 'hidden'}>API key<input type="password" name="claude_key" autocomplete="off" placeholder="${st.claude.key ? 'Saved. Paste a new one to replace it' : 'sk-ant-…'}"></label>
-        <details ${st.claude.model || st.claude.path ? 'open' : ''}><summary class="small muted">Advanced</summary>
+        <p class="small muted" id="modelsLine">${modelsLine(st.claude)}</p>
+        <details ${st.claude.model || st.claude.path ? 'open' : ''}><summary class="small muted">Advanced: which models</summary>
         <h3 class="sub">Tailoring CVs and cover letters</h3>
         <div class="form">
           <label class="field">Model<select name="tailor_model">${[['opus', 'Opus (best writing)'], ['sonnet', 'Sonnet (faster, uses less of your plan)'], ['', 'Same as for everything else']].map(([v, n]) => `<option value="${v}" ${st.claude.tailor_model === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <label class="field">How hard Claude thinks<select name="tailor_effort">${[['low', 'Low (fastest)'], ['medium', 'Medium (recommended)'], ['high', 'High (slowest, a few minutes each)']].map(([v, n]) => `<option value="${v}" ${st.claude.tailor_effort === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         </div>
-        <h3 class="sub">Scoring postings</h3>
+        <h3 class="sub">Searching</h3>
         <div class="form">
-          <label class="field">Model<select name="score_model">${[['sonnet', 'Sonnet (recommended: nearly the same scores, much less of your plan)'], ['opus', 'Opus'], ['', 'Same as for everything else']].map(([v, n]) => `<option value="${v}" ${st.claude.score_model === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Every new posting a search finds is scored, so this is most of what Job Hunt asks of Claude.</span></label>
+          <label class="field">Model<select name="score_model">${[['sonnet', 'Sonnet (recommended: nearly the same scores, much less of your plan)'], ['opus', 'Opus'], ['', 'Same as for everything else']].map(([v, n]) => `<option value="${v}" ${st.claude.score_model === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Scoring each new posting, reading posting pages, Indeed, salaries and company ratings: most of what Job Hunt asks of Claude.</span></label>
         </div>
         <div class="form" style="margin-top:10px">
           <label class="field">Model for everything else<input type="text" name="model" value="${esc(st.claude.model)}" placeholder="Default"><span class="hint">Email sorting and the rest. Blank: Claude Code's own choice, or Opus for the API.</span></label>

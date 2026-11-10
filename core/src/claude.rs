@@ -1249,6 +1249,12 @@ impl Claude {
         }
     }
 
+    /// The model for searching: scoring postings and everything else a search asks (reading pages,
+    /// picking titles, salaries, Indeed, company ratings and pages). Sonnet unless changed.
+    fn search_model(&self) -> &str {
+        if self.score_model.trim().is_empty() { self.model.as_str() } else { self.score_model.as_str() }
+    }
+
     fn code(&self) -> R<&crate::claude_code::ClaudeCode> {
         match &self.engine {
             Engine::Code(Some(cc)) => Ok(cc),
@@ -1362,7 +1368,7 @@ impl Llm for Claude {
         // Scoring needs the role and its requirements, which come well within the first 10,000
         // characters once the boilerplate is out; it's the most frequent request, so it's kept lean.
         let user = posting_block_max(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description, 10000);
-        let model = if self.score_model.trim().is_empty() { self.model.as_str() } else { self.score_model.as_str() };
+        let model = self.search_model();
         let mut s: JobScore = self.call_as(model, &scorer_system(cvs, guidance), &user, score_schema(), "medium")?;
         s.score = s.score.clamp(0, 100);
         s.potential = s.potential.map(|p| p.clamp(s.score, 100));
@@ -1459,7 +1465,7 @@ impl Llm for Claude {
         let schema = json!({"type": "object", "additionalProperties": false, "required": ["found"],
             "properties": {"found": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["n", "salary"],
                 "properties": {"n": {"type": "integer"}, "salary": {"type": "string"}}}}}});
-        let v: Value = self.call(&salaries_system(), &user, schema, "low")?;
+        let v: Value = self.call_as(self.search_model(), &salaries_system(), &user, schema, "low")?;
         Ok(v["found"].as_array().map(|a| a.iter().filter_map(|x| {
             let n = x["n"].as_u64()? as usize;
             let s = x["salary"].as_str()?.trim().to_string();
@@ -1475,7 +1481,7 @@ impl Llm for Claude {
         let user = format!("The candidate wants: {targets}\n\n<posting>\nTitles:\n{}\n</posting>", list.join("\n"));
         let schema = json!({"type": "object", "additionalProperties": false, "required": ["keep"],
             "properties": {"keep": {"type": "array", "items": {"type": "integer"}}}});
-        let p: Picked = self.call(&pick_titles_system(), &user, schema, "low")?;
+        let p: Picked = self.call_as(self.search_model(), &pick_titles_system(), &user, schema, "low")?;
         Ok(p.keep.into_iter().filter(|i| *i < titles.len()).collect())
     }
 
@@ -1483,7 +1489,7 @@ impl Llm for Claude {
         let mut schema = found_jobs_schema();
         schema["properties"].as_object_mut().unwrap().remove("tools_available");
         schema["required"] = json!(["jobs"]);
-        let found: FoundJobs = self.call(&alert_system(), &email_block(email, 20000), schema, "low")?;
+        let found: FoundJobs = self.call_as(self.search_model(), &alert_system(), &email_block(email, 20000), schema, "low")?;
         Ok(found.jobs.into_iter().filter(|j| !j.title.trim().is_empty() && !j.company.trim().is_empty()).collect())
     }
 
@@ -1493,7 +1499,7 @@ impl Llm for Claude {
             "companies": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["company", "board", "slug"],
                 "properties": {"company": s, "board": {"type": "string", "enum": ["greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable", "bamboohr"]}, "slug": s}}}}});
         let user = format!("Kinds of role: {targets}\nPlaces: {places}");
-        let ideas: Ideas = self.call(&boards_system(), &user, schema, "low")?;
+        let ideas: Ideas = self.call_as(self.search_model(), &boards_system(), &user, schema, "low")?;
         Ok(ideas.companies)
     }
 
@@ -1675,7 +1681,7 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
         let text: String = page.chars().take(30000).collect();
         let mut schema = found_jobs_schema()["properties"]["jobs"]["items"].clone();
         schema["additionalProperties"] = json!(false);
-        self.call(&read_posting_system(), &format!("URL: {url}\n\n<posting>\n{text}\n</posting>"), schema, "low")
+        self.call_as(self.search_model(), &read_posting_system(), &format!("URL: {url}\n\n<posting>\n{text}\n</posting>"), schema, "low")
     }
 
     fn company_rating(&self, company: &str, location: &str) -> R<CompanyRating> {
@@ -1689,7 +1695,7 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
             "others": {"type": "array", "items": other},
         }));
         let v = crate::claude_code::ask(cc, &crate::claude_code::Ask {
-            system: &company_rating_system(), prompt: &format!("Company: {company}\nWhere the job is: {location}"), schema: &schema, model: &self.model,
+            system: &company_rating_system(), prompt: &format!("Company: {company}\nWhere the job is: {location}"), schema: &schema, model: &model_id(self.search_model(), false),
             effort: "low", files: &[], connectors: &[], web: true, limit: Duration::from_secs(5 * 60),
         })?;
         let mut r: CompanyRating = serde_json::from_value(v).map_err(|e| Error(format!("Claude's answer wasn't in the expected shape ({e}).")))?;
@@ -1723,7 +1729,7 @@ note says; no company name, no filler. Return them in the same order, one for ea
         let schema = json!({"type": "object", "additionalProperties": false, "required": ["found", "url"],
             "properties": {"found": {"type": "boolean"}, "url": {"type": "string"}}});
         let v = crate::claude_code::ask(cc, &crate::claude_code::Ask {
-            system: &company_apply_system(), prompt: &user, schema: &schema, model: &self.model, effort: "low", files: &[],
+            system: &company_apply_system(), prompt: &user, schema: &schema, model: &model_id(self.search_model(), false), effort: "low", files: &[],
             connectors: &[], web: true, limit: Duration::from_secs(6 * 60),
         })?;
         let url = v["url"].as_str().unwrap_or("").trim().to_string();
@@ -1752,7 +1758,7 @@ note says; no company name, no filler. Return them in the same order, one for ea
         let system = indeed_system(details);
         let run = || -> R<FoundJobs> {
             let v = crate::claude_code::ask(cc, &crate::claude_code::Ask {
-                system: &system, prompt: &prompt, schema: &schema, model: &self.model, effort: "low", files: &[],
+                system: &system, prompt: &prompt, schema: &schema, model: &model_id(self.search_model(), false), effort: "low", files: &[],
                 connectors: INDEED_TOOLS, web: false, limit: Duration::from_secs(15 * 60),
             })?;
             serde_json::from_value(v).map_err(|e| Error(format!("Claude's answer wasn't in the expected shape ({e}).")))

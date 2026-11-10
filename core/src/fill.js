@@ -25,7 +25,7 @@
   const ATS = /greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|icims\.com|jobvite\.com|bamboohr\.com|myworkdayjobs\.com|recruitee\.com|teamtailor\.com|breezy\.hr|jazzhr\.com|applytojob\.com/i;
 
   // --- the panel, in its own shadow root so the page's styles don't reach it ---
-  let retired = false, ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
+  let retired = false, barEl = null, barTimer = null, ui, statusEl, headEl, buttons = {}, amber = [], amberAt = 0, filled = false, autoTimer = null;
   // One Job Hunt per page: another copy (the extension and the window both, or two copies of the
   // extension) would press each Add button twice and fill boxes the other one moved.
   const other = () => [...document.querySelectorAll('[data-jobhunt-panel]')].some(h => h !== ui);
@@ -43,15 +43,17 @@
       .s{color:#444;margin:0 0 10px}.r{display:flex;flex-wrap:wrap;gap:6px}
       button.b{font:inherit;border:1px solid #c8c8d0;background:#f6f6f8;border-radius:8px;padding:6px 10px;cursor:pointer}
       button.b.pr{background:#2f5bd3;border-color:#2f5bd3;color:#fff}button.b[hidden]{display:none}button.b:disabled{opacity:.6;cursor:default}
-      .min .s,.min .r{display:none}
+      .bar{height:6px;background:#e6e8ef;border-radius:3px;overflow:hidden;margin:0 0 10px}.bar i{display:block;height:100%;width:0;background:#2f5bd3;transition:width .45s}
+      .min .s,.min .r,.min .bar{display:none}
     </style><div class="p"><div class="h"><span class="t">Job Hunt · ${(JOB.company || '').replace(/[<>&]/g, '')}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
-      <p class="s"></p><div class="r">
+      <p class="s"></p><div class="bar" hidden><i></i></div><div class="r">
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
         <button class="b" data-k="stop" hidden>Stop: I'll submit it</button>
         <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button>
         <button class="b" data-k="drop" title="Not for you after all (the pay, say): Job Hunt sets it aside${JOB.queue ? ' and opens the next one' : ''}">Not interested</button></div></div>`;
     statusEl = root.querySelector('.s');
+    barEl = root.querySelector('.bar');
     root.querySelectorAll('[data-k]').forEach(b => { buttons[b.dataset.k] = b; });
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
     buttons.fill.onclick = () => start();
@@ -65,6 +67,27 @@
     ui = host;
   }
   const status = t => { panel(); statusEl.textContent = t; };
+  // The progress bar: while Claude writes the answers it creeps towards `to` (most of the way by
+  // the time it usually takes), then filling in takes it to the end. null hides it.
+  const barAt = () => (barEl && !barEl.hidden && parseFloat(barEl.firstChild.style.width)) || 0;
+  function progress(p) {
+    panel();
+    if (!barEl) return;
+    clearInterval(barTimer); barTimer = null;
+    barEl.hidden = p == null;
+    if (p != null) barEl.firstChild.style.width = Math.max(0, Math.min(100, p)).toFixed(1) + '%';
+  }
+  function creep(to, seconds, text) {
+    const from = barAt(), t0 = Date.now();
+    progress(from);
+    const tick = () => {
+      const s = (Date.now() - t0) / 1000;
+      barEl.firstChild.style.width = (from + (to - from) * (1 - Math.exp(-1.6 * s / seconds))).toFixed(1) + '%';
+      status(text(Math.round(s)));
+    };
+    tick();
+    barTimer = setInterval(tick, 500);
+  }
 
   // --- reading the form ---
   const own = el => ui && ui.contains(el);
@@ -281,6 +304,7 @@
           }
         }
         if (added) {
+          progress(barAt());
           status(`Added ${added} more ${added === 1 ? 'entry' : 'entries'} for the other jobs and schools on your CV; filling in the form…`);
           await wait(600);
           start(true);
@@ -288,8 +312,12 @@
         }
       }
       amber = []; amberAt = 0;
-      let ok = 0, todo = 0;
+      let ok = 0, todo = 0, i = 0;
+      const base = barAt(), total = fields.length || 1;
+      progress(base);
+      status('Filling in the form…');
       for (const f of fields) {
+        progress(base + (100 - base) * (i++ / total));
         if (f.type === 'add') continue;
         const file = answer.files && answer.files[f.key];
         const v = answer.values && answer.values[f.key];
@@ -303,6 +331,8 @@
         if (done) ok++; else todo++;
       }
       filled = true;
+      progress(100);
+      setTimeout(() => { if (!barTimer) progress(null); }, 2500);
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
       buttons.next.hidden = !todo; buttons.applied.hidden = false;
       const saved = (answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '';
@@ -328,7 +358,7 @@
       }
     },
     start: () => start(),
-    failed(msg) { waitingSince = 0; buttons.fill.disabled = false; status(msg); },
+    failed(msg) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status(msg); },
   };
   // What stops Job Hunt submitting for you: a captcha, or a required box you haven't ticked.
   const captcha = () => !!document.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="turnstile"], .g-recaptcha, .h-captcha, [data-sitekey]');
@@ -347,12 +377,18 @@
     checkPay();
     const list = collect();
     sent = { fields, byKey, adders };
+    if (!list.length) { progress(null); status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
     // No answer in three minutes (Job Hunt closed, Claude busy): the button comes back.
     const mine = waitingSince = Date.now();
-    setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; buttons.fill.disabled = false; status('No answers came back from Job Hunt. Is it still running? Press Fill in this form to try again.'); } }, 180000);
-    if (!list.length) { status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
+    setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status('No answers came back from Job Hunt. Is it still running? Press Fill in this form to try again.'); } }, 180000);
     buttons.fill.disabled = true;
-    status(`Reading ${list.length} questions and writing answers from your CV… this takes about half a minute.`);
+    // About how long Claude takes: longer with more questions (a form with several jobs on it, say).
+    const usual = Math.round(15 + list.length * 0.4);
+    const n = list.filter(f => f.type !== 'add').length;
+    if (!more) progress(0);
+    creep(more ? 93 : 75, usual, s => more
+      ? `Writing answers for all ${n} boxes, now with every job and school on your CV… ${s}s (usually about ${usual}s).`
+      : `Reading ${n} questions and writing answers from your CV… ${s}s (usually about ${usual}s).`);
     send('fields', { url: location.href, fields: list });
   }
 

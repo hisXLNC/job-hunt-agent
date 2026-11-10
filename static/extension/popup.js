@@ -37,6 +37,15 @@ async function fill() {
     else say("That didn't connect", r ? r.error : 'Is Job Hunt running?', true);
   };
   const { key } = await chrome.storage.local.get('key');
+  // Older than Job Hunt: it reloads itself with the new files (then open it again).
+  if (key) {
+    const c = await new Promise(ok => chrome.runtime.sendMessage({ check: true }, ok));
+    if (c && c.updating) { $('acts').hidden = true; return say('Updating the extension…', `Job Hunt is on ${c.updating}; the extension reloads itself to match. Open it again in a moment.`); }
+    if (c && c.stale) {
+      $('stale').hidden = false;
+      $('stale').textContent = `This copy of the extension is older than Job Hunt (${c.stale.version}) and can't update itself. In ${navigator.userAgent.includes('Edg/') ? 'edge' : 'chrome'}://extensions, remove it, then press Load unpacked and choose ${c.stale.folder || 'the folder shown in Job Hunt: Settings → App'}. From then on it updates by itself.`;
+    }
+  }
   if (!key) { $('setup').hidden = false; $('keyline').hidden = true; say('Job Hunt', 'Send a posting to Job Hunt, or set up Fill this form with your key below.'); return; }
   // Which application this page is, and whether the company's own site has it.
   const r = await ask('/ext/which', { url: tab.url, title: tab.title });

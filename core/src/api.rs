@@ -377,6 +377,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         // The browser extension's key for Fill this form (see bridge.rs), on this computer only.
         "ext_key": ext_key,
         "ext_last": Some(get("ext.last")).filter(|x| !x.is_empty()),
+        "ext_folder": crate::bridge::extension_dir(agent).to_string_lossy(),
         "repeat_mode": repeat_mode,
         "ratings_auto": get("ratings.auto") != "0",
         "claude_desktop": {
@@ -437,15 +438,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
                 let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
                 let fail = |_| Error("Couldn't pack the extension.".into());
-                for (name, from) in [("manifest.json", "extension/manifest.json"), ("popup.html", "extension/popup.html"), ("popup.js", "extension/popup.js"),
-                    ("background.js", "extension/background.js"), ("icon-48.png", "extension/icon-48.png"), ("icon-128.png", "extension/icon-128.png"), ("clip.js", "clip.js")] {
-                    let bytes = host.asset(from).ok_or_else(|| Error(format!("The extension's {name} is missing from this copy of Job Hunt.")))?;
+                for (name, bytes) in crate::bridge::extension_files(host.as_ref(), &host.version())? {
                     zip.start_file(format!("Send to Job Hunt/{name}"), opts).map_err(fail)?;
                     zip.write_all(&bytes)?;
                 }
-                // Fill this form: the Apply window's script, set up for the extension.
-                zip.start_file("Send to Job Hunt/fill.js", opts).map_err(fail)?;
-                zip.write_all(crate::fill::extension_script().as_bytes())?;
                 let body = zip.finish().map_err(fail)?.into_inner();
                 return Ok(Resp {
                     status: 200,
@@ -1125,6 +1121,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             let dir: PathBuf = match s(&b, "which") {
                 "applications" => agent.files().join("applications"),
                 "cv" => agent.files().join("cv"),
+                "extension" => crate::bridge::write_extension(agent, host.as_ref())?,
                 _ => agent.data.clone(),
             };
             std::fs::create_dir_all(&dir)?;
@@ -2006,6 +2003,17 @@ mod tests {
         for f in [manifest["action"]["default_popup"].as_str().unwrap(), manifest["icons"]["128"].as_str().unwrap(), "popup.js", "clip.js"] {
             assert!(z.by_name(&format!("Send to Job Hunt/{f}")).is_ok(), "{f} in the extension");
         }
+        // It carries this Job Hunt's version, so it can tell when it's out of date and reload itself.
+        assert_eq!(manifest["version"], "1.0.0");
+        let mut bg = String::new();
+        std::io::Read::read_to_string(&mut z.by_name("Send to Job Hunt/background.js").unwrap(), &mut bg).unwrap();
+        assert!(bg.contains("const BUILT = '1.0.0';"), "background.js knows its version");
+        // The folder the extension is loaded from: written, and opened for you.
+        assert_eq!(call(&agent, &host, "POST", "/api/open-folder", json!({"which": "extension"})).0, 200);
+        let dir = crate::bridge::extension_dir(&agent);
+        assert!(dir.join("fill.js").exists() && dir.join("manifest.json").exists());
+        let (_, st) = call(&agent, &host, "GET", "/api/settings", Value::Null);
+        assert_eq!(st["ext_folder"].as_str(), Some(dir.to_string_lossy().as_ref()));
         let (_, a) = call(&agent, &host, "POST", "/api/jobs/test:1/approve", Value::Null);
         assert_eq!(a["outcome"], "approved");
         assert_eq!(call(&agent, &host, "POST", "/api/open-url", json!({"url": "file:///etc/passwd"})).0, 400);
