@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.35.1",
+    "date": "2026-11-10",
+    "title": "Tells you when it's updated",
+    "changes": [
+      "After Job Hunt installs an update and restarts, a green bar at the top says it was updated, to which version, and what's new since the one you had (What's new for the details, Got it to close it)."
+    ]
+  },
+  {
     "version": "2.35.0",
     "date": "2026-11-10",
     "title": "Skills on forms, and choosing the job in your browser",

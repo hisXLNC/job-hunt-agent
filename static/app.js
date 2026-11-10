@@ -2625,6 +2625,30 @@ let update = null;
 let updateBarLater = null;
 /** A bar across the top of every page while an update waits: the sidebar note is easy to miss. */
 function updateBarHtml() {
+  return updatedBarHtml() + readyBarHtml();
+}
+/** Just updated (installed and restarted onto a newer version): what changed, until you press Got it. */
+let updated = null;
+function updatedBarHtml() {
+  if (!updated) return '';
+  const titles = updated.news.map(e => e.title).filter(Boolean);
+  return `<div class="update-bar done" id="updatedBar" role="status"><span><b>✓ Job Hunt was updated to ${esc(updated.to)}.</b>${titles.length ? ` <span class="muted">${esc(titles.slice(0, 3).join(' · '))}${titles.length > 3 ? ` and ${titles.length - 3} more` : ''}</span>` : ''}</span>
+    <span class="row"><a class="btn ghost" href="#settings/app" data-act="updatedOk">What's new</a><button class="btn" data-act="updatedOk">Got it</button></span></div>`;
+}
+/** Opening Job Hunt on a newer version than this window last saw: say so, with what changed since. */
+async function noteUpdated() {
+  const now = shortVersion(overview?.version);
+  if (!now) return;
+  let seen = null;
+  try { seen = localStorage.getItem('seenVersion'); localStorage.setItem('seenVersion', now); } catch (e) { return; }
+  if (!seen || versionKey(seen) >= versionKey(now)) return;
+  let log = [];
+  try { log = (await api('/api/changelog')).log || []; } catch (e) { /* the bar still says it updated */ }
+  const news = log.map(e => ({ ...e, version: shortVersion(e.version) })).filter(e => versionKey(e.version) > versionKey(seen) && versionKey(e.version) <= versionKey(now));
+  updated = { from: seen, to: now, news };
+  if (!$('#updatedBar')) main().querySelector('.page')?.insertAdjacentHTML('afterbegin', updatedBarHtml());
+}
+function readyBarHtml() {
   if (!update?.available || updateBarLater === update.version) return '';
   return `<div class="update-bar" id="updateBar"><span><b>Job Hunt ${esc(shortVersion(update.version))} is ready.</b> <span class="muted">Your applications and settings stay as they are.</span></span>
     <span class="row"><button class="btn primary" data-act="updateInstall">Install and restart</button><a class="btn ghost" href="#settings/app">What's new</a><button class="btn ghost" data-act="updateLater">Later</button></span></div>`;
@@ -2632,7 +2656,7 @@ function updateBarHtml() {
 function showUpdate(u) {
   const bar = $('#updateBar');
   if (!u?.available || updateBarLater === u.version) bar?.remove();
-  else if (!bar) main().querySelector('.page')?.insertAdjacentHTML('afterbegin', updateBarHtml());
+  else if (!bar) main().querySelector('.page')?.insertAdjacentHTML('afterbegin', readyBarHtml());
   const note = $('#updateNote');
   if (u?.available) {
     note.innerHTML = `<b>Job Hunt ${esc(shortVersion(u.version))} is ready</b>
@@ -3244,6 +3268,7 @@ async function act(el) {
     el.disabled = true;
     try { await fn(); if (done) toast(done); } catch (e) { toast(e.message, true); } finally { el.disabled = false; }
   };
+  if (a === 'updatedOk') { updated = null; $('#updatedBar')?.remove(); if (el.getAttribute('href')) location.hash = el.getAttribute('href'); return; }
   if (a === 'updateLater') { updateBarLater = update?.version || null; $('#updateBar')?.remove(); return; }
   if (a === 'updateCheck') {
     return busy(async () => {
@@ -4383,7 +4408,7 @@ setInterval(async () => {
   if (before !== after && !editing && !pageDirty && !$('#calAddCard:not([hidden])') && (here === '' || ['#overview', '#results', '#calendar'].includes(here) || here.startsWith('#pipeline') || here.startsWith('#job/'))) route();
 }, 8000);
 
-refreshOverview().then(route);
+refreshOverview().then(route).then(noteUpdated);
 // Look for an update shortly after opening, then every 30 minutes.
 setTimeout(checkUpdate, 4000);
 setInterval(checkUpdate, 30 * 60 * 1000);
