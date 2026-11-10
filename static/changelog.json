@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.34.5",
+    "date": "2026-11-10",
+    "title": "No more system senders as recruiters",
+    "changes": [
+      "Automatic emails (like \"WorkdaySystem_DoNotReply\") are no longer taken for recruiters, and ones saved before are removed from your recruiters and job tags."
+    ]
+  },
+  {
     "version": "2.34.4",
     "date": "2026-11-10",
     "title": "Faster to open",

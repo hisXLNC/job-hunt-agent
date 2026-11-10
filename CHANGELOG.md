@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.34.5] - 2026-11-10
+
+No more system senders as recruiters.
+
+### Changes
+
+- Automatic emails (like "WorkdaySystem_DoNotReply") are no longer taken for recruiters, and ones saved before are removed from your recruiters and job tags.
+
 ## [2.34.4] - 2026-11-10
 
 Faster to open.
@@ -1185,6 +1193,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.34.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.5
 [2.34.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.4
 [2.34.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.3
 [2.34.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.2

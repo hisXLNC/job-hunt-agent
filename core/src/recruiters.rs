@@ -77,7 +77,8 @@ pub fn list(agent: &Agent) -> Vec<Recruiter> {
             return old;
         }
     }
-    rows.into_iter().filter_map(|v| serde_json::from_value(v).ok()).collect()
+    // Systems saved before Job Hunt knew them apart ("WorkdaySystem_DoNotReply") aren't recruiters.
+    rows.into_iter().filter_map(|v| serde_json::from_value::<Recruiter>(v).ok()).filter(|r| person(&r.name, &r.email)).collect()
 }
 
 fn save(agent: &Agent, list: &[Recruiter]) -> R<()> {
@@ -153,8 +154,22 @@ pub fn looks_personal(address: &str) -> bool {
         "eluta.ca", "monster.com", "google.com", "calendly.com", "zoom.us", "teams.microsoft.com", "bamboohr.com", "recruitee.com", "teamtailor-mail.com", "breezy.hr", "applytojob.com", "hirevue.com"];
     let u = user.to_lowercase();
     let d = domain.to_lowercase();
-    !ROBOT.iter().any(|r| u == *r || u.starts_with(&format!("{r}.")) || u.starts_with(&format!("{r}-")) || u.starts_with(&format!("{r}+")))
+    !automated(&u)
+        && !ROBOT.iter().any(|r| u == *r || u.starts_with(&format!("{r}.")) || u.starts_with(&format!("{r}-")) || u.starts_with(&format!("{r}+")))
         && !SYSTEMS.iter().any(|s| d == *s || d.ends_with(&format!(".{s}")))
+}
+
+/// A sender's name or address that says it's a system, not a person: "WorkdaySystem_DoNotReply",
+/// "jobs_noreply", "Acme Talent Acquisition System" (separators and case ignored).
+pub fn automated(text: &str) -> bool {
+    let t: String = text.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+    ["noreply", "donotreply", "dontreply", "notreply", "noresponse", "autoreply", "automated", "automatic", "mailerdaemon", "postmaster",
+        "bounce", "notification", "system", "workday", "applicanttracking"].iter().any(|w| t.contains(w))
+}
+
+/// Whether a sender (name and address) could be a person you can write to.
+pub fn person(name: &str, address: &str) -> bool {
+    looks_personal(address) && !automated(name)
 }
 
 /// What one sender wrote about, for Claude to judge.
@@ -170,7 +185,7 @@ struct Seen {
 
 fn merge(list: &mut Vec<Recruiter>, idea: &crate::claude::RecruiterIdea, seen: Option<&Seen>) -> bool {
     let email = idea.email.trim().to_lowercase();
-    if email.is_empty() || !email.contains('@') {
+    if email.is_empty() || !email.contains('@') || !person(&idea.name, &email) {
         return false;
     }
     let (first, last, ids, n) = seen.map(|s| (s.first.clone(), s.last.clone(), s.ids.clone(), s.ids.len() as u32)).unwrap_or_else(|| (now(), now(), vec![], 1));
@@ -216,7 +231,7 @@ pub fn scan(agent: &Agent) -> R<Value> {
         agent.step("Looking for recruiters in your email", i, total, "");
         let Ok(e) = mail.get(&id) else { continue };
         let (name, addr) = sender(&e.from);
-        if me.contains(&addr) || !looks_personal(&addr) {
+        if me.contains(&addr) || !person(&name, &addr) {
             continue;
         }
         let s = by.entry(addr).or_default();
@@ -283,7 +298,7 @@ pub fn note_email(agent: &Agent, e: &Email, t: &Triage) {
         return;
     }
     let (name, addr) = sender(&e.from);
-    if !looks_personal(&addr) || name.is_empty() {
+    if !person(&name, &addr) || name.is_empty() {
         return;
     }
     let job = t.job_id.as_deref().and_then(|id| agent.db().job(id).ok().flatten());
@@ -337,7 +352,7 @@ pub fn backfill(agent: &Agent) -> R<usize> {
             continue;
         }
         let (name, addr) = sender(&from);
-        if name.is_empty() || !looks_personal(&addr) {
+        if name.is_empty() || !person(&name, &addr) {
             continue;
         }
         let Some(job) = agent.db().job(&job_id)? else { continue };
@@ -598,6 +613,9 @@ mod tests {
         assert!(looks_personal("jane.smith@maplebank.com") && looks_personal("recruiter.jane@agency.ca"));
         assert!(!looks_personal("no-reply@greenhouse.io") && !looks_personal("careers@maplebank.com") && !looks_personal("jane@hire.lever.co"));
         assert!(!looks_personal("talent+ca@maplebank.com") && !looks_personal("notifications@myworkday.com"));
+        assert!(!person("WorkdaySystem_DoNotReply", "maplebank@myworkday.com") && !person("WorkdaySystem_DoNotReply", "workday_donotreply@maplebank.com"));
+        assert!(!looks_personal("jobs_noreply@maplebank.com") && !person("Maple Bank Talent Acquisition System", "ta@maplebank.com"));
+        assert!(person("Jane Smith", "jane.smith@maplebank.com"));
         assert_eq!(sender("\"Jane Smith\" <Jane.Smith@MapleBank.com>"), ("Jane Smith".into(), "jane.smith@maplebank.com".into()));
         assert_eq!(company_key("Maple Bank of Canada Inc."), "maple bank");
         let r = |c: &str, kind: &str, at: &str| Recruiter { email: format!("{c}@x.com"), company: c.into(), kind: kind.into(), last_at: at.into(), ..Default::default() };
