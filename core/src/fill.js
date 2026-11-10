@@ -124,7 +124,7 @@
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
     return question(el) || clean(el.placeholder || el.name || el.id);
   }
-  let fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0;
+  let fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
@@ -189,7 +189,8 @@
     for (const g of Object.values(groups)) {
       const first = g.els[0];
       if (g.type === 'checkboxes' && g.els.length === 1) {
-        const f = { key: g.key, type: 'checkbox', label: g.options[0] || labelOf(first), context: question(first), required: first.required, value: '' };
+        const f = { key: g.key, type: 'checkbox', label: (g.options[0] !== 'on' && g.options[0]) || labelOf(first), context: question(first), required: first.required, value: '', checked: first.checked };
+        const sec = sectionOf(first); if (sec) f.section = sec;
         fields.push(f); byKey[g.key] = g.els; continue;
       }
       fields.push({ key: g.key, type: g.type, label: question(first) || clean(first.name), section: sectionOf(first) || undefined, options: g.options.slice(0, 40), required: g.els.some(e => e.required), value: g.els.filter(e => e.checked).map((e, i) => g.options[g.els.indexOf(e)]).join('; ') });
@@ -257,8 +258,10 @@
       return any;
     }
     if (f.type === 'checkbox') {
-      if (/^(yes|true|checked|tick)/i.test(String(v)) && !el.checked) el.click();
-      return el.checked;
+      // "yes" ticks it; "no" unticks a box that's ticked wrongly ("I currently work here" on a past job).
+      const on = /^(yes|true|checked|tick)/i.test(String(v)), off = /^(no|false|unchecked|untick|clear)/i.test(String(v));
+      if ((on && !el.checked) || (off && el.checked)) { ownClick = true; el.click(); ownClick = false; toggled = true; }
+      return on ? el.checked : off ? !el.checked : false;
     }
     // Already has an answer (yours or the site's): kept, unless Job Hunt corrects it from your CV
     // (a site's CV reader often cuts a job title short or puts it in the wrong box).
@@ -311,7 +314,7 @@
           return;
         }
       }
-      amber = []; amberAt = 0;
+      amber = []; amberAt = 0; toggled = false;
       let ok = 0, todo = 0, i = 0;
       const base = barAt(), total = fields.length || 1;
       progress(base);
@@ -329,6 +332,14 @@
         if (!matters) continue;
         mark((byKey[f.key] || [])[0], done);
         if (done) ok++; else todo++;
+      }
+      // Unticking "I currently work here" shows that job's end date: read the form again once and
+      // fill the boxes that appeared.
+      if (toggled && reveals < 1) {
+        await wait(800);
+        const had = new Set(Object.values(byKey).flat());
+        const appeared = collect().some(f => f.type !== 'add' && f.type !== 'file' && !f.value && !(byKey[f.key] || []).some(e => had.has(e)));
+        if (appeared) { reveals++; round = Math.max(round, 1); status('Unticked "I currently work here" on past jobs; filling in their end dates…'); start(true, true); return; }
       }
       filled = true;
       progress(100);
@@ -370,8 +381,8 @@
     amberAt++;
   }
   let sent = null;
-  function start(more) {
-    if (!more) round = 0;
+  function start(more, dates) {
+    if (!more) { round = 0; reveals = 0; }
     panel();
     if (retired) return;
     checkPay();
@@ -386,7 +397,9 @@
     const usual = Math.round(15 + list.length * 0.4);
     const n = list.filter(f => f.type !== 'add').length;
     if (!more) progress(0);
-    creep(more ? 93 : 75, usual, s => more
+    creep(more ? 93 : 75, usual, s => dates
+      ? `Filling in the end dates of your past jobs… ${s}s (usually about ${usual}s).`
+      : more
       ? `Writing answers for all ${n} boxes, now with every job and school on your CV… ${s}s (usually about ${usual}s).`
       : `Reading ${n} questions and writing answers from your CV… ${s}s (usually about ${usual}s).`);
     send('fields', { url: location.href, fields: list });

@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.34.3] - 2026-11-10
+
+Past jobs and promotions on forms.
+
+### Changes
+
+- "I currently work here" is ticked only on the job you're in now; Job Hunt unticks it on past jobs (also when the site ticked it) and then fills in their end dates.
+- Promotions: each title you held at one employer goes in its own entry on the form, with its own dates and description.
+- The browser extension updates itself to this version.
+
 ## [2.34.2] - 2026-11-10
 
 Install updates from your phone.
@@ -1165,6 +1175,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.34.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.3
 [2.34.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.2
 [2.34.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.1
 [2.34.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.34.0

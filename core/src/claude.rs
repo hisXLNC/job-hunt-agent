@@ -609,7 +609,7 @@ Rules:\n\
 - Contact details (name, first and last name, email, phone, LinkedIn, website, city, address) only from the CV \
 and <facts>. Split the name for first/last name fields.\n\
 - select, radio: the value must be one of the options, copied exactly. checkboxes: matching options joined by \
-\"; \". A lone checkbox: \"yes\" to tick it, else leave it out; never tick boxes that agree to terms, privacy \
+\"; \". A lone checkbox (checked: true when it's ticked now): \"yes\" to tick it, \"no\" to untick one that's ticked wrongly, else leave it out; never tick boxes that agree to terms, privacy \
 notices, or confirm the information is true: the candidate ticks those.\n\
 - Factual questions (work authorization, sponsorship, notice period, start date, salary, years of experience, \
 willingness to relocate or travel): only from the facts and CV. If they don't say, leave the field out.\n\
@@ -622,9 +622,9 @@ candidate's voice, specific to this posting, with real figures from the CV; for 
 from the CV, entry by entry in its order. Fields with the same section are one entry: \"Work Experience 1\" is \
 the CV's most recent job, \"Work Experience 2\" the one before it, and so on (\"Education 1\" the most recent \
 school); never put two jobs in one entry or one job in two. A role at the same employer under a different title \
-is its own entry. More entries on the form than in the CV: leave the extra ones out.\n\
+is its own entry. More entries on the form than in the CV: leave the extra ones out.\n- Promotions: a CV often lists several titles under one employer. Each title is its own entry, most recent first, with the employer (and location) repeated in each, its own dates (from the date by that title; where the CV gives dates only for the employer, the first title starts on the employer's start date and the last ends on its end date, and a date you can't tell is left out) and its own lines as the description (lines written for the employer as a whole go with the most recent title).\n- \"I currently work here\" (current job, present, still employed): \"yes\" only in the entry for the role the CV shows as ongoing (to Present, Current, to date, or no end date on the most recent job); \"no\" in every other entry, including earlier titles at the candidate's current employer, even when it's ticked already. An entry with an end date never gets \"yes\".\n\
 - add (a section's \"Add another\" button; entries is how many entries the section has now): how many more \
-entries the CV needs there, in digits: work history is every role in the CV's experience, education every degree \
+entries the CV needs there, in digits: work history is every role in the CV's experience (each title counts, promotions included), education every degree \
 or school, less the entries already there. \"0\" when it has enough. Fill the entries that are there now as usual. Copy each job title and \
 employer exactly as the CV writes it, never shortened or split; a description is that role's own lines from the \
 CV.\n\

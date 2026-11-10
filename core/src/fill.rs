@@ -318,7 +318,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     // Everything else, from Claude: one line per field, without the file fields and what the bank answered.
     let lines: Vec<String> = fields.iter().filter(|f| f["type"] != "file" && !f["key"].as_str().is_some_and(|k| banked.iter().any(|b| b == k))).map(|f| {
         let mut o = json!({ "key": f["key"], "type": f["type"], "label": f["label"] });
-        for k in ["section", "entries", "options", "context", "value", "required"] {
+        for k in ["section", "entries", "options", "context", "value", "required", "checked"] {
             if f.get(k).is_some_and(|v| !v.is_null() && v != "" && v != false) {
                 o[k] = f[k].clone();
             }

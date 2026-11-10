@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.34.3",
+    "date": "2026-11-10",
+    "title": "Past jobs and promotions on forms",
+    "changes": [
+      "\"I currently work here\" is ticked only on the job you're in now; Job Hunt unticks it on past jobs (also when the site ticked it) and then fills in their end dates.",
+      "Promotions: each title you held at one employer goes in its own entry on the form, with its own dates and description.",
+      "The browser extension updates itself to this version."
+    ]
+  },
+  {
     "version": "2.34.2",
     "date": "2026-11-10",
     "title": "Install updates from your phone",
