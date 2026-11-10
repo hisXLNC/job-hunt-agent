@@ -6,12 +6,13 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.35.6] - 2026-11-10
 
-The right job on each company's site.
+The right job on each site, and a note to the recruiter.
 
 ### Changes
 
 - The extension no longer takes a job you chose on one company's site for another's: a page that names one of your approved jobs' companies (BMO's careers site, say) is that job, and a job you chose from the list counts only on the site you chose it on.
 - The extension's popup has "Not this job? Choose another" to pick the job yourself.
+- "Just applied: message the recruiter": Write a note now opens the job at People at the company, where a new Write a note to the recruiter button writes it, even when you don't know their name yet (it greets them without one). With a recruiter Job Hunt knows there, it's written to them.
 
 ## [2.35.5] - 2026-11-10
 

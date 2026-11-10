@@ -423,7 +423,7 @@ function renderNav() {
   if (overview?.version) $('#versionNote').textContent = `Job Hunt ${shortVersion(overview.version)}`;
 }
 
-let overviewAt = 0;
+let overviewAt = 0, scrollToAfter = '';
 async function refreshOverview() {
   try { overview = await api('/api/overview'); overviewAt = Date.now(); } catch (e) { return; }
   renderNav();
@@ -1009,13 +1009,16 @@ async function showJob(id) {
         <div class="row"><button class="btn ghost" data-act="copy" data-from="fuBody">Copy</button></div>`
         : `<p class="muted">${following_up ? 'Claude is writing a short, polite note asking about the timeline.' : `No reply yet? Job Hunt drafts a short follow-up ${st.profile.follow_up_after ? `${st.profile.follow_up_after} days after you apply` : 'when you ask'}.`}</p>`}
     </section>` : ''}
-    ${!['skipped', 'dismissed'].includes(j.status) ? `<section class="card">
+    ${!['skipped', 'dismissed'].includes(j.status) ? `<section class="card" id="people">
       <header><h2>People at ${esc(j.company)}</h2>${writing_to ? '<span class="muted small"><span class="spin" data-kind="outreach"></span>Writing…</span>' : ''}</header>
       <p class="muted small">A recruiter, the hiring manager or someone you know there. A short note to the right person often counts for more than a perfect CV. <a href="#" data-act="link" data-url="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(j.company + ' ' + (playbook?.kind === 'agency' ? 'recruiter' : j.title.split(/[,(-]/)[0]))}">Look on LinkedIn</a></p>
       ${playbookHtml(playbook, contacts || [], j)}
       ${(know || []).filter(p => !(contacts || []).some(c => c.name === p.name)).map(p => `<div class="qa"><div class="row" style="justify-content:space-between"><span><span class="pill good">You know them</span> <b>${esc(p.name)}</b>${p.position ? ` · ${esc(p.position)}` : ''}${p.link ? ` · <a href="#" data-act="link" data-url="${esc(p.link)}">profile</a>` : ''}</span>
         <button class="btn primary" data-act="askReferral" data-person="${esc(JSON.stringify(p))}" ${writing_to ? 'disabled' : ''}>Ask ${esc(firstName(p.name))} for a referral</button></div></div>`).join('')}
       ${(contacts || []).map((c, i) => contactHtml(c, i, writing_to, playbook)).join('')}
+      ${!(contacts || []).length && ['approved', 'applied', 'interviewing'].includes(j.status) ? `<div class="qa"><div class="row" style="justify-content:space-between;align-items:center">
+        <span class="small">${recruiter ? `You know <b>${esc(recruiter.name)}</b>, a recruiter there.` : 'No name yet? Job Hunt writes a short note to the recruiter you can send on LinkedIn or by email. Add a name below to make it personal.'}</span>
+        <button class="btn primary" data-act="noteRecruiter" data-name="${esc(recruiter?.name || '')}" data-email="${esc(recruiter?.email || '')}" ${writing_to ? 'disabled' : ''}>Write a note to ${recruiter ? esc(firstName(recruiter.name)) : 'the recruiter'}</button></div></div>` : ''}
       <div class="row contact-add"><input type="text" id="cName" placeholder="Name"><input type="text" id="cRole" placeholder="Role (e.g. hiring manager)"><input type="text" id="cEmail" placeholder="Email or LinkedIn link (optional)">
         <button class="btn" data-act="addContact">Add</button></div>
     </section>` : ''}    ${offer || advising || j.status === 'offer' ? `<section class="card prep">
@@ -1072,6 +1075,8 @@ async function showJob(id) {
   // Just changed the letter: show it, with the changed paragraphs marked.
   if (revision?.what === 'letter') { document.querySelector('#pvTabs [data-pv=letter]')?.click(); markRevision(revision); }
   main().dataset.contacts = JSON.stringify(contacts || []);
+  // Opened for one part of the page (Write a note → People at the company): go there.
+  if (scrollToAfter) { const at = document.getElementById(scrollToAfter); scrollToAfter = ''; if (at) setTimeout(() => at.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
   if (tailoring || preparing || revising || following_up || answering || advising || writing_to || thanking || chatting) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
 }
 
@@ -1244,7 +1249,7 @@ function stepHtml(o, step, tracked) {
     o.quiet.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}, no reply`,
       `<button class="btn sm" data-act="stage" data-status="no_response" data-job="${id(j)}" data-from="applied">No response</button>`)).join('')]);
   if (o.reach_out?.length) groups.push(['Just applied: message the recruiter', o.reach_out.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}. A short note within 1 to 3 days helps`,
-    `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="apply">Write a note</a>`)).join('')]);
+    `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="apply" data-scroll="people">Write a note</a>`)).join('')]);
   if (o.contact_follow_ups?.length) groups.push(['No reply from the recruiter: follow up once', o.contact_follow_ups.slice(0, 6).map(f => row(f.job, `messaged ${esc(f.name)} ${esc(ago(f.sent_at))}${f.late ? '. Follow up now or let it go' : ''}`,
     `<a class="btn sm" href="#job/${encodeURIComponent(f.job.id)}" data-tab-to="apply">Write the follow-up</a>`)).join('')]);
   if (o.follow_ups?.length) groups.push(['No reply yet: follow up', o.follow_ups.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
@@ -3633,6 +3638,17 @@ async function act(el) {
   if (a === 'outreach') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/outreach`, { method: 'POST', body: { index: Number(el.dataset.i) } }); setTimeout(route, 300); }, 'Writing the message…');
   }
+  // A note to the recruiter, with no name needed: added as a contact, then written.
+  if (a === 'noteRecruiter') {
+    const list = JSON.parse(main().dataset.contacts || '[]');
+    const name = el.dataset.name;
+    list.push({ name: name || 'Recruiter', role: 'Recruiter', email: el.dataset.email || '', link: '', note: name ? '' : 'Name not known yet: greet them without a name ("Hello,"), never "Dear Recruiter".' });
+    return busy(async () => {
+      await api(`/api/jobs/${encodeURIComponent(jobId)}/contacts`, { method: 'POST', body: { contacts: list } });
+      await api(`/api/jobs/${encodeURIComponent(jobId)}/outreach`, { method: 'POST', body: { index: list.length - 1 } });
+      setTimeout(route, 300);
+    }, 'Writing the note…');
+  }
   if (a === 'addContact' || a === 'removeContact') {
     const list = JSON.parse(main().dataset.contacts || '[]');
     if (a === 'addContact') {
@@ -4163,6 +4179,7 @@ document.addEventListener('click', e => {
   document.querySelectorAll('details.menu[open]').forEach(m => { if (!m.contains(e.target) || e.target.closest('.menu-list')) m.open = false; });
   const to = e.target.closest('a[data-tab-to]');
   if (to) jobTabs[decodeURIComponent(to.getAttribute('href').replace('#job/', ''))] = to.dataset.tabTo;
+  if (to && to.dataset.scroll) scrollToAfter = to.dataset.scroll;
   const el = e.target.closest('[data-act]');
   if (el && el.tagName !== 'INPUT' && el.tagName !== 'SELECT') { e.preventDefault(); act(el); return; }
   const row = e.target.closest('tr[data-href]');
