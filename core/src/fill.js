@@ -179,7 +179,14 @@
       if (own(b) || !shown(b)) continue;
       const t = clean(b.textContent || b.getAttribute('aria-label') || '');
       if (!t || t.length > 40 || !ADD.test(t) || NOT_ADD.test(t)) continue;
-      const sec = sectionOf(b);
+      // Its section: the nearest heading before it that names one (a heading inside the entry, say
+      // a date picker's, doesn't count), or what the button says ("Add Another Work Experience").
+      let sec = sectionOf(b);
+      const aria = clean(b.getAttribute('aria-label') || '');
+      if (!HISTORY.test(sec + ' ' + t)) {
+        const before = heads.filter(h => h.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).map(h => textOf(h).slice(0, 80));
+        sec = [...before].reverse().find(x => HISTORY.test(x)) || (HISTORY.test(aria) ? aria.replace(ADD, '').replace(/^\s*another\s*/i, '') : '');
+      }
       if (!sec || !HISTORY.test(sec + ' ' + t)) continue;
       const base = sec.replace(/\s*\d+\s*$/, '');
       if (seen.has(base.toLowerCase())) continue;
@@ -533,6 +540,9 @@
     const box = () => first.isConnected ? first : (first.id && document.getElementById(first.id)) || [...field.querySelectorAll('input')].find(x => shown(x) && !own(x)) || first;
     const sig = () => options().map(o => clean(o.textContent)).join('|');
     let added = 0;
+    // Real clicks: turn them on first. The browser's "debugging" bar moves the page down when it
+    // appears, so a click aimed before it showed lands too high.
+    if (EXT) await new Promise(res => { const t = setTimeout(res, 3000); try { chrome.runtime.sendMessage({ jobhunt: 'debug', data: {} }, () => { void chrome.runtime.lastError; clearTimeout(t); setTimeout(res, 600); }); } catch (e) { clearTimeout(t); res(); } });
     for (const skill of want) {
       let el = box();
       if (skillPills(el).some(p => same(p, skill))) { added++; continue; }

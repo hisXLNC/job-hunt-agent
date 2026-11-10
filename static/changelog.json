@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.35.13",
+    "date": "2026-11-10",
+    "title": "Every job added on Workday, skills clicked where they are",
+    "changes": [
+      "Work Experience: Job Hunt didn't see Workday's Add Another button for jobs when a heading sat inside the job entry, so it never pressed it. It now finds the button by the nearest heading that names the section (or the button's own label).",
+      "Skills: the browser's \"started debugging\" bar pushes the page down when it appears, so a click aimed before it showed landed above the skill. The bar now comes on before the first skill and stays until the skills are done, and each click is aimed after it.",
+      "Education dates: a school's years in your application facts (\"American University of Kuwait: 2005 – 2009\") go in From and To, even when the CV gives only the year you finished."
+    ]
+  },
+  {
     "version": "2.35.12",
     "date": "2026-11-10",
     "title": "Workday skills selected with real clicks, jobs added from your CV",

@@ -63,17 +63,22 @@ const fill = (tabId, data) =>
 // Real clicks for the page (Workday's skill list takes no other): through Chrome's debugger, the
 // one way an extension can click as you would. Let go a few seconds after the last click.
 const debugging = new Map();
-async function realClick(tabId, x, y) {
+async function debugOn(tabId) {
   const t = { tabId };
   if (!debugging.has(tabId)) { await chrome.debugger.attach(t, '1.3'); debugging.set(tabId, 0); }
   clearTimeout(debugging.get(tabId));
+  // Kept on while the skills are chosen (a skill's search takes seconds): off a while after the last.
+  debugging.set(tabId, setTimeout(() => { debugging.delete(tabId); chrome.debugger.detach(t).catch(() => {}); }, 45000));
+}
+async function realClick(tabId, x, y) {
+  const t = { tabId };
+  await debugOn(tabId);
   // The page's position is in its own pixels; the browser's zoom (90%, 110%…) scales them.
   const zoom = await chrome.tabs.getZoom(tabId).catch(() => 1);
   x *= zoom; y *= zoom;
   for (const [type, button] of [['mouseMoved', 'none'], ['mousePressed', 'left'], ['mouseReleased', 'left']]) {
     await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', { type, x, y, button, clickCount: type === 'mouseMoved' ? 0 : 1 });
   }
-  debugging.set(tabId, setTimeout(() => { debugging.delete(tabId); chrome.debugger.detach(t).catch(() => {}); }, 6000));
 }
 chrome.debugger.onDetach.addListener(s => { if (s.tabId) debugging.delete(s.tabId); });
 const run = (tabId, func, args) => chrome.scripting.executeScript({ target: { tabId }, func, args });
@@ -90,6 +95,10 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   const tabId = sender.tab && sender.tab.id;
   if (!msg.jobhunt || !tabId) return;
   const { jobhunt: kind, data } = msg;
+  if (kind === 'debug') {
+    debugOn(tabId).then(() => reply({ ok: true }), e => reply({ ok: false, error: String(e && e.message || e) }));
+    return true;
+  }
   if (kind === 'click') {
     realClick(tabId, data.x, data.y).then(() => reply({ ok: true }), e => reply({ ok: false, error: String(e && e.message || e) }));
     return true;

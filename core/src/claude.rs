@@ -664,8 +664,9 @@ reading, speaking and writing unless they say otherwise; \"I am fluent\" ticked 
 language, \"no\" for one learned only a little (a beginner). Fill the entries that are there now as usual. Copy each job title and \
 employer exactly as the CV writes it, never shortened or split; a description is that role's own lines from the \
 CV.\n\
-- Dates in an entry: From and To come from the CV's dates for that job or school. A school with one year in the \
-CV is the year it ended (To); leave From out then, never the same year in both. GPA and grades only as the CV or \
+- Dates in an entry: From and To come from the facts when they give them (\"American University of Kuwait: 2005 \u{2013} \
+2009\": From 2005, To 2009), else from the CV's dates for that job or school. A school with one year in the \
+CV and none in the facts is the year it ended (To); leave From out then, never the same year in both. GPA and grades only as the CV or \
 facts give them.\n\
 - skills (a box that adds one skill at a time): 6-10 skills the CV shows that matter most for this posting, \
 most important first, joined by \"; \". Use the short, common name a list of skills would have (\"Project \

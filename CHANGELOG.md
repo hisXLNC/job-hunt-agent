@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.35.13] - 2026-11-10
+
+Every job added on Workday, skills clicked where they are.
+
+### Changes
+
+- Work Experience: Job Hunt didn't see Workday's Add Another button for jobs when a heading sat inside the job entry, so it never pressed it. It now finds the button by the nearest heading that names the section (or the button's own label).
+- Skills: the browser's "started debugging" bar pushes the page down when it appears, so a click aimed before it showed landed above the skill. The bar now comes on before the first skill and stays until the skills are done, and each click is aimed after it.
+- Education dates: a school's years in your application facts ("American University of Kuwait: 2005 – 2009") go in From and To, even when the CV gives only the year you finished.
+
 ## [2.35.12] - 2026-11-10
 
 Workday skills selected with real clicks, jobs added from your CV.
@@ -1322,6 +1332,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.35.13]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.13
 [2.35.12]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.12
 [2.35.11]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.11
 [2.35.10]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.10

@@ -392,7 +392,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let auto = auto_submit_on(agent) && AUTO_FORMS.iter().any(|h| host.ends_with(h)) && !required_open && !long_written;
     // For the panel: how many jobs the CV has (it says so when it added none), and which Job Hunt
     // answered (an extension older than it says to reload).
-    let roles = if work_add { cv_roles(&cv_text).max(roles_listed) } else { 0 };
+    let roles = cv_roles(&cv_text).max(roles_listed);
     Ok(json!({ "values": values, "files": files, "banked": banked, "auto": auto, "roles": roles, "app_version": agent.secret("app.version") }))
 }
 
