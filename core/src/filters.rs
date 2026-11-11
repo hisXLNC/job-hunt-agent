@@ -55,9 +55,15 @@ pub fn prefilter(p: &Posting, profile: &Profile) -> Option<String> {
         return Some(why);
     }
 
-    if let (Some(min), Some(max)) = (profile.min_salary, p.salary_max) {
-        if max < min {
-            return Some(format!("salary up to {max:.0}, below your minimum"));
+    // The most it pays: the source's figure, else its salary text or its own description (hourly
+    // rates as a year of 2,080 hours), so a low-paid job isn't scored just because the job site
+    // didn't fill in the salary field.
+    if let Some(min) = profile.min_salary {
+        let max = p.salary_max
+            .or_else(|| p.salary.as_deref().and_then(crate::sources::pay_max_in))
+            .or_else(|| crate::sources::pay_max_in(&p.description.chars().take(20000).collect::<String>()));
+        if let Some(max) = max.filter(|m| *m < min) {
+            return Some(format!("salary up to {max:.0} a year, below your minimum of {min:.0}"));
         }
     }
 

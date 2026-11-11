@@ -8168,16 +8168,16 @@ mod tests {
         let mut p = s.agent.profile();
         p.min_salary = Some(100000.0);
         s.agent.save_profile(&p).unwrap();
-        // The patterns miss pay written in words; Claude reads it while scoring.
+        // Pay in the description below your minimum: set aside before scoring, without Claude (it
+        // used to be scored, and set aside only once Claude had read the pay).
         let mut low = posting("Technical Program Manager", "1");
         low.description.push_str("\nSalary note: $80K~$90K a year");
         let mut fine = posting("Senior Program Manager", "2");
         fine.description.push_str("\nSalary note: $110K~$130K a year");
         s.agent.search(Some(vec![low, fine])).unwrap();
         let j1 = s.agent.db().job("test:1").unwrap().unwrap();
-        assert_eq!(j1.salary.as_deref(), Some("$80,000–$90,000"));
-        assert_eq!(j1.status, "skipped", "below your minimum: set aside, as the filter would");
-        assert!(j1.red_flags[0].starts_with("Pays up to $90,000, below your minimum of $100,000"), "{:?}", j1.red_flags);
+        assert_eq!(j1.status, "skipped", "below your minimum: set aside before scoring");
+        assert_eq!(j1.score, None, "not scored: no Claude usage on it");
         assert_ne!(s.agent.db().job("test:2").unwrap().unwrap().status, "skipped", "above your minimum: kept");
         // Found later (the company's own posting, the Apply window) for a job you approved: flagged, and you're told.
         let mut third = posting("Delivery Manager", "3");

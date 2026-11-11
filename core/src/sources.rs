@@ -264,6 +264,37 @@ pub fn salary_max_of(text: &str) -> Option<f64> {
     Some(hi)
 }
 
+/// The most a posting pays in a year, from wherever it says so: a salary as shown or the
+/// description's own pay line ("The salary range for this role is $95,000 - $115,000",
+/// "$45–$55 per hour" counted as 2,080 hours a year). None when it doesn't say, or says only "from".
+pub fn pay_max_in(text: &str) -> Option<f64> {
+    static PAY: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(?:CA\$|C\$|CAD\s*\$?|US\$|USD\s*\$?|\$)\s?\d[\d,]*(?:\.\d+)?\s?[kK]?(?:\s*(?:-|\u{2013}|\u{2014}|to|and)\s*(?:CA\$|C\$|CAD\s*\$?|US\$|USD\s*\$?|\$)?\s?\d[\d,]*(?:\.\d+)?\s?[kK]?)?").unwrap());
+    static HOURLY: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*(?:/\s*h(?:ou)?r|per\s+hour|an\s+hour|hourly|/\s*hour|\s*hr\b)").unwrap());
+    static NUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d[\d,]*(?:\.\d+)?").unwrap());
+    for m in PAY.find_iter(text) {
+        let after: String = text[m.end()..].chars().take(20).collect();
+        let before: String = text[..m.start()].chars().rev().take(40).collect::<String>().chars().rev().collect::<String>().to_lowercase();
+        if HOURLY.is_match(&after) || before.contains("hourly") {
+            let top = NUM.find_iter(m.as_str()).filter_map(|n| n.as_str().replace(',', "").parse::<f64>().ok()).filter(|v| (10.0..=500.0).contains(v)).fold(None, |a: Option<f64>, v| Some(a.map_or(v, |a| a.max(v))));
+            if let Some(h) = top {
+                return Some(h * 2080.0);
+            }
+            continue;
+        }
+        // A bonus, a budget or revenue isn't the pay: only amounts a salary could be.
+        let near = format!("{} {}", before.chars().rev().take(15).collect::<String>().chars().rev().collect::<String>(), after.to_lowercase());
+        if ["bonus", "revenue", "budget", "million", "portfolio", "spend", "funding", "contract", "savings"].iter().any(|w| near.contains(w)) {
+            continue;
+        }
+        // With the words just before it: "From $90,000" is where pay starts, not the most it pays.
+        let short: String = before.chars().rev().take(15).collect::<String>().chars().rev().collect();
+        if let Some(v) = salary_max_of(&format!("{short}{}{}", m.as_str(), after)) {
+            return Some(v);
+        }
+    }
+    None
+}
+
 /// A yearly pay range from a salary as shown ("$110,000–$135,000", "CAD 120K–150K", "$95,000"),
 /// or None for hourly rates and text without a yearly amount.
 pub fn salary_range(text: &str) -> Option<(f64, f64)> {
@@ -2382,6 +2413,12 @@ https://www.linkedin.com/comm/jobs/view/4012345678/ (again)\nhttps://www.linkedi
         assert_eq!(salary_range("120,000–140,000"), Some((120000.0, 140000.0)));
         assert_eq!(salary_range("$95,000"), Some((95000.0, 95000.0)));
         assert_eq!(salary_range("$45–$55/hour"), None);
+        // The most a posting pays, from its own words.
+        assert_eq!(pay_max_in("The base salary range for this role is $95,000 - $115,000 per year."), Some(115000.0));
+        assert_eq!(pay_max_in("Pay: $45–$55 per hour"), Some(55.0 * 2080.0));
+        assert_eq!(pay_max_in("Manage a $2,000,000 budget. Salary: CAD 120K–150K"), Some(150000.0));
+        assert_eq!(pay_max_in("Starting at $90,000"), None);
+        assert_eq!(pay_max_in("Competitive pay and benefits"), None);
         assert_eq!(salary_range("Competitive"), None);
     }
 
