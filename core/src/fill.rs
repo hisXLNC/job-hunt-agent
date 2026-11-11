@@ -475,6 +475,133 @@ pub fn cv_roles(cv: &str) -> usize {
     n.max(loose)
 }
 
+/// Everything a form asks for, ready to copy one piece at a time (for when filling in doesn't work):
+/// your contact details, the facts you keep for forms, each job and school on the CV this application
+/// uses (title, employer, dates as written and as MM/YYYY, its lines), skills, languages and the
+/// cover letter.
+pub fn kit(agent: &Agent, job_id: &str) -> R<Value> {
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+    let job = agent.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+    let profile = agent.profile();
+    let cv_text = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
+        .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&agent.cv_path(&t.name)).ok()))
+        .map(|d| d.plain_text())
+        .unwrap_or_default();
+    static PHONE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\+?\d[\d\s().-]{7,}\d").unwrap());
+    static EMAIL: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\w.+-]+@[\w-]+\.[\w.-]+").unwrap());
+    static LINKEDIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(?:https?://)?(?:[a-z]{2,3}\.)?linkedin\.com/in/[\w%-]+/?").unwrap());
+    static WEB: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(?:https?://)?(?:github\.com/[\w-]+|[\w-]+\.(?:dev|io|me|com|ca)/?[\w/-]*)").unwrap());
+    let head: String = cv_text.lines().take(10).collect::<Vec<_>>().join("\n");
+    let first_name_line = cv_text.lines().next().unwrap_or("").trim().to_string();
+    let name = if profile.name.trim().is_empty() { first_name_line } else { profile.name.trim().to_string() };
+    let (given, family) = name.rsplit_once(' ').map(|(a, b)| (a.to_string(), b.to_string())).unwrap_or((name.clone(), String::new()));
+    let email = if profile.email.trim().is_empty() { EMAIL.find(&head).map(|m| m.as_str().to_string()).unwrap_or_default() } else { profile.email.trim().to_string() };
+    let linkedin = LINKEDIN.find(&cv_text).map(|m| {
+        let l = m.as_str().trim_end_matches('/');
+        if l.starts_with("http") { l.to_string() } else if l.starts_with("linkedin") { format!("https://www.{l}") } else { format!("https://{l}") }
+    }).unwrap_or_default();
+    let phone = PHONE.find(&head.replace(&email, "")).map(|m| m.as_str().trim().to_string()).unwrap_or_default();
+    let website = WEB.find_iter(&head).map(|m| m.as_str().to_string()).find(|w| !w.contains('@') && !w.to_lowercase().contains("linkedin") && !email.ends_with(w.as_str())).unwrap_or_default();
+    let mut contact = vec![];
+    for (k, v) in [("Full name", name.clone()), ("First name", given), ("Last name", family), ("Email", email), ("Phone", phone), ("LinkedIn", linkedin), ("Website", website)] {
+        if !v.trim().is_empty() {
+            contact.push(json!({ "label": k, "value": v }));
+        }
+    }
+    // Your facts for forms: "Notice period: one month" as a label and its answer.
+    let facts: Vec<Value> = profile.application_facts.lines().map(str::trim).filter(|l| !l.is_empty()).map(|l| match l.split_once(':') {
+        Some((k, v)) if k.len() < 60 && !v.trim().is_empty() => json!({ "label": k.trim(), "value": v.trim() }),
+        _ => json!({ "label": "", "value": l }),
+    }).collect();
+    let (jobs, schools, skills) = cv_sections(&cv_text);
+    Ok(json!({
+        "contact": contact, "facts": facts, "jobs": jobs, "schools": schools, "skills": skills,
+        "languages": cv_languages(&format!("{cv_text}\n{}", profile.application_facts)),
+        "letter": job.cover_letter.clone().unwrap_or_default(), "cv": cv_text,
+        "answers": agent.answers(job_id),
+    }))
+}
+
+/// The CV's jobs and schools as entries (each starts at a line with a date range; the short line just
+/// before it, a title or employer, goes with it), and its skills section.
+fn cv_sections(cv: &str) -> (Vec<Value>, Vec<Value>, String) {
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+    static RANGE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)((?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+)?(?:\d{1,2}/)?(?:19|20)\d{2})\s*(?:\u{2013}|\u{2014}|-|to|until)\s*((?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+)?(?:\d{1,2}/)?(?:19|20)\d{2}|present|current|now|to date|date|ongoing)").unwrap());
+    static YEAR: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(?:19|20)\d{2}\b").unwrap());
+    static HEAD: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^[\s#*_|]*([a-z &/]{3,40}?)\s*:?\s*$").unwrap());
+    let section_of = |line: &str| -> Option<&'static str> {
+        let c = HEAD.captures(line)?;
+        let h = c[1].to_lowercase();
+        if h.split_whitespace().count() > 4 { return None; }
+        if ["experience", "employment", "work history", "career history", "professional background"].iter().any(|w| h.contains(w)) { Some("work") }
+        else if ["education", "academic", "qualification"].iter().any(|w| h.contains(w)) { Some("school") }
+        else if h.contains("skill") || h.contains("competenc") || h.contains("expertise") { Some("skills") }
+        else if ["certific", "language", "award", "volunteer", "reference", "interest", "summary", "profile", "training", "publication", "membership", "project"].iter().any(|w| h.contains(w)) { Some("other") }
+        else { None }
+    };
+    // "Jul 2023" / "07/2023" / "2023" / "Present" as MM/YYYY ("" for present).
+    let mmyyyy = |d: &str| -> String {
+        let l = d.to_lowercase();
+        let Some(y) = YEAR.find(&l).map(|m| m.as_str().to_string()) else { return String::new() };
+        const M: [&str; 12] = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+        if let Some(i) = M.iter().position(|m| l.contains(m)) { return format!("{:02}/{y}", i + 1); }
+        if let Some((m, _)) = l.split_once('/') { if let Ok(n) = m.trim().parse::<u32>() { if (1..=12).contains(&n) { return format!("{n:02}/{y}"); } } }
+        y
+    };
+    let (mut part, mut jobs, mut schools, mut skills) = ("", vec![], vec![], String::new());
+    let mut cur: Option<(String, String, String, Vec<String>)> = None; // (header, from, to, lines)
+    let mut loose: Vec<String> = vec![];
+    let flush = |cur: &mut Option<(String, String, String, Vec<String>)>, part: &str, jobs: &mut Vec<Value>, schools: &mut Vec<Value>| {
+        if let Some((h, from, to, lines)) = cur.take() {
+            let cut = |x: &str| x.trim_matches(|c: char| c.is_whitespace() || "|,\u{2013}\u{2014}-\u{b7}\u{2022}".contains(c)).to_string();
+            let mut bits: Vec<String> = h.split(['|', '\t', '\u{b7}', '\u{2022}']).flat_map(|b| b.split(" \u{2013} ").map(str::to_string).collect::<Vec<_>>()).map(|b| cut(&b)).filter(|b| !b.is_empty()).collect();
+            if bits.is_empty() { bits.push(cut(&h)); }
+            let v = json!({ "heading": cut(&h.replace('\t', " \u{b7} ")), "parts": bits, "from": from.trim(), "to": to.trim(), "from_mm": mmyyyy(&from), "to_mm": mmyyyy(&to), "description": lines.join("\n") });
+            if part == "school" { schools.push(v) } else { jobs.push(v) }
+        }
+    };
+    for raw in cv.lines() {
+        let line = raw.trim();
+        if line.is_empty() { continue; }
+        if let Some(sec) = section_of(line) {
+            flush(&mut cur, part, &mut jobs, &mut schools);
+            part = sec;
+            loose.clear();
+            continue;
+        }
+        match part {
+            "skills" => { if !skills.is_empty() { skills.push('\n'); } skills.push_str(line); }
+            "work" | "school" => {
+                if let Some(c) = RANGE.captures(line) {
+                    // The line before (a title or employer on its own line) belongs to this entry.
+                    let mut header = String::new();
+                    if let Some((_, _, _, lines)) = cur.as_mut() {
+                        if let Some(last) = lines.last() { if last.chars().count() < 70 && !last.ends_with('.') { header = lines.pop().unwrap_or_default(); } }
+                    } else if let Some(last) = loose.pop() { header = last; }
+                    flush(&mut cur, part, &mut jobs, &mut schools);
+                    let rest = RANGE.replace(line, "").to_string();
+                    let rest = rest.trim().trim_matches(|c: char| "|,()\u{2013}\u{2014}-".contains(c) || c.is_whitespace()).to_string();
+                    let h = [header, rest].into_iter().filter(|x| !x.trim().is_empty()).collect::<Vec<_>>().join(" | ");
+                    cur = Some((h, c[1].to_string(), c[2].to_string(), vec![]));
+                } else if let Some((_, _, _, lines)) = cur.as_mut() {
+                    lines.push(line.to_string());
+                } else {
+                    loose.push(line.to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    flush(&mut cur, part, &mut jobs, &mut schools);
+    // A school with one year and no range: its lines as one entry each.
+    if schools.is_empty() && !loose.is_empty() && part == "school" {
+        for l in &loose { schools.push(json!({ "heading": l, "parts": [l], "from": "", "to": "", "from_mm": "", "to_mm": YEAR.find(l).map(|m| m.as_str()).unwrap_or(""), "description": "" })); }
+    }
+    (jobs, schools, skills)
+}
+
 /// The languages a CV names (English, Arabic, French…), each once.
 pub fn cv_languages(cv: &str) -> Vec<&'static str> {
     const ALL: &[&str] = &["English", "French", "Arabic", "Spanish", "Portuguese", "German", "Italian", "Dutch", "Russian", "Ukrainian", "Polish", "Turkish", "Persian", "Farsi", "Urdu", "Hindi", "Punjabi", "Bengali", "Gujarati", "Tamil", "Telugu", "Marathi", "Malayalam", "Kannada", "Mandarin", "Cantonese", "Chinese", "Japanese", "Korean", "Vietnamese", "Thai", "Indonesian", "Malay", "Tagalog", "Filipino", "Greek", "Hebrew", "Swahili", "Somali", "Amharic", "Romanian", "Hungarian", "Czech", "Slovak", "Serbian", "Croatian", "Bosnian", "Bulgarian", "Swedish", "Norwegian", "Danish", "Finnish", "Kurdish", "Pashto", "Dari", "Armenian", "Albanian", "Tigrinya", "Yoruba", "Igbo", "Hausa", "Sinhala", "Nepali"];
@@ -571,6 +698,20 @@ mod tests {
         assert_eq!(file_for("Attach", true), Some("cv"));
         let s = script(&tok, "Tax Manager", "Acme <b>");
         assert!(s.contains(&tok) && s.contains(r#""company":"Acme <b>""#) && !s.contains("__TOKEN__"));
+    }
+
+    #[test]
+    fn kit_splits_the_cv_into_jobs_and_schools() {
+        let cv = "Jane Candidate\n+1 416 555 0100 | jane@x.com | linkedin.com/in/jane-c\nPROFESSIONAL EXPERIENCE\nMinistry of Finance, Kuwait\nFinancial Specialist\tJul 2023 \u{2013} Present\nDelivered the tax registration service in eight months.\nLed a team of four.\nAnalyst | Acme | 2019 - 2023\nBuilt reports.\nEDUCATION\nBSc Finance, American University of Kuwait | 2005 \u{2013} 2009\nSKILLS\nProgram governance; Power BI\n";
+        let (jobs, schools, skills) = cv_sections(cv);
+        assert_eq!(jobs.len(), 2);
+        assert_eq!(jobs[0]["heading"], "Ministry of Finance, Kuwait | Financial Specialist");
+        assert_eq!((jobs[0]["from_mm"].as_str(), jobs[0]["to_mm"].as_str()), (Some("07/2023"), Some("")));
+        assert!(jobs[0]["description"].as_str().unwrap().contains("team of four"));
+        assert_eq!((jobs[1]["from_mm"].as_str(), jobs[1]["to_mm"].as_str()), (Some("2019"), Some("2023")));
+        assert_eq!(schools.len(), 1);
+        assert_eq!(schools[0]["from_mm"], "2005");
+        assert_eq!(skills, "Program governance; Power BI");
     }
 
     #[test]

@@ -993,3 +993,15 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   .mtop { padding-top: env(safe-area-inset-top); padding-bottom: 0; }
   .mtop a { min-height: 44px; display: inline-flex; align-items: center; }
 }
+
+/* The copy-and-paste kit on a job's Apply tab. */
+#kitCard summary { cursor: pointer; list-style: none; }
+#kitCard summary::-webkit-details-marker { display: none; }
+.kit { margin-top: 10px; }
+.kit-h { font-size: 14px; margin: 16px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.kit-entry { border-left: 3px solid var(--line, #ddd); padding-left: 10px; margin: 8px 0 12px; }
+.kit-row { display: grid; grid-template-columns: minmax(90px, 150px) 1fr auto; gap: 10px; align-items: start; padding: 4px 0; border-bottom: 1px solid var(--surface-2, #eee); }
+.kit-l { color: var(--muted); font-size: 13px; padding-top: 4px; }
+.kit-v { white-space: pre-wrap; word-break: break-word; padding-top: 4px; font-size: 14px; }
+.kit-v.long { max-height: 6.5em; overflow: auto; }
+@media (max-width: 600px) { .kit-row { grid-template-columns: 1fr auto; } .kit-l { grid-column: 1 / -1; padding: 0; } }

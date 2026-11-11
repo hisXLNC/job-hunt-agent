@@ -1013,6 +1013,7 @@ async function showJob(id) {
       </div>
     </div>
     <div class="jpane" data-pane="apply" ${tab === 'apply' ? '' : 'hidden'}>
+    ${['ready', 'approved', 'applied', 'interviewing', 'offer'].includes(j.status) ? `<section class="card" id="kitCard"><details ${j.status === 'approved' ? 'open' : ''}><summary><h2 style="display:inline">Copy-and-paste kit</h2> <span class="muted small">every detail a form asks for, to copy one at a time when Fill this form doesn't work</span></summary><div id="kitBody" data-job="${esc(j.id)}"><p class="muted small">Loading…</p></div></details></section>` : ''}
     ${['ready', 'approved', 'applied', 'interviewing'].includes(j.status) || answers ? `<section class="card">
       <header><h2>Application questions</h2>${answering ? '<span class="muted small"><span class="spin" data-kind="answers"></span>Writing…</span>' : ''}</header>
       <p class="muted small">Paste the form's questions, one per line, or leave it empty for the usual ones (why this role, salary expectations, notice period…). Answers use your CV, this posting and your <a href="#cvs/details">facts for forms</a>.</p>
@@ -1096,7 +1097,39 @@ async function showJob(id) {
   main().dataset.contacts = JSON.stringify(contacts || []);
   // Opened for one part of the page (Write a note → People at the company): go there.
   if (scrollToAfter) { const at = document.getElementById(scrollToAfter); scrollToAfter = ''; if (at) setTimeout(() => at.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
+  loadKit();
   if (tailoring || preparing || revising || following_up || answering || advising || writing_to || thanking || chatting) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
+}
+
+/** The copy-and-paste kit on a job's Apply tab: each detail with its own Copy button. */
+async function loadKit() {
+  const box = $('#kitBody');
+  if (!box) return;
+  let k;
+  try { k = await api(`/api/jobs/${encodeURIComponent(box.dataset.job)}/kit`); } catch (e) { box.innerHTML = `<p class="muted small">${esc(e.message)}</p>`; return; }
+  let n = 0;
+  // A row: its label, the value (long ones folded), and Copy.
+  const row = (label, value, long) => {
+    if (!value || !String(value).trim()) return '';
+    const id = 'kit' + n++;
+    return `<div class="kit-row"><span class="kit-l">${esc(label)}</span><span class="kit-v${long ? ' long' : ''}" id="${id}">${esc(value)}</span><button class="btn ghost sm" data-act="copy" data-from="${id}">Copy</button></div>`;
+  };
+  const entry = (e, i, what) => {
+    const parts = (e.parts || []).length > 1 ? e.parts.map((p, j) => row(j === 0 ? `${what} ${i + 1}` : '', p)).join('') : row(`${what} ${i + 1}`, e.heading);
+    return `<div class="kit-entry">${parts}${row('From', e.from_mm || e.from)}${e.from && e.from_mm && e.from !== e.from_mm ? row('From (as on CV)', e.from) : ''}${row('To', e.to_mm || e.to)}${/present|current|now|date|ongoing/i.test(e.to || '') ? row('Current', 'Yes, I currently work here') : ''}${row('Description', e.description, true)}</div>`;
+  };
+  const group = (title, inner) => inner.trim() ? `<h3 class="kit-h">${title}</h3>${inner}` : '';
+  box.innerHTML = `<div class="kit">
+    ${group('You', k.contact.map(c => row(c.label, c.value)).join(''))}
+    ${group('Your facts for forms', (k.facts || []).map(f => row(f.label || 'Fact', f.value)).join(''))}
+    ${group('Work experience', (k.jobs || []).map((e, i) => entry(e, i, 'Job')).join(''))}
+    ${group('Education', (k.schools || []).map((e, i) => entry(e, i, 'School')).join(''))}
+    ${group('Skills', row('Skills', k.skills, true) + (k.skills ? row('As a list', k.skills.split(/\s*[;,|•\n]\s*/).filter(Boolean).join('\n'), true) : ''))}
+    ${group('Languages', (k.languages || []).map(l => row('Language', l)).join(''))}
+    ${group('Answers written for this application', (k.answers || []).map(a => row(a.question, a.answer, true)).join(''))}
+    ${group('Cover letter', row('Letter', k.letter, true))}
+    ${group('Whole CV as text', row('CV', k.cv, true))}
+    <p class="muted small">From the CV this application uses${(k.jobs || []).length ? '' : ' (Job Hunt found no dated jobs in it: copy from the whole CV below)'} and your <a href="#cvs/details">facts for forms</a>. Edit those to change what's here.</p></div>`;
 }
 
 // ---- Inbox ----

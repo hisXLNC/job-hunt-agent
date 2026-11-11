@@ -598,6 +598,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
                 return Resp::download(&dir.join(name));
             }
+            // The copy-and-paste kit: every detail a form asks for, one piece at a time.
+            ["api", "jobs", id, "kit"] => return Ok(Resp::json(&crate::fill::kit(agent, id)?)),
             ["api", "jobs", id, "preview"] => {
                 let job = job_or_404(agent, id)?;
                 // The tailored CV as it is on disk now, with the reworded paragraphs marked.
