@@ -1029,7 +1029,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             });
             Ok(Resp::json(&json!({ "started": true })))
         }
-        ["api", "run", task] if ["search", "search-force", "inbox"].contains(task) => {
+        ["api", "run", task] if ["search", "search-force", "inbox", "score-held"].contains(task) => {
             if task.starts_with("search") {
                 ready_to_search(agent)?;
             }

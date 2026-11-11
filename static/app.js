@@ -3029,7 +3029,7 @@ async function showSearch(arg) {
     ['what', `${svg('settings')}What to search`, 'tab-end'], ['setup', 'Set up sources', 'tab-set']];
   const view = tabs.some(([id]) => id === arg) ? arg : 'sources';
   const next = d.next_search ? new Date(d.next_search) : null;
-  const status = `<p class="muted small search-when">${d.last_search ? `Last full search ${esc(ago(d.last_search))}` : 'No full search yet'}${d.paused ? ` · ${esc(pausedWords(d.paused))}` : next ? ` · next ${esc(next.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}${d.held ? ` · ${d.held} posting${d.held === 1 ? '' : 's'} waiting to be scored` : ''}</p>`;
+  const status = `<p class="muted small search-when">${d.last_search ? `Last full search ${esc(ago(d.last_search))}` : 'No full search yet'}${d.paused ? ` · ${esc(pausedWords(d.paused))}` : next ? ` · next ${esc(next.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}${d.held ? ` · ${d.held} posting${d.held === 1 ? '' : 's'} waiting to be scored <button class="btn sm" data-act="scoreHeld">Score them all now</button>` : ''}</p>`;
   const actions = d.running ? `<button class="btn ghost danger" data-act="searchStop">Stop</button>`
     : `<button class="btn primary" data-act="run" data-task="search">${svg('search')}Search everything now</button>`;
   const ownCard = own ? `<section class="card progress-card"><header><h2>Searching ${esc(own.searching || own.name)}</h2><b class="pct">${d.progress?.percent ?? 0}%</b></header>
@@ -3828,6 +3828,10 @@ async function act(el) {
     const st = await api('/api/settings');
     try { await navigator.clipboard.writeText(phoneBookmark(st)); toast('Copied. Send it to your phone and paste it as a bookmark\'s address.'); } catch (e) { toast('Couldn\'t copy.', true); }
     return;
+  }
+  if (a === 'scoreHeld') {
+    if (!confirm('Score every waiting posting now? It uses your Claude plan (about one request per posting, in batches of 25), and stops at its usage limit; the rest then wait for the usual batches.')) return;
+    return busy(async () => { await api('/api/run/score-held', { method: 'POST' }); refreshOverview(); }, 'Scoring them all: matches show up under Pick as they come in.');
   }
   if (a === 'copyShare') {
     const st = await api('/api/settings');

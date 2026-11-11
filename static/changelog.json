@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.36.6",
+    "date": "2026-11-11",
+    "title": "Score every waiting posting",
+    "changes": [
+      "Score them all now: on the Search page, next to the postings waiting to be scored. Job Hunt scores every one of them, 25 at a time, until they're done or Claude's usage limit is reached, and tells you when it's finished.",
+      "Waiting postings are also scored faster on their own: up to 30 every 45 minutes (it was 15 every 90), while Claude has room."
+    ]
+  },
+  {
     "version": "2.36.5",
     "date": "2026-11-11",
     "title": "Skills chosen carefully, and send jobs from your phone",

@@ -1457,8 +1457,26 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// rather than all at once against your Claude plan's limit, or not until tomorrow's search.
     /// It doesn't count as a search: your last search and its report stay as they are.
     pub fn score_held(&self) -> R<Report> {
-        let batch = (self.profile().max_scored_per_run / 4).clamp(5, 15);
+        let batch = (self.profile().max_scored_per_run / 2).clamp(10, 30);
         self.search_with(Some(vec![]), false, Some(batch))
+    }
+
+    /// Score every posting waiting, now: batches of 25 one after another, until none are left, you
+    /// press Stop, or Claude's usage limit is reached (the rest then wait for the usual batches).
+    /// Returns how many were scored.
+    pub fn score_all_held(&self) -> R<usize> {
+        let mut scored = 0;
+        for _ in 0..200 {
+            if self.held_count() == 0 || self.stopping() || self.limited().is_some() {
+                break;
+            }
+            let r = self.search_with(Some(vec![]), false, Some(25))?;
+            scored += r.scored;
+            if r.scored == 0 {
+                break; // nothing more it can score now
+            }
+        }
+        Ok(scored)
     }
 
     /// `batch`: only score held postings, at most this many, quietly (see score_held).
@@ -6071,9 +6089,9 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     if crate::backup::due(agent) && !agent.is_running("backup") {
         out.push("backup");
     }
-    // Postings the last search couldn't score: a small batch every 90 minutes while Claude has room.
+    // Postings the last search couldn't score: a batch every 45 minutes while Claude has room.
     let held_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.held"))
-        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 90)
+        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 45)
         .unwrap_or(false);
     if ready && !held_lately && !agent.budget_wait() && !agent.is_running("search") && !out.contains(&"search") && agent.held_count() > 0 {
         out.push("held");
@@ -6505,12 +6523,17 @@ pub fn run_in_background(agent: &Arc<Agent>, task: &str) -> bool {
             "search" => agent.search(None).map(|r| r.to_string()),
             "search-force" => agent.force_search().map(|r| r.to_string()),
             "inbox" => agent.process_inbox(100).map(|s| format!("{} new job emails", s.values().sum::<usize>())),
+            "score-held" => agent.score_all_held().map(|n| {
+                let left = agent.held_count();
+                agent.note(&format!("Scored {n} waiting postings"), &if left > 0 { format!("{left} still wait (Claude's usage limit, or you stopped it); they're scored in batches as Claude has room.") } else { "All of them: the good fits are on your Overview, under Pick.".into() });
+                format!("{n} scored")
+            }),
             other => Err(Error(format!("unknown task {other}"))),
         };
         if let Err(e) = result {
             if !e.0.contains("already running") {
                 let _ = agent.db().log(None, &format!("{task}:error"), &e.0);
-                let what = if task.starts_with("search") { "Job search" } else { "Email check" };
+                let what = if task.starts_with("search") { "Job search" } else if task == "score-held" { "Scoring" } else { "Email check" };
                 agent.note(&format!("{what} didn't finish"), &e.0);
             }
         }
@@ -8522,7 +8545,7 @@ mod tests {
         assert_eq!(s.agent.search(Some(vec![])).unwrap().held, 0);
         // Through the day: small batches of what's held, without counting as a search.
         let mut p = s.agent.profile();
-        p.max_scored_per_run = 40; // batches of 10
+        p.max_scored_per_run = 20; // batches of 10 (half, at least 10)
         s.agent.save_profile(&p).unwrap();
         let found: Vec<Posting> = (10..=24).map(|i| Posting { company: format!("Co {i}"), ..posting("Program Manager", &i.to_string()) }).collect();
         s.agent.hold(found);
@@ -8535,7 +8558,10 @@ mod tests {
         let r = s.agent.score_held().unwrap();
         assert_eq!((r.scored, s.agent.held_count()), (10, 5));
         assert_eq!(s.agent.secret("last.search"), last, "not a search");
-        assert!(!due_tasks(&s.agent).contains(&"held"), "not again for 90 minutes");
+        assert!(!due_tasks(&s.agent).contains(&"held"), "not again for 45 minutes");
+        // Score them all now: the rest, in one go.
+        assert_eq!(s.agent.score_all_held().unwrap(), 5);
+        assert_eq!(s.agent.held_count(), 0);
     }
 
     #[test]
