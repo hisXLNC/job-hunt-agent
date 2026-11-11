@@ -1036,19 +1036,37 @@ pub fn parse_linkedin_posting(html: &str) -> Option<String> {
     Some(if crit.is_empty() { body } else { format!("{body}\n\n{}", crit.join("\n")) })
 }
 
-/// One search on LinkedIn's signed-out job search: the first page (up to 25 postings), newest first.
+/// One search on LinkedIn's signed-out job search, newest first: up to four pages of 25 (the first
+/// page alone missed most of a week's postings in a busy city). It stops at a page that isn't full.
 pub fn linkedin(c: &reqwest::blocking::Client, title: &str, place: &str, remote: bool) -> Result<Vec<Posting>, String> {
-    // Spaced out, like someone paging through results.
-    std::thread::sleep(Duration::from_millis(1500));
-    let mut u = url::Url::parse("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search").unwrap();
-    u.query_pairs_mut().append_pair("keywords", title).append_pair("location", place).append_pair("f_TPR", "r604800").append_pair("sortBy", "DD").append_pair("start", "0");
-    if remote {
-        u.query_pairs_mut().append_pair("f_WT", "2");
-    }
-    let html = linkedin_get(c, u.as_str())?;
-    let mut list = parse_linkedin_list(&html);
-    if list.is_empty() && (html.contains("authwall") || html.contains("challenge")) {
-        return Err("LinkedIn is limiting requests from this connection for now (it asked to sign in); the next search tries again".into());
+    let mut list: Vec<Posting> = vec![];
+    for page in 0..4 {
+        // Spaced out, like someone paging through results.
+        std::thread::sleep(Duration::from_millis(if page == 0 { 1500 } else { 2500 }));
+        let mut u = url::Url::parse("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search").unwrap();
+        u.query_pairs_mut().append_pair("keywords", title).append_pair("location", place).append_pair("f_TPR", "r604800").append_pair("sortBy", "DD").append_pair("start", &(page * 25).to_string());
+        if remote {
+            u.query_pairs_mut().append_pair("f_WT", "2");
+        }
+        let html = match linkedin_get(c, u.as_str()) {
+            Ok(h) => h,
+            // A later page turned away: keep what the first pages found.
+            Err(e) if page > 0 => { let _ = e; break; }
+            Err(e) => return Err(e),
+        };
+        let got = parse_linkedin_list(&html);
+        if got.is_empty() && page == 0 && (html.contains("authwall") || html.contains("challenge")) {
+            return Err("LinkedIn is limiting requests from this connection for now (it asked to sign in); the next search tries again".into());
+        }
+        let n = got.len();
+        for p in got {
+            if !list.iter().any(|x| x.external_id == p.external_id) {
+                list.push(p);
+            }
+        }
+        if n < 20 {
+            break;
+        }
     }
     // A remote-only search: these are remote, though the card may just name the country.
     if remote {
@@ -1804,7 +1822,8 @@ pub fn fetch_streaming(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &d
     }
     // LinkedIn: through Apify when there's a token, else its signed-out search, when it's on.
     if p.sources.linkedin && chosen("linkedin") {
-        let list = linkedin_searches(p, 10);
+        // More searches than the paid sources: LinkedIn has the most postings, and these cost nothing.
+        let list = linkedin_searches(p, 16);
         if let Some((token, actor)) = &keys.apify {
             let (c, token, actor) = (c.clone(), token.clone(), actor.clone());
             let max = (p.max_scored_per_run as usize).clamp(20, 100);

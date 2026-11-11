@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.36.4] - 2026-11-11
+
+More LinkedIn jobs.
+
+### Changes
+
+- LinkedIn: each search now reads up to four pages of the past week's postings (100), not only the first 25, which in a busy city missed most of them.
+- LinkedIn: 16 searches a run instead of 10, so each of your titles in each of your places comes round more often.
+
 ## [2.36.3] - 2026-11-11
 
 Your address learned, and Copy details after every fill.
@@ -1384,6 +1393,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.36.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.4
 [2.36.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.3
 [2.36.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.2
 [2.36.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.1

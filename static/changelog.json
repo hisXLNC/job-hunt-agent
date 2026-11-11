@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.36.4",
+    "date": "2026-11-11",
+    "title": "More LinkedIn jobs",
+    "changes": [
+      "LinkedIn: each search now reads up to four pages of the past week's postings (100), not only the first 25, which in a busy city missed most of them.",
+      "LinkedIn: 16 searches a run instead of 10, so each of your titles in each of your places comes round more often."
+    ]
+  },
+  {
     "version": "2.36.3",
     "date": "2026-11-11",
     "title": "Your address learned, and Copy details after every fill",
