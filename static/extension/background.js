@@ -73,9 +73,8 @@ async function debugOn(tabId) {
 async function realClick(tabId, x, y) {
   const t = { tabId };
   await debugOn(tabId);
-  // The page's position is in its own pixels; the browser's zoom (90%, 110%…) scales them.
-  const zoom = await chrome.tabs.getZoom(tabId).catch(() => 1);
-  x *= zoom; y *= zoom;
+  // The position is in the page's own (CSS) pixels, which is what the debugger takes: no scaling for
+  // the browser's zoom (scaling it put clicks beside the skill at 90% or 110%).
   for (const [type, button] of [['mouseMoved', 'none'], ['mousePressed', 'left'], ['mouseReleased', 'left']]) {
     await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', { type, x, y, button, clickCount: type === 'mouseMoved' ? 0 : 1 });
   }

@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.36.2] - 2026-11-11
+
+Skills selected at any browser zoom.
+
+### Changes
+
+- Skills: with the browser zoomed in or out (90%, 110%…), Job Hunt's clicks on Workday's skill list landed beside the skill, so it searched them but none was selected. Clicks now land on the skill at any zoom.
+
 ## [2.36.1] - 2026-11-11
 
 Language levels, Field of Study, skills it missed, career transitions.
@@ -1366,6 +1374,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.36.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.2
 [2.36.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.1
 [2.36.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.0
 [2.35.14]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.14

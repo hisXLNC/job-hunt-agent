@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.36.2",
+    "date": "2026-11-11",
+    "title": "Skills selected at any browser zoom",
+    "changes": [
+      "Skills: with the browser zoomed in or out (90%, 110%…), Job Hunt's clicks on Workday's skill list landed beside the skill, so it searched them but none was selected. Clicks now land on the skill at any zoom."
+    ]
+  },
+  {
     "version": "2.36.1",
     "date": "2026-11-11",
     "title": "Language levels, Field of Study, skills it missed, career transitions",
