@@ -37,6 +37,22 @@ pub fn title_matches(posting: &str, target: &str) -> bool {
     !need.is_empty() && need.iter().all(|w| have.contains(w))
 }
 
+/// When a posting went up, as a date: "2026-10-14", "2026-10-14T09:00:00Z" or a timestamp in
+/// seconds or milliseconds. None when it can't tell.
+pub fn posted_date(posted: &str) -> Option<chrono::NaiveDate> {
+    let t = posted.trim();
+    if let Ok(n) = t.parse::<i64>() {
+        let secs = if n > 100_000_000_000 { n / 1000 } else { n };
+        return chrono::DateTime::from_timestamp(secs, 0).map(|d| d.date_naive());
+    }
+    chrono::NaiveDate::parse_from_str(t.get(..10)?, "%Y-%m-%d").ok()
+}
+
+/// Days since a posting went up (see posted_date).
+pub fn days_since(posted: &str) -> Option<i64> {
+    posted_date(posted).map(|d| (chrono::Utc::now().date_naive() - d).num_days())
+}
+
 /// Why a posting should be skipped, or None if it is worth scoring.
 pub fn prefilter(p: &Posting, profile: &Profile) -> Option<String> {
     let title = p.title.to_lowercase();
@@ -53,6 +69,15 @@ pub fn prefilter(p: &Posting, profile: &Profile) -> Option<String> {
 
     if let Some(why) = outside_locations(p, profile) {
         return Some(why);
+    }
+
+    // Too old to be worth scoring (an open role's first weeks are when it's filled).
+    if profile.max_age_days > 0 {
+        if let Some(days) = p.posted_at.as_deref().and_then(days_since) {
+            if days > profile.max_age_days as i64 {
+                return Some(format!("posted {days} days ago, older than your cutoff of {} days", profile.max_age_days));
+            }
+        }
     }
 
     // The most it pays: the source's figure, else its salary text or its own description (hourly
@@ -240,6 +265,13 @@ mod tests {
         assert!(prefilter(&Posting { salary_max: Some(90000.0), ..posting("Program Manager") }, &p).unwrap().starts_with("salary"));
         assert_eq!(prefilter(&Posting { description: "Implement Snowflake rules".into(), ..posting("Tax Analyst") }, &p), None);
         assert_eq!(prefilter(&posting("Barista"), &p).unwrap(), "no title or keyword match");
+        // Too old: set aside before scoring (30 days by default); no date, or 0 days, keeps it.
+        let old = (chrono::Utc::now() - chrono::Duration::days(45)).format("%Y-%m-%d").to_string();
+        let fresh = (chrono::Utc::now() - chrono::Duration::days(3)).to_rfc3339();
+        assert!(prefilter(&Posting { posted_at: Some(old.clone()), ..posting("Program Manager") }, &p).unwrap().starts_with("posted 45 days ago"));
+        assert_eq!(prefilter(&Posting { posted_at: Some(fresh), ..posting("Program Manager") }, &p), None);
+        assert_eq!(prefilter(&Posting { posted_at: Some(old.clone()), ..posting("Program Manager") }, &Profile { max_age_days: 0, ..p.clone() }), None);
+        assert_eq!(days_since(&(chrono::Utc::now() - chrono::Duration::days(10)).timestamp_millis().to_string()), Some(10));
         // A GTA city brings in the GTA, the same as Toronto; Milton doesn't match "Hamilton".
         let oakville = Profile { locations: vec!["Oakville".into()], include_metro: true, ..profile() };
         for (l, ok) in [("Mississauga, ON", true), ("Toronto, Ontario, Canada", true), ("Oakville, ON", true), ("Hamilton, ON", false), ("Guelph, ON", false)] {

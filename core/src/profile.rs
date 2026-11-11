@@ -191,6 +191,8 @@ pub struct Profile {
     pub weekly_goal: u32,
     /// Remove postings you never acted on after this many days (0: keep them).
     pub purge_after_days: u32,
+    /// Don't score postings older than this many days (0: any age); they're set aside, using no Claude.
+    pub max_age_days: u32,
 }
 
 impl Default for Profile {
@@ -207,6 +209,7 @@ impl Default for Profile {
             score_threshold: 70,
             max_per_run: 10,
             purge_after_days: 0,
+            max_age_days: 30,
             auto_tailor: false,
             max_scored_per_run: 40,
             exclude_companies: vec![],

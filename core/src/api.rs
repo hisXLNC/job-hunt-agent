@@ -422,6 +422,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 o["version"] = json!(host.version());
                 o["side"] = agent.side_status();
                 o["title_ideas"] = json!(agent.title_ideas());
+                // Postings found but not scored yet: shown on the Overview, with Score them all now.
+                o["held"] = json!(agent.held_count());
                 // Whether forms can be filled in here (the app on your PC), for Approve and Apply to all.
                 o["can_fill"] = json!(host.can_fill() && !req.remote);
                 return Ok(Resp::json(&o));

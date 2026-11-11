@@ -180,7 +180,8 @@ function homeHead(on, about, between = '') {
       try { if (all) localStorage.setItem('jh.view', on); else lastView = localStorage.getItem('jh.view') || 'tracker'; } catch (e) {}
       if (!VIEWS.some(([id]) => id === lastView)) lastView = 'tracker';
       // (Every job is on Applications, in the sidebar: no To do / All jobs switch here.)
-      return `${all ? '' : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
+      const waiting = overview?.held || 0;
+      return `${all || !waiting ? '' : `<p class="small muted held-line">${waiting} posting${waiting === 1 ? '' : 's'} found and waiting to be scored (newest first, ${(overview?.running || []).includes('search') ? 'scoring now' : 'a batch every 45 minutes'}). <button class="btn sm" data-act="scoreHeld">Score them all now</button></p>`}${all ? '' : `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}</nav>`}`;
     })()}
     ${about ? `<p class="muted flow-about">${about}</p>` : ''}`;
 }
@@ -2388,6 +2389,7 @@ async function showSettings(tab, sub, host) {
       <section class="card"><header><h2>Which roles</h2></header><div class="form">
         <label class="field">Skip these companies<textarea name="exclude_companies">${esc(lines(p.exclude_companies))}</textarea></label>
         <label class="field">Skip titles containing<textarea name="exclude_title_keywords">${esc(lines(p.exclude_title_keywords))}</textarea></label>
+        <label class="field">Don't score jobs older than<input type="number" name="max_age_days" min="0" step="1" value="${p.max_age_days ?? 30}"><span class="hint">Days since the job was posted (0: any age). Older ones are set aside before scoring, using no Claude. Jobs whose posting date isn't known are scored.</span></label>
         <label class="field">Minimum yearly salary<input type="number" name="min_salary" min="0" step="1000" value="${p.min_salary ?? ''}" placeholder="No minimum, e.g. 120000"><span class="hint">Digits only. Jobs that pay less at most are skipped before scoring, so they use no Claude: the salary a job site gives, or the pay in the posting itself (hourly rates count as 2,080 hours a year). Jobs that don't say are kept. Job Hunt looks for missing salaries once a week. <a href="#" data-act="rescanSalaries">Look now</a></span></label>
         <label class="field">Skip companies rated below<select name="min_rating">${[['', 'Any rating'], ['3', '3.0 out of 5'], ['3.5', '3.5 out of 5'], ['4', '4.0 out of 5']].map(([x, n]) => `<option value="${x}" ${String(p.min_rating ?? '') === x || (x && Number(x) === p.min_rating) ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">From what employees say (Glassdoor and the like). Companies not rated yet are kept until they are.</span></label>
       </div>
@@ -2757,7 +2759,7 @@ function readProfile(form, part) {
   const has = n => el(n) != null;
   for (const k of ['name', 'email', 'timezone', 'guidance', 'stories', 'application_facts']) if (has(k)) p[k] = v(k).trim();
   for (const k of ['remote_ok', 'include_metro', 'auto_tailor']) if (has(k)) p[k] = !!el(k).checked;
-  for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'search_hour', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k)) p[k] = Number(v(k) || 0);
+  for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'max_age_days', 'search_hour', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k)) p[k] = Number(v(k) || 0);
   for (const k of ['locations', 'exclude_companies', 'exclude_title_keywords']) if (has(k)) p[k] = fromLines(v(k));
   if (has('min_salary')) p.min_salary = v('min_salary') ? Number(v('min_salary')) : null;
   if (has('min_rating')) p.min_rating = v('min_rating') ? Number(v('min_rating')) : null;

@@ -2093,7 +2093,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         let mut candidates = candidates;
         // Best first, so the scoring cap leaves out the weakest: titles that match one of yours first.
         let wanted_title = |p: &Posting| profile.tracks.iter().flat_map(|t| t.titles.iter()).any(|t| crate::filters::title_matches(&p.title, t));
-        candidates.sort_by_key(|p| !wanted_title(p));
+        // Newest first (what's just been posted is what's worth applying to now), then titles of yours.
+        let day = |p: &Posting| p.posted_at.as_deref().and_then(crate::filters::posted_date).unwrap_or(chrono::NaiveDate::MIN);
+        candidates.sort_by_key(|p| (std::cmp::Reverse(day(p)), !wanted_title(p)));
         let room = run.cap.saturating_sub(run.scored);
         if run.halted || room == 0 || self.stopping() {
             report.deferred += candidates.len();

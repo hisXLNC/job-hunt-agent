@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.36.9] - 2026-11-11
+
+Newest jobs first, an age cutoff, and what's waiting on the Overview.
+
+### Changes
+
+- Scoring goes newest first: the postings put up most recently are scored before older ones, in a search and from the ones waiting.
+- Don't score jobs older than (Settings → Search → Which roles, 30 days to start with): older postings are set aside before scoring, using no Claude. Jobs whose posting date isn't known are still scored; 0 turns it off.
+- The Overview shows how many postings are found and waiting to be scored, with Score them all now beside it.
+
 ## [2.36.8] - 2026-11-11
 
 Low-paid jobs skipped before scoring.
@@ -1427,6 +1437,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.36.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.9
 [2.36.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.8
 [2.36.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.7
 [2.36.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.6
