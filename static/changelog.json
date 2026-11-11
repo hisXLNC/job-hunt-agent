@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.36.3",
+    "date": "2026-11-11",
+    "title": "Your address learned, and Copy details after every fill",
+    "changes": [
+      "Learning: Job Hunt never kept what you typed in City or Location, because a job entry has a City too. Now your own City and Location (under Address) are kept and filled in next time, while a job's city and an entry's dates still come from your CV each time.",
+      "Copy details is in the panel after every fill: it lists each box on the page, whether Job Hunt had an answer for it and whether it filled it (labels only, not what you typed), to paste to Claude when a page wasn't filled.",
+      "Facts for application forms suggests your address and phone: the first page of most forms asks for them."
+    ]
+  },
+  {
     "version": "2.36.2",
     "date": "2026-11-11",
     "title": "Skills selected at any browser zoom",

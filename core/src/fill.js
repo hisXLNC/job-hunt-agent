@@ -774,6 +774,8 @@
         const file = answer.files && answer.files[f.key];
         const v = answer.values && answer.values[f.key];
         const done = await fillOne(f, v, file);
+        // For Copy details: what each box got (no values: the labels and whether each was filled).
+        (diag.fields ||= []).push({ label: String(f.label || '').slice(0, 60), type: f.type, section: f.section, had: !!f.value, answered: v != null && v !== '' || !!file, filled: !!done });
         // Green is what Job Hunt filled; a box the site (or you) had filled already isn't marked.
         const theirs = f.value !== '' && f.type !== 'file' && (v == null || v === '' || same(f.value, v));
         if (theirs && done) continue;
@@ -795,7 +797,7 @@
       setTimeout(() => { if (!barTimer) progress(null); }, 2500);
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
       buttons.next.hidden = !todo; buttons.applied.hidden = false;
-      buttons.diag.hidden = !(addNote && !/^Added/.test(addNote) || skillMiss.length);
+      buttons.diag.hidden = false; // what Job Hunt saw and did, to paste to Claude when something's off
       const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (skillMiss.length ? ` Not taken from Workday's lists (add these yourself): ${skillMiss.join(', ')}.` : '')
         + (EXT && answer.app_version && /^\d/.test(answer.app_version) && answer.app_version.replace(/-.*/, '') !== chrome.runtime.getManifest().version ? ` (This extension is ${chrome.runtime.getManifest().version}, Job Hunt is ${answer.app_version}: open the extension's button once so it updates, then reload this page.)` : '');
       status(todo
@@ -929,7 +931,7 @@
   // You sent the form: a Submit-like button, or the form itself (Enter, or a button Job Hunt can't name).
   function onPressed() {
     let fields = [];
-    if (filled) { try { fields = collect().filter(f => f.type !== 'file').map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options })); } catch (err) { /* the form changed */ } }
+    if (filled) { try { fields = collect().filter(f => f.type !== 'file').map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options, section: f.section })); } catch (err) { /* the form changed */ } }
     try { window.name = MARK + JSON.stringify({ at: Date.now(), fields: fields.slice(0, 80) }); } catch (e) { window.name = MARK + JSON.stringify({ at: Date.now() }); }
     watchForConfirmation(120);
   }
@@ -942,7 +944,7 @@
     // Save and Continue / Next on a form of several pages (Workday): keep this page's answers for
     // next time now (your GPA, notice period…), since only the last page is there when you submit.
     if (/^\s*(save and continue|save & continue|next|continue)\b/i.test(t) && ui && !retired) {
-      try { send('learn', { fields: collect().filter(f => !['file', 'add', 'skills'].includes(f.type) && f.value).map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options })).slice(0, 80) }); } catch (err) { /* the form changed */ }
+      try { send('learn', { fields: collect().filter(f => !['file', 'add', 'skills'].includes(f.type) && f.value).map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options, section: f.section })).slice(0, 80) }); } catch (err) { /* the form changed */ }
     }
     if (NOT_SEND.test(t)) return;
     if ((b.type === 'submit' && b.form) || /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|apply now|complete application|finish application/i.test(b.textContent || b.value || '')) onPressed();

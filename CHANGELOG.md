@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.36.3] - 2026-11-11
+
+Your address learned, and Copy details after every fill.
+
+### Changes
+
+- Learning: Job Hunt never kept what you typed in City or Location, because a job entry has a City too. Now your own City and Location (under Address) are kept and filled in next time, while a job's city and an entry's dates still come from your CV each time.
+- Copy details is in the panel after every fill: it lists each box on the page, whether Job Hunt had an answer for it and whether it filled it (labels only, not what you typed), to paste to Claude when a page wasn't filled.
+- Facts for application forms suggests your address and phone: the first page of most forms asks for them.
+
 ## [2.36.2] - 2026-11-11
 
 Skills selected at any browser zoom.
@@ -1374,6 +1384,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.36.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.3
 [2.36.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.2
 [2.36.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.1
 [2.36.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.0

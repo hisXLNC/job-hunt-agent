@@ -83,7 +83,23 @@ pub fn question_key(label: &str) -> String {
 /// Questions the bank never keeps: agreeing to terms and certifying (yours to tick each time),
 /// and anything that's about this one employer.
 fn personal_to_the_role(label: &str) -> bool {
-    work_history(label) || {
+    personal_in(label, "", "")
+}
+
+/// The same, knowing the part of the form a box is in and its kind: "City" or "Location" under
+/// Address (your own) is kept like any answer; in a "Work Experience 2" entry it's that job's. A
+/// date in an entry is that entry's too.
+fn personal_in(label: &str, section: &str, kind: &str) -> bool {
+    let s = section.to_lowercase();
+    let in_entry = ["experience", "employment", "work", "job", "position", "education", "school", "degree", "qualification", "language", "training", "certific"].iter().any(|w| s.contains(w));
+    let yours = !s.is_empty() && !in_entry && ["city", "location", "town"].contains(&question_key(label).as_str());
+    if yours {
+        return false;
+    }
+    if kind == "date" && (in_entry || s.is_empty()) {
+        return true;
+    }
+    work_history(label.split(" (").next().unwrap_or(label)) || {
     let l = label.to_lowercase();
     ["agree", "consent", "certify", "acknowledge", "attest", "privacy", "terms", "why do you want", "why are you interested", "why this",
         "cover letter", "tell us about", "describe", "what interests you", "anything else", "additional information", "captcha"]
@@ -127,7 +143,7 @@ pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
     let mut n = 0;
     for f in fields {
         let (label, value, kind) = (f["label"].as_str().unwrap_or(""), f["value"].as_str().unwrap_or("").trim(), f["type"].as_str().unwrap_or(""));
-        if label.trim().len() < 3 || value.is_empty() || value.chars().count() > 200 || ["file", "password", "checkbox", "add", "skills"].contains(&kind) || personal_to_the_role(label) {
+        if label.trim().len() < 3 || value.is_empty() || value.chars().count() > 200 || ["file", "password", "checkbox", "add", "skills", "prompt"].contains(&kind) || personal_in(label, f["section"].as_str().unwrap_or(""), kind) {
             continue;
         }
         let key = question_key(label);
@@ -142,7 +158,7 @@ pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
 /// The bank's answer to a field, if it has one that fits (for a list of options, one of them).
 fn from_bank(list: &[Value], f: &Value) -> Option<String> {
     let label = f["label"].as_str().unwrap_or("");
-    if personal_to_the_role(label) || ["file", "checkbox", "add", "skills"].contains(&f["type"].as_str().unwrap_or("")) {
+    if personal_in(label, f["section"].as_str().unwrap_or(""), f["type"].as_str().unwrap_or("")) || ["file", "checkbox", "add", "skills", "prompt"].contains(&f["type"].as_str().unwrap_or("")) {
         return None;
     }
     let key = question_key(label);
@@ -723,6 +739,13 @@ mod tests {
         assert!(!personal_to_the_role("Notice period"));
         let list = vec![json!({ "q": "Job Title", "key": "job title", "a": "Assistant" })];
         assert_eq!(from_bank(&list, &json!({ "label": "Job Title", "type": "text" })), None, "an old saved job title isn't reused");
+        // Your own city (under Address) is kept and reused; a job's city and an entry's dates aren't.
+        assert!(!personal_in("City", "Address", "text"));
+        assert!(personal_in("City", "Work Experience 2", "text"));
+        assert!(personal_in("From (MM/YYYY)", "Work Experience 1", "date"));
+        let list = vec![json!({ "q": "City", "key": "city", "a": "Toronto" })];
+        assert_eq!(from_bank(&list, &json!({ "label": "City", "type": "text", "section": "Address" })).as_deref(), Some("Toronto"));
+        assert_eq!(from_bank(&list, &json!({ "label": "City", "type": "text", "section": "Work Experience 1" })), None);
     }
 
     #[test]
