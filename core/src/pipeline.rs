@@ -323,6 +323,8 @@ pub struct Agent {
     notify: Notify,
     running: Mutex<HashSet<String>>,
     progress: Mutex<Progress>,
+    /// Scoring every waiting posting (Score them all now): (scored so far, how many were waiting).
+    scoring_all: Mutex<Option<(usize, usize)>>,
     /// The database's change counter at the last sync (u64::MAX: not synced yet).
     pub(crate) sync_mark: std::sync::atomic::AtomicU64,
     /// Whether this computer is the one using Job Hunt (see sync::beat).
@@ -358,6 +360,9 @@ pub struct Progress {
     /// Alongside the stage: the posting being scored while the sources are still searched.
     #[serde(default)]
     pub also: String,
+    /// Scoring the postings that were waiting (Score them all now), not a search.
+    #[serde(default)]
+    pub scoring: bool,
 }
 
 /// The search's stages and the share of the bar each one fills.
@@ -428,6 +433,7 @@ impl Agent {
             notify,
             running: Mutex::new(HashSet::new()),
             progress: Mutex::new(Progress::default()),
+            scoring_all: Mutex::new(None),
             stop: std::sync::atomic::AtomicBool::new(false),
             hold: std::sync::atomic::AtomicBool::new(false),
             sync_mark: std::sync::atomic::AtomicU64::new(u64::MAX),
@@ -785,7 +791,17 @@ impl Agent {
 
     /// The running search's progress, or None when no search is running.
     pub fn progress(&self) -> Option<Progress> {
-        self.is_running("search").then(|| self.progress.lock().unwrap().clone())
+        let mut p = self.is_running("search").then(|| self.progress.lock().unwrap().clone())?;
+        // Scoring what's waiting, not searching: say so, with how far through them it is.
+        if let Some((done, total)) = *self.scoring_all.lock().unwrap() {
+            let now = done + p.scored;
+            p.stage = "Scoring waiting postings".into();
+            p.done = now.min(total);
+            p.total = total;
+            p.percent = if total > 0 { (now * 100 / total).min(99) as u32 } else { 0 };
+            p.scoring = true;
+        }
+        Some(p)
     }
 
     /// What the search is doing alongside its stage (scoring a posting while the sources are still
@@ -1466,12 +1482,17 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Returns how many were scored.
     pub fn score_all_held(&self) -> R<usize> {
         let mut scored = 0;
+        *self.scoring_all.lock().unwrap() = Some((0, self.held_count()));
+        struct Done<'a>(&'a Mutex<Option<(usize, usize)>>);
+        impl Drop for Done<'_> { fn drop(&mut self) { *self.0.lock().unwrap() = None; } }
+        let _done = Done(&self.scoring_all);
         for _ in 0..200 {
             if self.held_count() == 0 || self.stopping() || self.limited().is_some() {
                 break;
             }
             let r = self.search_with(Some(vec![]), false, Some(25))?;
             scored += r.scored;
+            if let Some(x) = self.scoring_all.lock().unwrap().as_mut() { x.0 = scored; }
             if r.scored == 0 {
                 break; // nothing more it can score now
             }

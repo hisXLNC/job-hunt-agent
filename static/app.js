@@ -411,7 +411,7 @@ function renderNav() {
   $('#nav').innerHTML = NAV.map(([id, name]) =>
     `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && ready ? `<span class="badge">${ready}</span>` : ''}</a>`).join('');
   const running = overview?.running || [];
-  const busy = running.includes('search') ? `${overview?.progress?.paused ? 'Search paused' : 'Searching for jobs…'} ${overview?.progress?.percent ?? 0}%` : running.includes('inbox') ? 'Checking email…'
+  const busy = running.includes('search') ? (overview?.progress?.scoring ? `${overview.progress.paused ? 'Scoring paused' : 'Scoring waiting postings…'} ${overview.progress.done ?? 0} of ${overview.progress.total ?? 0}` : `${overview?.progress?.paused ? 'Search paused' : 'Searching for jobs…'} ${overview?.progress?.percent ?? 0}%`) : running.includes('inbox') ? 'Checking email…'
     : running.some(r => r.startsWith('tailor') || r === 'add') ? 'Tailoring…' : '';
   const side = overview?.side || {};
   const nextSearch = side.next_search ? new Date(side.next_search) : null;
@@ -1360,7 +1360,7 @@ function inUseHtml(u) {
 /** What the search is doing, in a line: "Scoring postings (12 of 40)". */
 function stageLine(pr) {
   if (!pr) return '';
-  const count = pr.total ? ` (${Math.min(pr.done + 1, pr.total)} of ${pr.total})` : '';
+  const count = pr.scoring ? ` (${pr.done} of ${pr.total})` : pr.total ? ` (${Math.min(pr.done + 1, pr.total)} of ${pr.total})` : '';
   return `${pr.paused ? 'Paused: ' : ''}${pr.stage || 'Starting the search'}${count}${pr.also ? ` · ${pr.also}` : ''}`;
 }
 /** The running search at the top of the Overview: its progress, and a menu with what it's doing
@@ -1368,18 +1368,20 @@ function stageLine(pr) {
 function searchCtl(pr) {
   pr = pr || {};
   return `<details class="menu" id="searchCtl"><summary class="btn${pr.paused ? ' primary' : ''}" data-sv="summary" title="${esc(stageLine(pr))}">
-      <span class="spin" data-sv="bar" data-p="${pr.percent ?? 0}"></span><span data-sv="label">${pr.paused ? 'Paused' : 'Searching'} · ${pr.percent ?? 0}%</span><span class="caret">▾</span></summary>
+      <span class="spin" data-sv="bar" data-p="${pr.percent ?? 0}"></span><span data-sv="label">${esc(ctlLabel(pr))}</span><span class="caret">▾</span></summary>
     <div class="menu-list right search-now">
       <b data-sv="stage">${esc(stageLine(pr))}</b>
       <span class="muted small" data-sv="detail">${esc(pr.detail || '')}</span>
       <span class="small" data-sv="counts">${searchCounts(pr)}</span>
       <div class="row">
         <button class="btn sm${pr.paused ? ' primary' : ''}" data-act="searchHold" data-sv="hold" data-on="${pr.paused ? '0' : '1'}">${pr.paused ? 'Resume' : 'Pause'}</button>
-        <button class="btn ghost danger sm" data-act="searchStop" title="Ends the search after the step it's on; what it found so far is kept">Stop</button>
+        <button class="btn ghost danger sm" data-act="searchStop" title="Ends it after the step it's on; what it found or scored so far is kept">Stop</button>
       </div>
     </div></details>`;
 }
-const searchCounts = pr => `${pr.found ?? 0} found · ${pr.new ?? 0} new · ${pr.scored ?? 0} scored · ${pr.tailored ?? 0} tailored`;
+const searchCounts = pr => pr.scoring ? `${pr.done ?? 0} of ${pr.total ?? 0} scored · ${pr.tailored ?? 0} tailored` : `${pr.found ?? 0} found · ${pr.new ?? 0} new · ${pr.scored ?? 0} scored · ${pr.tailored ?? 0} tailored`;
+/** The search button's words: searching, or scoring what was waiting ("Scoring 40 of 379"). */
+const ctlLabel = pr => pr.paused ? `Paused · ${pr.percent ?? 0}%` : pr.scoring ? `Scoring ${pr.done ?? 0} of ${pr.total ?? 0}` : `Searching · ${pr.percent ?? 0}%`;
 /** Bring the search menu and the sidebar's line up to date without redrawing anything else. */
 function updateSearchCtl() {
   const pr = overview?.progress;
@@ -1387,7 +1389,7 @@ function updateSearchCtl() {
   const box = $('#searchCtl');
   if (!box || !pr) return;
   const set = (k, v) => { const el = box.querySelector(`[data-sv="${k}"]`); if (el && el.textContent !== v) el.textContent = v; };
-  set('label', `${pr.paused ? 'Paused' : 'Searching'} · ${pr.percent}%`);
+  set('label', ctlLabel(pr));
   set('stage', stageLine(pr));
   set('detail', pr.detail || '');
   set('counts', searchCounts(pr));
@@ -1410,7 +1412,7 @@ function progressHtml(pr) {
     <header><h2>${pr.paused ? 'Paused: ' : ''}${esc(pr.stage || 'Starting the search')}${count}</h2><b class="pct">${pr.percent}%</b></header>
     <div class="pbar${pr.paused ? ' paused' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pr.percent}"><i style="width:${pr.percent}%"></i></div>
     <p class="muted small">${pr.paused ? 'Everything found so far is kept. Resume carries on from this step.' : esc(pr.detail || '')}${!pr.paused && pr.also ? `<br><b>Meanwhile:</b> ${esc(pr.also)}` : ''}</p>
-    ${pr.paused ? '<div class="row"><button class="btn primary sm" data-act="searchHold" data-on="0">Resume search</button><button class="btn ghost danger sm" data-act="searchStop">Stop</button></div>' : ''}
+    ${pr.paused ? `<div class="row"><button class="btn primary sm" data-act="searchHold" data-on="0">${pr.scoring ? 'Resume scoring' : 'Resume search'}</button><button class="btn ghost danger sm" data-act="searchStop">Stop</button></div>` : ''}
     <div class="facts small"><span><b>${pr.found}</b> postings found</span><span><b>${pr.new}</b> new</span><span><b>${pr.scored}</b> scored</span><span><b>${pr.tailored}</b> tailored</span></div>
   </section>`;
 }

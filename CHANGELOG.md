@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.36.7] - 2026-11-11
+
+Scoring shows as scoring.
+
+### Changes
+
+- Score them all now shows what it's doing: "Scoring 40 of 379" on the button, "Scoring waiting postings" in its menu and on the Overview, with how many are done, instead of "Searching · 0%" and "Starting the search". Pause and Resume work on it as on a search, and Stop keeps everything scored so far (the rest keep waiting).
+
 ## [2.36.6] - 2026-11-11
 
 Score every waiting posting.
@@ -1411,6 +1419,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.36.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.7
 [2.36.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.6
 [2.36.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.5
 [2.36.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.4

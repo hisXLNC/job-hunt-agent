@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.36.7",
+    "date": "2026-11-11",
+    "title": "Scoring shows as scoring",
+    "changes": [
+      "Score them all now shows what it's doing: \"Scoring 40 of 379\" on the button, \"Scoring waiting postings\" in its menu and on the Overview, with how many are done, instead of \"Searching · 0%\" and \"Starting the search\". Pause and Resume work on it as on a search, and Stop keeps everything scored so far (the rest keep waiting)."
+    ]
+  },
+  {
     "version": "2.36.6",
     "date": "2026-11-11",
     "title": "Score every waiting posting",
