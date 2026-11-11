@@ -299,6 +299,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
     // Before taking the database below: these need it too.
     let (weekly_to, next_wake) = (agent.weekly_to(), agent.next_wake().map(|t| t.to_rfc3339()));
     let ext_key = if host.kind() == "server" { String::new() } else { crate::bridge::key(agent) };
+    let (phone_url, phone_last) = (if host.kind() == "server" { String::new() } else { agent.secret("phone.url") }, agent.secret("phone.last"));
     let repeat_mode = agent.repeat_mode();
     let site_status = agent.site_status();
     let builtin_google = google::builtin_client().is_some();
@@ -376,8 +377,8 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "clip_watch": get("clip.watch") != "0",
         // The browser extension's key for Fill this form (see bridge.rs), on this computer only.
         "ext_key": ext_key,
-        "phone_url": if host.kind() == "server" { String::new() } else { agent.secret("phone.url") },
-        "phone_last": agent.secret("phone.last"),
+        "phone_url": phone_url,
+        "phone_last": phone_last,
         "ext_last": Some(get("ext.last")).filter(|x| !x.is_empty()),
         "ext_folder": crate::bridge::extension_dir(agent).to_string_lossy(),
         "repeat_mode": repeat_mode,
