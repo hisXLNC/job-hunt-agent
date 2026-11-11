@@ -6,10 +6,11 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.36.5] - 2026-11-11
 
-Skills chosen carefully, one at a time.
+Skills chosen carefully, and send jobs from your phone.
 
 ### Changes
 
+- Send jobs from the LinkedIn app on your phone: share a job to a Send to Job Hunt shortcut (set it up in Fill forms on your phone), and Job Hunt on your PC adds it, scores it and tells you, through Tailscale. Works from any app or browser that shares a link.
 - Skills: accuracy over speed. For each skill Job Hunt waits for Workday's results to finish coming in, compares every option and picks the closest (the same name, else the one sharing most of its words), and if nothing is close searches again shorter ("Payment" for "Payments Integration"). It clicks, waits up to five seconds for Workday to take it, clicks once more if it didn't, and pauses before the next. It never clicks a skill Workday already took (that would untick it).
 
 ## [2.36.4] - 2026-11-11

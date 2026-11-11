@@ -82,6 +82,11 @@ pub fn start(agent: Arc<Agent>) {
                     Resp { status: 204, ctype: "text/plain".into(), body: vec![], headers: vec![] }
                 } else if req.method == "GET" && req.path == "/m/fill.js" {
                     phone_script(&agent, &sent)
+                } else if req.path == "/m/add" {
+                    // A job shared from your phone (the LinkedIn app's Share → Send to Job Hunt): the
+                    // link as ?u=, or the shared text as the body.
+                    let shared = req.query.get("u").cloned().unwrap_or_else(|| String::from_utf8_lossy(&req.body).to_string());
+                    phone_add(&agent, &sent, &shared)
                 } else {
                     handle(&agent, &req.method, &req.path, &sent, &req.body)
                 };
@@ -114,6 +119,47 @@ fn phone_script(agent: &Agent, sent: &str) -> Resp {
         crate::fill::extension_script()
     );
     Resp { status: 200, ctype: "application/javascript; charset=utf-8".into(), body: script.into_bytes(), headers: vec![("Cache-Control".into(), "no-store".into())] }
+}
+
+/// Add the job a shared link points to (LinkedIn's share text is "…: https://www.linkedin.com/jobs/view/…"):
+/// read now, so the reply names it; added and scored in the background, with a notice when it's in.
+fn phone_add(agent: &Arc<Agent>, sent: &str, shared: &str) -> Resp {
+    let text = |status: u16, t: &str| Resp { status, ctype: "text/plain; charset=utf-8".into(), body: t.as_bytes().to_vec(), headers: vec![("Cache-Control".into(), "no-store".into())] };
+    let want = key(agent);
+    if sent.len() != want.len() || !sent.bytes().zip(want.bytes()).fold(true, |ok, (a, b)| ok & (a == b)) {
+        return text(401, "Job Hunt: the key in this shortcut is old. Copy the link again from Job Hunt on your PC (Fill forms on your phone).");
+    }
+    let Some(link) = Regex::new(r"https?://\S+").unwrap().find(shared).map(|m| m.as_str().trim_end_matches(|c: char| ").,;'\"".contains(c)).to_string()) else {
+        return text(400, "Job Hunt: there was no link in what was shared. Share the job itself (the Share button on the posting).");
+    };
+    // A short link (LinkedIn's app shares lnkd.in/…): where it leads.
+    let link = if link.contains("lnkd.in/") || link.contains("linkedin.com/comm/") {
+        crate::sources::http().get(&link).send().map(|r| r.url().to_string()).unwrap_or(link)
+    } else { link };
+    let posting = match agent.read_link(&link) {
+        Ok(p) => p,
+        Err(e) => return text(422, &format!("Job Hunt couldn't read that posting: {}", e.0)),
+    };
+    let _ = agent.db().set("phone.last", &crate::util::now());
+    let (title, company) = (posting.title.clone(), posting.company.clone());
+    let a = agent.clone();
+    std::thread::spawn(move || {
+        let use_claude = a.claude_ready() && posting.description.trim().len() >= 40;
+        // A LinkedIn job the way the browser button adds it (with its company-site apply link and pay).
+        let added = if crate::sources::linkedin_job_id(&link).is_some() {
+            a.add_clip(&json!({ "url": link, "claude": use_claude })).map(|j| j.id)
+        } else {
+            a.add_manual(&posting.company, &posting.title, &posting.url, &posting.location, &posting.description, use_claude)
+        };
+        match added {
+            Ok(id) => {
+                let (head, body) = a.added_notice(&id);
+                a.note(&head, &body);
+            }
+            Err(e) => a.note("Couldn't add that job", &e.0),
+        }
+    });
+    text(200, &format!("Sent to Job Hunt: {title} at {company}. It's being scored now."))
 }
 
 /// Make Job Hunt reachable from your phone through Tailscale: `tailscale serve` gives this computer an
@@ -253,6 +299,9 @@ mod tests {
         assert!(js.contains("__jobhuntRemote") && js.contains(&k) && js.contains("window.__jobhunt"));
         let bad = String::from_utf8(phone_script(&s.agent, "nope").body).unwrap();
         assert!(bad.starts_with("alert(") && !bad.contains(&k));
+        // A job shared from the phone: only with the key, and only with a link in it.
+        assert_eq!(phone_add(&s.agent, "nope", "https://www.linkedin.com/jobs/view/123456789").status, 401);
+        assert_eq!(phone_add(&s.agent, &k, "Look at this job!").status, 400);
         assert_eq!(handle(&s.agent, "GET", "/nope", &k, b"").status, 404);
     }
 

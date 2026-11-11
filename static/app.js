@@ -15,7 +15,17 @@ function phoneCard(st) {
       <li>Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself (a note or an email to yourself). Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.</li>
       <li>On the phone, bookmark any page, then edit the bookmark: name it <b>Job Hunt Fill</b> and paste what you copied as its address (URL).</li>
       <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark (in Safari, open Bookmarks and tap it). The Job Hunt panel appears and fills in the form.</li></ol>
-      <p class="muted small">On the phone, Workday's skills are chosen as best Job Hunt can; tick any it missed. The bookmark holds your key: keep it to yourself. Address: <code>${esc(url)}</code> <button class="btn ghost sm" data-act="phoneReset">Change</button></p>`
+      <p class="muted small">On the phone, Workday's skills are chosen as best Job Hunt can; tick any it missed. The bookmark holds your key: keep it to yourself. Address: <code>${esc(url)}</code> <button class="btn ghost sm" data-act="phoneReset">Change</button></p>
+      <h3 style="margin-top:18px">Send jobs from the LinkedIn app</h3>
+      <p class="muted small">Share a job from the LinkedIn app (or any app or browser) to Job Hunt: it's added and scored here, and you get a notice.</p>
+      <ol class="small steps-list">
+        <li>Get this link onto your iPhone: <button class="btn sm" data-act="copyShare">Copy the link</button> (send it to yourself, like the bookmark).</li>
+        <li>In <b>Shortcuts</b>, press <b>+</b> and name it <b>Send to Job Hunt</b>. Press the <b>ⓘ</b> and turn on <b>Show in Share Sheet</b>.</li>
+        <li>Add the action <b>URL Encode</b> (it takes the <b>Shortcut Input</b>).</li>
+        <li>Add <b>Get Contents of URL</b>: paste the link as its address, then tap at its end and insert <b>URL Encoded Text</b>.</li>
+        <li>Add <b>Show Notification</b> with <b>Contents of URL</b>, so you see what was added.</li>
+        <li>In the LinkedIn app, on a job: <b>Share</b> → <b>More</b> → <b>Send to Job Hunt</b>.</li></ol>
+      <p class="muted small">On Android, the free <b>HTTP Shortcuts</b> app does the same: a shortcut that receives shared text and opens this link with the text added at the end.</p>`
     : `<div class="row"><button class="btn primary" data-act="phoneTailscale">Set up with Tailscale</button><span class="muted small">Shares Job Hunt with your own devices only (Tailscale Serve), and gets this PC's address.</span></div>
       <details class="small"><summary class="muted">Or type the address yourself</summary><div class="row"><input id="phoneUrl" placeholder="https://your-pc.tailnet-name.ts.net" style="flex:1"><button class="btn sm" data-act="phoneSave">Save</button></div>
       <p class="muted small">An https address that reaches port ${47613} on this PC, such as after <code>tailscale serve --bg 47613</code>.</p></details>`}
@@ -3817,6 +3827,11 @@ async function act(el) {
   if (a === 'copyPhone') {
     const st = await api('/api/settings');
     try { await navigator.clipboard.writeText(phoneBookmark(st)); toast('Copied. Send it to your phone and paste it as a bookmark\'s address.'); } catch (e) { toast('Couldn\'t copy.', true); }
+    return;
+  }
+  if (a === 'copyShare') {
+    const st = await api('/api/settings');
+    try { await navigator.clipboard.writeText(`${st.phone_url}/m/add?k=${encodeURIComponent(st.ext_key)}&u=`); toast('Copied. Send it to your phone for the shortcut.'); } catch (e) { toast('Couldn\'t copy.', true); }
     return;
   }
   if (a === 'phoneTailscale') return busy(async () => { await api('/api/phone', { method: 'POST', body: { action: 'tailscale' } }); route(); }, 'Set up: Job Hunt can be reached from your phone through Tailscale.');
