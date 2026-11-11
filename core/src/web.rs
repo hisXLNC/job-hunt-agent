@@ -117,7 +117,7 @@ pub fn ensure_started(agent: Arc<Agent>, host: Arc<dyn Host>, port: u16) -> Resu
 pub(crate) struct Request {
     pub(crate) method: String,
     pub(crate) path: String,
-    query: HashMap<String, String>,
+    pub(crate) query: HashMap<String, String>,
     pub(crate) headers: HashMap<String, String>,
     pub(crate) body: Vec<u8>,
 }

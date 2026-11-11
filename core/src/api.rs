@@ -376,6 +376,8 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "clip_watch": get("clip.watch") != "0",
         // The browser extension's key for Fill this form (see bridge.rs), on this computer only.
         "ext_key": ext_key,
+        "phone_url": if host.kind() == "server" { String::new() } else { agent.secret("phone.url") },
+        "phone_last": agent.secret("phone.last"),
         "ext_last": Some(get("ext.last")).filter(|x| !x.is_empty()),
         "ext_folder": crate::bridge::extension_dir(agent).to_string_lossy(),
         "repeat_mode": repeat_mode,
@@ -1114,6 +1116,22 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.db().log(None, "fill", &format!("applying to {} in a row", jobs.len()))?;
             host.fill_application(&first.id, &crate::fill::form_link(first))?;
             Ok(Resp::json(&json!({ "started": jobs.len() })))
+        }
+        // Fill forms on your phone: share Job Hunt with your own devices through Tailscale, or keep the
+        // address you typed (another way to reach this computer).
+        ["api", "phone"] if req.remote || host.kind() == "server" => Err(Error("Set this up in Job Hunt on your PC.".into())),
+        ["api", "phone"] => {
+            let url = if s(&b, "action") == "tailscale" {
+                crate::bridge::tailscale_serve()?
+            } else {
+                let u = s(&b, "url").trim().trim_end_matches('/').to_string();
+                if !u.is_empty() && !u.starts_with("https://") {
+                    return Err(Error("The address starts with https:// (application pages are https, and won't load from an http address).".into()));
+                }
+                u
+            };
+            agent.db().set("phone.url", &url)?;
+            Ok(Resp::json(&json!({ "url": url })))
         }
         ["api", "open-url"] => {
             let url = s(&b, "url");

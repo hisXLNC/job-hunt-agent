@@ -4,6 +4,24 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/** The phone's "Fill this form" bookmark: loads Job Hunt's form filler from your PC (through Tailscale). */
+const phoneBookmark = st => `javascript:(function(){var s=document.createElement('script');s.src='${st.phone_url}/m/fill.js?k=${encodeURIComponent(st.ext_key)}&t='+Date.now();s.onerror=function(){alert('Job Hunt: couldn\\'t reach your PC. Is Job Hunt running there, and Tailscale on on this phone? (A few sites block it.)')};document.documentElement.appendChild(s)})();`;
+function phoneCard(st) {
+  const url = st.phone_url || '';
+  return `<section class="card" id="phoneCard"><header><h2>Fill forms on your phone</h2>${url ? `<span class="pill ${st.phone_last ? 'good' : ''}">${st.phone_last ? 'Used ' + esc(fmtWhen(st.phone_last)) : 'Ready'}</span>` : ''}</header>
+    <p class="muted">Apply from your phone's browser and Job Hunt fills in the form, from this PC (it has to be on, with Job Hunt running). Your phone reaches it through Tailscale, so only your own devices can.</p>
+    ${url ? `<ol class="small steps-list">
+      <li>On your phone, turn on Tailscale.</li>
+      <li>Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself (a note or an email to yourself). Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.</li>
+      <li>On the phone, bookmark any page, then edit the bookmark: name it <b>Job Hunt Fill</b> and paste what you copied as its address (URL).</li>
+      <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark (in Safari, open Bookmarks and tap it). The Job Hunt panel appears and fills in the form.</li></ol>
+      <p class="muted small">On the phone, Workday's skills are chosen as best Job Hunt can; tick any it missed. The bookmark holds your key: keep it to yourself. Address: <code>${esc(url)}</code> <button class="btn ghost sm" data-act="phoneReset">Change</button></p>`
+    : `<div class="row"><button class="btn primary" data-act="phoneTailscale">Set up with Tailscale</button><span class="muted small">Shares Job Hunt with your own devices only (Tailscale Serve), and gets this PC's address.</span></div>
+      <details class="small"><summary class="muted">Or type the address yourself</summary><div class="row"><input id="phoneUrl" placeholder="https://your-pc.tailnet-name.ts.net" style="flex:1"><button class="btn sm" data-act="phoneSave">Save</button></div>
+      <p class="muted small">An https address that reaches port ${47613} on this PC, such as after <code>tailscale serve --bg 47613</code>.</p></details>`}
+  </section>`;
+}
+
 async function api(path, { method = 'GET', body, raw } = {}) {
   const opts = { method, headers: {} };
   if (raw !== undefined) { opts.body = raw; opts.headers['Content-Type'] = 'application/octet-stream'; }
@@ -2256,7 +2274,8 @@ async function showSettings(tab, sub, host) {
         <li>Open a job posting and click the bookmark. On LinkedIn, click the job in the list so it shows on the right (or open the job itself), then click it.</li>
         <li>Job Hunt picks it up within a few seconds and tells you when it's ready. Added it before version 1.44? Add it again: the old one didn't work on LinkedIn.</li></ol>
       <label class="check"><input type="checkbox" data-act="clipWatch" ${st.clip_watch ? 'checked' : ''}> <span class="small">Pick up postings sent from the browser</span></label>` : '<div class="row"><a class="btn" href="#add">Add a job</a></div>'}
-    </section>`;
+    </section>
+    ${desk && st.ext_key ? phoneCard(st) : ''}`;
   } else if (tab === 'cvs') {
     const kindName = { docx: 'Word', pdf: 'Converted from PDF', text: 'Converted from text', 'docx-converted': 'Converted to Job Hunt layout' };
     body = `<section class="card"><header><h2>Your CVs</h2><button class="btn ghost" data-act="folder" data-which="cv">${svg('folder')}Open folder</button></header>
@@ -3762,6 +3781,14 @@ async function act(el) {
   if (a === 'insights') {
     return busy(async () => { await api('/api/results/insights', { method: 'POST' }); route(); setTimeout(() => { if (location.hash === '#results') route(); }, 30000); }, 'Claude is looking at your results. This takes a minute.');
   }
+  if (a === 'copyPhone') {
+    const st = await api('/api/settings');
+    try { await navigator.clipboard.writeText(phoneBookmark(st)); toast('Copied. Send it to your phone and paste it as a bookmark\'s address.'); } catch (e) { toast('Couldn\'t copy.', true); }
+    return;
+  }
+  if (a === 'phoneTailscale') return busy(async () => { await api('/api/phone', { method: 'POST', body: { action: 'tailscale' } }); route(); }, 'Set up: Job Hunt can be reached from your phone through Tailscale.');
+  if (a === 'phoneSave') return busy(async () => { await api('/api/phone', { method: 'POST', body: { url: $('#phoneUrl').value } }); route(); }, 'Saved.');
+  if (a === 'phoneReset') return busy(async () => { await api('/api/phone', { method: 'POST', body: { url: '' } }); route(); });
   if (a === 'copyBookmarklet') {
     try { await navigator.clipboard.writeText(bookmarklet()); toast('Copied. Paste it as the URL of a new bookmark.'); } catch (e) { toast('Couldn\'t copy. Drag the blue button to your bookmarks bar instead.', true); }
     return;

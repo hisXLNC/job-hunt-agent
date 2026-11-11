@@ -8,12 +8,34 @@
   const JOB = __JOB__;
   // In the browser extension (no token): messages go through the extension, which asks Job Hunt.
   const EXT = !TOKEN && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id;
+  // On your phone (the bookmark): messages go straight to Job Hunt on your PC, through Tailscale.
+  const PHONE = !TOKEN && !EXT && window.__jobhuntRemote;
   // In the window, messages go as an address Job Hunt catches and cancels. A filled-in form usually
   // guards against leaving it ("Leave site? Changes may not be saved"), which would stop the message,
   // so while one goes, that guard is stopped before it runs (this script runs before the page's own).
   let sending = 0;
   window.addEventListener('beforeunload', e => { if (Date.now() - sending < 2000) e.stopImmediatePropagation(); }, true);
-  const send = EXT ? (kind, data) => {
+  async function phoneSend(kind, data) {
+    const R = window.__jobhuntRemote;
+    const call = async (route, body) => {
+      let r;
+      try { r = await fetch(R.base + route, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Job-Hunt-Key': R.key }, body: JSON.stringify(body) }); }
+      catch (e) { throw new Error("Can't reach Job Hunt on your PC. Is it running there, and is Tailscale on on this phone?"); }
+      const v = await r.json().catch(() => ({}));
+      if (!r.ok) { const e = new Error(v.error || `Job Hunt said ${r.status}.`); e.data = v; throw e; }
+      return v;
+    };
+    const J = window.__jobhunt;
+    if (kind === 'fields') {
+      try { J.fill(await call('/ext/fill', data)); }
+      catch (e) { if (e.data && e.data.choose) J.choose(e.message, e.data.choose); else J.failed("Couldn't fill it in: " + e.message); }
+    } else if (kind === 'pick') {
+      try { await call('/ext/pick', data); J.start(); } catch (e) { J.failed("Couldn't choose it: " + e.message); }
+    } else if (['salary', 'dismiss', 'learn', 'applied'].includes(kind)) {
+      call('/ext/' + kind, data).catch(() => {});
+    }
+  }
+  const send = PHONE ? (kind, data) => phoneSend(kind, { ...data, url: location.href, title: document.title }) : EXT ? (kind, data) => {
     // The extension was updated (or turned off) since this page opened: this copy can't reach it.
     const gone = () => { waitingSince = 0; progress(null); if (buttons.fill) buttons.fill.disabled = false; status('The Job Hunt extension was updated since this page opened. Reload this page (F5), then press Fill this form in the extension again.'); };
     try {
@@ -39,7 +61,7 @@
   // Which copy this is: the extension's (with its version) or the Apply window's. When the extension
   // updates, the copy already on an open page (Workday's form never reloads) stops working; a new
   // copy takes over from it instead of stepping aside.
-  const ME = EXT ? 'ext:' + chrome.runtime.getManifest().version : 'app';
+  const ME = EXT ? 'ext:' + chrome.runtime.getManifest().version : PHONE ? 'phone' : 'app';
   const other = () => [...document.querySelectorAll('[data-jobhunt-panel]')].filter(h => h !== ui).some(h => {
     const v = h.getAttribute('data-jobhunt-panel');
     if (EXT && v !== 'app' && v !== ME) { h.remove(); return false; } // an older extension's: gone
@@ -964,5 +986,7 @@
     }
   }
   if (EXT) { panel(); status('Press Fill in this form when the application form is on screen.'); return; }
+  // From the phone's bookmark: tapped with the form on screen, so it starts right away.
+  if (PHONE) { panel(); start(); return; }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', look); else look();
 })();

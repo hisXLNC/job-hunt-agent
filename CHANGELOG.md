@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.36.0] - 2026-11-11
+
+Fill in forms on your phone.
+
+### Changes
+
+- Apply from your phone's browser and Job Hunt fills in the form: a Job Hunt Fill bookmark on your phone loads the same form filler as the extension, and gets the answers, your CV and letter from Job Hunt on your PC through Tailscale (only your own devices can reach it).
+- Set it up in Search → Set up sources → Fill forms on your phone: Set up with Tailscale shares Job Hunt with your devices (Tailscale Serve, https) and gives the bookmark to copy to your phone.
+- On the phone, Workday's skills are chosen as best Job Hunt can (the real clicks need the desktop extension); tick any it missed.
+
 ## [2.35.14] - 2026-11-10
 
 Workday dates, one skill at a time, the right number of jobs.
@@ -1343,6 +1353,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.36.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.0
 [2.35.14]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.14
 [2.35.13]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.13
 [2.35.12]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.12

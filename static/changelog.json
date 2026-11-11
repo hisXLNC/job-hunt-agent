@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.36.0",
+    "date": "2026-11-11",
+    "title": "Fill in forms on your phone",
+    "changes": [
+      "Apply from your phone's browser and Job Hunt fills in the form: a Job Hunt Fill bookmark on your phone loads the same form filler as the extension, and gets the answers, your CV and letter from Job Hunt on your PC through Tailscale (only your own devices can reach it).",
+      "Set it up in Search → Set up sources → Fill forms on your phone: Set up with Tailscale shares Job Hunt with your devices (Tailscale Serve, https) and gives the bookmark to copy to your phone.",
+      "On the phone, Workday's skills are chosen as best Job Hunt can (the real clicks need the desktop extension); tick any it missed."
+    ]
+  },
+  {
     "version": "2.35.14",
     "date": "2026-11-10",
     "title": "Workday dates, one skill at a time, the right number of jobs",

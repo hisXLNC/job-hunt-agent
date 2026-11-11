@@ -77,11 +77,90 @@ pub fn start(agent: Arc<Agent>) {
             let agent = agent.clone();
             std::thread::spawn(move || {
                 let Ok(Some(req)) = read_request(&stream) else { return };
-                let reply = handle(&agent, &req.method, &req.path, req.headers.get("x-job-hunt-key").map(String::as_str).unwrap_or(""), &req.body);
+                let sent = req.headers.get("x-job-hunt-key").cloned().or_else(|| req.query.get("k").cloned()).unwrap_or_default();
+                let mut reply = if req.method == "OPTIONS" {
+                    Resp { status: 204, ctype: "text/plain".into(), body: vec![], headers: vec![] }
+                } else if req.method == "GET" && req.path == "/m/fill.js" {
+                    phone_script(&agent, &sent)
+                } else {
+                    handle(&agent, &req.method, &req.path, &sent, &req.body)
+                };
+                // Your phone's browser calls from the application page's own site (through Tailscale):
+                // allowed from any page, as the key is what keeps others out.
+                reply.headers.extend([
+                    ("Access-Control-Allow-Origin".to_string(), "*".to_string()),
+                    ("Access-Control-Allow-Headers".to_string(), "Content-Type, X-Job-Hunt-Key".to_string()),
+                    ("Access-Control-Allow-Methods".to_string(), "GET, POST, OPTIONS".to_string()),
+                    ("Access-Control-Allow-Private-Network".to_string(), "true".to_string()),
+                ]);
                 let _ = write(stream, reply);
             });
         }
     });
+}
+
+/// The form filler for your phone's bookmark (`/m/fill.js?k=…`): the extension's script, talking to
+/// Job Hunt at the address it was loaded from (your PC's Tailscale name), with the key.
+fn phone_script(agent: &Agent, sent: &str) -> Resp {
+    let want = key(agent);
+    if sent.len() != want.len() || !sent.bytes().zip(want.bytes()).fold(true, |ok, (a, b)| ok & (a == b)) {
+        let body = "alert('Job Hunt: this bookmark has an old key. Copy the bookmark again from Job Hunt on your PC: Settings, Fill forms on your phone.');";
+        return Resp { status: 200, ctype: "application/javascript; charset=utf-8".into(), body: body.as_bytes().to_vec(), headers: vec![("Cache-Control".into(), "no-store".into())] };
+    }
+    let _ = agent.db().set("phone.last", &crate::util::now());
+    let script = format!(
+        "if (!window.__jobhunt) {{\nwindow.__jobhuntRemote = {{ base: new URL(document.currentScript.src).origin, key: {} }};\n{}\n}} else window.__jobhunt.start();\n",
+        json!(want),
+        crate::fill::extension_script()
+    );
+    Resp { status: 200, ctype: "application/javascript; charset=utf-8".into(), body: script.into_bytes(), headers: vec![("Cache-Control".into(), "no-store".into())] }
+}
+
+/// Make Job Hunt reachable from your phone through Tailscale: `tailscale serve` gives this computer an
+/// https address only your own devices can open (Job Hunt itself still listens on this computer only).
+/// Returns that address.
+pub fn tailscale_serve() -> crate::R<String> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    let exe = ["C:\\Program Files\\Tailscale\\tailscale.exe", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"].iter().find(|p| std::path::Path::new(p).exists()).map(|p| p.to_string()).unwrap_or_else(|| "tailscale".into());
+    let cmd = |args: &[&str]| {
+        let mut c = Command::new(&exe);
+        c.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            c.creation_flags(0x0800_0000); // no console window
+        }
+        c
+    };
+    let out = cmd(&["status", "--json"]).output().map_err(|e| crate::Error(format!("Couldn't run Tailscale on this computer ({e}). Is it installed?")))?;
+    let st: Value = serde_json::from_slice(&out.stdout).unwrap_or(Value::Null);
+    let dns = st["Self"]["DNSName"].as_str().unwrap_or("").trim_end_matches('.').to_string();
+    if dns.is_empty() {
+        return Err(crate::Error("Tailscale isn't signed in on this computer. Open Tailscale, sign in, then try again.".into()));
+    }
+    // Serve may wait for you to allow it in your tailnet's settings: give it twenty seconds, then say so.
+    let mut child = cmd(&["serve", "--bg", &PORT.to_string()]).spawn().map_err(|e| crate::Error(format!("Couldn't run Tailscale: {e}")))?;
+    let started = std::time::Instant::now();
+    let status = loop {
+        if let Some(s) = child.try_wait()? {
+            break Some(s);
+        }
+        if started.elapsed().as_secs() > 20 {
+            let _ = child.kill();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    };
+    let mut said = String::new();
+    if let Some(mut o) = child.stdout.take() { let _ = o.read_to_string(&mut said); }
+    if let Some(mut e) = child.stderr.take() { let _ = e.read_to_string(&mut said); }
+    let link = Regex::new(r"https://login\.tailscale\.com/\S+").unwrap().find(&said).map(|m| m.as_str().to_string());
+    match (status, link) {
+        (Some(s), _) if s.success() => Ok(format!("https://{dns}")),
+        (_, Some(l)) => Err(crate::Error(format!("Tailscale needs you to allow this once: open {l} , press Enable, then press Set up with Tailscale again."))),
+        _ => Err(crate::Error(format!("Tailscale couldn't share Job Hunt: {}", said.trim().chars().take(300).collect::<String>()))),
+    }
 }
 
 fn json_resp(status: u16, v: Value) -> Resp {
@@ -169,6 +248,11 @@ mod tests {
         assert!(k.starts_with("jh-") && key(&s.agent) == k, "made once, then kept");
         assert_eq!(handle(&s.agent, "GET", "/ext/ping", "wrong", b"").status, 401);
         assert_eq!(handle(&s.agent, "GET", "/ext/ping", &k, b"").status, 200);
+        // The phone's script: only with the key, and set up to call back where it came from.
+        let js = String::from_utf8(phone_script(&s.agent, &k).body).unwrap();
+        assert!(js.contains("__jobhuntRemote") && js.contains(&k) && js.contains("window.__jobhunt"));
+        let bad = String::from_utf8(phone_script(&s.agent, "nope").body).unwrap();
+        assert!(bad.starts_with("alert(") && !bad.contains(&k));
         assert_eq!(handle(&s.agent, "GET", "/nope", &k, b"").status, 404);
     }
 
