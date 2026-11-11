@@ -657,9 +657,12 @@ school); never put two jobs in one entry or one job in two. A role at the same e
 is its own entry. More entries on the form than in the CV: leave the extra ones out.\n- Promotions: a CV often lists several titles under one employer. Each title is its own entry, most recent first, with the employer (and location) repeated in each, its own dates (from the date by that title; where the CV gives dates only for the employer, the first title starts on the employer's start date and the last ends on its end date, and a date you can't tell is left out) and its own lines as the description (lines written for the employer as a whole go with the most recent title).\n- \"I currently work here\" (current job, present, still employed): \"yes\" only in the entries for roles the CV shows as ongoing (to Present, Current, to date, or no end date on the most recent job); \"no\" in every other entry (a lone checkbox per entry, by its section: answer each one), including earlier titles at the candidate's current employer, even when it's ticked already. An entry with an end date never gets \"yes\".\n\
 - add (a section's \"Add\" or \"Add another\" button; entries is how many entries the section has now): how many \
 more entries the CV needs there, in digits, always answered: work history is every role in the CV's experience \
-(each title counts, promotions included), education every degree or school, languages every language the CV or \
+(each title counts, promotions included, and a dated career break, transition, relocation or sabbatical the CV \
+lists among its jobs is an entry too: its heading as the title, what it says as the description), education every degree or school, languages every language the CV or \
 facts list, less the entries already there. \"0\" when it has enough. Language entries: the language, and \
-proficiency from the CV or facts (native, fluent, professional, beginner...), the closest option, the same level for \
+proficiency from the CV or facts (native, fluent, professional, beginner...): the option with that word in it when there \
+is one (\"beginner\" is \"1 - Beginner\", never \"Classroom Study\" or another level because of how it was learned), else \
+the closest, the same level for \
 reading, speaking and writing unless they say otherwise; \"I am fluent\" ticked (yes) only for a native or fluent \
 language, \"no\" for one learned only a little (a beginner). Fill the entries that are there now as usual. Copy each job title and \
 employer exactly as the CV writes it, never shortened or split; a description is that role's own lines from the \
@@ -669,6 +672,8 @@ CV.\n\
 CV and none in the facts is the year it ended (To); leave From out then, never the same year in both. A date field \
 with its format in the label (\"From (MM/YYYY)\") is answered in that format: \"07/2023\", or \"2009\" for (YYYY). GPA and grades only as the CV or \
 facts give them.\n\
+- prompt (a box where you type and choose one item from the site's list: Field of Study, Major): the one item, \
+in the short common name such a list would have (\"Finance\", \"Business Administration\").\n\
 - skills (a box that adds one skill at a time): 6-10 skills the CV shows that matter most for this posting, \
 most important first, joined by \"; \". Use the short, common name a list of skills would have (\"Project \
 Management\", \"Stakeholder Management\", \"Budgeting\", \"Power BI\"), one to three words each, never a sentence.\n\

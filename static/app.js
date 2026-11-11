@@ -1124,7 +1124,7 @@ async function loadKit() {
     ${group('Your facts for forms', (k.facts || []).map(f => row(f.label || 'Fact', f.value)).join(''))}
     ${group('Work experience', (k.jobs || []).map((e, i) => entry(e, i, 'Job')).join(''))}
     ${group('Education', (k.schools || []).map((e, i) => entry(e, i, 'School')).join(''))}
-    ${group('Skills', row('Skills', k.skills, true) + (k.skills ? row('As a list', k.skills.split(/\s*[;,|•\n]\s*/).filter(Boolean).join('\n'), true) : ''))}
+    ${group('Skills', (k.skills ? k.skills.split(/\s*[;,|•·\n]\s*/).map(x => x.replace(/^[-–*\s]+|[.\s]+$/g, '')).filter(x => x && x.length < 60) : []).map(x => row('Skill', x)).join('') + row('All of them', k.skills, true))}
     ${group('Languages', (k.languages || []).map(l => row('Language', l)).join(''))}
     ${group('Answers written for this application', (k.answers || []).map(a => row(a.question, a.answer, true)).join(''))}
     ${group('Cover letter', row('Letter', k.letter, true))}

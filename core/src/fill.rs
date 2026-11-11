@@ -346,7 +346,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let work_add = fields.iter().any(|f| f["type"] == "add" && is_work(f["section"].as_str().unwrap_or("")));
     let mut lines = lines;
     if work_add {
-        lines.push(json!({"key": "_roles", "type": "textarea", "label": "Every role in the CV's work experience, newest first, one per line as: title | employer | dates. Each title counts, promotions at the same employer included."}).to_string());
+        lines.push(json!({"key": "_roles", "type": "textarea", "label": "Every role in the CV's work experience, newest first, one per line as: title | employer | dates. Each title counts, promotions at the same employer included, and so does a dated career break or transition the CV lists among its jobs."}).to_string());
     }
     let mut roles_listed = 0usize;
     let mut written: Vec<String> = vec![];

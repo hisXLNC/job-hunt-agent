@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.36.1",
+    "date": "2026-11-11",
+    "title": "Language levels, Field of Study, skills it missed, career transitions",
+    "changes": [
+      "Languages: a level you give in your facts (\"French: beginner\") picks the option with that word (\"1 - Beginner\"), not one that matches how you learned it (\"Classroom Study\").",
+      "Skills: the panel lists every skill Workday didn't take, to add yourself; before, a later round (the end dates) cleared the list before you saw it.",
+      "Field of Study (and Major and the like) on Workday: typed and chosen from Workday's list like a skill, instead of left empty.",
+      "Work Experience: a dated career break or transition on your CV (\"Career Transition\") gets its own entry, like a job.",
+      "Copy-and-paste kit: each skill has its own Copy button."
+    ]
+  },
+  {
     "version": "2.36.0",
     "date": "2026-11-11",
     "title": "Fill in forms on your phone, and a copy-and-paste kit",

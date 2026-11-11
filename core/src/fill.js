@@ -238,6 +238,9 @@
   // A skills box (Workday's "Type to Add Skills"): type a skill, press Enter, choose the match from
   // the list that comes up; once per skill. Its value is the skills chosen so far.
   const SKILLS = /\bskills?\b/i;
+  // A box that takes one item from the site's list (Workday's Field of Study): typed, then chosen like a skill.
+  const PROMPT = /field of study|area of study|major|discipline|specialization|specialisation/i;
+  const isPrompt = (el, type) => ['text', 'search'].includes(type) && PROMPT.test(labelOf(el)) && (/myworkday/i.test(location.hostname) || !!(el.closest('[data-automation-id^=formField]') || el.parentElement)?.parentElement?.querySelector('[data-automation-id=promptIcon],[data-automation-id=multiselectInputContainer],[data-uxi-widget-type=multiselect],[data-automation-id=multiSelectContainer]'));
   const isSkills = (el, type) => ['text', 'search'].includes(type) && SKILLS.test(labelOf(el)) && !/years|level|describe|summary/i.test(labelOf(el));
   const skillPills = el => {
     const box = el.closest('[data-automation-id=multiSelectContainer],[data-uxi-widget-type=multiselect],[role=group],div');
@@ -395,7 +398,7 @@
       }
       const key = 'f' + n++;
       const chosen = type === 'select' && el.selectedIndex >= 0 && el.value !== '' ? clean(el.options[el.selectedIndex].text) : '';
-      const f = { key, type: isSkills(el, type) ? 'skills' : el.getAttribute('role') === 'combobox' ? 'combobox' : type, label: labelOf(el), required: el.required || el.getAttribute('aria-required') === 'true', value: type === 'file' ? (el.files && el.files.length ? 'attached' : '') : choice ? '' : type === 'select' ? chosen : clean(el.value) };
+      const f = { key, type: isSkills(el, type) ? 'skills' : isPrompt(el, type) ? 'prompt' : el.getAttribute('role') === 'combobox' ? 'combobox' : type, label: labelOf(el), required: el.required || el.getAttribute('aria-required') === 'true', value: type === 'file' ? (el.files && el.files.length ? 'attached' : '') : choice ? '' : type === 'select' ? chosen : clean(el.value) };
       if (type === 'checkbox') f.checked = el.checked;
       if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text)).slice(0, 60);
       if (type === 'checkbox') f.context = question(el);
@@ -565,6 +568,7 @@
     el.focus();
     setter(el, String(v));
     if (f.type === 'skills') return fillSkills(el, v);
+    if (f.type === 'prompt') return fillSkills(el, String(v).split(/\s*[;\n]\s*/)[0], true);
     if (f.type === 'combobox') {
       await wait(500);
       const opt = [...document.querySelectorAll('[role=option]')].find(o => near(o.textContent, v));
@@ -615,7 +619,7 @@
   const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].filter(o => !own(o) && shown(o) && clean(o.textContent));
   // Each skill: type it, press Enter, wait for the list of matches, choose the closest (the same
   // name, else one that starts with it or contains it, else the first), then the next.
-  async function fillSkills(first, v) {
+  async function fillSkills(first, v, one) {
     const want = String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean).slice(0, 12);
     // Workday redraws the box after each skill: find it again each time (by its id, else in its field).
     const field = first.closest('[data-automation-id^=formField]') || first.parentElement?.parentElement?.parentElement || document.body;
@@ -627,7 +631,7 @@
     if (EXT) await new Promise(res => { const t = setTimeout(res, 3000); try { chrome.runtime.sendMessage({ jobhunt: 'debug', data: {} }, () => { void chrome.runtime.lastError; clearTimeout(t); setTimeout(res, 600); }); } catch (e) { clearTimeout(t); res(); } });
     for (const skill of want) {
       let el = box();
-      if (skillPills(el).some(p => same(p, skill))) { added++; continue; }
+      if (skillPills(el).some(p => same(p, skill))) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); continue; }
       // The last skill's list still open: close it, so its matches aren't taken for this one's.
       if (options().length) { pressKey(el, 'Escape'); await wait(300); }
       el = box();
@@ -650,7 +654,7 @@
       }
       await wait(400);
       list = options();
-      if (!list.length || sig() === before && before) { skillMiss.push(skill); if (!diag.skill) diag.skill = { skill, noList: !list.length, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), box: htmlOf(field, 2500) }; typeIn(box(), ''); continue; }
+      if (!list.length || sig() === before && before) { if (!skillMiss.some(x => same(x, skill))) skillMiss.push(skill); if (!diag.skill) diag.skill = { skill, noList: !list.length, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), box: htmlOf(field, 2500) }; typeIn(box(), ''); continue; }
       const t = o => clean(o.getAttribute('data-automation-label') || o.textContent).toLowerCase(), s = skill.toLowerCase();
       // Else the one sharing most of the skill's words ("Budgeting" for "Budget Planning"), if it shares at least half.
       const words = x => x.split(/[^a-z0-9+#]+/).filter(w => w.length > 2 && !['and', 'the', 'for'].includes(w)).map(w => w.slice(0, 6));
@@ -664,7 +668,7 @@
       // Not in the list yet (the last search's results still showing, or this one still coming): look again.
       for (let i = 0; i < 2 && !best; i++) { await wait(1200); list = options(); best = choose(); }
       if (!best) {
-        skillMiss.push(skill);
+        if (!skillMiss.some(x => same(x, skill))) skillMiss.push(skill);
         if (!diag.skill) diag.skill = { skill, notInList: true, options: list.slice(0, 10).map(o => ({ text: clean(o.textContent).slice(0, 60), label: o.getAttribute('data-automation-label'), at: where(o) })), typed: box().value, box: htmlOf(field, 2500) };
         pressKey(box(), 'Escape'); typeIn(box(), ''); continue;
       }
@@ -692,7 +696,7 @@
         await wait(600);
         ok = taken();
       }
-      if (ok) added++; else {
+      if (ok) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); } else if (skillMiss.some(x => same(x, skill))) { /* said already */ } else {
         skillMiss.push(skill);
         if (!diag.skill) diag.skill = { skill, chose: name, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), list: htmlOf(snap, 6000), pills: skillPills(box()), box: htmlOf(field, 2500) };
       }
@@ -759,7 +763,6 @@
         if (work && answer.roles > (work.entries || 0)) addNote = `Your CV has ${answer.roles} jobs, but Workday's ${work.label} for ${work.section} didn't add any.`;
         else if (!work && /work experience|employment/i.test(document.body.innerText || '') && answer.roles) addNote = `Job Hunt didn't find the Add button for your jobs on this page.`;
       }
-      skillMiss = [];
       amber = []; amberAt = 0; toggled = false; replaceAsk = []; if (askEl) askEl.hidden = true;
       let ok = 0, todo = 0, i = 0;
       const base = barAt(), total = fields.length || 1;
@@ -793,7 +796,7 @@
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
       buttons.next.hidden = !todo; buttons.applied.hidden = false;
       buttons.diag.hidden = !(addNote && !/^Added/.test(addNote) || skillMiss.length);
-      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (skillMiss.length ? ` Skills Workday didn't take: ${skillMiss.join(', ')}.` : '')
+      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (skillMiss.length ? ` Not taken from Workday's lists (add these yourself): ${skillMiss.join(', ')}.` : '')
         + (EXT && answer.app_version && /^\d/.test(answer.app_version) && answer.app_version.replace(/-.*/, '') !== chrome.runtime.getManifest().version ? ` (This extension is ${chrome.runtime.getManifest().version}, Job Hunt is ${answer.app_version}: open the extension's button once so it updates, then reload this page.)` : '');
       status(todo
         ? `Filled ${ok}.${saved} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
@@ -857,7 +860,7 @@
   }
   let sent = null;
   async function start(more, dates) {
-    if (!more) { round = 0; reveals = 0; addNote = ''; }
+    if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; }
     panel();
     if (retired) return;
     checkPay();
@@ -866,7 +869,7 @@
     sent = { fields, byKey, adders };
     // The end dates that appeared: only the boxes still empty go (with the entries' checkboxes), not
     // the whole form again.
-    const list = dates ? all.filter(f => f.type !== 'add' && f.type !== 'file' && (!f.value || f.type === 'checkbox')) : all;
+    const list = dates ? all.filter(f => !['add', 'file', 'skills', 'prompt'].includes(f.type) && (!f.value || f.type === 'checkbox')) : all;
     if (!list.length) { progress(null); status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
     // No answer in six minutes (Job Hunt closed, Claude busy): the button comes back.
     const mine = waitingSince = Date.now();

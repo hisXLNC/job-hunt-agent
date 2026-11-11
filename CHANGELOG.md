@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.36.1] - 2026-11-11
+
+Language levels, Field of Study, skills it missed, career transitions.
+
+### Changes
+
+- Languages: a level you give in your facts ("French: beginner") picks the option with that word ("1 - Beginner"), not one that matches how you learned it ("Classroom Study").
+- Skills: the panel lists every skill Workday didn't take, to add yourself; before, a later round (the end dates) cleared the list before you saw it.
+- Field of Study (and Major and the like) on Workday: typed and chosen from Workday's list like a skill, instead of left empty.
+- Work Experience: a dated career break or transition on your CV ("Career Transition") gets its own entry, like a job.
+- Copy-and-paste kit: each skill has its own Copy button.
+
 ## [2.36.0] - 2026-11-11
 
 Fill in forms on your phone, and a copy-and-paste kit.
@@ -1354,6 +1366,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.36.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.1
 [2.36.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.0
 [2.35.14]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.14
 [2.35.13]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.35.13
