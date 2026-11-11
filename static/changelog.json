@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.36.5",
+    "date": "2026-11-11",
+    "title": "Skills chosen carefully, one at a time",
+    "changes": [
+      "Skills: accuracy over speed. For each skill Job Hunt waits for Workday's results to finish coming in, compares every option and picks the closest (the same name, else the one sharing most of its words), and if nothing is close searches again shorter (\"Payment\" for \"Payments Integration\"). It clicks, waits up to five seconds for Workday to take it, clicks once more if it didn't, and pauses before the next. It never clicks a skill Workday already took (that would untick it)."
+    ]
+  },
+  {
     "version": "2.36.4",
     "date": "2026-11-11",
     "title": "More LinkedIn jobs",

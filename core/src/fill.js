@@ -620,92 +620,109 @@
   // Each skill: type it, press Enter, wait for the list of matches, choose the closest (the same
   // name, else one that starts with it or contains it, else the first), then the next.
   async function fillSkills(first, v, one) {
-    const want = String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean).slice(0, 12);
+    const want = String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean).slice(0, one ? 1 : 12);
     // Workday redraws the box after each skill: find it again each time (by its id, else in its field).
     const field = first.closest('[data-automation-id^=formField]') || first.parentElement?.parentElement?.parentElement || document.body;
     const box = () => first.isConnected ? first : (first.id && document.getElementById(first.id)) || [...field.querySelectorAll('input')].find(x => shown(x) && !own(x)) || first;
     const sig = () => options().map(o => clean(o.textContent)).join('|');
+    const label = o => clean(o.getAttribute('data-automation-label') || o.textContent).toLowerCase();
+    const words = x => x.toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9+#]+/).filter(w => w.length > 1 && !['and', 'the', 'for', 'of', '&'].includes(w)).map(w => w.slice(0, 6));
+    // How well an option fits a skill: the same name best, then one that starts with it or holds it,
+    // then the share of their words they have in common (both ways, so "Management" alone doesn't
+    // pass for "Vendor Management").
+    const fit = (o, skill) => {
+      const x = label(o), s = skill.toLowerCase();
+      if (!x || /^(search results|no (items|results|matches)|searching|loading)/.test(x)) return 0;
+      if (x === s || x.replace(/\s*\([^)]*\)/g, '') === s.replace(/\s*\([^)]*\)/g, '')) return 100;
+      const a = words(s), b = words(x);
+      const common = a.filter(w => b.includes(w)).length;
+      let n = a.length && b.length ? 60 * common / Math.max(a.length, b.length) : 0;
+      if (x.startsWith(s)) n += 25; else if (x.includes(s)) n += 20; else if (s.includes(x) && b.length > 1) n += 10;
+      return n;
+    };
+    // Search: type it, press Enter, then wait for this search's own results and for the list to stop
+    // changing (Workday fills it in a bit at a time), up to about twenty seconds.
+    const search = async query => {
+      if (options().length) { pressKey(box(), 'Escape'); await wait(500); }
+      const el = box();
+      const before = sig();
+      el.focus(); el.click();
+      typeIn(el, '');
+      await wait(150);
+      typeIn(el, query);
+      await wait(300);
+      pressKey(el, 'Enter');
+      const key = words(query);
+      const ours = l => l.some(o => key.some(w => label(o).includes(w)));
+      let list = [];
+      for (let i = 0; i < 90; i++) {
+        await wait(170);
+        list = options();
+        const busy = !list.length || /^(searching|loading)/i.test(clean(list[0].textContent));
+        if (!busy && (ours(list) || (sig() !== before && i > 40))) break;
+        if (/no (items|results|matches)/i.test(clean(field.textContent || ''))) return [];
+      }
+      // Settled: the same list three looks in a row.
+      let last = sig(), same3 = 0;
+      for (let i = 0; i < 20 && same3 < 3; i++) { await wait(300); const now = sig(); same3 = now === last ? same3 + 1 : 0; last = now; }
+      return options();
+    };
     let added = 0;
     // Real clicks: turn them on first. The browser's "debugging" bar moves the page down when it
     // appears, so a click aimed before it showed lands too high.
-    if (EXT) await new Promise(res => { const t = setTimeout(res, 3000); try { chrome.runtime.sendMessage({ jobhunt: 'debug', data: {} }, () => { void chrome.runtime.lastError; clearTimeout(t); setTimeout(res, 600); }); } catch (e) { clearTimeout(t); res(); } });
+    if (EXT) await new Promise(res => { const t = setTimeout(res, 3000); try { chrome.runtime.sendMessage({ jobhunt: 'debug', data: {} }, () => { void chrome.runtime.lastError; clearTimeout(t); setTimeout(res, 800); }); } catch (e) { clearTimeout(t); res(); } });
     for (const skill of want) {
-      let el = box();
-      if (skillPills(el).some(p => same(p, skill))) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); continue; }
-      // The last skill's list still open: close it, so its matches aren't taken for this one's.
-      if (options().length) { pressKey(el, 'Escape'); await wait(300); }
-      el = box();
-      const before = sig();
-      el.focus(); el.click();
-      typeIn(el, skill);
-      pressKey(el, 'Enter');
-      // Wait for this skill's own results: a list with an option sharing a word with it (not the last
-      // skill's results, nor "Searching…"), up to twelve seconds. Workday's search can be slow, and
-      // moving on before it answered typed the next skill over this one.
-      const key = skill.toLowerCase().split(/[^a-z0-9+#]+/).filter(w => w.length > 2).map(w => w.slice(0, 5));
-      const ours = l => l.some(o => { const x = clean(o.getAttribute('data-automation-label') || o.textContent).toLowerCase(); return key.some(w => x.includes(w)); });
-      let list = [];
-      for (let i = 0; i < 75; i++) {
-        await wait(160);
-        list = options();
-        const busy = !list.length || /^(searching|loading)/i.test(clean(list[0].textContent));
-        if (!busy && (ours(list) || (sig() !== before && i > 30))) break;
-        if (/no (items|results|matches)/i.test(clean(field.textContent || ''))) break;
+      if (skillPills(box()).some(p => same(p, skill))) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); continue; }
+      // The skill as written, then a shorter search when the list has nothing close ("Payments
+      // Integration" finds nothing, "Payments" does).
+      const shorter = words(skill).length > 1 ? skill.replace(/\s*\([^)]*\)/g, '').split(/\s+/).slice(0, 2).join(' ') : '';
+      const single = skill.replace(/\s*\([^)]*\)/g, '').replace(/(\w{3,})s\b/g, '$1');
+      const queries = [skill, single, shorter, words(skill).length > 2 ? skill.split(/\s+/).slice(-2).join(' ') : ''].filter((q, i, a) => q && a.findIndex(x => x.toLowerCase() === q.toLowerCase()) === i);
+      let list = [], best = null, score = 0;
+      for (const q of queries) {
+        list = await search(q);
+        for (const o of list) { const f = fit(o, skill); if (f > score) { score = f; best = o; } }
+        if (score >= 45) break;
       }
-      await wait(400);
-      list = options();
-      if (!list.length || sig() === before && before) { if (!skillMiss.some(x => same(x, skill))) skillMiss.push(skill); if (!diag.skill) diag.skill = { skill, noList: !list.length, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), box: htmlOf(field, 2500) }; typeIn(box(), ''); continue; }
-      const t = o => clean(o.getAttribute('data-automation-label') || o.textContent).toLowerCase(), s = skill.toLowerCase();
-      // Else the one sharing most of the skill's words ("Budgeting" for "Budget Planning"), if it shares at least half.
-      const words = x => x.split(/[^a-z0-9+#]+/).filter(w => w.length > 2 && !['and', 'the', 'for'].includes(w)).map(w => w.slice(0, 6));
-      const overlap = o => { const ow = words(t(o)); return words(s).filter(w => ow.includes(w)).length; };
-      const choose = () => {
-        const most = [...list].sort((a, b) => overlap(b) - overlap(a))[0];
-        return list.find(o => t(o) === s) || list.find(o => t(o).startsWith(s)) || list.find(o => t(o).includes(s)) || list.find(o => t(o) && s.includes(t(o)))
-          || (most && overlap(most) * 2 >= words(s).length && overlap(most) > 0 ? most : null);
-      };
-      let best = choose();
-      // Not in the list yet (the last search's results still showing, or this one still coming): look again.
-      for (let i = 0; i < 2 && !best; i++) { await wait(1200); list = options(); best = choose(); }
-      if (!best) {
+      if (!best || score < 30) {
         if (!skillMiss.some(x => same(x, skill))) skillMiss.push(skill);
         if (!diag.skill) diag.skill = { skill, notInList: true, options: list.slice(0, 10).map(o => ({ text: clean(o.textContent).slice(0, 60), label: o.getAttribute('data-automation-label'), at: where(o) })), typed: box().value, box: htmlOf(field, 2500) };
-        pressKey(box(), 'Escape'); typeIn(box(), ''); continue;
+        pressKey(box(), 'Escape'); await wait(300); typeIn(box(), ''); await wait(500);
+        continue;
       }
-      // Workday takes a skill on the mouse press, not on a plain click: press it like a mouse, then
-      // check it was taken (a pill with its name, or the option ticked); else its checkbox, the
-      // row around it, then the keyboard (arrow down to it, Enter).
       const name = clean(best.textContent);
       const snap = (best.closest('[role=listbox]') || best.parentElement?.parentElement || best).cloneNode(true);
       const taken = () => skillPills(box()).some(p => same(p, name) || near(p, name)) || [...options()].some(o => same(o.textContent, name) && (o.getAttribute('aria-selected') === 'true' || o.closest('[aria-selected=true]')));
-      const idx = list.indexOf(best);
-      const tries = [best, best.querySelector('input[type=checkbox],input[type=radio],[role=checkbox]'), best.closest('[role=option],[data-automation-id=menuItem],li'), best.querySelector('[data-automation-id=promptOption]'), best.parentElement].filter((x, i, a) => x && a.indexOf(x) === i);
+      const settle = async ms => { for (let i = 0; i < ms / 250; i++) { if (taken()) return true; await wait(250); } return taken(); };
       let ok = false;
-      if (EXT && await realClick(best)) { for (let i = 0; i < 12 && !(ok = taken()); i++) await wait(250); }
-      for (const t of ok ? [] : tries) {
-        if (!t.isConnected) continue;
-        mouse(t);
-        await wait(600);
-        if ((ok = taken())) break;
+      if (EXT) {
+        // A real click, then up to five seconds for Workday to take it; once more if it didn't (never
+        // a second click on one it took, which would untick it).
+        for (let n = 0; n < 2 && !ok; n++) {
+          const target = [...options()].find(o => same(o.textContent, name)) || best;
+          if (!(await realClick(target))) break;
+          ok = await settle(5000);
+          if (!ok) await wait(800);
+        }
       }
-      if (!ok && idx >= 0) {
-        const el2 = box();
-        el2.focus();
-        for (let k = 0; k <= idx; k++) { pressKey(el2, 'ArrowDown'); await wait(60); }
-        pressKey(el2, 'Enter');
-        await wait(600);
-        ok = taken();
+      if (!ok) {
+        // Without real clicks (the app's window, or the phone): a mouse-like press on the option, its box, its row.
+        const tries = [best, best.querySelector('input[type=checkbox],input[type=radio],[role=checkbox]'), best.closest('[role=option],[data-automation-id=menuItem],li'), best.querySelector('[data-automation-id=promptOption]')].filter((x, i, a) => x && a.indexOf(x) === i);
+        for (const t of tries) {
+          if (!t.isConnected) continue;
+          mouse(t);
+          if ((ok = await settle(1500))) break;
+        }
       }
-      if (ok) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); } else if (skillMiss.some(x => same(x, skill))) { /* said already */ } else {
+      if (ok) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); } else if (!skillMiss.some(x => same(x, skill))) {
         skillMiss.push(skill);
         if (!diag.skill) diag.skill = { skill, chose: name, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), list: htmlOf(snap, 6000), pills: skillPills(box()), box: htmlOf(field, 2500) };
       }
-      await wait(800);
-      el = box();
-      if (options().length) { pressKey(el, 'Escape'); await wait(250); }
-      el = box();
-      if (el.value) typeIn(el, '');
-      await wait(300);
+      // A pause before the next, so Workday has redrawn the box.
+      await wait(1200);
+      if (options().length) { pressKey(box(), 'Escape'); await wait(400); }
+      if (box().value) typeIn(box(), '');
+      await wait(500);
     }
     return added > 0;
   }

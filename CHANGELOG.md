@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.36.5] - 2026-11-11
+
+Skills chosen carefully, one at a time.
+
+### Changes
+
+- Skills: accuracy over speed. For each skill Job Hunt waits for Workday's results to finish coming in, compares every option and picks the closest (the same name, else the one sharing most of its words), and if nothing is close searches again shorter ("Payment" for "Payments Integration"). It clicks, waits up to five seconds for Workday to take it, clicks once more if it didn't, and pauses before the next. It never clicks a skill Workday already took (that would untick it).
+
 ## [2.36.4] - 2026-11-11
 
 More LinkedIn jobs.
@@ -1393,6 +1401,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.36.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.5
 [2.36.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.4
 [2.36.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.3
 [2.36.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.2
