@@ -10,7 +10,7 @@ Low-paid jobs skipped before scoring.
 
 ### Changes
 
-- Minimum yearly salary (Settings → Search → Which roles) now also reads the pay a posting gives in its own text ("The salary range for this role is 5,000–15,000") and hourly rates (2,080 hours a year), so jobs below it are set aside before scoring and use no Claude. It used to read only the salary a job site filled in, so most of them were scored anyway. Starting pay ("From 0,000") and budgets or bonuses don't count as the most a job pays.
+- Minimum yearly salary (Settings → Search → Which roles) now also reads the pay a posting gives in its own text ("The salary range for this role is $95,000–$115,000") and hourly rates (2,080 hours a year), so jobs below it are set aside before scoring and use no Claude. It used to read only the salary a job site filled in, so most of them were scored anyway. Starting pay ("From $90,000") and budgets or bonuses don't count as the most a job pays.
 
 ## [2.36.7] - 2026-11-11
 
