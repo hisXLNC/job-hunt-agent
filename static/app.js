@@ -555,14 +555,13 @@ function greeting() {
 function todayList(o) {
   const pl = (n, one, many) => n === 1 ? one : many;
   const to = step => `#applications/${step}`;
-  const line = (n, title, sub, action) => `<div class="next-row"><span class="next-n">${n}</span><span class="grow"><b>${title}</b>${sub ? `<br><span class="muted small">${sub}</span>` : ''}</span><span class="row next-act">${action}</span></div>`;
+  const line = (n, title, sub, action) => ({ n, title, sub, action });
   const names = list => { const l = list.slice(0, 3).map(j => esc(j.company)); return l.join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : ''); };
   const rows = [];
   // Problems first: each says what's wrong, with the button that fixes it or takes you there.
-  (o.health || []).forEach(h => rows.push(`<div class="next-row ${h.level === 'problem' ? 'crit' : 'warn'}"><span class="next-n">!</span><span class="grow">${esc(h.text)}</span><span class="row next-act">
-      ${h.action === 'removeBroken' ? `<button class="btn sm" data-act="removeBroken" data-boards="${esc(JSON.stringify(h.data))}">Remove ${h.data.length === 1 ? 'it' : 'them'}</button><button class="btn sm go" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button>` : ''}
-      ${h.fix ? `<button class="btn sm go" data-act="${esc(h.fix.act)}" data-task="${esc(h.fix.task)}">${esc(h.fix.label)}</button>` : ''}
-      ${h.link && h.link !== '#overview' ? `<a class="btn sm go" href="${esc(h.link)}">Fix it</a>` : ''}</span></div>`));
+  const notes = [];
+  (o.health || []).forEach(h => (h.level === 'problem' ? rows : notes).push({ n: '!', cls: h.level === 'problem' ? 'crit' : 'warn', kicker: 'Needs attention', title: h.level === 'problem' ? 'Something needs fixing' : 'Worth a look', sub: esc(h.text), plain: true,
+    action: `${h.action === 'removeBroken' ? `<button class="btn sm" data-act="removeBroken" data-boards="${esc(JSON.stringify(h.data))}">Remove ${h.data.length === 1 ? 'it' : 'them'}</button><button class="btn sm go" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button>` : ''}${h.fix ? `<button class="btn sm go" data-act="${esc(h.fix.act)}" data-task="${esc(h.fix.task)}">${esc(h.fix.label)}</button>` : ''}${h.link && h.link !== '#overview' ? `<a class="btn sm go" href="${esc(h.link)}">Fix it</a>` : ''}` }));
   const soon = (o.interviews || []).filter(i => new Date(i.start) - Date.now() < 3 * 86400000);
   soon.forEach(i => rows.push(line(svg('calendar'), `Interview: ${esc(i.company || i.title)}`, `${esc(fmtWhen(i.start))}${i.job_title ? ` · ${esc(i.job_title)}` : ''}`,
     i.job_id ? `<a class="btn sm go" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prepare</a>` : `<a class="btn sm go" href="#calendar">Calendar</a>`)));
@@ -590,10 +589,14 @@ function todayList(o) {
   if (o.quiet?.length) rows.push(line(o.quiet.length, `quiet for 4+ weeks`, 'Close them as No response, so your list stays true.', `<a class="btn sm go" href="${to('waiting')}">Tidy up</a>`));
   if (o.held) rows.push(line(o.held, `${pl(o.held, 'posting', 'postings')} found and waiting to be scored`, (o.running || []).includes('search') ? 'Scoring now, newest first.' : 'Newest first, a batch every 45 minutes.',
     (o.running || []).includes('search') ? '' : `<button class="btn sm go" data-act="scoreHeld">Score them all now</button>`));
-  // The first thing on the list is the one to do: its button stands out.
-  return rows.map((r, i) => i ? r : r.replace('btn sm go', 'btn primary sm go'));
+  return [...rows, ...notes];
 }
 
+/** One of Today's things as a line of the list. */
+const todayRow = r => `<div class="next-row ${r.cls || ''}"><span class="next-n">${r.n}</span><span class="grow">${r.plain ? r.sub : `<b>${r.title}</b>${r.sub ? `<br><span class="muted small">${r.sub}</span>` : ''}`}</span><span class="row next-act">${r.action}</span></div>`;
+/** The first of them as the page's one large card: what to do next, and its button. */
+const todayHero = r => `<section class="hero ${r.cls || ''}"><span class="hero-n">${r.n}</span><div class="hero-main"><div class="hero-kicker">${r.kicker || 'Next up'}</div>
+    <h2>${typeof r.n === 'number' ? `${r.n} ` : ''}${r.title}</h2>${r.sub ? `<p>${r.sub}</p>` : ''}</div><div class="row hero-act">${r.action.replace('btn sm go', 'btn primary go').replace(/btn ghost sm/g, 'btn ghost').replace(/btn sm/g, 'btn')}</div></section>`;
 /** Today: what needs you, the hunt at a glance, and how it's going. The work itself is on Jobs. */
 async function showOverview() {
   // Just fetched (opening Job Hunt fetches it before drawing the page): no need to ask twice.
@@ -639,9 +642,10 @@ async function showOverview() {
     ${o.progress ? progressHtml(o.progress) : ''}
     <nav class="hsteps" aria-label="Your job hunt, step by step">${FLOW.map(([id, name, n, , hint]) =>
       `<a class="hstep${n(c) ? '' : ' none'}${id === nextStep ? ' next' : ''}" href="#applications/${id}"><span class="hstep-n">${n(c)}</span><span class="hstep-name">${name}</span><span class="hstep-hint">${hint}</span></a>`).join('<span class="hstep-arrow" aria-hidden="true">›</span>')}</nav>
-    <section class="card next-card"><header><h2>What needs you</h2>${todo.length ? `<a class="btn ghost" href="#applications">All jobs by step</a>` : ''}</header>
-      ${todo.length ? `${todo.join('')}<div id="healthIdeas" class="ideas"></div>` : `<p class="muted">${neededDone ? `You're all caught up.${searching ? ' A search is running: new matches show here when it\'s done.' : side.paused ? ` ${esc(pausedWords(side.paused))}.` : nextSearch ? ` Job Hunt searches again ${esc(nextSearch.toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }))}, or search now.` : ' Search for jobs to find new matches.'}` : 'Finish setting up above, then search for jobs.'}</p>`}
-    </section>
+    ${todo.length ? todayHero(todo[0]) : `<section class="hero done"><span class="hero-n">${svg('check')}</span><div class="hero-main"><div class="hero-kicker" style="color:var(--good)">${neededDone ? 'All caught up' : 'Getting started'}</div>
+        <h2>${neededDone ? 'Nothing needs you right now' : 'Finish setting up, then search'}</h2><p>${neededDone ? (searching ? 'A search is running: new matches show here when it\'s done.' : side.paused ? `${esc(pausedWords(side.paused))}.` : nextSearch ? `Job Hunt searches again ${esc(nextSearch.toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }))}.` : 'Search for jobs to find new matches.') : 'Connect Claude and add your CV above.'}</p></div></section>`}
+    ${todo.length > 1 ? `<section class="card next-card"><header><h2>Also waiting for you</h2><a class="btn ghost sm" href="#applications">All jobs by step</a></header>${todo.slice(1).map(todayRow).join('')}</section>` : ''}
+    <div id="healthIdeas" class="ideas"></div>
     ${titleIdeasHtml(o.title_ideas)}
     <section class="card on-auto"><div class="auto-line">${svg('search')}<span class="grow"><b>Job search</b> <span class="muted">last ran ${esc(ago(o.last_search))}${o.last_report && o.last_search ? `: ${o.last_report.new} new${o.last_report.to_pick ? `, ${o.last_report.to_pick} to pick from` : ''}` : ''}${side.paused ? '' : nextSearch ? ` · next ${esc(nextSearch.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}</span></span>${scheduleMenu(side.paused)}<a class="btn ghost sm" href="#search">What it found</a></div>
       ${setup.google || !googleOff ? `<div class="auto-line">${svg('mail')}<span class="grow"><b>Job email</b> <span class="muted">${setup.google ? `last checked ${esc(ago(o.last_inbox))}` : 'Gmail isn\'t connected: Job Hunt can sort your job email and book interviews.'}</span></span>${setup.google ? `<button class="btn sm" data-act="run" data-task="inbox">Check now</button><a class="btn ghost sm" href="#inbox">Inbox</a>` : `<a class="btn sm" href="#settings/connections">Connect Gmail</a><button class="btn ghost sm" data-act="setupSkip" data-what="google" title="Hide this">Not now</button>`}</div>` : ''}
@@ -1314,11 +1318,13 @@ function contactHtml(c, i, writing, pb) {
 
 /** One step of the job hunt on the Overview: its roles, each with the next thing to do. `tracked`
  *  (the Tracker's rows) fills in the steps after you apply. */
+/** A company's initial on a tile whose colour comes from its name: the same company, the same colour. */
+const avatar = name => { const s = String(name || '?').trim(); let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `<span class="avatar" style="--h:${h}" aria-hidden="true">${esc((s.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</span>`; };
 /** One job in a step's list. The tick box, fit and name are one label when the row can be ticked
  *  (a press anywhere on them ticks it); the why line and the buttons are outside it. */
 function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', attrs = '', facts = '' }) {
   const meta = [coCell(j), j.location ? placeHtml(j) : '', j.salary ? `<span title="${esc(j.salary)}">${esc(String(j.salary).split(/\s+[•·|]\s+/)[0])}</span>` : '', j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
-  const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}<span class="jfit">${scoreBadge(j.score)}${reachTag(j)}</span>
+  const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit">${scoreBadge(j.score)}${reachTag(j)}</span>
       <span class="jmain"><span class="jtitle"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${tags}</span><span class="jmeta">${meta}</span></span>`;
   return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" ${attrs}>${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
       <span class="row jact">${actions}</span>${sub ? `<div class="jwhy small">${sub}</div>` : ''}</div>`;

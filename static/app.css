@@ -1207,3 +1207,189 @@ label.jhead { cursor: pointer; }
   .next-row { flex-wrap: nowrap; }
   .next-act { flex: none; padding-left: 0; }
 }
+
+/* ======================================================================================
+   The look, reimagined: calm and light. One quiet page colour, white surfaces with hairline
+   edges instead of shadows, one accent, rounder corners, bigger type, and a light menu that
+   belongs to the page. Everything above still lays the pages out; this section restyles them.
+   ====================================================================================== */
+:root {
+  --bg: #F6F5F1; --surface: #FFFFFF; --surface-2: #F1F0EB; --ink: #16181D; --ink-2: #454A57; --muted: #6B7180;
+  --line: #DEDDD6; --line-2: #EAE9E3; --accent: #2D55E8; --accent-hover: #1F42C4; --accent-ink: #FFFFFF; --accent-soft: #E7ECFE;
+  --side: #F6F5F1; --side-ink: #4A4F5C; --side-hi: #16181D; --side-act: #FFFFFF;
+  --good: #0B7A3B; --good-soft: #E1F3E7; --warn: #8A5700; --warn-soft: #FBF0D4; --crit: #B42D2D; --crit-soft: #FAE4E2; --info: #2C5C9E; --info-soft: #E4ECF8;
+  --shadow: 0 1px 2px rgba(22, 24, 29, .04);
+  --lift: 0 1px 2px rgba(22, 24, 29, .05), 0 12px 32px rgba(22, 24, 29, .08);
+  --font-d: "Segoe UI Variable Display", "Segoe UI", Inter, system-ui, -apple-system, Roboto, sans-serif;
+  --r: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1115; --surface: #181B21; --surface-2: #1F232B; --ink: #ECEEF2; --ink-2: #BCC1CD; --muted: #9097A6;
+    --line: #2C313B; --line-2: #242932; --accent: #8FA6FF; --accent-hover: #AABBFF; --accent-ink: #0B1233; --accent-soft: #1F2748;
+    --side: #0F1115; --side-ink: #A7AEBD; --side-hi: #FFFFFF; --side-act: #1F232B;
+    --good: #52C47F; --good-soft: #14301F; --warn: #E3A83C; --warn-soft: #33270F; --crit: #EE7474; --crit-soft: #3A1B1B; --info: #82AAE6; --info-soft: #172539;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3); --lift: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .35);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1115; --surface: #181B21; --surface-2: #1F232B; --ink: #ECEEF2; --ink-2: #BCC1CD; --muted: #9097A6;
+  --line: #2C313B; --line-2: #242932; --accent: #8FA6FF; --accent-hover: #AABBFF; --accent-ink: #0B1233; --accent-soft: #1F2748;
+  --side: #0F1115; --side-ink: #A7AEBD; --side-hi: #FFFFFF; --side-act: #1F232B;
+  --good: #52C47F; --good-soft: #14301F; --warn: #E3A83C; --warn-soft: #33270F; --crit: #EE7474; --crit-soft: #3A1B1B; --info: #82AAE6; --info-soft: #172539;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3); --lift: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .35);
+}
+body { font-size: 14.5px; }
+h1, h2, h3 { letter-spacing: -.015em; font-weight: 650; }
+h1 { font-size: 30px; letter-spacing: -.025em; }
+h2 { font-size: 18px; }
+.eyebrow { letter-spacing: .04em; font-size: 12px; }
+.eyebrow a { color: inherit; }
+
+/* The menu: part of the page, not a dark slab. The page you're on is a white tile. */
+.app { grid-template-columns: 244px minmax(0, 1fr); }
+.side { padding: 22px 14px 16px; gap: 18px; border-right: 1px solid var(--line-2); }
+.brand { padding: 2px 10px 6px; gap: 11px; }
+.brand img { width: 34px; height: 34px; border-radius: 9px; }
+.brand strong { font-size: 18px; letter-spacing: -.02em; text-transform: none; font-weight: 700; }
+.brand small { display: none; }
+nav.main { gap: 3px; }
+nav.main a { padding: 9px 12px; border-radius: 10px; gap: 12px; font-size: 14.5px; font-weight: 500; }
+nav.main a svg { width: 19px; height: 19px; stroke-width: 1.6; }
+nav.main a:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--side-hi); }
+nav.main a.on { background: var(--side-act); color: var(--side-hi); font-weight: 650; box-shadow: 0 0 0 1px var(--line-2), var(--shadow); }
+nav.main a.on svg { color: var(--accent); }
+nav.main a .badge { background: var(--accent); color: var(--accent-ink); font-size: 11.5px; padding: 0 7px; line-height: 19px; }
+nav.main .nav-group { margin: 16px 12px 4px; font-size: 11px; opacity: 1; color: var(--muted); letter-spacing: .06em; }
+.side-foot { gap: 8px; padding: 12px 10px 0; border-top: 1px solid var(--line-2); font-size: 12.5px; }
+.side-foot .warn-line { color: var(--warn); }
+.theme-switch { background: var(--surface-2); border-color: var(--line-2); border-radius: 10px; }
+.theme-switch button.on { background: var(--surface); box-shadow: 0 0 0 1px var(--line-2), var(--shadow); }
+.update-note { border-radius: 12px; }
+
+/* Pages: more room, and a narrower measure so lines stay readable. */
+.page { max-width: 1180px; padding: 36px 40px 56px; gap: 22px; }
+.head { align-items: center; }
+.head p.muted { font-size: 15px; margin-top: 6px; }
+
+/* Surfaces: white, a hairline edge, generous corners. Shadows only for things that float. */
+.card, .kpi, .hstep, .steps-bar { border-radius: 16px; border-color: var(--line-2); box-shadow: var(--shadow); }
+.card { padding: 22px 24px; }
+.menu-list, .modal, .palette, .toast, .select-bar, .tip { box-shadow: var(--lift); }
+.modal { border-radius: 18px; }
+
+/* Buttons and boxes: taller, rounder, one filled button a screen. */
+.btn { padding: 8px 15px; border-radius: 10px; font-weight: 550; border-color: var(--line); }
+.btn:hover { border-color: color-mix(in srgb, var(--ink) 35%, var(--line)); background: var(--surface); }
+.btn.sm { border-radius: 9px; }
+.btn.primary { box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.btn.ghost:hover { background: var(--accent-soft); border-color: transparent; }
+.btn.ghost.danger:hover { background: var(--crit-soft); }
+input[type=text], input[type=search], input[type=email], input[type=url], input[type=number], input[type=password], select, textarea { border-radius: 10px; border-color: var(--line); padding: 9px 12px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.find-box { border-radius: 12px; background: var(--surface); border-color: var(--line); }
+kbd { border-radius: 6px; }
+
+/* Tabs: a row of soft pills; the one you're on is filled. */
+.tabs { border-bottom: 0; gap: 6px; flex-wrap: wrap; overflow: visible; }
+.tabs a { padding: 7px 14px; border: 1px solid transparent; border-radius: 999px; margin: 0; color: var(--ink-2); font-weight: 550; }
+.tabs a:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.tabs a.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tabs a.on .muted { color: inherit; opacity: .7; }
+.tabs .tabs-more > summary { border-radius: 999px; }
+
+/* Labels, scores, tables. */
+.pill { padding: 2px 10px; font-weight: 600; border-color: transparent; }
+.score { min-width: 40px; height: 30px; border-radius: 10px; font-size: 14.5px; font-weight: 700; }
+th { text-transform: uppercase; letter-spacing: .05em; font-size: 11.5px; font-weight: 650; border-bottom-color: var(--line-2); padding-block: 10px; }
+td { border-bottom-color: var(--line-2); }
+table.jobs tr.click:hover > td { background: var(--surface-2); }
+.card:has(> table) { padding: 6px 14px; }
+
+/* Today. What to do next is one large card with one button; the rest wait in a short list. */
+.hero { display: flex; align-items: center; gap: 22px; padding: 26px 28px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.hero::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--accent); }
+.hero.warn::before { background: #E3A83C; } .hero.crit::before { background: var(--crit); }
+.hero-n { flex: none; min-width: 72px; height: 72px; padding: 0 12px; display: grid; place-items: center; border-radius: 20px; background: var(--accent-soft); color: var(--accent); font-size: 34px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.hero-n svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.hero.warn .hero-n { background: var(--warn-soft); color: var(--warn); } .hero.crit .hero-n { background: var(--crit-soft); color: var(--crit); }
+.hero-main { flex: 1; min-width: 0; }
+.hero-kicker { font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.hero h2 { font-size: 23px; letter-spacing: -.02em; margin: 3px 0 5px; }
+.hero p { color: var(--ink-2); font-size: 15px; max-width: 640px; }
+.hero-act { flex: none; flex-wrap: nowrap; }
+.hero-act .btn { padding: 12px 22px; font-size: 15.5px; border-radius: 12px; }
+.hero.done::before { background: var(--good); }
+.hero.done .hero-n { background: var(--good-soft); color: var(--good); }
+.next-card > header h2 { font-size: 15px; color: var(--ink-2); font-weight: 650; }
+.next-n { border-radius: 12px; min-width: 40px; height: 40px; }
+/* The hunt as one track: five steps joined by a line, the next one lit. */
+.hsteps { gap: 0; background: var(--surface); border: 1px solid var(--line-2); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+.hstep { border: 0; border-radius: 0; box-shadow: none; padding: 14px 20px 15px; border-right: 1px solid var(--line-2); background: none; }
+.hstep:last-child { border-right: 0; }
+.hstep:hover { background: var(--surface-2); }
+.hstep.next { box-shadow: inset 0 -3px 0 var(--accent); background: var(--accent-soft); border-color: var(--line-2); }
+.hstep-arrow { display: none; }
+.hstep-n { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+.kpi-v { font-weight: 700; letter-spacing: -.02em; }
+.on-auto { border-radius: 16px; }
+
+/* Jobs. A company's initial beside each job makes a long list easy to scan. */
+.steps-bar a.on { background: var(--accent-soft); }
+.steps-bar .sb-n { font-weight: 700; letter-spacing: -.02em; }
+.avatar { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: 16px; color: hsl(var(--h) 45% 32%); background: hsl(var(--h) 60% 92%); }
+:root[data-theme="dark"] .avatar { color: hsl(var(--h) 60% 82%); background: hsl(var(--h) 30% 24%); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .avatar { color: hsl(var(--h) 60% 82%); background: hsl(var(--h) 30% 24%); } }
+.jrow { padding: 14px 10px; margin: 0 -10px; border-radius: 12px; }
+.jtitle .qt { font-size: 15.5px; font-weight: 650; }
+.jfit { order: 5; min-width: 0; margin-left: 4px; }
+.jrow.pick .jfit, .jrow:has(.reach-arrow) .jfit { min-width: 0; }
+.jwhy, .jrow.ticks .jwhy, .jrow.pick .jwhy { padding-left: 54px; }
+.jrow.ticks .jwhy { padding-left: 86px; }
+.group-h { font-size: 17px; }
+.card.next-step { border-color: var(--line-2); border-radius: 18px; padding: 20px 24px; position: relative; overflow: hidden; }
+.card.next-step::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--accent); }
+.next-main p { font-size: 15.5px; }
+
+/* Phones. */
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .mtop { background: var(--bg); color: var(--ink); border-bottom: 1px solid var(--line-2); }
+  .mbrand b { font-weight: 700; letter-spacing: -.02em; }
+  .mstatus { color: var(--muted); }
+  .tabbar { background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top-color: var(--line-2); }
+  .tabbar .on svg { stroke-width: 2.1; }
+  body.more-open .side { border-right: 0; }
+  .page { padding: 18px 16px calc(92px + env(safe-area-inset-bottom)); gap: 16px; }
+  .card { padding: 18px; border-radius: 16px; }
+  h1 { font-size: 26px; }
+  .hero { flex-wrap: wrap; padding: 20px; gap: 14px; }
+  .hero-n { min-width: 54px; height: 54px; font-size: 26px; border-radius: 16px; }
+  .hero-main { flex: 1 1 60%; }
+  .hero h2 { font-size: 20px; }
+  .hero-act { flex: 1 1 100%; }
+  .hero-act .btn { flex: 1; justify-content: center; }
+  .hsteps { overflow-x: auto; margin: 0; padding: 0; }
+  .hstep { min-width: 96px; padding: 12px 14px; }
+  .hstep-hint { display: none; }
+  .avatar { width: 36px; height: 36px; border-radius: 10px; font-size: 15px; }
+  .jrow .jfit { order: 5; flex-direction: column; }
+  .jwhy, .jrow.ticks .jwhy, .jrow.pick .jwhy { padding-left: 0; }
+}
+@media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .tabbar { border-left-color: var(--line-2); }
+  .page { padding: 16px calc(92px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); }
+  .hero { flex-wrap: nowrap; }
+  .hero-act { flex: none; }
+  .hero-act .btn { flex: none; }
+  .hstep { min-width: 0; }
+  .hstep-hint { display: block; }
+}
+.hero.warn .hero-kicker { color: var(--warn); } .hero.crit .hero-kicker { color: var(--crit); }
+.next-row.warn .grow, .next-row.crit .grow { color: var(--ink-2); }
+@media (max-width: 760px) and (orientation: portrait) {
+  /* All five steps fit across a phone. */
+  .hsteps { overflow: hidden; }
+  .hstep { flex: 1 1 0; min-width: 0; padding: 10px 4px 11px; align-items: center; text-align: center; }
+  .hstep-n { font-size: 22px; }
+  .hstep-name { font-size: 11px; letter-spacing: -.01em; }
+}
