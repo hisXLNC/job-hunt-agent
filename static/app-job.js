@@ -15,8 +15,11 @@ function jobActions(j, tailoring, progress) {
   else if (j.status === 'queued') { next = 'Read the posting and why it fits. Worth applying to? Job Hunt tailors your CV and writes a cover letter.'; main = [`<button class="btn primary" data-act="tailorPicked" data-job="${id}">Tailor my CV for this role</button>`]; }
   else if (j.status === 'ready') { next = 'Read your tailored CV and cover letter below, change what you like, then approve.'; main = [`<button class="btn primary" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">${svg('check')}${j.apply_email ? `Approve and email to ${esc(j.apply_email)}` : 'Approve and apply'}</button>`]; }
   else if (j.status === 'approved') { next = 'Submit it on the company\'s site. Job Hunt fills in the form in your browser; you check it and press Submit.';
-    main = [overview?.can_fill && j.url ? `<button class="btn primary" data-act="fillBrowser" data-job="${id}">${svg('open')}Fill it in my browser</button>` : `<a class="btn primary" href="#apply/${enc}">${svg('open')}Apply</a>`,
-      overview?.can_fill && j.url ? `<a class="btn" href="#apply/${enc}">Files and answers</a>` : '', `<button class="btn" data-act="stage" ${on} data-status="applied">${svg('check')}Mark applied</button>`]; }
+    const fills = overview?.can_fill && j.url;
+    if (!fills) next = 'Submit it on the company\'s site. Your files are under CV & letter, and every detail a form asks for, ready to copy, is under Questions & contacts.';
+    main = [fills ? `<button class="btn primary" data-act="fillBrowser" data-job="${id}">${svg('open')}Fill it in my browser</button>`
+        : j.url || j.apply_url ? `<button class="btn primary" data-act="open" data-job="${id}" data-what="${j.apply_url ? 'company' : 'posting'}">${svg('open')}Open the application</button>` : '',
+      `<button class="btn" data-act="stage" ${on} data-status="applied">${svg('check')}Mark applied</button>`]; }
   else if (j.status === 'saved') { next = 'Saved for later.'; main = [`<button class="btn primary" data-act="stage" ${on} data-status="${j.cv_path ? 'ready' : 'queued'}">Bring it back</button>`]; }
   else if (['skipped', 'dismissed'].includes(j.status)) next = j.status === 'skipped' ? 'Set aside: its fit was below your minimum, or a filter caught it. You can still tailor it.' : 'You marked it Not interested. You can still tailor it.';
   else if (progress && ['applied', 'interviewing', 'offer'].includes(j.status)) next = nextText(progress);
@@ -25,6 +28,9 @@ function jobActions(j, tailoring, progress) {
   const b = [];
   if (j.apply_url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="company">${svg('open')}On the company's site</button>`);
   if (j.url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="posting">${svg('open')}Open posting</button>`);
+  // Applying: the other ways to get to the form.
+  if (j.status === 'approved' && overview?.can_fill && j.url) b.push(`<button class="btn ghost sm" data-act="fillForm" data-job="${id}" title="Opens it in a Job Hunt window and fills it in there. Sites that need you to sign in are easier in your own browser.">In a Job Hunt window</button>`);
+  if (['ready', 'approved'].includes(j.status) && !j.apply_url && j.url) b.push(`<button class="btn ghost sm" data-act="findApply" data-job="${id}" title="Claude searches the company's careers site for this job, so you apply to them and not through a job board">${svg('search')}Find it on the company's site</button>`);
   if (['ready', 'approved', 'queued'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="stage" ${on} data-status="saved">Save for later</button>`, `<button class="btn ghost sm danger" data-act="stage" ${on} data-status="dismissed">Not interested</button>`);
   return `<section class="card next-step actions">
       <div class="next-main">${next ? `<p class="grow"><b>Next:</b> ${next}</p>` : '<span class="grow"></span>'}<div class="row">${main.filter(Boolean).join('')}</div></div>
@@ -150,6 +156,7 @@ async function showJob(id) {
         <div class="stack">
         ${(j.cv_changes || []).length && !own?.cv ? `<section class="card">
           <header><h2>What changed in your CV</h2><span class="muted small">${j.cv_changes.length} paragraph${j.cv_changes.length === 1 ? '' : 's'} reworded</span></header>
+          ${gapsHtml(j)}
           ${changesHtml(j, false)}
         </section>` : ''}
         ${j.cv_path || j.cover_letter ? `<section class="card">

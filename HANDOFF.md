@@ -5,9 +5,19 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.47.0** (below). Before it: **2.46.1**. Before it: **2.46.0**. Before it: **2.45.0**, **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
+- Latest version: **2.48.0** (below). Before it: **2.47.0**. Before it: **2.46.1**. Before it: **2.46.0**. Before it: **2.45.0**, **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
   tidy-up, strong-fit auto-tailoring, What you want). The working branch changes with each session
   (this one: `claude/brave-fermat-ti1omi`); `main` is what's released. Before it: 2.43.0, 2.42.0.
+- **2.48.0: profiles, and two pages fewer.** The extension fills a job site's own profile from the
+  CV: `fill::PROFILE` stands in for a job (`profile_job`), offered last in the panel's choice and
+  picked by itself on pages that read as a profile; `one_entry` spots a form that takes one job or
+  school at a time and `answers` fills them in order, one per press (`profile.<kind>:<host>`,
+  kept two hours), saying which in `note`. Tested with the real extension on a stand-in page
+  (`tools/ext_test/profile.html`, the `profile` variant), **never on Job Bank itself**. The
+  separate Apply page (`#apply/<id>`) and Review page (`#review`) are gone: the job's own page has
+  the next step, the files (CV & letter) and the copy kit and answers (Questions & contacts), and
+  old links go there (`#apply/<id>` to the job on that tab, `#review` to `#overview/approve`). The
+  keyword-gap box (`gapsHtml`) moved to the job page's CV & letter tab.
 - **2.47.0: four places, not five.** Pipeline is gone as a place. `NAV` is Queue, Inbox, Calendar,
   Me. Every job is the Queue's last tab, All jobs (`#applications`, `showPipeline` in
   `app-pipeline.js`, headed by `jobsHead` and the shared `queueTabs`); where a job stands is its

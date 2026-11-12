@@ -149,6 +149,12 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.click('.brand .brand-ver'); await page.waitForTimeout(1500);
   check(await page.evaluate(() => location.hash === '#settings/app' && !!document.querySelector('#whatsnew') && document.querySelector('#whatsnew').getBoundingClientRect().top < innerHeight), 'Pressing the version opens What\'s new');
 
+  // The separate Apply and Review pages are gone: their links open the job's own page and the Queue.
+  await page.goto(`${base}/#apply/${encodeURIComponent(jobId)}`); await page.waitForTimeout(1200);
+  check(await page.evaluate(id => location.hash === `#job/${encodeURIComponent(id)}` && /Questions/.test(document.querySelector('#jobTabs a.on')?.textContent || ''), jobId), 'An old link to Apply opens the job on Questions & contacts');
+  await page.goto(`${base}/#review`); await page.waitForTimeout(1200);
+  check(await page.evaluate(() => location.hash === '#overview/approve'), 'An old link to Review opens the Queue on Approve');
+
   // One search a day unless you choose two: the second time appears, and both are saved.
   await at('settings/search');
   check(await page.evaluate(() => document.querySelector('[data-second-search]').hidden), 'One search a day: no second time shown');

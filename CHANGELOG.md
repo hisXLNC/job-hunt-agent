@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.48.0] - 2026-11-12
+
+Profiles on job sites, and two pages fewer.
+
+### Changes
+
+- The extension can fill in your profile on a job site (Job Bank's, say) from your CV. When Job Hunt can't tell which application a page is, the last choice is now: Not an application, a profile here, from my CV. A form that takes one job at a time gets your jobs in order, newest first: fill, save it with the page's own button, open the empty form again, fill.
+- The extension's panel shows the Job Hunt logo, where it had a plain square.
+- The Files and answers page is gone. A job's own page already had everything on it: the next step opens the form, your files are under CV and letter, and every detail a form asks for is under Questions and contacts.
+- The separate Review page is gone too. Check and approve on a job opens its CV and letter, with the keywords to tick when cover is thin.
+- Old links to both pages still work: they open the job, or the Queue.
+
 ## [2.47.0] - 2026-11-12
 
 Four places, and All jobs in the Queue.
@@ -1629,6 +1641,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.48.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.48.0
 [2.47.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.47.0
 [2.46.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.46.1
 [2.46.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.46.0

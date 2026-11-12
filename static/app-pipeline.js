@@ -112,7 +112,7 @@ const CAN_CHOOSE = ['skipped', 'dismissed', 'saved'];
 function rowActions(j) {
   const id = esc(j.id);
   if (j.status === 'ready') return `<button class="btn primary sm" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">Approve</button><button class="btn ghost sm" data-act="stage" data-status="dismissed" data-job="${id}" data-from="ready" title="Not interested">${svg('close')}</button>`;
-  if (j.status === 'approved') return `<a class="btn primary sm" href="#apply/${encodeURIComponent(j.id)}">Apply</a>`;
+  if (j.status === 'approved') return overview?.can_fill && j.url ? `<button class="btn primary sm" data-act="fillBrowser" data-job="${id}" title="Opens the form in your browser, for the extension to fill in">Apply</button>` : `<a class="btn primary sm" href="#job/${encodeURIComponent(j.id)}">Apply</a>`;
   if (j.status === 'queued') return `<button class="btn sm" data-act="tailorPicked" data-job="${id}">Tailor</button>`;
   if (['skipped', 'dismissed'].includes(j.status)) return `<button class="btn ghost sm" data-act="tailorAnyway" data-job="${id}">Tailor anyway</button>`;
   return '';

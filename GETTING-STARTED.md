@@ -68,7 +68,7 @@ Job Hunt can only see the files it makes in your Google Drive, not your others.
 1. Tick the ones you like and press **Tailor selected**. Job Hunt rewrites your CV and writes a cover letter
    for each (a few minutes; you get a notification).
 2. Open each one (**Check and approve**), read it, change anything you want, and press **Approve and apply**.
-3. Press **Apply**. Job Hunt opens the company's form and fills it in. Check it, then press the
+3. The company's form opens in your browser and Job Hunt fills it in. Check it, then press the
    site's own **Submit** button. When the site confirms, Job Hunt marks it as applied.
 
 From then on Job Hunt searches every morning and checks your email every half hour.

@@ -227,14 +227,14 @@ function stepHtml(o, step, tracked) {
   if (unconfirmed.length) groups.push([`Filled in by Job Hunt: did these go through?${unconfirmed.length > 1 ? ` <button class="btn primary sm" data-act="appliedAll" data-ids="${esc(JSON.stringify(unconfirmed.map(j => j.id)))}" style="margin-left:8px">All went through</button>` : ''}`,
     unconfirmed.map(j => row(j, 'Job Hunt filled in the form; it isn\'t marked applied yet',
       `<button class="btn primary sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved">Yes, applied</button>
-       <a class="btn ghost sm" href="#apply/${encodeURIComponent(j.id)}" title="Not submitted yet: open it again">Not yet</a>`)).join('')]);
+       <a class="btn ghost sm" href="#job/${encodeURIComponent(j.id)}" title="Not submitted yet: open it again">Not yet</a>`)).join('')]);
   // Quickest first: one-click emails and short forms, then the ones that need an account.
   const toSubmit = [...(o.approved || [])].filter(j => !unconfirmed.some(u => u.id === j.id)).sort((a, b) => (a.effort?.minutes ?? 10) - (b.effort?.minutes ?? 10));
   const formable = toSubmit.filter(j => j.url && j.effort?.kind !== 'email');
   const runIds = list => esc(JSON.stringify(list.map(j => ({ id: j.id, name: `${j.company}: ${j.title}` }))));
   const quick = formable.filter(j => (j.effort?.minutes ?? 10) <= 5);
   if (toSubmit.length) groups.push([`Submit on the company's site${formable.length > 1 && o.can_fill ? ` ${quick.length > 1 && quick.length < formable.length ? `<button class="btn primary sm" data-act="applyAll" data-ids="${runIds(quick)}" style="margin-left:8px" title="The short forms, a few minutes each: each opens in your browser, the extension fills it, you press Submit, then the next">Apply to the ${quick.length} quick ones</button>` : ''}<button class="btn ${quick.length > 1 && quick.length < formable.length ? '' : 'primary '}sm" data-act="applyAll" data-ids="${runIds(formable)}" style="margin-left:8px" title="Each opens in your browser, quickest first; the extension fills it, you check it and press Submit, then the next one opens">Apply to all ${formable.length}</button>` : ''}`, toSubmit.map(j => row(j, onCompanySite(j),
-    `<a class="btn sm" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
+    `${o.can_fill && j.url && j.effort?.kind !== 'email' ? `<button class="btn sm" data-act="fillBrowser" data-job="${id(j)}" title="Opens the form in your browser, for the extension to fill in">Apply</button>` : `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}">Apply</a>`}
      <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="approved" title="Not interested after all (the pay, say)">${svg('close')}</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,

@@ -176,27 +176,13 @@ async function act(el) {
     if (target) { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); target.querySelector('details')?.setAttribute('open', ''); return; }
     connScrollTo = id; location.hash = id.startsWith('tile-') ? '#search/setup' : '#settings/connections'; return;
   }
-  if (a === 'reviewSkip') { reviewSkipped.add(el.dataset.job); route(); return; }
-  if (a === 'reviewReset') { reviewSkipped.clear(); route(); return; }
-  if (a === 'reviewApprove') {
-    const id = el.dataset.job;
-    if (el.dataset.email && !await ask(`Send your tailored CV and cover letter to ${el.dataset.email} from your Gmail?`, 'Send')) return;
-    return busy(async () => {
-      const r = await api(`/api/jobs/${encodeURIComponent(id)}/approve`, { method: 'POST' });
-      await refreshOverview();
-      if (r.outcome === 'applied') { toast('Sent and marked applied.'); route(); }
-      else if (await applyNow(id)) route(); // on to the next to review; the form opens in your browser
-      else { reviewReturn = location.hash === '#review'; location.hash = `#apply/${encodeURIComponent(id)}`; }
-    });
-  }
   if (a === 'applied') {
     const id = el.dataset.job;
     return busy(async () => {
       await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'applied', note: 'submitted on the company site' } });
       await refreshOverview();
       toast('Marked applied. Job Hunt will remind you to follow up.');
-      location.hash = reviewReturn ? '#review' : '#applications';
-      reviewReturn = false;
+      location.hash = '#overview';
     });
   }
   if (a === 'calMonth') {
@@ -307,7 +293,7 @@ async function act(el) {
       const r = await api(`/api/jobs/${encodeURIComponent(id)}/approve`, { method: 'POST' });
       await refreshOverview();
       if (r.outcome === 'applied') { toast('Sent. Marked as applied.'); route(); }
-      else if (!await applyNow(id)) location.hash = `#apply/${encodeURIComponent(id)}`;
+      else if (!await applyNow(id)) { jobTabs[id] = 'apply'; if (location.hash === `#job/${encodeURIComponent(id)}`) route(); else location.hash = `#job/${encodeURIComponent(id)}`; }
       else route();
     });
   }

@@ -1315,12 +1315,6 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape') t.blur();
     return;
   }
-  if (location.hash === '#review') {
-    const k = { a: '[data-act=reviewApprove]', s: '[data-status=saved]', x: '[data-status=dismissed]', n: '[data-act=reviewSkip]' }[e.key.toLowerCase()];
-    const b = k && document.querySelector(`.review-bar ${k}`);
-    if (b) { e.preventDefault(); b.click(); }
-    return;
-  }
   // Queue: decide without the mouse.
   const deck = document.querySelector('.decision[data-kind]');
   if (deck && ['Enter', 'x', 'l', 'ArrowRight', 's'].includes(e.key) && !(t && ['BUTTON', 'A', 'SUMMARY'].includes(t.tagName) && e.key === 'Enter')) {

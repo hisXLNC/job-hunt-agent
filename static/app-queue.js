@@ -140,13 +140,13 @@ function decisionHtml(x, at, of) {
     return `<article class="card decision" data-kind="submit">${decisionTop(j, where)}
       <div class="dbody"><div class="why blue"><b>Approved: submit it</b>${can ? 'It opens in your own browser, where your sign-ins work. On the form, click the Job Hunt extension and press Fill this form; check it over and press Submit.' : 'Open the Apply page: the posting, your files and your answers are there in one place.'}</div>
         <p class="small muted">${onCompanySite(j)}</p></div>
-      ${dbar(`<button class="btn quiet" data-act="stage" data-status="dismissed" data-job="${id}" data-from="approved">Not interested${key('X')}</button><button class="btn" data-act="stage" data-status="applied" data-job="${id}" data-from="approved" title="Already submitted it">Mark applied</button>${can ? `<a class="btn ghost" href="#apply/${enc}">Files and answers</a>` : ''}`,
-        can ? `<button class="btn primary big" data-primary data-act="fillBrowser" data-job="${id}">Fill it in my browser${key('Enter')}</button>` : `<a class="btn primary big" data-primary href="#apply/${enc}">Apply${key('Enter')}</a>`)}</article>`;
+      ${dbar(`<button class="btn quiet" data-act="stage" data-status="dismissed" data-job="${id}" data-from="approved">Not interested${key('X')}</button><button class="btn" data-act="stage" data-status="applied" data-job="${id}" data-from="approved" title="Already submitted it">Mark applied</button>${can ? `<a class="btn ghost" href="#job/${enc}" data-tab-to="apply">Files and answers</a>` : ''}`,
+        can ? `<button class="btn primary big" data-primary data-act="fillBrowser" data-job="${id}">Fill it in my browser${key('Enter')}</button>` : `<a class="btn primary big" data-primary href="#job/${enc}" data-tab-to="apply">Apply${key('Enter')}</a>`)}</article>`;
   }
   if (x.kind === 'filled') {
     return `<article class="card decision" data-kind="filled">${decisionTop(j, where)}
       <div class="dbody"><div class="why blue"><b>Did it go through?</b>Job Hunt filled in this form, but it isn't marked applied yet. Most go through.</div></div>
-      ${dbar(`<a class="btn" href="#apply/${enc}">Not yet: open it again</a>`, `<button class="btn primary big" data-primary data-act="stage" data-status="applied" data-job="${id}" data-from="approved">Yes, I applied${key('Enter')}</button>`)}</article>`;
+      ${dbar(`<a class="btn" href="#job/${enc}">Not yet: open it again</a>`, `<button class="btn primary big" data-primary data-act="stage" data-status="applied" data-job="${id}" data-from="approved">Yes, I applied${key('Enter')}</button>`)}</article>`;
   }
   if (x.kind === 'ask') {
     return `<article class="card decision" data-kind="ask">${decisionTop(j, where)}

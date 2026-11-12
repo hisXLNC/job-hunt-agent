@@ -595,9 +595,11 @@ async function showRoute() {
     else if (name === 'applications') { overview = await api('/api/overview'); await showPipeline(arg); }
     else if (name === 'overview') await showOverview(arg);
     else if (name === 'job') await showJob(arg);
-    else if (name === 'review') await showReview();
+    // The old Review page: the Queue's tailored applications, where each opens with its CV and letter.
+    else if (name === 'review') { location.replace('#overview/approve'); return; }
     else if (name === 'welcome') await showWelcome();
-    else if (name === 'apply') await showApply(arg);
+    // The old Apply page: the job's own page, on the tab with what a form asks for.
+    else if (name === 'apply') { jobTabs[arg] = 'apply'; location.replace(`#job/${encodeURIComponent(arg)}`); return; }
     else if (name === 'calendar') await showCalendar();
     else if (name === 'results') await showResults();
     else if (name === 'search') await showSearch(arg);
