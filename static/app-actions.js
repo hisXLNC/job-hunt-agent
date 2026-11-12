@@ -1321,3 +1321,6 @@ function onShown() {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onShown(); });
 window.addEventListener('focus', onShown);
+
+// A card you fold shut stays shut next time (What Job Hunt did lately on the Queue).
+document.addEventListener('toggle', e => { const k = e.target?.dataset?.keep; if (k) { try { localStorage.setItem(k, e.target.open ? '0' : '1'); } catch (err) {} } }, true);

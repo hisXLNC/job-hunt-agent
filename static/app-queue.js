@@ -321,10 +321,9 @@ async function showOverview(arg) {
           `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
       </div>
       ${!listing && rest.length ? `<aside class="deck-side"><h3>Up next</h3><div class="upnext">${rest.slice(0, 5).map(queueMini).join('')}${rest.length > 5 ? `<p class="muted small" style="margin:2px 4px">and ${rest.length - 5} more</p>` : ''}</div></aside>` : ''}
-    </div>      </aside>
     </div>
-    <details class="card activity"><summary><b>What Job Hunt did lately</b></summary>
-      ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
+    <details class="card activity" ${localStorage.getItem('jh.activityShut') === '1' ? '' : 'open'} data-keep="jh.activityShut"><summary><b>What Job Hunt did lately</b></summary>
+      ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.slice(0, 12).map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
     </details>`);
   if (listing) { restorePickViews(); listHeads(); }
 }
