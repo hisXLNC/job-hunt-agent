@@ -1180,16 +1180,6 @@ label.jhead { cursor: pointer; }
 /* ---- A phone held sideways, or a wide folding phone: the tabs go down the right edge, where the
    thumb is, and the page keeps its full height. ---- */
 @media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
-  .tabbar { grid-template-columns: none; grid-auto-flow: row; grid-auto-rows: minmax(0, 1fr); top: 0; bottom: 0; left: auto; right: 0; width: calc(76px + env(safe-area-inset-right));
-    border-top: 0; border-left: 1px solid var(--line); padding: calc(4px + env(safe-area-inset-top)) calc(4px + env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) 4px; }
-  .tabbar a, .tabbar button { min-height: 0; }
-  .tabbar .badge { left: 56%; }
-  .mtop { padding-right: calc(92px + env(safe-area-inset-right)); }
-  .page { padding: 14px calc(92px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); max-width: none; }
-  body.more-open .side { inset: 0 calc(76px + env(safe-area-inset-right)) 0 0; }
-  .toast { bottom: calc(12px + env(safe-area-inset-bottom)); right: calc(88px + env(safe-area-inset-right)); }
-  .review-bar { bottom: calc(8px + env(safe-area-inset-bottom)); }
-  .select-bar { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
   /* Room across: a job's buttons go back beside it. */
   .jhead { flex: 1 1 300px; }
   .jact { order: 0; flex: none; margin-left: auto; }
@@ -1203,7 +1193,6 @@ label.jhead { cursor: pointer; }
   .tabbar .badge { background: var(--accent); color: #fff; border-radius: 999px; text-align: center; font-weight: 700; }
 }
 @media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
-  .tabbar .badge { top: 14%; }
   .next-row { flex-wrap: nowrap; }
   .next-act { flex: none; padding-left: 0; }
 }
@@ -1376,8 +1365,6 @@ table.jobs tr.click:hover > td { background: var(--surface-2); }
   .jwhy, .jrow.ticks .jwhy, .jrow.pick .jwhy { padding-left: 0; }
 }
 @media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
-  .tabbar { border-left-color: var(--line-2); }
-  .page { padding: 16px calc(92px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); }
   .hero { flex-wrap: nowrap; }
   .hero-act { flex: none; }
   .hero-act .btn { flex: none; }
@@ -1425,8 +1412,7 @@ nav.main a { padding: 10px 12px; font-size: 15px; }
   body.more-open .mtop { z-index: 36; }
 }
 @media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
-  .mtop { padding-right: calc(84px + env(safe-area-inset-right)); }
-  body.more-open .side { inset: 0 calc(76px + env(safe-area-inset-right)) 0 0; }
+  .mtop { padding-right: calc(14px + env(safe-area-inset-right)); }
 }
 
 /* ======================================================================================
@@ -1562,10 +1548,7 @@ kbd.k { font: 11px var(--font-m); border: 1px solid currentColor; opacity: .55; 
   .tabs .tabs-gap { display: none; }
 }
 @media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
-  body.more-open .side { inset: 0 calc(76px + env(safe-area-inset-right)) 0 0; }
-  .dbar { right: calc(76px + env(safe-area-inset-right)); bottom: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
   .deck { grid-template-columns: minmax(0, 1fr) 250px; }
-  .deck-main { padding-bottom: 70px; }
 }
 
 .btn.primary kbd.k { background: none; color: inherit; border-color: currentColor; opacity: .7; }
@@ -1582,11 +1565,9 @@ kbd.k { font: 11px var(--font-m); border: 1px solid currentColor; opacity: .55; 
   .head-acts { flex-wrap: wrap; }
 }
 @media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
-  .page { padding: 14px calc(92px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
   .dbar { flex-wrap: nowrap; }
   .dbar .btn.big { order: 0; flex: 1 1 auto; }
   .dbar .btn:not(.big) { flex: 0 0 auto; }
-  .deck-main { padding-bottom: 80px; }
 }
 
 /* ---- A job beside the Pipeline's list (wide windows) ---- */
@@ -1715,4 +1696,14 @@ table.jobs td.fit, table.jobs td.stage, table.jobs td.next { white-space: nowrap
 @media (max-width: 1100px) {
   .deck-side .auto-line { flex-wrap: wrap; }
   .deck-side .auto-line .grow { min-width: 130px; }
+}
+
+/* ---- A phone held sideways (or a wide folding one): the tabs stay along the bottom, in a
+   shorter bar with each name beside its picture, so the page has the full width. ---- */
+@media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .tabbar a, .tabbar button { flex-direction: row; gap: 8px; min-height: 44px; font-size: 13px; }
+  .tabbar svg { width: 20px; height: 20px; }
+  .tabbar .badge { position: static; order: 3; }
+  body.more-open .side { inset: 0 0 calc(44px + env(safe-area-inset-bottom)) 0; }
+  .page { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
 }

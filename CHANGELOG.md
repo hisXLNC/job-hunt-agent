@@ -6,11 +6,12 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.44.1] - 2026-11-12
 
-Clearer scores on a phone.
+Clearer scores on a phone, and the tabs back at the bottom.
 
 ### Changes
 
 - On a phone, a job shows one fit score, with the other in words under it: was 76 once the CV is tailored, or ~97 tailored while it is a forecast. Before, two unlabelled scores sat one above the other.
+- On a phone held sideways (or a wide folding one), the tabs are along the bottom again in a shorter bar, instead of down the right edge where some browsers drew them badly. The page now uses the full width.
 - The Queue: the Everything count now matches the number waiting for you. A notice about your setup was being counted as a decision.
 - On a phone held sideways, Sort and filter starts folded, and the Email line's buttons no longer sit on top of its words.
 

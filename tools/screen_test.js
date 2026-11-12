@@ -153,14 +153,14 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
     await phone.goto(`${base}/#${h}`); await phone.reload(); await phone.waitForTimeout(900);
     check(!await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), `Phone: #${h} doesn't scroll sideways`);
   }
-  // A phone held sideways (or a wide folding one): the tabs run down the right edge.
+  // A phone held sideways (or a wide folding one): the tabs stay along the bottom, full width.
   const wide = await browser.newPage({ viewport: { width: 915, height: 500 }, hasTouch: true, isMobile: true });
   wide.on('pageerror', e => errors.push(`sideways: ${e.message}`));
   await wide.addInitScript(() => { try { sessionStorage.setItem('welcomed', '1'); } catch (e) {} });
   for (const h of ['overview', 'applications/pick', 'settings/extension']) {
     await wide.goto(`${base}/#${h}`); await wide.reload(); await wide.waitForTimeout(900);
-    const r = await wide.evaluate(() => { const b = document.querySelector('#tabbar').getBoundingClientRect(); return { left: b.left, right: b.right, height: b.height, w: innerWidth, h: innerHeight, scroll: document.documentElement.scrollWidth > innerWidth + 1 }; });
-    check(r.left > r.w - 110 && r.right >= r.w - 1 && r.height > r.h - 10 && !r.scroll, `Sideways phone: #${h} has its tabs down the right edge`);
+    const r = await wide.evaluate(() => { const b = document.querySelector('#tabbar').getBoundingClientRect(); return { left: b.left, right: b.right, bottom: b.bottom, height: b.height, w: innerWidth, h: innerHeight, scroll: document.documentElement.scrollWidth > innerWidth + 1 }; });
+    check(r.left <= 1 && r.right >= r.w - 1 && r.height < 80 && r.bottom >= r.h - 1 && !r.scroll, `Sideways phone: #${h} has its tabs along the bottom`);
   }
   // The phone's tabs are the five places; Settings is behind the top bar's menu button.
   await phone.goto(`${base}/#overview`); await phone.reload(); await phone.waitForTimeout(900);
