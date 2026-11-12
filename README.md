@@ -31,7 +31,7 @@ in), your CV, where you want to work, where to look, and your first search.
 ## Every day
 
 - **Queue:** the next decision, one at a time, with its button: pick, approve, submit, follow up.
-  **Pipeline** holds every job, by step or in one list.
+  The Queue's last tab, **All jobs**, holds every job wherever it stands.
 - **Pick roles** and Job Hunt tailors your CV and a cover letter for each. Read them, change anything,
   then **Approve**.
 - **Apply:** Job Hunt opens the company's form and fills it in. You check it and press Submit. When

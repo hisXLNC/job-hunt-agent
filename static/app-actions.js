@@ -342,7 +342,7 @@ async function act(el) {
   }
   if (a === 'pickStale') {
     const ids = JSON.parse(el.dataset.ids || '[]');
-    if (!ids.length || !await ask(`Set aside ${ids.length === 1 ? 'the one posting' : `the ${ids.length} postings`} that ${ids.length === 1 ? 'has' : 'have'} been up for more than three weeks or expired? ${ids.length === 1 ? 'It goes' : 'They go'} to Pipeline under Not interested, where you can still tailor ${ids.length === 1 ? 'it' : 'any of them'}. It doesn't change how Job Hunt scores.`, 'Set them aside')) return;
+    if (!ids.length || !await ask(`Set aside ${ids.length === 1 ? 'the one posting' : `the ${ids.length} postings`} that ${ids.length === 1 ? 'has' : 'have'} been up for more than three weeks or expired? ${ids.length === 1 ? 'It goes' : 'They go'} to All jobs under the stage Not interested, where you can still tailor ${ids.length === 1 ? 'it' : 'any of them'}. It doesn't change how Job Hunt scores.`, 'Set them aside')) return;
     return busy(async () => {
       for (const id of ids) await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'dismissed', note: 'older than three weeks', learn: false } });
       await refreshOverview(); route(); toast(`${ids.length} set aside.`);
@@ -1138,7 +1138,7 @@ document.addEventListener('submit', async e => {
     if (kind === 'add') {
       const claude = form.querySelector('[name=claude]:checked')?.value === '1';
       await api('/api/add', { method: 'POST', body: { company: f.company.value, title: f.title.value, url: f.url.value, location: f.location.value, description: f.description.value, claude } });
-      toast(claude ? 'Added. Once it\'s scored and tailored it appears under Ready to approve; you get a notice.' : 'Saved. It\'s in Pipeline, Saved for later.');
+      toast(claude ? 'Added. Once it\'s scored and tailored it appears under Ready to approve; you get a notice.' : 'Saved. It\'s in All jobs, Saved for later.');
       location.hash = '#overview';
     } else if (kind === 'other') {
       await api('/api/settings/other', { method: 'POST', body: { for: f.for.value, url: f.service.value || f.url.value, key: f.key.value, model: f.model.value } });

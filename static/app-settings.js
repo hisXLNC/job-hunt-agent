@@ -1287,7 +1287,7 @@ document.addEventListener('keydown', e => {
 });
 /** Every key, in Job Hunt's own dialog. */
 function keysHelp() {
-  const rows = [['Ctrl + K', 'Find any job'], ['/', 'Search the list on this page'], ['j / k', 'Next or previous job'], ['Enter X L →', 'In the Queue: do it, not interested, later, skip'], ['↑ ↓ Space X T', 'In Pipeline, Pick: move, tick, not interested, tailor the ticked ones'], ['a', 'Approve (on a job ready to approve)'],
+  const rows = [['Ctrl + K', 'Find any job'], ['/', 'Search the list on this page'], ['j / k', 'Next or previous job'], ['Enter X L →', 'In the Queue: do it, not interested, later, skip'], ['↑ ↓ Space X T', 'In the Pick list: move, tick, not interested, tailor the ticked ones'], ['a', 'Approve (on a job ready to approve)'],
     ['o', 'Open the posting'], ['t', 'Tailor my CV for this role'], ['c', 'Ask Claude about this job'], ['Esc', 'Back to the list'], ['?', 'These keys']];
   const back = document.createElement('div');
   back.className = 'modal-back';

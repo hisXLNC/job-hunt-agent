@@ -140,8 +140,7 @@ async function showDocuments() {
   };
   const docs = all.filter((groups[docFilter] || groups.all)[1]);
   page(`
-    ${jobsHead('files')}
-    <p class="muted flow-about">Every CV and cover letter tailored from yours. Click a heading to sort; click a role to read and edit them.</p>
+    ${meHead('files', 'Every CV and cover letter tailored from yours. Click a heading to sort; click a role to read and edit them.')}
     ${all.length ? '<input type="search" id="docFilter" class="filter" placeholder="Filter by company or title" style="max-width:420px;margin-bottom:10px">' : ''}
     ${all.length ? `<div class="chips">${Object.entries(groups).map(([k, [n, f]]) => `<button class="chip ${k === docFilter ? 'on' : ''}" data-act="docFilter" data-f="${k}">${n} <b>${all.filter(f).length}</b></button>`).join('')}</div>` : ''}
     ${docs.length ? `<section class="card" style="padding:6px 10px"><table class="jobs" id="t-docs"><thead><tr>${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Stage', 'rank')}${sortTh('Fit', 'num')}${sortTh('Updated', 'date')}<th>Files</th></tr></thead><tbody>
@@ -260,8 +259,7 @@ async function showResults() {
   const days = r.per_day || [], maxDay = Math.max(1, ...days.map(d => d.sent)), sentDays = days.reduce((a, d) => a + d.sent, 0);
   const label = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const every = Math.ceil(days.length / 8);
-  page(`${jobsHead('insights')}
-    <p class="muted flow-about">Which CVs, sources and fit scores turn into replies and interviews. A reply is any answer from the company, a rejection included, but not an automatic “we received it”.</p>
+  page(`${meHead('insights', 'Which CVs, sources and fit scores turn into replies and interviews. A reply is any answer from the company, a rejection included, but not an automatic “we received it”.')}
       <nav class="mode" aria-label="Period">${[[7, '7 days'], [30, '30 days'], [90, '90 days'], [0, 'All']].map(([v, n]) => `<a href="#results" data-act="resultsDays" data-days="${v}" class="${resultsDays === v ? 'on' : ''}">${n}</a>`).join('')}</nav></div>
     ${Object.keys(r.outreach || {}).length ? `<section class="card"><header><h2>Your messages to people</h2></header>
       <p class="muted small">How often a note got a reply, by who it went to. A reply is one you marked with They replied, or an email back about that job.</p>
@@ -348,7 +346,7 @@ function showAdd() {
       <label class="field wide">Full job description<textarea name="description" style="min-height:300px" placeholder="Needed to score and tailor; optional if you only save it."></textarea></label>
       <div class="field wide">What to do with it
         <label class="check"><input type="radio" name="claude" value="1" ${canClaude ? 'checked' : 'disabled'}> <span>Score it and tailor my CV and a cover letter<br><span class="muted small">${canClaude ? 'Uses Claude: two or three requests.' : 'Needs Claude connected and your CV added.'}</span></span></label>
-        <label class="check"><input type="radio" name="claude" value="0" ${canClaude ? '' : 'checked'}> <span>Just save it, without Claude<br><span class="muted small">Saved in Pipeline. Use Tailor anyway on it whenever you like.</span></span></label>
+        <label class="check"><input type="radio" name="claude" value="0" ${canClaude ? '' : 'checked'}> <span>Just save it, without Claude<br><span class="muted small">Saved in All jobs. Use Tailor anyway on it whenever you like.</span></span></label>
       </div>
     </div><div class="row"><button class="btn primary" type="submit">Add the job</button></div></form>
     <p class="muted small desktop-only">Used the <a href="#search/setup">Send to Job Hunt</a> button? Press Ctrl+V on this page to add that posting.</p>`);

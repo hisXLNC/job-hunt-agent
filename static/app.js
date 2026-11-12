@@ -121,17 +121,17 @@ const ICON = {
 };
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
-/** Five places. Queue: the next decision, one at a time. Pipeline: every job, wherever it is. Inbox: the email about them. Calendar: interviews and reminders. Me: what you're looking for, your CVs and details. The same five are the phone's tabs. Settings (the gear) has the accounts, the job sources and the app itself. */
-const NAV = [['overview', 'Queue'], ['applications', 'Pipeline'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['cvs', 'Me']];
-/** Pages that belong to a place: a job, applying, review, the tailored files and the insights to Pipeline; Recruiters to Inbox. */
-const NAV_HOME = { job: 'applications', apply: 'applications', documents: 'applications', add: 'applications', pipeline: 'applications', recruiters: 'inbox', results: 'applications', review: 'applications', welcome: 'overview' };
+/** Four places. Queue: what's waiting for you, and behind its last tab every job, wherever it stands. Inbox: the email about them. Calendar: interviews and reminders. Me: what you're looking for, your CVs and details, the files tailored from them, and how it's going. The same four are the phone's tabs. Settings (the gear) has the accounts, the job sources and the app itself. */
+const NAV = [['overview', 'Queue'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['cvs', 'Me']];
+/** Pages that belong to a place: a job, applying, review and every job to the Queue; the tailored files and the insights to Me; Recruiters to Inbox. */
+const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applications: 'overview', pipeline: 'overview', review: 'overview', welcome: 'overview', documents: 'cvs', results: 'cvs', recruiters: 'inbox' };
 /** Which place a page belongs to. What you're looking for is part of Me; where it looks is part of Settings. */
-const placeOf = () => { const [page, arg] = (location.hash.slice(1) || 'overview').split('/'); return page === 'search' ? (arg === 'what' ? 'cvs' : 'settings') : NAV_HOME[page] || page; };
+const placeOf = () => { const [page, arg] = (location.hash.slice(1) || 'overview').split('/'); return page === 'search' ? (arg === 'what' ? 'cvs' : 'settings') : page === 'applications' && arg === 'files' ? 'cvs' : NAV_HOME[page] || page; };
 /** Each place's views, as the same row of tabs wherever you are in it. */
 const placeTabs = (tabs, on) => `<nav class="tabs place-tabs">${tabs.map(([href, name, id]) => `<a href="${href}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
 const inboxTabs = on => placeTabs([['#inbox', 'Email', 'email'], ['#inbox/recruiters', 'Recruiters', 'recruiters']], on);
 /** Me: what you're looking for, then what Job Hunt knows about you. */
-const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['#cvs', `CVs${n ? ` (${n})` : ''}`, 'cvs'], ['#cvs/details', 'About me', 'details'], ['#cvs/career', 'Career paths', 'career'], ['#cvs/coach', 'Career coach', 'coach']], on);
+const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['#cvs', `CVs${n ? ` (${n})` : ''}`, 'cvs'], ['#cvs/details', 'About me', 'details'], ['#cvs/career', 'Career paths', 'career'], ['#cvs/coach', 'Career coach', 'coach'], ['#applications/files', 'Tailored files', 'files'], ['#results', 'Insights', 'insights']], on);
 const meHead = (on, about, n) => `<div class="head"><div class="grow"><h1>Me</h1><p class="muted">${about}</p></div><span class="save-state" ${on === 'what' ? '' : 'id="saveState"'} aria-live="polite">${['cvs', 'details'].includes(on) ? 'Changes save by themselves' : ''}</span></div>${meTabs(on, n)}`;
 /** Settings' tabs: what belongs to no one place, and where Job Hunt looks for jobs. */
 const SETTINGS_TABS = [['connections', 'Accounts'], ['sources', 'Job sources'], ['inbox', 'Email'], ['calendar', 'Calendar'], ['notifications', 'Notifications'], ['sync', 'Sync & backup'], ['extension', 'Browser extension'], ['app', 'App']];
@@ -173,13 +173,15 @@ function nextStepId(c = overview?.counts || {}) {
 const foldFilters = (html, few) => `<details class="fold-filters${few ? ' few' : ''}" ${!few && matchMedia('(min-width: 761px)').matches && !matchMedia('(pointer: coarse) and (max-width: 1100px) and (max-height: 700px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
 /** Find any job, and add one you found: at the top of Today and Jobs. */
 const findBox = () => `<button class="find-box" data-act="palette" title="Find any job (Ctrl+K)">${svg('search')}<span>Find a job…</span><kbd>Ctrl K</kbd></button>`;
-/** Pipeline's views: every job, each step with how many are in it, the files tailored for them, and how it's going. */
-function flowNav(on) {
-  const c = overview?.counts || {};
-  const n = id => (APP_TAB_STAGES[id] || []).reduce((sum, s) => sum + (c[s] || 0), 0);
-  // One row: where a job stands. (What to do next, step by step, is the Queue's.)
-  return `<nav class="tabs pipe-tabs" aria-label="Where jobs stand">${APP_TABS.filter(([id]) => APP_ALWAYS.includes(id) || id === on || n(id)).map(([id, name]) => `<a href="#applications/${id}" class="${id === on ? 'on' : ''}" ${id === on ? 'aria-current="page"' : ''}>${name}${APP_COUNTED.includes(id) ? ` <span class="n">${n(id)}</span>` : ''}</a>`).join('')}
-    <span class="tabs-gap"></span><a href="#applications/files" class="${on === 'files' ? 'on' : ''}">Tailored files</a><a href="#results" class="${on === 'insights' ? 'on' : ''}">Insights</a></nav>`;
+/** The Queue's row of tabs, the same on every one of them: what's waiting (all of it, then by step), and
+ *  last, every job wherever it stands. `on`: a step, '' for everything waiting, or 'jobs'. `view`: the
+ *  Queue's List / One by one switch, shown on the waiting tabs. */
+function queueTabs(on, view) {
+  const all = overview ? queueItems(overview) : [];
+  const n = k => all.filter(x => x.step === k).length;
+  return `<nav class="tabs qsteps" aria-label="What's waiting, and every job"><a href="#overview" class="${on ? '' : 'on'}">Everything <span class="n">${queueCount(all)}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(id) ? '' : ' none'}">${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}
+      <a href="#applications" class="all-jobs${on === 'jobs' ? ' on' : ''}" title="Every job Job Hunt has seen, wherever it stands: applied, closed, set aside">All jobs</a>
+      ${view ? `<span class="tabs-gap"></span><span class="seg view-seg" role="group" aria-label="How to show them"><button type="button" data-act="queueView" data-view="list" class="${view === 'list' ? 'on' : ''}" title="Every listing at once">List</button><button type="button" data-act="queueView" data-view="one" class="${view === 'one' ? 'on' : ''}" title="One decision at a time, with everything you need to decide">One by one</button></span>` : ''}</nav>`;
 }
 /** Postings found but not scored yet, with the button that scores them now. */
 function heldLine() {
@@ -187,12 +189,12 @@ function heldLine() {
   return waiting ? `<p class="small muted held-line">${waiting} posting${waiting === 1 ? '' : 's'} found and waiting to be scored (newest first, ${(overview?.running || []).includes('search') ? 'scoring now' : 'a batch every 45 minutes'}). <button class="btn sm" data-act="scoreHeld">Score them all now</button></p>` : '';
 }
 /** The top of the Jobs page: its name, find and add, and the steps. */
-function jobsHead(on, extra = '') {
+function jobsHead(extra = '') {
   return `<div class="head">
-      <div class="grow"><h1>Pipeline</h1></div>
+      <div class="grow"><h1>All jobs</h1><p class="muted">Every job Job Hunt has seen, wherever it stands. What needs you is under the other tabs.</p></div>
       <div class="row head-acts">${extra}<a class="btn" href="#add">${svg('add')}Add a job</a></div>
     </div>
-    ${flowNav(on)}`;
+    ${queueTabs('jobs')}`;
 }
 /** Scheduled searches: on, paused until a date, or off. A menu that says which, to change it. */
 function pausedWords(paused) {

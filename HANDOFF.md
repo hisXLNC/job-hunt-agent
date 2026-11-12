@@ -5,9 +5,20 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.46.1** (below). Before it: **2.46.0**. Before it: **2.45.0**, **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
+- Latest version: **2.47.0** (below). Before it: **2.46.1**. Before it: **2.46.0**. Before it: **2.45.0**, **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
   tidy-up, strong-fit auto-tailoring, What you want). The working branch changes with each session
   (this one: `claude/brave-fermat-ti1omi`); `main` is what's released. Before it: 2.43.0, 2.42.0.
+- **2.47.0: four places, not five.** Pipeline is gone as a place. `NAV` is Queue, Inbox, Calendar,
+  Me. Every job is the Queue's last tab, All jobs (`#applications`, `showPipeline` in
+  `app-pipeline.js`, headed by `jobsHead` and the shared `queueTabs`); where a job stands is its
+  Stage filter, and `#applications/<applied|new|…>` opens with that stage chosen
+  (`APP_TAB_STAGES`). `#applications/<a step>` goes to `#overview/<step>/list` (the Queue on that
+  step, as a list whatever the view kept). Tailored files (`#applications/files`) and Insights
+  (`#results`) are tabs of Me (`meTabs`). The overview now carries every job waiting (it sent the
+  top 8 to approve and 30 to pick, so counts and the apply-now order fell short), and `/api/jobs`
+  adds every job you acted on to the newest 2,000 found. The top bar uses the page's width and
+  side padding, and inside a group's card the heading, Select all, Sort and filter and the tick
+  boxes share one left edge.
 - **2.46.1: the two big files in parts, nothing else.** `core/src/pipeline.rs` keeps the Agent,
   settings, scheduling and the smaller sections; its largest sections are `impl Agent` blocks in
   `core/src/pipeline/` (`search.rs`, `checks.rs`, `people.rs`, `reports.rs`, `tailoring.rs`,

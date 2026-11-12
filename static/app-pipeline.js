@@ -3,24 +3,16 @@
 
 // ---- Applications ----
 /** The list of every job, and its narrower views: each a set of stages. */
-/** The Pipeline's one row of tabs: where a job stands. Each is the stages it covers. */
-const APP_TABS = [['all', 'All jobs'], ['new', 'New'], ['tailored', 'Tailored'], ['approved', 'Approved'], ['applied', 'Applied'], ['interviewing', 'Interviews'], ['closed', 'Closed'], ['saved', 'Saved'], ['skipped', 'Set aside'], ['dismissed', 'Not interested']];
-const APP_TAB_STAGES = { new: ['queued'], tailored: ['ready'], approved: ['approved'], applied: ['applied'], interviewing: ['interviewing', 'offer'], closed: ['rejected', 'no_response'], saved: ['saved'], skipped: ['skipped'], dismissed: ['dismissed'] };
-/** Tabs shown even when empty, and the ones that say how many (a count of what was set aside would only be noise). */
-const APP_ALWAYS = ['all', 'new', 'applied'];
-const APP_COUNTED = ['new', 'tailored', 'approved', 'applied', 'interviewing', 'closed', 'saved'];
+/** A link to All jobs can name where the jobs stand (#applications/applied): the Stage filter starts there. */
+const APP_TAB_STAGES = { new: 'queued', tailored: 'ready', approved: 'approved', applied: 'applied', interviewing: 'interviewing', closed: 'rejected', saved: 'saved', skipped: 'skipped', dismissed: 'dismissed' };
 async function showPipeline(view) {
   if (view === 'files') return showDocuments();
-  if (!APP_TABS.some(([id]) => id === view)) {
-    // Opened from the menu: every job. (What to do next is the Queue's.)
-    view = 'all';
-  }
   // Every job in one table (applications, new postings, skipped ones): click a column's heading to
   // sort by it. Postings outside your locations aren't shown.
   const [{ jobs: everything }, { rows }] = await Promise.all([api('/api/jobs'), api('/api/tracker')]);
-  // All jobs leaves out what you said no to (its own tab has those) and postings outside your locations.
-  const inTab = j => view === 'all' ? j.status !== 'dismissed' : (APP_TAB_STAGES[view] || []).includes(j.status);
-  const jobs = everything.filter(j => !outsideYours(j) && inTab(j));
+  // Every job but the postings outside your locations. What you said no to is in the list too, shown
+  // when you choose that stage.
+  const jobs = everything.filter(j => !outsideYours(j));
   const tracked = Object.fromEntries(rows.map(r => [r.id, r]));
   const WHO = { you: 'Your move', them: 'Waiting on them', later: 'Saved', done: 'Done' };
   // A skipped role whose forecast clears your fit score is worth a second look: tailored, it could make it.
@@ -40,7 +32,7 @@ async function showPipeline(view) {
   const sources = [...new Set(jobs.map(j => j.source))].sort((a, b) => sourceName(a).localeCompare(sourceName(b)));
   const stagesHere = Object.keys(STAGES).filter(k => jobs.some(j => j.status === k));
   const empKinds = ['Full-time', 'Contract', 'Temporary', 'Part-time', 'Internship', 'Co-op', 'Freelance', 'Not stated'].filter(k => jobs.some(j => empKind(j) === k));
-  page(`${jobsHead(view, `<a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Company, title, stage, fit, salary, dates, links and notes, for Excel or Google Sheets">${svg('download')}Spreadsheet</a>`)}
+  page(`${jobsHead(`<a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Company, title, stage, fit, salary, dates, links and notes, for Excel or Google Sheets">${svg('download')}Spreadsheet</a>`)}
     ${foldFilters(`<div class="all-filters" id="allFilters">
       <input type="search" data-allf="q" placeholder="Company, role or place" aria-label="Find in the list">
       <label class="small">Stage <select data-allf="stage">${opt('', 'Any')}${opt('you', 'Your move')}${opt('them', 'Waiting on them')}${stagesHere.map(k => opt(k, STAGES[k])).join('')}</select></label>
@@ -64,8 +56,8 @@ async function showPipeline(view) {
         <td class="next" data-v="${nextKey(j)}">${rowActions(j) ? `<div class="row-act" title="${esc(next(j).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())}">${rowActions(j)}</div>` : next(j)}</td>
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}" title="Found on ${esc(sourceName(j.source))}">${ageTag(j)}</td>
         <td class="small emp" data-v="${esc(j.employment || '~')}">${empCell(j)}</td></tr>`).join('')}
-    </tbody></table>${jobs.length ? '' : `<p class="empty">${{ applied: 'Nothing applied to yet. Jobs show here once you apply (or Job Hunt sees the confirmation email).', tailored: 'No tailored applications waiting to be approved.', approved: 'Nothing approved and waiting to be sent.', new: 'No new postings to pick from.', dismissed: 'Nothing you said no to.' }[view] || 'No jobs yet. Search for jobs from the Queue.'}</p>`}</section>`);
-  restoreAllFilters();
+    </tbody></table>${jobs.length ? '' : `<p class="empty">${'No jobs yet. Search for jobs from the Queue.'}</p>`}</section>`);
+  restoreAllFilters(APP_TAB_STAGES[view]);
   main().querySelectorAll('table.jobs').forEach(applySort);
   // j / k on a job page walk through the list as it was shown here.
   jobOrder = [...main().querySelectorAll('[data-expand]')].map(el => el.dataset.expand);
@@ -84,23 +76,27 @@ function applyAllFilters(save = true) {
   table.querySelectorAll('tr.xrow').forEach(r => r.remove());
   for (const r of table.tBodies[0].rows) {
     const d = r.dataset;
+    // What you said no to shows only when you ask for that stage.
     const ok = words.every(w => d.text.includes(w))
-      && (!v.stage || (v.stage === 'you' || v.stage === 'them' ? d.who === v.stage : d.status === v.stage))
+      && (v.stage ? (v.stage === 'you' || v.stage === 'them' ? d.who === v.stage : d.status === v.stage) : d.status !== 'dismissed')
       && Number(d.fit) >= Number(v.fit || 0) && (!v.source || d.source === v.source)
       && (!since || Number(d.found) >= since) && (!v.pay || d.pay === '1') && (!v.emp || d.emp === v.emp);
     r.hidden = !ok; r.classList.remove('open');
     if (ok) shown++;
   }
-  $('#allCount').textContent = `${shown < table.tBodies[0].rows.length ? `${shown} of ` : ''}${table.tBodies[0].rows.length} jobs`;
+  const total = [...table.tBodies[0].rows].filter(r => r.dataset.status !== 'dismissed').length;
+  $('#allCount').textContent = v.stage === 'dismissed' ? `${shown} not interested` : `${shown < total ? `${shown} of ` : ''}${total} jobs`;
   const col = Number(v.sort || 5);
   if (!sortState['t-all'] || sortState['t-all'].col !== col || save) {
     sortState['t-all'] = { col, dir: [0, 5].includes(col) ? 'asc' : 'desc' };
     applySort(table);
   }
 }
-function restoreAllFilters() {
+function restoreAllFilters(stage) {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('jh.allFilters') || '{}') || {}; } catch (e) {}
+  // Sent here for one stage (the jobs you applied to, say): that stage, whatever was chosen before.
+  if (stage) saved = { ...saved, stage, q: '' };
   document.querySelectorAll('#allFilters [data-allf]').forEach(el => { if (el.dataset.allf in saved) el.type === 'checkbox' ? el.checked = !!saved[el.dataset.allf] : el.value = saved[el.dataset.allf]; });
   applyAllFilters(false);
 }

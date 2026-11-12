@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.47.0] - 2026-11-12
+
+Four places, and All jobs in the Queue.
+
+### Changes
+
+- Pipeline is gone as a separate place. Every job is now the last tab of the Queue, All jobs, with search, the Stage filter and the spreadsheet. Tailored files and Insights are under Me. The top bar is Queue, Inbox, Calendar, Me.
+- The Queue now shows everything that is waiting. It was only being given the best 8 to approve and 30 to pick, so its count was too low and Best to apply to now missed most of your matches. Your count will go up.
+- All jobs no longer loses older jobs you applied to: it used to load only the 2,000 most recently found.
+- All jobs shows one fit score on a phone, with the other in words under it.
+- The top bar lines up with the page, and inside each group the heading, Select all, Sort and filter and the tick boxes start on one line.
+
 ## [2.46.1] - 2026-11-12
 
 Tidied inside.
@@ -1616,6 +1628,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.47.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.47.0
 [2.46.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.46.1
 [2.46.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.46.0
 [2.45.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.45.0

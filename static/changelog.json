@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.47.0",
+    "date": "2026-11-12",
+    "title": "Four places, and All jobs in the Queue",
+    "changes": [
+      "Pipeline is gone as a separate place. Every job is now the last tab of the Queue, All jobs, with search, the Stage filter and the spreadsheet. Tailored files and Insights are under Me. The top bar is Queue, Inbox, Calendar, Me.",
+      "The Queue now shows everything that is waiting. It was only being given the best 8 to approve and 30 to pick, so its count was too low and Best to apply to now missed most of your matches. Your count will go up.",
+      "All jobs no longer loses older jobs you applied to: it used to load only the 2,000 most recently found.",
+      "All jobs shows one fit score on a phone, with the other in words under it.",
+      "The top bar lines up with the page, and inside each group the heading, Select all, Sort and filter and the tick boxes start on one line."
+    ]
+  },
+  {
     "version": "2.46.1",
     "date": "2026-11-12",
     "title": "Tidied inside",

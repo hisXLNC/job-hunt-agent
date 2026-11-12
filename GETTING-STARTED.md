@@ -63,7 +63,7 @@ Job Hunt can only see the files it makes in your Google Drive, not your others.
 
 ## 7. Your first search
 
-**Run your first search** → **Search for jobs now**. It takes a few minutes. Roles that fit come to your **Queue**, one at a time (**Pipeline → Pick** has them as a list):
+**Run your first search** → **Search for jobs now**. It takes a few minutes. Roles that fit come to your **Queue**, as a list (or one at a time, with the switch at the right):
 
 1. Tick the ones you like and press **Tailor selected**. Job Hunt rewrites your CV and writes a cover letter
    for each (a few minutes; you get a notification).

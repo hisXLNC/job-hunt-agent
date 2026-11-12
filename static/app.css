@@ -488,7 +488,7 @@ form[data-form=profile] [type=submit] { display: none; }
   .mstatus { margin-left: auto; display: flex; align-items: center; gap: 6px; text-decoration: none; font-size: 12.5px; min-width: 0; }
   .mstatus span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Tabs at the bottom, within thumb's reach. */
-  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface);
+  .tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface);
     border-top: 1px solid var(--line); padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); }
   .tabbar a, .tabbar button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 52px;
     color: var(--muted); text-decoration: none; font: inherit; font-size: 11px; font-weight: 600; background: none; border: 0; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -1563,3 +1563,13 @@ table.jobs .jfit { display: inline-flex; align-items: center; white-space: nowra
   .side { padding-inline: max(32px, calc((100% - 1240px) / 2 + 32px)); }
   body.panel-open .side { padding-inline: 32px; }
 }
+
+/* ---- Inside a group's card, everything starts on one line down the left: the heading, Select all,
+   Sort and filter, and the tick boxes. (A borderless button's words sit in from its edge by its
+   padding, so it is pulled back by that much.) ---- */
+.todo-group .row > .btn.ghost.sm:first-child { margin-left: -10px; }
+.todo-group .fold-filters > summary, .todo-group .fold-filters.few > summary { margin-left: -10px; }
+
+/* ---- Every job, behind the Queue's last tab: set a little apart from the steps before it ---- */
+.qsteps a.all-jobs { margin-left: 10px; padding-left: 16px; border-left: 1px solid var(--line); border-radius: 0 999px 999px 0; }
+.qsteps a.all-jobs.on { border-radius: 999px; border-left-color: transparent; }

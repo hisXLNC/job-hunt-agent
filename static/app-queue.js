@@ -282,8 +282,7 @@ async function showOverview(arg) {
             </div></details></span>`}
       </div>
     </div>
-    ${all.length ? `<nav class="tabs qsteps" aria-label="Kinds of decision"><a href="#overview" class="${step ? '' : 'on'}">Everything <span class="n">${queueCount(all)}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === step ? 'on' : ''}${n(id) ? '' : ' none'}">${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}
-      <span class="tabs-gap"></span><span class="seg view-seg" role="group" aria-label="How to show them"><button type="button" data-act="queueView" data-view="list" class="${view === 'list' ? 'on' : ''}" title="Every listing at once">List</button><button type="button" data-act="queueView" data-view="one" class="${view === 'one' ? 'on' : ''}" title="One decision at a time, with everything you need to decide">One by one</button></span></nav>` : ''}
+    ${neededDone || all.length ? queueTabs(step, view) : ''}
     ${syncNewerHtml(o.sync_newer)}
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}

@@ -887,7 +887,7 @@ impl Agent {
             ("ready", s) => ("Application ready".into(), format!("{} at {} (fit {}) has a tailored CV and cover letter waiting for your approval.", j.title, j.company, s.unwrap_or(0))),
             ("queued", Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}. It's in your Queue, for you to tailor when you choose.", j.title, j.company)),
             (_, Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}.", j.title, j.company)),
-            _ => ("Saved to Job Hunt".into(), format!("{} at {} is saved in Pipeline. Use Tailor anyway when you want a tailored CV and cover letter.", j.title, j.company)),
+            _ => ("Saved to Job Hunt".into(), format!("{} at {} is saved in All jobs. Use Tailor anyway when you want a tailored CV and cover letter.", j.title, j.company)),
         }
     }
 
