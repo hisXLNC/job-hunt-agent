@@ -243,6 +243,14 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
         // the next two hours, through the form's other pages (see fill::job_for_page).
         ("GET", "/ext/jobs") => Ok(json!({ "jobs": pick_list(agent) })),
         ("POST", "/ext/pick") => {
+            let site = url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default();
+            // Not an application: a profile on this site, filled in from your CV.
+            if b["job_id"] == crate::fill::PROFILE {
+                return match agent.db().set("apply.browser", &format!("{}|{}|{site}", crate::fill::PROFILE, crate::util::now())) {
+                    Ok(()) => json_resp(200, json!({ "ok": true })),
+                    Err(e) => json_resp(400, json!({ "error": e.0 })),
+                };
+            }
             let job = agent.db().job(b["job_id"].as_str().unwrap_or(""));
             match job {
                 Ok(Some(j)) => agent.db().set("apply.browser", &format!("{}|{}|{}", j.id, crate::util::now(), url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default())).map(|_| page_job(&j, url)),
@@ -250,6 +258,8 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
                 Err(e) => Err(e),
             }
         }
+        // A profile isn't a job: nothing to note, set aside or mark applied.
+        ("POST", "/ext/salary" | "/ext/dismiss" | "/ext/applied") if crate::fill::job_for_page(agent, url, title).is_ok_and(|j| j.id == crate::fill::PROFILE) => Ok(json!({ "ok": true, "profile": true })),
         ("POST", "/ext/salary") => crate::fill::job_for_page(agent, url, title).and_then(|j| agent.found_salary(&j.id, b["text"].as_str().unwrap_or(""), "on the company's page")).map(|n| json!({ "new": n })),
         ("POST", "/ext/dismiss") => crate::fill::job_for_page(agent, url, title).and_then(|j| agent.db().set_status(&j.id, "dismissed", "not interested (from your browser)").map(|_| json!({ "ok": true }))),
         ("POST", "/ext/learn") => crate::fill::learn(agent, &fields).map(|n| json!({ "kept": n })),
@@ -261,11 +271,11 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
         Ok(v) => json_resp(200, v),
         // Not sure which application this is: the jobs to choose from come with the answer.
         Err(e) if e.0.contains("can't tell which application") => {
-            let jobs = pick_list(agent);
-            if jobs.is_empty() {
-                return json_resp(400, json!({ "error": e.0 }));
-            }
-            json_resp(400, json!({ "error": "Job Hunt can't tell which application this is. Choose it below.", "choose": jobs }))
+            // The last choice is no job at all: a profile on this site, filled in from your CV.
+            let mut jobs = pick_list(agent);
+            let none = jobs.is_empty();
+            jobs.push(json!({ "id": crate::fill::PROFILE, "title": "Not an application", "company": "a profile here, from my CV", "status": crate::fill::PROFILE }));
+            json_resp(400, json!({ "error": if none { "Job Hunt has no approved application for this page. If it's a profile on this site, it can fill that in from your CV." } else { "Job Hunt can't tell which application this is. Choose it below, or the last one if this is a profile to fill in from your CV." }, "choose": jobs }))
         }
         Err(e) => json_resp(400, json!({ "error": e.0 })),
     }

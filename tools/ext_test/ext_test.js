@@ -63,9 +63,10 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
 (async () => {
   const only = process.argv.slice(2);
   const names = Object.keys(VARIANTS).filter(n => !only.length || only.includes(n));
-  if (only.some(n => n !== 'app' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app`); process.exit(1); }
+  if (only.some(n => n !== 'app' && n !== 'profile' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile`); process.exit(1); }
   // Job Hunt's side: says its version, and answers a form's questions.
   let asked = null;
+  let picked = '';
   let bridge;
   try {
     bridge = await listen(http.createServer((req, res) => {
@@ -74,8 +75,18 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
       req.on('data', c => { body += c; });
       req.on('end', () => {
         if (req.url === '/ext/ping') return json(res, { ok: true, version: VERSION });
+        if (req.url === '/ext/pick') { picked = JSON.parse(body || '{}').job_id || ''; return json(res, { ok: true }); }
         if (req.url === '/ext/fill') {
           asked = JSON.parse(body || '{}');
+          // A site's own profile: no application to match it to, so the panel is given the choice,
+          // and once the profile is chosen, one job from the CV.
+          if (/\/match\/profile/.test(asked.url || '')) {
+            if (picked !== 'profile') { res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); return res.end(JSON.stringify({ error: "Job Hunt can't tell which application this is. Choose it below, or the last one if this is a profile to fill in from your CV.", choose: [{ id: 'a1', title: 'Business Project Manager', company: 'osc', status: 'approved' }, { id: 'profile', title: 'Not an application', company: 'a profile here, from my CV', status: 'profile' }] })); }
+            const by = { 'job title': 'Senior Program Manager', 'employer name': 'Maple Bank', 'city': 'Toronto', 'province': 'Ontario', 'start date': '2019-03-01' };
+            const values = {};
+            for (const f of asked.fields || []) for (const k of Object.keys(by)) if (String(f.label || '').toLowerCase().includes(k)) values[f.key] = by[k];
+            return json(res, { values, files: {}, roles: 0, banked: [], job: { id: 'profile', title: 'Your profile', company: '127.0.0.1' }, app_version: VERSION, profile: true, note: 'That was job 1 on your CV (Senior Program Manager).' });
+          }
           return json(res, answers(asked.fields));
         }
         json(res, { ok: true });
@@ -83,7 +94,8 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     }), 47613);
   } catch (e) { console.log('skipped: 127.0.0.1:47613 is in use (is Job Hunt running here?)'); process.exit(2); }
   const html = fs.readFileSync(path.join(__dirname, 'workday.html'));
-  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(html); }), 0);
+  const profileHtml = fs.readFileSync(path.join(__dirname, 'profile.html'));
+  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/match/profile') ? profileHtml : html); }), 0);
   const base = `http://127.0.0.1:${site.address().port}/apply`;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
@@ -163,6 +175,41 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     const problems = answer ? judge(got, s) : ['the form was never read (no questions were sent to Job Hunt)'];
     console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'app'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  skills: ${got.skills.join(', ') || 'none'} | study: ${got.study.join(', ') || 'none'}`);
     if (problems.length) { failed.push('app'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
+    await page.close();
+  }
+  // A job site's own profile (one job at a time, whole dates): Job Hunt can't match it to an
+  // application, offers the profile, fills it from the CV, and has nothing to mark as submitted.
+  if (!only.length || only.includes('profile')) {
+    const page = await ctx.newPage();
+    const url = `http://127.0.0.1:${site.address().port}/match/profile/experience`;
+    await page.goto(url);
+    const t0 = Date.now();
+    await sw.evaluate(async url => {
+      const [tab] = await chrome.tabs.query({ url: url + '*', active: true });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['fill.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => window.__jobhunt.start() });
+    }, url);
+    const panel = f => page.evaluate(f);
+    const problems = [];
+    let chosen = null;
+    for (let i = 0; i < 60 && !chosen; i++) { await page.waitForTimeout(500); chosen = await panel(() => { const r = document.querySelector('[data-jobhunt-panel]')?.shadowRoot, c = r?.querySelector('.c'); return c && !c.hidden ? { value: c.querySelector('select').value, button: c.querySelector('[data-k=pick]').textContent, logo: r.querySelectorAll('svg.m path, svg.m circle').length, head: r.querySelector('.t').textContent } : null; }); }
+    if (!chosen) problems.push('the panel never offered the choice');
+    else {
+      if (chosen.value !== 'profile') problems.push(`the profile wasn't chosen for a page that reads as one (chosen: ${chosen.value})`);
+      if (chosen.button !== 'Fill it in from my CV') problems.push(`the button says "${chosen.button}"`);
+      if (chosen.logo < 4) problems.push('the panel has no Job Hunt logo');
+      if (/·\s*$/.test(chosen.head)) problems.push(`the heading ends in a stray dot: "${chosen.head}"`);
+      await panel(() => document.querySelector('[data-jobhunt-panel]').shadowRoot.querySelector('[data-k=pick]').click());
+    }
+    let s = '';
+    for (let i = 0; i < 120 && chosen; i++) { await page.waitForTimeout(500); s = await panel(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s) || /Couldn't|No form|No answers/.test(s)) break; }
+    const got = await panel(() => { const r = document.querySelector('[data-jobhunt-panel]')?.shadowRoot; const v = id => document.getElementById(id).value; return { title: v('title'), employer: v('employer'), city: v('city'), prov: v('prov'), start: v('start'), end: v('end'), applied: !r?.querySelector('[data-k=applied]')?.hidden, drop: !r?.querySelector('[data-k=drop]')?.hidden }; });
+    const want = { title: 'Senior Program Manager', employer: 'Maple Bank', city: 'Toronto', prov: 'Ontario', start: '2019-03-01', end: '' };
+    for (const k of Object.keys(want)) if (got[k] !== want[k]) problems.push(`${k} is "${got[k]}", not "${want[k]}"`);
+    if (chosen && !/job 1 on your CV/.test(s)) problems.push('the panel doesn\'t say which job it filled in');
+    if (got.applied || got.drop) problems.push('I submitted it or Not interested is offered on a profile');
+    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'profile'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  ${got.title || 'no title'} at ${got.employer || 'no employer'}, from ${got.start || 'no date'}`);
+    if (problems.length) { failed.push('profile'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();
   }
   await ctx.close();

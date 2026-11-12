@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Job Match - Mock Job Site</title>
+<style>body{font:16px sans-serif;max-width:900px;margin:24px auto}label{display:block;margin-top:14px}input{font:inherit;padding:6px;width:320px}</style></head>
+<body>
+<!-- A stand-in for a job site's own profile (as Job Bank's "Add a work experience"): one job at a
+     time, whole dates in the browser's own date boxes, no application behind it. -->
+<h1>Manage your work experience and skills</h1>
+<form onsubmit="return false">
+  <h2>Add a work experience</h2>
+  <h3>Job title</h3>
+  <label for="title">* Job title</label><input id="title" type="text" required>
+  <h3>Details for this work experience</h3>
+  <label for="employer">* Employer name</label><input id="employer" type="text" required>
+  <label for="city">City</label><input id="city" type="text">
+  <label for="prov">Province, territory or country</label><input id="prov" type="text">
+  <label for="start">* Start date (yyyy-mm-dd)</label><input id="start" type="date" required>
+  <label for="end">End date (yyyy-mm-dd)</label><input id="end" type="date">
+  <p><button type="submit">Add</button> <button type="button">Cancel</button></p>
+</form>
+</body></html>

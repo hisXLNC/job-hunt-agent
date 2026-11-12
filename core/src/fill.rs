@@ -228,6 +228,24 @@ pub fn form_link(job: &crate::db::Job) -> String {
 /// Which job a page in your own browser is the application for: the one whose link it is, else
 /// the one you last chose "Fill in my browser" for (in the last two hours), else the one approved
 /// job whose company the page names.
+/// Not an application: a profile or account on a job site (Job Bank's, LinkedIn's, a company's
+/// talent pool), filled in from your CV as it is. Chosen in the panel like a job is.
+pub const PROFILE: &str = "profile";
+
+/// What stands in for the job when a page is a profile.
+pub fn profile_job(url: &str) -> crate::db::Job {
+    let site = host_of(url);
+    crate::db::Job {
+        id: PROFILE.into(),
+        title: "Your profile".into(),
+        company: if site.is_empty() { "this site".into() } else { site.trim_start_matches("www.").to_string() },
+        status: PROFILE.into(),
+        url: url.into(),
+        description: "Not an application for one job: the candidate's profile on a job site, filled in from their CV as it stands.".into(),
+        ..Default::default()
+    }
+}
+
 pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> {
     let jobs: Vec<crate::db::Job> = ["approved", "ready", "applied"].iter().flat_map(|s| agent.db().jobs(Some(s), 500).unwrap_or_default()).collect();
     let key = crate::db::url_key(url);
@@ -252,6 +270,9 @@ pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> 
         let site = parts.next().unwrap_or("");
         let fresh = chrono::DateTime::parse_from_rfc3339(at).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_hours() < 2);
         let here = site.is_empty() || site == host_of(url);
+        if id == PROFILE && fresh && here {
+            return Ok(profile_job(url));
+        }
         if let Some(j) = jobs.iter().find(|j| j.id == id).filter(|_| fresh && here) {
             return Ok(j.clone());
         }
@@ -305,8 +326,33 @@ fn attachment(path: &Path, name: &str) -> Option<Value> {
 }
 
 /// What to put in the form's fields, as {values: {key: text}, files: {key: {name, mime, b64}}}.
+/// A form that takes one work experience (or one school) at a time, as profiles do: which kind, and
+/// the key of the box that names it. None when the form has room for several (an Add button) or
+/// isn't about either.
+fn one_entry(fields: &[Value]) -> Option<(&'static str, String)> {
+    if fields.iter().any(|f| f["type"] == "add") {
+        return None;
+    }
+    let named = |words: &[&str]| -> Vec<String> {
+        fields.iter().filter(|f| { let l = f["label"].as_str().unwrap_or("").to_lowercase(); words.iter().any(|w| l.contains(w)) })
+            .filter_map(|f| f["key"].as_str().map(String::from)).collect()
+    };
+    let titles = named(&["job title", "position title", "position held", "role title"]);
+    let employers = named(&["employer", "company name", "organization name", "organisation name"]);
+    if titles.len() == 1 && employers.len() <= 1 || (titles.is_empty() && employers.len() == 1) {
+        return Some(("job", titles.into_iter().chain(employers).next().unwrap_or_default()));
+    }
+    let schools = named(&["school", "institution", "university", "college"]);
+    if schools.len() == 1 {
+        return Some(("school", schools[0].clone()));
+    }
+    None
+}
+
 pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
-    let job = agent.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+    let is_profile = job_id == PROFILE;
+    let page = fields.first().and_then(|f| f["page"].as_str()).unwrap_or("");
+    let job = if is_profile { profile_job(page) } else { agent.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))? };
     let profile = agent.profile();
     let cv_text = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
         .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&agent.cv_path(&t.name)).ok()))
@@ -355,8 +401,25 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     if let Some(min) = profile.min_salary {
         facts.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
     }
-    if let Some(prev) = agent.answers(job_id) {
+    if let Some(prev) = agent.answers(job_id).filter(|_| !is_profile) {
         facts.push_str(&format!("\nAnswers already written for this application (use the same ones): {prev}"));
+    }
+    // A profile takes one job (or school) at a time: which one this fill is for, counted from the
+    // newest, carried from one press of Fill to the next on that site for two hours.
+    let entry = if is_profile { one_entry(fields) } else { None };
+    let entry_key = entry.as_ref().map(|(kind, _)| format!("profile.{kind}:{}", host_of(page)));
+    let nth = entry_key.as_ref().map(|k| {
+        let saved = agent.secret(k);
+        let (n, at) = saved.split_once('|').unwrap_or(("1", ""));
+        let fresh = chrono::DateTime::parse_from_rfc3339(at).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_hours() < 2);
+        if fresh { n.parse::<usize>().unwrap_or(1).max(1) } else { 1 }
+    }).unwrap_or(1);
+    if is_profile {
+        facts.push_str("\nThis is the candidate's own profile on a job site, not an application for one job: fill it in from the CV as it stands, in the CV's own words, without tailoring it to any posting. A date box that wants a whole date where the CV gives a month and a year: the first day of that month, in the format the label shows (yyyy-mm-dd unless it says otherwise). A job they still hold has no end date: leave it empty.");
+        if let Some((kind, _)) = &entry {
+            let what = if *kind == "job" { "work experience" } else { "school or programme" };
+            facts.push_str(&format!("\nThis form takes one {what} at a time. Fill it with number {nth} on the CV, counting from the most recent (1 is the newest; each job title counts, promotions at one employer included). If the CV has fewer than {nth}, leave every box of the form empty."));
+        }
     }
     // A work-history Add button: Claude lists every role on the CV (a list it gets right more often
     // than a count), and the Add is pressed for each one the form doesn't have yet.
@@ -388,7 +451,26 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     }
     tidy_answers(fields, &mut values, &cv_text, &profile.application_facts, roles_listed);
     let n = values.len() + files.len();
-    agent.db().log(Some(job_id), "fill", &format!("{n} of {} fields filled in on the application form ({} from your saved answers)", fields.len(), banked.len()))?;
+    if is_profile {
+        agent.db().log(None, "fill", &format!("{n} of {} fields filled in on your profile at {}", fields.len(), job.company))?;
+    } else {
+        agent.db().log(Some(job_id), "fill", &format!("{n} of {} fields filled in on the application form ({} from your saved answers)", fields.len(), banked.len()))?;
+    }
+    // One at a time: say which one this was, and move on to the next for the next press of Fill.
+    let mut note = String::new();
+    if let (Some((kind, key)), Some(k)) = (&entry, &entry_key) {
+        let what = if *kind == "job" { "job" } else { "school" };
+        match values.get(key).and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty()) {
+            Some(name) => {
+                agent.db().set(k, &format!("{}|{}", nth + 1, crate::util::now()))?;
+                note = format!("That was {what} {nth} on your CV ({name}). Save it with the page's own button; for the next one, open the page's empty form again and press Fill.");
+            }
+            None => {
+                agent.db().set(k, "")?;
+                note = if nth > 1 { format!("Your CV has no {what} number {nth}: they're all in. The next Fill starts from the first again.") } else { format!("Job Hunt found no {what} on your CV to put here.") };
+            }
+        }
+    }
     // Count the bank's answers as used.
     if !banked.is_empty() {
         let keys: Vec<String> = fields.iter().filter(|f| f["key"].as_str().is_some_and(|k| banked.iter().any(|b| b == k))).map(|f| question_key(f["label"].as_str().unwrap_or(""))).collect();
@@ -401,16 +483,15 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     // Submit for you only on a plain form you've turned that on for, with every required field
     // answered from your saved answers, your facts or your files, and nothing Claude wrote at length
     // (the page itself still checks for a captcha and unticked boxes before it presses Submit).
-    let page = fields.first().and_then(|f| f["page"].as_str()).unwrap_or("");
     let link = if page.is_empty() { form_link(&job) } else { page.to_string() };
     let host = host_of(&link);
     let required_open = fields.iter().any(|f| f["required"] == true && f["type"] != "file" && !values.contains_key(f["key"].as_str().unwrap_or("")) && f["value"].as_str().unwrap_or("").is_empty());
     let long_written = written.iter().any(|k| values.get(k).and_then(|v| v.as_str()).is_some_and(|v| v.chars().count() > 120));
-    let auto = auto_submit_on(agent) && AUTO_FORMS.iter().any(|h| host.ends_with(h)) && !required_open && !long_written;
+    let auto = !is_profile && auto_submit_on(agent) && AUTO_FORMS.iter().any(|h| host.ends_with(h)) && !required_open && !long_written;
     // For the panel: how many jobs the CV has (it says so when it added none), and which Job Hunt
     // answered (an extension older than it says to reload).
     let roles = if roles_listed > 0 { roles_listed } else { cv_roles(&cv_text) };
-    Ok(json!({ "values": values, "files": files, "banked": banked, "auto": auto, "roles": roles, "app_version": agent.secret("app.version") }))
+    Ok(json!({ "values": values, "files": files, "banked": banked, "auto": auto, "roles": roles, "app_version": agent.secret("app.version"), "note": note, "profile": is_profile }))
 }
 
 /// What Claude wrote, made right where it can be checked: links in full (a LinkedIn box given
@@ -729,6 +810,35 @@ mod tests {
         assert_eq!(schools.len(), 1);
         assert_eq!(schools[0]["from_mm"], "2005");
         assert_eq!(skills, "Program governance; Power BI");
+    }
+
+    #[test]
+    fn a_profile_is_filled_from_the_cv_one_job_at_a_time() {
+        let s = crate::testkit::setup();
+        let page = "https://www.jobbank.gc.ca/match/profile/experience";
+        let fields = vec![json!({"key": "t", "type": "text", "label": "Job title", "page": page}), json!({"key": "e", "type": "text", "label": "Employer name"}),
+            json!({"key": "d", "type": "text", "label": "Start date (yyyy-mm-dd)"})];
+        assert_eq!(one_entry(&fields), Some(("job", "t".to_string())));
+        // A form with an Add button has room for them all: not one at a time.
+        assert!(one_entry(&[json!({"type": "add", "label": "Add", "section": "Work Experience"}), json!({"key": "t", "label": "Job title"})]).is_none());
+        assert_eq!(one_entry(&[json!({"key": "s", "label": "School or institution"})]).map(|x| x.0), Some("school"));
+        // The first press is the newest job, the next press the one before it.
+        let a = answers(&s.agent, PROFILE, &fields).unwrap();
+        assert_eq!((a["values"]["t"].as_str(), a["profile"].as_bool(), a["auto"].as_bool()), (Some("Role 1"), Some(true), Some(false)));
+        assert!(a["note"].as_str().unwrap().contains("job 1 on your CV (Role 1)"), "{}", a["note"]);
+        let b = answers(&s.agent, PROFILE, &fields).unwrap();
+        assert_eq!(b["values"]["t"], "Role 2");
+        // Past the last one: nothing filled, said so, and it starts over.
+        let c = answers(&s.agent, PROFILE, &fields).unwrap();
+        assert!(c["values"].get("t").is_none() && c["note"].as_str().unwrap().contains("no job number 3"), "{c}");
+        assert_eq!(answers(&s.agent, PROFILE, &fields).unwrap()["values"]["t"], "Role 1");
+        // Told it's a profile, from the CV as it stands, with whole dates.
+        let facts = s.llm.calls.lock().unwrap().iter().rev().find(|c| c.starts_with("fill:")).cloned().unwrap();
+        assert!(facts.contains("own profile on a job site") && facts.contains("first day of that month"), "{facts}");
+        // Chosen in the panel: the page is the profile for two hours on that site, and nowhere else.
+        s.agent.db().set("apply.browser", &format!("{PROFILE}|{}|www.jobbank.gc.ca", crate::util::now())).unwrap();
+        assert_eq!(job_for_page(&s.agent, page, "").unwrap().id, PROFILE);
+        assert!(job_for_page(&s.agent, "https://careers.other.example/apply", "").is_err());
     }
 
     #[test]

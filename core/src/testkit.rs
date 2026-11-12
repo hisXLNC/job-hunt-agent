@@ -75,6 +75,12 @@ impl Llm for FakeLlm {
             let label = f["label"].as_str().unwrap_or("").to_lowercase();
             let value = if label.contains("first name") { c.split(' ').next().unwrap_or("").to_string() }
                 else if label.contains("email") { "me@example.com".to_string() }
+                // One job at a time (a profile): the one the facts ask for, of a CV with two.
+                else if label.contains("job title") {
+                    let n = facts.split("with number ").nth(1).and_then(|x| x.split(' ').next()).and_then(|x| x.parse::<u32>().ok()).unwrap_or(0);
+                    if n == 0 || n > 2 { return None; }
+                    format!("Role {n}")
+                }
                 else {
                     let o = f["options"].as_array().and_then(|o| o.first())?; o.as_str().unwrap_or("").to_string() };
             Some(FieldValue { key: f["key"].as_str().unwrap_or("").into(), value })

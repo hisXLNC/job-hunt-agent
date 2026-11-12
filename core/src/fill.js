@@ -77,7 +77,7 @@
     root.innerHTML = `<style>
       .p{font:14px/1.45 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;background:#fff;color:#16181d;border:1px solid #eae9e3;border-radius:16px;box-shadow:0 1px 2px rgba(22,24,29,.06),0 14px 40px rgba(22,24,29,.16);padding:14px 16px 12px;width:320px}
       .h{display:flex;align-items:center;gap:9px;font-weight:650;margin-bottom:8px;letter-spacing:-.01em}.h .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .m{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#3b63f0,#2440b8);flex:none;position:relative}.m::after{content:"";position:absolute;inset:8px 6px 6px;border:2px solid #fff;border-radius:3px}
+      .m{width:24px;height:24px;flex:none;display:block}
       .x{border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:#6b7180;padding:2px 6px;border-radius:7px}.x:hover{background:#f1f0eb}
       .s{color:#454a57;margin:0 0 10px}.r{display:flex;flex-wrap:wrap;gap:6px}
       button.b{font:inherit;font-weight:560;border:1px solid #deddd6;background:#fff;color:#16181d;border-radius:10px;padding:8px 12px;cursor:pointer;flex:1 1 auto}
@@ -90,7 +90,7 @@
       .q{margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#fbf0d4;color:#5c3a00}.q[hidden]{display:none}.q p{margin:0 0 8px}
       .c{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}.c[hidden]{display:none}.c select{font:inherit;padding:8px 10px;border:1px solid #deddd6;border-radius:10px;max-width:100%;background:#fff}
       @media (max-width:420px){.p{width:calc(100vw - 32px)}}
-    </style><div class="p"><div class="h"><i class="m"></i><span class="t">Job Hunt · ${(JOB.company || '').replace(/[<>&]/g, '')}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
+    </style><div class="p"><div class="h"><svg class="m" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="jhg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3A5BD9"/><stop offset="1" stop-color="#22389A"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#jhg)"/><path d="M25 19.5v-2.5a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v2.5" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/><rect x="12" y="19.5" width="40" height="28" rx="5" fill="#fff"/><path d="M12 31h40" stroke="#22389A" stroke-width="2.4"/><rect x="28.5" y="28" width="7" height="6" rx="1.5" fill="#22389A"/><circle cx="48" cy="46" r="10" fill="#E9B949" stroke="#22389A" stroke-width="2.4"/><path d="m43.6 46.2 3 3 5.6-6" fill="none" stroke="#22389A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="t">Job Hunt${JOB.company ? ` · ${JOB.company.replace(/[<>&]/g, '')}` : ''}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
       <p class="s"></p><div class="q" hidden><p class="qt"></p><div class="r"><button class="b pr" data-k="replace">Replace with Job Hunt's</button><button class="b" data-k="keep">Keep it</button></div></div><div class="c" hidden><select></select><button class="b pr" data-k="pick">Fill it in for this job</button></div><div class="bar" hidden><i></i></div><div class="r">
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
@@ -117,7 +117,7 @@
       const id = chooseEl.querySelector('select').value;
       if (!id) return;
       chooseEl.hidden = true; buttons.fill.hidden = false; buttons.fill.disabled = true;
-      status('Filling it in for the job you chose…');
+      status(id === 'profile' ? 'Filling it in from your CV…' : 'Filling it in for the job you chose…');
       send('pick', { job_id: id });
     };
     buttons.next.onclick = () => nextAmber();
@@ -819,7 +819,7 @@
     async fill(answer) {
       if (retired) return;
       waitingSince = 0;
-      if (answer.job && headEl) headEl.textContent = `Job Hunt · ${answer.job.company}`;
+      if (answer.job && headEl) headEl.textContent = answer.profile ? `Job Hunt · your profile on ${answer.job.company}` : `Job Hunt · ${answer.job.company}`;
       // The answers go to the boxes as they were when the form was sent (boxes added or moved since
       // would shift them); read again only if the page replaced them.
       if (sent && Object.values(sent.byKey).every(els => els.every(e => e.isConnected))) ({ fields, byKey, adders } = sent);
@@ -901,9 +901,10 @@
       progress(100);
       setTimeout(() => { if (!barTimer) progress(null); }, 2500);
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
-      buttons.next.hidden = !todo; buttons.applied.hidden = false;
+      // A profile isn't an application: nothing to mark as submitted or to set aside.
+      buttons.next.hidden = !todo; buttons.applied.hidden = !!answer.profile; if (answer.profile) buttons.drop.hidden = true;
       buttons.diag.hidden = false; // what Job Hunt saw and did, to paste to Claude when something's off
-      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (skillMiss.length ? ` Not in the site's list, or not taken (add these yourself): ${skillMiss.join(', ')}.` : '') + (skillUnsure.length ? ` Chosen, but the site didn't show it: check ${skillUnsure.join(', ')}.` : '')
+      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (answer.note ? ' ' + answer.note : '') + (skillMiss.length ? ` Not in the site's list, or not taken (add these yourself): ${skillMiss.join(', ')}.` : '') + (skillUnsure.length ? ` Chosen, but the site didn't show it: check ${skillUnsure.join(', ')}.` : '')
         + (EXT && answer.app_version && /^\d/.test(answer.app_version) && answer.app_version.replace(/-.*/, '') !== chrome.runtime.getManifest().version ? ` (This extension is ${chrome.runtime.getManifest().version}, Job Hunt is ${answer.app_version}: open the extension's button once so it updates, then reload this page.)` : '');
       status(todo
         ? `Filled ${ok}.${saved} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
@@ -948,12 +949,18 @@
       for (const j of list) {
         const o = document.createElement('option');
         o.value = j.id;
-        o.textContent = `${j.title} · ${j.company}${j.status === 'ready' ? ' (not approved yet)' : ''}`;
+        o.textContent = j.id === 'profile' ? 'Not an application: a profile here, from my CV' : `${j.title} · ${j.company}${j.status === 'ready' ? ' (not approved yet)' : ''}`;
         sel.appendChild(o);
       }
+      // The button says what it will do with the choice.
+      const say = () => { buttons.pick.textContent = sel.value === 'profile' ? 'Fill it in from my CV' : 'Fill it in for this job'; };
+      sel.onchange = say;
       // Chosen already: the first whose company the page names (its title or address).
       const named = list.find(j => { const w = String(j.company || '').toLowerCase().split(/\s+/)[0]; return w.length >= 3 && here.includes(w); });
       if (named) sel.value = named.id;
+      // A page that reads as your own profile or account, or no job to choose: the profile.
+      else if (list.some(j => j.id === 'profile') && (list.length === 1 || /\/(profile|account|my-?(info|profile|account)|resume|experience|education|credentials|candidate)(\/|$|\?)/i.test(location.pathname))) sel.value = 'profile';
+      say();
       chooseEl.hidden = false;
       buttons.fill.hidden = true; // one blue button: the one under the list
     },
