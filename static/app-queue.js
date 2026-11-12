@@ -202,7 +202,14 @@ function queueMini(x) {
 async function showOverview(arg) {
   arg = String(arg || '').split('/')[0]; // a step, perhaps with /list after it (see the route)
   // Just fetched (opening Job Hunt fetches it before drawing the page): no need to ask twice.
-  if (!overview || Date.now() - overviewAt > 1500) { overview = await api('/api/overview'); overviewAt = Date.now(); }
+  // Going from tab to tab draws at once from what's here, and asks behind it whether anything
+  // changed (the app answers only that when nothing did); the page is drawn again only if so.
+  if (!overview) { overview = await api('/api/overview'); overviewAt = Date.now(); }
+  else if (Date.now() - overviewAt > 1500) {
+    const had = overview.rev, here = location.hash;
+    overviewAt = Date.now();
+    refreshOverview().then(() => { if (overview.rev !== had && location.hash === here && !pageDirty && !document.querySelector('.modal-back')) route(); });
+  }
   renderNav();
   const o = overview;
   const setup = o.setup;
@@ -233,7 +240,7 @@ async function showOverview(arg) {
   const view = /^#overview\/[a-z]+\/list$/.test(location.hash) ? 'list' : queueView();
   let listing = '';
   if (view === 'list' && all.length) {
-    const tracked = ['waiting', 'interviews'].includes(step) ? (await api('/api/tracker')).rows : [];
+    const tracked = ['waiting', 'interviews'].includes(step) ? (await kept('/api/tracker')).rows : [];
     const notes = step ? [] : all.filter(x => x.kind === 'health');
     const noteRow = x => `<div class="next-row ${x.h.level === 'problem' ? 'crit' : 'warn'}"><span class="next-n">!</span><span class="grow">${esc(x.h.text)}</span><span class="row next-act">
         ${x.h.action === 'removeBroken' ? `<button class="btn sm" data-act="removeBroken" data-boards="${esc(JSON.stringify(x.h.data))}">Remove ${x.h.data.length === 1 ? 'it' : 'them'}</button><button class="btn sm" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button>` : ''}

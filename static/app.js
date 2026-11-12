@@ -40,6 +40,18 @@ async function api(path, { method = 'GET', body, raw } = {}) {
   let data = null;
   try { data = await r.json(); } catch (e) {}
   if (!r.ok) throw new Error((data && data.error) || `Something went wrong (${r.status})`);
+  // Anything changed: the lists kept for a moment (see kept) are asked for afresh.
+  if (method !== 'GET') keptAt.clear();
+  return data;
+}
+/** A long list (every job, the tracker), kept for a few seconds so that going from tab to tab, or
+ *  back to a page, doesn't fetch and read it again each time. Anything you change clears it. */
+const keptAt = new Map();
+async function kept(path, ms = 15000) {
+  const k = keptAt.get(path);
+  if (k && Date.now() - k.at < ms) return k.data;
+  const data = await api(path);
+  keptAt.set(path, { at: Date.now(), data });
   return data;
 }
 
@@ -594,7 +606,7 @@ async function showRoute() {
     if (name === 'cvs' && arg === 'coach') await showCoach();
     // A step of the hunt is the Queue's: an old link to it in the Pipeline goes there, as a list.
     else if (name === 'applications' && FLOW.some(([id]) => id === arg)) { location.replace(`#overview/${arg}/list`); return; }
-    else if (name === 'applications') { overview = await api('/api/overview'); await showPipeline(arg); }
+    else if (name === 'applications') { if (!overview || Date.now() - overviewAt > 1500) await refreshOverview(); await showPipeline(arg); }
     else if (name === 'overview') await showOverview(arg);
     else if (name === 'job') await showJob(arg);
     // The old Review page: the Queue's tailored applications, where each opens with its CV and letter.

@@ -459,6 +459,20 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let company = req.query.get("company").cloned().unwrap_or_default();
                 return Ok(Resp::json(&json!({ "company": company, "rating": agent.db().rating(&company) })));
             }
+            // A company's logo, from its own site (see logos.rs): the image once it's kept; until then
+            // nothing (the page shows the company's letter), and Job Hunt goes looking in the background.
+            ["api", "logo"] => {
+                let company = req.query.get("c").cloned().unwrap_or_default();
+                let miss = |keep: &str| Resp { status: 404, ctype: "text/plain".into(), body: vec![], headers: vec![("Cache-Control".into(), keep.into())] };
+                return Ok(match crate::logos::kept(agent, &company) {
+                    Some(Some((ctype, body))) => Resp { status: 200, ctype, body, headers: vec![("Cache-Control".into(), "private, max-age=604800".into()), ("X-Content-Type-Options".into(), "nosniff".into())] },
+                    Some(None) => miss("private, max-age=3600"),
+                    None => {
+                        crate::logos::want(agent, &company);
+                        miss("no-store")
+                    }
+                });
+            }
             ["api", "extension.zip"] => {
                 // The Send to Job Hunt extension, with the page reader the bookmark uses.
                 use std::io::Write;

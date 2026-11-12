@@ -21,6 +21,8 @@ Profiles on job sites, one look for scores, and less repetition.
 - On a job's Questions and contacts tab, the application questions and the details to copy are one card: What the form asks.
 - Forms are filled one way: in your own browser, with the extension. The buttons for a separate Job Hunt window are gone.
 - The status at the top right says when Job Hunt last searched; when it searches next is in the Search button's menu.
+- Going from tab to tab in the Queue is quick again: it draws at once from what it already has and checks for changes behind it, where it used to fetch every job on each click.
+- Company logos: where Job Hunt knows a company's own website (jobs that apply on the company's site), it fetches that site's icon once and shows it in place of the letter. Companies seen only on a job board keep their letter. Nothing is asked of any outside service.
 
 ## [2.47.0] - 2026-11-12
 

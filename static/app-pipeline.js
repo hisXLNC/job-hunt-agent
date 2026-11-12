@@ -9,7 +9,7 @@ async function showPipeline(view) {
   if (view === 'files') return showDocuments();
   // Every job in one table (applications, new postings, skipped ones): click a column's heading to
   // sort by it. Postings outside your locations aren't shown.
-  const [{ jobs: everything }, { rows }] = await Promise.all([api('/api/jobs'), api('/api/tracker')]);
+  const [{ jobs: everything }, { rows }] = await Promise.all([kept('/api/jobs'), kept('/api/tracker')]);
   // Every job but the postings outside your locations. What you said no to is in the list too, shown
   // when you choose that stage.
   const jobs = everything.filter(j => !outsideYours(j));

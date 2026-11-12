@@ -25,6 +25,14 @@ and `DEVELOPING.md`.
   there, unused**: `Host::fill_application`, `desktop/src-tauri/src/lib.rs` `apply_window`,
   `fill::start_queue`/`queue_next`, and fill.js's TOKEN mode. It can't be run or tested from a
   Linux container, so removing it is for a session on Windows.
+  Speed: `showOverview` draws from the overview it has and calls `refreshOverview` behind it
+  (redrawing only when `rev` changed); `kept(path)` in `app.js` holds `/api/jobs` and
+  `/api/tracker` for 15 seconds, cleared by any change. Logos: `core/src/logos.rs` takes a
+  company's icon from its own site (`own_site` of a job's apply link; never a job board or a
+  site that hosts many companies), in the background, kept under `logo:<company key>`;
+  `/api/logo?c=` serves it or 404, and `avatar()` lays it over the letter. **Never run against a
+  real site from here** (no network): tested against a stand-in site. LinkedIn-only companies have
+  no logo; the posting's own logo link could be kept when a posting is read, a next step.
 - **2.47.0: four places, not five.** Pipeline is gone as a place. `NAV` is Queue, Inbox, Calendar,
   Me. Every job is the Queue's last tab, All jobs (`#applications`, `showPipeline` in
   `app-pipeline.js`, headed by `jobsHead` and the shared `queueTabs`); where a job stands is its

@@ -128,7 +128,12 @@ function contactHtml(c, i, writing, pb) {
 /** One step of the job hunt on the Overview: its roles, each with the next thing to do. `tracked`
  *  (the Tracker's rows) fills in the steps after you apply. */
 /** A company's initial on a tile whose colour comes from its name: the same company, the same colour. */
-const avatar = name => { const s = String(name || '?').trim(); let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `<span class="avatar" style="--h:${h}" title="${esc(s)}" aria-hidden="true">${esc((s.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</span>`; };
+const avatar = name => { const s = String(name || '?').trim(); let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `<span class="avatar" style="--h:${h}" title="${esc(s)}" aria-hidden="true">${esc((s.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}${name && !(Date.now() - (noLogo.get(s) || 0) < 90000) ? `<img class="logo" src="/api/logo?c=${encodeURIComponent(s)}" alt="" loading="lazy" decoding="async">` : ''}</span>`; };
+/** A company's own logo over its letter, once Job Hunt has it (see logos.rs): shown when it loads,
+ *  and where there's none the letter stays, without asking again on every redraw this session. */
+const noLogo = new Map(); // company: when its logo last wasn't there (asked again after a minute and a half, by when Job Hunt may have found it)
+document.addEventListener('load', e => { const i = e.target; if (i.matches?.('img.logo')) { if (i.naturalWidth >= 16) i.classList.add('ok'); else i.remove(); } }, true);
+document.addEventListener('error', e => { const i = e.target; if (i.matches?.('img.logo')) { try { noLogo.set(new URL(i.src).searchParams.get('c'), Date.now()); } catch (x) {} i.remove(); } }, true);
 /** What a posting pays, for a job's line of facts: the figure it states (its full wording on hover,
  *  and a mark when it's below your minimum), or that it states none. Always there, so no pay is
  *  something you see, not something missing. */
