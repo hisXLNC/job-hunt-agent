@@ -909,6 +909,7 @@ function careerHtml(career, thinking, tracks, chosen = '') {
     ${chosen ? '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-act="rescore" data-group="waiting">Read my waiting matches against it</button><span class="muted small">Matches found before you chose it aren\'t marked until they\'re scored again.</span></div>' : (career?.paths || []).length ? '<p class="muted small" style="margin-top:8px">Or press Make this my path on one of the paths below.</p>' : ''}</section>`;
   const kindName = { now: 'Open to you now', stretch: 'A step up or sideways', switch: 'A change of direction' };
   const paths = career?.paths || [];
+  const recs = paths.filter(c => c.recommended);
   const cur = c => c.currency && !['USD', 'CAD', 'AUD', 'NZD', 'SGD'].includes(c.currency) ? `${c.currency} ` : '$';
   const money = (n, c) => n ? `${cur(c)}${n >= 10000 ? `${Math.round(n / 1000)}k` : Math.round(n).toLocaleString()}` : '–';
   const range = (lo, hi, c) => lo && hi ? `${money(lo, c)}–${money(hi, c).replace(cur(c), '')}` : money(hi || lo, c);
@@ -917,7 +918,7 @@ function careerHtml(career, thinking, tracks, chosen = '') {
   const balanceName = { good: 'Good balance', mixed: 'Mixed balance', demanding: 'Demanding' };
   const balance = c => [c.hours ? `<span class="small">~${Math.round(c.hours)} h/week</span>` : '', c.balance ? `<span class="pill ${{ good: 'good', mixed: 'warn', demanding: 'crit' }[c.balance] || 'info'}" style="white-space:nowrap"${c.balance_note ? ` title="${esc(c.balance_note)}"` : ''}>${esc(balanceName[c.balance] || c.balance)}</span>` : ''].filter(Boolean).join(' ') || '–';
   const compare = paths.some(c => (c.ladder || []).length) ? `<table class="career-compare jobs" id="t-career"><thead><tr>${sortTh('Path')}${sortTh('Now', 'num')}${sortTh('In 5 years', 'num')}${sortTh('In 10 years', 'num')}${sortTh('Ceiling', 'num')}${sortTh('Hours a week', 'num')}<th>Balance</th></tr></thead><tbody>
-      ${paths.map(c => { const n = step(c, 'now') || { pay_min: c.pay_min, pay_max: c.pay_max }, f = step(c, '5'), t = step(c, '10'); return `<tr><td class="path-name" data-v="${esc(c.title.toLowerCase())}"><a href="#path-${esc(c.title)}" data-act="careerJump" data-i="${paths.indexOf(c)}">${esc(c.title)}</a><br><span class="muted small">${esc(kindName[c.kind] || c.kind)}</span></td>
+      ${paths.map(c => { const n = step(c, 'now') || { pay_min: c.pay_min, pay_max: c.pay_max }, f = step(c, '5'), t = step(c, '10'); return `<tr${c.recommended ? ' class="rec"' : ''}><td class="path-name" data-v="${esc(c.title.toLowerCase())}"><a href="#path-${esc(c.title)}" data-act="careerJump" data-i="${paths.indexOf(c)}">${esc(c.title)}</a>${c.recommended ? ' <span class="pill rec-pill" title="' + esc(c.recommended_why || 'Claude recommends this path') + '">★ Recommended</span>' : ''}<br><span class="muted small">${esc(kindName[c.kind] || c.kind)}</span></td>
         <td class="num" data-v="${n.pay_max || n.pay_min || 0}">${range(n.pay_min, n.pay_max, c)}</td><td class="num" data-v="${f ? f.pay_max || 0 : 0}">${f ? range(f.pay_min, f.pay_max, c) : '–'}</td><td class="num" data-v="${t ? t.pay_max || 0 : 0}">${t ? range(t.pay_min, t.pay_max, c) : '–'}</td>
         <td class="num ceil" data-v="${c.ceiling_pay || 0}"><b>${money(c.ceiling_pay, c)}</b><div class="ceilbar"><span style="width:${(c.ceiling_pay || 0) / top * 100}%"></span></div></td>
         <td class="num" data-v="${c.hours || 0}">${c.hours ? `~${Math.round(c.hours)}` : '–'}</td>
@@ -931,9 +932,13 @@ function careerHtml(career, thinking, tracks, chosen = '') {
   return `${chosenCard}<section class="card" id="careerCard"><header><h2>Your career paths</h2>
     ${thinking ? '<span class="muted small"><span class="spin" data-kind="career"></span>Claude is thinking… (a minute or two)</span>' : `<button class="btn" data-act="career">${career ? 'Think again' : 'Map my career paths'}</button>`}</header>
     ${career ? `${career.advice ? `<div class="advice"><b>Claude's advice</b><p>${esc(career.advice)}</p></div>` : ''}
+      ${recs.length ? `<div class="recs" id="careerRecs"><b>★ ${recs.length === 1 ? 'The path Claude recommends' : `The ${recs.length} paths Claude recommends`}</b><ul>${recs.map(c => `<li><a href="#path-${esc(c.title)}" data-act="careerJump" data-i="${paths.indexOf(c)}"><b>${esc(c.title)}</b></a> <span class="muted small">${esc(kindName[c.kind] || c.kind)}</span>${c.recommended_why ? `<br><span class="small">${esc(c.recommended_why)}</span>` : ''}</li>`).join('')}</ul></div>`
+        : paths.length ? '<p class="muted small" id="careerRecs">These paths were mapped before Job Hunt marked which ones Claude recommends. Press Think again to see its picks and why.</p>' : ''}
       ${compare ? `<h3 class="sub">Where each path leads</h3>${compare}<p class="muted small">Typical yearly base pay where you search, with steady progress. The ceiling is the most the path usually pays, at its top role. Hours are a typical week in the role, all in. Claude's estimates from ${esc(fmtDate(career.at))}: use them to compare paths, not as offers.</p>` : ''}
-      <div class="paths">${paths.map((c, i) => `<div class="path" id="path-${i}">
+      <div class="paths">${paths.map((c, i) => `<div class="path${c.recommended ? ' rec' : ''}" id="path-${i}">
+        ${c.recommended ? '<span class="rec-flag">★ Recommended</span>' : ''}
         <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><span><b>${esc(c.title)}</b><br><span class="small muted">${esc(kindName[c.kind] || c.kind)} · fit ${c.fit}</span></span>${c.ceiling_pay ? `<span class="pill good" style="white-space:nowrap" title="The most this path usually pays">up to ${money(c.ceiling_pay, c)}</span>` : `<span class="pill good" style="white-space:nowrap">${esc(c.pay)}</span>`}</div>
+        ${c.recommended && c.recommended_why ? `<p class="small rec-why"><b>Why Claude recommends it:</b> ${esc(c.recommended_why)}</p>` : ''}
         <p class="small">${esc(c.why)}</p>
         ${ladder(c)}
         ${c.hours || c.balance ? `<p class="small"><b>Work-life balance:</b> ${balance(c)}${c.balance_note ? ` ${esc(c.balance_note)}` : ''}</p>` : ''}

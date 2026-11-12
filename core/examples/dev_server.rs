@@ -108,6 +108,9 @@ impl Llm for DemoLlm {
             ceiling_title: format!("Director, {title}"), ceiling_pay: Some(pay.1 * 1.9),
             hours: Some([45.0, 50.0, 40.0][fit as usize % 3]), balance: ["mixed", "demanding", "good"][fit as usize % 3].into(),
             balance_note: ["Go-live weeks run late; mostly hybrid.", "Year-end and audits mean long weeks.", "Steady hours, often remote."][fit as usize % 3].into(),
+            recommended: fit >= 80,
+            recommended_why: if fit >= 86 { "This is where your replies come from: four of your five interviews were for programme roles in banks, and nothing stands in the way. You give up the faster growth of transformation work.".into() }
+                else if fit >= 80 { "It pays about the same now but leads further, and one rewritten bullet is all that stands in the way. Build towards it while you apply for programme roles.".into() } else { String::new() },
         };
         Ok(jobhunt_core::claude::CareerPlan { advice: "Your strongest case is regulated delivery: lead with it. Digital transformation pays about the same and grows faster, but asks you to show adoption, not just delivery. A move into process improvement pays less at first; keep it as a second string.".into(), paths: vec![
             p("Senior Technical Program Manager", "now", 86, (125000.0, 150000.0), &[], &["Senior Technical Program Manager", "Program Manager, Payments"], "Apply to five bank programmes this week.", &["Many openings in banks", "Your record fits as it is"], &["Long hiring loops", "Pay tops out without a Director title"]),

@@ -1113,6 +1113,10 @@ pub struct CareerPath {
     /// busy seasons, how much is remote).
     pub balance: String,
     pub balance_note: String,
+    /// Whether the coach recommends this path over the others (one to three of them), and why in a
+    /// sentence or two: what tips it for this person.
+    pub recommended: bool,
+    pub recommended_why: String,
 }
 
 /// The career coach's view: which missing skills cost you most, how to close each, and titles to try.
@@ -1207,8 +1211,30 @@ and the most it typically pays as a yearly number, not counting rare outliers.\n
 - balance: work-life balance in this role, \"good\", \"mixed\" or \"demanding\", and balance_note: one sentence on why \
 (on-call, travel, busy seasons such as year-end or tax season, deadlines, how often it's remote or hybrid), and \
 whether it changes higher up the ladder.\n\
+- recommended: true for the one to three directions you would choose in their place, false for the rest. Recommend at \
+least one, never more than three, and never all of them: it is a choice. Usually one they can get now and, when it \
+is worth the effort, one to build towards. It must agree with your advice;\n\
+- recommended_why: for a recommended direction, one or two plain sentences on what tips it for this person over the \
+others (their evidence, the pay it leads to, the balance, how little stands in the way), and what they give up by \
+choosing it. Empty for the rest.\n\
 Be honest about pay that's lower than what they make now, and about directions their search shows aren't working. \
 Never invent experience.")
+}
+
+/// Keeps the recommendation a choice: at most three paths, the best fits among those marked, and no
+/// reason left on a path that isn't recommended.
+pub fn tidy_recommended(paths: &mut [CareerPath]) {
+    let mut marked: Vec<usize> = (0..paths.len()).filter(|&i| paths[i].recommended).collect();
+    if marked.len() == paths.len() && paths.len() > 1 || marked.len() > 3 {
+        marked.sort_by_key(|&i| std::cmp::Reverse(paths[i].fit));
+        let keep = if paths.len() > 3 { 3 } else { 1 };
+        for &i in marked.iter().skip(keep) {
+            paths[i].recommended = false;
+        }
+    }
+    for p in paths.iter_mut() {
+        p.recommended_why = if p.recommended { p.recommended_why.trim().to_string() } else { String::new() };
+    }
 }
 
 /// A follow-up email on an application.
@@ -2221,8 +2247,11 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
             "ceiling_title": {"type": "string"}, "ceiling_pay": {"type": "number"},
             "hours": {"type": "number"}, "balance": {"type": "string", "enum": ["good", "mixed", "demanding"]}, "balance_note": {"type": "string"},
             "gaps": strings(), "titles": strings(), "first_step": {"type": "string"},
+            "recommended": {"type": "boolean"}, "recommended_why": {"type": "string"},
         }));
-        self.call(&career_system(), &user, obj(json!({"advice": {"type": "string"}, "paths": {"type": "array", "items": path}})), "medium")
+        let mut plan: CareerPlan = self.call(&career_system(), &user, obj(json!({"advice": {"type": "string"}, "paths": {"type": "array", "items": path}})), "medium")?;
+        tidy_recommended(&mut plan.paths);
+        Ok(plan)
     }
 
     fn coach(&self, candidate: &str, cvs: &str, evidence: &str) -> R<CoachPlan> {
@@ -2406,6 +2435,22 @@ Hybrid in Oakville; accommodation of flexible hours for the team.";
     }
 
     use super::*;
+
+    #[test]
+    fn a_recommendation_stays_a_choice() {
+        let path = |fit: i64, rec: bool| CareerPath { title: format!("Path {fit}"), fit, recommended: rec, recommended_why: " Because. ".into(), ..Default::default() };
+        // Every path marked: only the three best fits stay recommended, and the rest lose their reason.
+        let mut all: Vec<CareerPath> = [60, 90, 70, 80, 50].iter().map(|&f| path(f, true)).collect();
+        tidy_recommended(&mut all);
+        assert_eq!(all.iter().filter(|p| p.recommended).map(|p| p.fit).collect::<Vec<_>>(), vec![90, 70, 80]);
+        assert_eq!(all[1].recommended_why, "Because.");
+        assert_eq!(all[0].recommended_why, "");
+        // Two of three marked is already a choice.
+        let mut some = vec![path(80, true), path(70, false), path(60, true)];
+        tidy_recommended(&mut some);
+        assert_eq!(some.iter().filter(|p| p.recommended).count(), 2);
+        assert_eq!(some[1].recommended_why, "");
+    }
 
     fn walk(v: &Value, f: &mut dyn FnMut(&Value)) {
         f(v);
