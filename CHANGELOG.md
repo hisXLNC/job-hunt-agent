@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.51.1] - 2026-11-12
+
+Settings sits with the other places.
+
+### Changes
+
+- Settings is now beside Queue, Inbox, Calendar and Me, in the top bar and in the phone's tabs; the gear is gone.
+- On a phone the menu button is gone: tap the status at the top (Searched 5 min ago) for a small card with the search, email and sync lines and light or dark.
+- Also in this release, from 2.51.0: Never show this company, a Queue number that counts only what waits on you, Practise this interview, and a tag on several roles at one company.
+
 ## [2.51.0] - 2026-11-12
 
 Skip a company for good, practise interviews, a calmer badge.
@@ -1692,6 +1702,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.51.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.51.1
 [2.51.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.51.0
 [2.50.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.50.1
 [2.50.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.50.0

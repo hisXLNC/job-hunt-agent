@@ -134,7 +134,7 @@ const ICON = {
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
 /** Four places. Queue: what's waiting for you, and behind its last tab every job, wherever it stands. Inbox: the email about them. Calendar: interviews and reminders. Me: what you're looking for, your CVs and details, the files tailored from them, and how it's going. The same four are the phone's tabs. Settings (the gear) has the accounts, the job sources and the app itself. */
-const NAV = [['overview', 'Queue'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['cvs', 'Me']];
+const NAV = [['overview', 'Queue'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['cvs', 'Me'], ['settings', 'Settings']];
 /** Pages that belong to a place: a job, applying, review and every job to the Queue; the tailored files and the insights to Me; Recruiters to Inbox. */
 const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applications: 'overview', pipeline: 'overview', review: 'overview', welcome: 'overview', leads: 'overview', documents: 'cvs', results: 'cvs', recruiters: 'inbox' };
 /** Which place a page belongs to. What you're looking for is part of Me; where it looks is part of Settings. */
@@ -436,7 +436,6 @@ const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">
 // ---- shell ----
 function renderNav() {
   const active = placeOf();
-  const gear = $('#settingsLink'); if (gear) gear.classList.toggle('on', active === 'settings');
   // The badge: what's waiting on you. New matches to pick from aren't counted, or it would never clear.
   const waiting = overview ? queueCount(queueItems(overview).filter(x => x.step !== 'pick')) : 0;
   $('#nav').innerHTML = NAV.map(([id, name, group]) =>
@@ -459,7 +458,7 @@ function renderNav() {
     `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}<span>${name}</span>${id === 'overview' && waiting ? `<span class="badge">${waiting > 99 ? '99+' : waiting}</span>` : ''}</a>`).join('');
   const alert = !$('#connLine')?.hidden || !$('#limitLine')?.hidden || !$('#updateNote')?.hidden;
   $('#statusPop')?.classList.toggle('alert', alert);
-  const mm = $('#mMenu');
+  const mm = $('#mStatus');
   if (mm) { mm.setAttribute('aria-expanded', document.body.classList.contains('more-open')); mm.classList.toggle('alert', !$('#connLine')?.hidden || !$('#limitLine')?.hidden || !$('#updateNote')?.hidden); }
   updateSearchCtl();
   $('#runNote').textContent = busy || `Searched ${ago(overview?.last_search)}${side.paused ? ` · ${side.paused === 'off' ? 'daily search off' : `paused until ${new Date(side.paused).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}` : ''}`;

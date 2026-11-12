@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.51.1",
+    "date": "2026-11-12",
+    "title": "Settings sits with the other places",
+    "changes": [
+      "Settings is now beside Queue, Inbox, Calendar and Me, in the top bar and in the phone's tabs; the gear is gone.",
+      "On a phone the menu button is gone: tap the status at the top (Searched 5 min ago) for a small card with the search, email and sync lines and light or dark.",
+      "Also in this release, from 2.51.0: Never show this company, a Queue number that counts only what waits on you, Practise this interview, and a tag on several roles at one company."
+    ]
+  },
+  {
     "version": "2.51.0",
     "date": "2026-11-12",
     "title": "Skip a company for good, practise interviews, a calmer badge",

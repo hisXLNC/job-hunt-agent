@@ -488,7 +488,7 @@ form[data-form=profile] [type=submit] { display: none; }
   .mstatus { margin-left: auto; display: flex; align-items: center; gap: 6px; text-decoration: none; font-size: 12.5px; min-width: 0; }
   .mstatus span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Tabs at the bottom, within thumb's reach. */
-  .tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface);
+  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface);
     border-top: 1px solid var(--line); padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); }
   .tabbar a, .tabbar button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 52px;
     color: var(--muted); text-decoration: none; font: inherit; font-size: 11px; font-weight: 600; background: none; border: 0; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -1666,3 +1666,19 @@ details.kit > summary { cursor: pointer; }
 /* Several roles at one company in a list. */
 .co-more { border: 0; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 600; vertical-align: middle; }
 .co-more:hover { color: var(--ink); }
+
+/* ---- Phone: no menu button. The status in the top bar opens a card with the status lines and the
+   theme; Settings is the fifth tab. ---- */
+.mstatus { font: inherit; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .mstatus { min-height: 36px; padding: 4px 10px; border-radius: 999px; color: var(--muted); font-size: 12.5px; }
+  .mstatus[aria-expanded="true"] { background: var(--surface); box-shadow: 0 0 0 1px var(--line-2); color: var(--ink); }
+  .mstatus.alert .dot { box-shadow: 0 0 0 3px color-mix(in srgb, #E3A83C 35%, transparent); }
+  body.more-open { overflow: auto; }
+  body.more-open .side { inset: calc(var(--mtop-h, 64px) + 6px) 10px auto auto; width: min(340px, calc(100vw - 20px)); max-height: calc(100vh - var(--mtop-h, 64px) - 90px); padding: 12px 14px; gap: 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 50px rgba(0, 0, 0, .18); z-index: 45; }
+  body.more-open .status-pop .side-foot { gap: 6px; padding: 0; font-size: 14.5px; }
+  body.more-open .side .status { padding: 6px 2px; }
+  .tabbar a, .tabbar button { min-width: 0; }
+  .tabbar a span:not(.badge) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+}

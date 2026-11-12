@@ -55,6 +55,11 @@ and `DEVELOPING.md`.
   `app.js` or `pipeline.rs` for something, look in the parts too. The Rust linter's safe fixes
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
+- **2.51.1: Settings is a place.** The fifth entry of `NAV` (top bar and the phone's tabs); the gear
+  (`#settingsLink`) and the phone's menu button (`#mMenu`) are gone. On a phone the status in the top
+  bar (`#mStatus`, `data-act="moreMenu"`) opens `.side` as a small card with the status lines and the
+  theme (`body.more-open`, last block of `app.css`); a tap elsewhere closes it. 2.51.0 was never
+  published; this release carries it.
 - **2.51.0.** Not interested has a fourth answer, Never show <company> (`block: true` on
   `/api/jobs/<id>/status` -> `Agent::block_company`: adds to `exclude_companies`, dismisses its other
   queued postings). The nav badge leaves out the `pick` step (`renderNav`); the page's headline still

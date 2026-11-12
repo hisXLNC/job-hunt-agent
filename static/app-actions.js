@@ -1001,6 +1001,8 @@ document.addEventListener('click', e => {
     if (m.id === 'statusPop' && document.body.classList.contains('more-open')) return;
     if (!m.contains(e.target) || e.target.closest('.menu-list')) m.open = false;
   });
+  // The phone's status card closes on a tap anywhere else.
+  if (document.body.classList.contains('more-open') && !e.target.closest('.side, #mStatus')) { document.body.classList.remove('more-open'); renderNav(); }
   const to = e.target.closest('a[data-tab-to]');
   if (to) jobTabs[decodeURIComponent(to.getAttribute('href').replace('#job/', ''))] = to.dataset.tabTo;
   if (to && to.dataset.scroll) scrollToAfter = to.dataset.scroll;

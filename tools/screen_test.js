@@ -154,7 +154,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   // Every job is behind the Queue's last tab; the Pipeline's old step pages open the Queue on that step, as a list.
   await at('applications');
   check(await page.evaluate(() => document.querySelector('.page h1').textContent === 'All jobs' && /All jobs/.test(document.querySelector('.qsteps a.on')?.textContent || '') && !document.querySelector('.pipe-tabs') && !!document.querySelector('#t-all')), 'All jobs is the last tab of the Queue, with the list of every job');
-  check(await page.evaluate(() => [...document.querySelectorAll('#nav a')].map(a => a.textContent.replace(/\s*\d+$/, '').trim()).join('|')) === 'Queue|Inbox|Calendar|Me', 'Four places in the top bar');
+  check(await page.evaluate(() => [...document.querySelectorAll('#nav a')].map(a => a.textContent.replace(/\s*\d+$/, '').trim()).join('|')) === 'Queue|Inbox|Calendar|Me|Settings', 'Five places in the top bar');
   await page.evaluate(() => localStorage.setItem('jh.queueView', 'one'));
   await page.goto(`${base}/#applications/approve`); await page.waitForTimeout(1200);
   check(await page.evaluate(() => location.hash === '#overview/approve/list' && /Approve/.test(document.querySelector('.qsteps a.on')?.textContent || '') && !document.querySelector('.decision')), 'An old link to a Pipeline step opens the Queue on that step, as a list');
@@ -240,7 +240,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
     const body = await text('#main');
     check(body.length > 40 && !body.includes("Couldn't load"), `#${h} draws`);
   }
-  check((await text('#nav')).replace(/\s+/g, ' ').trim().replace(/ \d+/g, '') === 'Queue Inbox Calendar Me', 'The places are Queue, Inbox, Calendar, Me');
+  check((await text('#nav')).replace(/\s+/g, ' ').trim().replace(/ \d+/g, '') === 'Queue Inbox Calendar Me Settings', 'The places are Queue, Inbox, Calendar, Me, Settings');
   const on = async () => `${(await text('#nav a.on')).replace(/\s*\d+\s*$/, '').trim()} / ${(await text('.place-tabs a.on, .pipe-tabs a.on')).replace(/\s*\d+\s*$/, '').trim()}`;
   await at('calendar'); check((await text('#nav a.on')).trim() === 'Calendar', 'The calendar is its own place');
   await at('inbox'); check(await on() === 'Inbox / Email', 'Inbox opens on Email');
@@ -248,9 +248,8 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('applications/files'); check(await on() === 'Me / Tailored files', 'Tailored files are under Me');
   await at('search/what'); check(await on() === 'Me / Looking for', 'What to search for is Me, Looking for');
   await at('cvs'); check((await on()).startsWith('Me / CVs'), 'Your CVs are Me, CVs');
-  const gear = () => page.evaluate(() => document.querySelector('#settingsLink').classList.contains('on'));
-  await at('settings'); check(await gear() && (await text('.place-tabs a.on')).trim() === 'Accounts', 'Settings is the gear');
-  await at('search'); check(await gear() && (await text('.place-tabs a.on')).trim() === 'Job sources', 'Where it looks is Settings, Job sources');
+  await at('settings'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.place-tabs a.on')).trim() === 'Accounts' && !(await page.$('#settingsLink')), 'Settings is the last of the places, not a gear');
+  await at('search'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.place-tabs a.on')).trim() === 'Job sources', 'Where it looks is Settings, Job sources');
   await page.click('#runLine'); await page.waitForTimeout(300);
   check(await page.evaluate(() => { const r = document.querySelector('#syncLine').getBoundingClientRect(); return r.width > 0 && r.height > 0; }), 'The status in the top bar opens the status lines');
 
@@ -273,11 +272,14 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   }
   // The phone's tabs are the five places; Settings is behind the top bar's menu button.
   await phone.goto(`${base}/#overview`); await phone.reload(); await phone.waitForTimeout(900);
-  check((await phone.evaluate(() => document.querySelector('#tabbar').innerText)).replace(/\s+/g, ' ').replace(/ \d+/g, '').trim() === 'Queue Inbox Calendar Me', 'Phone: the tabs are the four places');
-  await phone.click('#mMenu'); await phone.waitForTimeout(400);
-  check(await phone.evaluate(() => { const a = document.querySelector('#settingsLink'); const r = a.getBoundingClientRect(); return r.width > 0 && r.top >= 0 && r.bottom <= innerHeight; }), 'Phone: the menu button shows Settings');
-  await phone.click('#settingsLink'); await phone.waitForTimeout(900);
-  check(await phone.evaluate(() => location.hash.startsWith('#settings') && !document.body.classList.contains('more-open')), 'Phone: Settings opens and the menu closes');
+  check((await phone.evaluate(() => document.querySelector('#tabbar').innerText)).replace(/\s+/g, ' ').replace(/ \d+/g, '').trim() === 'Queue Inbox Calendar Me Settings', 'Phone: the tabs are the five places');
+  check(!(await phone.$('#mMenu')), 'Phone: no menu button');
+  await phone.click('#mStatus'); await phone.waitForTimeout(400);
+  check(await phone.evaluate(() => { const top = document.querySelector('.mtop').getBoundingClientRect().bottom; const c = document.querySelector('.side').getBoundingClientRect(), l = document.querySelector('#searchLine').getBoundingClientRect(), t = document.querySelector('#themeSwitch').getBoundingClientRect(); return c.top >= top && c.width < innerWidth && l.height > 0 && l.top >= c.top && t.bottom <= innerHeight && t.height > 0; }), 'Phone: the status opens a card under the top bar, with the status lines and the theme');
+  await phone.mouse.click(6, await phone.evaluate(() => innerHeight - 140)); await phone.waitForTimeout(300);
+  check(await phone.evaluate(() => !document.body.classList.contains('more-open')), 'Phone: a tap elsewhere closes the card');
+  await phone.click('#tabbar a[href="#settings"]'); await phone.waitForTimeout(900);
+  check(await phone.evaluate(() => location.hash.startsWith('#settings') && document.querySelector('#tabbar a.on')?.textContent.trim() === 'Settings'), 'Phone: Settings is a tab');
   // The page reader on a LinkedIn posting (a stand-in page shaped like one): the people under
   // "Meet the hiring team" come with it; a profile link elsewhere on the page doesn't.
   const li = await browser.newPage();

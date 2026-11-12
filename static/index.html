@@ -18,16 +18,15 @@
 </head>
 <body>
 <div class="app">
-  <!-- On a phone: a slim bar on top (find, and a menu button for Settings and status), the five places as tabs at the bottom. -->
+  <!-- On a phone: a slim bar on top (what Job Hunt is doing, which opens the status card; find), the five places as tabs at the bottom. -->
   <header class="mtop">
     <span class="mbrand"><a href="#overview" aria-label="Job Hunt: the Queue"><img src="/static/logo.svg" alt="" width="26" height="26"></a><span class="brand-text"><a href="#overview"><b>Job Hunt</b></a><a class="brand-ver" href="#settings/app" data-act="versionInfo" data-version title="What's new in this version"></a></span></span>
-    <a class="mstatus" href="#overview"><span class="dot" id="mDot"></span><span id="mNote"></span></a>
+    <button type="button" class="mstatus" id="mStatus" data-act="moreMenu" aria-label="What Job Hunt is doing" aria-expanded="false"><span class="dot" id="mDot"></span><span id="mNote"></span></button>
     <button type="button" class="mbtn" data-act="palette" aria-label="Find a job"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button>
-    <button type="button" class="mbtn" id="mMenu" data-act="moreMenu" aria-label="Settings and status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </header>
   <nav class="tabbar" id="tabbar" aria-label="Sections"></nav>
-  <!-- The bar across the top: the five places, find, what Job Hunt is doing (and its status lines), Settings.
-       On a phone it's the sheet the top bar's menu button opens. -->
+  <!-- The bar across the top: the five places (Settings is the last), find, what Job Hunt is doing (and its status lines).
+       On a phone only its status lines show, as a card under the top bar's status. -->
   <aside class="side">
     <div class="brand">
       <a href="#overview" aria-label="Job Hunt: the Queue"><img src="/static/logo.svg" alt="" width="38" height="38"></a>
@@ -52,7 +51,6 @@
         <a class="muted side-version" href="#settings/app" id="versionNote" title="What's new">Job Hunt</a>
       </div>
     </details>
-    <a class="side-settings" id="settingsLink" href="#settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></a>
   </aside>
   <main id="main" tabindex="-1"><div class="page"><p class="muted">Loading…</p></div></main>
 </div>
