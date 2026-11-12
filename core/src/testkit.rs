@@ -20,6 +20,9 @@ use std::sync::Mutex as M;
 #[derive(Default)]
 pub struct FakeLlm {
     pub scores: M<BTreeMap<String, i64>>,
+    /// Postings per scoring request (0 or 1: each its own); and titles `score_many` leaves out.
+    pub batch: M<usize>,
+    pub left_out: M<Vec<String>>,
     pub triages: M<Vec<Triage>>,
     pub calls: M<Vec<String>>,
     pub accepted: M<Option<Option<TimeSlot>>>,
@@ -171,6 +174,14 @@ impl Llm for FakeLlm {
         })
     }
 
+    fn score_batch(&self) -> usize {
+        (*self.batch.lock().unwrap()).max(1)
+    }
+    fn score_many(&self, cvs: &[(String, String)], guidance: &str, jobs: &[Job]) -> R<Vec<Option<JobScore>>> {
+        self.calls.lock().unwrap().push(format!("score_many:{}", jobs.len()));
+        let out = self.left_out.lock().unwrap().clone();
+        jobs.iter().map(|j| if out.contains(&j.title) { Ok(None) } else { self.score(cvs, guidance, j).map(Some) }).collect()
+    }
     fn score(&self, cvs: &[(String, String)], _guidance: &str, job: &Job) -> R<JobScore> {
         self.calls.lock().unwrap().push("score".into());
         // A tailored CV (see tailor below) fits a little better.

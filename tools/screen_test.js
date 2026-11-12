@@ -120,6 +120,19 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.selectOption('[name=auto_tailor_mode]', 'off');
   check(await until(async () => (await prefs()).auto_tailor_min === 0, 15), 'Tailor by itself can be turned off again');
 
+  // One search a day unless you choose two: the second time appears, and both are saved.
+  await at('settings/search');
+  check(await page.evaluate(() => document.querySelector('[data-second-search]').hidden), 'One search a day: no second time shown');
+  await page.selectOption('[name=searches_per_day]', '2');
+  check(await until(async () => { const p = await prefs(); return p.searches_per_day === 2 && p.search_hour_2 === 16 && !(await page.evaluate(() => document.querySelector('[data-second-search]').hidden)); }, 15), 'Two searches a day: the second time shows and is saved');
+  await page.selectOption('[name=searches_per_day]', '1');
+  check(await until(async () => (await prefs()).searches_per_day === 1, 15), 'Back to one search a day');
+  // Another AI beside Claude: offered in Accounts, off until you set it up.
+  await at('settings/connections');
+  check(await page.evaluate(() => { const c = document.querySelector('#otherCard'); return !!c && c.querySelector('[name=for]').value === '' && [...c.querySelectorAll('[name=service] option')].some(o => /Grok/.test(o.textContent)) && !!document.querySelector('[name=score_batch]'); }), 'Accounts offers another AI (off) and scoring several postings to a request');
+  await page.selectOption('#otherCard [name=service]', '');
+  check(await page.evaluate(() => !document.querySelector('[data-other-url]').hidden), 'Another AI: choosing "Another one" asks for its address');
+
   // Pick is in the order of what's best to apply to now, unless you choose another.
   await at('applications/pick');
   check(await page.evaluate(() => { const s = document.querySelector('[data-pickf=sort]'); return !s || s.value === 'now'; }), 'Pick is ordered by what is best to apply to now');

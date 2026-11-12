@@ -367,6 +367,12 @@ pub struct Progress {
 
 /// The search's stages and the share of the bar each one fills.
 // Scoring runs alongside the search (see take_in), so searching is most of the bar.
+/// A tailored CV scored this much lower than before, or less, is the scorer's own variation.
+const RESCORE_NOISE: i64 = 5;
+
+/// With more matches than this waiting to be picked, a search scores half its usual number.
+const BACKLOG: usize = 40;
+
 const STAGES: [(&str, u32, u32); 5] = [
     ("Searching job sites", 0, 70),
     ("Searching Indeed", 70, 80),
@@ -523,6 +529,9 @@ impl Agent {
 
     /// Whether Claude can be called at all (installed Claude Code, or an API key).
     pub fn claude_ready(&self) -> bool {
+        if matches!(self.secret("other.for").as_str(), "search" | "all") && !self.secret("other.url").is_empty() && !self.secret("other.model").is_empty() {
+            return true;
+        }
         match self.engine_name().as_str() {
             "api" => !self.secret("claude.key").is_empty(),
             _ => crate::claude_code::find(&self.secret("claude.path")).is_some(),
@@ -541,6 +550,12 @@ impl Agent {
             _ => Engine::Code(crate::claude_code::find(&self.secret("claude.path"))),
         };
         let mut claude = Claude::with(engine, &model);
+        // Another AI for searching, or for everything (Settings, Accounts).
+        let for_what = self.secret("other.for");
+        if for_what == "search" || for_what == "all" {
+            claude.other = Some(crate::claude::OtherAi { url: self.secret("other.url"), key: self.secret("other.key"), model: self.secret("other.model"), for_what });
+        }
+        claude.score_batch = self.secret("claude.score_batch").parse().unwrap_or(crate::claude::SCORE_BATCH);
         // Saved choices for tailoring; never chosen means Opus at medium effort.
         if let Some(m) = self.db().get("claude.tailor_model").ok().flatten() {
             claude.tailor_model = m;
@@ -612,8 +627,11 @@ impl Agent {
         let today = local.date_naive();
         let mut times: Vec<chrono::DateTime<Utc>> = vec![];
         // The daily search: today's if it's still ahead, else tomorrow's.
-        times.extend(at(today, p.search_hour));
-        times.extend(at(today + Duration::days(1), p.search_hour));
+        let (first, second) = p.search_hours();
+        for h in std::iter::once(first).chain(second) {
+            times.extend(at(today, h));
+            times.extend(at(today + Duration::days(1), h));
+        }
         // The weekly review: Sunday at 6 PM (a Monday review comes with that day's search).
         if self.secret("weekly.day") != "mon" {
             let to_sunday = (7 - local.weekday().num_days_from_sunday()) % 7;
@@ -1703,7 +1721,12 @@ replies and interviews, and a little lower for kinds that got none from several 
             return err("No CV uploaded yet. Add one in CV & Career.");
         }
         let mut report = Report::default();
-        let cap = batch.unwrap_or(profile.max_scored_per_run).max(1);
+        let mut cap = batch.unwrap_or(profile.max_scored_per_run).max(1);
+        // More waiting to be picked than you'll get through: a scheduled search scores half as
+        // many (the newest first; the rest are held), so usage goes on what you'll apply to.
+        if batch.is_none() && self.db().jobs(Some("queued"), BACKLOG + 1)?.len() > BACKLOG {
+            cap = cap.min((cap / 2).max(10));
+        }
         self.drop_outside_locations()?;
         let set_aside = self.db().archive_unpicked(UNPICKED_DAYS)?;
         if set_aside > 0 {
@@ -2146,18 +2169,41 @@ replies and interviews, and a little lower for kinds that got none from several 
             }
         }
         let llm = self.llm();
-        let mut left = kept.into_iter();
-        for p in left.by_ref() {
+        let size = llm.score_batch().max(1);
+        let mut left: std::collections::VecDeque<Posting> = kept.into();
+        let stops_all = |e: &Error| e.0.contains("API key") || e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("wasn't found") || e.0.contains("isn't set up") || e.0.contains("key was rejected");
+        while !left.is_empty() {
             if self.stopping() || run.halted || run.scored >= run.cap {
-                self.hold(vec![p]);
-                report.deferred += 1;
-                continue;
+                report.deferred += left.len();
+                self.hold(left.drain(..).collect());
+                break;
             }
             self.wait_while_held();
-            self.also(&format!("scoring {} at {}", p.title, p.company));
+            let n = size.min(run.cap - run.scored).min(left.len());
+            let group: Vec<Posting> = left.drain(..n).collect();
+            self.also(&if n == 1 { format!("scoring {} at {}", group[0].title, group[0].company) } else { format!("scoring {n} postings: {} at {} and {} more", group[0].title, group[0].company, n - 1) });
+            let jobs: Vec<Job> = group.iter().map(|p| p.to_job()).collect();
+            // Several in one request. One the answer left out, or a request that failed for a
+            // reason of its own, is scored by itself; a failure that would stop every request
+            // (no key, the usage limit) stops here.
+            let mut answers: Vec<Option<R<crate::claude::JobScore>>> = if n > 1 {
+                match llm.score_many(ctx.cvs, ctx.guidance, &jobs) {
+                    Ok(v) => v.into_iter().map(|s| s.map(Ok)).collect(),
+                    Err(e) if stops_all(&e) => jobs.iter().map(|_| Some(Err(Error(e.0.clone())))).collect(),
+                    Err(_) => vec![],
+                }
+            } else {
+                vec![]
+            };
+            answers.resize_with(n, || None);
+            for ((p, mut job), answer) in group.into_iter().zip(jobs).zip(answers) {
+            if run.halted {
+                report.deferred += 1;
+                self.hold(vec![p]);
+                continue;
+            }
             run.scored += 1;
-            let mut job = p.to_job();
-            match llm.score(ctx.cvs, ctx.guidance, &job) {
+            match answer.unwrap_or_else(|| llm.score(ctx.cvs, ctx.guidance, &job)) {
                 Ok(s) => {
                     report.scored += 1;
                     job.status = if s.score >= profile.score_threshold { "queued" } else { "skipped" }.into();
@@ -2187,13 +2233,14 @@ replies and interviews, and a little lower for kinds that got none from several 
                     run.scored -= 1;
                     report.errors.push(format!("scoring {} / {}: {e}", p.company, p.title));
                     // Every other posting would fail the same way: stop scoring (they're held).
-                    if e.0.contains("API key") || e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("wasn't found") {
+                    if stops_all(&e) {
                         run.halted = true;
                     }
                     self.hold(vec![p]);
                 }
             }
             self.tally(report);
+            }
         }
         self.also("");
         Ok(())
@@ -2977,12 +3024,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         let p = self.profile();
         let tz = p.tz();
         let local = Utc::now().with_timezone(&tz);
-        use chrono::Timelike;
-        let searched_today = chrono::DateTime::parse_from_rfc3339(&self.secret("last.search")).is_ok_and(|t| t.with_timezone(&tz).date_naive() == local.date_naive());
-        // Searched today: tomorrow at the hour. Not yet: today at the hour, or now if that's passed.
-        let day = if searched_today { local.date_naive() + Duration::days(1) } else { local.date_naive() };
-        let next = if !searched_today && local.hour() >= p.search_hour { None } // due now: it runs within a minute
-            else { day.and_hms_opt(p.search_hour, 0, 0).and_then(|t| t.and_local_timezone(tz).earliest()).map(|t| t.to_rfc3339()) };
+        let last = chrono::DateTime::parse_from_rfc3339(&self.secret("last.search")).ok().map(|t| t.with_timezone(&tz).naive_local());
+        // The next search by itself (one a day, or two): None when it's due now and runs within a minute.
+        let next = p.next_search(local.naive_local(), last).and_then(|t| t.and_local_timezone(tz).earliest()).map(|t| t.to_rfc3339());
         let problems = self.connections().map(|c| c.iter().filter(|r| r["status"] == "problem").count()).unwrap_or(0);
         let paused = self.search_paused();
         json!({
@@ -4776,11 +4820,21 @@ publish your Google project (Settings \u{2192} Accounts explains how).", what.to
         drop(db);
         // The tailored CV scored the same way your CV was (one more request), once the
         // application is already waiting for you; on failure the page shows the score before.
-        if let Ok(s) = self.llm().score(&[(t.name.clone(), tailored_text)], &self.scoring_guidance(&profile), &job) {
+        // Two scorings of the same experience differ by a few points by chance, so the scorer is told
+        // the fit before, and a fit a little lower than it is taken as that chance, not a worse CV.
+        let mut guidance = self.scoring_guidance(&profile);
+        if let Some(a) = job.score {
+            guidance.push_str(&format!("\n\nThis CV is the candidate's own, reworded for this posting. Before the rewording you scored it {a} for this same posting. Use the same scale: score it lower than {a} only if the rewording lost or hid something the posting asks for."));
+        }
+        if let Ok(s) = self.llm().score(&[(t.name.clone(), tailored_text)], &guidance, &job) {
+            let after = match job.score {
+                Some(a) if s.score < a && a - s.score <= RESCORE_NOISE => a,
+                _ => s.score,
+            };
             let db = self.db();
-            db.update_job(job_id, &[("score_after", s.score.into())])?;
+            db.update_job(job_id, &[("score_after", after.into())])?;
             if let Some(a) = job.score {
-                db.log(Some(job_id), "rescored", &format!("fit {a} before tailoring, {} after", s.score))?;
+                db.log(Some(job_id), "rescored", &format!("fit {a} before tailoring, {after} after{}", if after != s.score { format!(" (scored {}: within the few points two scorings differ by)", s.score) } else { String::new() }))?;
             }
         }
         self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
@@ -6114,7 +6168,8 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     // Asked for from Claude (search_now) since the last search.
     let requested = { let r = agent.secret("request.search"); !r.is_empty() && r > agent.secret("last.search") };
     // Paused or off: only a search you ask for runs.
-    let scheduled = agent.search_paused().is_empty() && !searched_today && local.hour() >= p.search_hour;
+    let last = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.search")).ok().map(|t| t.with_timezone(&tz).naive_local());
+    let scheduled = agent.search_paused().is_empty() && p.search_due(local.naive_local(), last);
     if ready && (requested || scheduled) && !agent.is_running("search") {
         out.push("search");
     }
@@ -8275,6 +8330,30 @@ mod tests {
         s.agent.save_company_notes("ACME Inc.", "Wait six months.").unwrap();
         assert_eq!(s.agent.company_notes("Acme"), "Wait six months.");
         assert!(s.agent.company_history("Elsewhere", "").is_empty());
+    }
+
+    #[test]
+    fn postings_are_scored_several_to_a_request() {
+        let s = setup();
+        *s.llm.batch.lock().unwrap() = 4;
+        *s.llm.left_out.lock().unwrap() = vec!["Senior Program Manager".into()];
+        let profile = s.agent.profile();
+        let cvs = s.agent.cv_texts(&profile);
+        let guidance = s.agent.scoring_guidance(&profile);
+        let ctx = SearchCtx { profile: &profile, cvs: &cvs, guidance: &guidance, force: false, keep_found: true };
+        let mut run = SearchRun { cap: 5, ..SearchRun::default() };
+        let mut report = Report::default();
+        let list: Vec<Posting> = ["Technical Program Manager", "Senior Program Manager", "Program Manager, Payments", "Program Manager, Cloud", "Program Manager, Data", "Program Manager, Risk"]
+            .iter().enumerate().map(|(i, t)| posting(t, &(i + 1).to_string())).collect();
+        s.agent.take_in(list, &mut run, &mut report, &ctx).unwrap();
+        // Five of the six fit this search: four in one request, the fifth by itself; the one the
+        // answer left out is scored by itself too; the sixth waits.
+        assert_eq!((report.scored, report.deferred), (5, 1));
+        let calls = s.llm.calls.lock().unwrap().clone();
+        assert_eq!(calls.iter().filter(|c| c.starts_with("score_many")).cloned().collect::<Vec<_>>(), vec!["score_many:4".to_string()]);
+        // score_many's own three, the one it left out, and the fifth.
+        assert_eq!(calls.iter().filter(|c| *c == "score").count(), 5);
+        assert_eq!(s.agent.db().jobs(Some("queued"), 50).unwrap().len(), 5);
     }
 
     #[test]

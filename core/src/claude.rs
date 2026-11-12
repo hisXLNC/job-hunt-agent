@@ -150,6 +150,25 @@ pub fn score_schema() -> Value {
                "red_flags": strings(), "keywords": strings(), "deadline": {"type": "string"}, "potential": {"type": "integer"}, "salary": {"type": "string"}}))
 }
 
+/// Several postings scored in one answer: each entry is a score with the posting's number.
+pub fn score_many_schema() -> Value {
+    let mut one = score_schema();
+    one["properties"]["n"] = json!({"type": "integer"});
+    one["required"].as_array_mut().unwrap().push(json!("n"));
+    obj(json!({"scores": {"type": "array", "items": one}}))
+}
+
+/// A score as the rest of the app expects it: within 0-100, the potential never under the score,
+/// and the track one of the CVs given.
+fn tidy_score(mut s: JobScore, cvs: &[(String, String)]) -> JobScore {
+    s.score = s.score.clamp(0, 100);
+    s.potential = s.potential.map(|p| p.clamp(s.score, 100));
+    if !cvs.iter().any(|(n, _)| *n == s.track) {
+        s.track = cvs.first().map(|c| c.0.clone()).unwrap_or_default();
+    }
+    s
+}
+
 pub fn tailor_schema() -> Value {
     let edit = obj(json!({"index": {"type": "integer"}, "text": {"type": "string"}, "keywords_added": strings()}));
     obj(json!({"edits": {"type": "array", "items": edit}, "keyword_gaps": strings(),
@@ -438,6 +457,15 @@ fn email_block(e: &EmailIn, limit: usize) -> String {
 
 pub trait Llm: Send + Sync {
     fn score(&self, cvs: &[(String, String)], guidance: &str, job: &crate::db::Job) -> R<JobScore>;
+    /// How many postings to give `score_many` at once (1: score each with `score`).
+    fn score_batch(&self) -> usize {
+        1
+    }
+    /// Several postings scored in one request, in the order given; None where the answer left
+    /// one out (the caller scores that one by itself).
+    fn score_many(&self, cvs: &[(String, String)], guidance: &str, jobs: &[crate::db::Job]) -> R<Vec<Option<JobScore>>> {
+        jobs.iter().map(|j| self.score(cvs, guidance, j).map(Some)).collect()
+    }
     fn cv_profile(&self, cv_text: &str) -> R<CvProfile>;
     fn convert_cv(&self, cv: &CvSource) -> R<StructuredCv>;
     /// `consistency`: when the candidate already sent this company a CV, that CV and how close to
@@ -1218,7 +1246,25 @@ pub enum Engine {
     Api(String),
 }
 
+/// Another AI, reached the way OpenAI's API is: xAI's Grok, OpenAI, Gemini, OpenRouter, or a model
+/// running on this PC (Ollama). It answers the plain requests; looking things up on the web and
+/// Indeed stay with Claude Code.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OtherAi {
+    /// The API's address up to and including its version, e.g. "https://api.x.ai/v1".
+    pub url: String,
+    pub key: String,
+    pub model: String,
+    /// What it's used for: "search" (scoring postings and the rest of what a search asks) or
+    /// "all" (every plain request, CVs and cover letters included).
+    pub for_what: String,
+}
+
 pub struct Claude {
+    /// Set when another AI takes some or all of the plain requests.
+    pub other: Option<OtherAi>,
+    /// How many postings one scoring request covers (1: each its own request).
+    pub score_batch: usize,
     pub engine: Engine,
     /// Empty means the engine's default (Claude Code's own choice, or DEFAULT_MODEL for the API).
     pub model: String,
@@ -1250,6 +1296,10 @@ pub const TAILOR_EFFORT: &str = "medium";
 /// Scoring needs judgement, not prose: Sonnet does it nearly as well as Opus on a fraction of your
 /// plan's usage, and scoring is most of what a search asks of Claude.
 pub const SCORE_MODEL: &str = "sonnet";
+
+/// Postings scored in one request unless changed: your CVs and the instructions are sent once for
+/// the four, not four times.
+pub const SCORE_BATCH: usize = 4;
 
 /// A model name for the engine: Claude Code takes "opus" and "sonnet" as they are; the API needs
 /// a full model id.
@@ -1298,6 +1348,8 @@ impl Claude {
 
     pub fn with(engine: Engine, model: &str) -> Claude {
         Claude {
+            other: None,
+            score_batch: SCORE_BATCH,
             engine,
             model: model.trim().to_string(),
             tailor_model: TAILOR_MODEL.into(),
@@ -1339,8 +1391,20 @@ impl Claude {
         self.call_as(&self.model, system, user, schema, effort)
     }
 
+    /// A request a search makes (scoring, titles, salaries, alerts): the other AI's when one is
+    /// set for searching or for everything, else Claude's searching model.
+    fn search_call<T: DeserializeOwned>(&self, system: &str, user: &str, schema: Value, effort: &str) -> R<T> {
+        match &self.other {
+            Some(o) => ask_other(&self.http, o, system, user, schema),
+            None => self.call_as(self.search_model(), system, user, schema, effort),
+        }
+    }
+
     /// `call` with a particular model (empty: the engine's default).
     fn call_as<T: DeserializeOwned>(&self, model: &str, system: &str, user: &str, schema: Value, effort: &str) -> R<T> {
+        if let Some(o) = self.other.as_ref().filter(|o| o.for_what == "all") {
+            return ask_other(&self.http, o, system, user, schema);
+        }
         if let Engine::Code(_) = self.engine {
             let minutes = if effort == "low" { 5 } else { 10 };
             return self.ask_code_as(&model_id(model, false), system, user, schema, effort, &[], minutes);
@@ -1406,6 +1470,106 @@ impl Claude {
     }
 }
 
+/// The request body for another AI's chat endpoint. With `strict`, the answer must fit the schema
+/// (structured outputs); without, it's asked for as JSON with the schema in the instructions, for
+/// the services that don't offer the first.
+pub fn other_body(model: &str, system: &str, user: &str, schema: &Value, strict: bool) -> Value {
+    if strict {
+        json!({"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "response_format": {"type": "json_schema", "json_schema": {"name": "answer", "strict": true, "schema": schema}}})
+    } else {
+        let system = format!("{system}\n\nAnswer with one JSON object and nothing else, in exactly this JSON Schema:\n{schema}");
+        json!({"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "response_format": {"type": "json_object"}})
+    }
+}
+
+/// The JSON in another AI's answer: the message's text, without a code fence around it.
+pub fn other_answer(resp: &Value) -> R<String> {
+    let text = resp.pointer("/choices/0/message/content").and_then(|t| t.as_str()).unwrap_or("").trim();
+    if text.is_empty() {
+        return Err(Error("The other AI's answer had no text.".into()));
+    }
+    let text = text.strip_prefix("```json").or_else(|| text.strip_prefix("```")).unwrap_or(text);
+    Ok(text.strip_suffix("```").unwrap_or(text).trim().to_string())
+}
+
+/// One structured request to another AI (see OtherAi). Tried with a strict schema first; a service
+/// that refuses that is asked for plain JSON.
+fn ask_other<T: DeserializeOwned>(http: &reqwest::blocking::Client, o: &OtherAi, system: &str, user: &str, schema: Value) -> R<T> {
+    if o.url.trim().is_empty() || o.model.trim().is_empty() {
+        return Err(Error("The other AI isn't set up: choose its service and model in Settings → Accounts.".into()));
+    }
+    let url = format!("{}/chat/completions", o.url.trim().trim_end_matches('/'));
+    let mut strict = true;
+    let mut wait = Duration::from_secs(2);
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        let mut req = http.post(&url).json(&other_body(o.model.trim(), system, user, &schema, strict));
+        if !o.key.trim().is_empty() {
+            req = req.bearer_auth(o.key.trim());
+        }
+        let r = match req.send() {
+            Ok(r) => r,
+            Err(_) if attempt < 3 => {
+                std::thread::sleep(wait);
+                wait *= 2;
+                continue;
+            }
+            Err(e) => return Err(Error(format!("Couldn't reach the other AI at {} ({e}).", o.url.trim()))),
+        };
+        let status = r.status().as_u16();
+        let v: Value = r.json().unwrap_or(Value::Null);
+        if status == 200 {
+            let n = |k: &str| v.pointer(&format!("/usage/{k}")).and_then(|x| x.as_u64()).unwrap_or(0);
+            crate::usage::report(n("prompt_tokens"), n("completion_tokens"), 0.0);
+            let text = other_answer(&v)?;
+            return serde_json::from_str(&text).map_err(|e| Error(format!("The other AI's answer wasn't in the expected shape ({e}).")));
+        }
+        // No structured outputs there (or not for this schema): ask for plain JSON, once.
+        if strict && matches!(status, 400 | 404 | 422) {
+            strict = false;
+            continue;
+        }
+        if matches!(status, 429 | 500 | 502 | 503 | 504) && attempt < 3 {
+            std::thread::sleep(wait);
+            wait *= 2;
+            continue;
+        }
+        let msg = v.pointer("/error/message").and_then(|m| m.as_str()).or_else(|| v.get("error").and_then(|m| m.as_str())).unwrap_or("").to_string();
+        return Err(Error(match status {
+            401 | 403 => "The other AI's key was rejected. Check it in Settings → Accounts.".into(),
+            429 => "The other AI is rate-limiting this key, or it's out of credit; the next run will try again.".into(),
+            _ => format!("The other AI answered {status}: {msg}"),
+        }));
+    }
+}
+
+/// Check another AI's address and key without spending anything: the models it offers.
+pub fn other_models(url: &str, key: &str) -> R<Vec<String>> {
+    let url = url.trim().trim_end_matches('/');
+    if !(url.starts_with("https://") || url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1")) {
+        return Err(Error("The address must start with https:// (or be a model on this PC, http://localhost…).".into()));
+    }
+    let mut req = reqwest::blocking::Client::builder().timeout(Duration::from_secs(20)).build()?.get(format!("{url}/models"));
+    if !key.trim().is_empty() {
+        req = req.bearer_auth(key.trim());
+    }
+    let r = req.send().map_err(|e| Error(format!("Couldn't reach {url} ({e}).")))?;
+    match r.status().as_u16() {
+        200 => {
+            let v: Value = r.json().unwrap_or(Value::Null);
+            let mut ids: Vec<String> = v["data"].as_array().or_else(|| v["models"].as_array()).map(|a| a.iter()
+                .filter_map(|m| m["id"].as_str().or_else(|| m["name"].as_str()).map(|s| s.trim_start_matches("models/").to_string())).collect()).unwrap_or_default();
+            ids.sort();
+            Ok(ids)
+        }
+        401 | 403 => Err(Error("That key was rejected. Copy it again from the service's website.".into())),
+        s => Err(Error(format!("{url} answered {s}."))),
+    }
+}
+
 /// Check a key without spending anything: list the available models.
 pub fn check_key(key: &str) -> R<()> {
     let r = reqwest::blocking::Client::builder().timeout(Duration::from_secs(20)).build()?
@@ -1426,14 +1590,33 @@ impl Llm for Claude {
         // Scoring needs the role and its requirements, which come well within the first 10,000
         // characters once the boilerplate is out; it's the most frequent request, so it's kept lean.
         let user = posting_block_max(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description, 10000);
-        let model = self.search_model();
-        let mut s: JobScore = self.call_as(model, &scorer_system(cvs, guidance), &user, score_schema(), "medium")?;
-        s.score = s.score.clamp(0, 100);
-        s.potential = s.potential.map(|p| p.clamp(s.score, 100));
-        if !cvs.iter().any(|(n, _)| *n == s.track) {
-            s.track = cvs.first().map(|c| c.0.clone()).unwrap_or_default();
+        let s: JobScore = self.search_call(&scorer_system(cvs, guidance), &user, score_schema(), "medium")?;
+        Ok(tidy_score(s, cvs))
+    }
+
+    fn score_batch(&self) -> usize {
+        self.score_batch.clamp(1, 8)
+    }
+
+    fn score_many(&self, cvs: &[(String, String)], guidance: &str, jobs: &[crate::db::Job]) -> R<Vec<Option<JobScore>>> {
+        if jobs.len() < 2 {
+            return jobs.iter().map(|j| self.score(cvs, guidance, j).map(Some)).collect();
         }
-        Ok(s)
+        let user = jobs.iter().enumerate().map(|(i, job)| {
+            posting_block_max(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description, 10000)
+                .replacen("<posting>", &format!("<posting n=\"{i}\">"), 1)
+        }).collect::<Vec<_>>().join("\n\n");
+        let system = format!("{}\n\nYou are given {} postings, each in its own <posting n=\"…\"> block. Judge each one on its own, \
+exactly as if it were the only posting, never against the others. Answer with one entry in scores for every posting, with its n.", scorer_system(cvs, guidance), jobs.len());
+        let v: Value = self.search_call(&system, &user, score_many_schema(), "medium")?;
+        let mut out: Vec<Option<JobScore>> = jobs.iter().map(|_| None).collect();
+        for x in v["scores"].as_array().cloned().unwrap_or_default() {
+            let n = x["n"].as_u64().map(|n| n as usize);
+            if let (Some(n), Ok(s)) = (n.filter(|n| *n < jobs.len()), serde_json::from_value::<JobScore>(x)) {
+                out[n] = Some(tidy_score(s, cvs));
+            }
+        }
+        Ok(out)
     }
 
     fn cv_profile(&self, cv_text: &str) -> R<CvProfile> {
@@ -1523,7 +1706,7 @@ impl Llm for Claude {
         let schema = json!({"type": "object", "additionalProperties": false, "required": ["found"],
             "properties": {"found": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["n", "salary"],
                 "properties": {"n": {"type": "integer"}, "salary": {"type": "string"}}}}}});
-        let v: Value = self.call_as(self.search_model(), &salaries_system(), &user, schema, "low")?;
+        let v: Value = self.search_call(&salaries_system(), &user, schema, "low")?;
         Ok(v["found"].as_array().map(|a| a.iter().filter_map(|x| {
             let n = x["n"].as_u64()? as usize;
             let s = x["salary"].as_str()?.trim().to_string();
@@ -1539,7 +1722,7 @@ impl Llm for Claude {
         let user = format!("The candidate wants: {targets}\n\n<posting>\nTitles:\n{}\n</posting>", list.join("\n"));
         let schema = json!({"type": "object", "additionalProperties": false, "required": ["keep"],
             "properties": {"keep": {"type": "array", "items": {"type": "integer"}}}});
-        let p: Picked = self.call_as(self.search_model(), &pick_titles_system(), &user, schema, "low")?;
+        let p: Picked = self.search_call(&pick_titles_system(), &user, schema, "low")?;
         Ok(p.keep.into_iter().filter(|i| *i < titles.len()).collect())
     }
 
@@ -1547,7 +1730,7 @@ impl Llm for Claude {
         let mut schema = found_jobs_schema();
         schema["properties"].as_object_mut().unwrap().remove("tools_available");
         schema["required"] = json!(["jobs"]);
-        let found: FoundJobs = self.call_as(self.search_model(), &alert_system(), &email_block(email, 20000), schema, "low")?;
+        let found: FoundJobs = self.search_call(&alert_system(), &email_block(email, 20000), schema, "low")?;
         Ok(found.jobs.into_iter().filter(|j| !j.title.trim().is_empty() && !j.company.trim().is_empty()).collect())
     }
 
@@ -1557,7 +1740,7 @@ impl Llm for Claude {
             "companies": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["company", "board", "slug"],
                 "properties": {"company": s, "board": {"type": "string", "enum": ["greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable", "bamboohr"]}, "slug": s}}}}});
         let user = format!("Kinds of role: {targets}\nPlaces: {places}");
-        let ideas: Ideas = self.call_as(self.search_model(), &boards_system(), &user, schema, "low")?;
+        let ideas: Ideas = self.search_call(&boards_system(), &user, schema, "low")?;
         Ok(ideas.companies)
     }
 
@@ -1742,7 +1925,7 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
         let text: String = page.chars().take(30000).collect();
         let mut schema = found_jobs_schema()["properties"]["jobs"]["items"].clone();
         schema["additionalProperties"] = json!(false);
-        self.call_as(self.search_model(), &read_posting_system(), &format!("URL: {url}\n\n<posting>\n{text}\n</posting>"), schema, "low")
+        self.search_call(&read_posting_system(), &format!("URL: {url}\n\n<posting>\n{text}\n</posting>"), schema, "low")
     }
 
     fn company_rating(&self, company: &str, location: &str) -> R<CompanyRating> {
@@ -1932,6 +2115,87 @@ Hybrid in Oakville; accommodation of flexible hours for the team.";
             "summary": "no", "offered_times": [], "confirmed_time": null, "meeting_link": null, "interviewers": [],
             "needs_reply": false, "reply_draft": null})).unwrap();
         assert_eq!(t.category, "rejection");
+    }
+
+    #[test]
+    fn another_ai_request_and_answer() {
+        let b = other_body("grok-x", "sys", "user", &score_schema(), true);
+        assert_eq!(b["response_format"]["json_schema"]["strict"], true);
+        assert_eq!(b["messages"][0]["role"], "system");
+        let plain = other_body("m", "sys", "user", &score_schema(), false);
+        assert_eq!(plain["response_format"]["type"], "json_object");
+        assert!(plain["messages"][0]["content"].as_str().unwrap().contains("\"score\""), "the schema goes in the instructions");
+        let fenced = json!({"choices": [{"message": {"content": "```json\n{\"a\": 1}\n```"}}]});
+        assert_eq!(other_answer(&fenced).unwrap(), "{\"a\": 1}");
+        assert!(other_answer(&json!({"choices": []})).is_err());
+        assert!(other_models("ftp://x", "").is_err());
+        // Several postings in one answer: every score has its posting's number.
+        let many = score_many_schema();
+        assert!(many["properties"]["scores"]["items"]["required"].as_array().unwrap().contains(&json!("n")));
+        // Not set up: a clear error, and nothing sent.
+        let mut c = Claude::with(Engine::Code(None), "");
+        c.other = Some(OtherAi { for_what: "search".into(), ..OtherAi::default() });
+        let job = crate::db::Job { title: "T".into(), ..Default::default() };
+        let e = c.score(&[("a".into(), "cv".into())], "", &job).unwrap_err();
+        assert!(e.0.contains("isn't set up"), "{}", e.0);
+    }
+
+    /// A stand-in for another AI's service on this PC: answers each request with the next canned
+    /// (status, body), and returns what it was sent.
+    fn serve(answers: Vec<(u16, String)>) -> (String, std::thread::JoinHandle<Vec<String>>) {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://127.0.0.1:{}/v1", l.local_addr().unwrap().port());
+        let h = std::thread::spawn(move || {
+            let mut seen = vec![];
+            for (status, body) in answers {
+                let (mut c, _) = l.accept().unwrap();
+                let mut buf = vec![];
+                let mut chunk = [0u8; 4096];
+                loop {
+                    let n = c.read(&mut chunk).unwrap();
+                    buf.extend_from_slice(&chunk[..n]);
+                    let text = String::from_utf8_lossy(&buf).to_string();
+                    if let Some(i) = text.find("\r\n\r\n") {
+                        let len = text.to_lowercase().lines().find_map(|l| l.strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap())).unwrap_or(0);
+                        if buf.len() >= i + 4 + len || n == 0 {
+                            break;
+                        }
+                    }
+                }
+                seen.push(String::from_utf8_lossy(&buf).to_string());
+                write!(c, "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            }
+            seen
+        });
+        (url, h)
+    }
+
+    #[test]
+    fn another_ai_scores_postings() {
+        let one = json!({"score": 120, "track": "nope", "reasoning": "Strong match.", "red_flags": [], "keywords": ["UAT"], "deadline": "", "potential": 60, "salary": ""});
+        let reply = |v: &Value| json!({"choices": [{"message": {"content": format!("```json\n{v}\n```")}}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}).to_string();
+        let many = json!({"scores": [{"n": 1, "score": 71, "track": "a", "reasoning": "r", "red_flags": [], "keywords": [], "deadline": "", "potential": 80, "salary": ""}]});
+        // The first request is refused for its strict schema, so it's asked again for plain JSON.
+        let (url, h) = serve(vec![(400, "{\"error\": {\"message\": \"no json_schema here\"}}".into()), (200, reply(&one)), (200, reply(&many)), (200, json!({"data": [{"id": "grok-b"}, {"id": "grok-a"}]}).to_string())]);
+        let mut c = Claude::with(Engine::Code(None), "");
+        c.other = Some(OtherAi { url: url.clone(), key: "k-123".into(), model: "grok-a".into(), for_what: "search".into() });
+        let job = crate::db::Job { title: "Program Manager".into(), ..Default::default() };
+        let cvs = [("a".to_string(), "cv".to_string())];
+        let s = c.score(&cvs, "", &job).unwrap();
+        assert_eq!((s.score, s.track.as_str(), s.potential), (100, "a", Some(100)), "tidied like Claude's");
+        // Two postings in one request: the one it answered for, and none for the one it left out.
+        let two = c.score_many(&cvs, "", &[job.clone(), job.clone()]).unwrap();
+        assert!(two[0].is_none() && two[1].as_ref().is_some_and(|s| s.score == 71));
+        assert_eq!(other_models(&url, "k-123").unwrap(), vec!["grok-a".to_string(), "grok-b".to_string()]);
+        let seen = h.join().unwrap();
+        assert!(seen[0].contains("POST /v1/chat/completions") && seen[0].to_lowercase().contains("authorization: bearer k-123") && seen[0].contains("json_schema"));
+        assert!(seen[1].contains("json_object") && !seen[1].contains("\"strict\""));
+        assert!(seen[2].contains("<posting n=\\\"1\\\">"), "each posting has its number");
+        assert!(seen[3].starts_with("GET /v1/models"));
+        // Tailoring stays with Claude when the other AI is for searching only (and Claude isn't there: its own error).
+        let e = c.tailor("Sam", "1. x", &job, &[], "", "", "").unwrap_err();
+        assert!(e.0.contains("Claude Code"), "{}", e.0);
     }
 
     #[test]

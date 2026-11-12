@@ -333,6 +333,11 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
             "path": get("claude.path"),
             "code_found": crate::claude_code::find(&get("claude.path")).is_some(),
         },
+        "other": {
+            "for": Some(get("other.for")).filter(|f| f == "search" || f == "all").unwrap_or_default(),
+            "url": get("other.url"), "model": get("other.model"), "key": !get("other.key").is_empty(),
+        },
+        "score_batch": get("claude.score_batch").parse::<usize>().unwrap_or(claude::SCORE_BATCH),
         "adzuna": { "id": get("adzuna.id"), "key": !get("adzuna.key").is_empty() },
         "jsearch": { "key": !get("jsearch.key").is_empty(), "provider": Some(get("jsearch.provider")).filter(|p| !p.is_empty()).unwrap_or_else(|| "openwebninja".into()) },
         "jooble": { "key": !get("jooble.key").is_empty() },
@@ -1186,7 +1191,46 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             crate::sync::resume_here(agent)?;
             Ok(Resp::json(&json!({ "sync": crate::sync::status(agent) })))
         }
+        // Another AI's models, to check its address and key and to choose from (nothing is saved).
+        ["api", "settings", "other", "models"] => {
+            let key = Some(s(&b, "key").trim().to_string()).filter(|k| !k.is_empty()).unwrap_or_else(|| agent.secret("other.key"));
+            Ok(Resp::json(&json!({ "models": claude::other_models(s(&b, "url"), &key)? })))
+        }
+        // Another AI beside Claude: what it's used for ("" for nothing), where it is, its key and model.
+        ["api", "settings", "other"] => {
+            let for_what = match s(&b, "for") { "search" => "search", "all" => "all", _ => "" };
+            let (url, model) = (s(&b, "url").trim().trim_end_matches('/').to_string(), s(&b, "model").trim().to_string());
+            let key = s(&b, "key").trim().to_string();
+            if b.get("forget").and_then(|v| v.as_bool()) == Some(true) {
+                for k in ["other.for", "other.url", "other.model", "other.key"] {
+                    agent.db().set(k, "")?;
+                }
+                agent.connect();
+                return ok();
+            }
+            if !for_what.is_empty() {
+                if url.is_empty() || model.is_empty() {
+                    return Err(Error("Choose the service and one of its models first.".into()));
+                }
+                let k = if key.is_empty() { agent.secret("other.key") } else { key.clone() };
+                let models = claude::other_models(&url, &k)?;
+                if !models.is_empty() && !models.contains(&model) {
+                    return Err(Error(format!("That service has no model called {model}. Press Check to see its models.")));
+                }
+            }
+            agent.db().set("other.for", for_what)?;
+            agent.db().set("other.url", &url)?;
+            agent.db().set("other.model", &model)?;
+            if !key.is_empty() {
+                agent.db().set("other.key", &key)?;
+            }
+            agent.connect();
+            ok()
+        }
         ["api", "settings", "claude"] => {
+            if let Some(n) = b.get("score_batch").and_then(|v| v.as_u64()) {
+                agent.db().set("claude.score_batch", &n.clamp(1, 8).to_string())?;
+            }
             if let Some(e) = b.get("engine").and_then(|v| v.as_str()) {
                 agent.db().set("claude.engine", if e == "api" { "api" } else { "code" })?;
             }

@@ -1707,3 +1707,14 @@ table.jobs td.fit, table.jobs td.stage, table.jobs td.next { white-space: nowrap
   body.more-open .side { inset: 0 0 calc(44px + env(safe-area-inset-bottom)) 0; }
   .page { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
 }
+
+/* ---- Applying to several in your browser: the bar that carries the run ---- */
+.apply-run { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; z-index: 45; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: min(760px, calc(100vw - 24px));
+  padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgba(22, 24, 29, .16); }
+.apply-run .grow { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* ---- A thin CV: the keywords to tick ---- */
+.advice.warn { background: var(--warn-soft, #FBF1DC); }
+.gap-list { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .apply-run { bottom: calc(70px + env(safe-area-inset-bottom)); }
+}

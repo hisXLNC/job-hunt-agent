@@ -228,6 +228,10 @@ pub struct Profile {
     pub calendar: CalendarPrefs,
     /// Local hour of the daily search.
     pub search_hour: u32,
+    /// Searches a day: 1, or 2 for a second one at `search_hour_2`.
+    pub searches_per_day: u32,
+    /// Local hour of the second search, when there are two.
+    pub search_hour_2: u32,
     /// Minutes between inbox checks.
     pub inbox_minutes: u32,
     /// Anything the scorer should weigh, in your words (e.g. "I want hybrid roles in fintech").
@@ -271,6 +275,8 @@ impl Default for Profile {
             sources: Sources::default(),
             calendar: CalendarPrefs::default(),
             search_hour: 7,
+            searches_per_day: 1,
+            search_hour_2: 16,
             inbox_minutes: 30,
             guidance: String::new(),
             stories: String::new(),
@@ -327,6 +333,48 @@ impl Profile {
             out.push("The score threshold must be between 0 and 100.".into());
         }
         out
+    }
+
+    /// The hours a search runs at by itself: the day's first, and its second when two are chosen
+    /// (at a different hour).
+    pub fn search_hours(&self) -> (u32, Option<u32>) {
+        let (a, b) = (self.search_hour.min(23), self.search_hour_2.min(23));
+        if self.searches_per_day >= 2 && a != b { (a.min(b), Some(a.max(b))) } else { (a, None) }
+    }
+
+    /// Whether a scheduled search is due at `local`, given when the last one ran: the first when
+    /// none has run today and its hour has come; the second when its hour has come and nothing
+    /// has run in the two hours before it or since.
+    pub fn search_due(&self, local: chrono::NaiveDateTime, last: Option<chrono::NaiveDateTime>) -> bool {
+        use chrono::Timelike;
+        let (first, second) = self.search_hours();
+        let today = local.date();
+        if last.is_none_or(|t| t.date() != today) && local.hour() >= first {
+            return true;
+        }
+        match second {
+            Some(h) if local.hour() >= h => last.is_none_or(|t| Some(t) < today.and_hms_opt(h.saturating_sub(2), 0, 0)),
+            _ => false,
+        }
+    }
+
+    /// When the next scheduled search is, after `local`; None when one is due now.
+    pub fn next_search(&self, local: chrono::NaiveDateTime, last: Option<chrono::NaiveDateTime>) -> Option<chrono::NaiveDateTime> {
+        if self.search_due(local, last) {
+            return None;
+        }
+        let (first, second) = self.search_hours();
+        let today = local.date();
+        let searched_today = last.is_some_and(|t| t.date() == today);
+        let mut times = vec![];
+        if !searched_today {
+            times.extend(today.and_hms_opt(first, 0, 0));
+        }
+        if let Some(h) = second {
+            times.extend(today.and_hms_opt(h, 0, 0));
+        }
+        times.extend((today + chrono::Duration::days(1)).and_hms_opt(first, 0, 0));
+        times.into_iter().filter(|t| *t > local).min()
     }
 
     pub fn tz(&self) -> chrono_tz::Tz {
@@ -680,6 +728,22 @@ mod tests {
         assert!(crate::testkit::sample_profile().problems().is_empty());
         let p: Profile = serde_json::from_str(r#"{"name":"J","tracks":[{"name":"a"}]}"#).unwrap();
         assert_eq!(p.score_threshold, 70);
+        // One search a day unless two are chosen.
+        let at = |d: u32, h: u32, m: u32| chrono::NaiveDate::from_ymd_opt(2026, 3, d).unwrap().and_hms_opt(h, m, 0).unwrap();
+        assert_eq!(p.search_hours(), (7, None));
+        assert!(p.search_due(at(2, 7, 5), Some(at(1, 7, 1))) && !p.search_due(at(2, 6, 0), Some(at(1, 7, 1))));
+        assert!(!p.search_due(at(2, 17, 0), Some(at(2, 7, 1))), "one a day: nothing in the afternoon");
+        assert_eq!(p.next_search(at(2, 9, 0), Some(at(2, 7, 1))), Some(at(3, 7, 0)));
+        let mut two = p.clone();
+        two.searches_per_day = 2;
+        assert_eq!(two.search_hours(), (7, Some(16)));
+        assert_eq!(two.next_search(at(2, 9, 0), Some(at(2, 7, 1))), Some(at(2, 16, 0)));
+        assert!(two.search_due(at(2, 16, 1), Some(at(2, 7, 1))), "the second, at its hour");
+        assert!(!two.search_due(at(2, 16, 30), Some(at(2, 16, 2))), "not again once it has run");
+        assert!(!two.search_due(at(2, 16, 1), Some(at(2, 15, 0))), "not when you searched in the two hours before");
+        assert_eq!(two.next_search(at(2, 18, 0), Some(at(2, 16, 2))), Some(at(3, 7, 0)));
+        two.search_hour_2 = 7;
+        assert_eq!(two.search_hours(), (7, None), "the same hour twice is one search");
         // Nothing set: nothing said to the scorer. Set: one line each.
         assert_eq!(p.wants.for_scoring(), "");
         let w = Wants { level: "senior manager".into(), work: "permanent".into(), industries: vec!["fintech".into()], avoid: vec!["gambling".into(), " ".into()], dealbreakers: vec!["on-site five days".into()] };

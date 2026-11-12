@@ -170,7 +170,7 @@ function nextStepId(c = overview?.counts || {}) {
   return ['approve', 'submit', 'pick', 'waiting', 'interviews'].find(id => FLOW.find(f => f[0] === id)[2](c)) || '';
 }
 /** A list's sort and filters: shown on a wide window, folded under one line on a phone so the jobs come first. */
-const foldFilters = html => `<details class="fold-filters" ${matchMedia('(min-width: 761px)').matches && !matchMedia('(pointer: coarse) and (max-width: 1100px) and (max-height: 700px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
+const foldFilters = (html, few) => `<details class="fold-filters" ${!few && matchMedia('(min-width: 761px)').matches && !matchMedia('(pointer: coarse) and (max-width: 1100px) and (max-height: 700px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
 /** Find any job, and add one you found: at the top of Today and Jobs. */
 const findBox = () => `<button class="find-box" data-act="palette" title="Find any job (Ctrl+K)">${svg('search')}<span>Find a job…</span><kbd>Ctrl K</kbd></button>`;
 /** Pipeline's views: every job, each step with how many are in it, the files tailored for them, and how it's going. */
@@ -1496,6 +1496,32 @@ window.askApplied = async j => {
 /** After Approve: open the job's form in your own browser (your sign-ins and saved passwords work
  *  there), where the Job Hunt extension fills it in; false when that can't be done here (the phone,
  *  no link), and the Apply page takes over. */
+/** Applying to several in your browser, one after another: the list ({id, name}), where we are, and how many went. */
+let applyRun = null;
+/** The bar that carries a run: which application is open, and what to do when it's sent. */
+function runBar() {
+  let bar = $('#applyRun');
+  if (!applyRun) { bar?.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'applyRun'; bar.className = 'apply-run'; bar.setAttribute('role', 'status'); document.body.appendChild(bar); }
+  const cur = applyRun.list[applyRun.at];
+  bar.innerHTML = `<span class="grow"><b>Applying in your browser · ${applyRun.at + 1} of ${applyRun.list.length}</b><span class="muted small">${esc(cur.name)}. On the form, click the Job Hunt extension, then Fill this form.</span></span>
+    <button class="btn primary sm" data-act="runApplied">I submitted it: next</button><button class="btn sm" data-act="runSkip">Skip</button><button class="btn ghost sm" data-act="runAgain" title="Open this one's form again">Open again</button><button class="btn ghost sm" data-act="runStop">Stop</button>`;
+}
+/** Open the run's current application in your browser, or finish. */
+async function runOpen() {
+  if (!applyRun) return;
+  if (applyRun.at >= applyRun.list.length) {
+    const n = applyRun.done;
+    applyRun = null; runBar();
+    return toast(n ? `Done: ${n} marked as applied. Job Hunt reminds you to follow up if there's no reply.` : 'Done. None were marked as applied.');
+  }
+  runBar();
+  const cur = applyRun.list[applyRun.at];
+  try {
+    const r = await api(`/api/jobs/${encodeURIComponent(cur.id)}/fill-browser`, { method: 'POST' });
+    await api('/api/open-url', { method: 'POST', body: { url: r.url } });
+  } catch (e) { toast(`${cur.name}: ${e.message} Skip it, or press Open again.`, true); }
+}
 async function applyNow(id) {
   if (!overview?.can_fill) return false;
   try {
@@ -1560,13 +1586,26 @@ function contactHtml(c, i, writing, pb) {
 /** One step of the job hunt on the Overview: its roles, each with the next thing to do. `tracked`
  *  (the Tracker's rows) fills in the steps after you apply. */
 /** A company's initial on a tile whose colour comes from its name: the same company, the same colour. */
-const avatar = name => { const s = String(name || '?').trim(); let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `<span class="avatar" style="--h:${h}" aria-hidden="true">${esc((s.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</span>`; };
+const avatar = name => { const s = String(name || '?').trim(); let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `<span class="avatar" style="--h:${h}" title="${esc(s)}" aria-hidden="true">${esc((s.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</span>`; };
 /** What a posting pays, for a job's line of facts: the figure it states (its full wording on hover,
  *  and a mark when it's below your minimum), or that it states none. Always there, so no pay is
  *  something you see, not something missing. */
 const payFact = j => j.salary
   ? `<span class="pay${belowMin(j) ? ' low' : ''}" title="${esc(j.salary)}${belowMin(j) ? `. Below your minimum of ${money(minSalary())}` : ''}">${esc(String(j.salary).split(/\s+[•·|]\s+/)[0])}</span>`
   : '<span class="pay none" title="The posting doesn\'t say what it pays">No pay stated</span>';
+/** Under this share of a posting's keywords, a tailored CV is thin for it. */
+const THIN_COVER = 0.6;
+/** How much of a posting's keywords the tailored CV covers, as a fact for its row: marked when thin. */
+const coverFact = j => j.coverage_after == null ? '' : j.coverage_after < THIN_COVER
+  ? `<span class="warn-text" title="Under ${pct(THIN_COVER)}: screening software may rank it low. Open it to add the keywords you do have.">only ${pct(j.coverage_after)} of the posting's keywords</span>`
+  : `${pct(j.coverage_after)} of the posting's keywords`;
+/** For a thin CV: the posting's keywords it lacks, to tick the ones you really have. Job Hunt left
+ *  them out because nothing in your CV backs them; ticking one is you saying it's true. */
+const gapsHtml = j => j.coverage_after != null && j.coverage_after < THIN_COVER && (j.keyword_gaps || []).length ? `<div class="advice warn gaps" data-gaps="${esc(j.id)}">
+    <b>This CV covers ${pct(j.coverage_after)} of the posting's keywords.</b>
+    <p class="small">Job Hunt left these out because nothing in your CV backs them. Tick the ones you really have and it works them in; leave the rest.</p>
+    <div class="gap-list">${j.keyword_gaps.slice(0, 14).map(k => `<label class="check small"><input type="checkbox" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div>
+    <div class="row"><button class="btn sm" type="button" data-act="gapsAdd" data-job="${esc(j.id)}">Work in the ticked ones</button></div></div>` : '';
 /** How good a match is to apply to now, for ordering: its fit, less for each day the posting has
  *  been up after the first two (a role's first days are when applications get read), less for red
  *  flags and pay below your minimum, a little more when it applies on the company's own site or
@@ -1622,8 +1661,8 @@ function stepHtml(o, step, tracked) {
       <label class="check small"><input type="checkbox" data-pickf="flags"> No red flags</label>
       <label class="check small" title="The ten best to apply to now, by the order you chose. The rest wait."><input type="checkbox" data-pickf="top"> Best 10 only</label>
       <span class="muted small" data-pickcount></span>
-    </div>`)}
-    <p class="muted small pick-keys desktop-only"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Space</kbd> tick · <kbd>Enter</kbd> open · <kbd>X</kbd> not interested · <kbd>T</kbd> tailor the ticked ones</p>
+    </div>`, picking.length < 8)}
+    <p class="muted small pick-keys desktop-only" ${picking.length < 8 ? 'hidden' : ''}><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Space</kbd> tick · <kbd>Enter</kbd> open · <kbd>X</kbd> not interested · <kbd>T</kbd> tailor the ticked ones</p>
     <div class="pick-list">${rows}</div>
     <p class="muted small pick-more" data-pickmore hidden></p>
     <div class="select-bar" hidden><span class="select-n"></span><button class="btn primary" data-act="tailorPicked">Tailor selected</button><button class="btn" data-act="dismissPicked">${svg('close')}Not interested</button><button class="btn ghost" data-act="pickClear">Clear</button></div>
@@ -1633,8 +1672,8 @@ function stepHtml(o, step, tracked) {
   const ready = [];
   const many = o.ready?.length > 1;
   if (o.ready?.length) ready.push([`Ready to approve${many ? '' : ` <a class="btn sm" href="#review">Review it</a>`}`, `<div data-approvebox>
-    ${many ? `<div class="row" style="margin:2px 0 8px"><button class="btn ghost sm" type="button" data-act="approveAll">Select all</button><a class="btn sm" href="#review">Review them one by one</a></div>` : ''}
-    ${o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : '', onCompanySite(j)].filter(Boolean).join(' · '),
+    ${many ? `<div class="row" style="margin:2px 0 8px"><button class="btn ghost sm" type="button" data-act="approveAll">Select all</button><a class="btn primary sm" href="#review" title="Each one's changes and letter on one page: A approves and shows the next">Review them one by one</a></div>` : ''}
+    ${[...o.ready].sort((a, b) => applyRank(b) - applyRank(a)).map(j => row(j, [coverFact(j), j.apply_email ? 'applies by email' : '', onCompanySite(j)].filter(Boolean).join(' · '),
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`,
     o.ready.length > 1 ? `<input type="checkbox" data-appr="${id(j)}" data-email="${esc(j.apply_email || '')}" aria-label="Select ${esc(j.company)}">` : '')).join('')}
@@ -1650,7 +1689,9 @@ function stepHtml(o, step, tracked) {
   // Quickest first: one-click emails and short forms, then the ones that need an account.
   const toSubmit = [...(o.approved || [])].filter(j => !unconfirmed.some(u => u.id === j.id)).sort((a, b) => (a.effort?.minutes ?? 10) - (b.effort?.minutes ?? 10));
   const formable = toSubmit.filter(j => j.url && j.effort?.kind !== 'email');
-  if (toSubmit.length) groups.push([`Submit on the company's site${formable.length > 1 && o.can_fill ? ` <button class="btn primary sm" data-act="applyAll" data-ids="${esc(JSON.stringify(formable.map(j => j.id)))}" style="margin-left:8px" title="Each opens filled in, with your files attached; you check it and press Submit, and the next one opens">Apply to all ${formable.length}</button>` : ''}`, toSubmit.map(j => row(j, onCompanySite(j),
+  const runIds = list => esc(JSON.stringify(list.map(j => ({ id: j.id, name: `${j.company}: ${j.title}` }))));
+  const quick = formable.filter(j => (j.effort?.minutes ?? 10) <= 5);
+  if (toSubmit.length) groups.push([`Submit on the company's site${formable.length > 1 && o.can_fill ? ` ${quick.length > 1 && quick.length < formable.length ? `<button class="btn primary sm" data-act="applyAll" data-ids="${runIds(quick)}" style="margin-left:8px" title="The short forms, a few minutes each: each opens in your browser, the extension fills it, you press Submit, then the next">Apply to the ${quick.length} quick ones</button>` : ''}<button class="btn ${quick.length > 1 && quick.length < formable.length ? '' : 'primary '}sm" data-act="applyAll" data-ids="${runIds(formable)}" style="margin-left:8px" title="Each opens in your browser, quickest first; the extension fills it, you check it and press Submit, then the next one opens">Apply to all ${formable.length}</button>` : ''}`, toSubmit.map(j => row(j, onCompanySite(j),
     `<a class="btn sm" href="#apply/${encodeURIComponent(j.id)}">Apply</a>
      <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="approved" title="Not interested after all (the pay, say)">${svg('close')}</button>`)).join('')]);
@@ -1961,7 +2002,7 @@ let reviewPoll;
 async function showReview() {
   clearTimeout(reviewPoll);
   const { jobs } = await api('/api/jobs?status=ready');
-  const queue = jobs.filter(j => !reviewSkipped.has(j.id)).sort((a, b) => (b.score_after ?? b.score ?? 0) - (a.score_after ?? a.score ?? 0));
+  const queue = jobs.filter(j => !reviewSkipped.has(j.id)).sort((a, b) => applyRank(b) - applyRank(a));
   if (!queue.length) {
     page(`<div class="head"><div class="grow"><h1>Review</h1></div></div><section class="card review-done"><h2>All caught up</h2>
       <p class="muted">${jobs.length ? `You skipped ${jobs.length} for now. <a href="#" data-act="reviewReset">Go through them again</a>.` : 'Nothing waiting for your review. New ones appear after you tailor roles.'}</p>
@@ -1991,6 +2032,7 @@ async function showReview() {
           ${j.coverage_after != null ? `<p class="muted small">Posting keywords in your CV: <b>${pct(j.coverage_before)}</b> before, <b>${pct(j.coverage_after)}</b> after.${(j.keyword_gaps || []).length ? ` Not added (nothing in your CV backs them): ${esc(j.keyword_gaps.slice(0, 6).join(', '))}.` : ''}</p>` : ''}
         </section>
         <section class="card"><header><h2>What changed in your CV</h2><button class="btn ghost" data-act="open" data-what="cv" data-job="${esc(j.id)}">${svg('doc')}Open</button></header>
+          ${gapsHtml(j)}
           ${changesHtml(j, false)}
         </section>
       </div>
@@ -2516,6 +2558,19 @@ async function waitForRestart(before) {
   toast('Job Hunt hasn\'t come back yet. Check the PC: it may still be installing.', true);
 }
 
+/** Services that work the way OpenAI's API does: name, address ('' for one you type), and where its key comes from. */
+const OTHER_AI = [['Grok (xAI)', 'https://api.x.ai/v1', 'console.x.ai'], ['ChatGPT (OpenAI)', 'https://api.openai.com/v1', 'platform.openai.com'], ['Gemini (Google)', 'https://generativelanguage.googleapis.com/v1beta/openai', 'aistudio.google.com'],
+  ['OpenRouter (many models, one key)', 'https://openrouter.ai/api/v1', 'openrouter.ai'], ['On this PC (Ollama, no key)', 'http://localhost:11434/v1', ''], ['Another one', '', '']];
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.matches?.('form[data-form=other] [name=service]')) {
+    const form = t.form, known = OTHER_AI.find(x => x[1] === t.value);
+    form.querySelector('[data-other-url]').hidden = !!t.value;
+    form.querySelector('[data-other-keyhint]').textContent = known?.[2] ? `Create one at ${known[2]}.` : t.value ? 'None needed.' : '';
+    form.elements.model.innerHTML = '<option value="">Press Check to see its models</option>';
+  }
+  if (t.matches?.('[name=searches_per_day]')) { const s = t.form?.querySelector('[data-second-search]'); if (s) s.hidden = t.value !== '2'; }
+});
 /** Which model does what, in a line: from the Claude settings ({engine, model, tailor_model, score_model}). */
 function modelsLine(c) {
   const api = c.engine === 'api';
@@ -2557,12 +2612,26 @@ async function showSettings(tab, sub, host) {
         <h3 class="sub">Searching</h3>
         <div class="form">
           <label class="field">Model<select name="score_model">${[['sonnet', 'Sonnet (recommended: nearly the same scores, much less of your plan)'], ['opus', 'Opus'], ['', 'Same as for everything else']].map(([v, n]) => `<option value="${v}" ${st.claude.score_model === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Scoring each new posting, reading posting pages, Indeed, salaries and company ratings: most of what Job Hunt asks of Claude.</span></label>
+          <label class="field">Postings scored in one request<select name="score_batch">${[[4, 'Four (recommended: your CVs are sent once for the four)'], [6, 'Six (least usage)'], [2, 'Two'], [1, 'One (most usage)']].map(([v, n]) => `<option value="${v}" ${(st.score_batch || 4) === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Each request carries your CVs and the scoring instructions. Scoring several postings in one sends those once, which is most of what a search uses.</span></label>
         </div>
         <div class="form" style="margin-top:10px">
           <label class="field">Model for everything else<input type="text" name="model" value="${esc(st.claude.model)}" placeholder="Default"><span class="hint">Email sorting and the rest. Blank: Claude Code's own choice, or Opus for the API.</span></label>
           <label class="field">Claude Code location<input type="text" name="path" value="${esc(st.claude.path)}" placeholder="C:\\Users\\you\\.local\\bin\\claude.exe"><span class="hint">Only if Job Hunt can't find it.</span></label>
         </div></details>
         <div class="row"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-act="checkClaude">Check again</button>${st.claude.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="claude">Remove API key</button>' : ''}</div>
+      </form></section>
+    <section class="card" id="otherCard"><header><h2>Another AI</h2>${st.other.for ? `<span class="pill good">${st.other.for === 'all' ? 'Used for everything' : 'Used for searching'}</span>` : '<span class="pill">Optional</span>'}</header>
+      <p class="muted">Grok, ChatGPT, Gemini or a model on your own PC can do some of the work in Claude's place, so a search uses none of your Claude plan. You pay that service for what you use (a model on your PC is free).</p>
+      <form data-form="other" class="stack" style="gap:14px">
+        <div class="form">
+          <label class="field">Use it for<select name="for">${[['', 'Nothing: Claude does everything'], ['search', 'Searching: scoring postings, titles, salaries, job alerts (most of the usage)'], ['all', 'Everything, CVs and cover letters included']].map(([v, n]) => `<option value="${v}" ${st.other.for === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label class="field">Service<select name="service">${OTHER_AI.map(([n, u]) => `<option value="${esc(u)}" ${u && st.other.url === u ? 'selected' : ''} ${!u && st.other.url && !OTHER_AI.some(x => x[1] === st.other.url) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label class="field" data-other-url ${st.other.url && !OTHER_AI.some(x => x[1] === st.other.url) ? '' : 'hidden'}>Its address<input type="url" name="url" value="${esc(st.other.url || OTHER_AI[0][1])}" placeholder="https://…/v1"><span class="hint">Any service that works the way OpenAI's API does: the address up to and including /v1.</span></label>
+          <label class="field">Key<input type="password" name="key" autocomplete="off" placeholder="${st.other.key ? 'Saved. Paste a new one to replace it' : 'From the service\'s website'}"><span class="hint" data-other-keyhint></span></label>
+          <label class="field">Model<span class="row" style="flex-wrap:nowrap"><select name="model" style="flex:1">${st.other.model ? `<option selected>${esc(st.other.model)}</option>` : '<option value="">Press Check to see its models</option>'}</select><button class="btn sm" type="button" data-act="otherModels">Check</button></span><span class="hint">Check tests the address and key and lists the models; nothing is used.</span></label>
+        </div>
+        <p class="small muted">Looking things up on the web stays with Claude through your subscription: Indeed, company ratings, a company's own application page and finding recruiters. Without Claude those are skipped. Scores from another AI can differ from Claude's by a few points, so matches near your fit score may fall on the other side of it.</p>
+        <div class="row"><button class="btn primary" type="submit">Save</button>${st.other.url ? '<button class="btn ghost" type="button" data-act="otherForget">Remove it</button>' : ''}</div>
       </form></section>
     <section class="card" id="googleCard"><header><h2>Gmail, Google Calendar and Drive</h2>${st.google.connected ? `<span class="pill good">Connected${st.google.email ? ` · ${esc(st.google.email)}` : ''}</span>` : '<span class="pill">Optional</span>'}</header>
       <p class="muted">Job Hunt sorts your job email, drafts replies, books interviews in your calendar and keeps a private copy of your data in your own Drive. Everything stays in your Google account.</p>
@@ -2761,7 +2830,9 @@ async function showSettings(tab, sub, host) {
         <label class="check"><input type="checkbox" data-act="ratingsAuto" ${st.ratings_auto ? 'checked' : ''}> <span>Look up what employees say<br><span class="muted small">Ratings and reviews from Glassdoor, Indeed and the like, for the companies of roles you're considering: shown as a star rating next to the company, and on each job. Each company is looked up once (again after two months), through Claude Code; it uses a little of your Claude plan.</span></span></label>
       </section>
       <section class="card"><header><h2>When</h2></header><div class="form">
+        <label class="field">Searches a day<select name="searches_per_day">${[[1, 'One'], [2, 'Two: a second one later in the day']].map(([v, n]) => `<option value="${v}" ${(p.searches_per_day >= 2 ? 2 : 1) === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Two finds new postings hours sooner, when applications are read most. The second scores only what's new since the first, so it uses a little more of your plan, not double.</span></label>
         <label class="field">Search every day at${hourSelect('search_hour', p.search_hour)}<span class="hint">If Job Hunt isn't running then, it searches when it next opens.</span></label>
+        <label class="field" data-second-search ${p.searches_per_day >= 2 ? '' : 'hidden'}>And again at${hourSelect('search_hour_2', p.search_hour_2 ?? 16)}<span class="hint">Skipped when you searched by hand in the two hours before.</span></label>
         <div class="field">Daily search<div class="row">${scheduleMenu(overview?.side?.paused, false)}</div><span class="hint">${overview?.side?.paused ? esc(pausedWords(overview.side.paused)) + '.' : 'On. Pause it for a while, or turn it off.'}</span></div>
       </div></section>
       <section class="card"><header><h2>Tailoring</h2></header>
@@ -2769,7 +2840,7 @@ async function showSettings(tab, sub, host) {
         <label class="field">Tailor by itself<select name="auto_tailor_mode">${[['off', 'No: I pick which roles to tailor'], ['strong', 'Only strong fits (85 or better), so they\'re ready to approve'], ['all', 'Every role that clears my fit score']].map(([v, n]) => `<option value="${v}" ${(p.auto_tailor ? 'all' : p.auto_tailor_min > 0 ? 'strong' : 'off') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Strong fits: after each search the best new matches from the last two weeks are tailored without waiting for you, at most as many as Most applications tailored per search. They use your Claude plan as any tailoring does.</span></label>
         <details style="margin-top:10px"><summary class="small muted">Advanced</summary><div class="form" style="margin-top:8px">
         <label class="field">Fit score needed to tailor<span class="range-row"><input type="range" min="0" max="100" step="1" value="${p.score_threshold}" data-range-for="score_threshold" aria-label="Fit score needed to tailor"><input type="number" min="0" max="100" name="score_threshold" value="${p.score_threshold}"></span><span class="hint">0–100. Roles below it are skipped.</span></label>
-        <label class="field">Most new postings scored per search<input type="number" min="5" max="200" name="max_scored_per_run" value="${p.max_scored_per_run}"><span class="hint">Spares your Claude usage; the rest are scored next time.</span></label>
+        <label class="field">Most new postings scored per search<input type="number" min="5" max="200" name="max_scored_per_run" value="${p.max_scored_per_run}"><span class="hint">Spares your Claude usage; the rest are scored next time. With more than 40 matches waiting to be picked, a search by itself scores half this many, newest first.</span></label>
         <label class="field">Most applications tailored per search<input type="number" min="1" max="50" name="max_per_run" value="${p.max_per_run}"><span class="hint">Only when tailoring automatically.</span></label>
       </div><div class="form" style="margin-top:14px">
         <label class="field">Remove postings I never acted on<select name="purge_after_days">${[[0, 'Never'], [30, 'After 30 days'], [60, 'After 60 days'], [90, 'After 90 days']].map(([v, n]) => `<option value="${v}" ${(p.purge_after_days || 0) === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Skipped, not-interested and closed ones only; anything tailored, saved or applied to stays. Removed postings aren't brought back as new.</span></label>
@@ -3129,7 +3200,7 @@ function readProfile(form, part) {
   if (has('auto_tailor_mode')) { p.auto_tailor = v('auto_tailor_mode') === 'all'; p.auto_tailor_min = v('auto_tailor_mode') === 'strong' ? 85 : 0; }
   // What you want from a role (Me, Looking for): told to the scorer.
   if (has('want_level')) p.wants = { level: v('want_level').trim(), work: v('want_work'), industries: fromLines(v('want_industries')), avoid: fromLines(v('want_avoid')), dealbreakers: fromLines(v('want_dealbreakers')) };
-  for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'max_age_days', 'search_hour', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k)) p[k] = Number(v(k) || 0);
+  for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'max_age_days', 'search_hour', 'search_hour_2', 'searches_per_day', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k)) p[k] = Number(v(k) || 0);
   for (const k of ['locations', 'exclude_companies', 'exclude_title_keywords']) if (has(k)) p[k] = fromLines(v(k));
   if (has('min_salary')) p.min_salary = v('min_salary') ? Number(v('min_salary')) : null;
   if (has('min_rating')) p.min_rating = v('min_rating') ? Number(v('min_rating')) : null;
@@ -4227,11 +4298,15 @@ async function act(el) {
       await refreshOverview(); route();
     }, `Marked ${ids.length} as applied. Job Hunt reminds you to follow up on each.`);
   }
-  if (a === 'applyAll') {
-    const ids = JSON.parse(el.dataset.ids || '[]');
-    return busy(async () => { await api('/api/apply-queue', { method: 'POST', body: { ids } }); refreshOverview(); },
-      `Applying to ${ids.length} in a row. Each opens filled in, with your CV and letter attached: check it, press Submit, and the next one opens. Skip any to leave it for later.`);
+  if (a === 'applyAll') { applyRun = { list: JSON.parse(el.dataset.ids || '[]'), at: 0, done: 0 }; return runOpen(); }
+  if (a === 'runApplied') {
+    const cur = applyRun?.list[applyRun.at];
+    if (!cur) return;
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(cur.id)}/submitted`, { method: 'POST' }); applyRun.done++; applyRun.at++; await runOpen(); refreshOverview().then(() => { if (/^#(overview|applications)/.test(location.hash)) route(); }); });
   }
+  if (a === 'runSkip') { if (applyRun) { applyRun.at++; return runOpen(); } return; }
+  if (a === 'runAgain') { if (applyRun) return runOpen(); return; }
+  if (a === 'runStop') { applyRun = null; return runBar(); }
   if (a === 'fillBrowser') {
     return busy(async () => {
       const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/fill-browser`, { method: 'POST' });
@@ -4296,6 +4371,27 @@ async function act(el) {
   }
   if (a === 'phone') return busy(async () => { await api('/api/settings/phone', { method: 'POST', body: { on: el.dataset.on === '1' } }); route(); }, el.dataset.on === '1' ? 'Turned on. Now subscribe on your phone.' : 'Turned off.');
   if (a === 'phoneTest') return busy(() => api('/api/settings/phone-test', { method: 'POST' }), 'Sent. It should be on your phone now.');
+  if (a === 'otherModels') {
+    const form = el.closest('form'), f = form.elements;
+    return busy(async () => {
+      const r = await api('/api/settings/other/models', { method: 'POST', body: { url: f.service.value || f.url.value, key: f.key.value } });
+      const had = f.model.value;
+      f.model.innerHTML = r.models.length ? r.models.map(m => `<option ${m === had ? 'selected' : ''}>${esc(m)}</option>`).join('') : '<option value="">It lists no models</option>';
+      toast(r.models.length ? `It answered: ${r.models.length} model${r.models.length === 1 ? '' : 's'}. Choose one, then Save.` : 'It answered, but lists no models.');
+    }, 'Checking…');
+  }
+  if (a === 'otherForget') {
+    if (!await ask('Remove the other AI and its key? Claude does everything again.', 'Remove it')) return;
+    return busy(async () => { await api('/api/settings/other', { method: 'POST', body: { forget: true } }); toast('Removed.'); route(); });
+  }
+  if (a === 'gapsAdd') {
+    const have = [...el.closest('[data-gaps]').querySelectorAll('input:checked')].map(c => c.value);
+    if (!have.length) return toast('Tick the keywords you really have first.', true);
+    return busy(async () => {
+      await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/revise`, { method: 'POST', body: { what: 'cv', note: `I do have real experience with each of these, though my CV doesn't say so: ${have.join(', ')}. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.` } });
+      await refreshOverview(); setTimeout(route, 300);
+    }, 'Working them in…');
+  }
   if (a === 'revise') {
     const what = $('#reviseWhat').value, note = $('#reviseNote').value.trim();
     if (!note) { toast('Say what to change first.', true); return; }
@@ -4861,8 +4957,12 @@ document.addEventListener('submit', async e => {
       await api('/api/add', { method: 'POST', body: { company: f.company.value, title: f.title.value, url: f.url.value, location: f.location.value, description: f.description.value, claude } });
       toast(claude ? 'Added. Once it\'s scored and tailored it appears under Ready to approve; you get a notice.' : 'Saved. It\'s in Pipeline, Saved for later.');
       location.hash = '#overview';
+    } else if (kind === 'other') {
+      await api('/api/settings/other', { method: 'POST', body: { for: f.for.value, url: f.service.value || f.url.value, key: f.key.value, model: f.model.value } });
+      toast(f.for.value ? 'Saved. The next search uses it.' : 'Saved. Claude does everything.');
+      await refreshOverview(); route();
     } else if (kind === 'claude') {
-      await api('/api/settings/claude', { method: 'POST', body: { engine: form.querySelector('[name=engine]:checked').value, claude_key: f.claude_key.value, model: f.model.value, tailor_model: f.tailor_model.value, tailor_effort: f.tailor_effort.value, score_model: f.score_model.value, path: f.path.value } });
+      await api('/api/settings/claude', { method: 'POST', body: { engine: form.querySelector('[name=engine]:checked').value, claude_key: f.claude_key.value, model: f.model.value, tailor_model: f.tailor_model.value, tailor_effort: f.tailor_effort.value, score_model: f.score_model.value, score_batch: Number(f.score_batch.value), path: f.path.value } });
       toast('Saved.');
       await refreshOverview(); route();
     } else if (kind === 'apify') {

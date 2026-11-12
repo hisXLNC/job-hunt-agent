@@ -5,9 +5,26 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
+- Latest version: **2.45.0** (below). Before it: **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
   tidy-up, strong-fit auto-tailoring, What you want). The working branch changes with each session
   (this one: `claude/brave-fermat-ti1omi`); `main` is what's released. Before it: 2.43.0, 2.42.0.
+- **2.45.0, and why.** Less of the Claude plan per search, and not only Claude. (1) Scoring is
+  grouped: `Llm::score_batch`/`score_many` (claude.rs) put four postings in one request, so the CVs
+  and instructions go once; `score_these` (pipeline.rs) falls back to one at a time for any the
+  answer leaves out. Setting `claude.score_batch` (1 turns it off). **Not run against real Claude
+  from this container**: watch the first searches' scores. (2) `OtherAi` (claude.rs): any
+  OpenAI-style API (Grok, OpenAI, Gemini, OpenRouter, Ollama) for searching (`search_call`) or for
+  everything; settings `other.for|url|key|model`, endpoints `/api/settings/other` and `/models`.
+  Web lookups (Indeed, ratings, company pages, recruiters) stay with Claude Code. Tested against a
+  stand-in server in `another_ai_scores_postings`, never against a real service. (3) With more than
+  40 waiting to be picked (`BACKLOG`), a scheduled search scores half its cap. (4)
+  `Profile.searches_per_day`/`search_hour_2`, with `search_due`/`next_search` (profile.rs). (5) The
+  fit after tailoring is scored with the fit before as an anchor, and up to 5 lower counts as the
+  same (`RESCORE_NOISE`): two scorings differ by chance. (6) Screens: thin keyword cover (under 60%)
+  is flagged with the missing keywords to tick (`gapsHtml`, sent as a revise note; never added
+  unless the user says they have them), Approve and Review are in `applyRank` order, and "Apply to
+  all" / "the quick ones" run in the user's browser one after another (`applyRun`, `runBar`).
+  Follow-ups, recruiter contacts and one-by-one review already existed; they were not rebuilt.
 - **2.44.0, and why.** The user had 152 to pick, 21 to approve, 7 sent, no interviews: the search finds
   more than gets applied to, so the work went into throughput, not finding more. `applyRank(j)`
   (app.js) orders Pick and the one-by-one Queue: fit, less 1.5 a day after the first two, less for red

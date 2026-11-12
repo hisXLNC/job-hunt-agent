@@ -4,6 +4,22 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.45.0] - 2026-11-12
+
+Less of your Claude plan, another AI, and applying in a row.
+
+### Changes
+
+- Scoring uses less of your plan: four postings are scored in one request, so your CVs and the instructions are sent once for the four. Change it in Settings, Accounts, Claude, Advanced.
+- Another AI can do the searching, or everything: Grok, ChatGPT, Gemini, OpenRouter or a model on your own PC. Set it up in Settings, Accounts, Another AI. Looking things up on the web (Indeed, company ratings, recruiters) stays with Claude.
+- One search a day, or two: choose in Settings, Job sources, When. The second finds new postings hours sooner.
+- With more than 40 matches waiting to be picked, a search by itself scores half as many, newest first, so usage goes on jobs you will get to.
+- A tailored CV no longer shows a slightly lower fit than before by chance: the two scores are now measured against each other.
+- A tailored CV that covers under 60% of a posting's keywords is marked, and Review lists the missing ones to tick if you really have them.
+- Apply to all, and Apply to the quick ones, now open each form in your browser one after another: submit, press next, and the next one opens.
+- Ready to approve and Review are in the order of what is best to apply to now.
+- Sort and filter is folded away when there are fewer than eight to pick, and a company's coloured letter shows its name when you point at it.
+
 ## [2.44.1] - 2026-11-12
 
 Clearer scores on a phone, and the tabs back at the bottom.
@@ -1573,6 +1589,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.45.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.45.0
 [2.44.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.44.1
 [2.44.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.44.0
 [2.43.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.43.0

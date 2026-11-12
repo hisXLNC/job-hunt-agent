@@ -162,6 +162,12 @@ impl Llm for Metered {
     fn score(&self, cvs: &[(String, String)], guidance: &str, job: &Job) -> R<JobScore> {
         self.run("score", |l| l.score(cvs, guidance, job))
     }
+    fn score_batch(&self) -> usize {
+        self.inner.score_batch()
+    }
+    fn score_many(&self, cvs: &[(String, String)], guidance: &str, jobs: &[Job]) -> R<Vec<Option<JobScore>>> {
+        self.run("score", |l| l.score_many(cvs, guidance, jobs))
+    }
     fn cv_profile(&self, cv_text: &str) -> R<CvProfile> {
         self.run("cv", |l| l.cv_profile(cv_text))
     }
