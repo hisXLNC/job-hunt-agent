@@ -1639,3 +1639,66 @@ tr.in-panel > td, table.jobs tr.click.in-panel:hover > td { background: var(--ac
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .qsteps .view-seg { flex: none; margin-left: 8px; } .deck-main:has(> .card.todo) { padding-bottom: 0; } }
 
 .pick-more { margin: 10px 2px 2px; }
+
+/* ---- Pay, said the same way everywhere ---- */
+.pay { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.pay.low { color: var(--crit); }
+.pay.none { font-weight: 400; color: var(--muted); }
+.dtop .facts .pay:not(.none), .jp-head .facts .pay:not(.none) { background: var(--good-soft); color: var(--good); padding: 1px 9px; border-radius: 999px; }
+.dtop .facts .pay.low, .jp-head .facts .pay.low { background: var(--crit-soft); color: var(--crit); }
+
+/* ---- One set of sizes and edges, so things line up ---- */
+/* Every button, box and pill tab is one of two heights. */
+.btn, input[type=text], input[type=search], input[type=email], input[type=url], input[type=number], input[type=password], select, .find-box, .status-pill { min-height: 38px; }
+.btn.sm, .tabs.sub-tabs a, .view-seg button { min-height: 30px; }
+.btn.big { min-height: 46px; }
+.btn { line-height: 1.2; }
+select { padding-block: 0; }
+.tabs a { min-height: 36px; display: inline-flex; align-items: center; gap: 4px; }
+/* A page's top: its name on the left, its buttons on the right, on one line. */
+.head { align-items: center; min-height: 46px; }
+.head .row { gap: 8px; }
+/* A card's own heading and button, on one line. */
+.card > header { min-height: 34px; }
+.card > header h2 { margin: 0; }
+/* Rows of jobs: the tile, the name, the fit and the buttons each start at the same place in every
+   row and every group, whatever the buttons say. */
+.jrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; row-gap: 6px; align-items: center; }
+.jrow .jhead { grid-column: 1; display: grid; grid-template-columns: auto minmax(0, 1fr) 112px; align-items: center; gap: 14px; flex: none; }
+.jrow.ticks .jhead { grid-template-columns: 22px auto minmax(0, 1fr) 112px; }
+.jrow .jfit { order: 0; grid-column: -2; justify-content: flex-end; min-width: 0; margin: 0; }
+.jrow.pick .jfit, .jrow:has(.reach-arrow) .jfit { min-width: 0; }
+.jrow .jact { grid-column: 2; min-width: 232px; justify-content: flex-end; margin: 0; }
+.jrow .jwhy, .jrow.ticks .jwhy, .jrow.pick .jwhy { grid-column: 1 / -1; padding-left: 54px; }
+.jrow.ticks .jwhy, .jrow.pick .jwhy { padding-left: 90px; }
+.group-h { min-height: 34px; margin-bottom: 6px; }
+.group-h .btn { margin-left: 4px; }
+/* The Queue's side column and the job panel use the same card edges as the rest. */
+.deck-side .card { border-radius: 16px; }
+.dbar .btn { min-height: 40px; }
+.dbar .btn.big { min-height: 46px; }
+/* Tables: every cell starts on the same line, numbers line up. */
+table.jobs td { vertical-align: middle; }
+table.jobs td.fit, table.jobs td.stage, table.jobs td.next { white-space: nowrap; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .jrow { grid-template-columns: minmax(0, 1fr); }
+  .jrow .jhead, .jrow.ticks .jhead { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; }
+  .jrow.ticks .jhead { grid-template-columns: 26px auto minmax(0, 1fr) auto; }
+  .jrow .jfit { flex-direction: column; align-items: flex-end; gap: 3px; }
+  .jrow .jact { grid-column: 1; min-width: 0; justify-content: stretch; }
+  .jrow .jwhy, .jrow.ticks .jwhy, .jrow.pick .jwhy { padding-left: 0; }
+  .head { min-height: 0; }
+}
+@media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .jrow { grid-template-columns: minmax(0, 1fr) auto; }
+  .jrow .jact { grid-column: 2; min-width: 0; justify-content: flex-end; }
+}
+/* Each part of a row has its own column, whatever order it's written in. */
+.jrow .jhead > * { grid-row: 1; }
+.jrow .jhead > .avatar { grid-column: 1; }
+.jrow .jhead > .jmain { grid-column: 2; }
+.jrow .jhead > .jfit { grid-column: 3; }
+.jrow.ticks .jhead > .jtick { grid-column: 1; }
+.jrow.ticks .jhead > .avatar { grid-column: 2; }
+.jrow.ticks .jhead > .jmain { grid-column: 3; }
+.jrow.ticks .jhead > .jfit { grid-column: 4; }

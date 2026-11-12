@@ -17,6 +17,8 @@ Getting to the best matches sooner.
 - What you want (Me, Looking for): the level you're going for, permanent or contract, industries you want and don't, and deal-breakers. Scoring weighs them for every new posting, and a role that goes against one says why.
 - Indeed, through Claude, prefers the most recently posted roles.
 - Fix: adding a chip (a job title, a keyword) by pressing Enter could show an error.
+- Pay is on every job, the same way everywhere: in the lists, on a decision and in the panel beside the list. What the posting states, marked when it is below your minimum, or No pay stated when it states none.
+- Things line up: in every list the company tile, the name, the fit and the buttons start in the same place whatever the buttons say, and buttons, boxes and tabs share two heights.
 
 ## [2.43.0] - 2026-11-12
 

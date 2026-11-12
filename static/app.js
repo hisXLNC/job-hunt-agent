@@ -636,7 +636,7 @@ async function openPanel(id) {
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const w = fitWords(j), must = mustHaves(j), flags = (j.red_flags || []).filter(x => !/^must have:/i.test(x));
   const lacks = [w.gap, ...must.map(m => `Required, not on your CV: ${m}`), ...flags].filter(Boolean);
-  const facts = [`<b>${coCell(j)}</b>`, j.location ? placeHtml(j) : '', j.salary ? esc(String(j.salary).split(/\s+[•·|]\s+/)[0]) : '', j.employment ? esc(j.employment) : '', ageTag(j)].filter(Boolean).map(x => `<span>${x}</span>`).join('');
+  const facts = [`<b>${coCell(j)}</b>`, j.location ? placeHtml(j) : '', payFact(j), j.employment ? esc(j.employment) : '', ageTag(j)].filter(Boolean).map(x => `<span>${x}</span>`).join('');
   el.innerHTML = `<div class="jp-top"><span class="kicker">${esc(STAGES[j.status] || j.status)}</span><span class="grow"></span><a class="btn ghost sm" href="#job/${encodeURIComponent(id)}">Open the full page</a><button class="x" data-act="panelClose" title="Close (Esc)">×</button></div>
     <div class="jp-scroll">
       <div class="jp-head">${avatar(j.company)}<div class="grow"><h2>${esc(j.title)}</h2><div class="facts">${facts}</div></div>${fitRing(j.score_after ?? j.score)}</div>
@@ -699,7 +699,7 @@ const dbar = (quiet, main) => `<div class="dbar">${quiet}<span class="sp"></span
 const key = k => `<kbd class="k">${k}</kbd>`;
 /** The top of a decision about a job: its company tile, what kind of decision, its name and facts, its fit. */
 function decisionTop(j, kicker, fit = fitRing(j.score_after ?? j.score)) {
-  const facts = [`<b>${coCell(j)}</b>`, j.location ? placeHtml(j) : '', j.salary ? esc(String(j.salary).split(/\s+[•·|]\s+/)[0]) : '', j.employment ? esc(j.employment) : '', ageTag(j)].filter(Boolean).map(x => `<span>${x}</span>`).join('');
+  const facts = [`<b>${coCell(j)}</b>`, j.location ? placeHtml(j) : '', payFact(j), j.employment ? esc(j.employment) : '', ageTag(j)].filter(Boolean).map(x => `<span>${x}</span>`).join('');
   return `<div class="dtop">${avatar(j.company)}<div class="grow"><p class="kicker">${kicker}</p><h2><a href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a></h2>
       <div class="facts">${facts}</div><div class="dtags">${oneTag(j)}${effortTag(j)}${appliedBeforeTag(j)}${closedTag(j)}${deadlineTag(j)}${belowMinTag(j)}</div></div>${fit}</div>`;
 }
@@ -1556,6 +1556,12 @@ function contactHtml(c, i, writing, pb) {
  *  (the Tracker's rows) fills in the steps after you apply. */
 /** A company's initial on a tile whose colour comes from its name: the same company, the same colour. */
 const avatar = name => { const s = String(name || '?').trim(); let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `<span class="avatar" style="--h:${h}" aria-hidden="true">${esc((s.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</span>`; };
+/** What a posting pays, for a job's line of facts: the figure it states (its full wording on hover,
+ *  and a mark when it's below your minimum), or that it states none. Always there, so no pay is
+ *  something you see, not something missing. */
+const payFact = j => j.salary
+  ? `<span class="pay${belowMin(j) ? ' low' : ''}" title="${esc(j.salary)}${belowMin(j) ? `. Below your minimum of ${money(minSalary())}` : ''}">${esc(String(j.salary).split(/\s+[•·|]\s+/)[0])}</span>`
+  : '<span class="pay none" title="The posting doesn\'t say what it pays">No pay stated</span>';
 /** How good a match is to apply to now, for ordering: its fit, less for each day the posting has
  *  been up after the first two (a role's first days are when applications get read), less for red
  *  flags and pay below your minimum, a little more when it applies on the company's own site or
@@ -1574,7 +1580,7 @@ const daysUp = j => Math.max(0, (Date.now() - (+new Date(ageValue(j) || 0) || Da
 /** One job in a step's list. The tick box, fit and name are one label when the row can be ticked
  *  (a press anywhere on them ticks it); the why line and the buttons are outside it. */
 function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', attrs = '', facts = '' }) {
-  const meta = [coCell(j), j.location ? placeHtml(j) : '', j.salary ? `<span title="${esc(j.salary)}">${esc(String(j.salary).split(/\s+[•·|]\s+/)[0])}</span>` : '', j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
+  const meta = [coCell(j), j.location ? placeHtml(j) : '', payFact(j), j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
   const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit">${scoreBadge(j.score)}${reachTag(j)}</span>
       <span class="jmain"><span class="jtitle"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${tags}</span><span class="jmeta">${meta}</span></span>`;
   return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" data-job-row="${esc(j.id)}" ${attrs}>${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
