@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.56.1",
+    "date": "2026-11-12",
+    "title": "Workday forms: skills, school, certifications, languages and the CV upload",
+    "changes": [
+      "Skills are now actually chosen on Workday: the highlighted first row was being read as already chosen, so nothing was clicked. Skills the site did not keep are all reported.",
+      "School or University and Certification are chosen from the site's list. When your school or certificate is not in it, Other is chosen and the panel says so.",
+      "A second certification is added when your CV has more than one, and education gets as many entries as your CV has degrees.",
+      "Languages: the whole list is read (it was cut short on long lists), each entry gets its own language and levels, and I am fluent follows that language.",
+      "Your tailored CV is attached to an upload box that only says Select files under Resume/CV, and Job Hunt checks the file shows.",
+      "Education From dates are filled, and a career break is no longer added as a job with no company.",
+      "The browser's debugging bar goes away as soon as the form is filled."
+    ]
+  },
+  {
     "version": "2.56.0",
     "date": "2026-11-12",
     "title": "Rejections you can see, a career path, and a tidier top bar",

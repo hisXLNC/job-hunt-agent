@@ -56,6 +56,26 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.56.1: the OSC Workday form (osc.wd3, "My Experience").** From the user's trace and Copy details; each case is now in
+  `tools/ext_test/workday.html` and judged in `ext_test.js` (the old fill.js fails there the same way: no clicks in the
+  skill list, one skill reported). What was wrong: (1) Workday marks the row the keyboard is on `aria-selected=true`
+  (the first after every search); read as "chosen", every skill was `how: already` and never clicked. `lit()` rows
+  ignore it; chosen is the tick box, aria-checked, or the pills. After the skills, what the site shows is read again
+  and anything not there is reported (`diag.skillsLost`). (2) School or University and Certification are multiselect
+  prompts: told by structure (`builtAsPrompt`), filled like Field of Study; a school matches exactly or not at all
+  (`strict`), and when the list has no match "Other" / "Not Applicable" is chosen and said in the panel (`otherChosen`).
+  "PMP" matches "Project Management Professional (PMP)". (3) `HISTORY` has certif/licence, so the Certifications Add
+  Another is pressed; `cv_listed(cv, "cert"|"edu")` gives certifications and education a floor in `tidy_answers`.
+  (4) A legend over only a date's boxes ("From", "Expiration Date") is the date's label (`dateHeads`), not a section:
+  Education's From was unanswered and Role Description sat in section "To". (5) `openOptions()` counted chosen pills
+  as the open dropdown's options, so a long list was never scrolled; `moreOptions` collects option text while
+  scrolling (virtualized lists drop rows) and starts from the top. (6) The CV goes to an upload box by its section too
+  ("Select files" under Resume/CV); `attachSure` checks the file shows and drops it on the drop zone if not.
+  (7) `_roles` no longer counts a career break or transition (an entry with no company). (8) "I am fluent" follows
+  the entry's own language (`language_fluent`). (9) `undebug`: the debugger is let go when the fill ends.
+  NOT verified on the real site: whether Workday takes the synthetic drop, and whether its skill rows have tick boxes
+  (if a click isn't seen to take, the keyboard path runs, then it's reported). Ask for Copy details again (it now has
+  `want`/`now` per box, `drops`, `uploads`, `skillsLost`). Job Bank's profile form is still open.
 - **2.56.0: rejections you can see, Inbox count and actions, a career path, tested keys.** (Carries 2.55.0, never published.)
   Rejections: `link_rejections()` matches a "no" that named no application to the job (company in the email, unique or best
   title match), marks it rejected and notifies; `turned_down()` / `drafts_waiting()` put "Turned down" and "Draft to send"

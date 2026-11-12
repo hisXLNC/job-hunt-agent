@@ -4,6 +4,20 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.56.1] - 2026-11-12
+
+Workday forms: skills, school, certifications, languages and the CV upload.
+
+### Changes
+
+- Skills are now actually chosen on Workday: the highlighted first row was being read as already chosen, so nothing was clicked. Skills the site did not keep are all reported.
+- School or University and Certification are chosen from the site's list. When your school or certificate is not in it, Other is chosen and the panel says so.
+- A second certification is added when your CV has more than one, and education gets as many entries as your CV has degrees.
+- Languages: the whole list is read (it was cut short on long lists), each entry gets its own language and levels, and I am fluent follows that language.
+- Your tailored CV is attached to an upload box that only says Select files under Resume/CV, and Job Hunt checks the file shows.
+- Education From dates are filled, and a career break is no longer added as a job with no company.
+- The browser's debugging bar goes away as soon as the form is filled.
+
 ## [2.56.0] - 2026-11-12
 
 Rejections you can see, a career path, and a tidier top bar.
@@ -1774,6 +1788,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.56.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.56.1
 [2.56.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.56.0
 [2.55.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.55.0
 [2.54.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.54.0
