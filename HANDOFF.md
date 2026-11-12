@@ -18,6 +18,13 @@ and `DEVELOPING.md`.
   the next step, the files (CV & letter) and the copy kit and answers (Questions & contacts), and
   old links go there (`#apply/<id>` to the job on that tab, `#review` to `#overview/approve`). The
   keyword-gap box (`gapsHtml`) moved to the job page's CV & letter tab.
+  Also in 2.48.0: a fit score is a ring everywhere (`.score` with `--p`, set by `scoreBadge` and
+  `reachTag`); Career is one Me tab with `careerSeg` between `#cvs/career` and `#cvs/coach`; the
+  job page's kit and questions are one card; the buttons and API routes for the Job Hunt Apply
+  window are gone (`/api/jobs/<id>/fill`, `/api/apply-queue`), but **the window's own code is still
+  there, unused**: `Host::fill_application`, `desktop/src-tauri/src/lib.rs` `apply_window`,
+  `fill::start_queue`/`queue_next`, and fill.js's TOKEN mode. It can't be run or tested from a
+  Linux container, so removing it is for a session on Windows.
 - **2.47.0: four places, not five.** Pipeline is gone as a place. `NAV` is Queue, Inbox, Calendar,
   Me. Every job is the Queue's last tab, All jobs (`#applications`, `showPipeline` in
   `app-pipeline.js`, headed by `jobsHead` and the shared `queueTabs`); where a job stands is its

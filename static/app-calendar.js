@@ -99,7 +99,8 @@ async function showCoach() {
   const ideas = overview?.title_ideas || [];
   const jobsOf = x => (x.jobs || []).map(j => `<a href="#job/${encodeURIComponent(j.id)}">${esc(j.company)}</a>`).join(', ');
   page(`
-    ${meHead('coach', 'The skills the roles you go for ask for that your CV doesn\'t show, and what would help most.')}
+    ${meHead('career', 'The skills the roles you go for ask for that your CV doesn\'t show, and what would help most.')}
+    ${careerSeg('skills')}
     <section class="card coach-plan"><header><h2>Your career coach</h2>
       ${r.thinking ? '<span class="pill"><span class="spin" data-kind="coach"></span>Thinking…</span>' : `<button class="btn ${c ? 'ghost' : 'primary'}" data-act="coachRun" ${r.claude && g.postings ? '' : 'disabled'}>${c ? 'Look again' : 'Get my plan'}</button>`}</header>
       ${c ? `<p>${esc(c.advice)}</p><p class="muted small">From ${esc(fmtDate(c.at))}. Job Hunt looks again every week with your weekly review.</p>

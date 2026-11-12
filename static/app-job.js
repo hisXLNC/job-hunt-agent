@@ -29,7 +29,6 @@ function jobActions(j, tailoring, progress) {
   if (j.apply_url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="company">${svg('open')}On the company's site</button>`);
   if (j.url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="posting">${svg('open')}Open posting</button>`);
   // Applying: the other ways to get to the form.
-  if (j.status === 'approved' && overview?.can_fill && j.url) b.push(`<button class="btn ghost sm" data-act="fillForm" data-job="${id}" title="Opens it in a Job Hunt window and fills it in there. Sites that need you to sign in are easier in your own browser.">In a Job Hunt window</button>`);
   if (['ready', 'approved'].includes(j.status) && !j.apply_url && j.url) b.push(`<button class="btn ghost sm" data-act="findApply" data-job="${id}" title="Claude searches the company's careers site for this job, so you apply to them and not through a job board">${svg('search')}Find it on the company's site</button>`);
   if (['ready', 'approved', 'queued'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="stage" ${on} data-status="saved">Save for later</button>`, `<button class="btn ghost sm danger" data-act="stage" ${on} data-status="dismissed">Not interested</button>`);
   return `<section class="card next-step actions">
@@ -186,13 +185,13 @@ async function showJob(id) {
       </div>
     </div>
     <div class="jpane" data-pane="apply" ${tab === 'apply' ? '' : 'hidden'}>
-    ${['ready', 'approved', 'applied', 'interviewing', 'offer'].includes(j.status) ? `<section class="card" id="kitCard"><details ${j.status === 'approved' ? 'open' : ''}><summary><h2 style="display:inline">Copy-and-paste kit</h2> <span class="muted small">every detail a form asks for, to copy one at a time when Fill this form doesn't work</span></summary><div id="kitBody" data-job="${esc(j.id)}"><p class="muted small">Loading…</p></div></details></section>` : ''}
-    ${['ready', 'approved', 'applied', 'interviewing'].includes(j.status) || answers ? `<section class="card">
-      <header><h2>Application questions</h2>${answering ? '<span class="muted small"><span class="spin" data-kind="answers"></span>Writing…</span>' : ''}</header>
+    ${['ready', 'approved', 'applied', 'interviewing', 'offer'].includes(j.status) || answers ? `<section class="card">
+      <header><h2>What the form asks</h2>${answering ? '<span class="muted small"><span class="spin" data-kind="answers"></span>Writing…</span>' : ''}</header>
       <p class="muted small">Paste the form's questions, one per line, or leave it empty for the usual ones (why this role, salary expectations, notice period…). Answers use your CV, this posting and your <a href="#cvs/details">facts for forms</a>.</p>
       <textarea id="questions" placeholder="Why do you want to work at ${esc(j.company)}?\nHow many years of experience do you have with SAP?">${esc((answers || []).map(a => a.question).join('\n'))}</textarea>
       <div class="row"><button class="btn primary" data-act="answers" ${answering ? 'disabled' : ''}>${answers ? 'Write them again' : 'Write answers'}</button></div>
       ${(answers || []).map((a, i) => `<div class="qa"><b>${esc(a.question)}</b><div class="posting" id="ans${i}">${esc(a.answer)}</div><button class="btn ghost" data-act="copy" data-from="ans${i}">Copy</button></div>`).join('')}
+      ${['ready', 'approved', 'applied', 'interviewing', 'offer'].includes(j.status) ? `<details class="kit" id="kitCard" ${j.status === 'approved' ? 'open' : ''}><summary><b>Every detail, to copy</b> <span class="muted small">every detail a form asks for, to copy one at a time when Fill this form doesn't work</span></summary><div id="kitBody" data-job="${esc(j.id)}"><p class="muted small">Loading…</p></div></details>` : ''}
     </section>` : ''}
     ${fu || following_up || j.status === 'applied' ? `<section class="card">
       <header><h2>Follow-up</h2>${following_up ? '<span class="muted small"><span class="spin" data-kind="followup"></span>Writing…</span>' : `<button class="btn" data-act="followUp" data-job="${esc(j.id)}">${fu ? 'Write again' : 'Write follow-up'}</button>`}</header>

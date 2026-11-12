@@ -2,13 +2,19 @@
   {
     "version": "2.48.0",
     "date": "2026-11-12",
-    "title": "Profiles on job sites, and two pages fewer",
+    "title": "Profiles on job sites, one look for scores, and less repetition",
     "changes": [
       "The extension can fill in your profile on a job site (Job Bank's, say) from your CV. When Job Hunt can't tell which application a page is, the last choice is now: Not an application, a profile here, from my CV. A form that takes one job at a time gets your jobs in order, newest first: fill, save it with the page's own button, open the empty form again, fill.",
       "The extension's panel shows the Job Hunt logo, where it had a plain square.",
       "The Files and answers page is gone. A job's own page already had everything on it: the next step opens the form, your files are under CV and letter, and every detail a form asks for is under Questions and contacts.",
       "The separate Review page is gone too. Check and approve on a job opens its CV and letter, with the keywords to tick when cover is thin.",
-      "Old links to both pages still work: they open the job, or the Queue."
+      "Old links to both pages still work: they open the job, or the Queue.",
+      "Fit scores are a ring everywhere, as on a job's panel: how much is filled is the score, and its colour is how good the fit is. A forecast of what tailoring could reach is the same ring, paler, with ~ before the number.",
+      "Career paths and Career coach are one Career tab under Me, with a switch between Paths you could take and Skills to build.",
+      "Most applications tailored per search sits right under Tailor by itself, where it belongs (it was under Advanced).",
+      "On a job's Questions and contacts tab, the application questions and the details to copy are one card: What the form asks.",
+      "Forms are filled one way: in your own browser, with the extension. The buttons for a separate Job Hunt window are gone.",
+      "The status at the top right says when Job Hunt last searched; when it searches next is in the Search button's menu."
     ]
   },
   {

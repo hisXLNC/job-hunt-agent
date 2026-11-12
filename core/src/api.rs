@@ -751,23 +751,6 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             let job = job_or_404(agent, id)?;
             match *action {
                 "ask-recruiter" => Ok(Resp::json(&crate::recruiters::ask(agent, id)?)),
-                "fill" => {
-                    if req.remote {
-                        return Err(Error("Forms are filled in on the computer running Job Hunt.".into()));
-                    }
-                    if job.url.trim().is_empty() {
-                        return Err(Error("There's no link to this posting, so there's no form to fill in.".into()));
-                    }
-                    if !agent.claude_ready() {
-                        return Err(Error("Set up Claude in Settings \u{2192} Accounts first: it writes the answers.".into()));
-                    }
-                    // Filling it in is approving it, without the email Approve sends when there's an address.
-                    if job.status == "ready" {
-                        agent.db().set_status(id, "approved", "approved; filling in the form on the company site")?;
-                    }
-                    host.fill_application(id, job.apply_url.as_deref().unwrap_or(&job.url))?;
-                    ok()
-                }
                 // Applying in your own browser: remember which job, so the extension's Fill this form
                 // knows, and hand back the link to open (the company's own posting first).
                 "fill-browser" => {
@@ -1136,22 +1119,6 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
             });
             Ok(Resp::json(&json!({ "started": true })))
-        }
-        // Apply to several in a row: each opens in the Apply window, filled in, when the one before is sent.
-        ["api", "apply-queue"] => {
-            if req.remote || !host.can_fill() {
-                return Err(Error("Applying from a queue works in the Job Hunt app on your PC.".into()));
-            }
-            if !agent.claude_ready() {
-                return Err(Error("Set up Claude in Settings \u{2192} Accounts first: it writes the answers.".into()));
-            }
-            let ids: Vec<String> = b["ids"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
-            let jobs: Vec<crate::db::Job> = ids.iter().filter_map(|id| agent.db().job(id).ok().flatten()).filter(|j| j.status == "approved" && !j.url.trim().is_empty()).collect();
-            let Some(first) = jobs.first() else { return Err(Error("Nothing to apply to: approve some roles first.".into())) };
-            crate::fill::start_queue(agent, &jobs.iter().map(|j| j.id.clone()).collect::<Vec<_>>())?;
-            agent.db().log(None, "fill", &format!("applying to {} in a row", jobs.len()))?;
-            host.fill_application(&first.id, &crate::fill::form_link(first))?;
-            Ok(Resp::json(&json!({ "started": jobs.len() })))
         }
         // Fill forms on your phone: share Job Hunt with your own devices through Tailscale, or keep the
         // address you typed (another way to reach this computer).

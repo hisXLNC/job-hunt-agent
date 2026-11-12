@@ -485,10 +485,6 @@ async function act(el) {
       refreshOverview();
     }, 'Opened in your browser. On the form, click the Job Hunt extension and press Fill this form.');
   }
-  if (a === 'fillForm') {
-    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/fill`, { method: 'POST' }); refreshOverview(); },
-      'Opening the posting in a Job Hunt window. Get to the form; Job Hunt fills it in, and you press Submit.');
-  }
   if (a === 'askRecruiter') {
     return busy(async () => {
       const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/ask-recruiter`, { method: 'POST' });

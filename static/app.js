@@ -131,7 +131,9 @@ const placeOf = () => { const [page, arg] = (location.hash.slice(1) || 'overview
 const placeTabs = (tabs, on) => `<nav class="tabs place-tabs">${tabs.map(([href, name, id]) => `<a href="${href}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
 const inboxTabs = on => placeTabs([['#inbox', 'Email', 'email'], ['#inbox/recruiters', 'Recruiters', 'recruiters']], on);
 /** Me: what you're looking for, then what Job Hunt knows about you. */
-const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['#cvs', `CVs${n ? ` (${n})` : ''}`, 'cvs'], ['#cvs/details', 'About me', 'details'], ['#cvs/career', 'Career paths', 'career'], ['#cvs/coach', 'Career coach', 'coach'], ['#applications/files', 'Tailored files', 'files'], ['#results', 'Insights', 'insights']], on);
+const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['#cvs', `CVs${n ? ` (${n})` : ''}`, 'cvs'], ['#cvs/details', 'About me', 'details'], ['#cvs/career', 'Career', 'career'], ['#applications/files', 'Tailored files', 'files'], ['#results', 'Insights', 'insights']], on);
+/** Career's two views, on the one tab: the paths your CV supports, and the skills that would help most. */
+const careerSeg = on => `<nav class="mode career-seg" aria-label="Career"><a href="#cvs/career" class="${on === 'paths' ? 'on' : ''}">Paths you could take</a><a href="#cvs/coach" class="${on === 'skills' ? 'on' : ''}">Skills to build</a></nav>`;
 const meHead = (on, about, n) => `<div class="head"><div class="grow"><h1>Me</h1><p class="muted">${about}</p></div><span class="save-state" ${on === 'what' ? '' : 'id="saveState"'} aria-live="polite">${['cvs', 'details'].includes(on) ? 'Changes save by themselves' : ''}</span></div>${meTabs(on, n)}`;
 /** Settings' tabs: what belongs to no one place, and where Job Hunt looks for jobs. */
 const SETTINGS_TABS = [['connections', 'Accounts'], ['sources', 'Job sources'], ['inbox', 'Email'], ['calendar', 'Calendar'], ['notifications', 'Notifications'], ['sync', 'Sync & backup'], ['extension', 'Browser extension'], ['app', 'App']];
@@ -297,7 +299,7 @@ function ago(iso) {
 }
 const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
 const scoreBand = n => n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo';
-const scoreBadge = n => n == null ? '' : `<span class="score ${scoreBand(n)}" title="Fit score">${n}</span>`;
+const scoreBadge = n => n == null ? '' : `<span class="score ${scoreBand(n)}" style="--p:${n}" title="Fit score">${n}</span>`;
 /** Company and location as their own cells: the company with its rating, a dash for no place. */
 const coCell = j => `${esc(j.company)}${ratingTag(j.rating, j.company)}`;
 /** Country names as a place line spells them, and the short form a remote role shows: "Remote (US)". */
@@ -381,8 +383,8 @@ const fitNote = j => j.score != null && j.score_after != null && j.score_after !
   : canReach(j) && canReach(j) > j.score ? `<small class="fit-note">~${canReach(j)} tailored</small>` : '';
 /** After the fit badge: the tailored CV's fit as a second badge, or the forecast one (dashed) before tailoring. */
 const reachTag = j => j.score != null && j.score_after != null && j.score_after !== j.score
-  ? `<span class="reach"><span class="reach-arrow">→</span><span class="score ${scoreBand(j.score_after)}" title="Fit of the tailored CV">${j.score_after}</span></span>`
-  : canReach(j) ? `<span class="reach"><span class="reach-arrow">→</span><span class="score forecast ${scoreBand(canReach(j))}" title="${canReach(j) > j.score ? 'Predicted fit once your CV is tailored to this posting' : 'Tailoring is unlikely to raise this fit: the gap is in experience, not wording'}">~${canReach(j)}</span></span>` : '';
+  ? `<span class="reach"><span class="reach-arrow">→</span><span class="score ${scoreBand(j.score_after)}" style="--p:${j.score_after}" title="Fit of the tailored CV">${j.score_after}</span></span>`
+  : canReach(j) ? `<span class="reach"><span class="reach-arrow">→</span><span class="score forecast ${scoreBand(canReach(j))}" style="--p:${canReach(j)}" title="${canReach(j) > j.score ? 'Predicted fit once your CV is tailored to this posting' : 'Tailoring is unlikely to raise this fit: the gap is in experience, not wording'}">~${canReach(j)}</span></span>` : '';
 const trackLabel = t => (settingsCache?.profile?.tracks || []).find(x => x.name === t)?.label || overview?.track_labels?.[t] || (t || '').replace(/[-_]/g, ' ');
 const stagePill = s => `<span class="pill ${esc(s)}">${esc(STAGES[s] || s)}</span>`;
 /** When the posting stops taking applications, if it says; red when it's two days or less away. */
@@ -446,7 +448,7 @@ function renderNav() {
   const mm = $('#mMenu');
   if (mm) { mm.setAttribute('aria-expanded', document.body.classList.contains('more-open')); mm.classList.toggle('alert', !$('#connLine')?.hidden || !$('#limitLine')?.hidden || !$('#updateNote')?.hidden); }
   updateSearchCtl();
-  $('#runNote').textContent = busy || `Searched ${ago(overview?.last_search)}${side.paused ? ` · ${side.paused === 'off' ? 'daily search off' : `paused until ${new Date(side.paused).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}` : nextSearch ? ` · next ${when(nextSearch)}` : overview?.last_search ? ' · next soon' : ''}`;
+  $('#runNote').textContent = busy || `Searched ${ago(overview?.last_search)}${side.paused ? ` · ${side.paused === 'off' ? 'daily search off' : `paused until ${new Date(side.paused).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}` : ''}`;
   $('#dotRun').className = 'dot' + (busy ? ' busy' : side.paused ? ' warn' : ' on');
   const g = overview?.setup?.google;
   $('#dotGoogle').className = 'dot' + (g ? ' on' : '');

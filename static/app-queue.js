@@ -195,7 +195,7 @@ function queueMini(x) {
   const name = j ? j.title : x.kind === 'interview' ? `Interview: ${x.i.company || x.i.title}` : x.kind === 'quiet' ? `${x.list.length} quiet for 4+ weeks` : x.kind === 'held' ? `${x.n} waiting to be scored` : x.h.level === 'problem' ? 'Something needs fixing' : 'Worth a look';
   const who = j ? j.company : x.kind === 'interview' ? fmtWhen(x.i.start) : '';
   const tile = j ? avatar(j.company) : x.kind === 'interview' ? avatar(x.i.company || x.i.title) : `<span class="avatar plain">${x.kind === 'health' ? '!' : svg(x.kind === 'held' ? 'search' : 'clock')}</span>`;
-  return `<button type="button" class="mini" data-act="queueGo" data-id="${esc(x.id)}">${tile}<span class="grow"><b>${esc(name)}</b><span class="small muted">${esc(who)}${who ? ' · ' : ''}${QUEUE_KIND[x.kind]}</span></span>${j && j.score != null ? `<span class="score ${scoreBand(j.score_after ?? j.score)}">${j.score_after ?? j.score}</span>` : ''}</button>`;
+  return `<button type="button" class="mini" data-act="queueGo" data-id="${esc(x.id)}">${tile}<span class="grow"><b>${esc(name)}</b><span class="small muted">${esc(who)}${who ? ' · ' : ''}${QUEUE_KIND[x.kind]}</span></span>${j && j.score != null ? `<span class="score ${scoreBand(j.score_after ?? j.score)}" style="--p:${j.score_after ?? j.score}">${j.score_after ?? j.score}</span>` : ''}</button>`;
 }
 
 /** Queue: the next decision, in full, and what's behind it. The lists of jobs are in Pipeline. */
