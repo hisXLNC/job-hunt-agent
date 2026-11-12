@@ -56,6 +56,11 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.55.0: every employer is assumed to read a CV requirement by requirement.** `ats::general_tailoring()` is
+  handed to tailoring when the system isn't known (the Ashby text when it is). The check of the CV
+  (`.ats-review`, built once as `reviewBox` in `app-job.js`) is on every tailored job, on request; it still
+  runs by itself only for Ashby, because it costs up to three more requests. Ashby's own warnings stay on
+  Ashby jobs only.
 - **2.54.0: a CV for an Ashby employer is checked the way Ashby's AI checks it.** `Llm::criteria_review` writes
   the 5 to 8 criteria a recruiter would set from the posting and reads the tailored CV against each, strictly:
   meets / not / undecided, with the CV line as evidence and, for an undecided one the CV supports, a `fix`.

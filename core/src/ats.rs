@@ -35,6 +35,18 @@ pub fn tailoring(ats: &str) -> &'static str {
     }
 }
 
+/// How to tailor when the employer's system isn't known. Many systems now check a CV requirement by
+/// requirement, and a recruiter skimming reads the same way, so the same rules hold; they only
+/// reword what the CV already says.
+pub fn general_tailoring() -> &'static str {
+    "Assume the CV is first read requirement by requirement, by software or by a recruiter with a few seconds, looking for a line that shows each stated requirement:\n\
+- For each requirement the posting states as required, where the CV has the evidence, say it outright in one self-contained line, named the way the posting names it, in a line about work actually done.\n\
+- A requirement that appears only in a skills list, or only as a job title, may not count: show it in a line of the experience that used it.\n\
+- Where the posting asks for a number of years and the CV's own dated roles plainly add up to it, state the total in the summary. Never round up, and never state years the dates don't support.\n\
+- The summary at the top should state the two or three most important requirements the CV meets, in the posting's words.\n\
+- Repeating a keyword adds nothing. Where the CV has no evidence for a requirement, leave it out."
+}
+
 /// What whoever writes the form's answers is told for this system.
 pub fn answers(ats: &str) -> &'static str {
     match ats {

@@ -2025,7 +2025,7 @@ fn rejections_are_studied_and_tailoring_is_told() {
     // Tailoring is told the lessons, and for a job on Ashby how its reviewers read a CV.
     let other = s.agent.db().job(&jobs[1].id).unwrap().unwrap();
     let plain = s.agent.tailoring_guidance(&other);
-    assert!(plain.contains("State years of programme delivery") && !plain.contains("Ashby"));
+    assert!(plain.contains("State years of programme delivery") && plain.contains("requirement by requirement") && !plain.contains("Ashby"));
     let ashby = crate::db::Job { apply_url: Some("https://jobs.ashbyhq.com/acme/1/application".into()), ..other };
     assert!(s.agent.tailoring_guidance(&ashby).contains("undecided"));
 }

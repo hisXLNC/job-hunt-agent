@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.55.0",
+    "date": "2026-11-12",
+    "title": "Every CV is tailored for requirement-by-requirement screening",
+    "changes": [
+      "Tailoring now assumes any employer may check your CV requirement by requirement, by software or a recruiter with seconds: each requirement you meet is stated in one clear line, backed by experience and not only a skills list, with total years stated when your dates add up.",
+      "Every tailored job has Check my CV: Claude reads the CV as an AI screen would and marks each requirement Meets, Undecided or Not shown. It still runs by itself only for employers on Ashby."
+    ]
+  },
+  {
     "version": "2.54.0",
     "date": "2026-11-12",
     "title": "Your CV, checked the way Ashby's AI checks it",

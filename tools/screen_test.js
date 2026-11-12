@@ -177,6 +177,15 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
     await page.waitForTimeout(1500); await at(`job/${encodeURIComponent(ashbyId)}`);
   }
   check(!!ashbyId && await page.evaluate(() => { const r = document.querySelector('.ats-review'); return !!r && /Meets 4 of 6/.test(r.textContent) && r.querySelectorAll('tbody tr').length === 6 && !!r.querySelector('.pill.warn') && !!r.querySelector('[data-act="reviewFix"]') && document.querySelector('.ats-tips').open; }), 'A job on Ashby shows how its AI check would read the tailored CV');
+  // Any other tailored job offers the same check.
+  const plainId = await page.evaluate(async () => (await (await fetch('/api/jobs?limit=100')).json()).jobs.find(j => j.status === 'queued' && !/ashbyhq\.com/.test(j.url))?.id);
+  if (plainId) {
+    await page.evaluate(async id => { await fetch(`/api/jobs/${encodeURIComponent(id)}/tailor`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); }, plainId);
+    await page.waitForTimeout(6000); await at(`job/${encodeURIComponent(plainId)}`);
+  }
+  check(!!plainId && await page.evaluate(() => { const r = document.querySelector('.ats-review'); return !!r && /How an AI screen would read your CV/.test(r.textContent) && !!r.querySelector('[data-act="review"]') && !/Ashby/.test(document.querySelector('.ats-tips').textContent); }), 'Any tailored job offers the check of its CV');
+  // Back where it was, for the checks that follow.
+  if (plainId) await page.evaluate(id => fetch(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'queued', note: 'screen test', learn: false }) }), plainId);
   await at('results');
 
   // The version sits under the app's name and opens what's new.

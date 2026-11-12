@@ -1988,9 +1988,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         if !lessons.is_empty() {
             parts.push(format!("What this person's earlier rejections suggest doing differently:\n{}", lessons.iter().map(|l| format!("- {l}")).collect::<Vec<_>>().join("\n")));
         }
-        if let Some(ats) = crate::ats::of(job) {
-            parts.push(crate::ats::tailoring(ats).to_string());
-        }
+        parts.push(crate::ats::of(job).map(crate::ats::tailoring).unwrap_or_else(crate::ats::general_tailoring).to_string());
         parts.join("\n\n")
     }
 
