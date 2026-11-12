@@ -1876,7 +1876,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             let n = report.to_pick;
             self.note(
                 &format!("{n} role{} worth applying to", if n == 1 { "" } else { "s" }),
-                "Pick the ones to tailor your CV for on Job Hunt's Overview.",
+                "Pick the ones to tailor your CV for in Job Hunt, under Jobs.",
             );
         }
         Ok(report)
@@ -2263,7 +2263,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let Ok(Some(j)) = self.db().job(id) else { return ("Added to Job Hunt".into(), String::new()) };
         match (j.status.as_str(), j.score) {
             ("ready", s) => ("Application ready".into(), format!("{} at {} (fit {}) has a tailored CV and cover letter waiting for your approval.", j.title, j.company, s.unwrap_or(0))),
-            ("queued", Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}. It's on your Overview, under Pick, for you to tailor when you choose.", j.title, j.company)),
+            ("queued", Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}. It's under Jobs, in Pick, for you to tailor when you choose.", j.title, j.company)),
             (_, Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}.", j.title, j.company)),
             _ => ("Saved to Job Hunt".into(), format!("{} at {} is saved under Applications. Use Tailor anyway when you want a tailored CV and cover letter.", j.title, j.company)),
         }
@@ -2526,7 +2526,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             drop(db);
             self.note(
                 &format!("{closed} posting{} closed", if closed == 1 { " has" } else { "s have" }),
-                "They're marked Closed on the Overview, so you can skip them.",
+                "They're marked Closed under Jobs, so you can skip them.",
             );
         }
         Ok((checked, closed))

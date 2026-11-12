@@ -4,6 +4,20 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.37.0] - 2026-11-12
+
+A simpler layout: Today, Jobs, and every setting under Settings.
+
+### Changes
+
+- Today (was the Overview) is now a short list of what needs you, most pressing first, each with the button that takes you there, above the hunt at a glance: Pick, Approve, Submit, Waiting, Interviews.
+- Jobs (was Applications) holds every job in one place. The steps that were on the Overview are here, and All jobs is the list with its filters. Jobs opens on the step that needs you first. Older links still work.
+- The menu is in the order you use it: Today, Jobs, Inbox, Calendar; then what you set up once (Search, CV & Career); then Results and Settings.
+- Settings has everything: Job search, Email and Calendar are tabs there. The gear buttons on Inbox and Calendar still take you to them.
+- Search: Where it looks, What to search for and Set up sources are tabs side by side, and the daily search's on, pause and off menu is on this page and on Today.
+- The top of Today is less crowded: Find a job, Add a job and Search for jobs now. Check email now is on Today's Job email line and on the Inbox.
+- Notifications say Jobs instead of the Overview.
+
 ## [2.36.9] - 2026-11-11
 
 Newest jobs first, an age cutoff, and what's waiting on the Overview.
@@ -1437,6 +1451,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.37.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.37.0
 [2.36.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.9
 [2.36.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.8
 [2.36.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.7

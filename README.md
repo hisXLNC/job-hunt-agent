@@ -30,8 +30,8 @@ in), your CV, where you want to work, where to look, and your first search.
 
 ## Every day
 
-- **Overview:** new roles that fit, ready for you to pick; what's waiting for your go-ahead; what's
-  coming up.
+- **Today:** what needs you, one line each with the button that takes you there. **Jobs** holds
+  every job by step: Pick, Approve, Submit, Waiting, Interviews.
 - **Pick roles** and Job Hunt tailors your CV and a cover letter for each. Read them, change anything,
   then **Approve**.
 - **Apply:** Job Hunt opens the company's form and fills it in. You check it and press Submit. When

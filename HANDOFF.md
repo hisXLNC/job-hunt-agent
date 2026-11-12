@@ -5,8 +5,14 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.36.9** (on the working branch `claude/epic-knuth-urzr0g`; released once its
-  checks pass and it's pushed to `main`). Last published before it: 2.36.8.
+- Latest version: **2.37.0** (the layout redesign: Today, Jobs, every setting under Settings). The
+  working branch changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is what's
+  released. Last published before it: 2.36.9.
+- The screens' layout (`static/app.js`): `#overview` is **Today** (`showOverview`, `todayList`: what
+  needs you, one line each); `#applications` is **Jobs** (`showPipeline`): `#applications/<step>` is a
+  step (`showStep` → `stepHtml`; steps are `FLOW`), `#applications/all|new|active|applied` the list.
+  `#overview/<step>` and `#pipeline` redirect there. `#inbox/settings` and `#calendar/settings`
+  redirect to `#settings/inbox` and `#settings/calendar`; `#settings/search` goes to `#search/what`.
 - The user installs the Windows app from `hisXLNC/job-hunt-releases` and uses the Edge extension
   ("Send to Job Hunt") on Workday and other application forms, and Tailscale for the phone.
 
@@ -19,7 +25,7 @@ and `DEVELOPING.md`.
 2. Verify, in the background (it takes ~20 min; 40 after a `cargo clean`):
    `PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node22 | paste -sd:) timeout 2400 python tools/release_ci.py verify`
    It must end "Ready to release X".
-3. Commit (trailers: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and the session link),
+3. Commit (with the session's attribution trailers),
    push the branch, then `git push origin HEAD:main --no-verify`.
 4. A newer push to `main` cancels a build still running (fine when the new version includes it).
    GitHub minutes are limited (Windows counts double): batch changes.
@@ -51,6 +57,13 @@ take the database: read secrets before them). If the disk fills, `cargo clean` i
   (title, location, salary, age cutoff).
 - `core/src/pipeline.rs`: search, scoring (newest first), held postings (`score_held`,
   `score_all_held`), progress (`progress()`, `scoring_all`).
+
+## Looking at the screens
+
+`cd core && cargo run --example dev_server -- <empty folder> <a .docx CV>` serves the screens with
+sample jobs at http://127.0.0.1:8790 (static files are read live). With a CV given it seeds 7
+postings, 3 to pick; ticking and Tailor selected walks them through approve, submit and waiting.
+Playwright screenshots of it are how the 2.37.0 layout was checked (desktop and phone sizes).
 
 ## Testing the form filler
 
