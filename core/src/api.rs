@@ -412,7 +412,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
 
     if m == "GET" {
         if p == "/" || p == "/index.html" {
-            return host.asset("index.html").map(|b| Resp::bytes(b, "text/html; charset=utf-8")).map_or_else(not_found, Ok);
+            // Never kept by the browser: after an update, yesterday's page must not stay behind.
+            return host.asset("index.html").map(|b| Resp { headers: vec![("Cache-Control".into(), "no-store".into())], ..Resp::bytes(b, "text/html; charset=utf-8") }).map_or_else(not_found, Ok);
         }
         if let Some(rel) = p.strip_prefix("/static/") {
             if rel.contains("..") {

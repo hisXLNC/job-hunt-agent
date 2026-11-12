@@ -283,11 +283,16 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   // The phone's tabs are the five places; Settings is behind the top bar's menu button.
   await phone.goto(`${base}/#overview`); await phone.reload(); await phone.waitForTimeout(900);
   check((await phone.evaluate(() => document.querySelector('#tabbar').innerText)).replace(/\s+/g, ' ').replace(/ \d+/g, '').trim() === 'Queue Inbox Calendar Me Settings', 'Phone: the tabs are the five places');
-  check(!(await phone.$('#mMenu')), 'Phone: no menu button');
-  await phone.click('#mStatus'); await phone.waitForTimeout(400);
-  check(await phone.evaluate(() => { const top = document.querySelector('.mtop').getBoundingClientRect().bottom; const c = document.querySelector('.side').getBoundingClientRect(), l = document.querySelector('#searchLine').getBoundingClientRect(), t = document.querySelector('#themeSwitch').getBoundingClientRect(); return c.top >= top && c.width < innerWidth && l.height > 0 && l.top >= c.top && t.bottom <= innerHeight && t.height > 0; }), 'Phone: the status opens a card under the top bar, with the status lines and the theme');
-  await phone.mouse.click(6, await phone.evaluate(() => innerHeight - 140)); await phone.waitForTimeout(300);
-  check(await phone.evaluate(() => !document.body.classList.contains('more-open')), 'Phone: a tap elsewhere closes the card');
+  check(!(await phone.$('#mMenu')) && !(await phone.$('#settingsLink')), 'Phone: no menu button');
+  check(await phone.evaluate(() => { const top = document.querySelector('.mtop').getBoundingClientRect(); return ['#mStatus', '#mSync', '#mTheme'].every(q => { const r = document.querySelector(q)?.getBoundingClientRect(); return r && r.width > 0 && r.top >= top.top && r.bottom <= top.bottom + 1 && r.right <= innerWidth; }); }), 'Phone: the search, sync and theme are in the top bar');
+  const mode = () => phone.evaluate(() => document.documentElement.dataset.theme || 'auto');
+  const was = await mode();
+  await phone.click('#mTheme'); const one = await mode();
+  await phone.click('#mTheme'); const two = await mode();
+  await phone.click('#mTheme');
+  check(new Set([was, one, two]).size === 3 && await mode() === was, 'Phone: the theme button steps through Auto, Light and Dark');
+  // A page kept from an older version (its own menu button and gear) is put right when it draws.
+  check(await phone.evaluate(() => { document.querySelector('#mTheme').remove(); document.querySelector('.mtop').insertAdjacentHTML('beforeend', '<button class="mbtn" id="mMenu"></button>'); renderNav(); return !document.querySelector('#mMenu') && !!document.querySelector('#mTheme') && document.querySelectorAll('#mStatus').length === 1; }), 'Phone: an older page loses its menu button too');
   await phone.click('#tabbar a[href="#settings"]'); await phone.waitForTimeout(900);
   check(await phone.evaluate(() => location.hash.startsWith('#settings') && document.querySelector('#tabbar a.on')?.textContent.trim() === 'Settings'), 'Phone: Settings is a tab');
   // The page reader on a LinkedIn posting (a stand-in page shaped like one): the people under

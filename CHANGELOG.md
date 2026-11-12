@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.52.1] - 2026-11-12
+
+The phone's top bar, without a menu.
+
+### Changes
+
+- On a phone the menu button is gone for good. The search, email and sync statuses sit in the top bar, and where the menu was there is one button that steps through Auto, Light and Dark.
+- A page your browser kept from an older version no longer shows the old menu.
+- Also in this release, from 2.52.0: Draft a reply on a rejected job.
+
 ## [2.52.0] - 2026-11-12
 
 Draft a reply to a rejection.
@@ -1712,6 +1722,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.52.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.52.1
 [2.52.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.52.0
 [2.51.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.51.1
 [2.51.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.51.0

@@ -171,6 +171,8 @@ async function act(el) {
     return;
   }
   if (a === 'panelClose') return closePanel();
+  // The phone's one theme button: Auto, then Light, then Dark, and round again.
+  if (a === 'themeCycle') { const order = ['auto', 'light', 'dark']; setTheme(order[(order.indexOf(document.documentElement.dataset.theme || 'auto') + 1) % 3]); toast(`Appearance: ${MODES[document.documentElement.dataset.theme || 'auto'][0]}`); return; }
   if (a === 'moreMenu') { document.body.style.setProperty('--mtop-h', `${document.querySelector('.mtop')?.offsetHeight || 64}px`); document.body.classList.toggle('more-open'); const pop = $('#statusPop'); if (pop) pop.open = document.body.classList.contains('more-open'); renderNav(); return; }
   if (a === 'connGoto') {
     const id = CONN_HOME[el.dataset.to] || el.dataset.to, target = document.getElementById(id);
@@ -1004,8 +1006,7 @@ document.addEventListener('click', e => {
     if (m.id === 'statusPop' && document.body.classList.contains('more-open')) return;
     if (!m.contains(e.target) || e.target.closest('.menu-list')) m.open = false;
   });
-  // The phone's status card closes on a tap anywhere else.
-  if (document.body.classList.contains('more-open') && !e.target.closest('.side, #mStatus')) { document.body.classList.remove('more-open'); renderNav(); }
+
   const to = e.target.closest('a[data-tab-to]');
   if (to) jobTabs[decodeURIComponent(to.getAttribute('href').replace('#job/', ''))] = to.dataset.tabTo;
   if (to && to.dataset.scroll) scrollToAfter = to.dataset.scroll;
@@ -1247,14 +1248,16 @@ function showTheme() {
     b.classList.toggle('on', on);
     b.setAttribute('aria-checked', on ? 'true' : 'false');
   });
+  const one = document.getElementById('mTheme');
+  if (one) { one.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${MODES[pick][1]}</svg>`; one.title = `Appearance: ${MODES[pick][0]}. Press to change.`; one.setAttribute('aria-label', one.title); }
 }
-document.querySelectorAll('[data-theme-pick]').forEach(b => b.addEventListener('click', () => {
-  const pick = b.dataset.themePick;
+function setTheme(pick) {
   if (pick === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = pick;
   try { pick === 'auto' ? localStorage.removeItem('theme') : localStorage.setItem('theme', pick); } catch (e) {}
   showTheme();
-}));
+}
+document.querySelectorAll('[data-theme-pick]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themePick)));
 showTheme();
 
 window.addEventListener('hashchange', () => document.body.classList.remove('more-open'));

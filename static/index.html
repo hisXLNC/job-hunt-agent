@@ -18,11 +18,9 @@
 </head>
 <body>
 <div class="app">
-  <!-- On a phone: a slim bar on top (what Job Hunt is doing, which opens the status card; find), the five places as tabs at the bottom. -->
+  <!-- On a phone: a slim bar on top (the name; app.js adds what Job Hunt is doing, email and sync, find, and the theme button), the five places as tabs at the bottom. -->
   <header class="mtop">
     <span class="mbrand"><a href="#overview" aria-label="Job Hunt: the Queue"><img src="/static/logo.svg" alt="" width="26" height="26"></a><span class="brand-text"><a href="#overview"><b>Job Hunt</b></a><a class="brand-ver" href="#settings/app" data-act="versionInfo" data-version title="What's new in this version"></a></span></span>
-    <button type="button" class="mstatus" id="mStatus" data-act="moreMenu" aria-label="What Job Hunt is doing" aria-expanded="false"><span class="dot" id="mDot"></span><span id="mNote"></span></button>
-    <button type="button" class="mbtn" data-act="palette" aria-label="Find a job"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button>
   </header>
   <nav class="tabbar" id="tabbar" aria-label="Sections"></nav>
   <!-- The bar across the top: the five places (Settings is the last), find, what Job Hunt is doing (and its status lines).

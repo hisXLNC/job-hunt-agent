@@ -434,7 +434,27 @@ function eventText(e) {
 const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">${esc(e.company)} – ${esc(e.title)}</a> · ` : '';
 
 // ---- shell ----
+const MODES = { auto: ['Auto: follows your device', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'], light: ['Light', '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>'], dark: ['Dark', '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'] };
+/** The phone's top bar, right of the name: what the search is doing, email, sync, anything that needs
+ *  a look, find, and one button that steps through Auto, Light and Dark. Drawn here, not in the page,
+ *  so a page kept from an older version has no menu button left over. */
+function phoneTop() {
+  const top = $('.mtop');
+  if (!top || $('#mTheme')) return;
+  top.querySelectorAll('.mstatus, .mbtn, .mchip').forEach(e => e.remove());
+  $('#settingsLink')?.remove();
+  const ic = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  top.insertAdjacentHTML('beforeend', `<span class="mstats">
+    <a class="mstatus" id="mStatus" href="#search"><span class="dot" id="mDot"></span><span id="mNote"></span><span id="mNoteShort"></span></a>
+    <a class="mchip" id="mGoogle" href="#settings/connections">${ic('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>')}<span class="dot" id="mDotGoogle"></span><span class="mchip-t" id="mGoogleNote"></span></a>
+    <a class="mchip" id="mSync" href="#settings/sync">${ic('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a3.75 3.75 0 0 1-.5 7.5z"/>')}<span class="dot" id="mDotSync"></span><span class="mchip-t" id="mSyncNote"></span></a>
+    <a class="mchip" id="mWarn" href="#settings/connections" hidden><span class="dot warn"></span><span class="mchip-t" id="mWarnNote"></span></a></span>
+    <button type="button" class="mbtn" data-act="palette" aria-label="Find a job">${ic('<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>')}</button>
+    <button type="button" class="mbtn" id="mTheme" data-act="themeCycle"></button>`);
+  showTheme();
+}
 function renderNav() {
+  phoneTop();
   const active = placeOf();
   // The badge: what's waiting on you. New matches to pick from aren't counted, or it would never clear.
   const waiting = overview ? queueCount(queueItems(overview).filter(x => x.step !== 'pick')) : 0;
@@ -452,14 +472,14 @@ function renderNav() {
   $('#dotRun').className = 'dot' + (busy ? ' busy' : ' on');
   $('#mDot').className = 'dot' + (busy ? ' busy' : ' on');
   $('#mNote').textContent = busy || (overview?.last_search ? `Searched ${ago(overview.last_search)}` : '');
+  // On a narrow phone, just the time (or how far along it is).
+  $('#mNoteShort').textContent = busy ? (busy.match(/\d+%/)?.[0] || 'Working…') : overview?.last_search ? ago(overview.last_search) : '';
   // The phone's tab bar: the four used most, and More for the rest (and the status lines).
   // The phone's tabs are the same five places; the top bar's menu button has Settings, the status lines and the theme.
   $('#tabbar').innerHTML = NAV.map(([id, name]) =>
     `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}<span>${name}</span>${id === 'overview' && waiting ? `<span class="badge">${waiting > 99 ? '99+' : waiting}</span>` : ''}</a>`).join('');
   const alert = !$('#connLine')?.hidden || !$('#limitLine')?.hidden || !$('#updateNote')?.hidden;
   $('#statusPop')?.classList.toggle('alert', alert);
-  const mm = $('#mStatus');
-  if (mm) { mm.setAttribute('aria-expanded', document.body.classList.contains('more-open')); mm.classList.toggle('alert', !$('#connLine')?.hidden || !$('#limitLine')?.hidden || !$('#updateNote')?.hidden); }
   updateSearchCtl();
   $('#runNote').textContent = busy || `Searched ${ago(overview?.last_search)}${side.paused ? ` · ${side.paused === 'off' ? 'daily search off' : `paused until ${new Date(side.paused).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}` : ''}`;
   $('#dotRun').className = 'dot' + (busy ? ' busy' : side.paused ? ' warn' : ' on');
@@ -476,11 +496,19 @@ function renderNav() {
   $('#syncNote').textContent = sync ? (side.syncing ? 'Syncing…' : side.sync_error ? 'Sync didn\'t work' : at ? `Synced ${ago(at)}` : 'Not synced yet') : (at ? `Backed up ${ago(at)}` : 'No backup yet');
   $('#syncLine').title = sync && side.sync_error ? side.sync_error : sync ? `Syncing to ${side.sync_where === 'drive' ? 'Google Drive' : 'your sync folder'}. Open Sync & backup to sync now.` : 'Daily backups. Open Sync & backup to sync to Google Drive.';
   $('#syncLine').hidden = overview?.kind === 'server' && !sync && !at;
+  // The phone's chips: the same lines, short. The words show when there's room; the dot always does.
+  const chip = (id, line, dot, note, short) => { const el = $(id); if (!el) return; el.hidden = $(line).hidden; el.title = $(note).textContent; el.setAttribute('aria-label', $(note).textContent); $(id.replace('#m', '#mDot')).className = $(dot).className; $(`${id}Note`).textContent = short; };
+  chip('#mGoogle', '#googleLine', '#dotGoogle', '#googleNote', g ? (overview?.last_inbox ? `Email ${ago(overview.last_inbox)}` : 'Email on') : 'Email off');
+  chip('#mSync', '#syncLine', '#dotSync', '#syncNote', $('#syncNote').textContent);
+  if ($('#mStatus')) $('#mStatus').title = 'What the search found';
   const lim = side.claude_limited_until && new Date(side.claude_limited_until) > new Date();
   $('#limitLine').hidden = !lim && !side.deferred;
   $('#limitNote').textContent = lim ? `Claude limit until ${new Date(side.claude_limited_until).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : `${side.deferred} batch${side.deferred === 1 ? '' : 'es'} waiting for tonight`;
   $('#connLine').hidden = !side.conn_problems;
   $('#connNote').textContent = `${side.conn_problems} connection${side.conn_problems === 1 ? '' : 's'} need${side.conn_problems === 1 ? 's' : ''} attention`;
+  // The phone's amber chip: a Claude limit or a connection that needs a look.
+  const warn = $('#mWarn');
+  if (warn) { const what = !$('#connLine').hidden ? $('#connNote').textContent : !$('#limitLine').hidden ? $('#limitNote').textContent : ''; warn.hidden = !what; warn.title = what; warn.setAttribute('aria-label', what); $('#mWarnNote').textContent = !$('#connLine').hidden ? 'Check connections' : 'Claude limit'; }
   if (overview?.version) $('#versionNote').textContent = `Job Hunt ${shortVersion(overview.version)}`;
   // Under the name, top left: the version, which opens what's new in it.
   if (overview?.version) document.querySelectorAll('[data-version]').forEach(el => { el.textContent = `Version ${shortVersion(overview.version)}`; });

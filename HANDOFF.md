@@ -55,6 +55,13 @@ and `DEVELOPING.md`.
   `app.js` or `pipeline.rs` for something, look in the parts too. The Rust linter's safe fixes
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
+- **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+  draws the bar right of the name (search status linking to `#search`, email and sync chips, an amber
+  chip for a Claude limit or a connection problem, find, and `#mTheme`, one button that steps Auto,
+  Light, Dark via `setTheme`). It is drawn by script on purpose: a phone showed 2.51.1 with the old
+  page still in place, so `phoneTop` also strips an older page's `#mMenu` and gear, and `index.html`
+  is now served `no-store`. Under 640px the chips are icon and dot, and the search status is just
+  the time. 2.52.0 was never published; this release carries it.
 - **2.52.0: a reply to a rejection.** `Agent::write_rejection_reply` (kept under `decline:<job>`,
   `POST /api/jobs/<id>/decline`, the card above a rejected job's tabs). `Llm::rejection_reply` gets
   the summary of their rejection email and whether an interview was on the calendar (feedback is only

@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.52.1",
+    "date": "2026-11-12",
+    "title": "The phone's top bar, without a menu",
+    "changes": [
+      "On a phone the menu button is gone for good. The search, email and sync statuses sit in the top bar, and where the menu was there is one button that steps through Auto, Light and Dark.",
+      "A page your browser kept from an older version no longer shows the old menu.",
+      "Also in this release, from 2.52.0: Draft a reply on a rejected job."
+    ]
+  },
+  {
     "version": "2.52.0",
     "date": "2026-11-12",
     "title": "Draft a reply to a rejection",

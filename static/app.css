@@ -1682,3 +1682,21 @@ details.kit > summary { cursor: pointer; }
   .tabbar a, .tabbar button { min-width: 0; }
   .tabbar a span:not(.badge) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 }
+
+/* ---- Phone: everything the menu held is in the top bar. What the search is doing, email and sync
+   (a dot each, with words when there's room), find, and one button for Auto / Light / Dark. ---- */
+.mstats, .mchip { display: none; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  body.more-open .side { display: none; }
+  .mstats { display: flex; align-items: center; gap: 2px; margin-left: auto; min-width: 0; }
+  .mstatus { margin: 0; padding: 4px 8px; min-width: 0; text-decoration: none; background: none; box-shadow: none; }
+  .mchip { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 4px 7px; border-radius: 999px; color: var(--muted); font-size: 12.5px; text-decoration: none; white-space: nowrap; flex: none; }
+  .mchip[hidden] { display: none; }
+  .mchip svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .mchip .dot { margin-left: -9px; margin-top: 9px; box-shadow: 0 0 0 2px var(--bg); }
+  .mchip-t { display: none; }
+  .mbrand { flex: none; white-space: nowrap; }
+  #mNote { display: none; }
+  #mNoteShort { white-space: nowrap; }
+}
+@media (min-width: 640px) and (max-width: 1100px) { #mNote { display: inline; } #mNoteShort { display: none; } .mchip-t { display: inline; } .mchip .dot { margin: 0; box-shadow: none; } .mchip svg { display: none; } }
