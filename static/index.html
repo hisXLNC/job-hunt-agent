@@ -22,6 +22,8 @@
   <header class="mtop">
     <a class="mbrand" href="#overview"><img src="/static/logo.svg" alt="" width="26" height="26"><b>Job Hunt</b></a>
     <a class="mstatus" href="#overview"><span class="dot" id="mDot"></span><span id="mNote"></span></a>
+    <button type="button" class="mbtn" data-act="palette" aria-label="Find a job"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button>
+    <button type="button" class="mbtn" id="mMenu" data-act="moreMenu" aria-label="Settings and status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </header>
   <nav class="tabbar" id="tabbar" aria-label="Sections"></nav>
   <aside class="side">
@@ -29,8 +31,10 @@
       <img src="/static/logo.svg" alt="" width="38" height="38">
       <span><strong>Job Hunt</strong><small>Search · tailor · track</small></span>
     </a>
+    <button class="find-box side-find" data-act="palette" title="Find any job (Ctrl+K)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><span>Find a job…</span><kbd>Ctrl K</kbd></button>
     <nav class="main" id="nav" aria-label="Sections"></nav>
     <div class="side-foot">
+      <a class="side-settings" id="settingsLink" href="#settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
       <div class="update-note" id="updateNote" hidden></div>
       <a class="status" href="#overview" id="runLine"><span class="dot" id="dotRun"></span><span id="runNote">Idle</span></a>
       <a class="status" href="#settings/connections" id="googleLine"><span class="dot" id="dotGoogle"></span><span id="googleNote">Google not connected</span></a>
