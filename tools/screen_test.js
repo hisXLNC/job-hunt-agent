@@ -202,6 +202,25 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await phone.evaluate(() => { const a = document.querySelector('#settingsLink'); const r = a.getBoundingClientRect(); return r.width > 0 && r.top >= 0 && r.bottom <= innerHeight; }), 'Phone: the menu button shows Settings');
   await phone.click('#settingsLink'); await phone.waitForTimeout(900);
   check(await phone.evaluate(() => location.hash.startsWith('#settings') && !document.body.classList.contains('more-open')), 'Phone: Settings opens and the menu closes');
+  // The page reader on a LinkedIn posting (a stand-in page shaped like one): the people under
+  // "Meet the hiring team" come with it; a profile link elsewhere on the page doesn't.
+  const li = await browser.newPage();
+  await li.route('https://www.linkedin.com/**', r => r.fulfill({ contentType: 'text/html', body: `<html><head><meta charset="utf-8"></head><body>
+    <h1 class="t-24 t-bold">Senior Program Manager</h1><div class="job-details-jobs-unified-top-card__company-name">Maple Bank</div>
+    <div id="job-details">Lead program delivery across finance systems, UAT and vendor management for the bank.</div>
+    <div class="job-details-people-who-can-help__section--two-pane artdeco-card"><h2 class="text-heading-medium">Meet the hiring team</h2>
+      <div class="display-flex align-items-center"><a href="https://www.linkedin.com/in/dana-recruiter-123/?miniProfile=1" aria-label="View Dana Recruiter’s verified profile"><img alt=""></a>
+        <div class="hirer-card__hirer-information"><a href="https://www.linkedin.com/in/dana-recruiter-123/"><span class="jobs-poster__name"><strong>Dana Recruiter</strong></span></a>
+          <span>• 2nd</span><div class="text-body-small">Talent Acquisition Partner at Maple Bank</div><div>Job poster</div></div><button>Message</button></div>
+      <div class="display-flex align-items-center"><div class="hirer-card__hirer-information"><a href="/in/omar-director/"><strong>Omar Director</strong></a>
+          <span>3rd+</span><div class="text-body-small">Director, PMO</div></div><button>Message</button></div></div>
+    <aside><h2>People also viewed</h2><a href="/in/someone-else/">Someone Else</a></aside></body></html>` }));
+  await li.goto('https://www.linkedin.com/jobs/view/4123456789/');
+  await li.addScriptTag({ path: require('path').join(__dirname, '..', 'static', 'clip.js') });
+  const clip = JSON.parse((await li.evaluate(() => clipPage(true))).slice('JOBHUNT-CLIP:'.length));
+  check(JSON.stringify(clip.people) === JSON.stringify([{ name: 'Dana Recruiter', role: 'Talent Acquisition Partner at Maple Bank', link: 'https://www.linkedin.com/in/dana-recruiter-123' }, { name: 'Omar Director', role: 'Director, PMO', link: 'https://www.linkedin.com/in/omar-director' }]),
+    `LinkedIn posting: the hiring team is read with the job (${JSON.stringify(clip.people)})`);
+  await li.close();
   check(errors.length === 0, `No script errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
   await browser.close();
   if (failed.length) { console.log(`\n${failed.length} failed:\n- ${failed.join('\n- ')}`); process.exit(1); }

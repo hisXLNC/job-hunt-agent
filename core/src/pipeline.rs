@@ -2352,6 +2352,87 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// location, text, structured}. When the page didn't describe the job in a standard way, its
     /// own page is read for the job data, and only then does Claude read the page to find it.
     pub fn add_clip(&self, clip: &Value) -> R<Job> {
+        let team = clip["people"].as_array().is_some_and(|a| !a.is_empty());
+        match self.add_clip_job(clip) {
+            Ok(job) => {
+                if team {
+                    let _ = self.add_hiring_team(&job.id, &clip["people"]);
+                }
+                Ok(job)
+            }
+            // Already here (found by a search, say): the hiring team is still news. Sending the
+            // posting from LinkedIn is how you get it onto a job Job Hunt found by itself.
+            Err(e) if team && e.0.contains("is already in Job Hunt.") => {
+                let names = self.job_for_clip(clip).and_then(|id| self.add_hiring_team(&id, &clip["people"]).ok()).unwrap_or_default();
+                if names.is_empty() {
+                    return Err(e);
+                }
+                Err(Error(format!("{} Its hiring team from LinkedIn is now on the job, under People: {}.", e.0, names.join(", "))))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The job a posting sent from the browser is about, when it's here already: by its LinkedIn
+    /// number, else by company and title.
+    fn job_for_clip(&self, clip: &Value) -> Option<String> {
+        let f = |k: &str| clip[k].as_str().unwrap_or("").trim().to_string();
+        let db = self.db();
+        if let Some(n) = crate::sources::linkedin_job_id(&f("url")) {
+            let found = db.jobs(None, 5000).ok()?.into_iter().find(|j| crate::sources::linkedin_job_id(&j.url).as_deref() == Some(n.as_str()));
+            if let Some(j) = found {
+                return Some(j.id);
+            }
+        }
+        let url = f("url");
+        let same_link = |j: &Job| !url.is_empty() && j.url.trim_end_matches('/') == url.trim_end_matches('/');
+        if let Some(j) = db.jobs(None, 5000).ok()?.into_iter().find(same_link) {
+            return Some(j.id);
+        }
+        if f("company").is_empty() || f("title").is_empty() { None } else { db.existing_job("", &f("company"), &f("title")) }
+    }
+
+    /// The people LinkedIn lists as a posting's hiring team (read from the page in your own
+    /// browser, signed in as you): kept with the job's people, at most four, each with their
+    /// profile link. For a job you're already going for, the note to the first is written now.
+    /// Returns the names added.
+    pub fn add_hiring_team(&self, job_id: &str, people: &Value) -> R<Vec<String>> {
+        let mut list = self.contacts(job_id);
+        let mut added = vec![];
+        let mut first = None;
+        for p in people.as_array().into_iter().flatten().take(4) {
+            let f = |k: &str| p[k].as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ");
+            let (name, role, link) = (f("name"), f("role"), f("link").trim_end_matches('/').to_string());
+            if name.is_empty() || name.chars().count() > 80 || !link.starts_with("https://www.linkedin.com/in/") {
+                continue;
+            }
+            let same = |c: &Value| c["link"].as_str().is_some_and(|l| l.trim_end_matches('/') == link) || c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(&name));
+            if let Some(i) = list.iter().position(same) {
+                first.get_or_insert(i);
+                continue;
+            }
+            list.push(json!({ "name": name, "role": role.chars().take(160).collect::<String>(), "link": link, "email": "",
+                "note": "LinkedIn lists them on the posting as its hiring team. The candidate doesn't know them: a first, cold message." }));
+            first.get_or_insert(list.len() - 1);
+            added.push(name);
+        }
+        if added.is_empty() {
+            return Ok(added);
+        }
+        list.retain(|c| !(c["name"] == "Recruiter" && c["link"].as_str().unwrap_or("").is_empty() && c["message"].as_str().unwrap_or("").is_empty() && c["sent_at"].as_str().unwrap_or("").is_empty()));
+        self.save_contacts(job_id, &list)?;
+        self.db().log(Some(job_id), "contact", &format!("the hiring team from the LinkedIn posting: {}", added.join(", ")))?;
+        // Going for it already: the note to the first of them, ready to send from their profile.
+        let going = self.db().job(job_id)?.is_some_and(|j| ["ready", "approved", "applied", "interviewing"].contains(&j.status.as_str()));
+        let list = self.contacts(job_id);
+        let best = list.iter().position(|c| c["name"].as_str() == Some(added[0].as_str()));
+        if let Some(i) = best.filter(|i| going && self.claude_ready() && self.limited().is_none() && list[*i]["sent_at"].as_str().unwrap_or("").is_empty()) {
+            let _ = self.write_outreach(job_id, i);
+        }
+        Ok(added)
+    }
+
+    fn add_clip_job(&self, clip: &Value) -> R<Job> {
         let f = |k: &str| clip[k].as_str().unwrap_or("").trim().to_string();
         let use_claude = clip["claude"].as_bool().unwrap_or(true);
         // A LinkedIn job: read it as LinkedIn shows it signed out, which is far cleaner than the
@@ -8546,6 +8627,19 @@ mod tests {
         assert!(again.unwrap_err().0.contains("already in Job Hunt"));
         assert!(s.agent.add_clip(&json!({ "url": "https://example.com", "text": "A recipe for banana bread with walnuts and a little cinnamon." })).unwrap_err().0.contains("doesn't look like a job posting"));
         assert!(crate::api::parse_clip("JOBHUNT-CLIP:{\"url\":\"x\"}").is_some() && crate::api::parse_clip("hello").is_none());
+        // Sent from LinkedIn with its hiring team: they're kept with the job; a link that isn't a
+        // profile, and a second copy of the same person, are left out.
+        let team = json!([{ "name": "Dana  Recruiter", "role": "Talent Acquisition Partner at Maple Bank", "link": "https://www.linkedin.com/in/dana-r/" },
+            { "name": "Not A Profile", "role": "", "link": "https://example.com/in/x" }, { "name": "Dana Recruiter", "role": "", "link": "https://www.linkedin.com/in/dana-r" }]);
+        let e = s.agent.add_clip(&json!({ "url": "https://www.linkedin.com/jobs/view/123", "text": "Senior Program Manager at Maple Bank. Lead program delivery across finance systems, UAT and vendor management.", "people": team })).unwrap_err();
+        assert!(e.0.contains("is already in Job Hunt.") && e.0.contains("hiring team from LinkedIn is now on the job") && e.0.contains("Dana Recruiter"), "{}", e.0);
+        let people = s.agent.contacts(&j.id);
+        assert_eq!(people.len(), 1);
+        assert_eq!((people[0]["name"].as_str(), people[0]["link"].as_str()), (Some("Dana Recruiter"), Some("https://www.linkedin.com/in/dana-r")));
+        assert!(people[0]["note"].as_str().unwrap().contains("hiring team"));
+        // Sent again: nobody new, so only that it's already here.
+        let e = s.agent.add_clip(&json!({ "url": "https://www.linkedin.com/jobs/view/123", "text": "Senior Program Manager at Maple Bank. Lead program delivery across finance systems, UAT and vendor management.", "people": team })).unwrap_err();
+        assert!(!e.0.contains("hiring team"), "{}", e.0);
     }
 
     #[test]

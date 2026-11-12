@@ -1367,6 +1367,8 @@ async function showJob(id) {
     ${!['skipped', 'dismissed'].includes(j.status) ? `<section class="card" id="people">
       <header><h2>People at ${esc(j.company)}</h2>${writing_to ? '<span class="muted small"><span class="spin" data-kind="outreach"></span>Working on it: finding people and writing the note…</span>' : (contacts || []).length ? '<button class="btn ghost" data-act="findPeople">Find the recruiter on LinkedIn</button>' : ''}</header>
       <p class="muted small">A recruiter, the hiring manager or someone you know there. A short note to the right person often counts for more than a perfect CV. <a href="#" data-act="link" data-url="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(j.company + ' ' + (playbook?.kind === 'agency' ? 'recruiter' : j.title.split(/[,(-]/)[0]))}">Look on LinkedIn</a></p>
+      ${overview?.can_fill !== false ? `<div class="qa team-get"><div class="row" style="justify-content:space-between;align-items:center"><span class="small"><b>The hiring team, from LinkedIn.</b> Many postings there list who posted the job and who it reports to. Open ${/linkedin\.com\/jobs/.test(j.url || '') ? 'the posting' : 'the job on LinkedIn'} signed in, click the Job Hunt extension and press <b>Send to Job Hunt</b>: the people it lists are added here, with a note to the first.</span>
+        <button class="btn" data-act="link" data-url="${esc(/linkedin\.com\/jobs/.test(j.url || '') ? j.url : `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(`${j.title.split(/[,(]/)[0].trim()} ${j.company}`)}`)}">${svg('open')}${/linkedin\.com\/jobs/.test(j.url || '') ? 'Open the posting' : 'Find it on LinkedIn'}</button></div></div>` : ''}
       ${playbookHtml(playbook, contacts || [], j)}
       ${(know || []).filter(p => !(contacts || []).some(c => c.name === p.name)).map(p => `<div class="qa"><div class="row" style="justify-content:space-between"><span><span class="pill good">You know them</span> <b>${esc(p.name)}</b>${p.position ? ` · ${esc(p.position)}` : ''}${p.link ? ` · <a href="#" data-act="link" data-url="${esc(p.link)}">profile</a>` : ''}</span>
         <button class="btn primary" data-act="askReferral" data-person="${esc(JSON.stringify(p))}" ${writing_to ? 'disabled' : ''}>Ask ${esc(firstName(p.name))} for a referral</button></div></div>`).join('')}
@@ -1586,7 +1588,7 @@ function contactHtml(c, i, writing, pb) {
   return `<div class="qa"><div class="row" style="justify-content:space-between"><span><b>${esc(c.name)}</b>${c.role ? ` · ${esc(c.role)}` : ''}${c.email ? ` · ${esc(c.email)}` : ''}${c.link ? ` · <a href="#" data-act="link" data-url="${esc(c.link)}">profile</a>` : ''}
       ${state ? `<br><span class="small ${due ? '' : 'muted'}">${state}</span>` : ''}</span>
     <span class="row">${acts}</span></div>
-    ${c.message && !followed ? `<div class="posting" id="msg${i}">${esc(c.message)}</div><button class="btn ghost" data-act="copy" data-from="msg${i}">Copy</button>` : ''}</div>`;
+    ${c.message && !followed ? `<div class="posting" id="msg${i}">${esc(c.message)}</div><div class="row">${c.link && !c.email ? `<button class="btn" data-act="copyOpen" data-from="msg${i}" data-url="${esc(c.link)}" title="Copies the note and opens their profile: press Connect, Add a note, paste, Send">${svg('open')}Copy it and open their profile</button>` : ''}<button class="btn ghost" data-act="copy" data-from="msg${i}">Copy</button>${c.link && !c.email ? `<span class="muted small">${c.message.length} characters. A connection note takes 300 (200 on a free account, where LinkedIn also limits how many you can send a month).</span>` : ''}</div>` : ''}</div>`;
 }
 
 /** One step of the job hunt on the Overview: its roles, each with the next thing to do. `tracked`
@@ -4481,6 +4483,11 @@ async function act(el) {
   if (a === 'copyText') {
     try { await navigator.clipboard.writeText(el.dataset.text || ''); toast('Copied.'); } catch (e) { toast('Select the text and copy it.', true); }
     return;
+  }
+  if (a === 'copyOpen') {
+    const text = $(`#${el.dataset.from}`)?.textContent || '';
+    try { await navigator.clipboard.writeText(text); } catch (e) { return toast('Select the note and copy it, then open their profile.', true); }
+    return api('/api/open-url', { method: 'POST', body: { url: el.dataset.url } }).then(() => toast('Copied. On their profile: Connect, Add a note, paste, Send. Then press I sent it here.')).catch(e => toast(e.message, true));
   }
   if (a === 'copy') {
     const text = $(`#${el.dataset.from}`)?.textContent || '';

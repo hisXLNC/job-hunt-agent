@@ -41,6 +41,39 @@ function clipPage(only) {
     c.text = sel || t((document.querySelector('main') || document.body).innerText);
   }
   if (li && c.text.length < 40) c.text = c.title || 'LinkedIn job ' + li;
+  // LinkedIn, signed in: the people the posting lists under "Meet the hiring team" (who posted it,
+  // who the role reports to), each with their name, headline and profile link.
+  if (li) {
+    var people = [], boxes = [];
+    [].forEach.call(document.querySelectorAll('h2, h3, h4, [class*="hirer-card"], [class*="people-who-can-help"], [class*="jobs-poster"]'), function (h) {
+      var cls = String(h.className || ''), own = /hirer-card|people-who-can-help|jobs-poster/.test(cls);
+      if (!own && !/hiring team|people you can reach out to|job poster/i.test(t(h.innerText).slice(0, 80))) return;
+      var box = own ? h : (h.closest('section, .artdeco-card, [class*="hirer"], [class*="people-who-can-help"]') || h.parentElement);
+      if (box && boxes.indexOf(box) < 0) boxes.push(box);
+    });
+    var skip = /^(job poster|message|connect|follow|view profile|meet the hiring team|people you can reach out to|show more|show all|·|•)$|^[•·]?\s*(1st|2nd|3rd\+?|3rd)\b|mutual connection|degree connection|^\d+\+? (followers|connections)/i;
+    boxes.forEach(function (box) {
+      [].forEach.call(box.querySelectorAll('a[href*="/in/"]'), function (a) {
+        var m = String(a.href).match(/linkedin\.com\/in\/([^\/?#]+)/);
+        if (!m || people.length >= 4) return;
+        var link = 'https://www.linkedin.com/in/' + m[1];
+        if (people.some(function (p) { return p.link === link; })) return;
+        // The smallest block around the link that names the person: their card.
+        var card = a, lines = [];
+        for (var up = 0; up < 5 && card.parentElement && card !== box; up++) {
+          lines = t(card.innerText).split('\n').map(t).filter(function (x) { return x && !skip.test(x); });
+          if (lines.length >= 2) break;
+          card = card.parentElement;
+        }
+        var label = t(a.getAttribute('aria-label')).replace(/^view\s+/i, '').replace(/[’']s?\s+(verified\s+)?profile.*$/i, '');
+        var name = t((lines[0] || label).replace(/\s*[\u2022\u00B7]?\s*\b(1st|2nd|3rd)\b\+?.*$/i, '').replace(/\s+(is verified|verified).*$/i, '')) || label;
+        if (!name || name.length > 80 || !/[A-Za-z\u00C0-\u024F]/.test(name)) return;
+        var role = lines.filter(function (x) { return x !== name && x.indexOf(name) < 0; })[0] || '';
+        people.push({ name: name, role: role.slice(0, 160), link: link });
+      });
+    });
+    if (people.length) c.people = people;
+  }
   c.text = c.text.slice(0, 30000);
   var out = M + JSON.stringify(c);
   if (only) return out;
