@@ -168,7 +168,7 @@ function decisionHtml(x, at, of) {
     return `<article class="card decision" data-kind="quiet"><div class="dtop"><span class="bigicon">${svg('clock')}</span><div class="grow"><p class="kicker">${where}</p><h2>${l.length} quiet for four weeks or more</h2>
         <div class="facts"><span>${l.slice(0, 4).map(q => esc(q.company)).join(', ')}${l.length > 4 ? ` and ${l.length - 4} more` : ''}</span></div></div></div>
       <div class="dbody"><div class="why"><b>Keep your list true</b>No reply in a month rarely turns into one. Closing them as No response keeps Waiting to the ones still alive; they stay in Pipeline.</div></div>
-      ${dbar(`<a class="btn" href="#applications/waiting">See them</a>`, `<button class="btn primary big" data-primary data-act="closeQuiet" data-ids="${esc(JSON.stringify(l.map(q => q.id)))}">Close ${l.length === 1 ? 'it' : `all ${l.length}`} as No response${key('Enter')}</button>`)}</article>`;
+      ${dbar(`<a class="btn" href="#applications/applied">See them</a>`, `<button class="btn primary big" data-primary data-act="closeQuiet" data-ids="${esc(JSON.stringify(l.map(q => q.id)))}">Close ${l.length === 1 ? 'it' : `all ${l.length}`} as No response${key('Enter')}</button>`)}</article>`;
   }
   if (x.kind === 'interview') {
     const i = x.i;
@@ -200,6 +200,7 @@ function queueMini(x) {
 
 /** Queue: the next decision, in full, and what's behind it. The lists of jobs are in Pipeline. */
 async function showOverview(arg) {
+  arg = String(arg || '').split('/')[0]; // a step, perhaps with /list after it (see the route)
   // Just fetched (opening Job Hunt fetches it before drawing the page): no need to ask twice.
   if (!overview || Date.now() - overviewAt > 1500) { overview = await api('/api/overview'); overviewAt = Date.now(); }
   renderNav();
@@ -228,7 +229,8 @@ async function showOverview(arg) {
   if (cur) queueAt = cur.id;
   jobOrder = all.filter(x => x.j).map(x => x.j.id);
   // Every listing at once (the usual way), or one decision at a time.
-  const view = queueView();
+  // Sent here from a link to one step's list: a list this once, whatever the view you keep.
+  const view = /^#overview\/[a-z]+\/list$/.test(location.hash) ? 'list' : queueView();
   let listing = '';
   if (view === 'list' && all.length) {
     const tracked = ['waiting', 'interviews'].includes(step) ? (await api('/api/tracker')).rows : [];
@@ -293,7 +295,7 @@ async function showOverview(arg) {
           : `<section class="card decision done"><div class="dtop"><span class="bigicon good">${svg('check')}</span><div class="grow"><p class="kicker">${step ? 'Nothing here' : neededDone ? 'All caught up' : 'Getting started'}</p>
               <h2>${step ? `No ${step === 'waiting' ? 'follow-ups' : `${FLOW.find(f => f[0] === step)[1].toLowerCase()} decisions`} waiting` : neededDone ? 'Your queue is empty' : 'Connect Claude and add your CV'}</h2>
               <div class="facts"><span>${!neededDone ? 'Then search for jobs: the ones that fit come here, one at a time.' : searching ? 'A search is running: new matches come here when it\'s done.' : side.paused ? `${esc(pausedWords(side.paused))}.` : nextSearch ? `Job Hunt searches again ${esc(nextSearch.toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }))}.` : 'Search for jobs to find new matches.'}</span></div></div></div></section>`}
-        ${!listing && cur && cur.kind === 'pick' && picks > 3 ? `<p class="muted small deck-note">${picks} to pick from. Rather tick several at once? <a href="#applications/pick">Pick from the list in Pipeline</a>.</p>` : ''}
+        ${!listing && cur && cur.kind === 'pick' && picks > 3 ? `<p class="muted small deck-note">${picks} to pick from. Rather tick several at once? <a href="#" data-act="queueView" data-view="list">See them as a list</a>.</p>` : ''}
         ${tailoring ? `<p class="muted small deck-note"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(tailoring / 3)}"></span>Tailoring ${tailoring} application${tailoring === 1 ? '' : 's'}… they come back here to approve.</p>` : ''}
         ${titleIdeasHtml(o.title_ideas)}
         ${showSteps && neededDone && steps.some(st => st[4] && st[4] !== 'google' && !st[0]) ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && st[4] !== 'google' && !st[0]).map(([, t, d, href, key]) =>
@@ -308,13 +310,3 @@ async function showOverview(arg) {
   if (listing) restorePickViews();
 }
 
-/** One step of the hunt on the Jobs page: what the step is for, and its roles with the next thing to do. */
-async function showStep(step) {
-  const o = overview;
-  const tracked = ['waiting', 'interviews'].includes(step) ? (await api('/api/tracker')).rows : [];
-  page(`${jobsHead(step)}
-    <p class="muted flow-about">${FLOW.find(([id]) => id === step)[3]}</p>
-    ${step === 'pick' ? heldLine() : ''}
-    ${stepHtml(o, step, tracked)}`);
-  restorePickViews();
-}

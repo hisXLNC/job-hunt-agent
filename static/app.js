@@ -176,8 +176,9 @@ const findBox = () => `<button class="find-box" data-act="palette" title="Find a
 /** Pipeline's views: every job, each step with how many are in it, the files tailored for them, and how it's going. */
 function flowNav(on) {
   const c = overview?.counts || {};
-  const all = APP_TABS.some(([id]) => id === on);
-  return `<nav class="tabs pipe-tabs" aria-label="Views"><a href="#applications/all" class="${all ? 'on' : ''}">All jobs</a>${FLOW.map(([id, name, n]) => `<a href="#applications/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}" ${id === on ? 'aria-current="page"' : ''}>${name} <span class="n">${n(c)}</span></a>`).join('')}
+  const n = id => (APP_TAB_STAGES[id] || []).reduce((sum, s) => sum + (c[s] || 0), 0);
+  // One row: where a job stands. (What to do next, step by step, is the Queue's.)
+  return `<nav class="tabs pipe-tabs" aria-label="Where jobs stand">${APP_TABS.filter(([id]) => APP_ALWAYS.includes(id) || id === on || n(id)).map(([id, name]) => `<a href="#applications/${id}" class="${id === on ? 'on' : ''}" ${id === on ? 'aria-current="page"' : ''}>${name}${APP_COUNTED.includes(id) ? ` <span class="n">${n(id)}</span>` : ''}</a>`).join('')}
     <span class="tabs-gap"></span><a href="#applications/files" class="${on === 'files' ? 'on' : ''}">Tailored files</a><a href="#results" class="${on === 'insights' ? 'on' : ''}">Insights</a></nav>`;
 }
 /** Postings found but not scored yet, with the button that scores them now. */
@@ -585,6 +586,8 @@ async function showRoute() {
     // A page's settings are tabs of Settings.
     if ((name === 'inbox' || name === 'calendar') && arg === 'settings') { location.replace(`#settings/${name}`); return; }
     if (name === 'cvs' && arg === 'coach') await showCoach();
+    // A step of the hunt is the Queue's: an old link to it in the Pipeline goes there, as a list.
+    else if (name === 'applications' && FLOW.some(([id]) => id === arg)) { location.replace(`#overview/${arg}/list`); return; }
     else if (name === 'applications') { overview = await api('/api/overview'); await showPipeline(arg); }
     else if (name === 'overview') await showOverview(arg);
     else if (name === 'job') await showJob(arg);

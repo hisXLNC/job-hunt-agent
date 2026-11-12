@@ -130,6 +130,14 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await until(async () => { const p = await prefs(); return p.min_salary === 90000 && p.wants.work === 'permanent' && p.wants.level === 'senior manager' && p.auto_tailor_min === 85; }, 15), 'Guided setup: what you are looking for is saved, and the best matches get ready by themselves');
   await page.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => fetch('/api/settings/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s.profile, min_salary: null, auto_tailor_min: 0, seen_sources: s.profile.sources }) })));
 
+  // The Pipeline is one row of tabs by where a job stands; its old step pages open the Queue on that step, as a list.
+  await at('applications');
+  check(await page.evaluate(() => document.querySelectorAll('nav.tabs').length === 1 && [...document.querySelectorAll('.pipe-tabs a')].map(a => a.textContent.replace(/\s*\d+$/, '').trim()).slice(0, 2).join('|') === 'All jobs|New' && !document.querySelector('.pipe-tabs a[href="#applications/pick"]')), 'Pipeline: one row of tabs, by where a job stands');
+  await page.evaluate(() => localStorage.setItem('jh.queueView', 'one'));
+  await page.goto(`${base}/#applications/approve`); await page.waitForTimeout(1200);
+  check(await page.evaluate(() => location.hash === '#overview/approve/list' && /Approve/.test(document.querySelector('.qsteps a.on')?.textContent || '') && !document.querySelector('.decision')), 'An old link to a Pipeline step opens the Queue on that step, as a list');
+  await page.evaluate(() => localStorage.setItem('jh.queueView', 'list'));
+
   // One search a day unless you choose two: the second time appears, and both are saved.
   await at('settings/search');
   check(await page.evaluate(() => document.querySelector('[data-second-search]').hidden), 'One search a day: no second time shown');

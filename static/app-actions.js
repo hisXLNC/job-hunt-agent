@@ -296,7 +296,7 @@ async function act(el) {
       }
       await refreshOverview();
       toast([approved ? `${approved} approved: submit ${approved === 1 ? 'it' : 'them'} under Submit.` : '', sent ? `${sent} sent by email.` : '', failed.length ? `${failed.length} didn't go: ${failed[0]}` : ''].filter(Boolean).join(' '));
-      location.hash = approved ? '#applications/submit' : '#applications/approve';
+      location.hash = approved ? '#overview/submit' : '#overview/approve';
       route();
     });
   }

@@ -3137,8 +3137,10 @@ impl Agent {
                 b["recruiter"] = json!(r.name);
                 b
             })).take(5).collect();
-        let ready: Vec<Value> = db.jobs(Some("ready"), 8)?.iter().map(with_warnings).collect();
-        let to_tailor: Vec<Value> = db.jobs(Some("queued"), 30)?.iter().map(with_warnings).collect();
+        // All of them (the page shows the best first, and says how many): eight and thirty used to be
+        // the most, so the Queue's counts fell short of the Pipeline's and its order missed most of them.
+        let ready: Vec<Value> = db.jobs(Some("ready"), 300)?.iter().map(with_warnings).collect();
+        let to_tailor: Vec<Value> = db.jobs(Some("queued"), 500)?.iter().map(with_warnings).collect();
         drop(db);
         let quiet_jobs = self.quiet_applications()?;
         let db = self.db();

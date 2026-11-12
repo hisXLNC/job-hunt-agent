@@ -3,10 +3,13 @@
 
 // ---- Applications ----
 /** The list of every job, and its narrower views: each a set of stages. */
-const APP_TABS = [['all', 'Everything'], ['new', 'New postings'], ['active', 'In progress'], ['applied', 'Applied']];
-const APP_TAB_STAGES = { applied: ['applied', 'interviewing', 'offer', 'rejected', 'no_response'], active: ['ready', 'approved', 'saved'], new: ['queued'] };
+/** The Pipeline's one row of tabs: where a job stands. Each is the stages it covers. */
+const APP_TABS = [['all', 'All jobs'], ['new', 'New'], ['tailored', 'Tailored'], ['approved', 'Approved'], ['applied', 'Applied'], ['interviewing', 'Interviews'], ['closed', 'Closed'], ['saved', 'Saved'], ['skipped', 'Set aside'], ['dismissed', 'Not interested']];
+const APP_TAB_STAGES = { new: ['queued'], tailored: ['ready'], approved: ['approved'], applied: ['applied'], interviewing: ['interviewing', 'offer'], closed: ['rejected', 'no_response'], saved: ['saved'], skipped: ['skipped'], dismissed: ['dismissed'] };
+/** Tabs shown even when empty, and the ones that say how many (a count of what was set aside would only be noise). */
+const APP_ALWAYS = ['all', 'new', 'applied'];
+const APP_COUNTED = ['new', 'tailored', 'approved', 'applied', 'interviewing', 'closed', 'saved'];
 async function showPipeline(view) {
-  if (FLOW.some(([id]) => id === view)) return showStep(view);
   if (view === 'files') return showDocuments();
   if (!APP_TABS.some(([id]) => id === view)) {
     // Opened from the menu: every job. (What to do next is the Queue's.)
@@ -15,9 +18,9 @@ async function showPipeline(view) {
   // Every job in one table (applications, new postings, skipped ones): click a column's heading to
   // sort by it. Postings outside your locations aren't shown.
   const [{ jobs: everything }, { rows }] = await Promise.all([api('/api/jobs'), api('/api/tracker')]);
-  const inTab = j => view === 'all' || (APP_TAB_STAGES[view] || []).includes(j.status);
-  const jobs = everything.filter(j => !outsideYours(j) && j.status !== 'dismissed' && inTab(j));
-  const counts = Object.fromEntries(APP_TABS.map(([id]) => [id, everything.filter(j => !outsideYours(j) && j.status !== 'dismissed' && (id === 'all' || (APP_TAB_STAGES[id] || []).includes(j.status))).length]));
+  // All jobs leaves out what you said no to (its own tab has those) and postings outside your locations.
+  const inTab = j => view === 'all' ? j.status !== 'dismissed' : (APP_TAB_STAGES[view] || []).includes(j.status);
+  const jobs = everything.filter(j => !outsideYours(j) && inTab(j));
   const tracked = Object.fromEntries(rows.map(r => [r.id, r]));
   const WHO = { you: 'Your move', them: 'Waiting on them', later: 'Saved', done: 'Done' };
   // A skipped role whose forecast clears your fit score is worth a second look: tailored, it could make it.
@@ -38,7 +41,6 @@ async function showPipeline(view) {
   const stagesHere = Object.keys(STAGES).filter(k => jobs.some(j => j.status === k));
   const empKinds = ['Full-time', 'Contract', 'Temporary', 'Part-time', 'Internship', 'Co-op', 'Freelance', 'Not stated'].filter(k => jobs.some(j => empKind(j) === k));
   page(`${jobsHead(view, `<a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Company, title, stage, fit, salary, dates, links and notes, for Excel or Google Sheets">${svg('download')}Spreadsheet</a>`)}
-    <nav class="tabs sub-tabs">${APP_TABS.map(([id, n]) => `<a href="#applications/${id}" class="${id === view ? 'on' : ''}">${n} <span class="n">${counts[id]}</span></a>`).join('')}</nav>
     ${foldFilters(`<div class="all-filters" id="allFilters">
       <input type="search" data-allf="q" placeholder="Company, role or place" aria-label="Find in the list">
       <label class="small">Stage <select data-allf="stage">${opt('', 'Any')}${opt('you', 'Your move')}${opt('them', 'Waiting on them')}${stagesHere.map(k => opt(k, STAGES[k])).join('')}</select></label>
@@ -49,7 +51,6 @@ async function showPipeline(view) {
       <label class="check small"><input type="checkbox" data-allf="pay"> Shows pay</label>
       <label class="small">Sort by <select data-allf="sort">${opt('5', 'What needs you first')}${opt('4', 'Best fit')}${opt('7', 'Newest')}${opt('3', 'Highest pay')}${opt('0', 'Company')}</select></label>
       <span class="muted small" id="allCount">${jobs.length} job${jobs.length === 1 ? '' : 's'}</span>
-      <a class="views-x small" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a>
     </div>`)}
     <section class="card" style="padding:6px 10px"><table class="jobs" id="t-all"><thead><tr>${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}${sortTh('Next step', 'num')}${sortTh('Age', 'date')}${sortTh('Type')}</tr></thead><tbody>
       ${jobs.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-who="${esc(tracked[j.id]?.who || '')}" data-status="${esc(j.status)}" data-source="${esc(j.source)}"
@@ -58,12 +59,12 @@ async function showPipeline(view) {
         <td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b> ${closedTag(j)}${deadlineTag(j)}${coLocLine(j)}<span class="phone-only"><br>${stagePill(j.status)}</span></td>
         <td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td>
-        <td class="fit" data-v="${j.score_after ?? j.score ?? -1}">${scoreBadge(j.score)}${reachTag(j)}</td>
+        <td class="fit" data-v="${j.score_after ?? j.score ?? -1}"><span class="jfit${j.score != null && j.score_after != null && j.score_after !== j.score ? ' has-after' : canReach(j) ? ' has-fore' : ''}">${scoreBadge(j.score)}${reachTag(j)}${fitNote(j)}</span></td>
         <td class="stage" data-v="${stageOrder(j.status)}">${stagePill(j.status)}</td>
         <td class="next" data-v="${nextKey(j)}">${rowActions(j) ? `<div class="row-act" title="${esc(next(j).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())}">${rowActions(j)}</div>` : next(j)}</td>
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}" title="Found on ${esc(sourceName(j.source))}">${ageTag(j)}</td>
         <td class="small emp" data-v="${esc(j.employment || '~')}">${empCell(j)}</td></tr>`).join('')}
-    </tbody></table>${jobs.length ? '' : `<p class="empty">${{ applied: 'Nothing applied to yet. Jobs show here once you apply (or Job Hunt sees the confirmation email).', active: 'Nothing in progress: no tailored applications waiting.', new: 'No new postings to pick from.' }[view] || 'No jobs yet. Search for jobs from the Queue.'}</p>`}</section>`);
+    </tbody></table>${jobs.length ? '' : `<p class="empty">${{ applied: 'Nothing applied to yet. Jobs show here once you apply (or Job Hunt sees the confirmation email).', tailored: 'No tailored applications waiting to be approved.', approved: 'Nothing approved and waiting to be sent.', new: 'No new postings to pick from.', dismissed: 'Nothing you said no to.' }[view] || 'No jobs yet. Search for jobs from the Queue.'}</p>`}</section>`);
   restoreAllFilters();
   main().querySelectorAll('table.jobs').forEach(applySort);
   // j / k on a job page walk through the list as it was shown here.

@@ -563,7 +563,15 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let status = req.query.get("status").map(|s| s.as_str()).filter(|s| !s.is_empty());
                 let pdf = |p: &Option<String>| p.as_deref().map(|p| Path::new(p).with_extension("pdf").exists()).unwrap_or(false);
                 let (now, reposts) = (chrono::Utc::now(), agent.db().reposts()?);
-                let list = agent.db().jobs(status, 2000)?;
+                let mut list = agent.db().jobs(status, 2000)?;
+                // Every job: the newest 2,000 found, and whatever their age, each one you did
+                // something with (an application found long ago is still an application).
+                if status.is_none() {
+                    let have: std::collections::HashSet<String> = list.iter().map(|j| j.id.clone()).collect();
+                    for s in ["queued", "ready", "approved", "saved", "applied", "interviewing", "offer", "rejected", "no_response", "dismissed"] {
+                        list.extend(agent.db().jobs(Some(s), 5000)?.into_iter().filter(|j| !have.contains(&j.id)));
+                    }
+                }
                 // Each company's rating, read once.
                 let rated: std::collections::HashMap<String, Value> = {
                     let db = agent.db();

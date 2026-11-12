@@ -1546,3 +1546,13 @@ table.jobs td.fit, table.jobs td.stage, table.jobs td.next { white-space: nowrap
 .setup-more > summary { cursor: pointer; }
 .setup-more[open] > summary { margin-bottom: 12px; }
 .card.flat { border: 0; padding: 0; box-shadow: none; background: none; }
+
+/* ---- All jobs: one fit badge on a phone, as in the Queue's rows ---- */
+table.jobs .jfit { display: inline-flex; align-items: center; white-space: nowrap; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  table.jobs .jfit { flex-direction: column; align-items: center; gap: 2px; }
+  table.jobs .jfit.has-after > .score, table.jobs .jfit.has-fore .reach, table.jobs .jfit .reach-arrow { display: none; }
+  table.jobs .jfit .reach { margin: 0; display: inline-flex; }
+  .pipe-tabs { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .pipe-tabs a { flex: none; }
+}
