@@ -4,6 +4,24 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.56.0] - 2026-11-12
+
+Rejections you can see, a career path, and a tidier top bar.
+
+### Changes
+
+- A rejection now shows up: you get a notice, it appears in the Queue under Turned down, and no follow-up is drafted for a role that said no. Drafts Job Hunt saved in Gmail are listed too.
+- You can ask for changes to a drafted reply before sending it.
+- Inbox shows a count of new email about your applications, and each email has its actions: draft a reply, open the application, open it in Gmail.
+- Choose a career path (setup, Me > Career, or Looking for). Postings are marked On your path or Off your path with the reason, and offer advice says if accepting would set your goal back.
+- Insights has its own place in the top bar, and its layout is fixed. Search, email and sync each show as their own status, with the theme button beside them.
+- What Job Hunt did lately lines up with the page and is open by default.
+- A newly pasted key (Adzuna, Google for Jobs, Jooble, Apify, another AI) is tested first and only saved if it works.
+- Job Hunt no longer updates while you are doing something: it waits for ten quiet minutes and tells you a minute before.
+- Every tailored job has Check my CV, which reads it one requirement at a time as an AI screen would.
+- Form filler: saved answers no longer repeat across language or education entries, shorter panel messages, and Copy details now records what each box was meant to hold.
+- More company icons are found.
+
 ## [2.55.0] - 2026-11-12
 
 Every CV is tailored for requirement-by-requirement screening.
@@ -1756,6 +1774,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.56.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.56.0
 [2.55.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.55.0
 [2.54.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.54.0
 [2.53.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.53.0
