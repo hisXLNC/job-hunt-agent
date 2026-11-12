@@ -1138,7 +1138,7 @@ mod tests {
             p("Alex Morgan"),
             p("Senior data analyst who turns messy operational data into decisions"),
             p("alex@example.com | +1 416 555 0100"),
-            format!("<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t>Summary</w:t></w:r></w:p>"),
+            "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t>Summary</w:t></w:r></w:p>".to_string(),
             p("Analyst with eight years in retail and logistics, building forecasting models and dashboards."),
             bold_p("Work Experience"),
             bold_p("Data Analyst, Freight Co"),

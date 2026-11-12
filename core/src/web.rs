@@ -63,7 +63,7 @@ fn new_session(agent: &Agent) -> crate::R<String> {
 fn signed_in(agent: &Agent, cookie: Option<&str>) -> bool {
     let Some(token) = cookie else { return false };
     let h = sha(token);
-    sessions(agent).iter().any(|s| *s == h)
+    sessions(agent).contains(&h)
 }
 
 fn sign_out(agent: &Agent, cookie: Option<&str>) {

@@ -36,7 +36,8 @@ pub fn extension_files(host: &dyn crate::api::Host, version: &str) -> crate::R<V
         let v: String = version.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
         if name == "manifest.json" && !v.is_empty() {
             let text = String::from_utf8_lossy(&bytes).to_string();
-            let text = Regex::new(r#""version":\s*"[^"]*""#).unwrap().replace(&text, format!("\"version\": \"{v}\"").as_str()).to_string();
+            static VERSION: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| Regex::new(r#""version":\s*"[^"]*""#).unwrap());
+            let text = VERSION.replace(&text, format!("\"version\": \"{v}\"").as_str()).to_string();
             bytes = text.into_bytes();
         }
         if name == "background.js" {

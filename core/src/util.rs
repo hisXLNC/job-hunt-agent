@@ -26,7 +26,7 @@ pub fn thousands(n: i64) -> String {
     let d = n.abs().to_string();
     let mut out = String::new();
     for (i, c) in d.chars().enumerate() {
-        if i > 0 && (d.len() - i) % 3 == 0 {
+        if i > 0 && (d.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
@@ -133,41 +133,6 @@ pub fn file_words(s: &str) -> String {
     w.split_whitespace().collect::<Vec<_>>().join(" ").trim_end_matches(['.', ' ']).to_string()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn html() {
-        let raw = "&lt;p&gt;Lead &lt;b&gt;delivery&lt;/b&gt;.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;UAT &amp;amp; release&lt;/li&gt;&lt;/ul&gt;";
-        assert_eq!(html_to_text(raw), "Lead delivery.\n\n- UAT & release");
-    }
-
-    #[test]
-    fn pdf_follows_word_edits() {
-        let dir = std::env::temp_dir().join(format!("jh-pdf-{}", short_hash(&now())));
-        std::fs::create_dir_all(&dir).unwrap();
-        let docx = dir.join("CV.docx");
-        std::fs::write(&docx, "word").unwrap();
-        assert!(pdf_stale(&docx), "no PDF yet");
-        std::fs::write(dir.join("CV.pdf"), "pdf").unwrap();
-        assert!(!pdf_stale(&docx));
-        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
-        std::fs::File::options().write(true).open(&docx).unwrap().set_modified(later).unwrap();
-        assert!(pdf_stale(&docx), "changed in Word after the PDF was made");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn helpers() {
-        assert_eq!(slug("Big Bank  Senior TPM, Payments!", 60), "big-bank-senior-tpm-payments");
-        assert_eq!(file_words("Mary-Jane  O'Neil"), "Mary-Jane O'Neil");
-        assert_eq!(file_words("Smith/Jones: Tax & Co."), "Smith Jones Tax & Co");
-        assert_eq!(unescape("A &amp; B &#8211; &#x2019;"), "A & B – \u{2019}");
-        assert_eq!(escape("a<b & c"), "a&lt;b &amp; c");
-    }
-}
-
 /// Whether the PDF next to a Word file is missing or older than it (you changed it in Word).
 pub fn pdf_stale(docx: &std::path::Path) -> bool {
     let modified = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
@@ -230,4 +195,39 @@ pub fn docx_to_pdf(docx: &std::path::Path) -> crate::R<std::path::PathBuf> {
         }
     }
     Err(crate::Error("Couldn't make a PDF: Microsoft Word or LibreOffice is needed.".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn html() {
+        let raw = "&lt;p&gt;Lead &lt;b&gt;delivery&lt;/b&gt;.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;UAT &amp;amp; release&lt;/li&gt;&lt;/ul&gt;";
+        assert_eq!(html_to_text(raw), "Lead delivery.\n\n- UAT & release");
+    }
+
+    #[test]
+    fn pdf_follows_word_edits() {
+        let dir = std::env::temp_dir().join(format!("jh-pdf-{}", short_hash(&now())));
+        std::fs::create_dir_all(&dir).unwrap();
+        let docx = dir.join("CV.docx");
+        std::fs::write(&docx, "word").unwrap();
+        assert!(pdf_stale(&docx), "no PDF yet");
+        std::fs::write(dir.join("CV.pdf"), "pdf").unwrap();
+        assert!(!pdf_stale(&docx));
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+        std::fs::File::options().write(true).open(&docx).unwrap().set_modified(later).unwrap();
+        assert!(pdf_stale(&docx), "changed in Word after the PDF was made");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn helpers() {
+        assert_eq!(slug("Big Bank  Senior TPM, Payments!", 60), "big-bank-senior-tpm-payments");
+        assert_eq!(file_words("Mary-Jane  O'Neil"), "Mary-Jane O'Neil");
+        assert_eq!(file_words("Smith/Jones: Tax & Co."), "Smith Jones Tax & Co");
+        assert_eq!(unescape("A &amp; B &#8211; &#x2019;"), "A & B – \u{2019}");
+        assert_eq!(escape("a<b & c"), "a&lt;b &amp; c");
+    }
 }

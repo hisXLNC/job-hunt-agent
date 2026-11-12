@@ -75,8 +75,8 @@ impl Llm for FakeLlm {
             let label = f["label"].as_str().unwrap_or("").to_lowercase();
             let value = if label.contains("first name") { c.split(' ').next().unwrap_or("").to_string() }
                 else if label.contains("email") { "me@example.com".to_string() }
-                else if let Some(o) = f["options"].as_array().and_then(|o| o.first()) { o.as_str().unwrap_or("").to_string() }
-                else { return None };
+                else {
+                    let o = f["options"].as_array().and_then(|o| o.first())?; o.as_str().unwrap_or("").to_string() };
             Some(FieldValue { key: f["key"].as_str().unwrap_or("").into(), value })
         }).collect())
     }

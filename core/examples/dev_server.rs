@@ -50,7 +50,7 @@ impl Llm for DemoLlm {
             gaps: gaps.iter().map(|g| g.to_string()).collect(), titles: titles.iter().map(|t| t.to_string()).collect(), first_step: step.into(),
             pros: pros.iter().map(|g| g.to_string()).collect(), cons: cons.iter().map(|g| g.to_string()).collect(),
             ladder: ["Now", "In 3 years", "In 5 years", "In 10 years"].iter().enumerate().map(|(i, w)| jobhunt_core::claude::CareerStep {
-                when: w.to_string(), title: [title.to_string(), format!("Senior {title}"), format!("Lead {title}"), format!("Head of {}", title.split(' ').last().unwrap_or(""))][i].clone(),
+                when: w.to_string(), title: [title.to_string(), format!("Senior {title}"), format!("Lead {title}"), format!("Head of {}", title.split(' ').next_back().unwrap_or(""))][i].clone(),
                 pay_min: Some(pay.0 * (1.0 + 0.18 * i as f64)), pay_max: Some(pay.1 * (1.0 + 0.2 * i as f64)) }).collect(),
             ceiling_title: format!("Director, {title}"), ceiling_pay: Some(pay.1 * 1.9),
             hours: Some([45.0, 50.0, 40.0][fit as usize % 3]), balance: ["mixed", "demanding", "good"][fit as usize % 3].into(),

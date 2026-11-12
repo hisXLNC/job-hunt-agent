@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.46.1] - 2026-11-12
+
+Tidied inside.
+
+### Changes
+
+- Nothing you can see changes. The app's two largest code files were split into parts and small inefficiencies cleaned up, so future changes are safer to make and to test.
+
 ## [2.46.0] - 2026-11-12
 
 A simpler Queue, the hiring team from LinkedIn, and an easier setup.
@@ -1608,6 +1616,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.46.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.46.1
 [2.46.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.46.0
 [2.45.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.45.0
 [2.44.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.44.1

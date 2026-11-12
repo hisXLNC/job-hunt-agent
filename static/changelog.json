@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.46.1",
+    "date": "2026-11-12",
+    "title": "Tidied inside",
+    "changes": [
+      "Nothing you can see changes. The app's two largest code files were split into parts and small inefficiencies cleaned up, so future changes are safer to make and to test."
+    ]
+  },
+  {
     "version": "2.46.0",
     "date": "2026-11-12",
     "title": "A simpler Queue, the hiring team from LinkedIn, and an easier setup",

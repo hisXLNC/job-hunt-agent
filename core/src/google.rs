@@ -823,7 +823,7 @@ mod tests {
         assert_eq!((q["redirect_uri"].as_str(), q["state"].as_str(), q["code_challenge_method"].as_str()), ("http://127.0.0.1:1/", p.state.as_str(), "S256"));
         assert!(q["scope"].contains("drive.file") && q["access_type"] == "offline");
         // Checked before anything is sent to Google.
-        let wrong = format!("http://127.0.0.1:1/?state=other&code=4/abc&scope=x");
+        let wrong = "http://127.0.0.1:1/?state=other&code=4/abc&scope=x".to_string();
         assert!(finish_pasted(&c, &p, &wrong).unwrap_err().0.contains("different sign-in"));
         assert!(finish_pasted(&c, &p, &format!("http://127.0.0.1:1/?state={}", p.state)).unwrap_err().0.contains("no sign-in code"));
         assert!(finish_pasted(&c, &p, "http://127.0.0.1:1/?error=access_denied").unwrap_err().0.contains("add your Gmail address"));

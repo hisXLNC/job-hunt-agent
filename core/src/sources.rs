@@ -99,7 +99,7 @@ pub fn fmt_salary(lo: Option<f64>, hi: Option<f64>, cur: &str) -> Option<String>
         let s = n.abs().to_string();
         let mut out = String::new();
         for (i, c) in s.chars().enumerate() {
-            if i > 0 && (s.len() - i) % 3 == 0 {
+            if i > 0 && (s.len() - i).is_multiple_of(3) {
                 out.push(',');
             }
             out.push(c);
@@ -130,7 +130,7 @@ pub fn salary_from_text(text: &str) -> Option<(String, Option<f64>)> {
         }
         let after = c.get(5).map(|m| m.as_str().to_lowercase()).unwrap_or_default();
         let fmt = |x: f64| fmt_salary(Some(x), None, "").unwrap_or_default();
-        if hi >= 20_000.0 && hi <= 2_000_000.0 && lo >= 10_000.0 {
+        if (20_000.0..=2_000_000.0).contains(&hi) && lo >= 10_000.0 {
             return Some((format!("${}–${}", fmt(lo), fmt(hi)), Some(hi)));
         }
         if hi < 500.0 && (after.contains("hour") || after.contains("/hr") || after.contains("hr")) {
@@ -214,7 +214,7 @@ pub fn employment_type(title: &str, text: &str) -> Option<String> {
         return Some(with_length(kind, &near));
     }
     if INTERN.is_match(&text) && !text.to_lowercase().contains("interns") {
-        return Some(named(&INTERN.find(&text).unwrap().as_str().to_string()).to_string());
+        return Some(named(INTERN.find(&text).unwrap().as_str()).to_string());
     }
     if let Some(m) = CONTRACT.find(&text) {
         // The length can come just after ("Maternity leave coverage, 13 months").
@@ -1857,7 +1857,7 @@ pub fn fetch_streaming(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &d
         let list = linkedin_searches(p, 16);
         if let Some((token, actor)) = &keys.apify {
             let (c, token, actor) = (c.clone(), token.clone(), actor.clone());
-            let max = (p.max_scored_per_run as usize).clamp(20, 100);
+            let max = p.max_scored_per_run.clamp(20, 100);
             calls.push(("LinkedIn (through Apify)".into(), "LinkedIn".into(), None, Box::new(move || apify_linkedin(&c, &token, &actor, &list, max).map(|l| (l, false)))));
         } else {
             // Once LinkedIn turns a search away, the rest wait for the next search.
@@ -1967,10 +1967,10 @@ pub fn fetch_streaming(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &d
                 }
                 let mut fresh = vec![];
                 for p in list {
-                    if !found.contains_key(&p.id()) {
+                    found.entry(p.id()).or_insert_with(|| {
                         fresh.push(p.clone());
-                        found.insert(p.id(), p);
-                    }
+                        p
+                    });
                 }
                 if !fresh.is_empty() {
                     on_batch(&fresh);

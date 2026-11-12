@@ -92,7 +92,7 @@ fn main() {
             Err(e) => println!("  page FAILED {e}"),
         }
         for t in tries {
-            match sources::workday(&c, &t, &[title.clone()], &|_| false) {
+            match sources::workday(&c, &t, std::slice::from_ref(&title), &|_| false) {
                 Ok(list) => {
                     println!("  OK   {t}: {} postings for {title:?}", list.len());
                     for p in list.iter().take(2) {

@@ -5,9 +5,20 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.46.0** (below). Before it: **2.45.0**, **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
+- Latest version: **2.46.1** (below). Before it: **2.46.0**. Before it: **2.45.0**, **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
   tidy-up, strong-fit auto-tailoring, What you want). The working branch changes with each session
   (this one: `claude/brave-fermat-ti1omi`); `main` is what's released. Before it: 2.43.0, 2.42.0.
+- **2.46.1: the two big files in parts, nothing else.** `core/src/pipeline.rs` keeps the Agent,
+  settings, scheduling and the smaller sections; its largest sections are `impl Agent` blocks in
+  `core/src/pipeline/` (`search.rs`, `checks.rs`, `people.rs`, `reports.rs`, `tailoring.rs`,
+  `mail.rs`) and its tests are `pipeline/tests.rs`. A method those files share is `pub(super)`.
+  `static/app.js` is the helpers and the shell; the rest loads after it, in this order, from
+  `index.html`: `app-queue.js`, `app-pipeline.js`, `app-job.js`, `app-steps.js`, `app-flow.js`,
+  `app-calendar.js`, `app-settings.js`, `app-actions.js`. They are plain scripts sharing one
+  scope, so the order matters only for code that runs as a file loads. Where these notes say
+  `app.js` or `pipeline.rs` for something, look in the parts too. The Rust linter's safe fixes
+  were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
+  chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.46.0, and why.** The Queue lost its side column (search menu on the Search button, email
   button, `week-line` under the heading; `deck.solo`), the Queue's filters move beside Select all
   after render (`applyQueueView`), and the guided setup (`showWelcome`) is a list of steps with one

@@ -375,7 +375,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
             if v.key == "_roles" {
                 // One per line, as asked; Claude sometimes joins them with "; " instead.
                 let by_line = v.value.lines().filter(|l| l.trim().len() > 3).count();
-                let by_semi = v.value.split(|c| c == '\n' || c == ';').filter(|l| l.trim().len() > 3).count();
+                let by_semi = v.value.split(['\n', ';']).filter(|l| l.trim().len() > 3).count();
                 roles_listed = by_line.max(if v.value.contains('|') && by_semi > by_line { by_semi } else { by_line });
                 continue;
             }
@@ -774,12 +774,12 @@ mod tests {
         let n = learn(&s.agent, &[json!({ "label": "Are you legally authorized to work in Canada? *", "type": "select", "value": "Yes" }),
             json!({ "label": "Why do you want to work at Acme?", "type": "textarea", "value": "Because…" }), json!({ "label": "I agree to the terms", "type": "checkbox", "value": "" })]).unwrap();
         assert_eq!(n, 1);
-        let a = answers(&s.agent, "test:1", &[auth.clone()]).unwrap();
+        let a = answers(&s.agent, "test:1", std::slice::from_ref(&auth)).unwrap();
         assert_eq!((a["values"]["f0"].as_str(), calls()), (Some("Yes"), 1), "answered from the bank, no new request");
         assert_eq!(bank(&s.agent)[0]["uses"], 1);
         assert_eq!(a["auto"], false, "submitting for you is off until you turn it on");
         s.agent.db().set("apply.auto_submit", "1").unwrap();
-        assert_eq!(answers(&s.agent, "test:1", &[auth.clone()]).unwrap()["auto"], true, "all required answered from the bank, on Greenhouse");
+        assert_eq!(answers(&s.agent, "test:1", std::slice::from_ref(&auth)).unwrap()["auto"], true, "all required answered from the bank, on Greenhouse");
         let open = json!({ "key": "f2", "type": "text", "label": "Desired start date", "required": true, "value": "" });
         assert_eq!(answers(&s.agent, "test:1", &[auth.clone(), open]).unwrap()["auto"], false, "a required question left open");
         let mut elsewhere = auth.clone();
