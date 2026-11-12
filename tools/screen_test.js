@@ -36,6 +36,12 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   // The Queue opens as a list of everything waiting; One by one is a choice, and it's remembered.
   await at('overview');
   check((await page.$$('.pick-list .jrow.pick')).length >= 3 && !(await page.$('.decision[data-kind]')), 'The Queue opens as a list of every listing');
+  // New matches to pick from don't count on the Queue's badge; and Not interested offers to skip the company for good.
+  check(await page.evaluate(() => !document.querySelector('#nav .badge')), 'Queue: the badge leaves out new matches still to pick from');
+  await page.click('.pick-list .jrow [data-act=stage][data-status=dismissed]');
+  check(await until(async () => page.evaluate(() => [...document.querySelectorAll('.modal .btn')].some(b => /^Never show /.test(b.textContent))), 15), 'Queue: Not interested offers never to show the company again');
+  await page.click('.modal .btn.ghost');
+
   // Headers over the Queue's lists sort them: by company A to Z, then turned round; and a table
   // that was built without sorting (the usage table in Settings) sorts by its headers too.
   const listCos = () => page.evaluate(() => { const h = document.querySelector('.list-head'); return h ? [...h.parentElement.children].filter(c => c.matches('.jrow[data-job-row]')).map(r => r.dataset.lco) : null; });

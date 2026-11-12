@@ -437,9 +437,10 @@ const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">
 function renderNav() {
   const active = placeOf();
   const gear = $('#settingsLink'); if (gear) gear.classList.toggle('on', active === 'settings');
-  const waiting = overview ? queueCount(queueItems(overview)) : 0;
+  // The badge: what's waiting on you. New matches to pick from aren't counted, or it would never clear.
+  const waiting = overview ? queueCount(queueItems(overview).filter(x => x.step !== 'pick')) : 0;
   $('#nav').innerHTML = NAV.map(([id, name, group]) =>
-    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && waiting ? `<span class="badge" title="${waiting} decision${waiting === 1 ? '' : 's'} waiting">${waiting}</span>` : ''}</a>`).join('');
+    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && waiting ? `<span class="badge" title="${waiting} decision${waiting === 1 ? '' : 's'} waiting (new matches to pick from aren't counted)">${waiting}</span>` : ''}</a>`).join('');
   const running = overview?.running || [];
   const busy = running.includes('search') ? (overview?.progress?.scoring ? `${overview.progress.paused ? 'Scoring paused' : 'Scoring waiting postings…'} ${overview.progress.done ?? 0} of ${overview.progress.total ?? 0}` : `${overview?.progress?.paused ? 'Search paused' : 'Searching for jobs…'} ${overview?.progress?.percent ?? 0}%`) : running.includes('inbox') ? 'Checking email…'
     : running.some(r => r.startsWith('tailor') || r === 'add') ? 'Tailoring…' : '';

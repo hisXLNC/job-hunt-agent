@@ -239,6 +239,7 @@ async function showJob(id) {
       ${prep ? mdHtml(prep) : `<p class="muted">${preparing ? 'Claude is writing likely questions, answers from your CV, gaps to prepare for and questions to ask. This page updates by itself.' : 'Likely questions with answers from your CV, what the company is up to now (from a quick web search), gaps to prepare for, and questions to ask them.'}</p>`}
       ${prep ? '<p class="muted small">Also saved as “Interview prep.md” with this application\'s files.</p>' : ''}
       <p class="muted small">The evening before an interview on your calendar, Job Hunt makes sure this sheet is ready and reminds you.</p>
+      <p><button class="btn" type="button" data-act="practise">Practise this interview</button> <span class="muted small">Claude plays the interviewer here, one question at a time, with feedback on each answer.</span></p>
       <p class="muted small">${claude_desktop ? `Practise out loud: in the Claude app, ask <b>“Practise my interview for ${esc(j.company)}”</b>. Claude plays the interviewer and gives feedback on each answer.` : 'Want a mock interview with feedback? Add Job Hunt to the Claude app in <a href="#settings/app">Settings → App</a>.'}</p>
     </section>
     ${thanks || thanking || ['interviewing', 'offer'].includes(j.status) ? `<section class="card">

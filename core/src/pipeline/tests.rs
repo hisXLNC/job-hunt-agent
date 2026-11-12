@@ -1953,3 +1953,23 @@ fn overview_and_running_guard() {
     drop(g);
     assert!(s.agent.search(Some(vec![])).is_ok());
 }
+
+#[test]
+fn a_company_you_never_want_to_see() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
+    let picks = s.agent.db().jobs(Some("queued"), 10).unwrap();
+    assert_eq!(picks.len(), 2);
+    s.agent.db().set_status(&picks[0].id, "dismissed", "no").unwrap();
+    // Its other posting goes too, and the company joins the ones to skip (once).
+    assert_eq!(s.agent.block_company(&picks[0].id).unwrap(), 1);
+    assert_eq!(s.agent.block_company(&picks[0].id).unwrap(), 0);
+    assert!(s.agent.db().jobs(Some("queued"), 10).unwrap().is_empty());
+    assert_eq!(s.agent.profile().exclude_companies, vec!["Acme".to_string()]);
+    // And the next search leaves its postings out.
+    let r = s.agent.search(Some(vec![posting("Program Director", "3")])).unwrap();
+    assert_eq!(r.to_pick, 0);
+}

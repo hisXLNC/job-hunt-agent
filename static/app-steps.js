@@ -480,6 +480,9 @@ function listHeads() {
     const rows = [...p.children].filter(c => c.matches('.jrow[data-job-row]'));
     if (rows.length < 2 || p.querySelector(':scope > .list-head')) continue;
     rows[0].insertAdjacentHTML('beforebegin', `<div class="list-head" role="group" aria-label="Sort this list"><span>Sort by</span>${LIST_COLS.map(([k, name]) => `<button type="button" data-lsort="${k}" title="Sort by ${name.toLowerCase()}">${name}<span class="arrow"></span></button>`).join('')}</div>`);
+    const at = {};
+    rows.forEach(r => { if (r.dataset.lco) at[r.dataset.lco] = (at[r.dataset.lco] || 0) + 1; });
+    rows.forEach(r => { const n = at[r.dataset.lco]; if (n > 1 && !r.querySelector('.co-more')) r.querySelector('.jtitle')?.insertAdjacentHTML('beforeend', ` <button type="button" class="pill co-more" data-lsort="co" data-together="1" title="This company has ${n} roles in this list. Press to put them side by side.">${n} roles here</button>`); });
     // Select all sits at the start of the headers, and the row it had to itself goes.
     const all = p.closest('[data-pickbox], [data-approvebox]')?.querySelector('[data-act=approveAll], [data-act=pickAll]'), was = all?.parentElement;
     if (all && !was.classList.contains('list-head')) {
@@ -507,7 +510,8 @@ document.addEventListener('click', e => {
   if (!b) return;
   const col = LIST_COLS.find(c => c[0] === b.dataset.lsort), first = col[2] ? 'desc' : 'asc';
   // A third press lets go: back to each list's own order.
-  const off = listSort && listSort.key === col[0] && listSort.dir !== first;
+  const off = !b.dataset.together && listSort && listSort.key === col[0] && listSort.dir !== first;
+  if (b.dataset.together) { e.preventDefault(); listSort = null; }
   listSort = off ? null : { key: col[0], dir: listSort && listSort.key === col[0] ? (first === 'asc' ? 'desc' : 'asc') : first };
   try { localStorage.setItem('jh.listSort', JSON.stringify(listSort)); } catch (err) {}
   if (off) route(); else applyListSort();

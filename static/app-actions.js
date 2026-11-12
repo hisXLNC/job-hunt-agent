@@ -171,7 +171,7 @@ async function act(el) {
     return;
   }
   if (a === 'panelClose') return closePanel();
-  if (a === 'moreMenu') { document.body.classList.toggle('more-open'); const pop = $('#statusPop'); if (pop) pop.open = document.body.classList.contains('more-open'); renderNav(); return; }
+  if (a === 'moreMenu') { document.body.style.setProperty('--mtop-h', `${document.querySelector('.mtop')?.offsetHeight || 64}px`); document.body.classList.toggle('more-open'); const pop = $('#statusPop'); if (pop) pop.open = document.body.classList.contains('more-open'); renderNav(); return; }
   if (a === 'connGoto') {
     const id = CONN_HOME[el.dataset.to] || el.dataset.to, target = document.getElementById(id);
     if (target) { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); target.querySelector('details')?.setAttribute('open', ''); return; }
@@ -356,6 +356,14 @@ async function act(el) {
     if (!msg) { toast('Write a message first.', true); return; }
     jobTabs[jobId] = 'chat';
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/chat`, { method: 'POST', body: { message: msg } }); setTimeout(route, 300); });
+  }
+  // A mock interview, in the job's own chat: Claude asks, you answer, it says how the answer landed.
+  if (a === 'practise') {
+    jobTabs[jobId] = 'chat';
+    return busy(async () => {
+      await api(`/api/jobs/${encodeURIComponent(jobId)}/chat`, { method: 'POST', body: { message: "Let's practise my interview for this role. You play the interviewer. Ask one question at a time, the kind this company would really ask for this role, and wait for my answer. After each answer, say in two or three plain sentences what worked and what to change, then ask the next question. Start with the first question now." } });
+      setTimeout(route, 300);
+    }, 'Starting the practice…');
   }
   if (a === 'chatClear') {
     if (!await ask('Start the conversation over? This one is deleted.')) return;
@@ -701,22 +709,27 @@ async function act(el) {
     const from = el.dataset.from || main().dataset.status || '';
     let note = a === 'setStage' ? $('#stageNote').value : '';
     let learn = true;
+    let block = false;
     if (status === 'dismissed' && !note) {
+      const co = (await api(`/api/jobs/${encodeURIComponent(id)}`).catch(() => null))?.job?.company || '';
       const r = await dialog({
         title: 'Not interested in this role?',
         text: 'It goes to All jobs under Not interested. Job Hunt can also learn from it and score roles like it lower, or you can keep it as a backup.',
         input: 'Why not? (optional)', placeholder: 'e.g. too junior, sales role, too far',
         buttons: [{ label: 'Cancel', value: null, kind: 'ghost' }, { label: 'Save for later', value: 'saved' },
+          ...(co && co !== 'Unknown' ? [{ label: `Never show ${co}`, value: 'block' }] : []),
           { label: 'Not interested, and learn from it', value: 'learn' }, { label: 'Not interested', value: 'quiet', kind: 'primary' }],
       });
       if (!r) return;
       if (r.value === 'saved') status = 'saved';
+      block = r.value === 'block';
       learn = r.value === 'learn';
       note = r.text;
     }
     return busy(async () => {
-      await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status, note, learn } });
+      const done = await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status, note, learn, block } });
       await refreshOverview(); route();
+      if (block) { toast(`You won't be shown this company again${done.also ? ` (${done.also} more of its postings went too)` : ''}. Change it under Me, in the companies to skip.`); return; }
       // A slip is easy to make from a list: offer to put it back.
       if (from && from !== status) {
         toast(`Moved to ${STAGES[status]}.`, false, { label: 'Undo', run: async () => {

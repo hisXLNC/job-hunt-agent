@@ -55,6 +55,13 @@ and `DEVELOPING.md`.
   `app.js` or `pipeline.rs` for something, look in the parts too. The Rust linter's safe fixes
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
+- **2.51.0.** Not interested has a fourth answer, Never show <company> (`block: true` on
+  `/api/jobs/<id>/status` -> `Agent::block_company`: adds to `exclude_companies`, dismisses its other
+  queued postings). The nav badge leaves out the `pick` step (`renderNav`); the page's headline still
+  counts everything. Interview tab: Practise this interview sends a fixed opening message to the job's
+  chat (the preview's DemoLlm has no `chat`, so it can't be seen answering there). Rows of one company
+  in a list get an "n roles here" tag (`listHeads`). The phone's menu sheet starts below the top bar
+  whatever its height (`--mtop-h`, set when it opens).
 - **2.50.0: logos by site, and everything sorts.** `logos.rs` keeps a logo per site
   (`logo2:site:<domain>`) and a pointer per company (`logo2:co:<key>`), so two spellings of one
   company share one image; the old `logo:` keys are simply left behind. A site is only used when its

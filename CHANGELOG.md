@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.51.0] - 2026-11-12
+
+Skip a company for good, practise interviews, a calmer badge.
+
+### Changes
+
+- Not interested has a new answer, Never show this company: it joins the companies you skip, and its other new postings go with it.
+- The number on Queue now counts only what is waiting on you (approve, submit, follow up), not new matches still to pick from.
+- Practise this interview, on a job's Interview tab: Claude plays the interviewer in the job's chat, one question at a time, with feedback on each answer.
+- When a list has several roles at one company, each shows a tag; press it to put them side by side.
+- On a phone, the menu no longer hides Settings under the top bar.
+
 ## [2.50.1] - 2026-11-12
 
 A tighter heading over the Queue's lists.
@@ -1680,6 +1692,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.51.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.51.0
 [2.50.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.50.1
 [2.50.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.50.0
 [2.49.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.49.0

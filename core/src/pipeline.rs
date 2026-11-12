@@ -1417,6 +1417,28 @@ replies and interviews, and a little lower for kinds that got none from several 
         Ok(text)
     }
 
+    /// Never show this job's company again: it joins the companies to skip, and its other postings
+    /// still waiting to be picked go to Not interested. How many others went.
+    pub fn block_company(&self, job_id: &str) -> R<usize> {
+        let job = self.db().job(job_id)?;
+        let Some(job) = job else { return Ok(0) };
+        let name = job.company.trim().to_string();
+        if name.is_empty() || name == "Unknown" {
+            return Err(Error("This posting doesn't say which company it's from.".into()));
+        }
+        let mut p = self.profile();
+        if !p.exclude_companies.iter().any(|c| c.trim().eq_ignore_ascii_case(&name)) {
+            p.exclude_companies.push(name.clone());
+            self.save_profile(&p)?;
+        }
+        let waiting = self.db().jobs(Some("queued"), 5000)?;
+        let others: Vec<_> = waiting.into_iter().filter(|j| j.id != job.id && j.company.trim().eq_ignore_ascii_case(&name)).collect();
+        for j in &others {
+            self.db().set_status(&j.id, "dismissed", &format!("{name} is one of the companies you skip"))?;
+        }
+        Ok(others.len())
+    }
+
     /// Things that follow a change of stage: learning from it, and interview prep.
     /// What follows a stage change. `learn` false: a "not interested" isn't used to score
     /// postings like it later.

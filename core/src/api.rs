@@ -804,6 +804,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     let note = if s(&b, "note").is_empty() { "changed in Job Hunt" } else { s(&b, "note") };
                     agent.db().set_status(id, status, note)?;
                     agent.after_stage(id, status, s(&b, "note"), b.get("learn").and_then(|v| v.as_bool()).unwrap_or(true));
+                    // "Never show this company": it joins the companies to skip, with its other new postings.
+                    if status == "dismissed" && b["block"].as_bool() == Some(true) {
+                        return Ok(Resp::json(&json!({ "ok": true, "also": agent.block_company(id)? })));
+                    }
                     ok()
                 }
                 "tailor" => {

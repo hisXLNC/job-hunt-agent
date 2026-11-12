@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.51.0",
+    "date": "2026-11-12",
+    "title": "Skip a company for good, practise interviews, a calmer badge",
+    "changes": [
+      "Not interested has a new answer, Never show this company: it joins the companies you skip, and its other new postings go with it.",
+      "The number on Queue now counts only what is waiting on you (approve, submit, follow up), not new matches still to pick from.",
+      "Practise this interview, on a job's Interview tab: Claude plays the interviewer in the job's chat, one question at a time, with feedback on each answer.",
+      "When a list has several roles at one company, each shows a tag; press it to put them side by side.",
+      "On a phone, the menu no longer hides Settings under the top bar."
+    ]
+  },
+  {
     "version": "2.50.1",
     "date": "2026-11-12",
     "title": "A tighter heading over the Queue's lists",
