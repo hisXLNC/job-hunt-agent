@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.40.0] - 2026-11-12
+
+Jobs redesigned: the steps as one bar, each job a clean row.
+
+### Changes
+
+- Jobs no longer looks like the old Overview. The steps are one bar across the top, a number over a name each, the one you are on filled in, and All jobs at the end.
+- Each job in Pick, Approve, Submit and Waiting is one clean row: its fit, its name and tags, one line with the company, place, pay and age, the reason under it, and its buttons on the right.
+- On a phone the list starts much higher: the page's long description is gone, Find a job and Add a job share a line, and Sort and filter is folded under one line until you open it.
+- On a phone a job's main button is full width under it, where your thumb is, and the fit sits beside the name instead of pushing it off the line.
+- Each group in a step (Ready to approve, Submit on the company's site, No reply yet…) is its own card under a plain heading.
+- Messages that still said Applications or Settings, Connections now say Jobs and Settings, Accounts.
+
 ## [2.39.0] - 2026-11-12
 
 Skills on Workday, rebuilt and tested against a stand-in Workday.
@@ -1486,6 +1499,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.40.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.40.0
 [2.39.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.39.0
 [2.38.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.38.0
 [2.37.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.37.0

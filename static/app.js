@@ -155,13 +155,16 @@ const tabbedHead = (title, about, actions, base, tabs, on) => `<div class="head"
 function nextStepId(c = overview?.counts || {}) {
   return ['approve', 'submit', 'pick', 'waiting', 'interviews'].find(id => FLOW.find(f => f[0] === id)[2](c)) || '';
 }
+/** A list's sort and filters: shown on a wide window, folded under one line on a phone so the jobs come first. */
+const foldFilters = html => `<details class="fold-filters" ${matchMedia('(min-width: 761px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
 /** Find any job, and add one you found: at the top of Today and Jobs. */
 const findBox = () => `<button class="find-box" data-act="palette" title="Find any job (Ctrl+K)">${svg('search')}<span>Find a job…</span><kbd>Ctrl K</kbd></button>`;
-/** The steps of the hunt as a row (Pick › Approve › Submit › Waiting › Interviews), then every job in one list. */
+/** The steps of the hunt as one bar, each with how many are in it (Pick, Approve, Submit, Waiting,
+ *  Interviews), then every job in one list. The same numbers and names as Today's strip. */
 function flowNav(on) {
   const c = overview?.counts || {};
-  return `<nav class="flow" aria-label="Steps">${FLOW.map(([id, name, n]) => `<a href="#applications/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}"><span class="flow-name">${name}</span><span class="flow-c">${n(c)}</span></a>`).join('<span class="flow-arrow" aria-hidden="true">›</span>')}
-    <a href="#applications/all" class="flow-all${APP_TABS.some(([id]) => id === on) ? ' on' : ''}" title="Every job Job Hunt has found, in one list">${svg('applications')}<span class="flow-name">All jobs</span></a></nav>`;
+  return `<nav class="steps-bar" aria-label="Steps">${FLOW.map(([id, name, n]) => `<a href="#applications/${id}" class="${id === on ? 'on' : ''}${n(c) ? '' : ' none'}" ${id === on ? 'aria-current="page"' : ''}><b class="sb-n">${n(c)}</b><span class="sb-name">${name}</span></a>`).join('')}
+    <a href="#applications/all" class="sb-all${APP_TABS.some(([id]) => id === on) ? ' on' : ''}" title="Every job Job Hunt has found, in one list">${svg('applications')}<span class="sb-name">All jobs</span></a></nav>`;
 }
 /** Postings found but not scored yet, with the button that scores them now. */
 function heldLine() {
@@ -171,7 +174,7 @@ function heldLine() {
 /** The top of the Jobs page: its name, find and add, and the steps. */
 function jobsHead(on, extra = '') {
   return `<div class="head">
-      <div class="grow"><h1>Jobs</h1><p class="muted">Every job, from found to offer. Work through the steps from left to right, or see them all in one list.</p></div>
+      <div class="grow"><h1>Jobs</h1></div>
       <div class="row head-acts">${findBox()}<a class="btn ghost" href="#add">${svg('add')}Add a job</a>${extra}</div>
     </div>
     ${flowNav(on)}`;
@@ -705,7 +708,7 @@ async function showPipeline(view) {
   const empKinds = ['Full-time', 'Contract', 'Temporary', 'Part-time', 'Internship', 'Co-op', 'Freelance', 'Not stated'].filter(k => jobs.some(j => empKind(j) === k));
   page(`${jobsHead(view, `<a class="btn ghost" href="#cvs/documents" title="Every tailored CV and cover letter">${svg('documents')}Tailored files</a><a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Company, title, stage, fit, salary, dates, links and notes, for Excel or Google Sheets">${svg('download')}Spreadsheet</a>`)}
     <nav class="tabs">${APP_TABS.map(([id, n]) => `<a href="#applications/${id}" class="${id === view ? 'on' : ''}">${n} <span class="muted small">${counts[id]}</span></a>`).join('')}</nav>
-    <div class="all-filters" id="allFilters">
+    ${foldFilters(`<div class="all-filters" id="allFilters">
       <input type="search" data-allf="q" placeholder="Company, role or place" aria-label="Find in the list">
       <label class="small">Stage <select data-allf="stage">${opt('', 'Any')}${opt('you', 'Your move')}${opt('them', 'Waiting on them')}${stagesHere.map(k => opt(k, STAGES[k])).join('')}</select></label>
       <label class="small">Fit <select data-allf="fit">${opt('0', 'Any')}${opt('60', '60 or more')}${opt('70', '70 or more')}${opt('80', '80 or more')}</select></label>
@@ -716,7 +719,7 @@ async function showPipeline(view) {
       <label class="small">Sort by <select data-allf="sort">${opt('5', 'What needs you first')}${opt('4', 'Best fit')}${opt('7', 'Newest')}${opt('3', 'Highest pay')}${opt('0', 'Company')}</select></label>
       <span class="muted small" id="allCount">${jobs.length} job${jobs.length === 1 ? '' : 's'}</span>
       <a class="views-x small" href="/api/export.csv" download="Job Hunt applications.csv" title="Your applications as a spreadsheet">Export</a>
-    </div>
+    </div>`)}
     <section class="card" style="padding:6px 10px"><table class="jobs" id="t-all"><thead><tr>${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}${sortTh('Next step', 'num')}${sortTh('Age', 'date')}${sortTh('Type')}</tr></thead><tbody>
       ${jobs.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-who="${esc(tracked[j.id]?.who || '')}" data-status="${esc(j.status)}" data-source="${esc(j.source)}"
         data-fit="${j.score_after ?? j.score ?? 0}" data-emp="${esc(empKind(j))}" data-pay="${salaryValue(j.salary) > 0 ? 1 : 0}" data-found="${+new Date(j.found_at || 0) || 0}" data-text="${esc(`${j.company} ${j.title} ${j.location || ''}`.toLowerCase())}">
@@ -1311,37 +1314,38 @@ function contactHtml(c, i, writing, pb) {
 
 /** One step of the job hunt on the Overview: its roles, each with the next thing to do. `tracked`
  *  (the Tracker's rows) fills in the steps after you apply. */
+/** One job in a step's list. The tick box, fit and name are one label when the row can be ticked
+ *  (a press anywhere on them ticks it); the why line and the buttons are outside it. */
+function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', attrs = '', facts = '' }) {
+  const meta = [coCell(j), j.location ? placeHtml(j) : '', j.salary ? `<span title="${esc(j.salary)}">${esc(String(j.salary).split(/\s+[•·|]\s+/)[0])}</span>` : '', j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
+  const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}<span class="jfit">${scoreBadge(j.score)}${reachTag(j)}</span>
+      <span class="jmain"><span class="jtitle"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${tags}</span><span class="jmeta">${meta}</span></span>`;
+  return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" ${attrs}>${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
+      <span class="row jact">${actions}</span>${sub ? `<div class="jwhy small">${sub}</div>` : ''}</div>`;
+}
+
 function stepHtml(o, step, tracked) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
-  const row = (j, sub, actions, tick = '') => `<div class="todo-row${expiredWhy(j) ? ' expired-row' : ''}">${tick || '<span></span>'}
-      <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <a class="grow" href="#job/${encodeURIComponent(j.id)}"><span class="qt">${esc(j.title)}</span>${oneTag(j)}${effortTag(j)}${appliedBeforeTag(j)}${coLocLine(j)}</a>
-      <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}${j.employment ? `<br><span class="muted">${esc(j.employment)}</span>` : ''}</span>
-      <span class="why small muted">${sub || ''}</span>
-      <span class="row todo-act">${actions}</span></div>`;
+  const row = (j, sub, actions, tick = '') => jobRow(j, { tick, sub: sub ? `<span class="muted">${sub}</span>` : '', actions, tags: `${oneTag(j)}${effortTag(j)}${appliedBeforeTag(j)}` });
   const id = j => esc(j.id);
   const groups = [];
   const soon = (o.interviews || []).filter(i => new Date(i.start) - Date.now() < 3 * 86400000);
-  if (soon.length) groups.push(['Interviews in the next few days', soon.map(i => `<div class="todo-row"><span></span><span class="todo-fit"><span class="pill interviewing">${esc(fmtWhen(i.start))}</span></span>
-      <span class="grow"><span class="qt">${esc(i.company || i.title)}</span>${i.job_title ? `<br><span class="muted small">${esc(i.job_title)}</span>` : ''}</span>
-      ${i.job_id ? `<span class="row todo-act"><a class="btn sm" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prep</a></span>` : ''}</div>`).join('')]);
+  if (soon.length) groups.push(['Interviews in the next few days', soon.map(i => `<div class="jrow"><div class="jhead"><span class="jfit"><span class="pill interviewing">${esc(fmtWhen(i.start))}</span></span>
+      <span class="jmain"><span class="jtitle"><span class="qt">${esc(i.company || i.title)}</span></span>${i.job_title ? `<span class="jmeta">${esc(i.job_title)}</span>` : ''}</span></div>
+      ${i.job_id ? `<span class="row jact"><a class="btn sm" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prepare</a></span>` : ''}</div>`).join('')]);
   const picking = (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`));
   const inWork = (o.to_tailor || []).length - picking.length;
   if (picking.length) {
     // One list, best fit first; the filters reorder and hide rows in place (see applyPickView).
     const places = [...new Set((o.places || []).map(p => String(p).split(',')[0].trim()).filter(Boolean))];
     const opt = (v, n) => `<option value="${v}">${n}</option>`;
-    const rows = [...picking].sort((a, b) => !!expiredWhy(a) - !!expiredWhy(b) || (b.score || 0) - (a.score || 0)).map(j => `<div class="todo-row pick${expiredWhy(j) ? ' expired-row' : ''}" data-expired="${expiredWhy(j) ? 1 : 0}" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}"
-        data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}"
-        data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"><label style="display:contents"><input type="checkbox" data-pick="${esc(j.id)}">
-      <span class="todo-fit">${scoreBadge(j.score)}${reachTag(j)}</span>
-      <span class="grow"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${oneTag(j)}${appliedBeforeTag(j)}<br><span class="muted small">${ageTag(j)}</span>${coLocLine(j)}</span>
-      <span class="co small">${coCell(j)}</span><span class="loc small">${locCell(j)}</span><span class="sal small">${salaryCell(j)}</span></label>
-      <span class="why small">${whyFits(j)}</span>
-      <span class="row todo-act">${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button></span></div>`).join('');
+    const rows = [...picking].sort((a, b) => !!expiredWhy(a) - !!expiredWhy(b) || (b.score || 0) - (a.score || 0)).map(j => jobRow(j, {
+      cls: 'pick', tick: `<input type="checkbox" data-pick="${esc(j.id)}" aria-label="Pick ${esc(j.title)}">`, tags: `${oneTag(j)}${appliedBeforeTag(j)}`, facts: ageTag(j), sub: whyFits(j),
+      attrs: `data-expired="${expiredWhy(j) ? 1 : 0}" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}" data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}" data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"`,
+      actions: `${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button>` })).join('');
     groups.push([`Pick from <span data-pickhead>${picking.length} new match${picking.length === 1 ? '' : 'es'}</span>`, `<div data-pickbox>
     <div class="row" style="margin:2px 0 8px">${picking.length > 5 ? '<button class="btn sm" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost sm" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork}…</span>` : ''}</div>
-    <div class="pick-filters">
+    ${foldFilters(`<div class="pick-filters">
       <label class="small">Sort by <select data-pickf="sort">${opt('fit', 'Best fit')}${opt('reach', 'Fit after tailoring')}${opt('new', 'Newest')}${opt('pay', 'Highest pay')}${opt('rating', 'Best-rated company')}</select></label>
       <label class="small">Fit <select data-pickf="min">${opt('0', 'Any')}${opt('60', '60 or more')}${opt('70', '70 or more')}${opt('80', '80 or more')}${opt('-60', 'Under 60')}${opt('-70', 'Under 70')}</select></label>
       <label class="small">Found <select data-pickf="age">${opt('', 'Any time')}${opt('3', 'Last 3 days')}${opt('7', 'Last 7 days')}${opt('-14', 'Over 2 weeks ago')}</select></label>
@@ -1349,7 +1353,7 @@ function stepHtml(o, step, tracked) {
       <label class="check small"><input type="checkbox" data-pickf="pay"> Shows pay</label>
       <label class="check small"><input type="checkbox" data-pickf="flags"> No red flags</label>
       <span class="muted small" data-pickcount></span>
-    </div>
+    </div>`)}
     <p class="muted small pick-keys desktop-only"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Space</kbd> tick · <kbd>Enter</kbd> open · <kbd>X</kbd> not interested · <kbd>T</kbd> tailor the ticked ones</p>
     <div class="pick-list">${rows}</div>
     <div class="select-bar" hidden><span class="select-n"></span><button class="btn primary" data-act="tailorPicked">Tailor selected</button><button class="btn" data-act="dismissPicked">${svg('close')}Not interested</button><button class="btn ghost" data-act="pickClear">Clear</button></div>
@@ -1358,7 +1362,7 @@ function stepHtml(o, step, tracked) {
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
   const ready = [];
   const many = o.ready?.length > 1;
-  if (o.ready?.length) ready.push([many ? '' : `<a class="btn sm" href="#review">Review it</a>`, `<div data-approvebox>
+  if (o.ready?.length) ready.push([`Ready to approve${many ? '' : ` <a class="btn sm" href="#review">Review it</a>`}`, `<div data-approvebox>
     ${many ? `<div class="row" style="margin:2px 0 8px"><button class="btn ghost sm" type="button" data-act="approveAll">Select all</button><a class="btn sm" href="#review">Review them one by one</a></div>` : ''}
     ${o.ready.map(j => row(j, [j.coverage_after != null ? `${pct(j.coverage_after)} of the posting's keywords` : '', j.apply_email ? 'applies by email' : '', onCompanySite(j)].filter(Boolean).join(' · '),
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
@@ -1411,7 +1415,7 @@ function stepHtml(o, step, tracked) {
     interviews: 'No interviews yet.',
   }[step];
   // The groups' headings name the step's parts; the step's own name is on its tab.
-  const card = `<section class="card todo step-${step}">${by.length ? by.map(([h, rows]) => `<div class="todo-group">${h ? `<h3>${h}</h3>` : ''}${rows}</div>`).join('') : `<p class="muted">${empty}</p>`}</section>`;
+  const card = by.length ? by.map(([h, rows]) => `<section class="card todo step-${step}"><div class="todo-group">${h ? `<h2 class="group-h">${h}</h2>` : ''}${rows}</div></section>`).join('') : `<section class="card todo step-${step}"><p class="empty">${empty}</p></section>`;
   return card;
 }
 
@@ -1887,7 +1891,7 @@ async function showCoach() {
         <div class="coach-skills">${(c.skills || []).map(k => { const [cls, label] = COACH_KIND[k.kind] || ['', k.kind]; return `<div class="coach-skill">
           <div class="row" style="justify-content:space-between"><b>${esc(k.skill)}</b><span class="pill ${cls}">${label}</span></div>
           <p class="small">${esc(k.why)}</p><p class="small"><b>How:</b> ${esc(k.how)}</p>${k.time ? `<p class="muted small">About ${esc(k.time)}</p>` : ''}</div>`; }).join('')}</div>`
-        : `<p class="muted">${!g.postings ? 'After a search or two, your coach looks at the roles you go for and says which missing skills would help most, how to get each one, and new titles to try.' : !r.claude ? 'Connect Claude to get a plan (Settings → Connections).' : 'Claude looks at the skills below and your CVs, then says which ones are worth the effort, how to get each, and new titles to try. It takes a minute.'}</p>`}
+        : `<p class="muted">${!g.postings ? 'After a search or two, your coach looks at the roles you go for and says which missing skills would help most, how to get each one, and new titles to try.' : !r.claude ? 'Connect Claude to get a plan (Settings → Accounts).' : 'Claude looks at the skills below and your CVs, then says which ones are worth the effort, how to get each, and new titles to try. It takes a minute.'}</p>`}
     </section>
     ${ideas.length ? titleIdeasHtml(ideas) : ''}
     <section class="card"><header><h2>Skills your CV doesn't show</h2><span class="muted small">From ${g.postings} role${g.postings === 1 ? '' : 's'} near your fit score in the last 90 days</span></header>
@@ -2124,7 +2128,7 @@ function showAdd() {
       <label class="field wide">Full job description<textarea name="description" style="min-height:300px" placeholder="Needed to score and tailor; optional if you only save it."></textarea></label>
       <div class="field wide">What to do with it
         <label class="check"><input type="radio" name="claude" value="1" ${canClaude ? 'checked' : 'disabled'}> <span>Score it and tailor my CV and a cover letter<br><span class="muted small">${canClaude ? 'Uses Claude: two or three requests.' : 'Needs Claude connected and your CV added.'}</span></span></label>
-        <label class="check"><input type="radio" name="claude" value="0" ${canClaude ? '' : 'checked'}> <span>Just save it, without Claude<br><span class="muted small">Saved under Applications. Use Tailor anyway on it whenever you like.</span></span></label>
+        <label class="check"><input type="radio" name="claude" value="0" ${canClaude ? '' : 'checked'}> <span>Just save it, without Claude<br><span class="muted small">Saved under Jobs, in All jobs. Use Tailor anyway on it whenever you like.</span></span></label>
       </div>
     </div><div class="row"><button class="btn primary" type="submit">Add the job</button></div></form>
     <p class="muted small desktop-only">Used the <a href="#search/setup">Send to Job Hunt</a> button? Press Ctrl+V on this page to add that posting.</p>`);
@@ -2910,7 +2914,7 @@ function applyPickView(box, saved) {
   if (count) count.innerHTML = hidden ? `<b>${hidden} hidden by your filters.</b> <button class="btn ghost sm" type="button" data-act="pickShowAll">Show all ${rows.length}</button>` : '';
   const head = document.querySelector('[data-pickhead]');
   if (head) head.textContent = hidden ? `${shown} of ${rows.length} new matches` : `${rows.length} new match${rows.length === 1 ? '' : 'es'}`;
-  const chip = document.querySelector('.flow a[href="#applications/pick"] .flow-c');
+  const chip = document.querySelector('.steps-bar a[href="#applications/pick"] .sb-n');
   if (chip) { chip.textContent = String(shown); chip.title = hidden ? `${shown} shown, ${hidden} hidden by your filters` : ''; }
   pickChanged(box);
 }
@@ -2940,7 +2944,7 @@ function pickChanged(box) {
   if (btn) { btn.disabled = !n; btn.textContent = n ? `Tailor ${n}` : 'Tailor selected'; }
   selectBar(box, n);
   const all = box.querySelector('[data-act=pickAll]');
-  if (all) all.textContent = n && n === box.querySelectorAll('.todo-row:not([hidden]) [data-pick]').length ? 'Clear' : 'Select all';
+  if (all) all.textContent = n && n === box.querySelectorAll('.jrow:not([hidden]) [data-pick]').length ? 'Clear' : 'Select all';
 }
 // Sync: the folder box only for syncing through a folder.
 document.addEventListener('change', e => {
@@ -3402,7 +3406,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   // Pick: walk the list and tick without the mouse.
-  const pickRows = [...document.querySelectorAll('.pick-list .todo-row.pick')].filter(r => !r.hidden);
+  const pickRows = [...document.querySelectorAll('.pick-list .jrow.pick')].filter(r => !r.hidden);
   if (pickRows.length && ['ArrowDown', 'ArrowUp', 'j', 'k', ' ', 'Enter', 'x', 't'].includes(e.key) && !(t && ['BUTTON', 'A', 'SUMMARY'].includes(t.tagName) && [' ', 'Enter'].includes(e.key))) {
     const at = pickRows.findIndex(r => r.classList.contains('kb'));
     const cur = pickRows[at];
@@ -3675,8 +3679,8 @@ async function act(el) {
   if (a === 'docFilter') { docFilter = el.dataset.f; route(); return; }
   if (a === 'pickTop') {
     const box = el.closest('[data-pickbox]');
-    const all = [...box.querySelectorAll('.todo-row:not([hidden]) [data-pick]')];
-    const score = c => Number(c.closest('.todo-row').querySelector('.score')?.textContent || 0);
+    const all = [...box.querySelectorAll('.jrow:not([hidden]) [data-pick]')];
+    const score = c => Number(c.closest('.jrow').querySelector('.score')?.textContent || 0);
     const top = new Set([...all].sort((a, b) => score(b) - score(a)).slice(0, Number(el.dataset.n)));
     all.forEach(c => { c.checked = top.has(c); });
     pickChanged(box);
@@ -3690,7 +3694,7 @@ async function act(el) {
   }
   if (a === 'pickAll') {
     const box = el.closest('[data-pickbox]');
-    const all = [...box.querySelectorAll('.todo-row:not([hidden]) [data-pick]')];
+    const all = [...box.querySelectorAll('.jrow:not([hidden]) [data-pick]')];
     const on = !all.every(c => c.checked);
     all.forEach(c => { c.checked = on; });
     pickChanged(box);
@@ -4526,7 +4530,7 @@ document.addEventListener('submit', async e => {
     if (kind === 'add') {
       const claude = form.querySelector('[name=claude]:checked')?.value === '1';
       await api('/api/add', { method: 'POST', body: { company: f.company.value, title: f.title.value, url: f.url.value, location: f.location.value, description: f.description.value, claude } });
-      toast(claude ? 'Added. Once it\'s scored and tailored it appears under Ready to approve; you get a notice.' : 'Saved. It\'s under Applications, Saved for later.');
+      toast(claude ? 'Added. Once it\'s scored and tailored it appears under Ready to approve; you get a notice.' : 'Saved. It\'s under Jobs → All jobs, Saved for later.');
       location.hash = '#overview';
     } else if (kind === 'claude') {
       await api('/api/settings/claude', { method: 'POST', body: { engine: form.querySelector('[name=engine]:checked').value, claude_key: f.claude_key.value, model: f.model.value, tailor_model: f.tailor_model.value, tailor_effort: f.tailor_effort.value, score_model: f.score_model.value, path: f.path.value } });

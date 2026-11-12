@@ -2265,7 +2265,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             ("ready", s) => ("Application ready".into(), format!("{} at {} (fit {}) has a tailored CV and cover letter waiting for your approval.", j.title, j.company, s.unwrap_or(0))),
             ("queued", Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}. It's under Jobs, in Pick, for you to tailor when you choose.", j.title, j.company)),
             (_, Some(s)) => ("Added to Job Hunt".into(), format!("{} at {}: fit {s}.", j.title, j.company)),
-            _ => ("Saved to Job Hunt".into(), format!("{} at {} is saved under Applications. Use Tailor anyway when you want a tailored CV and cover letter.", j.title, j.company)),
+            _ => ("Saved to Job Hunt".into(), format!("{} at {} is saved under Jobs, in All jobs. Use Tailor anyway when you want a tailored CV and cover letter.", j.title, j.company)),
         }
     }
 
@@ -3866,7 +3866,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             add(&mut out, "problem", if self.engine_name() == "api" { "No Claude API key, so nothing can be scored or tailored.".into() } else { "Claude Code isn't ready on this computer, so nothing can be scored or tailored.".into() }, "#settings/connections");
         }
         if self.engine_name() == "api" && self.claude_ready() && (self.profile().sources.indeed || self.ratings_auto()) {
-            add(&mut out, "warn", "You're using a Claude API key. Indeed search, company ratings and finding jobs on companies' own sites need your Claude subscription: choose it in Settings \u{2192} Connections \u{2192} Claude.".into(), "#settings/connections");
+            add(&mut out, "warn", "You're using a Claude API key. Indeed search, company ratings and finding jobs on companies' own sites need your Claude subscription: choose it in Settings \u{2192} Accounts \u{2192} Claude.".into(), "#settings/connections");
         }
         if let Some(t) = self.limited() {
             add(&mut out, "warn", format!("Your Claude usage limit is reached. It resets {}; searching, scoring and tailoring wait until then, and pick up by themselves.", crate::util::reset_time(t, chrono::Utc::now())), "#settings/connections");
@@ -3933,7 +3933,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                     _ if signed_out => {
                         if seen.insert("google-signed-out".into()) {
                             fix(&mut out, "warn", format!("Google signed Job Hunt out, so the {} stopped. Reconnect it; if it happens again a week later, \
-publish your Google project (Settings \u{2192} Connections explains how).", what.to_lowercase()), "Reconnect Google", "google", "");
+publish your Google project (Settings \u{2192} Accounts explains how).", what.to_lowercase()), "Reconnect Google", "google", "");
                         }
                     }
                     // Trying again doesn't help without a CV: the link goes where you add one.

@@ -46,7 +46,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   page.on('request', r => { if (r.method() === 'POST' && /\/status$/.test(r.url())) sent.push(r.postDataJSON()); });
   const before = (await page.$$('[data-pick]')).length;
   check(before >= 3, `Pick has the sample matches (${before})`);
-  await page.click('.todo-row.pick:last-child [data-status=dismissed]');
+  await page.click('.jrow.pick:last-child [data-status=dismissed]');
   await page.waitForTimeout(500);
   check((await text('.modal .btn.primary')).trim() === 'Not interested', 'Not interested is the main button of its dialog');
   await page.click('.modal .btn.primary');
@@ -58,14 +58,14 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('applications/pick');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Space');
-  check(await page.evaluate(() => document.querySelector('.todo-row.pick.kb [data-pick]')?.checked === true), 'Arrow and Space tick a role');
+  check(await page.evaluate(() => document.querySelector('.jrow.pick.kb [data-pick]')?.checked === true), 'Arrow and Space tick a role');
   await page.keyboard.press('t');
   check(await until(async () => ((await counts()).ready || 0) >= 1), 'Tailoring moves it to Approve');
 
   // Jobs opens on what needs you first; approve from the job's page.
   await at('applications');
-  check((await text('.flow a.on')).startsWith('Approve'), 'Jobs opens on Approve when something is ready');
-  await page.click('.todo-row a.btn');
+  check((await text('.steps-bar a.on .sb-name')) === 'Approve', 'Jobs opens on Approve when something is ready');
+  await page.click('.jrow .jact a.btn');
   await page.waitForTimeout(1200);
   check((await text('.next-step')).includes('Next:'), 'A job says what to do next');
   const approve = await page.$('.next-step [data-act=approve]');
@@ -75,12 +75,12 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
 
   // Submit: mark it applied, and it waits for a reply.
   await at('applications/submit');
-  const applied = await page.$('.todo-row [data-status=applied]');
+  const applied = await page.$('.jrow [data-status=applied]');
   check(!!applied, 'Submit lists the approved job');
   if (applied) { await applied.click(); await page.waitForTimeout(1200); await okDialogs(); }
   check(await until(async () => ((await counts()).applied || 0) >= 1, 20), 'Mark applied moves it to Waiting');
   await at('applications/waiting');
-  check((await page.$$('.todo-row')).length >= 1, 'Waiting lists it');
+  check((await page.$$('.jrow')).length >= 1, 'Waiting lists it');
 
   // Every page in the menu draws.
   for (const h of ['overview', 'applications/all', 'applications/new', 'applications/applied', 'applications/interviews', 'inbox', 'inbox/recruiters', 'calendar', 'search', 'search/what', 'search/setup',
