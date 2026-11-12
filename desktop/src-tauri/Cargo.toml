@@ -1,6 +1,6 @@
 [package]
 name = "jobhunt"
-version = "2.37.0"
+version = "2.38.0"
 description = "Job Hunt: finds roles, tailors your CV, tracks applications, triages email and books interviews"
 authors = ["Job Hunt"]
 edition = "2021"
@@ -35,8 +35,10 @@ percent-encoding = "2"
 arboard = { version = "3", default-features = false }
 
 [profile.release]
-codegen-units = 1
-lto = true
+# Thin LTO over 16 units: close to the size and speed of full LTO, and a much shorter build
+# (Windows build minutes count double).
+codegen-units = 16
+lto = "thin"
 opt-level = "s"
 panic = "unwind"
 strip = true

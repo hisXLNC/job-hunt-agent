@@ -4,6 +4,24 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.38.0] - 2026-11-12
+
+One next step per job, a shorter Today, and your defaults.
+
+### Changes
+
+- Forms open in your own browser by default: Approve opens the form there for the extension to fill, and Fill it in my browser is the main button on the Apply page and on an approved job. A Job Hunt window is still offered.
+- Not interested no longer changes how Job Hunt scores: that is the main button now, with Not interested, and learn from it beside it. Setting several aside at once never learns.
+- A job's page starts with one Next line for its stage and its one button; opening the posting, Save for later and Not interested sit quietly under it.
+- Today is shorter: problems are lines of What needs you with their fix button, and the last search's report moved to Search. The Job search line says what the last search found.
+- Search opens with what it is looking for (titles, places, pay) and what the last search found, including why postings were set aside, each reason with a link to the setting that caused it. Sources you don't use are folded away.
+- Job titles and keywords can be changed in Search, What to search for, as well as in CV & Career.
+- Pick with the keyboard: arrows move, Space ticks, Enter opens, X is not interested, T tailors the ticked ones.
+- Waiting: Write all writes every follow-up that is due in one go, for you to read and send.
+- Jobs, All jobs has a Tailored files button. Long explanations on the CVs and Apply pages are folded under a short line.
+- A little more air: larger headings, roomier cards and rows.
+- Behind the scenes: every release is now clicked through in a real browser first (pick, tailor, approve, submit, every page, phone size), and the Windows build is quicker.
+
 ## [2.37.0] - 2026-11-12
 
 A simpler layout: Today, Jobs, and every setting under Settings.
@@ -1451,6 +1469,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.38.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.38.0
 [2.37.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.37.0
 [2.36.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.9
 [2.36.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.8

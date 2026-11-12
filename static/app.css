@@ -1050,3 +1050,47 @@ nav.main .nav-group { margin: 14px 10px 4px; font-size: 11px; font-weight: 600; 
   body.more-open .side nav.main .nav-group { display: block; }
 }
 @media (max-width: 900px) { nav.main .nav-group { display: none; } body.more-open .side nav.main .nav-group { display: block; } }
+
+/* ---- 2.38: the job page's next step, Today's problems, Search's summary, picking by keyboard ---- */
+/* A job's next step: what to do now and its button; the other actions sit quietly under it. */
+.card.next-step { flex-direction: column; flex-wrap: nowrap; gap: 10px; border-color: var(--accent); }
+.next-main { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; }
+.next-main .grow { flex: 1; min-width: 240px; }
+.next-more { gap: 2px; margin: 0 -8px -6px; padding-top: 8px; border-top: 1px solid var(--line-2); }
+.btn.ghost.danger { color: var(--crit); }
+/* Problems in What needs you. */
+.next-row.warn .next-n { background: var(--warn-soft); color: var(--warn); }
+.next-row.crit .next-n { background: var(--crit-soft); color: var(--crit); }
+.next-card .ideas:empty { display: none; }
+/* Search: what it's looking for, why postings were set aside, sources not in use. */
+.card.looking { padding-block: 8px; }
+.why-rows > div { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line-2); }
+.why-rows > div:first-child { border-top: 0; }
+.why-rows b { min-width: 36px; text-align: right; }
+.why-rows .grow { flex: 1; }
+.src-table > header { padding: 12px 0 4px; }
+.src-table > header + .src-row { border-top: 0; }
+.src-unused { border-top: 1px solid var(--line); padding: 10px 0; }
+.src-unused > summary + .src-row { border-top: 0; }
+.title-set + .title-set { border-top: 1px solid var(--line-2); padding-top: 14px; }
+.title-set { display: flex; flex-direction: column; gap: 10px; }
+/* Pick: the row the keyboard is on. */
+.todo-row.pick.kb { box-shadow: inset 3px 0 0 var(--accent); background: var(--accent-soft); }
+.pick-keys { margin: 0 0 6px; }
+.pick-keys kbd, table.keys kbd { font: 11px var(--font-m); padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); }
+
+/* ---- A calmer look: more air, softer cards, clearer headings ---- */
+.page { gap: 24px; padding-top: 32px; }
+h1 { font-size: 30px; }
+h2 { font-size: 18px; }
+.card { border-radius: 12px; padding: 20px 22px; }
+.kpi, .hstep { border-radius: 12px; }
+.card.on-auto, .card.looking, .card.optional-steps { padding-block: 10px; }
+.src-table { padding: 4px 20px; }
+td { padding-block: 12px; }
+.head p.muted { font-size: 15px; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .page { gap: 16px; padding-top: 16px; }
+  .card { padding: 16px; }
+  h1 { font-size: 24px; }
+}

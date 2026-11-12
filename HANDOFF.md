@@ -5,9 +5,12 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.37.0** (the layout redesign: Today, Jobs, every setting under Settings). The
-  working branch changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is what's
-  released. Last published before it: 2.36.9.
+- Latest version: **2.38.0** (job page's next step, Today and Search trimmed, keyboard picking, the
+  screen test). The working branch changes with each session (this one: `claude/brave-fermat-ti1omi`);
+  `main` is what's released. Last published before it: 2.37.0 (the Today / Jobs layout).
+- The user's defaults (asked for, keep them): forms open in **their own browser** (`applyNow`, the Apply
+  page's main button, the job page's next step: `fillBrowser`), and **Not interested doesn't learn**
+  (the dialog's main button and the bulk action send `learn: false`; "and learn from it" is the other button).
 - The screens' layout (`static/app.js`): `#overview` is **Today** (`showOverview`, `todayList`: what
   needs you, one line each); `#applications` is **Jobs** (`showPipeline`): `#applications/<step>` is a
   step (`showStep` → `stepHtml`; steps are `FLOW`), `#applications/all|new|active|applied` the list.
@@ -60,6 +63,12 @@ take the database: read secrets before them). If the disk fills, `cargo clean` i
 
 ## Looking at the screens
 
+`python tools/screen_test.py` clicks through the whole flow in a real browser against the preview
+(pick by keyboard, tailor, approve, submit, waiting, every menu page, phone width). `verify` runs it
+where Playwright is installed and skips it elsewhere (GitHub's build). Add a check there when a
+screen changes. A fresh container needs the window libraries for the last verify step:
+`apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev`.
+
 `cd core && cargo run --example dev_server -- <empty folder> <a .docx CV>` serves the screens with
 sample jobs at http://127.0.0.1:8790 (static files are read live). With a CV given it seeds 7
 postings, 3 to pick; ticking and Tailor selected walks them through approve, submit and waiting.
@@ -92,4 +101,10 @@ The Playwright mocks lived in the old session's scratchpad and are gone; rebuild
 - The Ryan "Manager, Tax Technology" LinkedIn posting wasn't picked up; LinkedIn now reads 4 pages.
   If it's still missing, check the skipped list's reason (location or age).
 - The GitHub release notes for 2.36.8 show "5,000–15,000" (shell ate `$9`); the in-app changelog is fixed.
-- Unanswered: build-time speedups (lighter LTO, parallel CI tests, skip the local Windows compile).
+- Build speed: the Windows release build uses thin LTO over 16 units since 2.38.0. If the installer
+  grew too much or the app got slower, go back to `lto = true`, `codegen-units = 1`.
+- Suggested and not built: learning from picks (the user wants Not interested not to learn), follow-ups
+  that send themselves (they're drafted; Write all N drafts them in one go), a one-click loosen for
+  filters (Search's last-search card links each reason to its setting instead).
+- `git push origin HEAD:main --no-verify` is refused in cloud sessions; push without the flag (the hook
+  isn't on unless `core.hooksPath` is set).

@@ -17,7 +17,8 @@ To release:
     python tools/release_ci.py verify      # must pass; then commit and push to main
 
 `verify` runs what the builds depend on and stops at the first failure: versions in step, the page
-scripts parse, every core test passes, the server and the Windows app compile. The pre-push hook in
+scripts parse, every core test passes, the server compiles, the screens work when clicked through in a
+real browser (tools/screen_test.py; skipped where Playwright isn't installed), and the Windows app compiles. The pre-push hook in
 .githooks runs it before anything is pushed to main (git config core.hooksPath .githooks).
 
 Other commands:
@@ -233,6 +234,8 @@ def verify(quick=False):
         ("Core tests pass", ["cargo", "test", "-q", "--manifest-path", "core/Cargo.toml"], ROOT),
         ("Server compiles", ["cargo", "build", "-q", "--manifest-path", "core/Cargo.toml", "--bin", "jobhunt-server"], ROOT),
     ]
+    # In a real browser, against the preview with sample data. Skipped where Playwright isn't installed.
+    steps.append(("Screens work (click-through)", [sys.executable, "tools/screen_test.py"], ROOT))
     if not quick:
         steps.append(("Windows app compiles", ["cargo", "check", "-q", "--manifest-path", "desktop/src-tauri/Cargo.toml"], ROOT))
     env = dict(os.environ, CARGO_TERM_COLOR="never")
@@ -244,6 +247,9 @@ def verify(quick=False):
             try:
                 r = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
                 ok, out = r.returncode == 0, (r.stdout + r.stderr)
+                if r.returncode == 2 and cmd[-1].endswith("screen_test.py"):
+                    print(f"skip  {name}: {out.strip().splitlines()[-1] if out.strip() else 'not available here'}", flush=True)
+                    continue
             except FileNotFoundError as e:
                 ok, out = False, f"{cmd[0]} isn't installed ({e})"
         print(f"{'ok  ' if ok else 'FAIL'}  {name}", flush=True)

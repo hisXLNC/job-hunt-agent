@@ -555,6 +555,11 @@ function todayList(o) {
   const line = (n, title, sub, action) => `<div class="next-row"><span class="next-n">${n}</span><span class="grow"><b>${title}</b>${sub ? `<br><span class="muted small">${sub}</span>` : ''}</span><span class="row next-act">${action}</span></div>`;
   const names = list => { const l = list.slice(0, 3).map(j => esc(j.company)); return l.join(', ') + (list.length > 3 ? ` and ${list.length - 3} more` : ''); };
   const rows = [];
+  // Problems first: each says what's wrong, with the button that fixes it or takes you there.
+  (o.health || []).forEach(h => rows.push(`<div class="next-row ${h.level === 'problem' ? 'crit' : 'warn'}"><span class="next-n">!</span><span class="grow">${esc(h.text)}</span><span class="row next-act">
+      ${h.action === 'removeBroken' ? `<button class="btn sm" data-act="removeBroken" data-boards="${esc(JSON.stringify(h.data))}">Remove ${h.data.length === 1 ? 'it' : 'them'}</button><button class="btn sm go" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button>` : ''}
+      ${h.fix ? `<button class="btn sm go" data-act="${esc(h.fix.act)}" data-task="${esc(h.fix.task)}">${esc(h.fix.label)}</button>` : ''}
+      ${h.link && h.link !== '#overview' ? `<a class="btn sm go" href="${esc(h.link)}">Fix it</a>` : ''}</span></div>`));
   const soon = (o.interviews || []).filter(i => new Date(i.start) - Date.now() < 3 * 86400000);
   soon.forEach(i => rows.push(line(svg('calendar'), `Interview: ${esc(i.company || i.title)}`, `${esc(fmtWhen(i.start))}${i.job_title ? ` · ${esc(i.job_title)}` : ''}`,
     i.job_id ? `<a class="btn sm go" href="#job/${encodeURIComponent(i.job_id)}" data-tab-to="interview">Prepare</a>` : `<a class="btn sm go" href="#calendar">Calendar</a>`)));
@@ -628,23 +633,18 @@ async function showOverview() {
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}
     ${inUseHtml(o.in_use)}
-    ${o.health?.length ? `<section class="card health"><header><h2>Needs attention</h2></header><ul class="flags">${o.health.map(h => `<li class="${h.level === 'problem' ? 'crit' : ''}">${esc(h.text)}
-      ${h.action === 'removeBroken' ? `<span class="row" style="display:inline-flex;margin-left:6px"><button class="btn" data-act="removeBroken" data-boards="${esc(JSON.stringify(h.data))}">Remove ${h.data.length === 1 ? 'it' : 'them'}</button><button class="btn primary" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button></span>` : ''}
-      ${h.fix ? `<button class="btn sm" style="margin-left:6px" data-act="${esc(h.fix.act)}" data-task="${esc(h.fix.task)}">${esc(h.fix.label)}</button>` : ''}
-      ${h.link && h.link !== '#overview' ? `<a href="${esc(h.link)}">Fix it</a>` : ''}</li>`).join('')}</ul><div id="healthIdeas" class="ideas"></div></section>` : ''}
     ${o.progress ? progressHtml(o.progress) : ''}
     <nav class="hsteps" aria-label="Your job hunt, step by step">${FLOW.map(([id, name, n, , hint]) =>
       `<a class="hstep${n(c) ? '' : ' none'}${id === nextStep ? ' next' : ''}" href="#applications/${id}"><span class="hstep-n">${n(c)}</span><span class="hstep-name">${name}</span><span class="hstep-hint">${hint}</span></a>`).join('<span class="hstep-arrow" aria-hidden="true">›</span>')}</nav>
     <section class="card next-card"><header><h2>What needs you</h2>${todo.length ? `<a class="btn ghost" href="#applications">All jobs by step</a>` : ''}</header>
-      ${todo.length ? todo.join('') : `<p class="muted">${neededDone ? `You're all caught up.${searching ? ' A search is running: new matches show here when it\'s done.' : side.paused ? ` ${esc(pausedWords(side.paused))}.` : nextSearch ? ` Job Hunt searches again ${esc(nextSearch.toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }))}, or search now.` : ' Search for jobs to find new matches.'}` : 'Finish setting up above, then search for jobs.'}</p>`}
+      ${todo.length ? `${todo.join('')}<div id="healthIdeas" class="ideas"></div>` : `<p class="muted">${neededDone ? `You're all caught up.${searching ? ' A search is running: new matches show here when it\'s done.' : side.paused ? ` ${esc(pausedWords(side.paused))}.` : nextSearch ? ` Job Hunt searches again ${esc(nextSearch.toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }))}, or search now.` : ' Search for jobs to find new matches.'}` : 'Finish setting up above, then search for jobs.'}</p>`}
     </section>
     ${titleIdeasHtml(o.title_ideas)}
-    <section class="card on-auto"><div class="auto-line">${svg('search')}<span class="grow"><b>Job search</b> <span class="muted">last ran ${esc(ago(o.last_search))}${side.paused ? '' : nextSearch ? ` · next ${esc(nextSearch.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}</span></span>${scheduleMenu(side.paused)}<a class="btn ghost sm" href="#search">Where it looks</a></div>
-      ${setup.google || !googleOff ? `<div class="auto-line">${svg('mail')}<span class="grow"><b>Job email</b> <span class="muted">${setup.google ? `last checked ${esc(ago(o.last_inbox))}` : 'Gmail isn\'t connected: Job Hunt can sort your job email and book interviews.'}</span></span>${setup.google ? `<button class="btn sm" data-act="run" data-task="inbox">Check now</button><a class="btn ghost sm" href="#inbox">Inbox</a>` : `<a class="btn sm" href="#settings/connections">Connect Gmail</a>`}</div>` : ''}
+    <section class="card on-auto"><div class="auto-line">${svg('search')}<span class="grow"><b>Job search</b> <span class="muted">last ran ${esc(ago(o.last_search))}${o.last_report && o.last_search ? `: ${o.last_report.new} new${o.last_report.to_pick ? `, ${o.last_report.to_pick} to pick from` : ''}` : ''}${side.paused ? '' : nextSearch ? ` · next ${esc(nextSearch.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}</span></span>${scheduleMenu(side.paused)}<a class="btn ghost sm" href="#search">What it found</a></div>
+      ${setup.google || !googleOff ? `<div class="auto-line">${svg('mail')}<span class="grow"><b>Job email</b> <span class="muted">${setup.google ? `last checked ${esc(ago(o.last_inbox))}` : 'Gmail isn\'t connected: Job Hunt can sort your job email and book interviews.'}</span></span>${setup.google ? `<button class="btn sm" data-act="run" data-task="inbox">Check now</button><a class="btn ghost sm" href="#inbox">Inbox</a>` : `<a class="btn sm" href="#settings/connections">Connect Gmail</a><button class="btn ghost sm" data-act="setupSkip" data-what="google" title="Hide this">Not now</button>`}</div>` : ''}
     </section>
-    ${showSteps && neededDone ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && !st[0]).map(([, t, d, href, key]) =>
+    ${showSteps && neededDone && steps.some(st => st[4] && st[4] !== 'google' && !st[0]) ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && st[4] !== 'google' && !st[0]).map(([, t, d, href, key]) =>
       `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
-    ${o.progress ? '' : reportHtml(o.last_report)}
     <section class="kpis three">
       <div class="kpi"><span class="kpi-l">Applied this week</span><span class="kpi-v">${o.this_week}${o.weekly_goal ? `<span class="muted" style="font-size:.5em"> / ${o.weekly_goal}</span>` : ''}</span>${o.weekly_goal ? `<span class="meter"><i style="width:${Math.min(100, o.this_week / o.weekly_goal * 100)}%"></i></span>` : ''}<span class="kpi-s">${delta === 0 ? 'Same as last week' : `<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span> vs last week`}</span></div>
       <a class="kpi" href="#calendar"><span class="kpi-l">Interviews coming up</span><span class="kpi-v">${o.interviews.length}</span><span class="kpi-s">${next ? `Next: ${esc(fmtWhen(next.start))}` : 'None booked yet'}</span></a>
@@ -703,7 +703,7 @@ async function showPipeline(view) {
   const sources = [...new Set(jobs.map(j => j.source))].sort((a, b) => sourceName(a).localeCompare(sourceName(b)));
   const stagesHere = Object.keys(STAGES).filter(k => jobs.some(j => j.status === k));
   const empKinds = ['Full-time', 'Contract', 'Temporary', 'Part-time', 'Internship', 'Co-op', 'Freelance', 'Not stated'].filter(k => jobs.some(j => empKind(j) === k));
-  page(`${jobsHead(view, `<a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Company, title, stage, fit, salary, dates, links and notes, for Excel or Google Sheets">${svg('download')}Spreadsheet</a>`)}
+  page(`${jobsHead(view, `<a class="btn ghost" href="#cvs/documents" title="Every tailored CV and cover letter">${svg('documents')}Tailored files</a><a class="btn ghost" href="/api/export.csv" download="Job Hunt applications.csv" title="Company, title, stage, fit, salary, dates, links and notes, for Excel or Google Sheets">${svg('download')}Spreadsheet</a>`)}
     <nav class="tabs">${APP_TABS.map(([id, n]) => `<a href="#applications/${id}" class="${id === view ? 'on' : ''}">${n} <span class="muted small">${counts[id]}</span></a>`).join('')}</nav>
     <div class="all-filters" id="allFilters">
       <input type="search" data-allf="q" placeholder="Company, role or place" aria-label="Find in the list">
@@ -922,18 +922,29 @@ let jobPoll;
 const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions &amp; contacts'], ['interview', 'Interview'], ['chat', 'Ask Claude']];
 const jobTabs = {};
 /** The job's buttons: its next step first, as the main one, then the rest, all in view. */
-function jobActions(j, tailoring) {
+function jobActions(j, tailoring, progress) {
   const id = esc(j.id), on = `data-job="${id}" data-from="${esc(j.status)}"`;
+  const enc = encodeURIComponent(j.id);
+  // What to do now, in a sentence, with its button (or two).
+  let next = '', main = [];
+  if (tailoring) next = 'Job Hunt is tailoring your CV and cover letter. This page updates by itself.';
+  else if (j.status === 'queued') { next = 'Read the posting and why it fits. Worth applying to? Job Hunt tailors your CV and writes a cover letter.'; main = [`<button class="btn primary" data-act="tailorPicked" data-job="${id}">Tailor my CV for this role</button>`]; }
+  else if (j.status === 'ready') { next = 'Read your tailored CV and cover letter below, change what you like, then approve.'; main = [`<button class="btn primary" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">${svg('check')}${j.apply_email ? `Approve and email to ${esc(j.apply_email)}` : 'Approve and apply'}</button>`]; }
+  else if (j.status === 'approved') { next = 'Submit it on the company\'s site. Job Hunt fills in the form in your browser; you check it and press Submit.';
+    main = [overview?.can_fill && j.url ? `<button class="btn primary" data-act="fillBrowser" data-job="${id}">${svg('open')}Fill it in my browser</button>` : `<a class="btn primary" href="#apply/${enc}">${svg('open')}Apply</a>`,
+      overview?.can_fill && j.url ? `<a class="btn" href="#apply/${enc}">Files and answers</a>` : '', `<button class="btn" data-act="stage" ${on} data-status="applied">${svg('check')}Mark applied</button>`]; }
+  else if (j.status === 'saved') { next = 'Saved for later.'; main = [`<button class="btn primary" data-act="stage" ${on} data-status="${j.cv_path ? 'ready' : 'queued'}">Bring it back</button>`]; }
+  else if (['skipped', 'dismissed'].includes(j.status)) next = j.status === 'skipped' ? 'Set aside: its fit was below your minimum, or a filter caught it. You can still tailor it.' : 'You marked it Not interested. You can still tailor it.';
+  else if (progress && ['applied', 'interviewing', 'offer'].includes(j.status)) next = nextText(progress);
+  if (['skipped', 'dismissed'].includes(j.status) || (j.status === 'saved' && !j.cv_path)) main.push(`<button class="btn ${j.status === 'saved' ? '' : 'primary'}" data-act="tailorAnyway" data-job="${id}" ${tailoring ? 'disabled' : ''}>Tailor anyway</button>`);
+  // The rest: always there, never in the way.
   const b = [];
-  if (j.status === 'ready') b.push(`<button class="btn primary" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">${svg('check')}${j.apply_email ? `Approve and email to ${esc(j.apply_email)}` : 'Approve and apply'}</button>`);
-  if (j.status === 'queued' && !tailoring) b.push(`<button class="btn primary" data-act="tailorPicked" data-job="${id}">Tailor my CV for this role</button>`);
-  if (j.status === 'approved') b.push(`<a class="btn primary" href="#apply/${encodeURIComponent(j.id)}">${svg('open')}Apply on the company's site</a>`, `<button class="btn" data-act="stage" ${on} data-status="applied">${svg('check')}Mark applied</button>`);
-  if (j.status === 'saved') b.push(`<button class="btn primary" data-act="stage" ${on} data-status="${j.cv_path ? 'ready' : 'queued'}">Bring it back</button>`);
-  if (['skipped', 'dismissed'].includes(j.status) || (j.status === 'saved' && !j.cv_path)) b.push(`<button class="btn ${j.status === 'saved' ? '' : 'primary'}" data-act="tailorAnyway" data-job="${id}" ${tailoring ? 'disabled' : ''}>Tailor anyway</button>`);
-  if (j.apply_url) b.push(`<button class="btn" data-act="open" data-job="${id}" data-what="company">${svg('open')}On the company's site</button>`);
-  if (j.url) b.push(`<button class="btn" data-act="open" data-job="${id}" data-what="posting">${svg('open')}Open posting</button>`);
-  if (['ready', 'approved', 'queued'].includes(j.status)) b.push(`<button class="btn" data-act="stage" ${on} data-status="saved">Save for later</button>`, `<button class="btn danger" data-act="stage" ${on} data-status="dismissed">Not interested</button>`);
-  return `<div class="actions">${b.join('')}</div>`;
+  if (j.apply_url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="company">${svg('open')}On the company's site</button>`);
+  if (j.url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="posting">${svg('open')}Open posting</button>`);
+  if (['ready', 'approved', 'queued'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="stage" ${on} data-status="saved">Save for later</button>`, `<button class="btn ghost sm danger" data-act="stage" ${on} data-status="dismissed">Not interested</button>`);
+  return `<section class="card next-step actions">
+      <div class="next-main">${next ? `<p class="grow"><b>Next:</b> ${next}</p>` : '<span class="grow"></span>'}<div class="row">${main.filter(Boolean).join('')}</div></div>
+      ${b.length ? `<div class="row next-more">${b.join('')}</div>` : ''}</section>`;
 }
 /** "Why it fits", up top: the strongest match, the biggest gap, and anything to check. */
 function whyBox(j, flags, note = '') {
@@ -980,13 +991,12 @@ async function showJob(id) {
         <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}${(company_history || []).length ? ' <span class="pill info">Applied here before</span>' : ''}</div>
       </div>
     </div>
-    ${jobActions(j, tailoring)}
+    ${jobActions(j, tailoring, progress)}
     ${j.warnings.length && !j.closed_at && !['applied', 'interviewing', 'offer'].includes(j.status) ? `<div class="card" style="border-color:var(--warn)"><b>Check this posting is real and open before you put time in.</b><ul class="flags">${j.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
     ${expiredWhy(j) ? `<div class="card" style="border-color:var(--crit)"><b>This opening has expired.</b><p class="muted">${esc(expiredWhy(j).replace(/^Expired: /, '').replace(/^./, c => c.toUpperCase()))}. Open the posting to make sure, then mark it Not interested.</p></div>` : ''}
-    ${j.status === 'approved' ? `<div class="card row" style="border-color:var(--accent);justify-content:space-between"><span><b>Next: submit it on the company's site.</b><br><span class="muted">The Apply screen has the posting, your files and your answers in one place.</span></span><a class="btn primary" href="#apply/${encodeURIComponent(j.id)}">Apply</a></div>` : ''}
     ${(recruiters_here || []).length ? `<div class="card"><b>Recruiter${recruiters_here.length === 1 ? '' : 's'} for this application</b>${recruiters_here.map(r => `<div class="small" style="margin-top:6px"><b>${esc(r.name)}</b> <span class="muted">${esc(r.company_of || '')}</span> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>${r.phone ? ` · <a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a>` : ''}${r.linkedin ? ` · <a href="#" data-act="link" data-url="${esc(r.linkedin)}">LinkedIn</a>` : ''}<br><span class="muted">${esc(r.emails)} email${r.emails === 1 ? '' : 's'} · last ${esc(ago(r.last_at))}${r.last_subject ? ` · “${esc(r.last_subject)}”` : ''}</span></div>`).join('')}<a class="small" href="#inbox/recruiters">All recruiters</a></div>` : ''}
     ${recruiter && !['rejected', 'offer', 'no_response', 'dismissed'].includes(j.status) && !(recruiters_here || []).some(r => r.email === recruiter.email && ['applied', 'interviewing'].includes(j.status)) ? recruiterCard(recruiter, j) : ''}
-    ${tailoring ? `<div class="card"><p><span class="spin" data-kind="tailor+score"></span> Tailoring your CV and cover letter for this role… this page updates by itself.</p></div>` : ''}
+    ${tailoring ? `<p class="muted small"><span class="spin" data-kind="tailor+score"></span> Tailoring…</p>` : ''}
     ${revising ? `<div class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this page updates by itself.</p></div>` : ''}
     <nav class="tabs job-tabs" id="jobTabs">${tabs.map(([k, n]) => `<a href="#" data-jtab="${k}" class="${k === tab ? 'on' : ''}">${n}${badge[k] ? `<span class="tab-dot" title="${esc(badge[k])}"></span>` : ''}</a>`).join('')}</nav>
     <div class="jpane" data-pane="overview" ${tab === 'overview' ? '' : 'hidden'}>
@@ -1235,15 +1245,15 @@ window.askApplied = async j => {
     catch (e) { toast(e.message, true); }
   }
 };
-/** After Approve: open the job's form in Job Hunt's Apply window, filled in, when that works here
- *  (the app on your PC) and suits the job; else false, and the Apply page takes over. Forms that need
- *  an account go to the Apply page, where your own browser (with your sign-ins) is offered. */
+/** After Approve: open the job's form in your own browser (your sign-ins and saved passwords work
+ *  there), where the Job Hunt extension fills it in; false when that can't be done here (the phone,
+ *  no link), and the Apply page takes over. */
 async function applyNow(id) {
-  const j = [...(overview?.approved || []), ...(overview?.ready || [])].find(x => x.id === id);
-  if (!overview?.can_fill || j?.effort?.kind === 'account') return false;
+  if (!overview?.can_fill) return false;
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}/fill`, { method: 'POST' });
-    toast('Approved. The form opens in its own window, filled in from your CV; check it and press Submit.');
+    const r = await api(`/api/jobs/${encodeURIComponent(id)}/fill-browser`, { method: 'POST' });
+    await api('/api/open-url', { method: 'POST', body: { url: r.url } });
+    toast('Approved. It\'s opening in your browser: on the form, click the Job Hunt extension and press Fill this form.');
     return true;
   } catch (e) { return false; }
 }
@@ -1340,6 +1350,7 @@ function stepHtml(o, step, tracked) {
       <label class="check small"><input type="checkbox" data-pickf="flags"> No red flags</label>
       <span class="muted small" data-pickcount></span>
     </div>
+    <p class="muted small pick-keys desktop-only"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Space</kbd> tick · <kbd>Enter</kbd> open · <kbd>X</kbd> not interested · <kbd>T</kbd> tailor the ticked ones</p>
     <div class="pick-list">${rows}</div>
     <div class="select-bar" hidden><span class="select-n"></span><button class="btn primary" data-act="tailorPicked">Tailor selected</button><button class="btn" data-act="dismissPicked">${svg('close')}Not interested</button><button class="btn ghost" data-act="pickClear">Clear</button></div>
 </div>`]);
@@ -1376,7 +1387,7 @@ function stepHtml(o, step, tracked) {
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="apply" data-scroll="people">Write a note</a>`)).join('')]);
   if (o.contact_follow_ups?.length) groups.push(['No reply from the recruiter: follow up once', o.contact_follow_ups.slice(0, 6).map(f => row(f.job, `messaged ${esc(f.name)} ${esc(ago(f.sent_at))}${f.late ? '. Follow up now or let it go' : ''}`,
     `<a class="btn sm" href="#job/${encodeURIComponent(f.job.id)}" data-tab-to="apply">Write the follow-up</a>`)).join('')]);
-  if (o.follow_ups?.length) groups.push(['No reply yet: follow up', o.follow_ups.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
+  if (o.follow_ups?.length) groups.push([`No reply yet: follow up${o.follow_ups.length > 1 ? ` <button class="btn primary sm" data-act="followUpAll" data-ids="${esc(JSON.stringify(o.follow_ups.slice(0, 6).map(j => j.id)))}" style="margin-left:8px" title="Job Hunt writes a short follow-up for each; they're saved as Gmail drafts (or on each job) for you to read and send">Write all ${Math.min(6, o.follow_ups.length)}</button>` : ''}`, o.follow_ups.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
     `<button class="btn sm" data-act="followUp" data-job="${id(j)}">Write follow-up</button>`)).join('')]);
   // Each step's groups; the ones above were made for all of them.
   const has = h => groups.find(g => String(g[0]).startsWith(h));
@@ -1496,10 +1507,16 @@ function reportHtml(r) {
     </div>
     <p class="muted small">Also set up daily job alerts on LinkedIn, Indeed or your country's job sites for your titles, sent to your Gmail: Job Hunt reads them on every email check. If many postings are set aside for their location or title, widen your locations or add titles in <a href="#cvs">Your CVs</a>.</p>
     <div id="moreIdeas" class="ideas"></div></details>` : '';
+  const WHY_FIX = { 'outside your locations': 'Change your places', 'title doesn\'t match your CVs': 'Add job titles', 'a title word you skip': 'Change the words you skip', 'salary below your minimum': 'Change your minimum salary', 'a company you skip': 'Change the companies you skip', 'company rated below your minimum': 'Change the minimum rating' };
+  const whyRows = Object.entries(r.why_filtered || {}).sort((a, b) => b[1] - a[1]);
+  const aside = whyRows.length ? `<details class="more"><summary><b>Why ${r.filtered} ${r.filtered === 1 ? 'was' : 'were'} set aside before scoring</b></summary>
+      <div class="why-rows">${whyRows.map(([k, n]) => `<div><b class="num">${n}</b><span class="grow">${esc(k)}</span>${WHY_FIX[k] ? `<a class="btn ghost sm" href="#search/what">${WHY_FIX[k]}</a>` : ''}</div>`).join('')}</div>
+      <p class="muted small">They used no Claude. They're in <a href="#applications/all">Jobs → All jobs</a> with the stage Skipped, each with its reason and Tailor anyway.</p></details>` : '';
   return `<section class="card"><header><h2>Last search</h2><a class="btn ghost" href="#applications/new">See the postings</a></header>
-    <div class="facts"><span><b>${r.found}</b> postings found</span><span><b>${r.new}</b> new</span>${r.known ? `<span><b>${r.known}</b> seen before</span>` : ''}<span title="${esc(why)}"><b>${r.filtered}</b> set aside (title or place didn't match)${why ? ` <span class="muted small">(${esc(why)})</span>` : ''}</span><span><b>${r.scored}</b> checked by Claude</span><span><b>${r.tailored}</b> tailored</span>${r.to_pick ? `<span><b>${r.to_pick}</b> to pick from</span>` : ''}${r.deferred ? `<span><b>${r.deferred}</b> left for next time</span>` : ''}${r.closed ? `<span><b>${r.closed}</b> closed</span>` : ''}</div>
+    <div class="facts"><span><b>${r.found}</b> postings found</span><span><b>${r.new}</b> new</span>${r.known ? `<span><b>${r.known}</b> seen before</span>` : ''}<span title="${esc(why)}"><b>${r.filtered}</b> set aside before scoring</span><span><b>${r.scored}</b> checked by Claude</span><span><b>${r.tailored}</b> tailored</span>${r.to_pick ? `<span><b>${r.to_pick}</b> to pick from</span>` : ''}${r.deferred ? `<span><b>${r.deferred}</b> left for next time</span>` : ''}${r.closed ? `<span><b>${r.closed}</b> closed</span>` : ''}</div>
     ${(r.by_source || []).length ? `<p class="small muted" style="margin:8px 0 0">From: ${r.by_source.map(x => `${esc(x.name)} <b>${x.found}</b>${x.failed ? ` <span class="bad-text">(${x.failed === x.searches ? 'failed' : `${x.failed} of ${x.searches} searches failed`})</span>` : ''}`).join(' · ')}</p>` : ''}
     ${probs.length ? `<details style="margin-top:8px"><summary class="small">${probs.length} problem${probs.length === 1 ? '' : 's'}</summary><ul class="flags">${probs.slice(0, 12).map(p => `<li>${esc(p)}</li>`).join('')}</ul></details>` : ''}
+    ${aside}
     ${more}
   </section>`;
 }
@@ -1736,9 +1753,9 @@ async function showApply(id) {
       <p class="muted">${!done && expiredWhy(j) ? `<b style="color:var(--crit)">${esc(expiredWhy(j))}.</b> Check the posting is still open before you apply.` : done ? 'You\'ve applied to this one.' : can_fill && j.url ? 'Job Hunt can fill in the form for you, or use the files and answers below yourself.' : 'Four steps. Your files and answers are ready below.'}</p></div></div>
     <ol class="apply-steps">
       ${can_fill && j.url && !done ? `<li class="card"><h2>Let Job Hunt fill it in</h2>
-        <p class="muted">Opens ${j.apply_url ? 'the job on the company\'s own site' : 'the posting'} in a Job Hunt window. Use the company's Apply button (sign in or make an account if it asks); when the form appears, Job Hunt fills it in from your CV, letter, facts and saved answers, and attaches your files. It doesn't press Submit (unless you turned that on for simple forms): check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>I submitted it</b> in that window (or <b>Mark applied</b> here) to do it yourself.</p>
-        <div class="row"><button class="btn primary" data-act="fillForm" data-job="${esc(j.id)}">${svg('check')}Fill it in for me</button><button class="btn" data-act="fillBrowser" data-job="${esc(j.id)}" title="Opens it in Chrome or Edge, where your sign-ins and saved passwords work; the Job Hunt extension fills it in">${svg('open')}Fill it in my own browser</button></div>
-        <p class="muted small">${j.effort?.kind === 'account' ? `<b>${esc(j.effort.label.split(' · ')[0])} makes you sign in or create an account:</b> your own browser is easier, with your saved passwords. ` : ''}In your own browser, click the Job Hunt extension on the form and press <b>Fill this form</b> (set it up in <a href="#search/setup">Search → Set up sources</a>). The steps below are there if you'd rather do it yourself, or for anything it couldn't fill.</p></li>` : ''}
+        <p class="muted">Opens ${j.apply_url ? 'the job on the company\'s own site' : 'the posting'} in your own browser, where your sign-ins and saved passwords work. On the form, click the Job Hunt extension and press <b>Fill this form</b>: it fills it in from your CV, letter, facts and saved answers, and attaches your files. You check it and press Submit.</p>
+        <div class="row"><button class="btn primary" data-act="fillBrowser" data-job="${esc(j.id)}" title="Opens it in Chrome or Edge; the Job Hunt extension fills it in">${svg('open')}Fill it in my browser</button><button class="btn" data-act="fillForm" data-job="${esc(j.id)}" title="Opens it in a Job Hunt window and fills it in there. Sites that need you to sign in are easier in your own browser.">${svg('check')}In a Job Hunt window instead</button></div>
+        <details class="more"><summary class="small muted">How it works, and marking it applied</summary><p class="muted small">Job Hunt doesn't press Submit (unless you turned that on for simple forms): check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>Mark applied</b> here. The extension is set up in <a href="#search/setup">Search → Set up sources</a>. The steps below are there if you'd rather do it yourself, or for anything it couldn't fill.</p></details></li>` : ''}
       <li class="card"><h2>${j.apply_url ? 'Open it on the company\'s site' : 'Open the posting'}</h2><p class="muted">${j.apply_url ? 'Applying on the company\'s own site goes straight to them, not through a job board.' : 'Use the company\'s Apply button.'} If it asks you to sign in or make an account, do that first.</p>
         <div class="row">${j.apply_url ? `<button class="btn ${can_fill ? '' : 'primary'}" data-act="open" data-what="company" data-job="${esc(j.id)}">${svg('open')}Apply on the company's site</button>` : ''}
         ${j.url ? `<button class="btn ${j.apply_url ? 'ghost' : can_fill ? '' : 'primary'}" data-act="open" data-what="posting" data-job="${esc(j.id)}">${svg('open')}${j.apply_url ? 'The job board posting' : 'Open the posting'}</button>` : ''}
@@ -2386,7 +2403,8 @@ async function showSettings(tab, sub, host) {
   } else if (tab === 'cvs') {
     const kindName = { docx: 'Word', pdf: 'Converted from PDF', text: 'Converted from text', 'docx-converted': 'Converted to Job Hunt layout' };
     body = `<section class="card"><header><h2>Your CVs</h2><button class="btn ghost" data-act="folder" data-which="cv">${svg('folder')}Open folder</button></header>
-      <p class="muted">Add as many CVs as you like, one for each kind of role. Every posting is scored against all of them and tailored from the best match. Word files are edited in place, so your formatting stays. PDF and text CVs are converted, word for word, into a clean Word copy first. Only your headline, summary, skills and bullet points are ever reworded, and an edit that adds a figure your CV doesn't state is refused.</p>
+      <p class="muted">Add as many CVs as you like, one for each kind of role. Every posting is scored against all of them and tailored from the best match.</p>
+      <details class="more"><summary class="small muted">What Job Hunt changes in a CV</summary><p class="muted small">Word files are edited in place, so your formatting stays. PDF and text CVs are converted, word for word, into a clean Word copy first. Only your headline, summary, skills and bullet points are ever reworded, and an edit that adds a figure your CV doesn't state is refused.</p></details>
       <label class="drop" id="drop"><input type="file" accept=".docx,.pdf,.txt" multiple data-upload="cv-add" hidden>
         <b>Add CVs</b><span class="muted small">Drop Word, PDF or text files here, or click to choose. Claude reads each one and suggests the job titles to search for.</span></label>
     </section>
@@ -2437,7 +2455,14 @@ async function showSettings(tab, sub, host) {
     body = `${cvsTabs(view, st.cvs.length)}
       ${view === 'career' ? career : view === 'details' ? details : body}`;
   } else if (tab === 'search') {
-    body = `<p class="muted">What Job Hunt looks for, where, and what it does with what it finds. The job titles come from your CVs, in <a href="#cvs">CV &amp; Career</a>.</p>
+    body = `<p class="muted">What Job Hunt looks for, where, and what it does with what it finds.</p>
+      <section class="card"><header><h2>Job titles</h2><a class="btn ghost" href="#cvs">Your CVs</a></header>
+        <p class="muted small">Each CV searches for its own titles, one per line. A posting whose title doesn't match is still scored if it mentions one of the keywords.</p>
+        ${st.cvs.length ? st.cvs.map(c => `<div class="title-set" data-cv="${esc(c.track)}"><input type="hidden" data-k="label" value="${esc(c.label)}"><input type="hidden" data-k="letter_style" value="${esc(c.letter_style || 'standard')}">
+          <div class="form"><label class="field">${st.cvs.length > 1 ? `Titles for your ${esc(c.label)} CV` : 'Job titles to search for'}<textarea data-k="titles" style="min-height:120px">${esc(lines(c.titles))}</textarea></label>
+          <label class="field">Keywords that also qualify a posting<textarea data-k="keywords" style="min-height:120px">${esc(lines(c.keywords))}</textarea></label></div>
+          <div class="row"><button class="btn" data-act="saveCv" data-track="${esc(c.track)}">Save titles</button><button class="btn ghost" data-act="suggestCv" data-track="${esc(c.track)}">Find more titles</button></div></div>`).join('') : '<p class="muted">Add a CV first: Claude reads it and suggests the titles. <a href="#cvs">Add your CV</a></p>'}
+      </section>
       <form data-form="profile" data-part="search">
       <section class="card"><header><h2>Where</h2></header><div class="form">
         <div class="field">Cities or areas${placePicker('locations', p.locations, p.sources.adzuna_country)}<span class="hint">Job Hunt also looks about 50 km around each. None: anywhere in the country.</span></div>
@@ -3108,6 +3133,14 @@ async function showSearch(arg) {
   let body;
   if (view === 'sources') {
     const busy = d.running;
+    if (!overview) await refreshOverview();
+    const st = settingsCache || (settingsCache = await api('/api/settings').catch(() => null));
+    const titles = [...new Set((st?.cvs || []).flatMap(c => c.titles || []))];
+    const places = st?.profile?.locations || [];
+    const few = (l, n) => l.slice(0, n).map(x => `<b>${esc(x)}</b>`).join(', ') + (l.length > n ? ` and ${l.length - n} more` : '');
+    const looking = st ? `<section class="card looking"><div class="auto-line">${svg('search')}<span class="grow">${titles.length ? `Looking for ${few(titles, 4)}` : '<b>No job titles yet.</b> Add a CV, or add titles yourself.'}
+        ${places.length ? ` in ${few(places.map(p => String(p).split(',')[0]), 4)}` : ' anywhere in the country'}${st.profile.remote_ok ? ', and remote roles' : ''}${st.profile.min_salary ? `, paying ${money(st.profile.min_salary)} or more` : ''}.</span>
+        <a class="btn sm" href="#search/what">Change</a></div></section>` : '';
     const btns = (r, res) => {
       const b = [];
       const on = !['off', 'setup', 'na'].includes(r.status);
@@ -3121,7 +3154,7 @@ async function showSearch(arg) {
     const siteRows = sites.map(x => { const [cls, label] = SITE_STATE[x.state] || ['', x.state];
       return `<div class="src-site"><span class="grow"><b>${esc(x.name)}</b> <span class="pill ${cls}">${label}</span><br><span class="small muted">${esc(x.detail)}${x.at ? ` · ${esc(ago(x.at))}` : ''}</span></span>
         ${rows.agencies && !['off', 'setup'].includes(rows.agencies.status) ? `<button class="btn ghost sm" data-act="srcSearch" data-id="site:${esc(x.id)}" ${busy ? 'disabled' : ''}>Search</button>` : ''}</div>`; }).join('');
-    body = `<section class="card src-table">${order.map(id => {
+    const srcRow = id => {
       const r = rows[id], res = results[id];
       const [cls, label] = CONN_PILL[r.status] || ['', r.status];
       const off = ['off', 'setup', 'na'].includes(r.status);
@@ -3130,7 +3163,11 @@ async function showSearch(arg) {
         <div class="src-last small">${id === 'alerts' ? '<span class="muted">Read on every email check</span>' : off ? '' : res?.postings || res?.running || res?.error ? `<a href="#search/${esc(id)}" class="plain">${srcLastLine(res)}</a>` : srcLastLine(res)}</div>
         <div class="src-acts row">${btns(r, res)}</div>
         ${id === 'agencies' && sites.length ? `<details class="src-sites"><summary class="small">${sites.length} recruiter${sites.length === 1 ? '' : 's'} and job site${sites.length === 1 ? '' : 's'}</summary>${siteRows}</details>` : ''}
-      </div>`; }).join('')}</section>
+      </div>`; };
+    const inUse = order.filter(id => !isOff(id)), unused = order.filter(isOff);
+    body = `${looking}${d.running ? '' : reportHtml(overview?.last_report)}
+      <section class="card src-table"><header><h2>Where it looks</h2><span class="muted small">${inUse.length} in use</span></header>${inUse.map(srcRow).join('') || '<p class="muted">No source is on yet. Turn one on below.</p>'}
+        ${unused.length ? `<details class="more src-unused"${inUse.length ? '' : ' open'}><summary><b>${unused.length} more you can turn on or set up</b></summary>${unused.map(srcRow).join('')}</details>` : ''}</section>
       <p class="muted small">Keys, company boards and which recruiters to search are set, and tested, in <a href="#search/setup">Set up sources</a>; your job titles' places and schedule in <a href="#search/what">What to search</a>.</p>`;
   } else {
     const r = results[view];
@@ -3331,7 +3368,7 @@ document.addEventListener('keydown', e => {
 });
 /** Every key, in Job Hunt's own dialog. */
 function keysHelp() {
-  const rows = [['Ctrl + K', 'Find any job'], ['/', 'Search the list on this page'], ['j / k', 'Next or previous job'], ['a', 'Approve (on a job ready to approve)'],
+  const rows = [['Ctrl + K', 'Find any job'], ['/', 'Search the list on this page'], ['j / k', 'Next or previous job'], ['↑ ↓ Space X T', 'In Pick: move, tick, not interested, tailor the ticked ones'], ['a', 'Approve (on a job ready to approve)'],
     ['o', 'Open the posting'], ['t', 'Tailor my CV for this role'], ['c', 'Ask Claude about this job'], ['Esc', 'Back to the list'], ['?', 'These keys']];
   const back = document.createElement('div');
   back.className = 'modal-back';
@@ -3363,6 +3400,25 @@ document.addEventListener('keydown', e => {
     const b = k && document.querySelector(`.review-bar ${k}`);
     if (b) { e.preventDefault(); b.click(); }
     return;
+  }
+  // Pick: walk the list and tick without the mouse.
+  const pickRows = [...document.querySelectorAll('.pick-list .todo-row.pick')].filter(r => !r.hidden);
+  if (pickRows.length && ['ArrowDown', 'ArrowUp', 'j', 'k', ' ', 'Enter', 'x', 't'].includes(e.key) && !(t && ['BUTTON', 'A', 'SUMMARY'].includes(t.tagName) && [' ', 'Enter'].includes(e.key))) {
+    const at = pickRows.findIndex(r => r.classList.contains('kb'));
+    const cur = pickRows[at];
+    if (['ArrowDown', 'ArrowUp', 'j', 'k'].includes(e.key)) {
+      const to = pickRows[Math.max(0, Math.min(pickRows.length - 1, at < 0 ? 0 : at + (e.key === 'ArrowDown' || e.key === 'j' ? 1 : -1)))];
+      cur?.classList.remove('kb'); to.classList.add('kb'); to.scrollIntoView({ block: 'nearest' });
+      e.preventDefault(); return;
+    }
+    if (e.key === 't') { const b = document.querySelector('[data-pickbox] .select-bar:not([hidden]) [data-act=tailorPicked]'); if (b) { e.preventDefault(); b.click(); } else toast('Tick a role first (Space).'); return; }
+    if (cur) {
+      e.preventDefault();
+      if (e.key === ' ') cur.querySelector('[data-pick]').click();
+      else if (e.key === 'Enter') cur.querySelector('a.qt').click();
+      else if (e.key === 'x') { const n = pickRows[at + 1] || pickRows[at - 1]; n?.classList.add('kb'); cur.querySelector('[data-status=dismissed]').click(); }
+      return;
+    }
   }
   const onJob = location.hash.startsWith('#job/');
   const id = onJob ? decodeURIComponent(location.hash.slice(5)) : null;
@@ -3563,7 +3619,7 @@ async function act(el) {
       const r = await api(`/api/jobs/${encodeURIComponent(id)}/approve`, { method: 'POST' });
       await refreshOverview();
       if (r.outcome === 'applied') { toast('Sent and marked applied.'); route(); }
-      else if (await applyNow(id)) route(); // on to the next to review; the form fills in its own window
+      else if (await applyNow(id)) route(); // on to the next to review; the form opens in your browser
       else { reviewReturn = location.hash === '#review'; location.hash = `#apply/${encodeURIComponent(id)}`; }
     });
   }
@@ -3721,10 +3777,10 @@ async function act(el) {
   }
   if (a === 'dismissPicked') {
     const ids = [...el.closest('[data-pickbox]').querySelectorAll('[data-pick]:checked')].map(c => c.dataset.pick);
-    // A few: your choice, which scoring learns from. Many at once is a clear-out (old or weak
-    // matches), which would crowd out the choices scoring learns from.
-    const learn = ids.length <= 5;
-    if (!ids.length || !await ask(`Not interested in these ${ids.length}? ${learn ? 'Job Hunt learns from them and scores roles like them lower.' : 'They go to All jobs under Not interested. (Clearing out this many at once doesn\'t change how Job Hunt scores.)'}`, 'Not interested')) return;
+    // Set aside without changing how Job Hunt scores: to teach it, use Not interested on one job
+    // and choose "and learn from it".
+    const learn = false;
+    if (!ids.length || !await ask(`Not interested in ${ids.length === 1 ? 'this one' : `these ${ids.length}`}? ${ids.length === 1 ? 'It goes' : 'They go'} to All jobs under Not interested. It doesn't change how Job Hunt scores.`, 'Not interested')) return;
     return busy(async () => {
       for (const id of ids) await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'dismissed', note: '', learn } });
       await refreshOverview(); route(); toast(`${ids.length} set aside as not interested.`);
@@ -3926,6 +3982,14 @@ async function act(el) {
   if (a === 'thanks') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/thanks`, { method: 'POST' }); setTimeout(route, 300); }, 'Writing the thank-you note…');
   }
+  if (a === 'followUpAll') {
+    const ids = JSON.parse(el.dataset.ids || '[]');
+    return busy(async () => {
+      for (const id of ids) await api(`/api/jobs/${encodeURIComponent(id)}/followup`, { method: 'POST' });
+      document.querySelectorAll('[data-act=followUp]').forEach(b => { if (ids.includes(b.dataset.job)) b.outerHTML = '<span class="muted small"><span class="spin" data-kind="followup"></span>Writing…</span>'; });
+      el.remove();
+    }, `Writing ${ids.length} follow-ups. Read each one before you send it.`);
+  }
   if (a === 'followUp') {
     return busy(async () => {
       await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/followup`, { method: 'POST' });
@@ -4046,10 +4110,10 @@ async function act(el) {
     if (status === 'dismissed' && !note) {
       const r = await dialog({
         title: 'Not interested in this role?',
-        text: 'Job Hunt can learn from it and score roles like it lower, or you can keep it as a backup.',
+        text: 'It goes to All jobs under Not interested. Job Hunt can also learn from it and score roles like it lower, or you can keep it as a backup.',
         input: 'Why not? (optional)', placeholder: 'e.g. too junior, sales role, too far',
         buttons: [{ label: 'Cancel', value: null, kind: 'ghost' }, { label: 'Save for later', value: 'saved' },
-          { label: 'Not interested, don\'t learn', value: 'quiet' }, { label: 'Not interested', value: 'learn', kind: 'primary' }],
+          { label: 'Not interested, and learn from it', value: 'learn' }, { label: 'Not interested', value: 'quiet', kind: 'primary' }],
       });
       if (!r) return;
       if (r.value === 'saved') status = 'saved';
