@@ -19,6 +19,8 @@ Less of your Claude plan, another AI, and applying in a row.
 - Apply to all, and Apply to the quick ones, now open each form in your browser one after another: submit, press next, and the next one opens.
 - Ready to approve and Review are in the order of what is best to apply to now.
 - Sort and filter is folded away when there are fewer than eight to pick, and a company's coloured letter shows its name when you point at it.
+- On a phone held sideways, the Queue's side column goes under the list, so each job has the whole width: its name is no longer squeezed into a few words a line, and List / One by one stays in reach.
+- Fill forms on your phone has moved to Settings, Browser extension (it was at the bottom of Job sources). On the phone, that page now says where to get the bookmark: it is handed out on your PC only, because it carries your key.
 
 ## [2.44.1] - 2026-11-12
 

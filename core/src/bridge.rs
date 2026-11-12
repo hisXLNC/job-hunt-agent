@@ -109,7 +109,7 @@ pub fn start(agent: Arc<Agent>) {
 fn phone_script(agent: &Agent, sent: &str) -> Resp {
     let want = key(agent);
     if sent.len() != want.len() || !sent.bytes().zip(want.bytes()).fold(true, |ok, (a, b)| ok & (a == b)) {
-        let body = "alert('Job Hunt: this bookmark has an old key. Copy the bookmark again from Job Hunt on your PC: Settings, Fill forms on your phone.');";
+        let body = "alert('Job Hunt: this bookmark has an old key. Copy the bookmark again from Job Hunt on your PC: Settings, Browser extension, Fill forms on your phone.');";
         return Resp { status: 200, ctype: "application/javascript; charset=utf-8".into(), body: body.as_bytes().to_vec(), headers: vec![("Cache-Control".into(), "no-store".into())] };
     }
     let _ = agent.db().set("phone.last", &crate::util::now());

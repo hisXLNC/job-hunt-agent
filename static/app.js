@@ -2735,8 +2735,7 @@ async function showSettings(tab, sub, host) {
         <li>Open a job posting and click the bookmark. On LinkedIn, click the job in the list so it shows on the right (or open the job itself), then click it.</li>
         <li>Job Hunt picks it up within a few seconds and tells you when it's ready. Added it before version 1.44? Add it again: the old one didn't work on LinkedIn.</li></ol>
       <label class="check"><input type="checkbox" data-act="clipWatch" ${st.clip_watch ? 'checked' : ''}> <span class="small">Pick up postings sent from the browser</span></label>` : '<div class="row"><a class="btn" href="#add">Add a job</a></div>'}
-    </section>
-    ${desk && st.ext_key ? phoneCard(st) : ''}`;
+    </section>`;
   } else if (tab === 'cvs') {
     const kindName = { docx: 'Word', pdf: 'Converted from PDF', text: 'Converted from text', 'docx-converted': 'Converted to Job Hunt layout' };
     body = `<section class="card"><header><h2>Your CVs</h2><button class="btn ghost" data-act="folder" data-which="cv">${svg('folder')}Open folder</button></header>
@@ -2902,8 +2901,15 @@ async function showSettings(tab, sub, host) {
     // Set up on the PC Job Hunt runs on (its folder and key are there); from a phone, say so.
     body = st.kind === 'server' || st.remote.here
       ? `<section class="card"><header><h2>Browser extension</h2></header><p class="muted"><b>Send to Job Hunt</b> for Chrome or Edge sends a posting you're looking at to Job Hunt and fills in application forms in your own browser. It's set up on the computer Job Hunt runs on: open Job Hunt there and go to <b>Settings → Browser extension</b>.</p>
-          <p class="muted small">On this phone, use the Fill this form bookmark instead: <a href="#settings/app">Settings → App</a>.</p></section>`
-      : extensionCard(st);
+          </section>
+        <section class="card"><header><h2>Fill forms on this phone</h2></header>
+          <p class="muted">A phone's browser can't run the extension, so on a phone a bookmark does the filling. It carries your private key, so Job Hunt only hands it out on your PC.</p>
+          <ol class="small steps-list">
+            <li>On your PC, open Job Hunt: <b>Settings</b> (the gear) → <b>Browser extension</b> → <b>Fill forms on your phone</b>.</li>
+            <li>Press <b>Copy the bookmark</b> and send it to yourself (a note or an email to yourself).</li>
+            <li>On this phone, bookmark any page, then edit that bookmark: name it <b>Job Hunt Fill</b> and paste what you copied as its address.</li>
+            <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark. The Job Hunt panel appears and fills in the form.</li></ol></section>`
+      : extensionCard(st) + (st.ext_key ? phoneCard(st) : '');
   } else if (tab === 'sync') {
     const server = st.kind === 'server', here = st.remote.here;
     const b = st.backup;
