@@ -143,6 +143,12 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('results');
   check(await page.evaluate(() => /Insights/.test(document.querySelector('.place-tabs a.on')?.textContent || '')), 'Insights is under Me');
 
+  // The version sits under the app's name and opens what's new.
+  await at('overview');
+  check(/^Version \d+\.\d+/.test(await text('.brand .brand-ver')), `The version is under the name (${await text('.brand .brand-ver')})`);
+  await page.click('.brand .brand-ver'); await page.waitForTimeout(1500);
+  check(await page.evaluate(() => location.hash === '#settings/app' && !!document.querySelector('#whatsnew') && document.querySelector('#whatsnew').getBoundingClientRect().top < innerHeight), 'Pressing the version opens What\'s new');
+
   // One search a day unless you choose two: the second time appears, and both are saved.
   await at('settings/search');
   check(await page.evaluate(() => document.querySelector('[data-second-search]').hidden), 'One search a day: no second time shown');

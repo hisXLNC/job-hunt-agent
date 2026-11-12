@@ -15,6 +15,7 @@ Four places, and All jobs in the Queue.
 - All jobs no longer loses older jobs you applied to: it used to load only the 2,000 most recently found.
 - All jobs shows one fit score on a phone, with the other in words under it.
 - The top bar lines up with the page, and inside each group the heading, Select all, Sort and filter and the tick boxes start on one line.
+- The version number is under Job Hunt's name at the top left. Press it to see what's new.
 
 ## [2.46.1] - 2026-11-12
 

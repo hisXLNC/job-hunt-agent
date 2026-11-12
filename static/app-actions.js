@@ -484,6 +484,13 @@ async function act(el) {
   if (a === 'runSkip') { if (applyRun) { applyRun.at++; return runOpen(); } return; }
   if (a === 'runAgain') { if (applyRun) return runOpen(); return; }
   if (a === 'queueFClear') { document.querySelectorAll('[data-queuef]').forEach(c => { if (c.type === 'checkbox') c.checked = false; }); return applyQueueView(false); }
+  if (a === 'versionInfo') {
+    // What's new, in Settings, App: there once the page has drawn.
+    document.body.classList.remove('more-open');
+    location.hash = '#settings/app';
+    for (let i = 0; i < 20; i++) { await new Promise(r => setTimeout(r, 150)); const box = $('#whatsnew'); if (box) { box.scrollIntoView({ block: 'start' }); break; } }
+    return;
+  }
   if (a === 'runStop') { applyRun = null; return runBar(); }
   if (a === 'fillBrowser') {
     return busy(async () => {

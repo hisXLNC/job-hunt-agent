@@ -467,6 +467,8 @@ function renderNav() {
   $('#connLine').hidden = !side.conn_problems;
   $('#connNote').textContent = `${side.conn_problems} connection${side.conn_problems === 1 ? '' : 's'} need${side.conn_problems === 1 ? 's' : ''} attention`;
   if (overview?.version) $('#versionNote').textContent = `Job Hunt ${shortVersion(overview.version)}`;
+  // Under the name, top left: the version, which opens what's new in it.
+  if (overview?.version) document.querySelectorAll('[data-version]').forEach(el => { el.textContent = `Version ${shortVersion(overview.version)}`; });
 }
 
 let overviewAt = 0, scrollToAfter = '';
