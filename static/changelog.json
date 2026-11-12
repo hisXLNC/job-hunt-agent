@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.50.1",
+    "date": "2026-11-12",
+    "title": "A tighter heading over the Queue's lists",
+    "changes": [
+      "The sort menu and filters sit on the same line as the list's title, and Select all sits at the start of the Sort by row, so the heading takes two lines instead of three."
+    ]
+  },
+  {
     "version": "2.50.0",
     "date": "2026-11-12",
     "title": "One logo per company, and every list sorts",

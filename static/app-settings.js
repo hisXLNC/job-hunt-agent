@@ -797,8 +797,8 @@ function applyQueueView(restore) {
   const box = document.querySelector('[data-queuebox]');
   if (!box) return;
   const controls = [...box.querySelectorAll('[data-queuef]')];
-  // Beside the first group's Select all, when there is one: one row of controls, not two.
-  const first = document.querySelector('.page [data-act=approveAll], .page [data-act=pickAll]')?.parentElement;
+  // On the first group's heading line, to its right: no row of its own.
+  const first = document.querySelector('.page [data-act=approveAll], .page [data-act=pickAll]')?.closest('.todo-group')?.querySelector('.group-h');
   if (first && !first.contains(box)) { first.appendChild(box); box.classList.add('inline'); first.classList.add('with-filters'); }
   if (restore) {
     let saved = {};

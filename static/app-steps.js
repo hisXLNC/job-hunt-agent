@@ -480,6 +480,12 @@ function listHeads() {
     const rows = [...p.children].filter(c => c.matches('.jrow[data-job-row]'));
     if (rows.length < 2 || p.querySelector(':scope > .list-head')) continue;
     rows[0].insertAdjacentHTML('beforebegin', `<div class="list-head" role="group" aria-label="Sort this list"><span>Sort by</span>${LIST_COLS.map(([k, name]) => `<button type="button" data-lsort="${k}" title="Sort by ${name.toLowerCase()}">${name}<span class="arrow"></span></button>`).join('')}</div>`);
+    // Select all sits at the start of the headers, and the row it had to itself goes.
+    const all = p.closest('[data-pickbox], [data-approvebox]')?.querySelector('[data-act=approveAll], [data-act=pickAll]'), was = all?.parentElement;
+    if (all && !was.classList.contains('list-head')) {
+      p.querySelector(':scope > .list-head').prepend(all);
+      if (!was.children.length) was.hidden = true;
+    }
   }
   applyListSort();
 }

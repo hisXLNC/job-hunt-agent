@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.50.1] - 2026-11-12
+
+A tighter heading over the Queue's lists.
+
+### Changes
+
+- The sort menu and filters sit on the same line as the list's title, and Select all sits at the start of the Sort by row, so the heading takes two lines instead of three.
+
 ## [2.50.0] - 2026-11-12
 
 One logo per company, and every list sorts.
@@ -1672,6 +1680,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.50.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.50.1
 [2.50.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.50.0
 [2.49.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.49.0
 [2.48.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.48.0

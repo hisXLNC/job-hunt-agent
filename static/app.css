@@ -1523,7 +1523,9 @@ table.jobs td.fit, table.jobs td.stage, table.jobs td.next { white-space: nowrap
 .deck.solo { grid-template-columns: minmax(0, 1fr); }
 .deck.solo .optional-steps { margin-top: 4px; }
 /* The Queue's sort and filters, beside Select all. */
-.row.with-filters { align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.with-filters { align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.group-h .queue-filters { font-family: var(--font-b); font-size: 14px; font-weight: 400; letter-spacing: 0; }
+.group-h.with-filters { margin-bottom: 2px; }
 .queue-filters.inline { margin: 0 0 0 auto; }
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
   .queue-filters.inline { margin-left: 0; width: 100%; }
@@ -1654,7 +1656,8 @@ details.kit > summary { cursor: pointer; }
 .lead-email input { padding: 4px 8px; }
 
 /* ---- Headers over the Queue's lists: press one to sort by it ---- */
-.list-head { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; padding: 6px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line-2); }
+.list-head { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; padding: 2px 10px 4px 0; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line-2); }
+.list-head > .btn { margin-right: 14px; font-size: 13px; }
 .list-head > span { margin-right: 6px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 11px; }
 .list-head button { font: inherit; font-weight: 600; color: var(--muted); background: none; border: 0; border-radius: 8px; padding: 3px 8px; cursor: pointer; }
 .list-head button:hover, .list-head button.on { color: var(--ink); background: var(--surface-2); }
