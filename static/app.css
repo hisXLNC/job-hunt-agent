@@ -1556,3 +1556,10 @@ table.jobs .jfit { display: inline-flex; align-items: center; white-space: nowra
   .pipe-tabs { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
   .pipe-tabs a { flex: none; }
 }
+
+/* ---- The top bar starts and ends where the page does, so the name sits over the heading and the
+   gear over the buttons, at any window width. ---- */
+@media (min-width: 761px) {
+  .side { padding-inline: max(32px, calc((100% - 1240px) / 2 + 32px)); }
+  body.panel-open .side { padding-inline: 32px; }
+}
