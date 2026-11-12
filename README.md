@@ -30,7 +30,7 @@ in), your CV, where you want to work, where to look, and your first search.
 
 ## Every day
 
-- **Today:** what needs you, one line each with the button that takes you there. **Jobs** holds
+- **Home:** what to do next, as one card with its button, and what else is waiting. **Jobs** holds
   every job by step: Pick, Approve, Submit, Waiting, Interviews.
 - **Pick roles** and Job Hunt tailors your CV and a cover letter for each. Read them, change anything,
   then **Approve**.

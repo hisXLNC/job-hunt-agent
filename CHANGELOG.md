@@ -4,6 +4,21 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.41.0] - 2026-11-12
+
+A new shape: five places, a calmer look.
+
+### Changes
+
+- Job Hunt is now five places, each answering one question: Home (what now, and how it is going), Jobs (where every job is), Inbox (who wrote, and when your interviews are), Search (what it looks for, and where) and Profile (your CVs and details).
+- Results is Home, Progress. The Calendar is Inbox, Interviews. Tailored files are in Jobs, All jobs. CV & Career is Profile, and Your details is About you. Older links still land in the right place.
+- Settings is the gear at the foot of the menu, with what belongs to no one place: Accounts, Email, Calendar, Notifications, Sync & backup, Browser extension, App.
+- Find a job is in the menu, so it is on every screen.
+- Home starts with one Next up card: the most pressing thing and its button. Everything else waits in a short list under it, and minor warnings go last.
+- A calmer look everywhere: a light menu that is part of the page, white cards with hairline edges, tabs as pills, larger type, one accent colour. Light and dark.
+- Each job in a list has a coloured tile with its company's initial, so a long list is quick to scan.
+- On a phone the five tabs are the five places, so More is gone. The top bar has Find and a menu button with Settings, the status lines and the theme. Sideways, the tabs stay down the right edge.
+
 ## [2.40.0] - 2026-11-12
 
 Jobs redesigned, tabs on the right for a sideways phone, and the extension's own Settings tab.
@@ -1502,6 +1517,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.41.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.41.0
 [2.40.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.40.0
 [2.39.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.39.0
 [2.38.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.38.0

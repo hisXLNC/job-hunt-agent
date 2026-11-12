@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.41.0",
+    "date": "2026-11-12",
+    "title": "A new shape: five places, a calmer look",
+    "changes": [
+      "Job Hunt is now five places, each answering one question: Home (what now, and how it is going), Jobs (where every job is), Inbox (who wrote, and when your interviews are), Search (what it looks for, and where) and Profile (your CVs and details).",
+      "Results is Home, Progress. The Calendar is Inbox, Interviews. Tailored files are in Jobs, All jobs. CV & Career is Profile, and Your details is About you. Older links still land in the right place.",
+      "Settings is the gear at the foot of the menu, with what belongs to no one place: Accounts, Email, Calendar, Notifications, Sync & backup, Browser extension, App.",
+      "Find a job is in the menu, so it is on every screen.",
+      "Home starts with one Next up card: the most pressing thing and its button. Everything else waits in a short list under it, and minor warnings go last.",
+      "A calmer look everywhere: a light menu that is part of the page, white cards with hairline edges, tabs as pills, larger type, one accent colour. Light and dark.",
+      "Each job in a list has a coloured tile with its company's initial, so a long list is quick to scan.",
+      "On a phone the five tabs are the five places, so More is gone. The top bar has Find and a menu button with Settings, the status lines and the theme. Sideways, the tabs stay down the right edge."
+    ]
+  },
+  {
     "version": "2.40.0",
     "date": "2026-11-12",
     "title": "Jobs redesigned, tabs on the right for a sideways phone, and the extension's own Settings tab",

@@ -5,13 +5,23 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.40.0** (Jobs' step pages redesigned: `.steps-bar`, `jobRow`; tabs down the right
-  edge for a sideways or folding phone; Settings → Browser extension). The working branch changes
-  with each session (this one: `claude/brave-fermat-ti1omi`); `main` is what's released. Before it:
-  2.39.0 (skills rebuilt against the mock), 2.38.0, 2.37.0 (the layout).
+- Latest version: **2.41.0** (the rework: five places and the calm, light look). The working branch
+  changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is what's released.
+  Before it: 2.40.0 (Jobs rows, right-edge tabs, Settings → Browser extension), 2.39.0 (skills).
+- **Where things are (2.41.0).** `NAV` is five places, also the phone's five tabs: Home (`#overview`;
+  tabs Today and Progress = `#results`), Jobs (`#applications`: steps, All jobs, Tailored files =
+  `#applications/files`), Inbox (`#inbox`; Email, Interviews = `#calendar`, Recruiters), Search,
+  Profile (`#cvs`; Your CVs, About you, Career paths, Career coach). Settings is the gear at the foot
+  of the menu (`#settingsLink`); on a phone it's behind the top bar's menu button (`#mMenu`), with the
+  status lines and the theme. Find a job is in the menu (and the phone's top bar). `placeTabs` draws a
+  place's tabs; `NAV_HOME` says which place a route belongs to.
+- **The look** is the last big block of `static/app.css` ("The look, reimagined"): tokens, light menu,
+  hairline cards, pill tabs. Today's first item is `todayHero`, the rest `todayRow`; `avatar` is the
+  company tile on a job row.
+- The user asked for screenshots before a redesign is built: show real screens from the preview
+  (`scratchpad` Playwright shots at 1440×900, 390×844 and 915×500) and wait for a yes.
 - The user reads Job Hunt on a wide folding phone in landscape (about 915×500 CSS px, touch): check
-  that shape as well as a narrow phone (`tools/screen_test.js` does). Still in the old style, not yet
-  restyled: the All jobs table, the job page below its Next card, Review, Inbox, Calendar, CV & Career.
+  that shape as well as a narrow phone (`tools/screen_test.js` does).
 - The user's defaults (asked for, keep them): forms open in **their own browser** (`applyNow`, the Apply
   page's main button, the job page's next step: `fillBrowser`), and **Not interested doesn't learn**
   (the dialog's main button and the bulk action send `learn: false`; "and learn from it" is the other button).

@@ -148,7 +148,7 @@ const filesCard = (st, setup) => `<section class="card"><header><h2>${setup ? 'W
   <form data-form="filesFolder" class="row" style="flex-wrap:nowrap;gap:6px"><input type="text" name="dir" value="${esc(st.files.folder)}" style="flex:1">
     <button class="btn" type="button" data-act="pickFolder" data-into="dir">Browse…</button><button class="btn primary" type="submit">${setup ? 'Use this folder' : 'Move here'}</button></form>
   <p class="muted small" style="margin-top:6px">Moving takes what's there now with it, and every application still finds its files.</p></section>`;
-/** CV & Career's tabs: your CVs, the versions tailored from them, career paths, your details. */
+/** Profile's tabs: your CVs, the versions tailored from them, career paths, your details. */
 const cvsTabs = (view, n) => `<nav class="tabs">${[['cvs', `Your CVs${n ? ` (${n})` : ''}`], ['details', 'About you'], ['career', 'Career paths'], ['coach', 'Career coach']].map(([id, name]) => `<a href="#cvs${id === 'cvs' ? '' : `/${id}`}" class="${id === view ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
 /** A page's heading with its tabs, for the pages that hold several views. */
 /** A page's settings (tabs marked tab-end or tab-set) show as buttons at its top, by its main
@@ -744,7 +744,7 @@ async function showPipeline(view) {
         <td class="next" data-v="${nextKey(j)}">${rowActions(j) ? `<div class="row-act" title="${esc(next(j).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())}">${rowActions(j)}</div>` : next(j)}</td>
         <td class="small muted nowrap" data-v="${esc(ageValue(j))}" title="Found on ${esc(sourceName(j.source))}">${ageTag(j)}</td>
         <td class="small emp" data-v="${esc(j.employment || '~')}">${empCell(j)}</td></tr>`).join('')}
-    </tbody></table>${jobs.length ? '' : `<p class="empty">${{ applied: 'Nothing applied to yet. Jobs show here once you apply (or Job Hunt sees the confirmation email).', active: 'Nothing in progress: no tailored applications waiting.', new: 'No new postings to pick from.' }[view] || 'No jobs yet. Search for jobs from Today.'}</p>`}</section>`);
+    </tbody></table>${jobs.length ? '' : `<p class="empty">${{ applied: 'Nothing applied to yet. Jobs show here once you apply (or Job Hunt sees the confirmation email).', active: 'Nothing in progress: no tailored applications waiting.', new: 'No new postings to pick from.' }[view] || 'No jobs yet. Search for jobs from Home.'}</p>`}</section>`);
   restoreAllFilters();
   main().querySelectorAll('table.jobs').forEach(applySort);
   // j / k on a job page walk through the list as it was shown here.
@@ -1094,7 +1094,7 @@ async function showJob(id) {
         </section>` : ''}
         <section class="card">
           <header><h2>${j.cv_path ? 'Tailor again' : 'Tailor'}</h2></header>
-          ${tracks.length ? `<p class="muted small">Starts from your <b>${esc(trackLabel(j.track || tracks[0].name))}</b> CV, the closest fit for this role.</p>` : '<p class="muted small">Add a CV in <a href="#cvs">CV & Career</a> first.</p>'}
+          ${tracks.length ? `<p class="muted small">Starts from your <b>${esc(trackLabel(j.track || tracks[0].name))}</b> CV, the closest fit for this role.</p>` : '<p class="muted small">Add a CV in <a href="#cvs">Profile</a> first.</p>'}
           <div class="row" ${tracks.length && j.cv_path ? '' : 'hidden'}><button class="btn" data-act="retailor" ${tailoring ? 'disabled' : ''}>Tailor again</button></div>
           ${tracks.length > 1 ? `<details class="small" style="margin-top:6px"><summary class="muted">Use a different CV</summary><div class="row" style="margin-top:6px"><select id="track" style="width:auto">${tracks.map(t => `<option value="${esc(t.name)}" ${t.name === j.track ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select><button class="btn" data-act="retailor" data-pick="1" ${tailoring ? 'disabled' : ''}>Tailor from it</button></div></details>` : ''}
         </section>
@@ -2112,7 +2112,7 @@ async function showResults() {
       ${r.thinking ? '<span class="muted small"><span class="spin" data-kind="insights"></span>Claude is looking…</span>' : `<button class="btn" data-act="insights">${r.insights ? 'Look again' : 'Ask Claude'}</button>`}</header>
       ${r.insights ? `<p class="muted small">From ${esc(fmtDate(r.insights.at))}. Job Hunt also does this once a month by itself.</p>${mdHtml(r.insights.text)}` : '<p class="muted">Claude reads your results and the applications behind them, and says what is working and what to change: titles, CVs, sources or your fit threshold.</p>'}
     </section>
-    <section class="card row" style="justify-content:space-between"><span><b>Your career options</b><br><span class="muted small">${r.career ? `${(r.career.paths || []).length} directions with pay, pros and cons, and Claude's advice. Ask again now and then: it uses what's working above.` : 'Every direction your CVs support, with pay ranges, pros and cons, and Claude\'s advice.'}</span></span><a class="btn" href="#cvs/career">${svg('cvs')}Open CV &amp; Career</a></section>
+    <section class="card row" style="justify-content:space-between"><span><b>Your career options</b><br><span class="muted small">${r.career ? `${(r.career.paths || []).length} directions with pay, pros and cons, and Claude's advice. Ask again now and then: it uses what's working above.` : 'Every direction your CVs support, with pay ranges, pros and cons, and Claude\'s advice.'}</span></span><a class="btn" href="#cvs/career">${svg('cvs')}Open your Profile</a></section>
     ${f.sent && f.sent < 20 ? '<p class="muted small">With only a few applications in a group, its rates can swing a lot. They settle as you send more.</p>' : ''}`);
 }
 
@@ -2548,7 +2548,7 @@ async function showSettings(tab, sub, host) {
       <section class="card"><header><h2>Weekly review</h2><button class="btn" type="button" data-act="weeklyNow">Send it now</button></header>
         <p class="muted">Once a week: what you sent against your goal, who replied, what's going quiet, what to do next, and the best new roles of the week to pick.</p>
         <div class="form">
-          <label class="field">Weekly goal (applications)<input type="number" min="0" max="100" name="weekly_goal" value="${p.weekly_goal ?? 10}"><span class="hint">Shown on Today too. 0 for none.</span></label>
+          <label class="field">Weekly goal (applications)<input type="number" min="0" max="100" name="weekly_goal" value="${p.weekly_goal ?? 10}"><span class="hint">Shown on Home too. 0 for none.</span></label>
           <label class="field">When<select data-act="weeklyDay"><option value="sun" ${st.weekly.day === 'sun' ? 'selected' : ''}>Sunday at 6 PM, to plan the week ahead</option><option value="mon" ${st.weekly.day === 'mon' ? 'selected' : ''}>Monday, at the daily search hour</option></select></label>
         </div>
         <label class="check"><input type="checkbox" data-act="weeklyEmail" ${st.weekly.email ? 'checked' : ''}> <span>Email me the whole review${st.weekly.to ? ` at ${esc(st.weekly.to)}` : ''} (needs Gmail connected). Otherwise it's a short notice.</span></label>
@@ -3575,7 +3575,7 @@ async function act(el) {
   }
   if (a === 'welcomeRecheck') { await refreshOverview(); route(); return; }
   if (a === 'welcomeSearch') {
-    return busy(async () => { await api('/api/run/search', { method: 'POST' }); await refreshOverview(); location.hash = '#overview'; }, 'Searching for jobs. Matches appear on Today and under Jobs.');
+    return busy(async () => { await api('/api/run/search', { method: 'POST' }); await refreshOverview(); location.hash = '#overview'; }, 'Searching for jobs. Matches appear on Home and under Jobs.');
   }
   if (a === 'chgEdit' || a === 'chgCancel') {
     const row = el.closest('.chg-row');
@@ -3766,7 +3766,7 @@ async function act(el) {
     });
   }
   if (a === 'syncResume') {
-    return busy(async () => { await api('/api/sync/resume', { method: 'POST' }); await refreshOverview(); route(); }, 'Switching back here… when the other computer\'s data arrives, Continue from it on Today.');
+    return busy(async () => { await api('/api/sync/resume', { method: 'POST' }); await refreshOverview(); route(); }, 'Switching back here… when the other computer\'s data arrives, Continue from it on Home.');
   }
   if (a === 'syncContinue') {
     if (!await ask('Continue from the other computer\'s data? Job Hunt restarts with it.')) return;
@@ -4576,7 +4576,7 @@ document.addEventListener('submit', async e => {
     } else if (kind === 'sync') {
       const where = form.querySelector('[name=where]:checked')?.value || 'drive';
       const r = await api('/api/sync/settings', { method: 'POST', body: { where, ...(f.dir ? { dir: f.dir.value } : {}), on: f.on.checked, secrets: f.secrets.checked, ...(f.every ? { every: Number(f.every.value) } : {}) } });
-      toast(r.sync.newer ? `${r.sync.newer.device} has newer data there. Choose on Today whether to continue from it.` : r.sync.on ? `Synced. ${where === 'drive' ? 'The Job Hunt folder in your Google Drive' : 'This folder'} now has your latest data.` : 'Saved.');
+      toast(r.sync.newer ? `${r.sync.newer.device} has newer data there. Choose on Home whether to continue from it.` : r.sync.on ? `Synced. ${where === 'drive' ? 'The Job Hunt folder in your Google Drive' : 'This folder'} now has your latest data.` : 'Saved.');
       await refreshOverview(); route();
     } else if (kind === 'welcomeWhere') {
       const p = JSON.parse(JSON.stringify(settingsCache.profile));
