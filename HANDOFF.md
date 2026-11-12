@@ -56,6 +56,18 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.53.0: learning from rejections, and Ashby** (carries 2.52.0 and 2.52.1, which were never published alone).
+  `study_rejections()` in `pipeline.rs` gives Claude each rejection email matched to a job (fit, days from applying,
+  interviewed or not, the email's words via Gmail) through `Llm::rejection_lessons`; the result is kept under `lessons`
+  and shown on Insights. `tailoring_guidance(job)` hands the lessons, plus `ats::tailoring` for the employer's system,
+  to `Llm::tailor` as its new last argument `guidance`. It is re-run from the periodic check when more rejections are
+  matched than at the last study (three or more). `core/src/ats.rs` holds what is known about an application system
+  (only Ashby: told from `source == "ashby"` or `ashbyhq.com` in the job's links), the job JSON carries it as `system`
+  (`ats` was already the CV check), and the job page shows it as a card. The Ashby facts come from Ashby's published
+  help pages found by search (AI-assisted review marks each criterion met / not met / undecided with CV citations;
+  auto-reject rules on form answers at submission with a delayed email; application limits; request links skip both;
+  fraud signals). Those pages could not be opened from the build session, so re-read them before adding detail.
+  Not tested: a real Claude study, and real Gmail bodies.
   draws the bar right of the name (search status linking to `#search`, email and sync chips, an amber
   chip for a Claude limit or a connection problem, find, and `#mTheme`, one button that steps Auto,
   Light, Dark via `setTheme`). It is drawn by script on purpose: a phone showed 2.51.1 with the old

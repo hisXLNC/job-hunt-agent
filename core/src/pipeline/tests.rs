@@ -1998,3 +1998,34 @@ fn a_reply_to_a_rejection() {
     assert_eq!((v["in_thread"].as_bool(), v["robot"].as_bool()), (Some(false), Some(true)));
     assert!(s.mail.drafts.lock().unwrap().last().unwrap().0.starts_with("to:"));
 }
+
+#[test]
+fn rejections_are_studied_and_tailoring_is_told() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    assert!(s.agent.study_rejections().is_err(), "nothing to study yet");
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
+    let jobs = s.agent.db().jobs(Some("queued"), 10).unwrap();
+    // Two emails about one application count once; an unmatched rejection isn't counted.
+    let theirs = crate::google::Email { id: "r1".into(), thread_id: "t1".into(), body: "We have decided to move forward with candidates whose experience more closely matches.".into(), ..Default::default() };
+    s.mail.messages.lock().unwrap().insert("r1".into(), theirs);
+    let db = s.agent.db();
+    db.record_email("r1", "t1", Some(&jobs[0].id), "no-reply@ashbyhq.com", "Update", "rejection", "Not moving forward", None, "2026-01-03T00:00:00Z").unwrap();
+    db.record_email("r0", "t1", Some(&jobs[0].id), "no-reply@ashbyhq.com", "Update", "rejection", "Older", None, "2026-01-02T00:00:00Z").unwrap();
+    db.record_email("r9", "t9", None, "x@y.example", "No", "rejection", "Nobody's", None, "2026-01-04T00:00:00Z").unwrap();
+    drop(db);
+    let lines = s.agent.rejections_evidence().unwrap();
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].contains("more closely matches") && lines[0].contains("no interview") && lines[0].contains("system: not known"), "{}", lines[0]);
+    let v = s.agent.study_rejections().unwrap();
+    assert_eq!((v["count"].as_u64(), v["said"][0]["count"].as_u64()), (Some(1), Some(1)));
+    assert_eq!(s.agent.results().unwrap()["lessons"]["lessons"][0], "State years of programme delivery outright in the summary");
+    // Tailoring is told the lessons, and for a job on Ashby how its reviewers read a CV.
+    let other = s.agent.db().job(&jobs[1].id).unwrap().unwrap();
+    let plain = s.agent.tailoring_guidance(&other);
+    assert!(plain.contains("State years of programme delivery") && !plain.contains("Ashby"));
+    let ashby = crate::db::Job { apply_url: Some("https://jobs.ashbyhq.com/acme/1/application".into()), ..other };
+    assert!(s.agent.tailoring_guidance(&ashby).contains("undecided"));
+}

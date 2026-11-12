@@ -5,6 +5,7 @@
 //! CV and a cover letter, track every application, triage job email and book interviews.
 
 pub mod api;
+pub mod ats;
 pub mod backup;
 pub mod bridge;
 pub mod claude;

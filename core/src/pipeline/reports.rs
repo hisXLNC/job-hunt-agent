@@ -497,6 +497,7 @@ publish your Google project (Settings \u{2192} Accounts explains how).", what.to
             "by_pay": by_pay,
             "market_pay": market,
             "insights": serde_json::from_str::<Value>(&self.secret("insights")).ok(),
+            "lessons": self.rejection_lessons(),
             "career": serde_json::from_str::<Value>(&self.secret("career")).ok(),
         }))
     }

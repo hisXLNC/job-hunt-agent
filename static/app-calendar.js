@@ -310,6 +310,15 @@ async function showResults() {
 </div>`;
     })()}
     ${payHtml(r.pay)}
+    <section class="card prep"><header><h2>What your rejections say</h2>
+      ${r.studying ? '<span class="muted small"><span class="spin" data-kind="lessons"></span>Claude is reading them…</span>' : `<button class="btn" data-act="lessons">${r.lessons ? 'Study them again' : 'Study my rejections'}</button>`}</header>
+      ${r.lessons ? `<p class="muted small">From ${esc(fmtDate(r.lessons.at))}, across ${r.lessons.count} rejection${r.lessons.count === 1 ? '' : 's'}. Job Hunt reads them again as more arrive.</p>
+        ${r.lessons.note ? `<p>${esc(r.lessons.note)}</p>` : ''}
+        ${(r.lessons.said || []).length ? `<table><thead><tr><th>What the emails said</th><th class="num">Emails</th></tr></thead><tbody>${r.lessons.said.filter(x => x.count > 0).map(x => `<tr><td>${esc(x.reason)}</td><td class="num">${x.count}</td></tr>`).join('')}</tbody></table>` : ''}
+        ${(r.lessons.patterns || []).length ? `<h3>What the set shows</h3><ul>${r.lessons.patterns.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+        ${(r.lessons.lessons || []).length ? `<h3>What tailoring now does differently</h3><ul>${r.lessons.lessons.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="muted small">These are handed to Claude every time it tailors a CV and cover letter for you, within the usual rule: nothing is added that your CV doesn't state.</p>` : '<p class="muted small">Nothing here to change in how your CVs are tailored yet.</p>'}`
+      : '<p class="muted">Claude reads every rejection email matched to an application: what it says (most give no reason), how fast it came, and at which stage. What it learns is used the next time a CV and cover letter are tailored for you.</p>'}
+    </section>
     <section class="card prep"><header><h2>What's working, and what to change</h2>
       ${r.thinking ? '<span class="muted small"><span class="spin" data-kind="insights"></span>Claude is looking…</span>' : `<button class="btn" data-act="insights">${r.insights ? 'Look again' : 'Ask Claude'}</button>`}</header>
       ${r.insights ? `<p class="muted small">From ${esc(fmtDate(r.insights.at))}. Job Hunt also does this once a month by itself.</p>${mdHtml(r.insights.text)}` : '<p class="muted">Claude reads your results and the applications behind them, and says what is working and what to change: titles, CVs, sources or your fit threshold.</p>'}

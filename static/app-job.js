@@ -55,7 +55,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, decline, declining, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, decline, declining, system: sys, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   j.effort = effort;
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
@@ -81,6 +81,10 @@ async function showJob(id) {
       </div>
     </div>
     ${jobActions(j, tailoring, progress)}
+    ${sys ? `<details class="card ats-tips"><summary><b>${esc(j.company)} takes applications through ${esc(sys.name)}.</b> <span class="muted">What that means for this one</span></summary>
+      ${(sys.here || []).length ? `<p style="color:var(--warn)">You've applied to ${sys.here.length} other role${sys.here.length === 1 ? '' : 's'} here in the last 90 days (${sys.here.slice(0, 3).map(h => esc(h.title) + (h.status === 'rejected' ? ', turned down' : '')).join('; ')}). ${esc(sys.name)} lets employers block repeat applications, so check this one is worth it.</p>` : ''}
+      <ul>${sys.tips.map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join('')}</ul>
+      <p class="muted small">From ${esc(sys.name)}'s own published help pages. Employers choose which of these they switch on, so not all of it applies to every company.</p></details>` : ''}
     ${decline || declining || j.status === 'rejected' ? `<section class="card">
       <header><h2>Reply to the rejection</h2>${declining ? '<span class="muted small"><span class="spin" data-kind="decline"></span>Writing…</span>' : `<button class="btn" data-act="decline">${decline ? 'Write again' : 'Draft a reply'}</button>`}</header>
       ${decline ? `<p class="small muted">${decline.draft ? `Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>${decline.in_thread ? ', as a reply to their email' : ''}` : 'Written'} ${esc(ago(decline.at))}${decline.to ? ` · to ${esc(decline.to)}` : ' · add the address of the person you dealt with before sending'}</p>

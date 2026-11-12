@@ -544,6 +544,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
                 r["overlap"] = json!(overlap);
                 r["thinking"] = json!(agent.is_running("insights"));
+                r["studying"] = json!(agent.is_running("lessons"));
                 r["career_thinking"] = json!(agent.is_running("career"));
                 return Ok(Resp::json(&r));
             }
@@ -669,7 +670,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
                     "effort": crate::fill::effort(&job), "job": job, "history": history, "progress": agent.tracker(Some(id))?.pop(),
-                    "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "decline": agent.rejection_reply(id), "declining": agent.is_running(&format!("decline:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
+                    "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "system": crate::ats::of(&job).map(|a| json!({ "name": crate::ats::name(a), "tips": crate::ats::tips(a), "here": agent.applied_here(&job) })), "decline": agent.rejection_reply(id), "declining": agent.is_running(&format!("decline:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
                     "rating": agent.db().rating(&job.company), "rating_busy": agent.is_running(&format!("rating:{}", crate::db::company_key(&job.company))),
                     "cv_pdf": pdf(&job.cv_path), "letter_pdf": pdf(&job.letter_path),
                     "revising": agent.is_running(&format!("revise:{id}")),
@@ -1508,6 +1509,20 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         ["api", "results", "add-titles"] => {
             let titles: Vec<String> = b.get("titles").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
             Ok(Resp::json(&json!({ "added": agent.add_titles(s(&b, "track"), &titles)? })))
+        }
+        ["api", "results", "lessons"] => {
+            if agent.is_running("lessons") {
+                return Ok(Resp::json(&json!({ "started": false })));
+            }
+            let a = agent.clone();
+            std::thread::spawn(move || {
+                let Ok(_g) = a.claim("lessons") else { return };
+                if let Err(e) = a.study_rejections() {
+                    let _ = a.db().log(None, "lessons:error", &e.0);
+                    a.note("Nothing to learn from yet", &e.0);
+                }
+            });
+            Ok(Resp::json(&json!({ "started": true })))
         }
         ["api", "results", "insights"] => {
             if agent.is_running("insights") {

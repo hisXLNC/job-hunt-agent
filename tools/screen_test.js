@@ -163,6 +163,15 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await page.evaluate(() => document.querySelector('.page h1').textContent === 'Me' && /Tailored files/.test(document.querySelector('.place-tabs a.on')?.textContent || '')), 'Tailored files is under Me');
   await at('results');
   check(await page.evaluate(() => /Insights/.test(document.querySelector('.place-tabs a.on')?.textContent || '')), 'Insights is under Me');
+  // Rejections: Claude studies them from Insights, and what it learns is shown (and handed to tailoring).
+  check(await page.evaluate(() => !!document.querySelector('[data-act="lessons"]')), 'Insights offers to study your rejections');
+  await page.click('[data-act="lessons"]'); await page.waitForTimeout(1500); await at('results');
+  check(await page.evaluate(() => { const c = [...document.querySelectorAll('.card')].find(x => /What your rejections say/.test(x.querySelector('h2')?.textContent || '')); return !!c && /What the emails said/.test(c.textContent) && /What tailoring now does differently/.test(c.textContent) && c.querySelectorAll('tbody tr').length >= 1; }), 'The study shows what the emails said and what tailoring now does differently');
+  // A job whose employer uses Ashby says what that means for the application.
+  const ashbyId = await page.evaluate(async () => (await (await fetch('/api/jobs?limit=100')).json()).jobs.find(j => /ashbyhq\.com/.test(j.url))?.id);
+  if (ashbyId) { await at(`job/${encodeURIComponent(ashbyId)}`); }
+  check(!!ashbyId && await page.evaluate(() => { const d = document.querySelector('.ats-tips'); return !!d && /through Ashby/.test(d.querySelector('summary').textContent) && d.querySelectorAll('li').length === 6; }), 'A job on Ashby says how Ashby handles applications');
+  await at('results');
 
   // The version sits under the app's name and opens what's new.
   await at('overview');

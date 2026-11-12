@@ -174,8 +174,8 @@ impl Llm for Metered {
     fn convert_cv(&self, cv: &CvSource) -> R<StructuredCv> {
         self.run("cv", |l| l.convert_cv(cv))
     }
-    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &Job, keywords: &[String], stories: &str, style: &str, consistency: &str) -> R<Tailored> {
-        self.run("tailor", |l| l.tailor(candidate, numbered_cv, job, keywords, stories, style, consistency))
+    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &Job, keywords: &[String], stories: &str, style: &str, consistency: &str, guidance: &str) -> R<Tailored> {
+        self.run("tailor", |l| l.tailor(candidate, numbered_cv, job, keywords, stories, style, consistency, guidance))
     }
     fn triage(&self, candidate: &str, tz: &str, email: &EmailIn, applications: &[(String, String, String, String)]) -> R<Triage> {
         self.run("email", |l| l.triage(candidate, tz, email, applications))
@@ -231,6 +231,9 @@ impl Llm for Metered {
     fn rejection_reply(&self, candidate: &str, job: &Job, their_email: &str, interviewed: bool) -> R<FollowUp> {
         self.run("thanks", |l| l.rejection_reply(candidate, job, their_email, interviewed))
     }
+    fn rejection_lessons(&self, candidate: &str, rejections: &str) -> R<crate::claude::Lessons> {
+        self.run("insights", |l| l.rejection_lessons(candidate, rejections))
+    }
     fn thank_you(&self, candidate: &str, job: &Job, interview: &str) -> R<FollowUp> {
         self.run("thanks", |l| l.thank_you(candidate, job, interview))
     }
@@ -281,7 +284,7 @@ mod tests {
         fn convert_cv(&self, _c: &CvSource) -> R<StructuredCv> {
             unimplemented!()
         }
-        fn tailor(&self, _a: &str, _b: &str, _j: &Job, _k: &[String], _s: &str, _t: &str, _c: &str) -> R<Tailored> {
+        fn tailor(&self, _a: &str, _b: &str, _j: &Job, _k: &[String], _s: &str, _t: &str, _c: &str, _guidance: &str) -> R<Tailored> {
             unimplemented!()
         }
         fn triage(&self, _a: &str, _b: &str, _e: &EmailIn, _x: &[(String, String, String, String)]) -> R<Triage> {

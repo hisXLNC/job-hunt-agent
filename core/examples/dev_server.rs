@@ -45,6 +45,16 @@ impl Llm for DemoLlm {
     fn rejection_reply(&self, c: &str, job: &Job, _their: &str, interviewed: bool) -> R<jobhunt_core::claude::FollowUp> {
         Ok(jobhunt_core::claude::FollowUp { subject: format!("Thank you: {}", job.title), body: format!("Hello,\n\nThank you for letting me know about the {} role, and for the time your team gave me.{} I'd be glad to be kept in mind if a role like it opens later at {}.\n\n{c}", job.title, if interviewed { " If you're able to share any feedback from the interviews, I'd find it useful; no worries if not." } else { "" }, job.company) })
     }
+    fn rejection_lessons(&self, _c: &str, rejections: &str) -> R<jobhunt_core::claude::Lessons> {
+        use jobhunt_core::claude::{Lessons, SaidReason};
+        let n = rejections.lines().filter(|l| l.starts_with("- ")).count() as u32;
+        Ok(Lessons {
+            said: vec![SaidReason { reason: "No reason given".into(), count: n.saturating_sub(1).max(1) }, SaidReason { reason: "Went with candidates whose experience matched more closely".into(), count: u32::from(n > 1) }],
+            patterns: vec![format!("{n} rejection{} so far, none after an interview: too few to see a pattern yet.", if n == 1 { "" } else { "s" })],
+            lessons: vec!["State the size of the programmes you ran (people, budget, months) in the first two bullets, not further down.".into(), "In the cover letter, name the regulated platforms you delivered in the first paragraph.".into()],
+            note: "Most of these gave no reason, which is normal. The one that did points at experience match, so make the closest experience impossible to miss.".into(),
+        })
+    }
     fn outreach(&self, _c: &str, _cv: &str, job: &Job, contact: &str, _brief: &str) -> R<String> {
         let first = contact.lines().next().unwrap_or("").trim_start_matches("name: ").split_whitespace().next().unwrap_or("there").to_string();
         Ok(format!("Hi {first}, saw the news about {}. I ran a 40-person programme that moved 30 services online in 14 months, which sounds close to what you're building next. Are you hiring for that kind of work? Happy to do a quick call.\nSam", job.company))
@@ -132,7 +142,7 @@ impl Llm for DemoLlm {
             salary: String::new(),
         })
     }
-    fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], _stories: &str, _style: &str, _consistency: &str) -> R<Tailored> {
+    fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], _stories: &str, _style: &str, _consistency: &str, _guidance: &str) -> R<Tailored> {
         let mut edits = vec![];
         for line in numbered.lines() {
             let Some(close) = line.find(']') else { continue };
@@ -213,7 +223,8 @@ fn seed(agent: &Agent) {
     ];
     let postings: Vec<Posting> = jobs.iter().enumerate().map(|(i, (t, c, l, s, e))| Posting {
         source: "adzuna".into(), external_id: format!("demo{i}"), company: c.to_string(), title: t.to_string(), location: l.to_string(),
-        url: format!("https://example.com/jobs/{i}"), salary: s.map(|x| x.to_string()), apply_email: e.map(|x| x.to_string()),
+        // One employer takes applications through Ashby.
+        url: if i == 6 { "https://jobs.ashbyhq.com/utility/demo6".into() } else { format!("https://example.com/jobs/{i}") }, salary: s.map(|x| x.to_string()), apply_email: e.map(|x| x.to_string()),
         description: "We're looking for a Technical Program Manager to lead delivery of regulated financial platforms.\n\nWhat you'll do\n- Own program governance, requirements, UAT and release management\n- Manage vendors and system integrators\n- Report to the steering committee\n\nWhat you bring\n- PMP\n- 8+ years delivering large platforms\n- Agile and waterfall experience".into(),
         ..Posting::default()
     }).collect();
@@ -232,6 +243,10 @@ fn seed(agent: &Agent) {
         let start = (chrono::Utc::now() + chrono::Duration::days(3)).to_rfc3339();
         db.record_calendar_event("evt1", Some(id), "interview", &start, "Interview").unwrap();
         db.record_email("m1", "t1", Some(id), "Recruiter <talent@insurer.example>", "Interview invitation – Digital Transformation Manager", "interview_request", "They'd like a 45-minute video interview next week and offered Tuesday or Wednesday afternoon.", Some("d1"), &chrono::Utc::now().to_rfc3339()).unwrap();
+    }
+    // A rejection email matched to a job, for the study of rejections to read.
+    if let Some(id) = db.jobs(Some("skipped"), 50).unwrap().iter().find(|j| j.company == "Big Bank").map(|j| j.id.clone()) {
+        db.record_email("m3", "t3", Some(&id), "Hiring Team <no-reply@bigbank.example>", "Your application", "rejection", "They've decided to move forward with candidates whose experience more closely matches the role.", None, &(chrono::Utc::now() - chrono::Duration::hours(30)).to_rfc3339()).unwrap();
     }
     db.record_email("m2", "t2", None, "Jobs Digest <alerts@board.example>", "12 new jobs for Program Manager", "job_alert", "A job-board digest of program manager roles in Toronto.", None, &(chrono::Utc::now() - chrono::Duration::hours(5)).to_rfc3339()).unwrap();
     // Other Google Calendar events from a sync; one looks like an interview for the applied job.

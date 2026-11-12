@@ -1700,3 +1700,8 @@ details.kit > summary { cursor: pointer; }
   #mNoteShort { white-space: nowrap; }
 }
 @media (min-width: 640px) and (max-width: 1100px) { #mNote { display: inline; } #mNoteShort { display: none; } .mchip-t { display: inline; } .mchip .dot { margin: 0; box-shadow: none; } .mchip svg { display: none; } }
+
+/* What an employer's application system means for a job. */
+.ats-tips > summary { cursor: pointer; }
+.ats-tips ul { margin: 10px 0 6px; padding-left: 20px; }
+.ats-tips li { margin: 6px 0; }

@@ -470,7 +470,7 @@ pub trait Llm: Send + Sync {
     fn convert_cv(&self, cv: &CvSource) -> R<StructuredCv>;
     /// `consistency`: when the candidate already sent this company a CV, that CV and how close to
     /// stay to it (see Agent::tailor); empty otherwise.
-    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, keywords: &[String], stories: &str, style: &str, consistency: &str) -> R<Tailored>;
+    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, keywords: &[String], stories: &str, style: &str, consistency: &str, guidance: &str) -> R<Tailored>;
     fn triage(&self, candidate: &str, tz: &str, email: &EmailIn, applications: &[(String, String, String, String)]) -> R<Triage>;
     fn scheduling_reply(&self, candidate: &str, tz: &str, email: &EmailIn, accept: Option<&TimeSlot>, free: &[TimeSlot]) -> R<String>;
     /// Postings from Indeed, through the Indeed connector on your Claude account (Claude Code only).
@@ -532,6 +532,10 @@ pub trait Llm: Send + Sync {
     /// in turn) and your new message.
     fn chat(&self, _candidate: &str, _cv: &str, _job: &crate::db::Job, _notes: &str, _history: &[(String, String)], _message: &str) -> R<String> {
         Err(Error("Chat isn't available.".into()))
+    }
+    /// What a set of rejections says, and what to do differently when tailoring the next application.
+    fn rejection_lessons(&self, _candidate: &str, _rejections: &str) -> R<Lessons> {
+        Err(Error("Studying rejections isn't available.".into()))
     }
     /// What the results so far suggest changing, as Markdown.
     fn insights(&self, _candidate: &str, _results: &str, _applications: &str) -> R<String> {
@@ -907,6 +911,51 @@ questions, cover letter and message drafts, interview preparation, what to say a
 Anything you write for them to send (answers, letters, messages) follows this:\n{HUMAN}\n\n\
 Use only facts from their CV and notes; when something isn't there, ask or leave a [placeholder] rather than \
 inventing it. Keep replies short unless they ask for something long. Plain text or light Markdown."
+    )
+}
+
+/// What a job seeker's rejections show.
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Lessons {
+    /// The reasons the emails state, grouped, each with how many emails give it.
+    pub said: Vec<SaidReason>,
+    /// What the set shows beyond the wording, each with its numbers.
+    pub patterns: Vec<String>,
+    /// Instructions for tailoring the next CV and cover letter.
+    pub lessons: Vec<String>,
+    pub note: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct SaidReason {
+    pub reason: String,
+    pub count: u32,
+}
+
+fn rejection_lessons_system() -> String {
+    format!(
+        "You study a job seeker's rejection emails so their next applications land better.\n\n{UNTRUSTED}\n\n{YOU}\n\n\
+You get each rejection: the role, the company, how well their CV fit (0-100), how many days passed between applying \
+and the rejection, whether they were interviewed, which application system the employer uses when known, and what the \
+email said.\n\n\
+Most rejection emails give no reason; that is normal, and it is a finding in itself. Never invent a reason an email \
+doesn't state, and never read a polite stock phrase (\"other candidates more closely matched\") as a specific one.\n\n\
+said: the reasons the emails state, grouped into short plain labels (for example \"No reason given\", \"Went with \
+candidates whose experience matched more closely\", \"The role was filled or closed\", \"Location or right to \
+work\", \"Wanted more experience with <named skill>\"), each with how many emails give it. The counts add up to the \
+number of emails.\n\
+patterns: 2-4 things the set shows beyond the wording, each citing its numbers. Look at how fast the no came (a \
+rejection within a day or two with no interview usually means a screening question or a volume cut, not a close read \
+of the CV), at which stage it came, at which kinds of role, level or employer say no most, and at the fit scores of \
+what was rejected. Only what the data supports: with fewer than five rejections, say there is too little to see a \
+pattern and give at most one.\n\
+lessons: 2-5 instructions to whoever tailors their next CV and cover letter. Each one concrete, tied to something \
+above, and something honest rewording can do: which evidence to lead with, what to state outright instead of \
+implying, what the cover letter should address head on, which kind of role to stop spending effort on. Never tell \
+them to claim experience they lack. An empty list when the evidence supports none.\n\
+note: two or three plain sentences to them on what to take from this, including what it can't tell them."
     )
 }
 
@@ -1791,7 +1840,7 @@ exactly as if it were the only posting, never against the others. Answer with on
         Ok(cv)
     }
 
-    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, keywords: &[String], stories: &str, style: &str, consistency: &str) -> R<Tailored> {
+    fn tailor(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, keywords: &[String], stories: &str, style: &str, consistency: &str, guidance: &str) -> R<Tailored> {
         let mut stories = if stories.trim().is_empty() {
             String::new()
         } else {
@@ -1810,6 +1859,12 @@ exactly as if it were the only posting, never against the others. Answer with on
         let user = match letter_style(style) {
             "" => user,
             s => format!("{user}\n\nCover letter style (this overrides the length and tone above; keep the layout and honesty rules): {s}"),
+        };
+        // What earlier rejections taught, and how this employer's application system reads a CV.
+        let user = if guidance.trim().is_empty() {
+            user
+        } else {
+            format!("{user}\n\nGuidance for this application (follow it wherever the CV supports it; the honesty rules above always win, and it never adds experience the CV doesn't state):\n{}", guidance.trim())
         };
         let model = if self.tailor_model.trim().is_empty() { self.model.as_str() } else { self.tailor_model.as_str() };
         let effort = if ["low", "medium", "high"].contains(&self.tailor_effort.as_str()) { self.tailor_effort.as_str() } else { TAILOR_EFFORT };
@@ -2014,6 +2069,13 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
             return Err(Error("Claude's reply came back empty; try again.".into()));
         }
         Ok(r)
+    }
+
+    fn rejection_lessons(&self, candidate: &str, rejections: &str) -> R<Lessons> {
+        let user = format!("Candidate: {candidate}\n\nTheir rejections:\n<posting>\n{rejections}\n</posting>");
+        let reason = json!({"type": "object", "properties": {"reason": {"type": "string"}, "count": {"type": "integer"}}, "required": ["reason", "count"], "additionalProperties": false});
+        let list = json!({"type": "array", "items": {"type": "string"}});
+        self.call(&rejection_lessons_system(), &user, obj(json!({"said": {"type": "array", "items": reason}, "patterns": list, "lessons": list, "note": {"type": "string"}})), "medium")
     }
 
     fn insights(&self, candidate: &str, results: &str, applications: &str) -> R<String> {
@@ -2373,7 +2435,7 @@ Hybrid in Oakville; accommodation of flexible hours for the team.";
         assert!(seen[2].contains("<posting n=\\\"1\\\">"), "each posting has its number");
         assert!(seen[3].starts_with("GET /v1/models"));
         // Tailoring stays with Claude when the other AI is for searching only (and Claude isn't there: its own error).
-        let e = c.tailor("Sam", "1. x", &job, &[], "", "", "").unwrap_err();
+        let e = c.tailor("Sam", "1. x", &job, &[], "", "", "", "").unwrap_err();
         assert!(e.0.contains("Claude Code"), "{}", e.0);
     }
 

@@ -1853,6 +1853,89 @@ replies and interviews, and a little lower for kinds that got none from several 
         self.db().get(&format!("thanks:{job_id}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
     }
 
+    /// Your other applications to this job's company in the last 90 days: [{title, status, applied}].
+    pub fn applied_here(&self, job: &Job) -> Vec<Value> {
+        let key = crate::db::company_key(&job.company);
+        let since = (Utc::now() - chrono::Duration::days(90)).to_rfc3339();
+        self.db().jobs(None, 1_000_000).unwrap_or_default().into_iter()
+            .filter(|j| j.id != job.id && crate::db::company_key(&j.company) == key && j.applied_at.as_deref().is_some_and(|a| a >= since.as_str()))
+            .map(|j| json!({ "title": j.title, "status": j.status, "applied": j.applied_at }))
+            .collect()
+    }
+
+    /// What the last study of your rejections found (see `study_rejections`).
+    pub fn rejection_lessons(&self) -> Option<Value> {
+        self.db().get("lessons").ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
+    }
+
+    /// Each rejection email matched to an application, newest first, one line each, for Claude to
+    /// study: the role, the fit, how fast the no came, whether you interviewed, the employer's
+    /// application system, and what the email said (its own words when Gmail is connected).
+    /// How many applications have a rejection email matched to them.
+    pub fn rejections_count(&self) -> usize {
+        let emails = self.db().emails(5000).unwrap_or_default();
+        let ids: std::collections::HashSet<_> = emails.iter().filter(|e| e.category.as_deref() == Some("rejection")).filter_map(|e| e.job_id.clone()).collect();
+        ids.len()
+    }
+
+    pub fn rejections_evidence(&self) -> R<Vec<String>> {
+        let emails = self.db().emails(5000)?;
+        let events = self.db().calendar_ids().unwrap_or_default();
+        let mail = self.mail.read().unwrap().clone();
+        let mut seen = std::collections::HashSet::new();
+        let mut lines = vec![];
+        for e in emails.iter().filter(|e| e.category.as_deref() == Some("rejection")) {
+            let Some(id) = e.job_id.as_deref() else { continue };
+            if !seen.insert(id.to_string()) || lines.len() >= 30 {
+                continue;
+            }
+            let job = self.db().job(id)?;
+            let Some(job) = job else { continue };
+            let days = match (job.applied_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok()), e.received_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok())) {
+                (Some(a), Some(r)) => format!("{} days after applying", (r - a).num_days().max(0)),
+                _ => "days after applying not known".into(),
+            };
+            let interviewed = events.iter().any(|c| c.kind == "interview" && c.job_id.as_deref() == Some(id));
+            // Their own words, cut to what a rejection needs; the summary when Gmail can't give them.
+            let words = mail.as_ref().and_then(|m| m.get(&e.gmail_id).ok()).map(|m| m.body).filter(|b| !b.trim().is_empty())
+                .unwrap_or_else(|| e.summary.clone().unwrap_or_default());
+            let words: String = words.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(900).collect();
+            lines.push(format!("- {} at {} | fit {} | {} | {} | system: {} | email: {}", job.title, job.company,
+                job.score_after.or(job.score).map(|s| s.to_string()).unwrap_or("-".into()), days, if interviewed { "interviewed" } else { "no interview" },
+                crate::ats::of(&job).map(crate::ats::name).unwrap_or("not known"), words));
+        }
+        Ok(lines)
+    }
+
+    /// Claude reads your rejections: what they say, what the set shows, and what to do differently
+    /// when tailoring. Kept, and handed to every tailoring after it.
+    pub fn study_rejections(&self) -> R<Value> {
+        let lines = self.rejections_evidence()?;
+        if lines.is_empty() {
+            return err("No rejection emails are matched to an application yet. Connect Gmail and they're picked up as they arrive.");
+        }
+        let found = self.llm().rejection_lessons(&self.profile().name, &lines.join("\n"))?;
+        let v = json!({ "at": now(), "count": lines.len(), "matched": self.rejections_count(), "said": found.said, "patterns": found.patterns, "lessons": found.lessons, "note": found.note });
+        let db = self.db();
+        db.set("lessons", &v.to_string())?;
+        db.log(None, "lessons", &format!("Claude studied {} rejection{}", lines.len(), if lines.len() == 1 { "" } else { "s" }))?;
+        Ok(v)
+    }
+
+    /// What tailoring is told beyond the CV and the posting: the lessons from your rejections, and
+    /// how this employer's application system reads a CV.
+    pub fn tailoring_guidance(&self, job: &Job) -> String {
+        let mut parts = vec![];
+        let lessons: Vec<String> = self.rejection_lessons().and_then(|v| serde_json::from_value(v["lessons"].clone()).ok()).unwrap_or_default();
+        if !lessons.is_empty() {
+            parts.push(format!("What this person's earlier rejections suggest doing differently:\n{}", lessons.iter().map(|l| format!("- {l}")).collect::<Vec<_>>().join("\n")));
+        }
+        if let Some(ats) = crate::ats::of(job) {
+            parts.push(crate::ats::tailoring(ats).to_string());
+        }
+        parts.join("\n\n")
+    }
+
     pub fn rejection_reply(&self, job_id: &str) -> Option<Value> {
         self.db().get(&format!("decline:{job_id}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
     }
@@ -2967,6 +3050,12 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                     let sent = a.results().map(|r| r["funnel"]["sent"].as_u64().unwrap_or(0)).unwrap_or(0);
                     if stale && sent >= 10 && a.claude_ready() {
                         let _ = a.write_insights();
+                    }
+                    // Rejections since the last study: read them again, so tailoring keeps learning.
+                    let studied = a.rejection_lessons().map(|v| v["matched"].as_u64().unwrap_or(0)).unwrap_or(0);
+                    let now_n = a.rejections_count() as u64;
+                    if now_n > studied && now_n >= 3 && a.claude_ready() && !a.budget_wait() {
+                        let _ = a.study_rejections();
                     }
                     // The career coach, weekly: the gaps that cost you most and new titles to try.
                     if a.claude_ready() && !a.budget_wait() {

@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.53.0",
+    "date": "2026-11-12",
+    "title": "Learns from your rejections, and knows how Ashby reads applications",
+    "changes": [
+      "Claude studies your rejection emails: what they say (most give no reason), how fast they came and at which stage. Find it under Me, Insights, What your rejections say. What it learns is handed to every CV and cover letter tailored after that.",
+      "Job Hunt reads your rejections again as more arrive.",
+      "Employers on Ashby: the tailored CV states each requirement you meet in one clear line, because Ashby's AI review marks each requirement met, not met or undecided and quotes your CV as the evidence.",
+      "A job on Ashby shows what to watch for: screening questions that reject at once, answers checked against your CV, limits on repeat applications, and that a link from someone inside skips the automatic rules.",
+      "Rejected jobs offer a short, gracious reply, saved to your Gmail drafts.",
+      "Phone: the menu button is gone. Search, email, sync and one theme button sit in the top bar. Reload the page once."
+    ]
+  },
+  {
     "version": "2.52.1",
     "date": "2026-11-12",
     "title": "The phone's top bar, without a menu",

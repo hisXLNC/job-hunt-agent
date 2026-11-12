@@ -331,7 +331,7 @@ impl Agent {
                 job.company, p.applied_at.as_deref().unwrap_or("").get(..10).unwrap_or(""), p.title, d.plain_text().chars().take(8000).collect::<String>()),
             _ => String::new(),
         };
-        let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.stories, &t.letter_style, &consistency)?;
+        let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.stories, &t.letter_style, &consistency, &self.tailoring_guidance(&job))?;
         // Held to it, whatever came back: the headline as they saw it, and only the few edits that add most.
         if let Some(pd) = prior_doc.as_ref().filter(|_| mode == "light") {
             let headline = headline_indices(&doc);

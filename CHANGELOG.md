@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.53.0] - 2026-11-12
+
+Learns from your rejections, and knows how Ashby reads applications.
+
+### Changes
+
+- Claude studies your rejection emails: what they say (most give no reason), how fast they came and at which stage. Find it under Me, Insights, What your rejections say. What it learns is handed to every CV and cover letter tailored after that.
+- Job Hunt reads your rejections again as more arrive.
+- Employers on Ashby: the tailored CV states each requirement you meet in one clear line, because Ashby's AI review marks each requirement met, not met or undecided and quotes your CV as the evidence.
+- A job on Ashby shows what to watch for: screening questions that reject at once, answers checked against your CV, limits on repeat applications, and that a link from someone inside skips the automatic rules.
+- Rejected jobs offer a short, gracious reply, saved to your Gmail drafts.
+- Phone: the menu button is gone. Search, email, sync and one theme button sit in the top bar. Reload the page once.
+
 ## [2.52.1] - 2026-11-12
 
 The phone's top bar, without a menu.
@@ -1722,6 +1735,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.53.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.53.0
 [2.52.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.52.1
 [2.52.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.52.0
 [2.51.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.51.1

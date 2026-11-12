@@ -520,6 +520,9 @@ async function act(el) {
   if (a === 'clearHeld') {
     return busy(async () => { await api('/api/usage/clear-held', { method: 'POST' }); renderUsage(); refreshOverview(); }, 'Cancelled.');
   }
+  if (a === 'lessons') {
+    return busy(async () => { await api('/api/results/lessons', { method: 'POST' }); route(); setTimeout(() => { if (location.hash === '#results') route(); }, 20000); }, 'Claude is reading your rejections…');
+  }
   if (a === 'insights') {
     return busy(async () => { await api('/api/results/insights', { method: 'POST' }); route(); setTimeout(() => { if (location.hash === '#results') route(); }, 30000); }, 'Claude is looking at your results. This takes a minute.');
   }

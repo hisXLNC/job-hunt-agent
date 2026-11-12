@@ -168,6 +168,12 @@ impl Llm for FakeLlm {
         self.calls.lock().unwrap().push("rejection_reply".into());
         Ok(FollowUp { subject: format!("Thank you: {}", job.title), body: format!("Thank you for letting me know.{} They wrote: {their_email}. {c}", if interviewed { " Any feedback?" } else { "" }) })
     }
+    fn rejection_lessons(&self, _c: &str, rejections: &str) -> R<crate::claude::Lessons> {
+        self.calls.lock().unwrap().push("rejection_lessons".into());
+        let n = rejections.lines().filter(|l| l.starts_with("- ")).count() as u32;
+        Ok(crate::claude::Lessons { said: vec![crate::claude::SaidReason { reason: "No reason given".into(), count: n }], patterns: vec![format!("{n} rejections, none after an interview")],
+            lessons: vec!["State years of programme delivery outright in the summary".into()], note: rejections.to_string() })
+    }
     fn thank_you(&self, c: &str, job: &Job, _interview: &str) -> R<FollowUp> {
         self.calls.lock().unwrap().push("thank_you".into());
         Ok(FollowUp { subject: format!("Thank you: {} interview", job.title), body: format!("Thank you for your time. {c}") })
@@ -233,7 +239,7 @@ impl Llm for FakeLlm {
             salary: job.description.lines().find_map(|l| l.strip_prefix("Salary note: ")).unwrap_or("").replace('~', " to "),
         })
     }
-    fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], stories: &str, _style: &str, consistency: &str) -> R<Tailored> {
+    fn tailor(&self, _c: &str, numbered: &str, _job: &Job, _k: &[String], stories: &str, _style: &str, consistency: &str, _guidance: &str) -> R<Tailored> {
         *self.stories_seen.lock().unwrap() = stories.to_string();
         if !consistency.is_empty() {
             self.calls.lock().unwrap().push(format!("tailor-consistent:{}", consistency.lines().next().unwrap_or("")));
