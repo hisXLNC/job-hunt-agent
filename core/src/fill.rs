@@ -82,6 +82,7 @@ pub fn question_key(label: &str) -> String {
 
 /// Questions the bank never keeps: agreeing to terms and certifying (yours to tick each time),
 /// and anything that's about this one employer.
+#[cfg(test)]
 fn personal_to_the_role(label: &str) -> bool {
     personal_in(label, "", "")
 }

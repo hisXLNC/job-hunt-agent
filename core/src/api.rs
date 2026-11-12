@@ -431,6 +431,18 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 o["held"] = json!(agent.held_count());
                 // Whether forms can be filled in here (the app on your PC), for Approve and Apply to all.
                 o["can_fill"] = json!(host.can_fill() && !req.remote);
+                // The page asks every few seconds: when nothing changed since what it has, say only
+                // that, so it isn't sent, read and drawn again (it matters most on a phone).
+                let rev = {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    o.to_string().hash(&mut h);
+                    format!("{:x}", h.finish())
+                };
+                if req.query.get("have").is_some_and(|have| *have == rev) {
+                    return Ok(Resp::json(&json!({ "same": true, "rev": rev })));
+                }
+                o["rev"] = json!(rev);
                 return Ok(Resp::json(&o));
             }
             ["api", "coach"] => {
@@ -1170,8 +1182,13 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             // The board lists this page loaded, so boards changed elsewhere since aren't overwritten.
             let seen = b.get("seen_sources").and_then(|v| serde_json::from_value(v.clone()).ok());
+            // The calendar Job Hunt writes to is part of the Google connection: a change to it
+            // (and nothing else here) needs the connections made again.
+            let calendar = agent.profile().calendar.calendar_id;
             let saved = agent.save_settings(profile, seen)?;
-            agent.connect(); // the calendar id may have changed
+            if agent.profile().calendar.calendar_id != calendar {
+                agent.connect();
+            }
             Ok(Resp::json(&json!({ "ok": true, "profile": saved })))
         }
         // What runs programs or reads and writes folders on the computer is set there, not from a phone.
@@ -2026,6 +2043,12 @@ mod tests {
         agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
         let (st, o) = call(&agent, &host, "GET", "/api/overview", Value::Null);
         assert_eq!((st, o["counts"]["ready"].as_i64()), (200, Some(1)));
+        // Asked again with what the page has: only that nothing changed. With something else: all of it.
+        let rev = o["rev"].as_str().unwrap().to_string();
+        let (_, same) = call(&agent, &host, "GET", &format!("/api/overview?have={rev}"), Value::Null);
+        assert_eq!((same["same"].as_bool(), same.get("counts")), (Some(true), None));
+        let (_, all) = call(&agent, &host, "GET", "/api/overview?have=old", Value::Null);
+        assert_eq!((all["rev"].as_str(), all["counts"]["ready"].as_i64()), (Some(rev.as_str()), Some(1)));
         let (_, list) = call(&agent, &host, "GET", "/api/jobs?status=ready", Value::Null);
         assert_eq!(list["jobs"].as_array().unwrap().len(), 1);
         let (_, one) = call(&agent, &host, "GET", "/api/jobs/test:1", Value::Null);

@@ -468,7 +468,13 @@ function renderNav() {
 
 let overviewAt = 0, scrollToAfter = '';
 async function refreshOverview() {
-  try { overview = await api('/api/overview'); overviewAt = Date.now(); } catch (e) { return; }
+  // Nothing changed since what's on screen: the app says only that, and nothing is redrawn.
+  try {
+    const o = await api(`/api/overview${overview?.rev ? `?have=${overview.rev}` : ''}`);
+    overviewAt = Date.now();
+    if (o.same) return;
+    overview = o;
+  } catch (e) { return; }
   renderNav();
 }
 
