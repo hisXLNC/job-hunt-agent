@@ -13,6 +13,11 @@
   .popup [role=option] { padding: 7px 10px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
   .popup [role=option].active { background: #dfe8ff; }
   .spacer { height: 260px; }
+  fieldset { border: 0; padding: 0; margin: 0 0 18px; } legend { font-weight: 600; padding: 0; }
+  .dd { font: inherit; padding: 6px 8px; width: 320px; text-align: left; background: #fff; border: 1px solid #888; border-radius: 4px; }
+  .ddlist { position: absolute; background: #fff; border: 1px solid #888; width: 320px; height: 180px; overflow-y: auto; z-index: 10; }
+  .ddlist [role=option] { height: 30px; line-height: 30px; padding: 0 10px; box-sizing: border-box; cursor: pointer; }
+  [data-automation-id=file-upload-drop-zone] { border: 2px dashed #9bb; padding: 24px; width: 420px; text-align: center; }
 </style></head>
 <body>
 <!-- A stand-in for a Workday application page, for tools/ext_test/ext_test.js. Its skill and
@@ -24,15 +29,30 @@
      ?click=any      the list takes a script's clicks too (to test Job Hunt's own window, which has no real clicks)
      ?slow=2500      how long a search takes, in ms -->
 <h2>My Experience</h2>
+<h3>Work Experience</h3>
+<div role="group"><h4>Work Experience 1</h4>
+<div data-automation-id="formField-jobTitle"><label for="we1-title">Job Title</label><input type="text" id="we1-title" aria-required="true"></div>
+<div data-automation-id="formField-companyName"><label for="we1-company">Company</label><input type="text" id="we1-company" aria-required="true"></div>
+<fieldset><legend>From</legend><div data-automation-id="dateInputWrapper"><input type="text" id="we1-from-dateSectionMonth-input" data-automation-id="dateSectionMonth-input" role="spinbutton" aria-label="Month" size="2"><label for="we1-from-dateSectionMonth-input">MM</label> / <input type="text" id="we1-from-dateSectionYear-input" data-automation-id="dateSectionYear-input" role="spinbutton" aria-label="Year" size="4"></div></fieldset>
+<div data-automation-id="formField-roleDescription"><label for="we1-desc">Role Description</label><textarea id="we1-desc"></textarea></div></div>
 <div data-automation-id="formField-email"><label for="email">Email Address</label><input type="text" id="email"></div>
 <div data-automation-id="formField-phone"><label for="phone">Phone Number</label><input type="text" id="phone"></div>
 <h3>Education 1</h3>
-<div data-automation-id="formField-school"><label for="school">School or University</label><input type="text" id="school"></div>
+<div data-automation-id="formField-school"><label for="education-1--school">School or University</label>
+  <div data-automation-id="multiSelectContainer" data-uxi-widget-type="multiselect"><div><div data-automation-id="multiselectInputContainer">
+    <ul class="sel" data-automation-id="selectedItemList"></ul>
+    <div><input type="text" id="education-1--school" data-automation-id="searchBox" data-uxi-widget-type="selectinput" placeholder="Search" data-single="1" data-list="schools"></div>
+    <span data-automation-id="promptIcon">☰</span></div></div></div></div>
+<fieldset><legend>From</legend><div data-automation-id="dateInputWrapper"><input type="text" id="education-1--from-dateSectionYear-input" data-automation-id="dateSectionYear-input" role="spinbutton" aria-label="Year" size="4"><label for="education-1--from-dateSectionYear-input">YYYY</label></div></fieldset>
 <div data-automation-id="formField-fieldOfStudy"><label for="education-1--fieldOfStudy">Field of Study</label>
   <div data-automation-id="multiSelectContainer"><div><div data-automation-id="multiselectInputContainer">
     <ul class="sel" data-automation-id="selectedItemList"></ul>
     <div><input type="text" id="education-1--fieldOfStudy" data-automation-id="searchBox" data-uxi-widget-type="selectinput" placeholder="Search" data-single="1" data-list="study"></div>
     <span data-automation-id="promptIcon">☰</span></div></div></div></div>
+<h3>Certifications</h3>
+<div role="group" id="certs"></div>
+<h3>Languages</h3>
+<div role="group" id="langs"></div>
 <div class="spacer"></div>
 <h3>Skills</h3>
 <div data-automation-id="formField-skills"><label for="skills--skills">Type to Add Skills</label>
@@ -40,6 +60,8 @@
     <ul class="sel" data-automation-id="selectedItemList"></ul>
     <div><input type="text" id="skills--skills" data-automation-id="searchBox" data-uxi-widget-type="selectinput" placeholder="Search" data-list="skills"></div>
     <span data-automation-id="promptIcon">☰</span></div></div></div></div>
+<h3>Resume/CV</h3>
+<div data-automation-id="formField-resume"><div data-automation-id="attachments-FileUpload"><div data-automation-id="file-upload-drop-zone" id="dropzone"><p>Drop files here</p>or <label for="resumeFile" style="display:inline;color:#07a">Select files</label><input type="file" id="resumeFile" data-automation-id="file-upload-input-ref" style="display:none"></div><ul id="resumeList"></ul></div></div>
 <div class="spacer"></div>
 <button type="button">Save and Continue</button>
 <script>
@@ -48,12 +70,16 @@ const ODD = Q.get('pills') === 'odd', TRUSTED_TYPING = Q.get('typing') === 'trus
 const LISTS = {
   skills: ['Python', 'Python Programming', 'Project Management', 'Project Management Office (PMO)', 'Program Management', 'SQL', 'SQL Server', 'MySQL', 'Vendor Management', 'Vendor Relations',
     'Agile Methodology', 'Agile Project Management', 'Stakeholder Management', 'Risk Management', 'Data Analysis', 'Microsoft Excel', 'Payments', 'Payment Processing', 'JIRA', 'Budgeting'],
+  // Not every school or certificate is in a site's list: those forms say to choose "Other".
+  schools: ['American University', 'American University of Beirut', 'University of Toronto', 'Other'],
+  certs: ['Project Management Professional (PMP)', 'Certified Public Accountant (CPA)', 'Other'],
   study: ['Computer Science', 'Computer Engineering', 'Computer and Information Sciences', 'Data Science', 'Business Administration', 'Economics'],
 };
 window.mock = { clicks: [], searches: [] };
-for (const input of document.querySelectorAll('input[data-automation-id=searchBox]')) {
+const CHOSEN = {};
+function wire(input) {
   const single = !!input.dataset.single, all = LISTS[input.dataset.list];
-  const chosen = [];
+  const chosen = CHOSEN[input.id] = [];
   const ul = input.closest('[data-automation-id=multiselectInputContainer]').querySelector('ul');
   let popup = null, active = -1, typed = '', timer = 0;
   const pills = () => {
@@ -71,7 +97,7 @@ for (const input of document.querySelectorAll('input[data-automation-id=searchBo
   const draw = q => {
     const hits = all.filter(n => n.toLowerCase().includes(q.toLowerCase()));
     popup.dataset.q = q;
-    popup.innerHTML = hits.length ? `<div role="listbox">${hits.map((n, i) => `<div role="option" data-automation-id="menuItem"${ODD ? '' : ` aria-selected="${chosen.includes(n)}"`} class="${i === active ? 'active' : ''}" data-name="${n}">
+    popup.innerHTML = hits.length ? `<div role="listbox">${hits.map((n, i) => `<div role="option" data-automation-id="menuItem"${ODD ? '' : ` aria-selected="${i === Math.max(0, active)}"`} class="${i === active ? 'active' : ''}" data-name="${n}">
         <div data-automation-id="promptOption" data-automation-label="${n}"><input type="${single ? 'radio' : 'checkbox'}" data-automation-id="${single ? 'radioBtn' : 'checkboxPanel'}" tabindex="-1" ${chosen.includes(n) ? 'checked' : ''}> ${n}</div></div>`).join('')}</div>`
       : '<div data-automation-id="noResults"><p>No Items.</p></div>';
   };
@@ -114,7 +140,83 @@ for (const input of document.querySelectorAll('input[data-automation-id=searchBo
   });
   // Leaving the box (a click elsewhere) closes the list, as Workday's does.
   input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) close(); }, 200));
-  window.mock[input.dataset.list] = () => [...chosen];
+  if (!window.mock[input.dataset.list]) window.mock[input.dataset.list] = () => [...chosen];
 }
+// A date's own boxes under a legend, as Workday draws "From", "Issued Date" and "Expiration Date".
+const dateSet = (id, legend, kinds) => `<fieldset><legend>${legend}</legend><div data-automation-id="dateInputWrapper">${kinds.map(k => `<input type="text" id="${id}-dateSection${k}-input" data-automation-id="dateSection${k}-input" role="spinbutton" aria-label="${k}" size="4">`).join(' / ')}</div></fieldset>`;
+// Certifications: one entry, and "Add Another" after the entry's last date (its nearest heading is that date's legend).
+let nCert = 0;
+function addCert() {
+  const n = ++nCert, box = document.createElement('div');
+  box.innerHTML = `<h4>Certifications ${n}</h4>
+    <div data-automation-id="formField-certification"><label for="cert-${n}--certification">Certification</label>
+      <div data-automation-id="multiSelectContainer" data-uxi-widget-type="multiselect"><div><div data-automation-id="multiselectInputContainer">
+        <ul class="sel" data-automation-id="selectedItemList"></ul>
+        <div><input type="text" id="cert-${n}--certification" aria-required="true" data-automation-id="searchBox" data-uxi-widget-type="selectinput" placeholder="Search" data-single="1" data-list="certs"></div>
+        <span data-automation-id="promptIcon">☰</span></div></div></div></div>
+    ${dateSet(`cert-${n}--issued`, 'Issued Date', ['Month', 'Day', 'Year'])}${dateSet(`cert-${n}--expires`, 'Expiration Date', ['Month', 'Day', 'Year'])}`;
+  document.getElementById('certs').insertBefore(box, document.getElementById('certAdd'));
+  wire(box.querySelector('input[data-automation-id=searchBox]'));
+}
+document.getElementById('certs').innerHTML = '<div id="certAdd"><button type="button" data-automation-id="add-button">Add Another</button></div>';
+document.querySelector('#certAdd button').onclick = addCert;
+addCert();
+// Languages: the list of languages draws only the rows in view (the rest aren't on the page).
+const LANGS = ['Afrikaans', 'Albanian', 'Amharic', 'Arabic', 'Armenian', 'Azerbaijani', 'Basque', 'Belarusian', 'Bengali', 'Bosnian', 'Bulgarian', 'Burmese', 'Cantonese', 'Catalan', 'Cebuano', 'Croatian', 'Czech', 'Danish', 'Dari', 'Dutch',
+  'English', 'Estonian', 'Farsi', 'Filipino', 'Finnish', 'French', 'Galician', 'Georgian', 'German', 'Greek', 'Gujarati', 'Haitian Creole', 'Hausa', 'Hebrew', 'Hindi', 'Hmong', 'Hungarian', 'Icelandic', 'Igbo', 'Indonesian',
+  'Irish', 'Italian', 'Japanese', 'Javanese', 'Kannada', 'Kazakh', 'Khmer', 'Kinyarwanda', 'Korean', 'Kurdish', 'Kyrgyz', 'Lao', 'Latvian', 'Lithuanian', 'Luxembourgish', 'Macedonian', 'Malagasy', 'Malay', 'Malayalam', 'Maltese',
+  'Mandarin', 'Maori', 'Marathi', 'Mongolian', 'Nepali', 'Norwegian', 'Oriya', 'Oromo', 'Pashto', 'Polish', 'Portuguese', 'Punjabi', 'Quechua', 'Romanian', 'Russian', 'Samoan', 'Serbian', 'Sesotho', 'Shona', 'Sindhi',
+  'Sinhala', 'Slovak', 'Slovenian', 'Somali', 'Spanish', 'Sundanese', 'Swahili', 'Swedish', 'Tajik', 'Tamil', 'Tatar', 'Telugu', 'Thai', 'Tibetan', 'Tigrinya', 'Tongan', 'Turkish', 'Turkmen', 'Ukrainian', 'Urdu',
+  'Uyghur', 'Uzbek', 'Vietnamese', 'Welsh', 'Wolof', 'Xhosa', 'Yiddish', 'Yoruba', 'Zulu', 'Akan', 'Bambara', 'Chichewa', 'Fijian', 'Fula', 'Guarani', 'Hawaiian', 'Ilocano', 'Kashmiri', 'Lingala', 'Tswana'];
+const LEVELS = ['1 - Beginner', '2 - Classroom Study', '3 - Intermediate', '4 - Advanced', '5 - Fluent'];
+let openList = null;
+function dropdown(btn, all) {
+  btn.addEventListener('click', () => {
+    if (openList) { const mine = openList.for === btn; openList.remove(); openList = null; if (mine) return; }
+    const list = document.createElement('div');
+    list.className = 'ddlist'; list.setAttribute('role', 'listbox'); list.for = btn;
+    const r = btn.getBoundingClientRect();
+    list.style.left = (r.left + scrollX) + 'px'; list.style.top = (r.bottom + scrollY + 2) + 'px';
+    const virtual = all.length > 20;
+    const draw = () => {
+      const first = virtual ? Math.floor(list.scrollTop / 30) : 0, rows = virtual ? all.slice(first, first + 8) : all;
+      list.innerHTML = `<div style="height:${virtual ? first * 30 : 0}px"></div>${rows.map(n => `<div role="option" data-name="${n}">${n}</div>`).join('')}<div style="height:${virtual ? Math.max(0, all.length - first - 8) * 30 : 0}px"></div>`;
+    };
+    draw();
+    if (virtual) list.addEventListener('scroll', draw);
+    list.addEventListener('click', e => { const o = e.target.closest('[role=option]'); if (!o) return; btn.textContent = o.dataset.name; list.remove(); openList = null; });
+    document.body.appendChild(list); openList = list;
+    // Opens at what's chosen, as a real list does: what's above it is out of view.
+    if (virtual && all.includes(btn.textContent)) { list.scrollTop = Math.max(0, all.indexOf(btn.textContent) - 2) * 30; draw(); }
+  });
+  btn.addEventListener('keydown', e => { if (e.key === 'Escape' && openList) { openList.remove(); openList = null; } });
+}
+let nLang = 0;
+function addLang() {
+  const n = ++nLang, box = document.createElement('div');
+  box.innerHTML = `<h4>Languages ${n}</h4>
+    <div data-automation-id="formField-language"><label id="lang-${n}-l">Language</label><button type="button" class="dd" aria-haspopup="listbox" aria-labelledby="lang-${n}-l" aria-required="true" data-k="language">Select One</button></div>
+    <div data-automation-id="formField-native"><label for="lang-${n}-fluent">I am fluent in this language.</label><input type="checkbox" id="lang-${n}-fluent" name="native"></div>
+    <div data-automation-id="formField-comprehension"><label id="lang-${n}-c">Comprehension</label><button type="button" class="dd" aria-haspopup="listbox" aria-labelledby="lang-${n}-c" aria-required="true" data-k="comprehension">Select One</button></div>`;
+  document.getElementById('langs').insertBefore(box, document.getElementById('langAdd'));
+  dropdown(box.querySelector('[data-k=language]'), LANGS); dropdown(box.querySelector('[data-k=comprehension]'), LEVELS);
+}
+document.getElementById('langs').innerHTML = '<div id="langAdd"><button type="button" data-automation-id="add-button">Add Another</button></div>';
+document.querySelector('#langAdd button').onclick = addLang;
+addLang();
+document.addEventListener('mousedown', e => { if (openList && !openList.contains(e.target) && e.target !== openList.for) { openList.remove(); openList = null; } });
+// The upload area takes a file dropped on it (not one set on its hidden box by a script), and lists it.
+const zone = document.getElementById('dropzone');
+for (const t of ['dragenter', 'dragover']) zone.addEventListener(t, e => e.preventDefault());
+// (Workday empties its file box at once; here a file a script puts in it is dropped without being listed.)
+document.getElementById('resumeFile').addEventListener('change', e => { e.target.value = ''; });
+zone.addEventListener('drop', e => { e.preventDefault(); for (const f of e.dataTransfer.files) document.getElementById('resumeList').insertAdjacentHTML('beforeend', `<li>${f.name}</li>`); });
+for (const input of document.querySelectorAll('input[data-automation-id=searchBox]')) if (!CHOSEN[input.id]) wire(input);
+window.mock.state = () => ({
+  school: CHOSEN['education-1--school'], certs: [...document.querySelectorAll('#certs input[data-automation-id=searchBox]')].map(i => CHOSEN[i.id].join()),
+  languages: [...document.querySelectorAll('#langs [data-k=language]')].map(b => b.textContent), levels: [...document.querySelectorAll('#langs [data-k=comprehension]')].map(b => b.textContent),
+  fluent: [...document.querySelectorAll('#langs input[type=checkbox]')].map(c => c.checked), eduFrom: document.getElementById('education-1--from-dateSectionYear-input').value,
+  workFrom: document.getElementById('we1-from-dateSectionMonth-input').value + '/' + document.getElementById('we1-from-dateSectionYear-input').value, company: document.getElementById('we1-company').value,
+  resume: [...document.querySelectorAll('#resumeList li')].map(l => l.textContent) });
 </script>
 </body></html>

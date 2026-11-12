@@ -193,13 +193,13 @@
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
     return question(el) || clean(el.placeholder || el.name || el.id);
   }
-  let addNote = '', skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
+  let addNote = '', otherChosen = [], skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
   const ADD = /^\s*\+?\s*add\b/i;
   const NOT_ADD = /\b(file|attachment|resume|cv|cover|link|website|document|photo|skill|reference)s?\b/i;
-  const HISTORY = /experience|employment|work|job|position|education|school|degree|qualification|language/i;
+  const HISTORY = /experience|employment|work|job|position|education|school|degree|qualification|language|certif|licen[cs]e/i;
   function collectAdders(n) {
     adders = {};
     const seen = new Set();
@@ -230,7 +230,7 @@
   }
   // The part of the form a box is in: the nearest heading before it ("Work Experience 2",
   // "Education 1"), so each entry gets its own job or school from the CV.
-  let heads = [];
+  let heads = [], dateHeads = [];
   const sectionOf = el => {
     let t = '';
     for (const h of heads) { if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) t = h; else break; }
@@ -246,7 +246,11 @@
   const SKILLS = /\bskills?\b/i;
   // A box that takes one item from the site's list (Workday's Field of Study): typed, then chosen like a skill.
   const PROMPT = /field of study|area of study|major|discipline|specialization|specialisation/i;
-  const isPrompt = (el, type) => ['text', 'search'].includes(type) && PROMPT.test(labelOf(el)) && (/myworkday/i.test(location.hostname) || !!(el.closest('[data-automation-id^=formField]') || el.parentElement)?.parentElement?.querySelector('[data-automation-id=promptIcon],[data-automation-id=multiselectInputContainer],[data-uxi-widget-type=multiselect],[data-automation-id=multiSelectContainer]'));
+  // Workday draws such a box as a "multiselect" (School or University, Certification): told by how
+  // it's built, whatever it's called. Typed into as plain text, Workday drops what was typed.
+  const PROMPT_BOX = '[data-automation-id=multiSelectContainer],[data-automation-id=multiselectInputContainer],[data-uxi-widget-type=multiselect]';
+  const builtAsPrompt = el => !!el.closest(PROMPT_BOX) || el.getAttribute('data-uxi-widget-type') === 'selectinput';
+  const isPrompt = (el, type) => ['text', 'search'].includes(type) && !SKILLS.test(labelOf(el)) && (builtAsPrompt(el) || PROMPT.test(labelOf(el)) && (/myworkday/i.test(location.hostname) || !!(el.closest('[data-automation-id^=formField]') || el.parentElement)?.parentElement?.querySelector('[data-automation-id=promptIcon],[data-automation-id=multiselectInputContainer],[data-uxi-widget-type=multiselect],[data-automation-id=multiSelectContainer]')));
   const isSkills = (el, type) => ['text', 'search'].includes(type) && SKILLS.test(labelOf(el)) && !/years|level|describe|summary/i.test(labelOf(el));
   const skillPills = el => {
     const box = el.closest('[data-automation-id=multiSelectContainer],[data-uxi-widget-type=multiselect],[role=group],div');
@@ -257,7 +261,9 @@
   // while open, so each is opened once, read and closed before the form is read.
   const DROPS = 'button[aria-haspopup=listbox]';
   const dropOptions = new WeakMap();
-  const openOptions = () => [...document.querySelectorAll('[role=listbox] [role=option], [data-automation-id=promptOption]')].filter(o => !own(o) && shown(o));
+  // (Not the items already chosen in a skills or school box: Workday draws those like options, and
+  // counted as the open list's they kept a long list from being scrolled.)
+  const openOptions = () => [...document.querySelectorAll('[role=listbox] [role=option], [data-automation-id=promptOption]')].filter(o => !own(o) && shown(o) && !o.closest('[data-automation-id=selectedItem],[data-automation-id=selectedItemList],[data-automation-id=multiselectInputContainer]'));
   // Close whatever list is open: Escape where the focus is (Workday moves it into the list), then a
   // click outside it. A list left open had its options taken for the next dropdown's, which put one
   // dropdown's answers in another.
@@ -287,41 +293,64 @@
     return list;
   }
   // A long list (every language) may show only part of itself until scrolled: scroll it to find more.
-  async function moreOptions(list, want) {
-    const scroller = list.length && (list[0].closest('[role=listbox]') || list[0].parentElement);
+  // `texts` (when given) collects every option's words as they come into view: a list that draws
+  // only the rows in view (Workday's languages) takes the earlier ones off the page as it scrolls,
+  // and reading only what's left sent Claude a part of the list to choose from.
+  const scrollerOf = list => { for (let x = list.length ? list[0].parentElement : null; x && x !== document.body; x = x.parentElement) if (x.scrollHeight > x.clientHeight + 4 && /auto|scroll/.test(getComputedStyle(x).overflowY)) return x; return list.length ? list[0].closest('[role=listbox]') || list[0].parentElement : null; };
+  async function moreOptions(list, want, texts) {
+    const note = l => { if (texts) for (const o of l) { const t = clean(o.textContent); if (t && !texts.includes(t)) texts.push(t); } };
+    note(list);
+    const scroller = scrollerOf(list);
     if (!scroller || scroller.scrollHeight <= scroller.clientHeight + 4) return list;
-    let all = [...list];
-    for (let i = 0; i < 25; i++) {
-      if (want && all.some(o => same(o.textContent, want))) break;
+    const hit = () => want ? openOptions().find(o => same(o.textContent, want)) || openOptions().find(o => same(core(o.textContent), core(want))) : null;
+    // From the top: a list opened part-way down (at the option chosen before) hides what's above.
+    if (scroller.scrollTop > 0) { scroller.scrollTop = 0; scroller.dispatchEvent(new Event('scroll')); await wait(150); note(openOptions()); }
+    let all = [...openOptions()];
+    for (let i = 0; i < 60; i++) {
+      if (hit()) break;
       const top = scroller.scrollTop;
       scroller.scrollTop = top + Math.max(80, scroller.clientHeight - 20);
       scroller.dispatchEvent(new Event('scroll'));
       await wait(100);
       if (scroller.scrollTop === top) break;
-      for (const o of openOptions()) if (!all.includes(o)) all.push(o);
+      const now = openOptions();
+      note(now);
+      for (const o of now) if (!all.includes(o)) all.push(o);
     }
+    // Looking for one option: the rows as they are once the list has settled (a list that draws
+    // only what's in view draws its rows again as it scrolls; the ones seen a moment ago are gone).
+    if (want) { await wait(200); return openOptions(); }
     return all.filter(o => o.isConnected);
   }
   async function readDrops() {
     let n = 0;
     for (const b of document.querySelectorAll(DROPS)) {
       if (own(b) || !shown(b) || b.disabled || dropOptions.has(b) || n++ > 40) continue;
-      const list = await moreOptions(await openDrop(b));
-      dropOptions.set(b, [...new Set(list.map(o => clean(o.textContent)).filter(t => t && !/^select one$/i.test(t)))]);
+      const texts = [];
+      await moreOptions(await openDrop(b), '', texts);
+      dropOptions.set(b, texts.filter(t => !/^select one$/i.test(t)));
       await closeLists(b);
     }
   }
   async function fillDrop(b, v) {
     if (same(clean(b.textContent), v) || same(core(b.textContent), core(v))) return true;
     let list = await openDrop(b);
-    let i = pick(list.map(o => clean(o.textContent)), v);
-    if (i < 0) { list = await moreOptions(list, v); i = pick(list.map(o => clean(o.textContent)), v); }
-    if (i < 0) { await closeLists(b); return false; }
+    // The option of that name, wherever it is in the list; a near match only once the whole list
+    // has been looked through (in a list of languages, the rows in view aren't all there is).
+    const exact = l => l.findIndex(o => same(o.textContent, v) || same(core(o.textContent), core(v)));
+    let i = exact(list);
+    if (i < 0) { list = await moreOptions(list, v); i = exact(list); if (i < 0) i = pick(list.map(o => clean(o.textContent)), v); }
+    // For Copy details: a choice that wasn't in the list, or didn't take.
+    const tell = why => (diag.drops ||= []).push({ label: labelOf(b).slice(0, 40), want: String(v).slice(0, 40), why, saw: list.slice(0, 12).map(o => clean(o.textContent).slice(0, 30)), now: clean(b.textContent).slice(0, 40) });
+    if (i < 0) { tell('not in the list'); await closeLists(b); return false; }
+    const name = clean(list[i].textContent);
     list[i].scrollIntoView({ block: 'nearest' });
     ownClick = true; list[i].click(); ownClick = false;
     await wait(300);
     await closeLists(b);
-    return same(core(b.textContent), core(list[i].textContent || v)) || !/^select one$/i.test(clean(b.textContent));
+    const ok = same(core(b.textContent), core(name || v)) || !/^select one$/i.test(clean(b.textContent));
+    if (!ok) tell('clicked, not taken');
+    return ok;
   }
   // Workday's dates: a box each for month, (day) and year, side by side in one wrapper.
   const datePart = el => {
@@ -368,6 +397,12 @@
   function collect() {
     fields = []; byKey = {};
     heads = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,[role=heading]')].filter(h => !own(h) && shown(h) && textOf(h).length > 1);
+    // A heading over nothing but a date's own boxes (Workday's "From", "To", "Expiration Date") names
+    // that date, not a part of the form: it goes in the date's label, and the boxes after it stay in
+    // their entry ("Education 1"), where it used to pass for the section of everything below it.
+    const dateBox = h => { const box = h.closest('fieldset') || h.parentElement; const ins = box ? [...box.querySelectorAll('input,select,textarea')].filter(x => x.type !== 'hidden' && !own(x)) : []; return ins.length > 0 && ins.length <= 4 && ins.every(x => datePart(x)) ? box : null; };
+    dateHeads = heads.map(h => [h, dateBox(h)]).filter(x => x[1]);
+    heads = heads.filter(h => !dateHeads.some(x => x[0] === h));
     const groups = {};
     let n = 0;
     const datesDone = new Set();
@@ -384,14 +419,14 @@
         const fmt = kinds.includes('day') ? 'MM/DD/YYYY' : kinds.includes('month') ? 'MM/YYYY' : 'YYYY';
         const key = 'f' + n++;
         const now = parts.map(x => clean(x.value)).filter(Boolean).join('/');
-        const f = { key, type: 'date', format: fmt, label: `${(question(el, parts) || labelOf(el)).replace(/\s*\b(month|day|year)\b\s*$/i, '') || 'Date'} (${fmt})`, required: parts.some(x => x.required || x.getAttribute('aria-required') === 'true'), value: kinds.includes('year') && parts.find(x => datePart(x) === 'year').value ? now : '' };
+        const f = { key, type: 'date', format: fmt, label: `${(dateHeads.find(x => x[1].contains(el)) ? textOf(dateHeads.find(x => x[1].contains(el))[0]) : '') || (question(el, parts) || labelOf(el)).replace(/\s*\b(month|day|year)\b\s*$/i, '') || 'Date'} (${fmt})`, required: parts.some(x => x.required || x.getAttribute('aria-required') === 'true'), value: kinds.includes('year') && parts.find(x => datePart(x) === 'year').value ? now : '' };
         const sec = sectionOf(el); if (sec) f.section = sec;
         fields.push(f); byKey[key] = parts;
         continue;
       }
       const type = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : (el.type || 'text').toLowerCase();
       if (['hidden', 'submit', 'button', 'reset', 'image', 'password'].includes(type)) continue;
-      if (type === 'search' && !SKILLS.test(labelOf(el))) continue;
+      if (type === 'search' && !SKILLS.test(labelOf(el)) && !builtAsPrompt(el)) continue;
       const choice = type === 'radio' || type === 'checkbox';
       if (type !== 'file' && !choice && !shown(el)) continue;
       if (choice && !shown(el) && !(el.labels && [...el.labels].some(shown))) continue;
@@ -433,7 +468,7 @@
       const key = 'd' + n++;
       const now = clean(b.textContent);
       const f = { key, type: 'select', drop: true, label: labelOf(b).replace(/\s*(select one|required)\s*/gi, ' ').trim(), required: b.getAttribute('aria-required') === 'true' || /required/i.test(b.getAttribute('aria-label') || ''),
-        value: /^select one$/i.test(now) ? '' : now, options: (dropOptions.get(b) || []).slice(0, 150) };
+        value: /^select one$/i.test(now) ? '' : now, options: (dropOptions.get(b) || []).slice(0, 260) };
       const sec = sectionOf(b); if (sec) f.section = sec;
       fields.push(f); byKey[key] = [b];
     }
@@ -495,6 +530,22 @@
     // Workday takes the file and empties its box at once, so an empty box afterwards is fine.
     return true;
   }
+  // Attached, and seen to be: the box holds the file, or the page lists its name (Workday takes the
+  // file and empties its box). If neither, the file is dropped on the upload area as a person
+  // would, and looked for again; a file that never shows is left for you, in amber.
+  async function attachSure(el, file) {
+    const there = () => (el.isConnected && el.files && el.files.length > 0) || (document.body.innerText || '').includes(file.name);
+    const seen = async ms => { for (let i = 0; i < ms / 250; i++) { if (there()) return true; await wait(250); } return there(); };
+    attach(el, file);
+    if (await seen(5000)) return true;
+    let zone = null;
+    for (let x = el.parentElement, i = 0; x && i < 6 && !zone; x = x.parentElement, i++) zone = x.querySelector('[data-automation-id=file-upload-drop-zone],[data-automation-id*=dropzone i],[class*=dropzone i],[class*=drop-zone i]');
+    if (!zone) return false;
+    const dt = new DataTransfer();
+    dt.items.add(new File([Uint8Array.from(atob(file.b64), c => c.charCodeAt(0))], file.name, { type: file.mime }));
+    for (const t of ['dragenter', 'dragover', 'drop']) zone.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt }));
+    return seen(6000);
+  }
   async function replaceFiles() {
     let done = 0;
     for (const r of replaceAsk) {
@@ -527,7 +578,9 @@
         return true;
       }
       attached.add(f.label + '|' + file.name);
-      return attach(el, file);
+      if (await attachSure(el, file)) return true;
+      attached.delete(f.label + '|' + file.name);
+      return false;
     }
     if (v == null || v === '') return f.value !== '' && f.type !== 'checkbox';
     if (f.drop) return fillDrop(el, v);
@@ -659,6 +712,9 @@
       const x = label(o), s = skill.toLowerCase();
       if (!x || /^(search results|no (items|results|matches)|searching|loading)/.test(x)) return 0;
       if (x === s || bare(x) === bare(s)) return 100;
+      // Its short form in brackets, either way round: "PMP" is "Project Management Professional (PMP)".
+      const abbr = t => ((/\(([^)]{2,12})\)/.exec(t) || [])[1] || '').trim();
+      if ((abbr(x) && (abbr(x) === s || abbr(x) === abbr(s))) || (abbr(s) && abbr(s) === x)) return 95;
       const a = words(s), b = words(x);
       const common = a.filter(w => b.includes(w)).length;
       let n = a.length && b.length ? 60 * common / Math.max(a.length, b.length) : 0;
@@ -676,10 +732,13 @@
     const rowOf = o => o.closest('[role=option],[data-automation-id=menuItem],li') || o;
     const tick = o => rowOf(o).querySelector('input[type=checkbox],input[type=radio]');
     // An option the site shows as chosen: its tick box is ticked, or it's marked selected.
-    const ticked = o => { const r = rowOf(o), c = tick(o); return !!(c && c.checked) || [o, r].some(x => x.getAttribute('aria-selected') === 'true' || x.getAttribute('aria-checked') === 'true') || !!r.querySelector('[aria-checked=true]'); };
+    // (Not aria-selected in Workday's lists: there it marks the row the keyboard is on, the first
+    // one after every search. Read as "chosen", it left every skill unclicked.)
+    const lit = x => x.getAttribute('data-automation-id') === 'menuItem' || !!x.closest('[data-automation-id=activeListContainer]');
+    const ticked = o => { const r = rowOf(o), c = tick(o); return !!(c && c.checked) || [o, r].some(x => (x.getAttribute('aria-selected') === 'true' && !lit(r)) || x.getAttribute('aria-checked') === 'true') || !!r.querySelector('[aria-checked=true]'); };
     // Whether this option's state can be seen at all. When it can't, one real click is trusted and
     // never repeated: a second click would untick it.
-    const visible = o => !!tick(o) || [o, rowOf(o)].some(x => x.hasAttribute('aria-selected') || x.hasAttribute('aria-checked')) || kids() >= 0 || names().length > 0;
+    const visible = o => !!tick(o) || [o, rowOf(o)].some(x => (x.hasAttribute('aria-selected') && !lit(rowOf(o))) || x.hasAttribute('aria-checked')) || kids() >= 0 || names().length > 0;
     const find = name => { const l = options().filter(o => same(o.getAttribute('data-automation-label') || o.textContent, name)); return l.find(o => o.matches('[data-automation-id=promptOption]')) || l[0] || null; };
     const nothing = () => !options().length && (NOTHING.test(clean(field === document.body ? '' : field.textContent || '')) || [...document.querySelectorAll(LISTS)].some(x => !own(x) && shown(x) && NOTHING.test(clean(x.textContent).slice(0, 200))));
     // Typing the way the page takes it: as a script does (most sites), or as real typing through the
@@ -728,7 +787,7 @@
       const rows = () => [...new Set(options().map(rowOf))].filter(shown);
       const mine = r => same(r.querySelector('[data-automation-label]')?.getAttribute('data-automation-label') || r.textContent, name);
       if (!rows().some(mine)) return false;
-      const on = () => { const id = box().getAttribute('aria-activedescendant'); const a = (id && document.getElementById(id)) || (document.activeElement && document.activeElement.closest && document.activeElement.closest('[role=option]')) || rows().find(r => /\b(active|focus(ed)?|highlight(ed)?|hover(ed)?)\b/i.test(r.className || '')); return a ? rowOf(a) : null; };
+      const on = () => { const id = box().getAttribute('aria-activedescendant'); const a = (id && document.getElementById(id)) || (document.activeElement && document.activeElement.closest && document.activeElement.closest('[role=option]')) || rows().find(r => /\b(active|focus(ed)?|highlight(ed)?|hover(ed)?)\b/i.test(r.className || '')) || rows().find(r => lit(r) && r.getAttribute('aria-selected') === 'true'); return a ? rowOf(a) : null; };
       box().focus();
       for (let i = 0; i < 8; i++) {
         const a = on();
@@ -744,7 +803,7 @@
     // 'already'), 'unseen' when it was clicked but the site shows no sign either way, or ''.
     const choose = async (best, name) => {
       const was = { kids: kids(), names: names().length };
-      const got = () => names().some(p => same(p, name) || near(p, name)) || (was.kids >= 0 && kids() > was.kids) || names().length > was.names || options().some(o => same(o.getAttribute('data-automation-label') || o.textContent, name) && ticked(o));
+      const got = () => names().some(p => same(p, name) || near(p, name)) || kids() > Math.max(0, was.kids) || names().length > was.names || options().some(o => same(o.getAttribute('data-automation-label') || o.textContent, name) && ticked(o));
       const settle = async ms => { for (let i = 0; i < ms / 200; i++) { if (got()) return true; await wait(200); } return got(); };
       const cur = () => find(name) || (best.isConnected ? best : null);
       if (cur() && ticked(cur())) return 'already';
@@ -770,6 +829,9 @@
     };
     let added = 0;
     diag.skills ||= [];
+    // A school is that school or none: "American University" isn't "American University of Kuwait".
+    const strict = one && /school|university|college|institution/i.test(labelOf(first));
+    const chosenNames = [];
     for (const skill of want) {
       if (names().some(p => same(p, skill))) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); continue; }
       // The skill as written, then plainer searches when the list has nothing close: without its
@@ -782,8 +844,18 @@
       trace.length = 0;
       for (const q of queries) {
         list = await search(q);
-        for (const o of list) { const f = fit(o, skill); if (f > score && closeEnough(o, skill, f)) { score = f; best = o; } }
-        if (score >= 45) break;
+        for (const o of list) { const f = fit(o, skill); if (f > score && (strict ? f >= 95 : closeEnough(o, skill, f))) { score = f; best = o; } }
+        if (score >= 45 || strict) break;
+      }
+      // A box that takes one item, and the site's list doesn't have yours: its "Other" (or "Not
+      // Applicable"), as such forms ask for, and said in the panel so you can check it.
+      let other = '';
+      if (!best && one) {
+        for (const alt of ['Other', 'Not Applicable']) {
+          list = await search(alt);
+          best = list.find(o => label(o) === alt.toLowerCase()) || list.find(o => new RegExp('^' + alt + '\\b', 'i').test(label(o)) && label(o).length < 30) || null;
+          if (best) { other = alt; score = 100; break; }
+        }
       }
       const log = { skill, searches: trace.slice() };
       diag.skills.push(log);
@@ -800,6 +872,8 @@
       const snap = ((find(name) || best).closest('[role=listbox]') || best.parentElement?.parentElement || best).cloneNode(true);
       const how = await choose(best, name);
       Object.assign(log, { chose: name, fit: Math.round(score), how: how || 'not taken' });
+      if (how) chosenNames.push([skill, name]);
+      if (how && other) { const what = labelOf(first) || 'a box'; if (!otherChosen.includes(what)) otherChosen.push(what); }
       if (how === 'unseen') { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); if (!skillUnsure.some(x => same(x, name))) skillUnsure.push(name); }
       else if (how) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); }
       else if (!skillMiss.some(x => same(x, skill))) {
@@ -811,6 +885,18 @@
       if (options().length) { pressKey(box(), 'Escape'); await wait(300); }
       if (box().value) typeIn(box(), '');
       await wait(250);
+    }
+    // What the site shows as chosen, once it's all done: a skill that was clicked but isn't there
+    // (the site didn't keep it, or a redraw emptied the box) is reported, never passed off as added.
+    if (!one && added) {
+      await wait(700);
+      const have = names(), count = Math.max(kids(), have.length);
+      const lost = count <= 0 ? chosenNames : have.length ? chosenNames.filter(([, n]) => !have.some(p => same(p, n) || near(p, n))) : [];
+      if (lost.length) {
+        diag.skillsLost = { shown: have, count, lost: lost.map(x => x[0]), box: htmlOf(field, 2500) };
+        for (const [skill, n] of lost) { if (!skillMiss.some(x => same(x, skill))) skillMiss.push(skill); skillUnsure = skillUnsure.filter(x => !same(x, n)); }
+        added -= lost.length;
+      }
     }
     return added > 0;
   }
@@ -907,13 +993,15 @@
         if (appeared) { reveals++; round = Math.max(round, 1); status('Unticked "I currently work here" on past jobs; filling in their end dates…'); start(true, true); return; }
       }
       filled = true;
+      // Done with real clicks and keys: let the browser's debugger go now, not two minutes on.
+      ext('undebug');
       progress(100);
       setTimeout(() => { if (!barTimer) progress(null); }, 2500);
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
       // A profile isn't an application: nothing to mark as submitted or to set aside.
       buttons.next.hidden = !todo; buttons.applied.hidden = !!answer.profile; if (answer.profile) buttons.drop.hidden = true;
       buttons.diag.hidden = false; // what Job Hunt saw and did, to paste to Claude when something's off
-      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (answer.note ? ' ' + answer.note : '') + (skillMiss.length ? ` Not in the site's list, or not taken (add these yourself): ${skillMiss.join(', ')}.` : '') + (skillUnsure.length ? ` Chosen, but the site didn't show it: check ${skillUnsure.join(', ')}.` : '')
+      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (answer.note ? ' ' + answer.note : '') + (skillMiss.length ? ` Not in the site's list, or not taken (add these yourself): ${skillMiss.join(', ')}.` : '') + (skillUnsure.length ? ` Chosen, but the site didn't show it: check ${skillUnsure.join(', ')}.` : '') + (otherChosen.length ? ` Not in the site's list, so "Other" was chosen for: ${otherChosen.join(', ')}.` : '')
         + (EXT && answer.app_version && /^\d/.test(answer.app_version) && answer.app_version.replace(/-.*/, '') !== chrome.runtime.getManifest().version ? ` (This extension is ${chrome.runtime.getManifest().version}, Job Hunt is ${answer.app_version}: open the extension's button once so it updates, then reload this page.)` : '');
       status(todo
         ? `Filled ${ok}.${saved} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
@@ -985,7 +1073,7 @@
   }
   let sent = null;
   async function start(more, dates) {
-    if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; skillUnsure = []; }
+    if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
     if (retired) return;
     checkPay();

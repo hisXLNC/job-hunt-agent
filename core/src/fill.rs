@@ -369,7 +369,11 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let files_wanted: Vec<&Value> = fields.iter().filter(|f| f["type"] == "file").collect();
     let mut files = serde_json::Map::new();
     for f in &files_wanted {
-        let which = file_for(f["label"].as_str().unwrap_or(""), files_wanted.len() == 1);
+        // By what the box says, else by the part of the form it's in (Workday's box says only
+        // "Select files", under Resume/CV); a certificate's own upload box gets neither.
+        let (label, section) = (f["label"].as_str().unwrap_or(""), f["section"].as_str().unwrap_or(""));
+        let other_doc = ["certif", "licen", "transcript", "portfolio", "reference"].iter().any(|w| format!("{label} {section}").to_lowercase().contains(w));
+        let which = if other_doc { None } else { file_for(label, false).or_else(|| file_for(section, files_wanted.len() == 1)) };
         let path = match which {
             Some("cv") => job.cv_path.as_deref().map(|p| as_pdf(Path::new(p))),
             Some("letter") => job.letter_path.as_deref().map(|p| as_pdf(Path::new(p))),
@@ -434,7 +438,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let work_add = fields.iter().any(|f| f["type"] == "add" && is_work(f["section"].as_str().unwrap_or("")));
     let mut lines = lines;
     if work_add {
-        lines.push(json!({"key": "_roles", "type": "textarea", "label": "Every role in the CV's work experience, newest first, one per line as: title | employer | dates. Each title counts, promotions at the same employer included, and so does a dated career break or transition the CV lists among its jobs."}).to_string());
+        lines.push(json!({"key": "_roles", "type": "textarea", "label": "Every role in the CV's work experience, newest first, one per line as: title | employer | dates. Each title counts, promotions at the same employer included. Only jobs with an employer: a career break, a transition, a sabbatical, study or a gap the CV lists among its jobs is NOT a role (a form's entry for it would have no company), so leave it out here and give it no entry in the form."}).to_string());
     }
     let mut roles_listed = 0usize;
     let mut written: Vec<String> = vec![];
@@ -518,6 +522,18 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
                 let langs = cv_languages(&format!("{cv_text}\n{facts}")).len() as i64;
                 let more = if langs > 0 { (langs - have).max(0) } else { given.min(1) };
                 values.insert(key.to_string(), json!(more.to_string()));
+            } else if section.contains("certif") || section.contains("licen") {
+                // Certifications: at least as many entries as the CV lists.
+                let more = cv_listed(cv_text, "cert") as i64 - have;
+                if more > given {
+                    values.insert(key.to_string(), json!(more.min(6).to_string()));
+                }
+            } else if section.contains("education") || section.contains("school") || section.contains("degree") {
+                // Education: at least as many as the CV's degrees (Claude's number alone left some out).
+                let more = cv_listed(cv_text, "edu") as i64 - have;
+                if more > given {
+                    values.insert(key.to_string(), json!(more.min(5).to_string()));
+                }
             } else if is_work(&section) {
                 // Claude's list of the roles when it gave one (counting date lines can overcount:
                 // a career break, a degree's dates), else the CV's date lines.
@@ -534,6 +550,18 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
         if linky && !v.starts_with("http") && !v.contains(' ') && v.contains('.') {
             let full = if v.starts_with("linkedin.com") { format!("https://www.{v}") } else { format!("https://{v}") };
             values.insert(key.to_string(), json!(full));
+        }
+    }
+    // "I am fluent in this language", in an entry of Languages: as the CV or your facts put that
+    // language ("French: elementary" isn't fluent), whatever was guessed.
+    let text = format!("{cv_text}\n{facts}").to_lowercase();
+    for f in fields.iter().filter(|f| f["type"] == "checkbox" && f["label"].as_str().is_some_and(|l| l.to_lowercase().contains("fluent"))) {
+        let (Some(key), Some(section)) = (f["key"].as_str(), f["section"].as_str().filter(|s| s.to_lowercase().contains("language"))) else { continue };
+        let lang = fields.iter().find(|x| x["section"].as_str() == Some(section) && x["label"].as_str().is_some_and(|l| l.trim().eq_ignore_ascii_case("language")))
+            .and_then(|x| x["key"].as_str().and_then(|k| values.get(k)).and_then(|v| v.as_str()).or_else(|| x["value"].as_str()))
+            .map(|l| l.trim().to_lowercase()).filter(|l| l.len() > 2);
+        if let Some(fluent) = lang.and_then(|l| language_fluent(&text, &l)) {
+            values.insert(key.to_string(), json!(if fluent { "yes" } else { "no" }));
         }
     }
 }
@@ -708,6 +736,53 @@ fn cv_sections(cv: &str) -> (Vec<Value>, Vec<Value>, String) {
     (jobs, schools, skills)
 }
 
+/// Whether the CV (lower-cased) puts a language as fluent, from the words right after its name:
+/// "english (native)", "french: elementary". None when it doesn't say.
+fn language_fluent(text: &str, lang: &str) -> Option<bool> {
+    let mut found = None;
+    for (at, _) in text.match_indices(lang) {
+        let after: String = text[at + lang.len()..].chars().take(45).take_while(|c| *c != '\n' && *c != ';' && *c != '|').collect();
+        // Up to the next language in a list ("english (native), french (basic)").
+        let after = after.split(',').next().unwrap_or("");
+        if ["elementary", "beginner", "basic", "limited", "intermediate", "conversational", "classroom", "learning", "some ", "a1", "a2", "b1", "working knowledge"].iter().any(|w| after.contains(w)) {
+            return Some(false);
+        }
+        if ["native", "fluent", "bilingual", "mother tongue", "first language", "full professional", "c2", "proficient"].iter().any(|w| after.contains(w)) {
+            found = Some(true);
+        }
+    }
+    found
+}
+
+/// How many certifications ("cert") or degrees ("edu") the CV lists under that heading: its lines
+/// there, a short line of several ("PMP, CSM") counted one each. 0 when there's no such heading.
+pub fn cv_listed(cv: &str, what: &str) -> usize {
+    let heading = |l: &str| {
+        let t = l.trim().trim_matches(|c: char| "#*_|: ".contains(c)).to_lowercase();
+        t.len() < 45 && t.split_whitespace().count() <= 5 && ["experience", "employment", "work history", "education", "academic", "qualification", "certification", "certificate", "licen", "skills", "languages", "training", "volunteer", "awards", "references", "publications", "interests", "professional development", "memberships", "summary", "profile", "projects"].iter().any(|w| t.contains(w))
+            && !t.contains(',') && !t.chars().any(|c| c.is_ascii_digit())
+    };
+    let mine = |l: &str| { let t = l.to_lowercase(); if what == "cert" { t.contains("certif") || t.contains("licen") } else { t.contains("education") || t.contains("academic") } };
+    let (mut on, mut n) = (false, 0usize);
+    for line in cv.lines() {
+        if heading(line) {
+            on = mine(line);
+            continue;
+        }
+        let t = line.trim().trim_start_matches(|c: char| "-*\u{2022}\u{00b7} ".contains(c));
+        if !on || t.len() < 2 {
+            continue;
+        }
+        if what == "cert" {
+            // "PMP, PMI-CPMAI" on one short line is two; a longer line is one certificate with its details.
+            n += if t.len() < 60 && !t.chars().any(|c| c.is_ascii_digit()) { t.split([',', ';', '|']).filter(|x| x.trim().len() > 1).count().max(1) } else { 1 };
+        } else if ["bachelor", "master", "b.sc", "bsc", "m.sc", "msc", "mba", "phd", "ph.d", "doctor", "diploma", "degree", "associate", "b.a", "m.a", "b.eng", "beng", "meng", "llb", "certificate"].iter().any(|w| t.to_lowercase().contains(w)) {
+            n += 1;
+        }
+    }
+    n
+}
+
 /// The languages a CV names (English, Arabic, French…), each once.
 pub fn cv_languages(cv: &str) -> Vec<&'static str> {
     const ALL: &[&str] = &["English", "French", "Arabic", "Spanish", "Portuguese", "German", "Italian", "Dutch", "Russian", "Ukrainian", "Polish", "Turkish", "Persian", "Farsi", "Urdu", "Hindi", "Punjabi", "Bengali", "Gujarati", "Tamil", "Telugu", "Marathi", "Malayalam", "Kannada", "Mandarin", "Cantonese", "Chinese", "Japanese", "Korean", "Vietnamese", "Thai", "Indonesian", "Malay", "Tagalog", "Filipino", "Greek", "Hebrew", "Swahili", "Somali", "Amharic", "Romanian", "Hungarian", "Czech", "Slovak", "Serbian", "Croatian", "Bosnian", "Bulgarian", "Swedish", "Norwegian", "Danish", "Finnish", "Kurdish", "Pashto", "Dari", "Armenian", "Albanian", "Tigrinya", "Yoruba", "Igbo", "Hausa", "Sinhala", "Nepali"];
@@ -783,6 +858,19 @@ mod tests {
         v.insert("a2".into(), json!("3"));
         tidy_answers(&fields, &mut v, &cv, "", 0);
         assert_eq!(v["a2"], "1");
+        // Certifications and degrees: at least what the CV lists; a career break isn't one.
+        let cv2 = "EXPERIENCE\nLead, X | 2019 - Present\nEDUCATION\nMBA, Rotman | 2012\nBachelor of Finance, AUK | 2005 - 2009\nCERTIFICATIONS\nPMP, PMI-CPMAI\nLANGUAGES\nEnglish (native), Arabic (native), French (elementary)\n";
+        assert_eq!((cv_listed(cv2, "cert"), cv_listed(cv2, "edu")), (2, 2));
+        let fields2 = vec![json!({"key": "c1", "type": "add", "section": "Certifications", "entries": 1}), json!({"key": "e1", "type": "add", "section": "Education", "entries": 0}),
+            json!({"key": "l1", "type": "select", "label": "Language", "section": "Languages 1"}), json!({"key": "x1", "type": "checkbox", "label": "I am fluent in this language.", "section": "Languages 1"}),
+            json!({"key": "l3", "type": "select", "label": "Language", "section": "Languages 3"}), json!({"key": "x3", "type": "checkbox", "label": "I am fluent in this language.", "section": "Languages 3"})];
+        let mut v2 = serde_json::Map::new();
+        for (k, val) in [("e1", "1"), ("l1", "English"), ("x1", "yes"), ("l3", "French"), ("x3", "yes")] { v2.insert(k.into(), json!(val)); }
+        tidy_answers(&fields2, &mut v2, cv2, "", 0);
+        assert_eq!((v2["c1"].as_str(), v2["e1"].as_str()), (Some("1"), Some("2")), "one more certificate, two schools");
+        assert_eq!((v2["x1"].as_str(), v2["x3"].as_str()), (Some("yes"), Some("no")), "fluent follows each entry's own language");
+        // The CV goes in the box under Resume/CV even when the box only says "Select files".
+        assert_eq!(file_for("Select files", false).or_else(|| file_for("Resume/CV", false)), Some("cv"));
         // A language only in your facts counts too.
         tidy_answers(&fields, &mut v, &cv, "French: beginner (school, to grade 6)", 0);
         assert_eq!(v["a2"], "2");

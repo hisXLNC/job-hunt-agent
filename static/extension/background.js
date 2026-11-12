@@ -141,6 +141,12 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     debugOn(tabId).then(fresh => reply({ ok: true, fresh }), e => reply({ ok: false, error: String(e && e.message || e) }));
     return true;
   }
+  if (kind === 'undebug') {
+    // The form is filled: let the tab go at once (other tools can't read a page held by the debugger).
+    if (debugging.has(tabId)) { clearTimeout(debugging.get(tabId)); debugging.delete(tabId); chrome.debugger.detach({ tabId }).catch(() => {}); }
+    reply({ ok: true });
+    return;
+  }
   if (kind === 'type' || kind === 'key') {
     (kind === 'type' ? realType(tabId, data.text) : realKey(tabId, data.key)).then(() => reply({ ok: true }), e => reply({ ok: false, error: String(e && e.message || e) }));
     return true;

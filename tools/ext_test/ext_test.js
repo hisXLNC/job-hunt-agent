@@ -46,16 +46,30 @@ function buildExtension(dir) {
 }
 
 // Job Hunt's answers for the mock form's boxes.
+// The CV here has a school and a certificate the site's lists don't have, three languages (two
+// fluent, one not) and a second certificate, as the form that showed these bugs did.
+const LANGS = ['English', 'Arabic', 'French'];
+let lastFields = [];
 function answers(fields) {
-  const values = {};
+  const values = {}, files = {};
+  lastFields = fields || [];
   for (const f of fields || []) {
-    if (f.type === 'skills') values[f.key] = SKILLS;
-    else if (f.type === 'prompt') values[f.key] = 'Computer Science';
+    const nth = Number((/(\d+)\s*$/.exec(f.section || '') || [])[1] || 1), sec = f.section || '';
+    if (f.type === 'add') { if (/certif/i.test(sec)) values[f.key] = String(Math.max(0, 2 - (f.entries || 0))); else if (/language/i.test(sec)) values[f.key] = String(Math.max(0, 3 - (f.entries || 0))); }
+    else if (f.type === 'file') { if (/resume|cv/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - CV.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 test').toString('base64') }; }
+    else if (f.type === 'skills') values[f.key] = SKILLS;
+    else if (f.type === 'prompt') values[f.key] = /school|university/i.test(f.label) ? 'American University of Kuwait' : /certif/i.test(f.label) ? (nth === 1 ? 'PMP' : 'PMI-CPMAI') : 'Computer Science';
+    else if (/^language$/i.test(f.label)) values[f.key] = LANGS[nth - 1] || '';
+    else if (/comprehension/i.test(f.label)) values[f.key] = nth === 3 ? 'Beginner' : 'Fluent';
+    else if (/fluent/i.test(f.label)) values[f.key] = nth === 3 ? 'no' : 'yes';
+    else if (f.type === 'date' && /^from/i.test(f.label)) { if (/education/i.test(sec)) values[f.key] = '2005'; else if (/work experience/i.test(sec)) values[f.key] = '03/2019'; }
     else if (/email/i.test(f.label)) values[f.key] = 'sam@example.com';
     else if (/phone/i.test(f.label)) values[f.key] = '416-555-0100';
-    else if (/school/i.test(f.label)) values[f.key] = 'University of Toronto';
+    else if (/job title/i.test(f.label)) values[f.key] = 'Program Manager';
+    else if (/company/i.test(f.label)) values[f.key] = 'Maple Bank';
+    else if (/role description/i.test(f.label)) values[f.key] = 'Led delivery.';
   }
-  return { values, files: {}, roles: 0, banked: [], job: { title: 'Senior Program Manager', company: 'Mock Co' }, app_version: VERSION };
+  return { values, files, roles: 0, banked: [], job: { title: 'Senior Program Manager', company: 'Mock Co' }, app_version: VERSION };
 }
 const listen = (server, port) => new Promise((ok, no) => { server.once('error', no); server.listen(port, '127.0.0.1', () => ok(server)); });
 const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(v)); };
@@ -120,6 +134,24 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (got.study.join() !== 'Computer Science') problems.push(`Field of Study is ${JSON.stringify(got.study)}, not Computer Science`);
     if (!/Underwater Basket Weaving/.test(s)) problems.push('the skill the site doesn\'t have wasn\'t reported');
     if (/add these yourself\): [^.]*(Python|SQL|Project Management|Vendor Management)/.test(s)) problems.push('a skill that was chosen is reported as not taken');
+    // What the OSC Workday form got wrong (2.57.0).
+    const st = got.state || {}, eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    if (!eq(st.school, ['Other'])) problems.push(`School or University is ${JSON.stringify(st.school)}, not Other (the list doesn't have the school; "American University" is a different one)`);
+    if (!eq(st.certs, ['Project Management Professional (PMP)', 'Other'])) problems.push(`the certifications are ${JSON.stringify(st.certs)}, not PMP and Other in two entries`);
+    if (!eq(st.languages, LANGS)) problems.push(`the languages are ${JSON.stringify(st.languages)}, not ${LANGS.join(', ')}`);
+    if (!eq(st.levels, ['5 - Fluent', '5 - Fluent', '1 - Beginner'])) problems.push(`the language levels are ${JSON.stringify(st.levels)}`);
+    if (!eq(st.fluent, [true, true, false])) problems.push(`"I am fluent" is ${JSON.stringify(st.fluent)}`);
+    if (st.eduFrom !== '2005') problems.push(`Education's From is "${st.eduFrom}", not 2005`);
+    if (st.workFrom !== '03/2019' || st.company !== 'Maple Bank') problems.push(`the job's From is "${st.workFrom}" and its company "${st.company}"`);
+    if (!eq(st.resume, ['Sam Lee - CV.pdf'])) problems.push(`the upload area lists ${JSON.stringify(st.resume)}, not the CV once`);
+    if (!/"Other" was chosen for: [^.]*School/.test(s)) problems.push('the panel doesn\'t say Other was chosen for the school');
+    const lang = lastFields.find(f => /^language$/i.test(f.label));
+    if (!lang || (lang.options || []).length < 120 || !LANGS.every(l => lang.options.includes(l))) problems.push(`the language list sent to Job Hunt has ${lang ? (lang.options || []).length : 0} of 120 options${lang && !lang.options.includes('English') ? ', without English' : ''}`);
+    const desc = lastFields.find(f => /role description/i.test(f.label)), from = lastFields.find(f => f.type === 'date' && /work experience/i.test(f.section || ''));
+    if (!desc || desc.section !== 'Work Experience 1') problems.push(`Role Description's section is "${desc && desc.section}", not Work Experience 1`);
+    if (!from || !/^From \(MM\/YYYY\)/.test(from.label)) problems.push(`the job's From date is labelled "${from && from.label}"`);
+    const up = lastFields.filter(f => f.type === 'file');
+    if (up.length !== 1 || up[0].section !== 'Resume/CV') problems.push(`the upload box's section is ${JSON.stringify(up.map(f => f.section))}`);
     return problems;
   };
   for (const name of names) {
@@ -136,7 +168,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     const status = () => page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || '');
     let s = '';
     for (let i = 0; i < 600; i++) { await page.waitForTimeout(500); s = await status(); if (/^Filled \d+/.test(s) || /Couldn't|No form|No answers/.test(s)) break; }
-    const got = await page.evaluate(() => ({ skills: window.mock.skills(), study: window.mock.study(), clicks: window.mock.clicks.length, searches: window.mock.searches }));
+    const got = await page.evaluate(() => ({ skills: window.mock.skills(), study: window.mock.study(), clicks: window.mock.clicks.length, searches: window.mock.searches, state: window.mock.state() }));
     const secs = Math.round((Date.now() - t0) / 1000);
     const details = await sw.evaluate(async url => {
       const [tab] = await chrome.tabs.query({ url: url.split('?')[0] + '*', active: true });
@@ -150,6 +182,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
       failed.push(name);
       for (const p of problems) console.log(`        ${p}`);
       console.log(`        panel: ${s.slice(0, 300)}`);
+      if (details && details.drops) console.log(`        dropdowns: ${JSON.stringify(details.drops).slice(0, 700)}`);
       console.log(`        searches: ${got.searches.join(' | ')}  clicks in the list: ${got.clicks}`);
     }
     await page.close();
@@ -171,9 +204,10 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     for (let i = 0; i < 40 && !answer; i++) await page.waitForTimeout(500);
     let s = '', got = { skills: [], study: [] };
     if (answer) {
-      await page.evaluate(a => { window.__jobhunt.fill(a); }, answer);
-      for (let i = 0; i < 400; i++) { await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s)) break; }
-      got = await page.evaluate(() => ({ skills: window.mock.skills(), study: window.mock.study() }));
+      // Each time the form is read again (after its Add buttons were pressed), the app answers again.
+      let given = null;
+      for (let i = 0; i < 500; i++) { if (answer !== given) { given = answer; await page.evaluate(a => { window.__jobhunt.fill(a); }, answer); } await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s)) break; }
+      got = await page.evaluate(() => ({ skills: window.mock.skills(), study: window.mock.study(), state: window.mock.state() }));
     }
     const problems = answer ? judge(got, s) : ['the form was never read (no questions were sent to Job Hunt)'];
     console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'app'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  skills: ${got.skills.join(', ') || 'none'} | study: ${got.study.join(', ') || 'none'}`);
