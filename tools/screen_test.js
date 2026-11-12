@@ -173,6 +173,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('cvs/career');
   await page.click('#pathCard [data-act="choosePath"]');
   check(await until(async () => (await prefs()).wants?.path === '', 15), 'Career: the path can be cleared');
+  await at('results');
   // Rejections: Claude studies them from Insights, and what it learns is shown (and handed to tailoring).
   check(await page.evaluate(() => !!document.querySelector('[data-act="lessons"]')), 'Insights offers to study your rejections');
   await page.click('[data-act="lessons"]'); await page.waitForTimeout(1500); await at('results');
