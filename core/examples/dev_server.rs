@@ -42,6 +42,9 @@ impl Llm for DemoLlm {
         ];
         Ok(all.into_iter().filter(|l| !skip.contains(&l.company)).collect())
     }
+    fn rejection_reply(&self, c: &str, job: &Job, _their: &str, interviewed: bool) -> R<jobhunt_core::claude::FollowUp> {
+        Ok(jobhunt_core::claude::FollowUp { subject: format!("Thank you: {}", job.title), body: format!("Hello,\n\nThank you for letting me know about the {} role, and for the time your team gave me.{} I'd be glad to be kept in mind if a role like it opens later at {}.\n\n{c}", job.title, if interviewed { " If you're able to share any feedback from the interviews, I'd find it useful; no worries if not." } else { "" }, job.company) })
+    }
     fn outreach(&self, _c: &str, _cv: &str, job: &Job, contact: &str, _brief: &str) -> R<String> {
         let first = contact.lines().next().unwrap_or("").trim_start_matches("name: ").split_whitespace().next().unwrap_or("there").to_string();
         Ok(format!("Hi {first}, saw the news about {}. I ran a 40-person programme that moved 30 services online in 14 months, which sounds close to what you're building next. Are you hiring for that kind of work? Happy to do a quick call.\nSam", job.company))

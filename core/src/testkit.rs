@@ -164,6 +164,10 @@ impl Llm for FakeLlm {
         self.calls.lock().unwrap().push("follow_up".into());
         Ok(FollowUp { subject: format!("Following up: {} application", job.title), body: format!("Hello, I applied on {applied_on}. {c}") })
     }
+    fn rejection_reply(&self, c: &str, job: &Job, their_email: &str, interviewed: bool) -> R<FollowUp> {
+        self.calls.lock().unwrap().push("rejection_reply".into());
+        Ok(FollowUp { subject: format!("Thank you: {}", job.title), body: format!("Thank you for letting me know.{} They wrote: {their_email}. {c}", if interviewed { " Any feedback?" } else { "" }) })
+    }
     fn thank_you(&self, c: &str, job: &Job, _interview: &str) -> R<FollowUp> {
         self.calls.lock().unwrap().push("thank_you".into());
         Ok(FollowUp { subject: format!("Thank you: {} interview", job.title), body: format!("Thank you for your time. {c}") })

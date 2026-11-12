@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.52.0] - 2026-11-12
+
+Draft a reply to a rejection.
+
+### Changes
+
+- A rejected job now has a Reply to the rejection card: Draft a reply writes a short, gracious note that thanks them, asks for feedback only if you interviewed, and asks to be kept in mind.
+- With Gmail connected it is saved as a draft, as a reply to their email when a person sent it. If their email came from a no-reply address, Job Hunt says so and addresses it to the person you dealt with instead.
+- Nothing is sent: you read it and send it yourself.
+
 ## [2.51.1] - 2026-11-12
 
 Settings sits with the other places.
@@ -1702,6 +1712,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.52.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.52.0
 [2.51.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.51.1
 [2.51.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.51.0
 [2.50.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.50.1

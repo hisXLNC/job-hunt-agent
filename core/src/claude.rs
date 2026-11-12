@@ -537,6 +537,10 @@ pub trait Llm: Send + Sync {
     fn insights(&self, _candidate: &str, _results: &str, _applications: &str) -> R<String> {
         Err(Error("Insights aren't available.".into()))
     }
+    /// A short, gracious reply to a rejection. `their_email`: what they wrote, when it's known.
+    fn rejection_reply(&self, _candidate: &str, _job: &crate::db::Job, _their_email: &str, _interviewed: bool) -> R<FollowUp> {
+        Err(Error("Replies to a rejection aren't available.".into()))
+    }
     /// A thank-you email after an interview.
     fn thank_you(&self, _candidate: &str, _job: &crate::db::Job, _interview: &str) -> R<FollowUp> {
         Err(Error("Thank-you notes aren't available.".into()))
@@ -1161,6 +1165,19 @@ strongest concrete reason they fit (from the posting and their application), off
 else that would help, and thank them. Never ask about the status or for an update, never paste the CV, and \
 mention no attachments. Sign with the candidate's name. subject: \"Following up: <job title> application\". \
 Never invent facts."
+    )
+}
+
+fn rejection_reply_system() -> String {
+    format!(
+        "You write a short reply from a job candidate to an employer who has just turned them down.\n\n\
+{UNTRUSTED}\n\n{HUMAN}\n\n\
+Write in the candidate's voice: gracious, brief (50-90 words), with no bitterness, no arguing with the decision and no \
+asking them to reconsider. Thank them for letting the candidate know and for their time. Name the role. When the \
+candidate was interviewed, ask in one sentence whether they could share any feedback, making it easy to say no; when \
+they weren't, don't ask for feedback. Say in one sentence that the candidate would like to be kept in mind for roles \
+that fit later, tied to the kind of work in the posting. Sign with the candidate's name. subject: \
+\"Thank you: <job title>\". Never invent facts, and don't repeat their email back to them."
     )
 }
 
@@ -2006,6 +2023,20 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
             insights: String,
         }
         Ok(self.call::<T>(&insights_system(), &user, obj(json!({"insights": {"type": "string"}})), "medium")?.insights)
+    }
+
+    fn rejection_reply(&self, candidate: &str, job: &crate::db::Job, their_email: &str, interviewed: bool) -> R<FollowUp> {
+        let user = format!(
+            "Candidate: {candidate}\nInterviewed for it: {}\nWhat they wrote: {}\n\n{}",
+            if interviewed { "yes" } else { "no" },
+            if their_email.trim().is_empty() { "not known" } else { their_email },
+            posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description),
+        );
+        let f: FollowUp = self.call(&rejection_reply_system(), &user, obj(json!({"subject": {"type": "string"}, "body": {"type": "string"}})), "low")?;
+        if f.body.trim().is_empty() {
+            return Err(Error("Claude's reply came back empty; try again.".into()));
+        }
+        Ok(f)
     }
 
     fn thank_you(&self, candidate: &str, job: &crate::db::Job, interview: &str) -> R<FollowUp> {

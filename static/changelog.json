@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.52.0",
+    "date": "2026-11-12",
+    "title": "Draft a reply to a rejection",
+    "changes": [
+      "A rejected job now has a Reply to the rejection card: Draft a reply writes a short, gracious note that thanks them, asks for feedback only if you interviewed, and asks to be kept in mind.",
+      "With Gmail connected it is saved as a draft, as a reply to their email when a person sent it. If their email came from a no-reply address, Job Hunt says so and addresses it to the person you dealt with instead.",
+      "Nothing is sent: you read it and send it yourself."
+    ]
+  },
+  {
     "version": "2.51.1",
     "date": "2026-11-12",
     "title": "Settings sits with the other places",

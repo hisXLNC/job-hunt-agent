@@ -668,7 +668,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
                     "effort": crate::fill::effort(&job), "job": job, "history": history, "progress": agent.tracker(Some(id))?.pop(),
-                    "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
+                    "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "decline": agent.rejection_reply(id), "declining": agent.is_running(&format!("decline:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
                     "rating": agent.db().rating(&job.company), "rating_busy": agent.is_running(&format!("rating:{}", crate::db::company_key(&job.company))),
                     "cv_pdf": pdf(&job.cv_path), "letter_pdf": pdf(&job.letter_path),
                     "revising": agent.is_running(&format!("revise:{id}")),
@@ -975,6 +975,21 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     let what = if s(&b, "what") == "letter" { "letter" } else { "cv" };
                     agent.undo_revision(id, what)?;
                     ok()
+                }
+                "decline" => {
+                    let key = format!("decline:{id}");
+                    if agent.is_running(&key) {
+                        return Err(Error("The reply is being written already.".into()));
+                    }
+                    let (a, id) = (agent.clone(), id.to_string());
+                    std::thread::spawn(move || {
+                        let Ok(_g) = a.claim(&key) else { return };
+                        if let Err(e) = a.write_rejection_reply(&id) {
+                            let _ = a.db().log(Some(&id), "decline:error", &e.0);
+                            a.note("The reply to the rejection didn't work", &e.0);
+                        }
+                    });
+                    Ok(Resp::json(&json!({ "started": true })))
                 }
                 "thanks" => {
                     let key = format!("thanks:{id}");

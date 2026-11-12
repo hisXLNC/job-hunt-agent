@@ -1853,6 +1853,50 @@ replies and interviews, and a little lower for kinds that got none from several 
         self.db().get(&format!("thanks:{job_id}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
     }
 
+    pub fn rejection_reply(&self, job_id: &str) -> Option<Value> {
+        self.db().get(&format!("decline:{job_id}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
+    }
+
+    /// A short reply to a rejection, saved as a Gmail draft when Gmail is connected: in the thread of
+    /// their email when a person sent it, otherwise a new email to whoever you dealt with there.
+    pub fn write_rejection_reply(&self, job_id: &str) -> R<Value> {
+        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        let profile = self.profile();
+        let emails = self.db().emails(5000)?;
+        let said = emails.into_iter().find(|e| e.job_id.as_deref() == Some(job_id) && e.category.as_deref() == Some("rejection"));
+        let interviewed = self.db().calendar_ids().unwrap_or_default().iter().any(|e| e.kind == "interview" && e.job_id.as_deref() == Some(job_id));
+        let their = said.as_ref().map(|e| format!("{}: {}", e.subject.as_deref().unwrap_or(""), e.summary.as_deref().unwrap_or(""))).unwrap_or_default();
+        let mut f = self.llm().rejection_reply(&profile.name, &job, &their, interviewed)?;
+        let own = self.own_words(&job, &profile);
+        (f.subject, f.body) = (cv::humanize(&f.subject, &own), cv::humanize(&f.body, &own));
+        let person = said.as_ref().and_then(|e| e.sender.as_deref()).map(google::address).filter(|a| crate::recruiters::looks_personal(a));
+        let mail = self.mail.read().unwrap().clone();
+        let (to, draft, in_thread) = match (&mail, &said, &person) {
+            (Some(m), Some(e), Some(p)) => {
+                let original = m.get(&e.gmail_id)?;
+                (p.clone(), Some(m.draft_reply(&original, &f.body)?), true)
+            }
+            _ => {
+                let to = match &person {
+                    Some(p) => p.clone(),
+                    None => self.follow_up_to(&job)?,
+                };
+                let draft = match &mail {
+                    Some(m) => Some(m.draft(&to, &f.subject, &f.body)?),
+                    None => None,
+                };
+                (to, draft, false)
+            }
+        };
+        // Their email came from an address nobody reads: say so, so it isn't sent into the void.
+        let robot = said.is_some() && person.is_none();
+        let v = json!({ "at": now(), "to": to, "subject": f.subject, "body": f.body, "draft": draft, "in_thread": in_thread, "robot": robot, "interviewed": interviewed });
+        let db = self.db();
+        db.set(&format!("decline:{job_id}"), &v.to_string())?;
+        db.log(Some(job_id), "decline", if draft.is_some() { "reply to the rejection saved in your Gmail drafts" } else { "reply to the rejection written" })?;
+        Ok(v)
+    }
+
     /// The thank-you email after an interview, saved as a Gmail draft when Gmail is connected.
     pub fn write_thank_you(&self, job_id: &str, interview: &str) -> R<Value> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;

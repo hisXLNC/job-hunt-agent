@@ -1973,3 +1973,28 @@ fn a_company_you_never_want_to_see() {
     let r = s.agent.search(Some(vec![posting("Program Director", "3")])).unwrap();
     assert_eq!(r.to_pick, 0);
 }
+
+#[test]
+fn a_reply_to_a_rejection() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
+    let jobs = s.agent.db().jobs(Some("queued"), 10).unwrap();
+    let (a, b) = (jobs[0].id.clone(), jobs[1].id.clone());
+    // A person wrote to turn you down: the reply is drafted in the thread of their email.
+    let theirs = crate::google::Email { id: "r1".into(), thread_id: "t1".into(), from: "Priya Shah <priya.shah@acme.example>".into(), subject: "Your application".into(), ..Default::default() };
+    s.mail.messages.lock().unwrap().insert("r1".into(), theirs);
+    s.agent.db().record_email("r1", "t1", Some(&a), "Priya Shah <priya.shah@acme.example>", "Your application", "rejection", "We went with another candidate", None, "2026-01-02T00:00:00Z").unwrap();
+    let v = s.agent.write_rejection_reply(&a).unwrap();
+    assert_eq!((v["to"].as_str().unwrap(), v["in_thread"].as_bool(), v["robot"].as_bool()), ("priya.shah@acme.example", Some(true), Some(false)));
+    assert!(v["body"].as_str().unwrap().contains("We went with another candidate") && !v["body"].as_str().unwrap().contains("feedback"), "what they wrote reaches Claude; no feedback asked without an interview");
+    assert_eq!(s.mail.drafts.lock().unwrap().last().unwrap().0, "r1");
+    assert_eq!(s.agent.rejection_reply(&a).unwrap()["subject"], v["subject"]);
+    // From an address nobody reads: a new draft, flagged, never a reply into the void.
+    s.agent.db().record_email("r2", "t2", Some(&b), "no-reply@greenhouse.io", "Update", "rejection", "Not moving forward", None, "2026-01-03T00:00:00Z").unwrap();
+    let v = s.agent.write_rejection_reply(&b).unwrap();
+    assert_eq!((v["in_thread"].as_bool(), v["robot"].as_bool()), (Some(false), Some(true)));
+    assert!(s.mail.drafts.lock().unwrap().last().unwrap().0.starts_with("to:"));
+}

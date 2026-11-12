@@ -55,7 +55,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, decline, declining, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   j.effort = effort;
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
@@ -81,6 +81,13 @@ async function showJob(id) {
       </div>
     </div>
     ${jobActions(j, tailoring, progress)}
+    ${decline || declining || j.status === 'rejected' ? `<section class="card">
+      <header><h2>Reply to the rejection</h2>${declining ? '<span class="muted small"><span class="spin" data-kind="decline"></span>Writing…</span>' : `<button class="btn" data-act="decline">${decline ? 'Write again' : 'Draft a reply'}</button>`}</header>
+      ${decline ? `<p class="small muted">${decline.draft ? `Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>${decline.in_thread ? ', as a reply to their email' : ''}` : 'Written'} ${esc(ago(decline.at))}${decline.to ? ` · to ${esc(decline.to)}` : ' · add the address of the person you dealt with before sending'}</p>
+        ${decline.robot ? '<p class="small" style="color:var(--warn)">Their email came from an address that doesn\'t take replies. Send this to the recruiter or interviewer you dealt with, or leave it.</p>' : ''}
+        <p><b>${esc(decline.subject)}</b></p><div class="posting">${esc(decline.body)}</div>
+        <p class="muted small">Nothing is sent: read it, change what you like, and ${decline.draft ? 'send it from Gmail' : 'copy it into an email (connect Gmail in Settings and it is saved as a draft for you)'}.</p>` : '<p class="muted">A short, gracious note: thanks, a request for feedback if you interviewed, and that you\'d like to be kept in mind. Worth sending when you dealt with a person; it is often how the next opening reaches you first.</p>'}
+    </section>` : ''}
     ${j.warnings.length && !j.closed_at && !['applied', 'interviewing', 'offer'].includes(j.status) ? `<div class="card" style="border-color:var(--warn)"><b>Check this posting is real and open before you put time in.</b><ul class="flags">${j.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
     ${expiredWhy(j) ? `<div class="card" style="border-color:var(--crit)"><b>This opening has expired.</b><p class="muted">${esc(expiredWhy(j).replace(/^Expired: /, '').replace(/^./, c => c.toUpperCase()))}. Open the posting to make sure, then mark it Not interested.</p></div>` : ''}
     ${(recruiters_here || []).length ? `<div class="card"><b>Recruiter${recruiters_here.length === 1 ? '' : 's'} for this application</b>${recruiters_here.map(r => `<div class="small" style="margin-top:6px"><b>${esc(r.name)}</b> <span class="muted">${esc(r.company_of || '')}</span> · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>${r.phone ? ` · <a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a>` : ''}${r.linkedin ? ` · <a href="#" data-act="link" data-url="${esc(r.linkedin)}">LinkedIn</a>` : ''}<br><span class="muted">${esc(r.emails)} email${r.emails === 1 ? '' : 's'} · last ${esc(ago(r.last_at))}${r.last_subject ? ` · “${esc(r.last_subject)}”` : ''}</span></div>`).join('')}<a class="small" href="#inbox/recruiters">All recruiters</a></div>` : ''}

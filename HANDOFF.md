@@ -55,6 +55,11 @@ and `DEVELOPING.md`.
   `app.js` or `pipeline.rs` for something, look in the parts too. The Rust linter's safe fixes
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
+- **2.52.0: a reply to a rejection.** `Agent::write_rejection_reply` (kept under `decline:<job>`,
+  `POST /api/jobs/<id>/decline`, the card above a rejected job's tabs). `Llm::rejection_reply` gets
+  the summary of their rejection email and whether an interview was on the calendar (feedback is only
+  asked for then). A person's email gets `draft_reply` in its thread; a no-reply sender gets a new
+  draft to `follow_up_to` and the `robot` flag, which the card warns about. Written on request only.
 - **2.51.1: Settings is a place.** The fifth entry of `NAV` (top bar and the phone's tabs); the gear
   (`#settingsLink`) and the phone's menu button (`#mMenu`) are gone. On a phone the status in the top
   bar (`#mStatus`, `data-act="moreMenu"`) opens `.side` as a small card with the status lines and the

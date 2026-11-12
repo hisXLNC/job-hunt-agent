@@ -576,6 +576,9 @@ async function act(el) {
   if (a === 'undoRevision') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/undo`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Put back as it was.');
   }
+  if (a === 'decline') {
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/decline`, { method: 'POST' }); setTimeout(route, 300); }, 'Writing the reply…');
+  }
   if (a === 'thanks') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/thanks`, { method: 'POST' }); setTimeout(route, 300); }, 'Writing the thank-you note…');
   }

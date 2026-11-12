@@ -189,6 +189,16 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.selectOption('#otherCard [name=service]', '');
   check(await page.evaluate(() => !document.querySelector('[data-other-url]').hidden), 'Another AI: choosing "Another one" asks for its address');
 
+  // A rejected application offers a reply: drafted on request, shown with its subject, nothing sent.
+  const turnedDown = await page.evaluate(async () => { const r = await (await fetch('/api/jobs')).json(); const j = (r.jobs || r).find(x => x.status === 'queued' || x.status === 'saved'); if (!j) return ''; window.name = j.status; await fetch(`/api/jobs/${encodeURIComponent(j.id)}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'rejected', note: 'screen test', learn: false }) }); return j.id; });
+  if (turnedDown) {
+    await at(`job/${encodeURIComponent(turnedDown)}`);
+    await page.click('[data-act=decline]');
+    check(await until(async () => { await page.reload(); await page.waitForTimeout(700); return page.evaluate(() => { const c = [...document.querySelectorAll('section.card')].find(x => /Reply to the rejection/.test(x.textContent)); return !!c && /Thank you: /.test(c.textContent) && /Nothing is sent/.test(c.textContent); }); }, 15), 'A rejected job: Draft a reply writes one and shows it');
+    // Back where it was, for the checks that follow.
+    await page.evaluate(id => fetch(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: window.name || 'queued', note: 'screen test', learn: false }) }), turnedDown);
+  } else check(false, 'A rejected job: there was a job to try the reply on');
+
   // Leads: hiring posts and newly funded companies, each with who to write to. Your own message is
   // kept; once it's sent the lead moves to Written to and off the tab's count.
   await at('leads');
