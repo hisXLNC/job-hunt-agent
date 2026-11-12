@@ -8,6 +8,8 @@ and `DEVELOPING.md`.
 - Latest version: **2.43.0** (a job beside the Pipeline list, chips in Me, the extension reworked).
   The working branch changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is
   what's released. Before it: 2.42.0 (the Queue and the top bar), 2.41.0, 2.40.0, 2.39.0 (skills).
+- The Queue is a **list by default** (the user asked: every listing, with One by one as an option):
+  `queueView()` reads `jh.queueView`; the list is `stepHtml` for each step that has something.
 - **2.43.0.** `openPanel(id)` draws a job in `#jobPanel` beside the list on a wide window
   (`panelFits`); rows and titles in Pipeline open it, `syncPanel` keeps it across redraws, Esc closes
   it. `chipify` turns `textarea[data-chips]` into chips (the textarea stays the value). The extension's

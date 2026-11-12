@@ -690,6 +690,8 @@ function queueItems(o) {
 const queueCount = items => items.filter(x => x.kind !== 'health' || x.h.level === 'problem').length;
 const QUEUE_KIND = { pick: 'Pick', approve: 'Approve', submit: 'Submit', filled: 'Submit', ask: 'Ask a recruiter', contact: 'Follow up', follow: 'Follow up', reach: 'Say hello', quiet: 'Tidy up', interview: 'Interview', health: 'Needs attention', held: 'Waiting to be scored' };
 let queueSkipped = new Set(), queueAt = '';
+/** How the Queue is shown: every listing at once ('list', unless you choose otherwise) or one decision at a time ('one'). Remembered on this device. */
+const queueView = () => { try { return localStorage.getItem('jh.queueView') === 'one' ? 'one' : 'list'; } catch (e) { return 'list'; } };
 /** A decision's buttons: the quiet ones on the left, a gap, then the one that moves it on. */
 const dbar = (quiet, main) => `<div class="dbar">${quiet}<span class="sp"></span>${main}<button class="btn ghost skip" type="button" data-act="queueSkip" title="Leave it for now and see the next one (→)">Skip${svg('next')}</button></div>`;
 const key = k => `<kbd class="k">${k}</kbd>`;
@@ -821,6 +823,23 @@ async function showOverview(arg) {
   const cur = list.find(x => x.id === queueAt) || list.find(x => !queueSkipped.has(x.id)) || list[0];
   if (cur) queueAt = cur.id;
   jobOrder = all.filter(x => x.j).map(x => x.j.id);
+  // Every listing at once (the usual way), or one decision at a time.
+  const view = queueView();
+  let listing = '';
+  if (view === 'list' && all.length) {
+    const tracked = ['waiting', 'interviews'].includes(step) ? (await api('/api/tracker')).rows : [];
+    const notes = step ? [] : all.filter(x => x.kind === 'health');
+    const noteRow = x => `<div class="next-row ${x.h.level === 'problem' ? 'crit' : 'warn'}"><span class="next-n">!</span><span class="grow">${esc(x.h.text)}</span><span class="row next-act">
+        ${x.h.action === 'removeBroken' ? `<button class="btn sm" data-act="removeBroken" data-boards="${esc(JSON.stringify(x.h.data))}">Remove ${x.h.data.length === 1 ? 'it' : 'them'}</button><button class="btn sm" data-act="suggestBoards" data-into="healthIdeas">Suggest companies</button>` : ''}
+        ${x.h.fix ? `<button class="btn sm" data-act="${esc(x.h.fix.act)}" data-task="${esc(x.h.fix.task)}">${esc(x.h.fix.label)}</button>` : ''}${x.h.link && x.h.link !== '#overview' ? `<a class="btn sm" href="${esc(x.h.link)}">Fix it</a>` : ''}</span></div>`;
+    // What's furthest along first, as in the one-by-one order; a step you chose shows all of itself.
+    const order = step ? [step] : ['interviews', 'approve', 'submit', 'pick', 'waiting'].filter(s => all.some(x => x.step === s));
+    listing = `${notes.some(x => x.h.level === 'problem') ? `<section class="card next-card">${notes.filter(x => x.h.level === 'problem').map(noteRow).join('')}</section>` : ''}
+      ${order.map(s => `${s === 'pick' ? heldLine() : ''}${stepHtml(o, s, s === step ? tracked : [])}`).join('')}
+      ${notes.some(x => x.h.level !== 'problem') ? `<section class="card next-card">${notes.filter(x => x.h.level !== 'problem').map(noteRow).join('')}</section>` : ''}
+      <div id="healthIdeas" class="ideas"></div>`;
+    jobOrder = all.filter(x => x.j).map(x => x.j.id);
+  }
   const rest = cur ? [...list.slice(list.indexOf(cur) + 1), ...list.slice(0, list.indexOf(cur))] : [];
   const tailoring = (o.to_tailor || []).length - (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`)).length;
   const n = k => all.filter(x => x.step === k).length;
@@ -829,7 +848,7 @@ async function showOverview(arg) {
   page(`<div class="head">
       <div class="grow">
         <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${first ? ` · ${greeting()}, ${esc(first)}` : ''}</div>
-        <h1>${queueCount(all) ? `${queueCount(all)} decision${queueCount(all) === 1 ? '' : 's'} waiting` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
+        <h1>${queueCount(all) ? `${queueCount(all)} waiting for you` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
       </div>
       <div class="row head-acts">
         <a class="btn ghost" href="#add">${svg('add')}Add a job</a>
@@ -837,7 +856,8 @@ async function showOverview(arg) {
           : `<button class="btn${all.length ? '' : ' primary'}" data-act="run" data-task="search" ${!o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${svg('search')}Search for jobs now</button>`}
       </div>
     </div>
-    ${all.length ? `<nav class="tabs qsteps" aria-label="Kinds of decision"><a href="#overview" class="${step ? '' : 'on'}">Everything <span class="n">${all.length}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === step ? 'on' : ''}${n(id) ? '' : ' none'}">${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}</nav>` : ''}
+    ${all.length ? `<nav class="tabs qsteps" aria-label="Kinds of decision"><a href="#overview" class="${step ? '' : 'on'}">Everything <span class="n">${all.length}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === step ? 'on' : ''}${n(id) ? '' : ' none'}">${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}
+      <span class="tabs-gap"></span><span class="seg view-seg" role="group" aria-label="How to show them"><button type="button" data-act="queueView" data-view="list" class="${view === 'list' ? 'on' : ''}" title="Every listing at once">List</button><button type="button" data-act="queueView" data-view="one" class="${view === 'one' ? 'on' : ''}" title="One decision at a time, with everything you need to decide">One by one</button></span></nav>` : ''}
     ${syncNewerHtml(o.sync_newer)}
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}
@@ -845,16 +865,16 @@ async function showOverview(arg) {
     ${o.progress ? progressHtml(o.progress) : ''}
     <div class="deck">
       <div class="deck-main">
-        ${cur ? decisionHtml(cur, list.indexOf(cur) + 1, list.length)
+        ${listing ? listing : cur ? decisionHtml(cur, list.indexOf(cur) + 1, list.length)
           : `<section class="card decision done"><div class="dtop"><span class="bigicon good">${svg('check')}</span><div class="grow"><p class="kicker">${step ? 'Nothing here' : neededDone ? 'All caught up' : 'Getting started'}</p>
               <h2>${step ? `No ${step === 'waiting' ? 'follow-ups' : `${FLOW.find(f => f[0] === step)[1].toLowerCase()} decisions`} waiting` : neededDone ? 'Your queue is empty' : 'Connect Claude and add your CV'}</h2>
               <div class="facts"><span>${!neededDone ? 'Then search for jobs: the ones that fit come here, one at a time.' : searching ? 'A search is running: new matches come here when it\'s done.' : side.paused ? `${esc(pausedWords(side.paused))}.` : nextSearch ? `Job Hunt searches again ${esc(nextSearch.toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }))}.` : 'Search for jobs to find new matches.'}</span></div></div></div></section>`}
-        ${cur && cur.kind === 'pick' && picks > 3 ? `<p class="muted small deck-note">${picks} to pick from. Rather tick several at once? <a href="#applications/pick">Pick from the list in Pipeline</a>.</p>` : ''}
+        ${!listing && cur && cur.kind === 'pick' && picks > 3 ? `<p class="muted small deck-note">${picks} to pick from. Rather tick several at once? <a href="#applications/pick">Pick from the list in Pipeline</a>.</p>` : ''}
         ${tailoring ? `<p class="muted small deck-note"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(tailoring / 3)}"></span>Tailoring ${tailoring} application${tailoring === 1 ? '' : 's'}… they come back here to approve.</p>` : ''}
         ${titleIdeasHtml(o.title_ideas)}
       </div>
       <aside class="deck-side">
-        ${rest.length ? `<h3>Up next</h3><div class="upnext">${rest.slice(0, 5).map(queueMini).join('')}${rest.length > 5 ? `<p class="muted small" style="margin:2px 4px">and ${rest.length - 5} more</p>` : ''}</div>` : ''}
+        ${!listing && rest.length ? `<h3>Up next</h3><div class="upnext">${rest.slice(0, 5).map(queueMini).join('')}${rest.length > 5 ? `<p class="muted small" style="margin:2px 4px">and ${rest.length - 5} more</p>` : ''}</div>` : ''}
         <h3>Running by itself</h3>
         <section class="card on-auto">
           <div class="auto-line">${svg('search')}<span class="grow"><b>Search</b> <span class="muted">${esc(ago(o.last_search))}${o.last_report && o.last_search ? `: ${o.last_report.new} new` : ''}${side.paused ? '' : nextSearch ? ` · next ${esc(nextSearch.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}</span></span><a class="btn ghost sm" href="#search">Results</a></div>
@@ -874,6 +894,7 @@ async function showOverview(arg) {
     <details class="card activity"><summary><b>What Job Hunt did lately</b></summary>
       ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
     </details>`);
+  if (listing) restorePickViews();
 }
 
 /** One step of the hunt on the Jobs page: what the step is for, and its roles with the next thing to do. */
@@ -3834,6 +3855,10 @@ async function act(el) {
     return;
   }
   if (a === 'siteDrop') { el.closest('.site-own')?.remove(); toast('Removed. Save to keep the change.'); return; }
+  if (a === 'queueView') {
+    try { localStorage.setItem('jh.queueView', el.dataset.view === 'one' ? 'one' : 'list'); } catch (e) { /* storage off: it stays a list */ }
+    route(); return;
+  }
   if (a === 'queueSkip' || a === 'queueGo') {
     // Leave this decision for now, or go to one of the next: nothing is changed, only what's shown.
     if (a === 'queueSkip') queueSkipped.add(queueAt);

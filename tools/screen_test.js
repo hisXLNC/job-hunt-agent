@@ -33,11 +33,15 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
     check(await hash() === to, `#${from} lands on ${to}`);
   }
 
-  // The Queue opens on a decision: a new match to pick, with its buttons.
+  // The Queue opens as a list of everything waiting; One by one is a choice, and it's remembered.
+  await at('overview');
+  check((await page.$$('.pick-list .jrow.pick')).length >= 3 && !(await page.$('.decision[data-kind]')), 'The Queue opens as a list of every listing');
+  await page.click('[data-act=queueView][data-view=one]'); await page.waitForTimeout(500);
+  // One by one: a decision on its own, with its buttons.
   await at('overview');
   const kind = () => page.evaluate(() => document.querySelector('.decision')?.dataset.kind || '');
   const title = () => text('.decision h2');
-  check(await kind() === 'pick', 'The Queue opens on a new match to pick');
+  check(await kind() === 'pick', 'One by one shows a new match to pick, and stays chosen after a reload');
   check((await text('.qsteps')).includes('Pick'), 'The Queue counts its decisions by kind');
   const first = await title();
   await page.click('.decision [data-act=queueSkip]'); await page.waitForTimeout(500);

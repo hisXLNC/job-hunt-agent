@@ -6,10 +6,11 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.43.0] - 2026-11-12
 
-A job beside the list, chips in Me, and the extension reworked.
+The Queue as a list, a job beside the list, chips in Me, and the extension reworked.
 
 ### Changes
 
+- The Queue shows every listing at once: what to approve, submit, pick and follow up, each group with its buttons and tick boxes. One by one, the single-decision view, is the switch at the end of its tabs; Job Hunt remembers which you chose.
 - Pipeline: on a wide window, clicking a job opens it beside the list: where it stands, the next thing to do with its buttons, why it fits and the gaps, its tailored files and the posting. Open the full page is one click further; Esc closes it.
 - Me, Looking for: job titles, keywords, companies to skip and title words to skip are chips. Type one and press Enter to add it; the cross removes it. The fit score needed has a slider.
 - The extension's button is reworked: whether it is connected to Job Hunt, which application this page is, Fill this form with its shortcut, and a list of the applications you approved with Open beside each, so you can submit them one after another from the browser.
