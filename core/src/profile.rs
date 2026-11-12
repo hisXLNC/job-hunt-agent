@@ -228,6 +228,9 @@ pub struct Profile {
     pub calendar: CalendarPrefs,
     /// Local hour of the daily search.
     pub search_hour: u32,
+    /// The most characters a LinkedIn connection note may have on your account: 300 with Premium,
+    /// 200 on a free one. Notes to people found on LinkedIn are written to fit.
+    pub linkedin_note: u32,
     /// Searches a day: 1, or 2 for a second one at `search_hour_2`.
     pub searches_per_day: u32,
     /// Local hour of the second search, when there are two.
@@ -275,6 +278,7 @@ impl Default for Profile {
             sources: Sources::default(),
             calendar: CalendarPrefs::default(),
             search_hour: 7,
+            linkedin_note: 300,
             searches_per_day: 1,
             search_hour_2: 16,
             inbox_minutes: 30,

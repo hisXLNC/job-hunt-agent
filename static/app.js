@@ -868,11 +868,25 @@ async function showOverview(arg) {
       <div class="grow">
         <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${first ? ` · ${greeting()}, ${esc(first)}` : ''}</div>
         <h1>${queueCount(all) ? `${queueCount(all)} waiting for you` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
+        ${neededDone ? `<p class="week-line"><span class="week-label">This week</span>
+          <a href="#results" title="Applications sent this week${o.weekly_goal ? `, against your goal of ${o.weekly_goal}` : ''}${delta ? ` (${delta > 0 ? delta + ' more' : -delta + ' fewer'} than last week)` : ''}"><b>${o.this_week}</b>${o.weekly_goal ? ` of ${o.weekly_goal}` : ''} applied${delta ? ` <span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span>` : ''}</a>
+          <a href="#calendar" title="Interviews coming up"><b>${o.interviews.length}</b> interview${o.interviews.length === 1 ? '' : 's'}</a>
+          <a href="#results" title="How many of your applications got a reply"><b>${pct(o.response_rate)}</b> replied</a></p>` : ''}
       </div>
       <div class="row head-acts">
         <a class="btn ghost" href="#add">${svg('add')}Add a job</a>
+        ${setup.google ? `<button class="btn ghost mail-btn" data-act="run" data-task="inbox" title="Your job email was checked ${esc(ago(o.last_inbox))}. Press to check it now.">${svg('mail')}<span>${esc(ago(o.last_inbox))}</span></button>`
+          : googleOff ? '' : `<a class="btn ghost mail-btn" href="#settings/connections" title="Gmail isn't connected: connect it and Job Hunt sorts your job email and drafts replies">${svg('mail')}<span>Connect email</span></a>`}
         ${searching ? searchCtl(o.progress)
-          : `<button class="btn${all.length ? '' : ' primary'}" data-act="run" data-task="search" ${!o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${svg('search')}Search for jobs now</button>`}
+          : `<span class="split"><button class="btn${all.length ? '' : ' primary'}" data-act="run" data-task="search" ${!o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${svg('search')}Search for jobs now</button><details class="menu search-menu"><summary class="btn${all.length ? '' : ' primary'}${side.paused ? ' paused' : ''}" title="The last search, its results, and the daily search" aria-label="Search: results and schedule"><span class="caret">▾</span></summary><div class="menu-list right">
+              <p class="menu-note"><b>Last search</b> ${o.last_search ? `${esc(ago(o.last_search))}${o.last_report ? `: ${o.last_report.new} new` : ''}` : 'not yet'}</p>
+              <a href="#search">See what it found</a>
+              <p class="menu-note"><b>${side.paused ? (side.paused === 'off' ? 'The daily search is off' : esc(pausedWords(side.paused))) : nextSearch ? `Next search ${esc(nextSearch.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : 'The next search is due now'}</b></p>
+              ${side.paused ? '<button data-act="searchPause" data-days="0">Turn the daily search back on</button>' : ''}
+              <button data-act="searchPause" data-days="1">Pause for a day</button><button data-act="searchPause" data-days="3">Pause for 3 days</button><button data-act="searchPause" data-days="7">Pause for a week</button>
+              ${side.paused === 'off' ? '' : '<button data-act="searchPause" data-days="off">Turn the daily search off</button>'}
+              <a href="#settings/search">When it searches, and how often</a>
+            </div></details></span>`}
       </div>
     </div>
     ${all.length ? `<nav class="tabs qsteps" aria-label="Kinds of decision"><a href="#overview" class="${step ? '' : 'on'}">Everything <span class="n">${queueCount(all)}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === step ? 'on' : ''}${n(id) ? '' : ' none'}">${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}
@@ -882,7 +896,7 @@ async function showOverview(arg) {
       `<div class="step-wrap"><a class="step ${done ? 'done' : ''}" href="${href}"><span class="tick">${done ? '✓' : ''}</span><span><b>${esc(t)}</b><br><span class="muted small">${esc(d)}</span></span></a>${key && !done ? `<button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this step">Not now</button>` : ''}</div>`).join('')}</div></section>` : ''}
     ${inUseHtml(o.in_use)}
     ${o.progress ? progressHtml(o.progress) : ''}
-    <div class="deck">
+    <div class="deck${!listing && rest.length ? '' : ' solo'}">
       <div class="deck-main">
         ${listing ? listing : cur ? decisionHtml(cur, list.indexOf(cur) + 1, list.length)
           : `<section class="card decision done"><div class="dtop"><span class="bigicon good">${svg('check')}</span><div class="grow"><p class="kicker">${step ? 'Nothing here' : neededDone ? 'All caught up' : 'Getting started'}</p>
@@ -891,24 +905,11 @@ async function showOverview(arg) {
         ${!listing && cur && cur.kind === 'pick' && picks > 3 ? `<p class="muted small deck-note">${picks} to pick from. Rather tick several at once? <a href="#applications/pick">Pick from the list in Pipeline</a>.</p>` : ''}
         ${tailoring ? `<p class="muted small deck-note"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(tailoring / 3)}"></span>Tailoring ${tailoring} application${tailoring === 1 ? '' : 's'}… they come back here to approve.</p>` : ''}
         ${titleIdeasHtml(o.title_ideas)}
-      </div>
-      <aside class="deck-side">
-        ${!listing && rest.length ? `<h3>Up next</h3><div class="upnext">${rest.slice(0, 5).map(queueMini).join('')}${rest.length > 5 ? `<p class="muted small" style="margin:2px 4px">and ${rest.length - 5} more</p>` : ''}</div>` : ''}
-        <h3>Running by itself</h3>
-        <section class="card on-auto">
-          <div class="auto-line">${svg('search')}<span class="grow"><b>Search</b> <span class="muted">${esc(ago(o.last_search))}${o.last_report && o.last_search ? `: ${o.last_report.new} new` : ''}${side.paused ? '' : nextSearch ? ` · next ${esc(nextSearch.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}</span></span><a class="btn ghost sm" href="#search">Results</a></div>
-          <div class="auto-line sched">${scheduleMenu(side.paused, false)}</div>
-          ${setup.google || !googleOff ? `<div class="auto-line">${svg('mail')}<span class="grow"><b>Email</b> <span class="muted">${setup.google ? `checked ${esc(ago(o.last_inbox))}` : 'Gmail isn\'t connected'}</span></span>${setup.google ? `<button class="btn ghost sm" data-act="run" data-task="inbox">Check now</button>` : `<a class="btn sm" href="#settings/connections">Connect</a><button class="btn ghost sm" data-act="setupSkip" data-what="google" title="Hide this">Not now</button>`}</div>` : ''}
-        </section>
-        <h3>This week</h3>
-        <section class="card week">
-          <a href="#results" class="wk"><b>${o.this_week}${o.weekly_goal ? `<span class="muted"> / ${o.weekly_goal}</span>` : ''}</b><span>applied${delta ? ` · <span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span>` : ''}</span></a>
-          <a href="#calendar" class="wk"><b>${o.interviews.length}</b><span>interview${o.interviews.length === 1 ? '' : 's'}</span></a>
-          <a href="#results" class="wk"><b>${pct(o.response_rate)}</b><span>replied</span></a>
-        </section>
         ${showSteps && neededDone && steps.some(st => st[4] && st[4] !== 'google' && !st[0]) ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && st[4] !== 'google' && !st[0]).map(([, t, d, href, key]) =>
           `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
-      </aside>
+      </div>
+      ${!listing && rest.length ? `<aside class="deck-side"><h3>Up next</h3><div class="upnext">${rest.slice(0, 5).map(queueMini).join('')}${rest.length > 5 ? `<p class="muted small" style="margin:2px 4px">and ${rest.length - 5} more</p>` : ''}</div></aside>` : ''}
+    </div>      </aside>
     </div>
     <details class="card activity"><summary><b>What Job Hunt did lately</b></summary>
       ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
@@ -1685,8 +1686,8 @@ function stepHtml(o, step, tracked) {
   else if (inWork) groups.push(['Tailoring', `<p class="muted"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork} application${inWork === 1 ? '' : 's'}… they appear under Ready to approve.</p>`]);
   const ready = [];
   const many = o.ready?.length > 1;
-  if (o.ready?.length) ready.push([`Ready to approve${many ? '' : ` <a class="btn sm" href="#review">Review it</a>`}`, `<div data-approvebox>
-    ${many ? `<div class="row" style="margin:2px 0 8px"><button class="btn ghost sm" type="button" data-act="approveAll">Select all</button><a class="btn primary sm" href="#review" title="Each one's changes and letter on one page: A approves and shows the next">Review them one by one</a></div>` : ''}
+  if (o.ready?.length) ready.push(['Ready to approve', `<div data-approvebox>
+    ${many ? `<div class="row" style="margin:2px 0 8px"><button class="btn ghost sm" type="button" data-act="approveAll">Select all</button></div>` : ''}
     ${[...o.ready].sort((a, b) => applyRank(b) - applyRank(a)).map(j => row(j, [coverFact(j), j.apply_email ? 'applies by email' : '', onCompanySite(j)].filter(Boolean).join(' · '),
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`,
@@ -3314,6 +3315,9 @@ function applyQueueView(restore) {
   const box = document.querySelector('[data-queuebox]');
   if (!box) return;
   const controls = [...box.querySelectorAll('[data-queuef]')];
+  // Beside the first group's Select all, when there is one: one row of controls, not two.
+  const first = document.querySelector('.page [data-act=approveAll], .page [data-act=pickAll]')?.parentElement;
+  if (first && !first.contains(box)) { first.appendChild(box); box.classList.add('inline'); first.classList.add('with-filters'); }
   if (restore) {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem('jh.queueF') || '{}') || {}; } catch (e) {}
@@ -3338,7 +3342,7 @@ function applyQueueView(restore) {
     mine.sort((a, b) => Number(b.dataset['q' + v.sort]) - Number(a.dataset['q' + v.sort])).forEach(r => p.insertBefore(r, after));
   }
   // A group with nothing left to show steps aside.
-  document.querySelectorAll('.page .todo-group').forEach(g => { const all = g.querySelectorAll('.jrow[data-job-row]'); const card = g.closest('.card'); if (card && all.length) card.classList.toggle('qf-hide', !g.querySelector('.jrow[data-job-row]:not(.qf-hide)')); });
+  document.querySelectorAll('.page .todo-group').forEach(g => { const all = g.querySelectorAll('.jrow[data-job-row]'); const card = g.closest('.card'); if (card && all.length) card.classList.toggle('qf-hide', !g.querySelector('.jrow[data-job-row]:not(.qf-hide)') && !card.contains(box)); });
   // The Pick group's own controls follow these (only when you change one here).
   if (!restore) document.querySelectorAll('[data-pickbox]').forEach(pb => {
     const set = (k, val) => { const el = pb.querySelector(`[data-pickf="${k}"]`); if (el) el.type === 'checkbox' ? el.checked = val : el.value = val; };

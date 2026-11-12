@@ -199,6 +199,10 @@ fn read_json<T: for<'a> Deserialize<'a> + Default>(p: &Path) -> T {
 
 /// This computer's id and name, made once and never copied to other computers.
 pub fn device(data: &Path) -> (String, String) {
+    // One at a time: two syncs starting together on a new computer would each make an identity,
+    // and the one that lost would then look like another computer with newer data.
+    static ONE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
     let p = data.join("device.json");
     let v: Value = read_json(&p);
     let name = std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_else(|_| "this computer".into());

@@ -3626,8 +3626,10 @@ replies and interviews, and a little lower for kinds that got none from several 
         let clean: Vec<Value> = list.iter().filter(|c| c["name"].as_str().is_some_and(|n| !n.trim().is_empty())).map(|c| {
             let f = |k: &str| c[k].as_str().unwrap_or("").trim().to_string();
             // sent_at: when you sent the first message; followed_at: the one follow-up (see playbook).
+            // replied_at: they wrote back (you said so, for a reply on LinkedIn, which Job Hunt can't see).
+            // message_kind: whether the message kept here is the first or the follow-up.
             json!({ "name": f("name"), "role": f("role"), "email": f("email"), "link": f("link"), "note": f("note"), "message": f("message"),
-                "sent_at": f("sent_at"), "followed_at": f("followed_at") })
+                "message_kind": f("message_kind"), "sent_at": f("sent_at"), "followed_at": f("followed_at"), "replied_at": f("replied_at") })
         }).collect();
         self.db().set(&format!("contacts:{job_id}"), &json!(clean).to_string())
     }
@@ -3703,6 +3705,9 @@ replies and interviews, and a little lower for kinds that got none from several 
                 None => "Applied: not yet (applying now)".into(),
             },
         ];
+        if c["email"].as_str().unwrap_or("").trim().is_empty() {
+            brief.push(format!("LinkedIn note limit: {} characters", if profile.linkedin_note == 200 { 200 } else { 300 }));
+        }
         let facts = profile.application_facts.trim();
         if !facts.is_empty() {
             brief.push(format!("Availability and other facts the candidate gave (use only what's about availability, notice or relocation):\n{facts}"));
@@ -3724,6 +3729,43 @@ replies and interviews, and a little lower for kinds that got none from several 
         let name = c["name"].as_str().unwrap_or("").to_string();
         self.save_contacts(job_id, &list)?;
         self.db().log(Some(job_id), "contact", &format!("{} sent to {name}", if key == "sent_at" { "message" } else { "follow-up" }))
+    }
+
+    /// They wrote back (on LinkedIn, say, where Job Hunt can't see it): no follow-up is asked for,
+    /// and it counts in how often your messages get a reply. Again: not replied after all.
+    pub fn contact_replied(&self, job_id: &str, index: usize) -> R<()> {
+        let mut list = self.contacts(job_id);
+        let c = list.get_mut(index).ok_or_else(|| Error("That contact is gone.".into()))?;
+        let was = contact_time(c, "replied_at").is_some();
+        c["replied_at"] = json!(if was { String::new() } else { now() });
+        let name = c["name"].as_str().unwrap_or("").to_string();
+        self.save_contacts(job_id, &list)?;
+        self.db().log(Some(job_id), "contact", &if was { format!("{name}: not a reply after all") } else { format!("{name} replied") })
+    }
+
+    /// How your messages to people have done, by who they went to: {recruiter, manager, other},
+    /// each {sent, replied}. A reply is one you marked, or (for the job) a real email back.
+    pub fn outreach_stats(&self) -> R<Value> {
+        let emails = self.db().job_emails()?;
+        let jobs = self.db().jobs(None, 5000)?;
+        let mut by: BTreeMap<&str, (u32, u32)> = BTreeMap::new();
+        for j in jobs {
+            let wrote_back = emails.iter().any(|(id, cat, _, _)| *id == j.id && ["recruiter_outreach", "interview_request", "interview_confirmed", "assessment", "offer"].contains(&cat.as_str()));
+            for c in self.contacts(&j.id) {
+                if contact_time(&c, "sent_at").is_none() {
+                    continue;
+                }
+                let role = c["role"].as_str().unwrap_or("").to_lowercase();
+                let kind = if ["recruit", "talent", "sourc", "people partner", "human resources", " hr"].iter().any(|w| role.contains(w) || format!(" {role}").contains(w)) { "recruiter" }
+                    else if ["manager", "director", "head", "lead", "vp", "vice president", "chief", "principal"].iter().any(|w| role.contains(w)) { "manager" } else { "other" };
+                let e = by.entry(kind).or_default();
+                e.0 += 1;
+                if contact_time(&c, "replied_at").is_some() || wrote_back {
+                    e.1 += 1;
+                }
+            }
+        }
+        Ok(json!(by.into_iter().map(|(k, (sent, replied))| (k.to_string(), json!({ "sent": sent, "replied": replied }))).collect::<serde_json::Map<String, Value>>()))
     }
 
     /// Who you've messaged at a company, across its jobs: [(name, job id, when)]. The playbook says one
@@ -3756,11 +3798,18 @@ replies and interviews, and a little lower for kinds that got none from several 
     pub fn reach_out_due(&self) -> R<Vec<Job>> {
         let now = Utc::now();
         let applied = self.db().jobs(Some("applied"), 2000)?;
-        Ok(applied.into_iter().filter(|j| {
+        let mut due: Vec<Job> = applied.into_iter().filter(|j| {
             let age = j.applied_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok()).map(|t| (now - t.with_timezone(&Utc)).num_days());
             age.is_some_and(|d| d <= crate::playbook::REACH_OUT_WITHIN) && j.closed_at.is_none() && crate::playbook::kind(j).reach_out()
                 && self.messaged_at(&j.company).is_empty()
-        }).collect())
+        }).collect();
+        // Approved and not sent yet, with someone to write to (the posting's hiring team, say): a
+        // note the day you apply lands better than one days after.
+        let approved = self.db().jobs(Some("approved"), 500)?;
+        due.extend(approved.into_iter().filter(|j| j.closed_at.is_none() && crate::playbook::kind(j).reach_out()
+            && self.contacts(&j.id).iter().any(|c| contact_time(c, "sent_at").is_none() && !(c["link"].as_str().unwrap_or("").is_empty() && c["email"].as_str().unwrap_or("").is_empty()))
+            && self.messaged_at(&j.company).is_empty()));
+        Ok(due)
     }
 
     /// Contacts you messaged a week or more ago with no reply and no follow-up yet: [{job, name, index, sent_at}].
@@ -3777,7 +3826,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             for (i, c) in self.contacts(&j.id).iter().enumerate() {
                 let Some(sent) = contact_time(c, "sent_at") else { continue };
                 let days = (now - sent).num_days();
-                if contact_time(c, "followed_at").is_none() && (crate::playbook::FOLLOW_UP_AFTER..=30).contains(&days) {
+                if contact_time(c, "followed_at").is_none() && contact_time(c, "replied_at").is_none() && (crate::playbook::FOLLOW_UP_AFTER..=30).contains(&days) {
                     out.push(json!({ "job": j.brief(), "name": c["name"], "index": i, "sent_at": c["sent_at"], "late": days > crate::playbook::FOLLOW_UP_BY }));
                 }
             }
@@ -8637,6 +8686,12 @@ mod tests {
         assert_eq!(people.len(), 1);
         assert_eq!((people[0]["name"].as_str(), people[0]["link"].as_str()), (Some("Dana Recruiter"), Some("https://www.linkedin.com/in/dana-r")));
         assert!(people[0]["note"].as_str().unwrap().contains("hiring team"));
+        // You sent Dana the note, and she wrote back on LinkedIn: no follow-up asked for, and it counts.
+        s.agent.contact_sent(&j.id, 0).unwrap();
+        s.agent.contact_replied(&j.id, 0).unwrap();
+        assert_eq!(s.agent.outreach_stats().unwrap()["recruiter"], json!({ "sent": 1, "replied": 1 }));
+        s.agent.contact_replied(&j.id, 0).unwrap();
+        assert_eq!(s.agent.outreach_stats().unwrap()["recruiter"], json!({ "sent": 1, "replied": 0 }), "pressed again: not a reply after all");
         // Sent again: nobody new, so only that it's already here.
         let e = s.agent.add_clip(&json!({ "url": "https://www.linkedin.com/jobs/view/123", "text": "Senior Program Manager at Maple Bank. Lead program delivery across finance systems, UAT and vendor management.", "people": team })).unwrap_err();
         assert!(!e.0.contains("hiring team"), "{}", e.0);

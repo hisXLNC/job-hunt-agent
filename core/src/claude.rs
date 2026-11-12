@@ -755,12 +755,18 @@ A first message is 3 to 4 sentences, in this order:\n\
 to what this role needs.\n\
 3. Their availability, and a move or relocation if the brief states one; leave this sentence out when it states none.\n\
 4. An offer of a quick call.\n\
-For a staffing agency, also say they're open to similar roles the recruiter is filling. A follow-up is 2 to 3 \
+For a staffing agency, also say they're open to similar roles the recruiter is filling. \
+Who it's to changes sentence 2 and 3. A recruiter or talent acquisition partner screens for fit and logistics: keep them as above. \
+The hiring manager, or someone on the team the role sits in (a director, head, lead or manager of that function, by their role in <contact>), \
+cares about the work: sentence 2 is one result from the CV that bears on what their team is doing, said in their terms, and leave \
+availability out unless the brief makes it the point. When the candidate hasn't applied yet (the brief says so), say they're applying, \
+not that they applied. A follow-up is 2 to 3 \
 sentences: refer back to the first message, add one new specific point of fit (not a repeat), and offer the call \
 again; it's the last message, so don't promise more.\n\
 Never ask about the status or for an update; never paste the CV or list its contents; mention no attachments. \
 If there's an email address in <contact>, write an email (\"Subject: ...\" first, then at most 110 words); \
-otherwise a LinkedIn note of at most 300 characters. Warm, direct, no flattery or clichés. Sign with the \
+otherwise a LinkedIn note of at most the number of characters <brief> gives as the LinkedIn note limit (300 when it gives none): \
+count them, and cut words, never the name or the role, to fit. Warm, direct, no flattery or clichés. Sign with the \
 candidate's first name. Never invent facts.\n\
 It must read like the candidate typed it themselves in a couple of minutes, not like a template or an AI:\n\
 - Start \"Hi <first name>,\" (no name known: \"Hi,\" or \"Hello,\"). Never \"Dear\", never \"I hope this message \

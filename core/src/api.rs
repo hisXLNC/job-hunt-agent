@@ -511,6 +511,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let days = req.query.get("days").and_then(|d| d.parse::<i64>().ok()).filter(|d| *d > 0);
                 let mut r = agent.results_for(days)?;
                 r["week_words"] = json!(agent.week_in_words().unwrap_or_default());
+                r["outreach"] = agent.outreach_stats().unwrap_or(Value::Null);
                 // How much the sources overlap, with each one's name as shown.
                 let site = |id: &str| crate::sites::SITES.iter().find(|s| s.id == id).map(|s| s.name.to_string());
                 let mut overlap = agent.db().source_overlap(90)?;
@@ -933,6 +934,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 // You sent the message written to a contact (the first, or the follow-up).
                 "contact-sent" => {
                     agent.contact_sent(id, b["index"].as_u64().unwrap_or(0) as usize)?;
+                    ok()
+                }
+                // They wrote back, where Job Hunt can't see it (pressed again: they didn't after all).
+                "contact-replied" => {
+                    agent.contact_replied(id, b["index"].as_u64().unwrap_or(0) as usize)?;
                     ok()
                 }
                 "contacts" => {
