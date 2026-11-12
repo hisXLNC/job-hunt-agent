@@ -987,15 +987,18 @@ impl Agent {
     fn scoring_guidance(&self, profile: &Profile) -> String {
         let list: Vec<Value> = self.secret("feedback").parse::<Value>().ok().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
         let results = self.results_for_scoring();
+        // What you want (the fields in Me, Looking for), then your own notes.
+        let wants = profile.wants.for_scoring();
+        let own = [wants.as_str(), profile.guidance.trim()].iter().filter(|x| !x.is_empty()).cloned().collect::<Vec<_>>().join("\n\n");
         if list.is_empty() {
-            return format!("{}{results}", profile.guidance.trim());
+            return format!("{own}{results}");
         }
         let lines: Vec<String> = list.iter().rev().take(25).map(|f| {
             let reason = f["reason"].as_str().unwrap_or("");
             format!("- {}: {} at {}{}", f["decision"].as_str().unwrap_or(""), f["title"].as_str().unwrap_or(""), f["company"].as_str().unwrap_or(""),
                 if reason.is_empty() { String::new() } else { format!(" ({reason})") })
         }).collect();
-        format!("{}\n\nThe candidate's recent decisions on earlier postings (score similar postings the same way):\n{}{results}", profile.guidance.trim(), lines.join("\n"))
+        format!("{own}\n\nThe candidate's recent decisions on earlier postings (score similar postings the same way):\n{}{results}", lines.join("\n"))
     }
 
     /// Which kinds of application have had replies so far, for scoring: with 8 or more sent,
@@ -1818,7 +1821,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let known_before = std::mem::take(&mut run.known_before);
         // Unless tailoring is automatic, roles that cleared the bar wait for you to pick them. A batch
         // of held postings leaves tailoring to the next search.
-        let queued = if profile.auto_tailor && batch.is_none() { self.db().jobs(Some("queued"), profile.max_per_run)? } else { vec![] };
+        let queued = if batch.is_none() { self.to_tailor_by_itself(&profile)? } else { vec![] };
         if !profile.auto_tailor {
             report.to_pick = self.db().jobs(Some("queued"), 500)?.len();
         }
@@ -2221,10 +2224,24 @@ replies and interviews, and a little lower for kinds that got none from several 
             db.log(Some(job_id), "scored", &format!("{} on the {} track (scored on request)", s.score, s.track))?;
         }
         let _ = self.found_salary(job_id, &s.salary, "in the posting");
-        if status == "queued" && profile.auto_tailor {
+        if status == "queued" && (profile.auto_tailor || (profile.auto_tailor_min > 0 && s.score >= profile.auto_tailor_min)) {
             return self.tailor(job_id, None);
         }
         self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
+    }
+
+    /// The roles a search tailors without being asked, best fit first, at most `max_per_run`:
+    /// every one that cleared your fit score when tailoring is automatic; else, when you chose a
+    /// score for it, only the strong fits found in the last two weeks (an old match isn't worth the
+    /// usage until you say so). None otherwise.
+    fn to_tailor_by_itself(&self, profile: &Profile) -> R<Vec<Job>> {
+        let from = if profile.auto_tailor { profile.score_threshold } else if profile.auto_tailor_min > 0 { profile.auto_tailor_min.max(profile.score_threshold) } else { return Ok(vec![]) };
+        let recent = (chrono::Utc::now() - chrono::Duration::days(14)).to_rfc3339();
+        let mut list: Vec<Job> = self.db().jobs(Some("queued"), 500)?.into_iter()
+            .filter(|j| j.score.unwrap_or(0) >= from && (profile.auto_tailor || j.found_at >= recent)).collect();
+        list.sort_by_key(|j| std::cmp::Reverse(j.score.unwrap_or(0)));
+        list.truncate(profile.max_per_run);
+        Ok(list)
     }
 
     /// Store a posting as skipped before scoring, with the reason.

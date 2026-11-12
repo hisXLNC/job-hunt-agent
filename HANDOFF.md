@@ -5,11 +5,20 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.43.0** (a job beside the Pipeline list, chips in Me, the extension reworked).
-  The working branch changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is
-  what's released. Before it: 2.42.0 (the Queue and the top bar), 2.41.0, 2.40.0, 2.39.0 (skills).
-- The Queue is a **list by default** (the user asked: every listing, with One by one as an option):
-  `queueView()` reads `jh.queueView`; the list is `stepHtml` for each step that has something.
+- Latest version: **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
+  tidy-up, strong-fit auto-tailoring, What you want). The working branch changes with each session
+  (this one: `claude/brave-fermat-ti1omi`); `main` is what's released. Before it: 2.43.0, 2.42.0.
+- **2.44.0, and why.** The user had 152 to pick, 21 to approve, 7 sent, no interviews: the search finds
+  more than gets applied to, so the work went into throughput, not finding more. `applyRank(j)`
+  (app.js) orders Pick and the one-by-one Queue: fit, less 1.5 a day after the first two, less for red
+  flags. "Best 10 only" (on by itself above 15) and "Set aside N older than 3 weeks" (`pickStale`,
+  `learn: false`) shorten the list. `Profile.auto_tailor_min` (85 from the UI's "Only strong fits")
+  tailors the best recent matches by itself (`to_tailor_by_itself`); it is **off unless the user turns
+  it on** (Me, Looking for, Tailor by itself). `Profile.wants` (level, permanent or contract,
+  industries, deal-breakers) goes to the scorer through `Wants::for_scoring` in `scoring_guidance`.
+- Sources, as reviewed for 2.44.0: sound. LinkedIn's signed-out search is the newest 100 a title and
+  place (a shorter time window wouldn't find more); Indeed through Claude now prefers the newest. Not
+  done, worth asking the user about: a second search a day, since early applications are read most.
 - **2.43.0.** `openPanel(id)` draws a job in `#jobPanel` beside the list on a wide window
   (`panelFits`); rows and titles in Pipeline open it, `syncPanel` keeps it across redraws, Esc closes
   it. `chipify` turns `textarea[data-chips]` into chips (the textarea stays the value). The extension's

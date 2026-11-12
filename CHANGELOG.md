@@ -4,6 +4,20 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.44.0] - 2026-11-12
+
+Getting to the best matches sooner.
+
+### Changes
+
+- Pick is ordered by what is best to apply to now: fit, less for every day a posting has been up after its first two, less for red flags and pay below your minimum, a little more for the company's own site. Best fit, Newest and the other orders are still in Sort by. The Queue, one by one, goes in the same order.
+- With a long list Pick shows the best 10 only, so you deal with those first. Show all brings back the rest; untick Best 10 only to keep it off.
+- Set aside the matches older than three weeks in one click (they stay in Pipeline, and it doesn't change how Job Hunt scores).
+- Tailor by itself has a middle setting: Only strong fits (85 or better). After each search the best new matches are tailored without waiting for you, ready to approve. Me, Looking for. It is off until you choose it.
+- What you want (Me, Looking for): the level you're going for, permanent or contract, industries you want and don't, and deal-breakers. Scoring weighs them for every new posting, and a role that goes against one says why.
+- Indeed, through Claude, prefers the most recently posted roles.
+- Fix: adding a chip (a job title, a keyword) by pressing Enter could show an error.
+
 ## [2.43.0] - 2026-11-12
 
 The Queue as a list, a job beside the list, chips in Me, and the extension reworked.
@@ -1546,6 +1560,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.44.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.44.0
 [2.43.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.43.0
 [2.42.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.42.0
 [2.41.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.41.0

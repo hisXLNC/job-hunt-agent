@@ -485,7 +485,9 @@ function chipify(root) {
     const draw = () => {
       box.innerHTML = `${list().map((x, i) => `<span class="chip">${esc(x)}<button type="button" data-i="${i}" aria-label="Remove ${esc(x)}">×</button></span>`).join('')}<input type="text" class="chip-add" placeholder="${esc(ta.dataset.add || 'Add')}…" aria-label="${esc(ta.dataset.add || 'Add')}">`;
     };
-    const add = input => { const v = input.value.split(/,|\n/).map(x => x.trim()).filter(Boolean); if (!v.length) return false; set([...list(), ...v.filter(x => !list().some(y => y.toLowerCase() === x.toLowerCase()))]); box.querySelector('.chip-add').focus(); return true; };
+    // The box is emptied before the chips are drawn again: drawing takes the focus from it, and what
+    // was typed must not be added a second time as it goes.
+    const add = input => { const v = input.value.split(/,|\n/).map(x => x.trim()).filter(Boolean); input.value = ''; if (!v.length) return false; set([...list(), ...v.filter(x => !list().some(y => y.toLowerCase() === x.toLowerCase()))]); box.querySelector('.chip-add').focus(); return true; };
     box.addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) { e.preventDefault(); const l = list(); l.splice(Number(b.dataset.i), 1); set(l); } });
     box.addEventListener('keydown', e => {
       if (!e.target.matches('.chip-add')) return;
@@ -677,7 +679,7 @@ function queueItems(o) {
   // Quickest first: one-click emails and short forms, then the ones that need an account.
   [...(o.approved || [])].filter(j => !unconfirmed.some(u => u.id === j.id)).sort((a, b) => (a.effort?.minutes ?? 10) - (b.effort?.minutes ?? 10)).forEach(j => add('submit', 'submit', j.id, { j }));
   (o.recruiter_asks || []).forEach(j => add('submit', 'ask', j.id, { j }));
-  (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`)).sort((a, b) => !!expiredWhy(a) - !!expiredWhy(b) || (b.score || 0) - (a.score || 0)).forEach(j => add('pick', 'pick', j.id, { j }));
+  (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`)).sort((a, b) => applyRank(b) - applyRank(a)).forEach(j => add('pick', 'pick', j.id, { j }));
   (o.contact_follow_ups || []).forEach(f => add('waiting', 'contact', f.job.id, { j: f.job, f }));
   (o.follow_ups || []).forEach(j => add('waiting', 'follow', j.id, { j }));
   (o.reach_out || []).forEach(j => add('waiting', 'reach', j.id, { j }));
@@ -1554,6 +1556,21 @@ function contactHtml(c, i, writing, pb) {
  *  (the Tracker's rows) fills in the steps after you apply. */
 /** A company's initial on a tile whose colour comes from its name: the same company, the same colour. */
 const avatar = name => { const s = String(name || '?').trim(); let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `<span class="avatar" style="--h:${h}" aria-hidden="true">${esc((s.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase())}</span>`; };
+/** How good a match is to apply to now, for ordering: its fit, less for each day the posting has
+ *  been up after the first two (a role's first days are when applications get read), less for red
+ *  flags and pay below your minimum, a little more when it applies on the company's own site or
+ *  says what it pays. An expired posting goes to the bottom. */
+function applyRank(j) {
+  const days = Math.max(0, (Date.now() - (+new Date(ageValue(j) || 0) || Date.now())) / 86400000);
+  let n = (j.score ?? 0) - Math.min(30, Math.max(0, days - 2) * 1.5) - Math.min(12, (j.red_flags || []).length * 4);
+  if (belowMin(j)) n -= 10;
+  if (j.apply_url) n += 3;
+  if (salaryValue(j.salary) > 0) n += 2;
+  if (expiredWhy(j)) n -= 60;
+  return Math.round(n * 10) / 10;
+}
+/** Days a posting has been up (or since Job Hunt found it). */
+const daysUp = j => Math.max(0, (Date.now() - (+new Date(ageValue(j) || 0) || Date.now())) / 86400000);
 /** One job in a step's list. The tick box, fit and name are one label when the row can be ticked
  *  (a press anywhere on them ticks it); the why line and the buttons are outside it. */
 function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', attrs = '', facts = '' }) {
@@ -1579,23 +1596,25 @@ function stepHtml(o, step, tracked) {
     // One list, best fit first; the filters reorder and hide rows in place (see applyPickView).
     const places = [...new Set((o.places || []).map(p => String(p).split(',')[0].trim()).filter(Boolean))];
     const opt = (v, n) => `<option value="${v}">${n}</option>`;
-    const rows = [...picking].sort((a, b) => !!expiredWhy(a) - !!expiredWhy(b) || (b.score || 0) - (a.score || 0)).map(j => jobRow(j, {
+    const rows = [...picking].sort((a, b) => applyRank(b) - applyRank(a)).map(j => jobRow(j, {
       cls: 'pick', tick: `<input type="checkbox" data-pick="${esc(j.id)}" aria-label="Pick ${esc(j.title)}">`, tags: `${oneTag(j)}${appliedBeforeTag(j)}`, facts: ageTag(j), sub: whyFits(j),
-      attrs: `data-expired="${expiredWhy(j) ? 1 : 0}" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}" data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}" data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"`,
+      attrs: `data-expired="${expiredWhy(j) ? 1 : 0}" data-now="${applyRank(j)}" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}" data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}" data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"`,
       actions: `${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button>` })).join('');
     groups.push([`Pick from <span data-pickhead>${picking.length} new match${picking.length === 1 ? '' : 'es'}</span>`, `<div data-pickbox>
-    <div class="row" style="margin:2px 0 8px">${picking.length > 5 ? '<button class="btn sm" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost sm" type="button" data-act="pickAll">Select all</button>${inWork ? `<span class="muted small"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork}…</span>` : ''}</div>
+    <div class="row" style="margin:2px 0 8px">${picking.length > 5 ? '<button class="btn sm" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost sm" type="button" data-act="pickAll">Select all</button>${(() => { const old = picking.filter(j => daysUp(j) > 21 || expiredWhy(j)); return old.length ? `<button class="btn ghost sm" type="button" data-act="pickStale" data-ids="${esc(JSON.stringify(old.map(j => j.id)))}" title="Postings up for more than three weeks, or expired: an application now is rarely read. It doesn't change how Job Hunt scores.">Set aside ${old.length} older than 3 weeks</button>` : ''; })()}${inWork ? `<span class="muted small"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork}…</span>` : ''}</div>
     ${foldFilters(`<div class="pick-filters">
-      <label class="small">Sort by <select data-pickf="sort">${opt('fit', 'Best fit')}${opt('reach', 'Fit after tailoring')}${opt('new', 'Newest')}${opt('pay', 'Highest pay')}${opt('rating', 'Best-rated company')}</select></label>
+      <label class="small">Sort by <select data-pickf="sort">${opt('now', 'Best to apply to now')}${opt('fit', 'Best fit')}${opt('reach', 'Fit after tailoring')}${opt('new', 'Newest')}${opt('pay', 'Highest pay')}${opt('rating', 'Best-rated company')}</select></label>
       <label class="small">Fit <select data-pickf="min">${opt('0', 'Any')}${opt('60', '60 or more')}${opt('70', '70 or more')}${opt('80', '80 or more')}${opt('-60', 'Under 60')}${opt('-70', 'Under 70')}</select></label>
       <label class="small">Found <select data-pickf="age">${opt('', 'Any time')}${opt('3', 'Last 3 days')}${opt('7', 'Last 7 days')}${opt('-14', 'Over 2 weeks ago')}</select></label>
       ${places.length > 1 || o.remote_ok ? `<label class="small">Where <select data-pickf="place">${opt('', 'Anywhere')}${places.map(p => opt(esc(p.toLowerCase()), esc(p))).join('')}${opt('remote', 'Remote')}</select></label>` : ''}
       <label class="check small"><input type="checkbox" data-pickf="pay"> Shows pay</label>
       <label class="check small"><input type="checkbox" data-pickf="flags"> No red flags</label>
+      <label class="check small" title="The ten best to apply to now, by the order you chose. The rest wait."><input type="checkbox" data-pickf="top"> Best 10 only</label>
       <span class="muted small" data-pickcount></span>
     </div>`)}
     <p class="muted small pick-keys desktop-only"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Space</kbd> tick · <kbd>Enter</kbd> open · <kbd>X</kbd> not interested · <kbd>T</kbd> tailor the ticked ones</p>
     <div class="pick-list">${rows}</div>
+    <p class="muted small pick-more" data-pickmore hidden></p>
     <div class="select-bar" hidden><span class="select-n"></span><button class="btn primary" data-act="tailorPicked">Tailor selected</button><button class="btn" data-act="dismissPicked">${svg('close')}Not interested</button><button class="btn ghost" data-act="pickClear">Clear</button></div>
 </div>`]);
   }
@@ -2709,6 +2728,15 @@ async function showSettings(tab, sub, host) {
           <label class="check"><input type="checkbox" name="remote_ok" ${p.remote_ok ? 'checked' : ''}> <span>Include remote roles open across the country<br><span class="muted small">Remote roles based in one of your locations are always included.</span></span></label>
         </div>
       </div></section>
+      <section class="card"><header><h2>What you want</h2></header>
+        <p class="muted small">The things that make you turn a role down, told to Job Hunt up front. Scoring weighs them for every new posting: a role that goes against one scores lower and says why.</p>
+        <div class="form">
+          <label class="field">The level you're going for<input type="text" name="want_level" value="${esc(p.wants?.level || '')}" placeholder="e.g. senior manager or director"></label>
+          <label class="field">Permanent or contract<select name="want_work">${[['', 'Either'], ['permanent', 'Permanent only'], ['contract', 'Contract only']].map(([v, n]) => `<option value="${v}" ${(p.wants?.work || '') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label class="field">Industries you want<textarea data-chips data-add="Add an industry" name="want_industries">${esc(lines(p.wants?.industries))}</textarea></label>
+          <label class="field">Industries you don't want<textarea data-chips data-add="Add an industry" name="want_avoid">${esc(lines(p.wants?.avoid))}</textarea></label>
+          <label class="field" style="grid-column:1/-1">Deal-breakers<textarea data-chips data-add="Add a deal-breaker" name="want_dealbreakers">${esc(lines(p.wants?.dealbreakers))}</textarea><span class="hint">For example: on-site five days, more than 25% travel, commission only. A posting that clearly has one is set aside with the reason.</span></label>
+        </div></section>
       <section class="card"><header><h2>Which roles</h2></header><div class="form">
         <label class="field">Skip these companies<textarea data-chips data-add="Add a company" name="exclude_companies">${esc(lines(p.exclude_companies))}</textarea></label>
         <label class="field">Skip titles containing<textarea data-chips data-add="Add a word" name="exclude_title_keywords">${esc(lines(p.exclude_title_keywords))}</textarea></label>
@@ -2727,7 +2755,7 @@ async function showSettings(tab, sub, host) {
       </div></section>
       <section class="card"><header><h2>Tailoring</h2></header>
         <div class="field" style="margin-bottom:10px">A company you've applied to before<select data-act="repeatMode">${[['light', 'Light touch: the same headline, at most 4 paragraphs changed (recommended)'], ['same', 'The same CV as before, with a new cover letter'], ['usual', 'Tailor as usual']].map(([v, n]) => `<option value="${v}" ${(st.repeat_mode || 'light') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">They keep every CV you send on file, side by side. A different headline or a different story for the same achievement is what stands out.</span></div>
-        <label class="check"><input type="checkbox" name="auto_tailor" ${p.auto_tailor ? 'checked' : ''}> <span>Tailor automatically<br><span class="muted small">Off (recommended): after each search you tick which roles to tailor your CV for, in your Queue. On: every role that fits well enough is tailored right away.</span></span></label>
+        <label class="field">Tailor by itself<select name="auto_tailor_mode">${[['off', 'No: I pick which roles to tailor'], ['strong', 'Only strong fits (85 or better), so they\'re ready to approve'], ['all', 'Every role that clears my fit score']].map(([v, n]) => `<option value="${v}" ${(p.auto_tailor ? 'all' : p.auto_tailor_min > 0 ? 'strong' : 'off') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Strong fits: after each search the best new matches from the last two weeks are tailored without waiting for you, at most as many as Most applications tailored per search. They use your Claude plan as any tailoring does.</span></label>
         <details style="margin-top:10px"><summary class="small muted">Advanced</summary><div class="form" style="margin-top:8px">
         <label class="field">Fit score needed to tailor<span class="range-row"><input type="range" min="0" max="100" step="1" value="${p.score_threshold}" data-range-for="score_threshold" aria-label="Fit score needed to tailor"><input type="number" min="0" max="100" name="score_threshold" value="${p.score_threshold}"></span><span class="hint">0–100. Roles below it are skipped.</span></label>
         <label class="field">Most new postings scored per search<input type="number" min="5" max="200" name="max_scored_per_run" value="${p.max_scored_per_run}"><span class="hint">Spares your Claude usage; the rest are scored next time.</span></label>
@@ -3087,6 +3115,9 @@ function readProfile(form, part) {
   const has = n => el(n) != null;
   for (const k of ['name', 'email', 'timezone', 'guidance', 'stories', 'application_facts']) if (has(k)) p[k] = v(k).trim();
   for (const k of ['remote_ok', 'include_metro', 'auto_tailor']) if (has(k)) p[k] = !!el(k).checked;
+  if (has('auto_tailor_mode')) { p.auto_tailor = v('auto_tailor_mode') === 'all'; p.auto_tailor_min = v('auto_tailor_mode') === 'strong' ? 85 : 0; }
+  // What you want from a role (Me, Looking for): told to the scorer.
+  if (has('want_level')) p.wants = { level: v('want_level').trim(), work: v('want_work'), industries: fromLines(v('want_industries')), avoid: fromLines(v('want_avoid')), dealbreakers: fromLines(v('want_dealbreakers')) };
   for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'max_age_days', 'search_hour', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k)) p[k] = Number(v(k) || 0);
   for (const k of ['locations', 'exclude_companies', 'exclude_title_keywords']) if (has(k)) p[k] = fromLines(v(k));
   if (has('min_salary')) p.min_salary = v('min_salary') ? Number(v('min_salary')) : null;
@@ -3126,12 +3157,20 @@ function showBoardFields() {
 function applyPickView(box, saved) {
   const controls = [...box.querySelectorAll('[data-pickf]')];
   if (saved) controls.forEach(el => { if (el.dataset.pickf in saved) el.type === 'checkbox' ? el.checked = !!saved[el.dataset.pickf] : el.value = saved[el.dataset.pickf]; });
+  // Until you choose otherwise: the best to apply to now first, and with a long list, the best ten.
+  if (saved) {
+    let fresh = false;
+    try { fresh = !localStorage.getItem('jh.pickNow'); localStorage.setItem('jh.pickNow', '1'); } catch (e) {}
+    const sort = controls.find(el => el.dataset.pickf === 'sort'), top = controls.find(el => el.dataset.pickf === 'top');
+    if (fresh && sort) sort.value = 'now';
+    if (top && !('top' in saved)) top.checked = (box.querySelector('.pick-list')?.children.length || 0) > 15;
+  }
   const v = {};
   controls.forEach(el => { v[el.dataset.pickf] = el.type === 'checkbox' ? el.checked : el.value; });
   if (!saved) try { localStorage.setItem('jh.pickView', JSON.stringify(v)); } catch (e) {}
   const list = box.querySelector('.pick-list');
   if (!list) return;
-  const key = { fit: 'score', reach: 'reach', new: 'age', pay: 'pay', rating: 'rating' }[v.sort] || 'score';
+  const key = { now: 'now', fit: 'score', reach: 'reach', new: 'age', pay: 'pay', rating: 'rating' }[v.sort] || 'now';
   // Expired postings last, whatever the order.
   const rows = [...list.children].sort((a, b) => (a.dataset.expired === '1') - (b.dataset.expired === '1') || Number(b.dataset[key]) - Number(a.dataset[key]) || Number(b.dataset.score) - Number(a.dataset.score));
   let shown = 0;
@@ -3141,11 +3180,15 @@ function applyPickView(box, saved) {
     const days = (Date.now() - Number(r.dataset.age || 0)) / 86400000;
     const hide = (min >= 0 ? score < min : score >= -min) || (age > 0 && days > age) || (age < 0 && days <= -age) || (v.pay && !(Number(r.dataset.pay) > 0))
       || (v.flags && Number(r.dataset.flags) > 0) || (v.place && !r.dataset.place.includes(v.place));
-    r.hidden = hide;
-    if (hide) r.querySelector('[data-pick]').checked = false; // never tailor what you can't see
+    // Best 10 only: the first ten that pass the filters, in the order chosen.
+    const over = !hide && v.top && shown >= 10;
+    r.hidden = hide || over;
+    if (r.hidden) r.querySelector('[data-pick]').checked = false; // never tailor what you can't see
     else shown++;
     list.appendChild(r);
   }
+  const more = box.querySelector('[data-pickmore]');
+  if (more) { more.hidden = !(v.top && rows.length > shown); more.innerHTML = more.hidden ? '' : `Showing the best ${shown} of ${rows.length}. Deal with these first: the rest wait. <button class="btn ghost sm" type="button" data-act="pickShowAll">Show all ${rows.length}</button>`; }
   // With filters on, every count says what you can see, and how to see the rest.
   const hidden = rows.length - shown;
   const count = box.querySelector('[data-pickcount]');
@@ -3940,8 +3983,7 @@ async function act(el) {
   if (a === 'pickTop') {
     const box = el.closest('[data-pickbox]');
     const all = [...box.querySelectorAll('.jrow:not([hidden]) [data-pick]')];
-    const score = c => Number(c.closest('.jrow').querySelector('.score')?.textContent || 0);
-    const top = new Set([...all].sort((a, b) => score(b) - score(a)).slice(0, Number(el.dataset.n)));
+    const top = new Set(all.slice(0, Number(el.dataset.n)));
     all.forEach(c => { c.checked = top.has(c); });
     pickChanged(box);
     return;
@@ -4038,6 +4080,14 @@ async function act(el) {
     const box = el.closest('[data-pickbox], [data-approvebox]');
     box.querySelectorAll('[data-pick]:checked, [data-appr]:checked').forEach(c => { c.checked = false; });
     return a === 'pickClear' ? pickChanged(box) : approveChanged(box);
+  }
+  if (a === 'pickStale') {
+    const ids = JSON.parse(el.dataset.ids || '[]');
+    if (!ids.length || !await ask(`Set aside ${ids.length === 1 ? 'the one posting' : `the ${ids.length} postings`} that ${ids.length === 1 ? 'has' : 'have'} been up for more than three weeks or expired? ${ids.length === 1 ? 'It goes' : 'They go'} to Pipeline under Not interested, where you can still tailor ${ids.length === 1 ? 'it' : 'any of them'}. It doesn't change how Job Hunt scores.`, 'Set them aside')) return;
+    return busy(async () => {
+      for (const id of ids) await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'dismissed', note: 'older than three weeks', learn: false } });
+      await refreshOverview(); route(); toast(`${ids.length} set aside.`);
+    });
   }
   if (a === 'dismissPicked') {
     const ids = [...el.closest('[data-pickbox]').querySelectorAll('[data-pick]:checked')].map(c => c.dataset.pick);

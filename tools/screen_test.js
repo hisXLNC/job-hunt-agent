@@ -108,6 +108,22 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.click('.title-set [data-act=saveCv]'); await page.waitForTimeout(1500);
   check(await page.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => s.cvs[0].titles.includes('Portfolio Delivery Lead'))), 'Saving keeps the new title');
 
+  // What you want, and tailoring the strong fits by itself: both save by themselves.
+  await at('search/what');
+  await page.fill('[name=want_level]', 'senior manager');
+  await page.selectOption('[name=want_work]', 'permanent');
+  await page.fill('[name=want_dealbreakers] + .chips-in .chip-add', 'on-site five days');
+  await page.keyboard.press('Enter');
+  await page.selectOption('[name=auto_tailor_mode]', 'strong');
+  const prefs = async () => page.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => s.profile));
+  check(await until(async () => { const p = await prefs(); return p.wants && p.wants.level === 'senior manager' && p.wants.work === 'permanent' && (p.wants.dealbreakers || []).includes('on-site five days') && p.auto_tailor_min === 85 && p.auto_tailor === false; }, 15), 'What you want and Tailor by itself (strong fits) are saved');
+  await page.selectOption('[name=auto_tailor_mode]', 'off');
+  check(await until(async () => (await prefs()).auto_tailor_min === 0, 15), 'Tailor by itself can be turned off again');
+
+  // Pick is in the order of what's best to apply to now, unless you choose another.
+  await at('applications/pick');
+  check(await page.evaluate(() => { const s = document.querySelector('[data-pickf=sort]'); return !s || s.value === 'now'; }), 'Pick is ordered by what is best to apply to now');
+
   // Every page in the menu draws.
   for (const h of ['overview', 'results', 'applications/files', 'applications/all', 'applications/new', 'applications/applied', 'applications/interviews', 'inbox', 'inbox/recruiters', 'calendar', 'search', 'search/what', 'search/setup',
     'cvs', 'cvs/documents', 'cvs/career', 'cvs/coach', 'cvs/details', 'results', 'settings', 'settings/inbox', 'settings/calendar', 'settings/notifications', 'settings/sync', 'settings/extension', 'settings/app', 'add', 'welcome']) {

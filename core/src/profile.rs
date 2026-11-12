@@ -148,6 +148,52 @@ impl Default for CalendarPrefs {
     }
 }
 
+/// What you want from a role, beyond what your CVs say: the reasons people turn a posting down,
+/// given to the scorer up front so it doesn't have to guess them.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(default)]
+pub struct Wants {
+    /// The level you're going for, in your words ("senior manager or director").
+    pub level: String,
+    /// "permanent", "contract", or empty for either.
+    pub work: String,
+    /// Industries you'd like to work in.
+    pub industries: Vec<String>,
+    /// Industries you don't want.
+    pub avoid: Vec<String>,
+    /// Things that rule a role out for you ("more than 25% travel", "on-site five days").
+    pub dealbreakers: Vec<String>,
+}
+
+impl Wants {
+    /// These, as lines for the scorer; empty when nothing is set.
+    pub fn for_scoring(&self) -> String {
+        let list = |l: &[String]| l.iter().map(|x| x.trim()).filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", ");
+        let mut lines = vec![];
+        if !self.level.trim().is_empty() {
+            lines.push(format!("- Level they're going for: {}. A role clearly below or above it scores lower.", self.level.trim()));
+        }
+        match self.work.trim() {
+            "permanent" => lines.push("- Permanent roles only: a contract or temporary role scores below 50, with \"Contract role\" in red_flags.".into()),
+            "contract" => lines.push("- Contract roles only: a permanent role scores below 50, with \"Permanent role\" in red_flags.".into()),
+            _ => {}
+        }
+        if !list(&self.industries).is_empty() {
+            lines.push(format!("- Industries they want: {}. Score these a little higher when the fit is otherwise equal.", list(&self.industries)));
+        }
+        if !list(&self.avoid).is_empty() {
+            lines.push(format!("- Industries they don't want: {}. Score these below 50, naming the industry in red_flags.", list(&self.avoid)));
+        }
+        if !list(&self.dealbreakers).is_empty() {
+            lines.push(format!("- Deal-breakers: {}. A posting that clearly has one scores below 50, with it named in red_flags; when the posting doesn't say, don't assume.", list(&self.dealbreakers)));
+        }
+        if lines.is_empty() {
+            return String::new();
+        }
+        format!("What the candidate wants from a role:\n{}", lines.join("\n"))
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct Profile {
@@ -168,6 +214,11 @@ pub struct Profile {
     /// Tailor every role at or above the threshold right after a search. Off: they wait for you
     /// to pick which ones to tailor.
     pub auto_tailor: bool,
+    /// Tailor by itself only the roles that score at least this (0: off). Used when `auto_tailor`
+    /// is off: the strong fits are ready to approve, the borderline ones wait for you to pick.
+    pub auto_tailor_min: i64,
+    /// What you want from a role, said in a few fields; scoring weighs them (see `Wants`).
+    pub wants: Wants,
     /// At most this many new postings are scored per search, to spare your Claude usage.
     pub max_scored_per_run: usize,
     pub exclude_companies: Vec<String>,
@@ -211,6 +262,8 @@ impl Default for Profile {
             purge_after_days: 0,
             max_age_days: 30,
             auto_tailor: false,
+            auto_tailor_min: 0,
+            wants: Wants::default(),
             max_scored_per_run: 40,
             exclude_companies: vec![],
             exclude_title_keywords: vec!["intern".into(), "junior".into(), "entry level".into(), "co-op".into(), "student".into()],
@@ -627,6 +680,12 @@ mod tests {
         assert!(crate::testkit::sample_profile().problems().is_empty());
         let p: Profile = serde_json::from_str(r#"{"name":"J","tracks":[{"name":"a"}]}"#).unwrap();
         assert_eq!(p.score_threshold, 70);
+        // Nothing set: nothing said to the scorer. Set: one line each.
+        assert_eq!(p.wants.for_scoring(), "");
+        let w = Wants { level: "senior manager".into(), work: "permanent".into(), industries: vec!["fintech".into()], avoid: vec!["gambling".into(), " ".into()], dealbreakers: vec!["on-site five days".into()] };
+        let text = w.for_scoring();
+        assert!(text.starts_with("What the candidate wants from a role:") && text.lines().count() == 6, "{text}");
+        assert!(text.contains("senior manager") && text.contains("Permanent roles only") && text.contains("fintech") && text.contains("don't want: gambling.") && text.contains("on-site five days"));
         assert_eq!(p.tracks[0].label, "Main CV");
         assert_eq!(p.tracks[0].kind, "docx");
         assert!(Profile::default().tracks.is_empty() && Profile::default().locations.is_empty());
