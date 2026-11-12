@@ -4,6 +4,23 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.42.0] - 2026-11-12
+
+Rebuilt around a Queue: one decision at a time.
+
+### Changes
+
+- Job Hunt opens on your Queue: the next decision, on its own, with what you need to decide and its buttons. Pick a match, approve a tailored CV, submit, follow up, prepare for an interview. Skip leaves one for later; Up next shows what is behind it.
+- The Queue works from the keyboard: Enter does it, X is not interested, L is later, the right arrow skips.
+- A match to pick shows why it fits, what you have that the posting asks for, and the gaps and things to check, with its fit as a ring.
+- The menu is a bar across the top: Queue, Pipeline, Inbox, Calendar, Me. Find a job, what Job Hunt is doing, and Settings are on the right. Click the status to see the search, Google, sync and the light or dark theme.
+- Pipeline is every job: All jobs, each step as a list (Pick is where you tick several at once), Tailored files and Insights (was Results).
+- Inbox and Calendar are two places again: Inbox has Email and Recruiters; Calendar has your interviews and reminders.
+- Me starts with what you are looking for (titles, places, how picky), then your CVs, About me, Career paths and the coach.
+- Settings (the gear) has Accounts, Job sources (where it looks, what each source found, setting them up), Email, Calendar, Notifications, Sync & backup, Browser extension and App.
+- On a phone the five tabs are the five places, and a decision's buttons stay above them by your thumb. Sideways, the tabs run down the right edge.
+- Notifications and messages use the new names. Older links still land in the right place.
+
 ## [2.41.0] - 2026-11-12
 
 A new shape: five places, a calmer look.
@@ -1517,6 +1534,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.42.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.42.0
 [2.41.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.41.0
 [2.40.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.40.0
 [2.39.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.39.0

@@ -57,7 +57,7 @@ Job Hunt can only see the files it makes in your Google Drive, not your others.
 
 ## 6. Your first search
 
-Step 5: **Search for jobs now**. It takes a few minutes. Roles that fit appear under **Jobs**, in **Pick** (and **Home** tells you they're there):
+Step 5: **Search for jobs now**. It takes a few minutes. Roles that fit come to your **Queue**, one at a time (**Pipeline → Pick** has them as a list):
 
 1. Tick the ones you like and press **Tailor selected**. Job Hunt rewrites your CV and writes a cover letter
    for each (a few minutes; you get a notification).
@@ -69,7 +69,7 @@ From then on Job Hunt searches every morning and checks your email every half ho
 
 ## If something says "Needs attention"
 
-**Home** tells you in plain words, with a button that fixes it or takes you there. Common ones:
+The **Queue** tells you in plain words, with a button that fixes it or takes you there. Common ones:
 
 - **"Your Claude usage limit is reached until …"**: nothing's broken. Your Claude plan allows so much
   use every few hours; Job Hunt waits and carries on by itself.

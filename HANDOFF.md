@@ -5,16 +5,23 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.41.0** (the rework: five places and the calm, light look). The working branch
-  changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is what's released.
-  Before it: 2.40.0 (Jobs rows, right-edge tabs, Settings → Browser extension), 2.39.0 (skills).
-- **Where things are (2.41.0).** `NAV` is five places, also the phone's five tabs: Home (`#overview`;
-  tabs Today and Progress = `#results`), Jobs (`#applications`: steps, All jobs, Tailored files =
-  `#applications/files`), Inbox (`#inbox`; Email, Interviews = `#calendar`, Recruiters), Search,
-  Profile (`#cvs`; Your CVs, About you, Career paths, Career coach). Settings is the gear at the foot
-  of the menu (`#settingsLink`); on a phone it's behind the top bar's menu button (`#mMenu`), with the
-  status lines and the theme. Find a job is in the menu (and the phone's top bar). `placeTabs` draws a
-  place's tabs; `NAV_HOME` says which place a route belongs to.
+- Latest version: **2.42.0** (the from-scratch rework: a bar across the top, the Queue). The working
+  branch changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is what's
+  released. Before it: 2.41.0 (five places, the calm look), 2.40.0, 2.39.0 (skills).
+- **Where things are (2.42.0).** The shell is a top bar (`.side` in `index.html`: brand, `#nav`, find,
+  the status pill `#statusPop` with the status lines and the theme, the gear `#settingsLink`); on a
+  phone it's the sheet behind `#mMenu`, and `#tabbar` has the five places. `NAV`: **Queue**
+  (`#overview[/step]`: `showOverview`, `queueItems` builds the decisions, `decisionHtml` draws one;
+  Skip and Up next only change `queueAt` / `queueSkipped`), **Pipeline** (`#applications`: All jobs,
+  the steps as lists, Tailored files = `#applications/files`, Insights = `#results`), **Inbox**
+  (Email, Recruiters), **Calendar** (its own place: the user asked for it apart from Inbox), **Me**
+  (`#search/what` Looking for, `#cvs` CVs, About me, Career paths, Coach). **Settings** (the gear):
+  `SETTINGS_TABS`, where Job sources is `#search` (where it looks, each source's results, set up).
+  `placeOf()` says which place a route belongs to.
+- The mockups the user approved are in the session's scratchpad only; what they showed and isn't
+  built yet: a job opening in a panel beside the Pipeline list (it still opens its own page), a
+  single Timeline (dropped: the user wanted Inbox and Calendar apart), chips and sliders on Me,
+  Looking for (it's the existing form).
 - **The look** is the last big block of `static/app.css` ("The look, reimagined"): tokens, light menu,
   hairline cards, pill tabs. Today's first item is `todayHero`, the rest `todayRow`; `avatar` is the
   company tile on a job row.

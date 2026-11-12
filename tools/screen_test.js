@@ -28,24 +28,27 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   const okDialogs = async () => { for (let i = 0; i < 3; i++) { const b = await page.$('.modal .btn.primary'); if (!b) break; await b.click().catch(() => {}); await page.waitForTimeout(800); } };
 
   // Older addresses.
-  for (const [from, to] of [['overview/approve', '#applications/approve'], ['pipeline', '#applications/all'], ['inbox/settings', '#settings/inbox'], ['calendar/settings', '#settings/calendar'], ['settings/search', '#search/what'], ['cvs/documents', '#applications/files']]) {
+  for (const [from, to] of [['overview/ready', '#overview/approve'], ['pipeline', '#applications/all'], ['inbox/settings', '#settings/inbox'], ['calendar/settings', '#settings/calendar'], ['settings/search', '#search/what'], ['cvs/documents', '#applications/files']]) {
     await at(from);
     check(await hash() === to, `#${from} lands on ${to}`);
   }
 
-  // Today lists the new matches, and its button goes to Pick.
+  // The Queue opens on a decision: a new match to pick, with its buttons.
   await at('overview');
-  check((await text('.hsteps')).includes('Pick'), 'Home shows the steps');
-  const pick = await page.$('.hero a[href="#applications/pick"], .next-card a[href="#applications/pick"]');
-  check(!!pick, 'Home says there are new matches to pick from');
-  if (pick) { await pick.click(); await page.waitForTimeout(700); }
-  check(await hash() === '#applications/pick', 'Its button opens Jobs on Pick');
+  const kind = () => page.evaluate(() => document.querySelector('.decision')?.dataset.kind || '');
+  const title = () => text('.decision h2');
+  check(await kind() === 'pick', 'The Queue opens on a new match to pick');
+  check((await text('.qsteps')).includes('Pick'), 'The Queue counts its decisions by kind');
+  const first = await title();
+  await page.click('.decision [data-act=queueSkip]'); await page.waitForTimeout(500);
+  check((await title()) !== first && (await kind()) === 'pick', 'Skip shows the next decision');
 
-  // Not interested: the main button doesn't teach scoring.
+  // Pipeline, Pick: the list. Not interested: the main button doesn't teach scoring.
+  await at('applications/pick');
   const sent = [];
   page.on('request', r => { if (r.method() === 'POST' && /\/status$/.test(r.url())) sent.push(r.postDataJSON()); });
   const before = (await page.$$('[data-pick]')).length;
-  check(before >= 3, `Pick has the sample matches (${before})`);
+  check(before >= 3, `Pipeline, Pick lists the sample matches (${before})`);
   await page.click('.jrow.pick:last-child [data-status=dismissed]');
   await page.waitForTimeout(500);
   check((await text('.modal .btn.primary')).trim() === 'Not interested', 'Not interested is the main button of its dialog');
@@ -62,25 +65,27 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.keyboard.press('t');
   check(await until(async () => ((await counts()).ready || 0) >= 1), 'Tailoring moves it to Approve');
 
-  // Jobs opens on what needs you first; approve from the job's page.
-  await at('applications');
-  check((await text('.steps-bar a.on .sb-name')) === 'Approve', 'Jobs opens on Approve when something is ready');
-  await page.click('.jrow .jact a.btn');
-  await page.waitForTimeout(1200);
-  check((await text('.next-step')).includes('Next:'), 'A job says what to do next');
-  const approve = await page.$('.next-step [data-act=approve]');
-  check(!!approve, 'A tailored job offers Approve');
-  if (approve) { await approve.click(); await page.waitForTimeout(1500); await okDialogs(); }
-  check(await until(async () => ((await counts()).approved || 0) >= 1, 20), 'Approving moves it to Submit');
+  // The Queue now leads with what's furthest along: approve it there, with the keyboard.
+  await at('overview');
+  check(await kind() === 'approve', 'The Queue leads with the tailored job to approve');
+  const jobId = await page.evaluate(() => document.querySelector('.decision [data-primary]').dataset.job);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(1500); await okDialogs();
+  check(await until(async () => ((await counts()).approved || 0) >= 1, 20), 'Enter approves it: it moves to Submit');
 
-  // Submit: mark it applied, and it waits for a reply.
-  await at('applications/submit');
-  const applied = await page.$('.jrow [data-status=applied]');
-  check(!!applied, 'Submit lists the approved job');
+  // A job's own page says what to do next.
+  await at(`job/${encodeURIComponent(jobId)}`);
+  check((await text('.next-step')).includes('Next:'), 'A job says what to do next');
+  check((await text('#nav a.on')).trim() === 'Pipeline', 'A job belongs to Pipeline');
+
+  // Submit, from the Queue: mark it applied, and it waits for a reply.
+  await at('overview/submit');
+  check(await kind() === 'submit', 'The Queue, Submit shows the approved job');
+  const applied = await page.$('.decision [data-status=applied]');
   if (applied) { await applied.click(); await page.waitForTimeout(1200); await okDialogs(); }
   check(await until(async () => ((await counts()).applied || 0) >= 1, 20), 'Mark applied moves it to Waiting');
   await at('applications/waiting');
-  check((await page.$$('.jrow')).length >= 1, 'Waiting lists it');
+  check((await page.$$('.jrow, .trow')).length >= 1, 'Pipeline, Waiting lists it');
 
   // Every page in the menu draws.
   for (const h of ['overview', 'results', 'applications/files', 'applications/all', 'applications/new', 'applications/applied', 'applications/interviews', 'inbox', 'inbox/recruiters', 'calendar', 'search', 'search/what', 'search/setup',
@@ -89,13 +94,19 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
     const body = await text('#main');
     check(body.length > 40 && !body.includes("Couldn't load"), `#${h} draws`);
   }
-  check((await text('#nav')).replace(/\s+/g, ' ').trim().replace(/ \d+/g, '') === 'Home Jobs Inbox Search Profile', 'The menu is Home, Jobs, Inbox, Search, Profile');
-  await at('calendar');
-  check((await text('#nav a.on')).trim() === 'Inbox' && (await text('.place-tabs a.on')).trim() === 'Interviews', 'The calendar is Inbox, Interviews');
-  await at('results');
-  check((await text('#nav a.on')).trim() === 'Home' && (await text('.place-tabs a.on')).trim() === 'Progress', 'Results are Home, Progress');
-  await at('settings');
-  check(await page.evaluate(() => document.querySelector('#settingsLink').classList.contains('on')), 'Settings is the gear at the foot of the menu');
+  check((await text('#nav')).replace(/\s+/g, ' ').trim().replace(/ \d+/g, '') === 'Queue Pipeline Inbox Calendar Me', 'The places are Queue, Pipeline, Inbox, Calendar, Me');
+  const on = async () => `${(await text('#nav a.on')).replace(/\s*\d+\s*$/, '').trim()} / ${(await text('.place-tabs a.on, .pipe-tabs a.on')).replace(/\s*\d+\s*$/, '').trim()}`;
+  await at('calendar'); check((await text('#nav a.on')).trim() === 'Calendar', 'The calendar is its own place');
+  await at('inbox'); check(await on() === 'Inbox / Email', 'Inbox opens on Email');
+  await at('results'); check(await on() === 'Pipeline / Insights', 'Results are Pipeline, Insights');
+  await at('applications/files'); check(await on() === 'Pipeline / Tailored files', 'Tailored files are in Pipeline');
+  await at('search/what'); check(await on() === 'Me / Looking for', 'What to search for is Me, Looking for');
+  await at('cvs'); check((await on()).startsWith('Me / CVs'), 'Your CVs are Me, CVs');
+  const gear = () => page.evaluate(() => document.querySelector('#settingsLink').classList.contains('on'));
+  await at('settings'); check(await gear() && (await text('.place-tabs a.on')).trim() === 'Accounts', 'Settings is the gear');
+  await at('search'); check(await gear() && (await text('.place-tabs a.on')).trim() === 'Job sources', 'Where it looks is Settings, Job sources');
+  await page.click('#runLine'); await page.waitForTimeout(300);
+  check(await page.evaluate(() => { const r = document.querySelector('#syncLine').getBoundingClientRect(); return r.width > 0 && r.height > 0; }), 'The status in the top bar opens the status lines');
 
   // A phone: nothing wider than the screen.
   const phone = await browser.newPage({ ...devices['iPhone 13'] });
@@ -116,7 +127,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   }
   // The phone's tabs are the five places; Settings is behind the top bar's menu button.
   await phone.goto(`${base}/#overview`); await phone.reload(); await phone.waitForTimeout(900);
-  check((await phone.evaluate(() => document.querySelector('#tabbar').innerText)).replace(/\s+/g, ' ').replace(/ \d+/g, '').trim() === 'Home Jobs Inbox Search Profile', 'Phone: the tabs are the five places');
+  check((await phone.evaluate(() => document.querySelector('#tabbar').innerText)).replace(/\s+/g, ' ').replace(/ \d+/g, '').trim() === 'Queue Pipeline Inbox Calendar Me', 'Phone: the tabs are the five places');
   await phone.click('#mMenu'); await phone.waitForTimeout(400);
   check(await phone.evaluate(() => { const a = document.querySelector('#settingsLink'); const r = a.getBoundingClientRect(); return r.width > 0 && r.top >= 0 && r.bottom <= innerHeight; }), 'Phone: the menu button shows Settings');
   await phone.click('#settingsLink'); await phone.waitForTimeout(900);

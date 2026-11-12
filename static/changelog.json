@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.42.0",
+    "date": "2026-11-12",
+    "title": "Rebuilt around a Queue: one decision at a time",
+    "changes": [
+      "Job Hunt opens on your Queue: the next decision, on its own, with what you need to decide and its buttons. Pick a match, approve a tailored CV, submit, follow up, prepare for an interview. Skip leaves one for later; Up next shows what is behind it.",
+      "The Queue works from the keyboard: Enter does it, X is not interested, L is later, the right arrow skips.",
+      "A match to pick shows why it fits, what you have that the posting asks for, and the gaps and things to check, with its fit as a ring.",
+      "The menu is a bar across the top: Queue, Pipeline, Inbox, Calendar, Me. Find a job, what Job Hunt is doing, and Settings are on the right. Click the status to see the search, Google, sync and the light or dark theme.",
+      "Pipeline is every job: All jobs, each step as a list (Pick is where you tick several at once), Tailored files and Insights (was Results).",
+      "Inbox and Calendar are two places again: Inbox has Email and Recruiters; Calendar has your interviews and reminders.",
+      "Me starts with what you are looking for (titles, places, how picky), then your CVs, About me, Career paths and the coach.",
+      "Settings (the gear) has Accounts, Job sources (where it looks, what each source found, setting them up), Email, Calendar, Notifications, Sync & backup, Browser extension and App.",
+      "On a phone the five tabs are the five places, and a decision's buttons stay above them by your thumb. Sideways, the tabs run down the right edge.",
+      "Notifications and messages use the new names. Older links still land in the right place."
+    ]
+  },
+  {
     "version": "2.41.0",
     "date": "2026-11-12",
     "title": "A new shape: five places, a calmer look",
