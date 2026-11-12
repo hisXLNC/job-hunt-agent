@@ -432,6 +432,7 @@ async function act(el) {
     const here = location.hash;
     return busy(async () => { await api('/api/results/career', { method: 'POST' }); settingsCache = null; route(); watchCareer(here); }, 'Claude is thinking about your career options. This takes a minute or two.');
   }
+  if (a === 'choosePath') return busy(() => savePath(el.dataset.title || ''));
   if (a === 'addTitles') {
     const titles = JSON.parse(el.dataset.titles || '[]');
     const sel = document.querySelector(`[data-path-track="${el.dataset.i}"]`);
@@ -891,7 +892,21 @@ async function showSourceTest(start) {
 
 /** Your career paths, for choosing a direction: Claude's advice, a comparison of where each path leads
  *  (now, 5 and 10 years, and its pay ceiling), then each path's ladder, pros and cons, and what it takes. */
-function careerHtml(career, thinking, tracks) {
+/** Save the career path you chose (empty clears it); every posting scored from now on is read against it. */
+async function savePath(path) {
+  const st = settingsCache || await api('/api/settings');
+  const p = JSON.parse(JSON.stringify(st.profile));
+  p.wants = { ...(p.wants || {}), path: path.trim() };
+  await api('/api/settings/profile', { method: 'POST', body: { ...p, seen_sources: st.profile.sources } });
+  settingsCache = null; route();
+  toast(path.trim() ? `Your path: ${path.trim()}. New postings are read against it.` : 'Cleared. Postings are no longer read against a path.');
+}
+function careerHtml(career, thinking, tracks, chosen = '') {
+  const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const chosenCard = `<section class="card" id="pathCard"><header><h2>Your career path</h2>${chosen ? '<span class="pill good">Chosen</span>' : ''}</header>
+    <p class="muted small">Choose where you're heading. Job Hunt reads each new posting against it: one that moves you along it is marked <b>On your path</b>, one that would pull you off it is marked <b>Off your path</b> with the reason, and when you weigh an offer it says plainly if accepting would set your goal back.</p>
+    <form data-form="careerPath" class="row" style="align-items:flex-end;flex-wrap:wrap"><label class="field grow" style="min-width:240px;margin:0">The path you're building<input type="text" name="path" value="${esc(chosen)}" placeholder="e.g. product leadership in fintech"></label><button class="btn primary" type="submit">Save</button>${chosen ? '<button class="btn" type="button" data-act="choosePath" data-title="">Clear it</button>' : ''}</form>
+    ${chosen ? '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-act="rescore" data-group="waiting">Read my waiting matches against it</button><span class="muted small">Matches found before you chose it aren\'t marked until they\'re scored again.</span></div>' : (career?.paths || []).length ? '<p class="muted small" style="margin-top:8px">Or press Make this my path on one of the paths below.</p>' : ''}</section>`;
   const kindName = { now: 'Open to you now', stretch: 'A step up or sideways', switch: 'A change of direction' };
   const paths = career?.paths || [];
   const cur = c => c.currency && !['USD', 'CAD', 'AUD', 'NZD', 'SGD'].includes(c.currency) ? `${c.currency} ` : '$';
@@ -913,7 +928,7 @@ function careerHtml(career, thinking, tracks) {
   const searchFor = (c, i) => (c.titles || []).length ? `<details class="small"><summary class="muted">Look for this role now</summary>
       <p style="margin:6px 0">Job titles for it: ${c.titles.map(esc).join(', ')}</p>
       ${tracks.length ? `<div class="row">${tracks.length > 1 ? `<label class="small">Add them to the search for your<select data-path-track="${i}" style="margin-left:6px">${tracks.map(t => `<option value="${esc(t.name)}">${esc(t.label)}</option>`).join('')}</select> CV</label>` : ''}<button class="btn sm" data-act="addTitles" data-i="${i}" data-titles="${esc(JSON.stringify(c.titles))}" ${c.titles.every(t => tracks.some(x => x.titles.some(y => y.toLowerCase() === t.toLowerCase()))) ? 'disabled title="Already in your search"' : ''}>${tracks.length > 1 ? 'Add' : 'Add them to my search'}</button></div>` : ''}</details>` : '';
-  return `<section class="card" id="careerCard"><header><h2>Your career paths</h2>
+  return `${chosenCard}<section class="card" id="careerCard"><header><h2>Your career paths</h2>
     ${thinking ? '<span class="muted small"><span class="spin" data-kind="career"></span>Claude is thinking… (a minute or two)</span>' : `<button class="btn" data-act="career">${career ? 'Think again' : 'Map my career paths'}</button>`}</header>
     ${career ? `${career.advice ? `<div class="advice"><b>Claude's advice</b><p>${esc(career.advice)}</p></div>` : ''}
       ${compare ? `<h3 class="sub">Where each path leads</h3>${compare}<p class="muted small">Typical yearly base pay where you search, with steady progress. The ceiling is the most the path usually pays, at its top role. Hours are a typical week in the role, all in. Claude's estimates from ${esc(fmtDate(career.at))}: use them to compare paths, not as offers.</p>` : ''}
@@ -926,6 +941,7 @@ function careerHtml(career, thinking, tracks) {
         ${(c.gaps || []).length ? `<p class="small"><b>What it takes:</b> ${c.gaps.map(esc).join('; ')}</p>` : ''}
         ${c.first_step ? `<p class="small"><b>First step this month:</b> ${esc(c.first_step)}</p>` : ''}
         ${searchFor(c, i)}
+        <div class="row" style="margin-top:8px">${same(chosen, c.title) ? '<span class="pill good">Your chosen path</span>' : `<button class="btn sm" data-act="choosePath" data-title="${esc(c.title)}">Make this my path</button>`}</div>
       </div>`).join('')}</div>`
     : `<p class="muted">Claude reads your whole CV and maps every direction it supports: where each leads in 3, 5 and 10 years, the pay at each step and the most the path can pay, the usual hours and work-life balance, with pros and cons and its advice on which to choose.${thinking ? '' : ' It does this by itself when you add a CV.'}</p>`}
   </section>`;
@@ -1160,6 +1176,7 @@ document.addEventListener('submit', async e => {
       await api(`/api/jobs/${encodeURIComponent(form.dataset.job)}/decline`, { method: 'POST', body: { change: f.change.value } });
       toast('Rewriting the reply…'); setTimeout(route, 300); return;
     }
+    if (kind === 'careerPath') { await savePath(f.path.value); return; }
     if (kind === 'add') {
       const claude = form.querySelector('[name=claude]:checked')?.value === '1';
       await api('/api/add', { method: 'POST', body: { company: f.company.value, title: f.title.value, url: f.url.value, location: f.location.value, description: f.description.value, claude } });
@@ -1175,7 +1192,7 @@ document.addEventListener('submit', async e => {
       await refreshOverview(); route();
     } else if (kind === 'apify') {
       await api('/api/settings/keys', { method: 'POST', body: { apify_key: f.apify_key.value, apify_actor: f.apify_actor.value } });
-      toast('Saved. Turn LinkedIn on if it isn\'t, then Test it in the Status list.');
+      toast(f.apify_key.value.trim() ? 'The token works, and it\'s saved. Turn LinkedIn on if it isn\'t.' : 'Saved.');
       settingsCache = null; route();
     } else if (kind === 'recruiterEdit') {
       const body = Object.fromEntries(['email', 'name', 'company', 'phone', 'linkedin', 'notes'].filter(k => f[k]).map(k => [k, f[k].value]));
@@ -1189,11 +1206,11 @@ document.addEventListener('submit', async e => {
       settingsCache = null; route();
     } else if (kind === 'jsearch' || kind === 'jooble') {
       await api('/api/settings/keys', { method: 'POST', body: kind === 'jsearch' ? { jsearch_key: f.jsearch_key.value, jsearch_provider: f.jsearch_provider.value } : { jooble_key: f.jooble_key.value } });
-      toast('Saved. Use Test sources to check it.');
+      toast((kind === 'jsearch' ? f.jsearch_key : f.jooble_key).value.trim() ? 'The key works, and it\'s saved.' : 'Saved.');
       await refreshOverview(); route();
     } else if (kind === 'adzuna') {
       await api('/api/settings/keys', { method: 'POST', body: { adzuna_id: f.adzuna_id.value, adzuna_key: f.adzuna_key.value } });
-      toast('Adzuna saved.');
+      toast(f.adzuna_key.value.trim() ? 'The key works, and Adzuna is saved.' : 'Adzuna saved.');
       await refreshOverview(); route();
     } else if (kind === 'sync') {
       const where = form.querySelector('[name=where]:checked')?.value || 'drive';
@@ -1203,7 +1220,7 @@ document.addEventListener('submit', async e => {
     } else if (kind === 'welcomeWant') {
       const p = JSON.parse(JSON.stringify(settingsCache.profile));
       p.min_salary = f.min_salary.value ? Number(f.min_salary.value) : null;
-      p.wants = { ...(p.wants || {}), level: f.want_level.value.trim(), work: f.want_work.value };
+      p.wants = { ...(p.wants || {}), level: f.want_level.value.trim(), work: f.want_work.value, path: f.want_path ? f.want_path.value.trim() : (p.wants?.path || '') };
       // The strongest matches ready by themselves, unless everything already is.
       if (!p.auto_tailor) p.auto_tailor_min = f.strong.checked ? 85 : 0;
       await api('/api/settings/profile', { method: 'POST', body: { ...p, seen_sources: settingsCache.profile.sources } });
@@ -1264,8 +1281,7 @@ function showTheme() {
     b.classList.toggle('on', on);
     b.setAttribute('aria-checked', on ? 'true' : 'false');
   });
-  const one = document.getElementById('mTheme');
-  if (one) { one.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${MODES[pick][1]}</svg>`; one.title = `Appearance: ${MODES[pick][0]}. Press to change.`; one.setAttribute('aria-label', one.title); }
+  document.querySelectorAll('#mTheme, #dTheme').forEach(one => { one.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${MODES[pick][1]}</svg>`; one.title = `Appearance: ${MODES[pick][0]}. Press to change.`; one.setAttribute('aria-label', one.title); });
 }
 function setTheme(pick) {
   if (pick === 'auto') delete document.documentElement.dataset.theme;

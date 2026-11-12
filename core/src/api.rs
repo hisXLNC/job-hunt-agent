@@ -1283,6 +1283,13 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 agent.connect();
                 return ok();
             }
+            // A newly pasted key is tried first, whatever it's used for: one the service refuses isn't saved.
+            if !key.is_empty() && for_what.is_empty() {
+                if url.is_empty() {
+                    return Err(Error("Choose the service first, so the key can be tested.".into()));
+                }
+                claude::other_models(&url, &key)?;
+            }
             if !for_what.is_empty() {
                 if url.is_empty() || model.is_empty() {
                     return Err(Error("Choose the service and one of its models first.".into()));
@@ -1441,26 +1448,38 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             Ok(Resp::json(&json!({ "started": n })))
         }
         ["api", "settings", "keys"] => {
+            // A newly pasted key is tried against its service first: one that's refused (or can't
+            // be tested) isn't saved, and the key that was working stays.
+            let pasted = |name: &str| Some(s(&b, name).trim().to_string()).filter(|k| !k.is_empty());
+            let tried = |service: &str, name: &str, key: &str, extra: &str| crate::sources::check_key(service, key, extra).map_err(|e| Error(format!("That {name} wasn't saved: {e}.")));
+            let (adzuna, jsearch, apify, jooble) = (pasted("adzuna_key"), pasted("jsearch_key"), pasted("apify_key"), pasted("jooble_key"));
+            if let Some(k) = &adzuna {
+                let id = if b.get("adzuna_id").is_some() { s(&b, "adzuna_id").trim().to_string() } else { agent.secret("adzuna.id") };
+                tried("adzuna", "Adzuna key", k, &id)?;
+            }
+            if let Some(k) = &jsearch {
+                let from = b.get("jsearch_provider").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(|| agent.secret("jsearch.provider"));
+                tried("jsearch", "Google for Jobs key", k, if from == "rapidapi" { "rapidapi" } else { "openwebninja" })?;
+            }
+            if let Some(k) = &apify {
+                tried("apify", "Apify token", k, "")?;
+            }
+            if let Some(k) = &jooble {
+                tried("jooble", "Jooble key", k, "")?;
+            }
             if b.get("adzuna_id").is_some() {
                 agent.db().set("adzuna.id", s(&b, "adzuna_id").trim())?;
-            }
-            if !s(&b, "adzuna_key").trim().is_empty() {
-                agent.db().set("adzuna.key", s(&b, "adzuna_key").trim())?;
             }
             if let Some(p) = b.get("jsearch_provider").and_then(|v| v.as_str()) {
                 agent.db().set("jsearch.provider", if p == "rapidapi" { "rapidapi" } else { "openwebninja" })?;
             }
-            if !s(&b, "jsearch_key").trim().is_empty() {
-                agent.db().set("jsearch.key", s(&b, "jsearch_key").trim())?;
-            }
-            if !s(&b, "apify_key").trim().is_empty() {
-                agent.db().set("apify.key", s(&b, "apify_key").trim())?;
-            }
             if b.get("apify_actor").is_some() {
                 agent.db().set("apify.actor", s(&b, "apify_actor").trim())?;
             }
-            if !s(&b, "jooble_key").trim().is_empty() {
-                agent.db().set("jooble.key", s(&b, "jooble_key").trim())?;
+            for (name, key) in [("adzuna.key", adzuna), ("jsearch.key", jsearch), ("apify.key", apify), ("jooble.key", jooble)] {
+                if let Some(k) = key {
+                    agent.db().set(name, &k)?;
+                }
             }
             ok()
         }
@@ -2271,6 +2290,10 @@ mod tests {
         assert_eq!(call(&agent, &host, "POST", "/api/settings/google-connect", Value::Null).0, 400);
 
         call(&agent, &host, "POST", "/api/settings/keys", json!({"adzuna_id": "id1", "adzuna_key": "k1"}));
+        // A pasted key the service refuses isn't saved, and the one that worked stays.
+        let (code, body) = call(&agent, &host, "POST", "/api/settings/keys", json!({"adzuna_key": "bad-key", "jooble_key": "j1"}));
+        assert!(code >= 400 && body.to_string().contains("wasn't saved"), "{code} {body}");
+        assert_eq!((agent.secret("adzuna.key").as_str(), agent.secret("jooble.key").as_str()), ("k1", ""));
         assert_eq!(call(&agent, &host, "POST", "/api/settings/claude", json!({"path": "/no/such/claude"})).0, 400);
         call(&agent, &host, "POST", "/api/settings/claude", json!({"engine": "api", "model": "claude-opus-5-5"}));
         let st0 = call(&agent, &host, "GET", "/api/settings", Value::Null).1;

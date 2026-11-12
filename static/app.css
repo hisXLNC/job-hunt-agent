@@ -488,7 +488,7 @@ form[data-form=profile] [type=submit] { display: none; }
   .mstatus { margin-left: auto; display: flex; align-items: center; gap: 6px; text-decoration: none; font-size: 12.5px; min-width: 0; }
   .mstatus span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Tabs at the bottom, within thumb's reach. */
-  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface);
+  .tabbar { display: grid; grid-template-columns: repeat(6, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface);
     border-top: 1px solid var(--line); padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); }
   .tabbar a, .tabbar button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 52px;
     color: var(--muted); text-decoration: none; font: inherit; font-size: 11px; font-weight: 600; background: none; border: 0; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -1715,3 +1715,20 @@ details.kit > summary { cursor: pointer; }
 .inbox-list tr.fresh td:first-child { box-shadow: inset 3px 0 0 var(--info); }
 .inbox-acts { gap: 6px; flex-wrap: wrap; }
 .inbox-acts .btn { white-space: nowrap; }
+
+/* ---- Desktop bar: each status is its own chip, and the theme is one button beside them. ---- */
+.dstats { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.brand { flex: none; white-space: nowrap; }
+.dstats .status-pill { text-decoration: none; cursor: pointer; max-width: 240px; }
+.dchip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); font-size: 12.5px; font-weight: 550; text-decoration: none; white-space: nowrap; }
+.dchip:hover { color: var(--ink); }
+.dchip[hidden] { display: none; }
+.dchip.warn { border-color: #E3A83C; color: var(--ink); }
+.dchip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.dtheme { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none; border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); border-radius: 999px; cursor: pointer; }
+.dtheme:hover { color: var(--ink); }
+.dtheme svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+/* Narrower windows: the chips keep their icon and dot, and their words go to the tooltip. */
+@media (max-width: 1850px) { .dchip-t { display: none; } .dchip.warn .dchip-t { display: inline; } .dchip svg + .dot { margin-left: -9px; margin-top: 9px; box-shadow: 0 0 0 2px var(--surface); } }
+@media (max-width: 1250px) { .dstats .status-pill { max-width: 150px; } .side-find kbd, .side-find span { display: none; } }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) { .tabbar a span:not(.badge) { font-size: 10.5px; } }

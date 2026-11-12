@@ -142,13 +142,15 @@ impl Llm for DemoLlm {
         })
     }
 
-    fn score(&self, _cvs: &[(String, String)], _guidance: &str, job: &Job) -> R<JobScore> {
+    fn score(&self, _cvs: &[(String, String)], guidance: &str, job: &Job) -> R<JobScore> {
         let score = 50 + (job.title.len() as i64 * 7 + job.company.len() as i64 * 3) % 48;
+        // With a career path set, the demo reads a role against it by its employer.
+        let path: Vec<String> = if !guidance.contains("career path they're building") { vec![] } else if job.company.contains("Fintech") || job.company.contains("Bank") { vec!["Career path: toward. Delivery of financial platforms, the next step on your path.".into()] } else if job.company.contains("Utility") || job.company.contains("Ontario") { vec!["Career path: away. Public-sector operations, with no financial product work.".into()] } else { vec![] };
         Ok(JobScore {
             score,
             track: if job.title.contains("Data") { "data-engineering".into() } else { "program-delivery".into() },
             reasoning: format!("Strong match on regulated financial-platform delivery for {}. The biggest gap is direct experience with the company's own stack.", job.company),
-            red_flags: if score < 60 { vec!["Asks for 5+ years of hands-on Java development".into()] } else { vec![] },
+            red_flags: if score < 60 { vec!["Asks for 5+ years of hands-on Java development".into()] } else { vec![] }.into_iter().chain(path).collect(),
             keywords: vec!["Technical Program Management".into(), "Stakeholder Management".into(), "UAT".into(), "vendor management".into(), "Agile".into(), "Kubernetes".into(), "Release Management".into(), "PMP".into()],
             deadline: String::new(),
             potential: Some((score + 8 + score % 7).min(97)),

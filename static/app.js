@@ -134,16 +134,16 @@ const ICON = {
 const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
 /** Four places. Queue: what's waiting for you, and behind its last tab every job, wherever it stands. Inbox: the email about them. Calendar: interviews and reminders. Me: what you're looking for, your CVs and details, the files tailored from them, and how it's going. The same four are the phone's tabs. Settings (the gear) has the accounts, the job sources and the app itself. */
-const NAV = [['overview', 'Queue'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['cvs', 'Me'], ['settings', 'Settings']];
+const NAV = [['overview', 'Queue'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['cvs', 'Me'], ['results', 'Insights'], ['settings', 'Settings']];
 /** Pages that belong to a place: a job, applying, review and every job to the Queue; the tailored files and the insights to Me; Recruiters to Inbox. */
-const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applications: 'overview', pipeline: 'overview', review: 'overview', welcome: 'overview', leads: 'overview', documents: 'cvs', results: 'cvs', recruiters: 'inbox' };
+const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applications: 'overview', pipeline: 'overview', review: 'overview', welcome: 'overview', leads: 'overview', documents: 'cvs', recruiters: 'inbox' };
 /** Which place a page belongs to. What you're looking for is part of Me; where it looks is part of Settings. */
 const placeOf = () => { const [page, arg] = (location.hash.slice(1) || 'overview').split('/'); return page === 'search' ? (arg === 'what' ? 'cvs' : 'settings') : page === 'applications' && arg === 'files' ? 'cvs' : NAV_HOME[page] || page; };
 /** Each place's views, as the same row of tabs wherever you are in it. */
 const placeTabs = (tabs, on) => `<nav class="tabs place-tabs">${tabs.map(([href, name, id]) => `<a href="${href}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
 const inboxTabs = on => placeTabs([['#inbox', 'Email', 'email'], ['#inbox/recruiters', 'Recruiters', 'recruiters']], on);
 /** Me: what you're looking for, then what Job Hunt knows about you. */
-const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['#cvs', `CVs${n ? ` (${n})` : ''}`, 'cvs'], ['#cvs/details', 'About me', 'details'], ['#cvs/career', 'Career', 'career'], ['#applications/files', 'Tailored files', 'files'], ['#results', 'Insights', 'insights']], on);
+const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['#cvs', `CVs${n ? ` (${n})` : ''}`, 'cvs'], ['#cvs/details', 'About me', 'details'], ['#cvs/career', 'Career', 'career'], ['#applications/files', 'Tailored files', 'files']], on);
 /** Career's two views, on the one tab: the paths your CV supports, and the skills that would help most. */
 const careerSeg = on => `<nav class="mode career-seg" aria-label="Career"><a href="#cvs/career" class="${on === 'paths' ? 'on' : ''}">Paths you could take</a><a href="#cvs/coach" class="${on === 'skills' ? 'on' : ''}">Skills to build</a></nav>`;
 const meHead = (on, about, n) => `<div class="head"><div class="grow"><h1>Me</h1><p class="muted">${about}</p></div><span class="save-state" ${on === 'what' ? '' : 'id="saveState"'} aria-live="polite">${['cvs', 'details'].includes(on) ? 'Changes save by themselves' : ''}</span></div>${meTabs(on, n)}`;
@@ -453,8 +453,26 @@ function phoneTop() {
     <button type="button" class="mbtn" id="mTheme" data-act="themeCycle"></button>`);
   showTheme();
 }
+/** The desktop bar, right of the places: what the search is doing, email and sync each as their own
+ *  chip (as on a phone), anything that needs a look, and one button for Auto, Light and Dark. The
+ *  old pop-up that held them stays in the page, hidden, as where their words are worked out. */
+function deskTop() {
+  const pop = $('#statusPop');
+  if (!pop || $('#dTheme')) return;
+  const ic = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  pop.insertAdjacentHTML('beforebegin', `<span class="dstats">
+    <a class="status-pill" id="dRun" href="#search" title="What the search found"><span class="dot" id="dDotRun"></span><span id="dRunNote"></span></a>
+    <a class="dchip" id="dGoogle" href="#settings/connections">${ic('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>')}<span class="dot" id="dDotGoogle"></span><span class="dchip-t" id="dGoogleNote"></span></a>
+    <a class="dchip" id="dSync" href="#settings/sync">${ic('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a3.75 3.75 0 0 1-.5 7.5z"/>')}<span class="dot" id="dDotSync"></span><span class="dchip-t" id="dSyncNote"></span></a>
+    <a class="dchip warn" id="dWarn" href="#settings/connections" hidden><span class="dot warn"></span><span class="dchip-t" id="dWarnNote"></span></a>
+    <a class="dchip warn" id="dUp" href="#settings/app" hidden><span class="dot warn"></span><span class="dchip-t">Update ready</span></a></span>
+    <button type="button" class="dtheme" id="dTheme" data-act="themeCycle"></button>`);
+  pop.hidden = true;
+  showTheme();
+}
 function renderNav() {
   phoneTop();
+  deskTop();
   const active = placeOf();
   // The badge: what's waiting on you. New matches to pick from aren't counted, or it would never clear.
   const waiting = overview ? queueCount(queueItems(overview).filter(x => x.step !== 'pick')) : 0;
@@ -498,7 +516,11 @@ function renderNav() {
   $('#syncLine').title = sync && side.sync_error ? side.sync_error : sync ? `Syncing to ${side.sync_where === 'drive' ? 'Google Drive' : 'your sync folder'}. Open Sync & backup to sync now.` : 'Daily backups. Open Sync & backup to sync to Google Drive.';
   $('#syncLine').hidden = overview?.kind === 'server' && !sync && !at;
   // The phone's chips: the same lines, short. The words show when there's room; the dot always does.
-  const chip = (id, line, dot, note, short) => { const el = $(id); if (!el) return; el.hidden = $(line).hidden; el.title = $(note).textContent; el.setAttribute('aria-label', $(note).textContent); $(id.replace('#m', '#mDot')).className = $(dot).className; $(`${id}Note`).textContent = short; };
+  const chip = (id, line, dot, note, short) => { const el = $(id); if (!el) return; el.hidden = $(line).hidden; el.title = $(note).textContent; el.setAttribute('aria-label', $(note).textContent); $(id.replace(/^#(.)/, '#$1Dot')).className = $(dot).className; $(`${id}Note`).textContent = short; };
+  // The desktop bar's chips: the same lines.
+  chip('#dGoogle', '#googleLine', '#dotGoogle', '#googleNote', g ? (overview?.last_inbox ? `Email ${ago(overview.last_inbox)}` : 'Email on') : 'Email off');
+  chip('#dSync', '#syncLine', '#dotSync', '#syncNote', $('#syncNote').textContent);
+  if ($('#dRunNote')) { $('#dRunNote').textContent = $('#runNote').textContent; $('#dDotRun').className = $('#dotRun').className; }
   chip('#mGoogle', '#googleLine', '#dotGoogle', '#googleNote', g ? (overview?.last_inbox ? `Email ${ago(overview.last_inbox)}` : 'Email on') : 'Email off');
   chip('#mSync', '#syncLine', '#dotSync', '#syncNote', $('#syncNote').textContent);
   if ($('#mStatus')) $('#mStatus').title = 'What the search found';
@@ -510,6 +532,8 @@ function renderNav() {
   // The phone's amber chip: a Claude limit or a connection that needs a look.
   const warn = $('#mWarn');
   if (warn) { const what = !$('#connLine').hidden ? $('#connNote').textContent : !$('#limitLine').hidden ? $('#limitNote').textContent : ''; warn.hidden = !what; warn.title = what; warn.setAttribute('aria-label', what); $('#mWarnNote').textContent = !$('#connLine').hidden ? 'Check connections' : 'Claude limit'; }
+  const dWarn = $('#dWarn');
+  if (dWarn) { const what = !$('#connLine').hidden ? $('#connNote').textContent : !$('#limitLine').hidden ? $('#limitNote').textContent : ''; dWarn.hidden = !what; dWarn.title = what; $('#dWarnNote').textContent = what; $('#dUp').hidden = $('#updateNote').hidden; }
   if (overview?.version) $('#versionNote').textContent = `Job Hunt ${shortVersion(overview.version)}`;
   // Under the name, top left: the version, which opens what's new in it.
   if (overview?.version) document.querySelectorAll('[data-version]').forEach(el => { el.textContent = `Version ${shortVersion(overview.version)}`; });

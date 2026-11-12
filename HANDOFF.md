@@ -56,6 +56,26 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.56.0: rejections you can see, Inbox count and actions, a career path, tested keys.** (Carries 2.55.0, never published.)
+  Rejections: `link_rejections()` matches a "no" that named no application to the job (company in the email, unique or best
+  title match), marks it rejected and notifies; `turned_down()` / `drafts_waiting()` put "Turned down" and "Draft to send"
+  in the Queue's Waiting step; a follow-up is never drafted for a company that said no. The reply draft takes a
+  "change this" note (`decline` with `change`). Inbox: `inbox_new()` badge, "What you can do" column, `POST /api/emails/<id>/reply`.
+  Updates: `quiet_for_update` waits for everything running and 10 quiet minutes (`api::idle_secs`), and notifies a minute before.
+  Top bar (desktop): `deskTop()` in app.js draws the status chips (`#dRun #dGoogle #dSync #dWarn #dUp`) and `#dTheme`; the old
+  `#statusPop` stays in the page hidden, as where the words are worked out. Insights is its own place (NAV has six).
+  Career path: `Wants.path`; the scorer adds one red flag "Career path: toward|away. why" (`profile::PATH_FLAG`), which
+  `Job::from_row` moves out of `red_flags` into `job.career {toward, why}` (`flags_to_store` puts it back when flags are
+  rewritten). Shown by `pathTag` (lists), the why-box (job page) and told to `offer_advice`. Chosen in Me, Career
+  (`#pathCard`, `savePath`), Looking for, and the welcome steps. Matches found earlier need "Read my waiting matches against it" (rescore, group waiting).
+  Keys: `sources::check_key` tries a pasted Adzuna / Google for Jobs / Jooble / Apify key before `/api/settings/keys` saves it
+  (in tests: a key starting "bad" is refused); another AI's key is tried with `other_models` even when it's used for nothing yet.
+  Form filler: every box in a numbered entry ("Languages 2") is never answered from saved answers (`personal_in`): that put
+  French in all three language entries on a Workday form. "Copy details" now lists for each box what was meant (`want`),
+  what it holds after (`now`), its options and HTML when it failed, plus the page's upload areas. STILL OPEN from the same
+  report (OSC Workday): education From date and university not filled, tailored CV not attached to the Attachments drop
+  zone, 0 skills added; and Job Bank's profile "Add a work experience" form got nothing. Ask for Copy details from each.
+  Icons: see logos.rs (`none2|`, www. retry, DuckDuckGo index fallback); unverified against the real sites from here.
 - **2.55.0: every employer is assumed to read a CV requirement by requirement.** `ats::general_tailoring()` is
   handed to tailoring when the system isn't known (the Ashby text when it is). The check of the CV
   (`.ats-review`, built once as `reviewBox` in `app-job.js`) is on every tailored job, on request; it still

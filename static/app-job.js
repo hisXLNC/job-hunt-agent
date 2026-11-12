@@ -37,7 +37,7 @@ function jobActions(j, tailoring, progress) {
 }
 /** "Why it fits", up top: the strongest match, the biggest gap, and anything to check. */
 function whyBox(j, flags, note = '') {
-  if (!j.reasoning && !flags.length && j.score == null) return '';
+  if (!j.reasoning && !flags.length && j.score == null && !j.career) return '';
   const r = (j.reasoning || '').trim();
   const m = r.match(/^(.*?)(?:\.?\s*)(?:Gap|Biggest gap|Main gap)s?:\s*(.*)$/i);
   const match = (m ? m[1] : r).replace(/^(Strong(est)? match|Match):\s*/i, '').replace(/\.$/, '');
@@ -48,6 +48,7 @@ function whyBox(j, flags, note = '') {
     <div class="grow">
       ${match ? `<p><span class="why-label good-text">Why it fits</span> ${esc(match)}</p>` : ''}
       ${gap ? `<p><span class="why-label warn-text">Biggest gap</span> ${esc(gap)}</p>` : ''}
+      ${j.career ? `<p><span class="why-label ${j.career.toward ? 'good-text' : 'bad-text'}">${j.career.toward ? 'On your career path' : 'Off your career path'}</span> ${esc(j.career.why || '')}${j.career.toward ? '' : ` Taking it wouldn't be ideal for the path you chose${j.status === 'offer' ? '; weigh that before you accept' : ''}. <a href="#cvs/career">Your path</a>`}</p>` : ''}
       ${must.length ? `<p><span class="why-label warn-text">Required, not on your CV</span> ${esc(must.join('; '))}</p>` : ''}
       ${other.length ? `<p><span class="why-label bad-text">Check</span> ${esc(other.join('; '))}</p>` : ''}
       ${note ? `<p class="muted small">${note}</p>` : ''}

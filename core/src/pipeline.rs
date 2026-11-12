@@ -2191,7 +2191,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         if loose.is_empty() {
             return 0;
         }
-        let waiting: Vec<Job> = ["applied", "interviewing"].iter().flat_map(|s| self.db().jobs(Some(s), 2000).unwrap_or_default()).collect();
+        // Every application the email could be about, the ones already turned down too: with two at
+        // one company and nothing to tell them apart, it's left alone, whatever happens to one later.
+        let waiting: Vec<Job> = ["applied", "interviewing", "rejected"].iter().flat_map(|s| self.db().jobs(Some(s), 2000).unwrap_or_default()).collect();
         let mut n = 0;
         let mut taken: HashSet<String> = HashSet::new();
         for e in &loose {
@@ -2204,6 +2206,9 @@ replies and interviews, and a little lower for kinds that got none from several 
                 [(a, j), (b, _), ..] if a > b => *j,
                 _ => continue,
             };
+            if job.status == "rejected" {
+                continue;
+            }
             let done = (|| -> R<()> {
                 let db = self.db();
                 db.set_email_job(&e.gmail_id, &job.id)?;
@@ -2238,7 +2243,9 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// waiting, that you haven't said you've dealt with.
     pub fn drafts_waiting(&self) -> Vec<Value> {
         let since = (Utc::now() - chrono::Duration::days(14)).to_rfc3339();
-        self.db().jobs(Some("applied"), 2000).unwrap_or_default().into_iter().filter_map(|j| {
+        // (Read first: each job's follow-up takes the database again.)
+        let applied = self.db().jobs(Some("applied"), 2000).unwrap_or_default();
+        applied.into_iter().filter_map(|j| {
             let f = self.follow_up(&j.id)?;
             (!f["draft"].is_null() && f["at"].as_str().is_some_and(|a| a >= since.as_str()) && self.db().get(&format!("seen:draft:{}", j.id)).ok().flatten().is_none())
                 .then(|| json!({ "job": j.brief(), "at": f["at"], "to": f["to"], "subject": f["subject"] }))
@@ -2350,6 +2357,16 @@ replies and interviews, and a little lower for kinds that got none from several 
             Some(m) => format!("Their minimum yearly salary: {m:.0}."),
             None => "They haven't set a minimum salary.".into(),
         };
+        // The career path they chose, and how this role reads against it: the advice says plainly
+        // when taking the offer would pull them off it.
+        if !profile.wants.path.trim().is_empty() {
+            context.push_str(&format!("\nThe career path they're building: {}.", profile.wants.path.trim()));
+            match job.career.as_ref().map(|c| (c.toward, c.why.clone())) {
+                Some((true, why)) => context.push_str(&format!(" This role was read as moving them along it. {why}")),
+                Some((false, why)) => context.push_str(&format!(" This role was read as leading AWAY from it. {why} Say plainly, near the top, that accepting would not be ideal for that goal and what it would cost them, then what would make it worth taking anyway.")),
+                None => context.push_str(" Say whether taking this role helps or sets back that path."),
+            }
+        }
         let others: Vec<Job> = self.db().jobs(Some("offer"), 50)?.into_iter().filter(|j| j.id != job_id).collect();
         for o in others {
             if let Some(v) = self.offer(&o.id) {

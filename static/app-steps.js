@@ -13,6 +13,8 @@ const whyFits = j => {
 };
 /** The posting's hard requirements the CV doesn't show (red flags Claude marks "Must have:"): a stretch to apply for. */
 const mustHaves = j => (j.red_flags || []).filter(f => /^must have:/i.test(f)).map(f => f.replace(/^must have:\s*/i, ''));
+/** How the role reads against the career path you chose (Me, Career): on it, or leading away from it. */
+const pathTag = j => !j.career ? '' : j.career.toward ? ` <span class="pill good" title="${esc(j.career.why || 'Moves you along the career path you chose')}">On your path</span>` : ` <span class="pill crit" title="${esc(j.career.why || 'Leads away from the career path you chose')}">Off your path</span>`;
 const stretchTag = j => { const m = mustHaves(j); return m.length ? ` <span class="pill warn" title="Required, and not on your CV: ${esc(m.join('; '))}">Stretch</span>` : ''; };
 /** The one tag a row in a list shows, the most important first: closed, closing soon, a stretch,
  *  someone you know there. The rest are on the job itself. */
@@ -20,7 +22,9 @@ function oneTag(j) {
   const closed = closedTag(j); if (closed) return ` ${closed}`;
   const low = belowMinTag(j); if (low) return low;
   const dl = deadlineTag(j); if (dl && /crit|bad|warn/.test(dl)) return ` ${dl}`;
+  if (j.career && !j.career.toward) return pathTag(j);
   const st = stretchTag(j); if (st) return st;
+  if (j.career) return pathTag(j);
   if (j.recruiter) return ` <span class="pill good" title="You know ${esc(j.recruiter)}, a recruiter there">Recruiter: ${esc(firstName(j.recruiter))}</span>`;
   if (j.know?.length) return ` <span class="pill good" title="Connected on LinkedIn: ${esc(j.know.join(', '))}">You know ${esc(j.know.length === 1 ? firstName(j.know[0]) : `${j.know.length} people`)}</span>`;
   return dl ? ` ${dl}` : '';

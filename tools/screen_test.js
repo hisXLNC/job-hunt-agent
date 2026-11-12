@@ -37,7 +37,8 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('overview');
   check((await page.$$('.pick-list .jrow.pick')).length >= 3 && !(await page.$('.decision[data-kind]')), 'The Queue opens as a list of every listing');
   // New matches to pick from don't count on the Queue's badge; and Not interested offers to skip the company for good.
-  check(await page.evaluate(() => !document.querySelector('#nav .badge')), 'Queue: the badge leaves out new matches still to pick from');
+  check(await page.evaluate(() => !document.querySelector('#nav a[href="#overview"] .badge')), 'Queue: the badge leaves out new matches still to pick from');
+  check(await page.evaluate(() => document.querySelector('#nav a[href="#inbox"] .badge')?.textContent.trim() === '1'), 'Inbox: the badge counts new email about your applications');
   await page.click('.pick-list .jrow [data-act=stage][data-status=dismissed]');
   check(await until(async () => page.evaluate(() => [...document.querySelectorAll('.modal .btn')].some(b => /^Never show /.test(b.textContent))), 15), 'Queue: Not interested offers never to show the company again');
   await page.click('.modal .btn.ghost');
@@ -154,7 +155,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   // Every job is behind the Queue's last tab; the Pipeline's old step pages open the Queue on that step, as a list.
   await at('applications');
   check(await page.evaluate(() => document.querySelector('.page h1').textContent === 'All jobs' && /All jobs/.test(document.querySelector('.qsteps a.on')?.textContent || '') && !document.querySelector('.pipe-tabs') && !!document.querySelector('#t-all')), 'All jobs is the last tab of the Queue, with the list of every job');
-  check(await page.evaluate(() => [...document.querySelectorAll('#nav a')].map(a => a.textContent.replace(/\s*\d+$/, '').trim()).join('|')) === 'Queue|Inbox|Calendar|Me|Settings', 'Five places in the top bar');
+  check(await page.evaluate(() => [...document.querySelectorAll('#nav a')].map(a => a.textContent.replace(/\s*\d+$/, '').trim()).join('|')) === 'Queue|Inbox|Calendar|Me|Insights|Settings', 'Six places in the top bar');
   await page.evaluate(() => localStorage.setItem('jh.queueView', 'one'));
   await page.goto(`${base}/#applications/approve`); await page.waitForTimeout(1200);
   check(await page.evaluate(() => location.hash === '#overview/approve/list' && /Approve/.test(document.querySelector('.qsteps a.on')?.textContent || '') && !document.querySelector('.decision')), 'An old link to a Pipeline step opens the Queue on that step, as a list');
@@ -162,7 +163,16 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('applications/files');
   check(await page.evaluate(() => document.querySelector('.page h1').textContent === 'Me' && /Tailored files/.test(document.querySelector('.place-tabs a.on')?.textContent || '')), 'Tailored files is under Me');
   await at('results');
-  check(await page.evaluate(() => /Insights/.test(document.querySelector('.place-tabs a.on')?.textContent || '')), 'Insights is under Me');
+  check(await page.evaluate(() => document.querySelector('.page h1').textContent === 'Insights' && !document.querySelector('.place-tabs') && /Insights/.test(document.querySelector('#nav a.on')?.textContent || '')), 'Insights is its own place in the top bar');
+  // A career path: chosen under Me, Career; saved with what you want; cleared again.
+  await at('cvs/career');
+  await page.fill('[data-form=careerPath] [name=path]', 'Program leadership in fintech'); await page.click('[data-form=careerPath] button[type=submit]');
+  check(await until(async () => (await prefs()).wants?.path === 'Program leadership in fintech', 15) && await until(() => page.evaluate(() => !!document.querySelector('#pathCard .pill.good') && !!document.querySelector('#pathCard [data-act="rescore"][data-group="waiting"]')), 10), 'Career: the path you choose is saved, and offers to read waiting matches against it');
+  await at('search/what');
+  check(await page.evaluate(() => document.querySelector('[name=want_path]')?.value === 'Program leadership in fintech'), 'Looking for shows the career path too');
+  await at('cvs/career');
+  await page.click('#pathCard [data-act="choosePath"]');
+  check(await until(async () => (await prefs()).wants?.path === '', 15), 'Career: the path can be cleared');
   // Rejections: Claude studies them from Insights, and what it learns is shown (and handed to tailoring).
   check(await page.evaluate(() => !!document.querySelector('[data-act="lessons"]')), 'Insights offers to study your rejections');
   await page.click('[data-act="lessons"]'); await page.waitForTimeout(1500); await at('results');
@@ -274,18 +284,23 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
     const body = await text('#main');
     check(body.length > 40 && !body.includes("Couldn't load"), `#${h} draws`);
   }
-  check((await text('#nav')).replace(/\s+/g, ' ').trim().replace(/ \d+/g, '') === 'Queue Inbox Calendar Me Settings', 'The places are Queue, Inbox, Calendar, Me, Settings');
+  check((await text('#nav')).replace(/\s+/g, ' ').trim().replace(/ \d+/g, '') === 'Queue Inbox Calendar Me Insights Settings', 'The places are Queue, Inbox, Calendar, Me, Insights, Settings');
+  // The top bar: the search, email and sync each have their own chip, and the theme button sits outside any pop-up.
+  check(await page.evaluate(() => { const bar = document.querySelector('#nav').getBoundingClientRect(); return document.querySelector('#statusPop').hidden && ['#dRun', '#dGoogle', '#dSync', '#dTheme'].every(q => { const r = document.querySelector(q)?.getBoundingClientRect(); return r && r.width > 0 && r.right <= innerWidth && r.left >= bar.right - 1; }) && [...document.querySelectorAll('.dstats > :not([hidden]), #dTheme')].every((el, i, all) => !i || el.getBoundingClientRect().left >= all[i - 1].getBoundingClientRect().right - 1); }), 'The top bar shows search, email, sync and the theme button side by side');
+  { const mode = () => page.evaluate(() => document.documentElement.dataset.theme || 'auto'); const was = await mode(); await page.click('#dTheme'); const one = await mode(); await page.click('#dTheme'); const two = await mode(); await page.click('#dTheme');
+    check(new Set([was, one, two]).size === 3 && await mode() === was, 'The top bar theme button steps through Auto, Light and Dark'); }
   const on = async () => `${(await text('#nav a.on')).replace(/\s*\d+\s*$/, '').trim()} / ${(await text('.place-tabs a.on, .pipe-tabs a.on')).replace(/\s*\d+\s*$/, '').trim()}`;
   await at('calendar'); check((await text('#nav a.on')).trim() === 'Calendar', 'The calendar is its own place');
   await at('inbox'); check(await on() === 'Inbox / Email', 'Inbox opens on Email');
-  await at('results'); check(await on() === 'Me / Insights', 'Insights are under Me');
+  check(await page.evaluate(() => { const row = [...document.querySelectorAll('.inbox-list tr')].find(r => /Rejection/.test(r.textContent)); return !!row && /Draft a reply/.test(row.textContent) && /Open in Gmail/.test(row.textContent) && !!row.querySelector('a[href^="#job/"], a[href*="job"]'); }), 'Inbox: a rejection offers a reply and a link to its application');
+  await at('results'); check((await text('#nav a.on')).trim() === 'Insights', 'Insights is its own place');
   await at('applications/files'); check(await on() === 'Me / Tailored files', 'Tailored files are under Me');
   await at('search/what'); check(await on() === 'Me / Looking for', 'What to search for is Me, Looking for');
   await at('cvs'); check((await on()).startsWith('Me / CVs'), 'Your CVs are Me, CVs');
   await at('settings'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.place-tabs a.on')).trim() === 'Accounts' && !(await page.$('#settingsLink')), 'Settings is the last of the places, not a gear');
   await at('search'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.place-tabs a.on')).trim() === 'Job sources', 'Where it looks is Settings, Job sources');
-  await page.click('#runLine'); await page.waitForTimeout(300);
-  check(await page.evaluate(() => { const r = document.querySelector('#syncLine').getBoundingClientRect(); return r.width > 0 && r.height > 0; }), 'The status in the top bar opens the status lines');
+  await page.click('#dRun'); await page.waitForTimeout(400);
+  check(await page.evaluate(() => location.hash === '#search') && (await page.getAttribute('#dSync', 'title') || '').length > 3, 'The search chip in the top bar opens what the search found, and each chip says its status');
 
   // A phone: nothing wider than the screen.
   const phone = await browser.newPage({ ...devices['iPhone 13'] });
@@ -306,7 +321,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   }
   // The phone's tabs are the five places; Settings is behind the top bar's menu button.
   await phone.goto(`${base}/#overview`); await phone.reload(); await phone.waitForTimeout(900);
-  check((await phone.evaluate(() => document.querySelector('#tabbar').innerText)).replace(/\s+/g, ' ').replace(/ \d+/g, '').trim() === 'Queue Inbox Calendar Me Settings', 'Phone: the tabs are the five places');
+  check((await phone.evaluate(() => document.querySelector('#tabbar').innerText)).replace(/\s+/g, ' ').replace(/ \d+/g, '').trim() === 'Queue Inbox Calendar Me Insights Settings', 'Phone: the tabs are the six places');
   check(!(await phone.$('#mMenu')) && !(await phone.$('#settingsLink')), 'Phone: no menu button');
   check(await phone.evaluate(() => { const top = document.querySelector('.mtop').getBoundingClientRect(); return ['#mStatus', '#mSync', '#mTheme'].every(q => { const r = document.querySelector(q)?.getBoundingClientRect(); return r && r.width > 0 && r.top >= top.top && r.bottom <= top.bottom + 1 && r.right <= innerWidth; }); }), 'Phone: the search, sync and theme are in the top bar');
   const mode = () => phone.evaluate(() => document.documentElement.dataset.theme || 'auto');

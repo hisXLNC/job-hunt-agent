@@ -235,7 +235,7 @@ impl Llm for FakeLlm {
         let out = self.left_out.lock().unwrap().clone();
         jobs.iter().map(|j| if out.contains(&j.title) { Ok(None) } else { self.score(cvs, guidance, j).map(Some) }).collect()
     }
-    fn score(&self, cvs: &[(String, String)], _guidance: &str, job: &Job) -> R<JobScore> {
+    fn score(&self, cvs: &[(String, String)], guidance: &str, job: &Job) -> R<JobScore> {
         self.calls.lock().unwrap().push("score".into());
         // A tailored CV (see tailor below) fits a little better.
         let tailored = cvs.iter().any(|c| c.1.contains("Led vendor management"));
@@ -244,7 +244,8 @@ impl Llm for FakeLlm {
             // One of the CVs it was given, as the real scorer makes sure of.
             track: cvs.iter().find(|c| c.0 == "program").or(cvs.first()).map(|c| c.0.clone()).unwrap_or_else(|| "program".into()),
             reasoning: "Strong delivery match.".into(),
-            red_flags: vec![],
+            // With a career path set, a role is read against it (here, by its title).
+            red_flags: if !guidance.contains("career path they're building") { vec![] } else if job.title.contains("Program") { vec!["Career path: toward. Program delivery in finance.".into()] } else { vec!["Career path: away. A different kind of work.".into()] },
             keywords: vec!["Technical Program Manager".into(), "UAT".into(), "vendor management".into(), "Kubernetes".into()],
             deadline: if job.description.contains("apply by Halloween") { "2099-10-31".into() } else { String::new() },
             potential: Some(92),

@@ -1392,6 +1392,15 @@ fn deadlines_answers_offers_and_contacts() {
     assert!(s.agent.offer_advice("test:1", "").is_err());
     let o = s.agent.offer_advice("test:1", "Base 135,000, 10% bonus, start Nov 3").unwrap();
     assert!(o["advice"].as_str().unwrap().contains("Base 135,000"));
+    // With a career path chosen, a role read as leading away from it is said so in the advice's brief.
+    let mut p = s.agent.profile();
+    p.wants.path = "product leadership in fintech".into();
+    s.agent.save_profile(&p).unwrap();
+    let flags = json!(["Career path: away. An operations role outside fintech."]);
+    s.agent.db().update_job("test:1", &[("red_flags", flags)]).unwrap();
+    let o = s.agent.offer_advice("test:1", "Base 135,000, 10% bonus, start Nov 3").unwrap();
+    assert!(o["advice"].as_str().unwrap().contains("leading AWAY") && o["advice"].as_str().unwrap().contains("product leadership in fintech"), "{o}");
+    s.agent.db().update_job("test:1", &[("red_flags", json!([]))]).unwrap();
 
     // Contacts and a message to one.
     s.agent.save_contacts("test:1", &[json!({ "name": "Sam Lee", "role": "Hiring manager" }), json!({ "name": " " })]).unwrap();
@@ -2062,7 +2071,7 @@ fn a_no_that_named_no_application_is_matched_and_said() {
     p.auto_tailor = false;
     p.follow_up_after = 5;
     s.agent.save_profile(&p).unwrap();
-    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Data Analyst", "2")])).unwrap();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
     let ids: Vec<String> = s.agent.db().jobs(Some("queued"), 10).unwrap().iter().map(|j| j.id.clone()).collect();
     let long_ago = (Utc::now() - chrono::Duration::days(8)).to_rfc3339();
     for id in &ids {
@@ -2070,7 +2079,7 @@ fn a_no_that_named_no_application_is_matched_and_said() {
         db.set_status(id, "applied", "sent").unwrap();
         db.update_job(id, &[("applied_at", json!(long_ago))]).unwrap();
     }
-    let analyst = ids.iter().find(|id| s.agent.db().job(id).unwrap().unwrap().title.contains("Analyst")).unwrap().clone();
+    let analyst = ids.iter().find(|id| s.agent.db().job(id).unwrap().unwrap().title.contains("Technical")).unwrap().clone();
     let other = ids.iter().find(|id| **id != analyst).unwrap().clone();
     assert_eq!(s.agent.follow_ups_due().unwrap().len(), 2);
     // A no from the company that doesn't say which role: neither is chased, neither is closed.
@@ -2079,17 +2088,17 @@ fn a_no_that_named_no_application_is_matched_and_said() {
     assert_eq!(s.agent.link_rejections(), 0);
     assert!(s.agent.follow_ups_due().unwrap().is_empty());
     // One that names the role: that application becomes Rejected, you're told, and it waits in the Queue.
-    s.agent.db().record_email("n2", "t2", None, "Acme Careers <no-reply@acme.example>", "Update on Senior Data Analyst", "rejection", "Acme went with another candidate for the Data Analyst role.", None, &now).unwrap();
+    s.agent.db().record_email("n2", "t2", None, "Acme Careers <no-reply@acme.example>", "Update on Technical Program Manager", "rejection", "Acme went with another candidate for the Technical Program Manager role.", None, &now).unwrap();
     assert_eq!(s.agent.link_rejections(), 1);
     assert_eq!(s.agent.db().job(&analyst).unwrap().unwrap().status, "rejected");
     assert_eq!(s.agent.db().job(&other).unwrap().unwrap().status, "applied");
     assert!(s.notes.lock().unwrap().iter().any(|t| t.contains("Turned down: Acme")));
     let down = s.agent.turned_down();
-    assert_eq!((down.len(), down[0]["said"].as_str()), (1, Some("Acme went with another candidate for the Data Analyst role.")));
+    assert_eq!((down.len(), down[0]["said"].as_str()), (1, Some("Acme went with another candidate for the Technical Program Manager role.")));
     // Put away, it leaves the Queue; a reply drafted does the same.
     s.agent.db().set(&format!("seen:turned:{analyst}"), "x").unwrap();
     assert!(s.agent.turned_down().is_empty());
-    // An email from before you applied is about something else.
+    // The first one still can't be told apart between the two, so the other application stays as it is.
     assert_eq!(s.agent.link_rejections(), 0);
 }
 

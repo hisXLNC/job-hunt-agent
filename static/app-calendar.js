@@ -260,8 +260,8 @@ async function showResults() {
   const days = r.per_day || [], maxDay = Math.max(1, ...days.map(d => d.sent)), sentDays = days.reduce((a, d) => a + d.sent, 0);
   const label = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const every = Math.ceil(days.length / 8);
-  page(`${meHead('insights', 'Which CVs, sources and fit scores turn into replies and interviews. A reply is any answer from the company, a rejection included, but not an automatic “we received it”.')}
-      <nav class="mode" aria-label="Period">${[[7, '7 days'], [30, '30 days'], [90, '90 days'], [0, 'All']].map(([v, n]) => `<a href="#results" data-act="resultsDays" data-days="${v}" class="${resultsDays === v ? 'on' : ''}">${n}</a>`).join('')}</nav></div>
+  page(`<div class="head"><div class="grow"><h1>Insights</h1><p class="muted">Which CVs, sources and fit scores turn into replies and interviews. A reply is any answer from the company, a rejection included, but not an automatic “we received it”.</p></div></div>
+      <nav class="mode" aria-label="Period">${[[7, '7 days'], [30, '30 days'], [90, '90 days'], [0, 'All']].map(([v, n]) => `<a href="#results" data-act="resultsDays" data-days="${v}" class="${resultsDays === v ? 'on' : ''}">${n}</a>`).join('')}</nav>
     ${Object.keys(r.outreach || {}).length ? `<section class="card"><header><h2>Your messages to people</h2></header>
       <p class="muted small">How often a note got a reply, by who it went to. A reply is one you marked with They replied, or an email back about that job.</p>
       <div class="facts">${[['recruiter', 'Recruiters'], ['manager', 'Hiring managers and team leads'], ['other', 'Others']].filter(([k]) => r.outreach[k]).map(([k, n]) => `<span><b>${n}:</b> ${r.outreach[k].replied} of ${r.outreach[k].sent} replied${r.outreach[k].sent >= 5 ? ` (${Math.round(100 * r.outreach[k].replied / r.outreach[k].sent)}%)` : ''}</span>`).join('')}</div>

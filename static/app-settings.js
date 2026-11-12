@@ -262,7 +262,7 @@ async function showSettings(tab, sub, host) {
         <button class="btn ghost danger" data-act="removeCv" data-track="${esc(c.track)}">Remove</button>
       </div></section>`).join('')}
     ${st.cvs.length ? '' : '<p class="empty">No CVs yet. Add one above to start.</p>'}`;
-    const career = st.cvs.length ? careerHtml(st.career, st.career_thinking, st.profile.tracks || []) : '<section class="card"><p>Add a CV first: Claude maps your career paths from it.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>';
+    const career = st.cvs.length ? careerHtml(st.career, st.career_thinking, st.profile.tracks || [], st.profile.wants?.path || '') : '<section class="card"><p>Add a CV first: Claude maps your career paths from it.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>';
     const details = `<form data-form="profile" data-part="about"><section class="card"><header><h2>About you</h2></header>
       <p class="muted">Your name goes on your CVs' file names and cover letters; your email is where the weekly review goes.</p>
       <div class="form">
@@ -308,6 +308,7 @@ async function showSettings(tab, sub, host) {
         <div class="form">
           <label class="field">The level you're going for<input type="text" name="want_level" value="${esc(p.wants?.level || '')}" placeholder="e.g. senior manager or director"></label>
           <label class="field">Permanent or contract<select name="want_work">${[['', 'Either'], ['permanent', 'Permanent only'], ['contract', 'Contract only']].map(([v, n]) => `<option value="${v}" ${(p.wants?.work || '') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label class="field" style="grid-column:1/-1">The career path you're building<input type="text" name="want_path" value="${esc(p.wants?.path || '')}" placeholder="e.g. product leadership in fintech"><span class="hint">Each posting is read against it: one that moves you along it is marked On your path, and one that would pull you off it is marked Off your path, with the reason. Me, Career maps the paths your CV supports.</span></label>
           <label class="field">Industries you want<textarea data-chips data-add="Add an industry" name="want_industries">${esc(lines(p.wants?.industries))}</textarea></label>
           <label class="field">Industries you don't want<textarea data-chips data-add="Add an industry" name="want_avoid">${esc(lines(p.wants?.avoid))}</textarea></label>
           <label class="field" style="grid-column:1/-1">Deal-breakers<textarea data-chips data-add="Add a deal-breaker" name="want_dealbreakers">${esc(lines(p.wants?.dealbreakers))}</textarea><span class="hint">For example: on-site five days, more than 25% travel, commission only. A posting that clearly has one is set aside with the reason.</span></label>
@@ -702,7 +703,7 @@ function readProfile(form, part) {
   for (const k of ['remote_ok', 'include_metro', 'auto_tailor']) if (has(k)) p[k] = !!el(k).checked;
   if (has('auto_tailor_mode')) { p.auto_tailor = v('auto_tailor_mode') === 'all'; p.auto_tailor_min = v('auto_tailor_mode') === 'strong' ? 85 : 0; }
   // What you want from a role (Me, Looking for): told to the scorer.
-  if (has('want_level')) p.wants = { level: v('want_level').trim(), work: v('want_work'), industries: fromLines(v('want_industries')), avoid: fromLines(v('want_avoid')), dealbreakers: fromLines(v('want_dealbreakers')) };
+  if (has('want_level')) p.wants = { level: v('want_level').trim(), work: v('want_work'), industries: fromLines(v('want_industries')), avoid: fromLines(v('want_avoid')), dealbreakers: fromLines(v('want_dealbreakers')), path: has('want_path') ? v('want_path').trim() : (p.wants?.path || '') };
   for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'max_age_days', 'search_hour', 'search_hour_2', 'searches_per_day', 'linkedin_note', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k)) p[k] = Number(v(k) || 0);
   for (const k of ['locations', 'exclude_companies', 'exclude_title_keywords']) if (has(k)) p[k] = fromLines(v(k));
   if (has('min_salary')) p.min_salary = v('min_salary') ? Number(v('min_salary')) : null;

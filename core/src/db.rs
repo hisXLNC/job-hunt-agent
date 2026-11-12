@@ -171,6 +171,27 @@ pub struct Job {
     pub score_after: Option<i64>,
     /// What the fit could be once the CV is tailored, predicted when it's scored.
     pub score_potential: Option<i64>,
+    /// How the role reads against the career path you chose, when the scorer said: whether it
+    /// leads toward it, and why. Kept as one of the stored red flags (profile::PATH_FLAG), and
+    /// taken out of `red_flags` when the job is read.
+    #[serde(default)]
+    pub career: Option<Career>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Career {
+    pub toward: bool,
+    pub why: String,
+}
+
+impl Job {
+    /// These flags as they're stored: with the career-path read put back.
+    pub fn flags_to_store(&self, mut flags: Vec<String>) -> Vec<String> {
+        if let Some(c) = &self.career {
+            flags.push(format!("{} {}. {}", crate::profile::PATH_FLAG, if c.toward { "toward" } else { "away" }, c.why));
+        }
+        flags
+    }
 }
 
 /// The same role, however a source spells the company: "USA018 Thomson Reuters Holdings Inc." and
@@ -260,7 +281,10 @@ fn list<T: serde::de::DeserializeOwned + Default>(s: String) -> T {
 
 impl Job {
     fn from_row(r: &Row) -> rusqlite::Result<Job> {
+        let all_flags: Vec<String> = list(r.get("red_flags")?);
+        let career = crate::profile::path_read(&all_flags).map(|(toward, why)| Career { toward, why });
         Ok(Job {
+            career,
             id: r.get("id")?,
             source: r.get("source")?,
             company: r.get("company")?,
@@ -277,7 +301,7 @@ impl Job {
             score: r.get("score")?,
             track: r.get("track")?,
             reasoning: r.get("reasoning")?,
-            red_flags: list(r.get("red_flags")?),
+            red_flags: all_flags.into_iter().filter(|f| !f.starts_with(crate::profile::PATH_FLAG)).collect(),
             keywords: list(r.get("keywords")?),
             coverage_before: r.get("coverage_before")?,
             coverage_after: r.get("coverage_after")?,
@@ -632,7 +656,7 @@ impl Db {
             params![
                 j.id, j.source, j.company, j.title, j.location, j.url, j.apply_email, j.description, j.salary,
                 j.posted_at, stamp, j.status, j.score, j.track, j.reasoning,
-                serde_json::to_string(&j.red_flags)?, serde_json::to_string(&j.keywords)?, j.deadline, dupe_key(&j.company, &j.title), url_key(&j.url), j.apply_url, j.score_potential
+                serde_json::to_string(&j.flags_to_store(j.red_flags.clone()))?, serde_json::to_string(&j.keywords)?, j.deadline, dupe_key(&j.company, &j.title), url_key(&j.url), j.apply_url, j.score_potential
             ],
         )?;
         Ok(())

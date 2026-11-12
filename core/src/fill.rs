@@ -100,6 +100,11 @@ fn personal_in(label: &str, section: &str, kind: &str) -> bool {
     if kind == "date" && (in_entry || s.is_empty()) {
         return true;
     }
+    // Every box in a numbered entry ("Languages 2", "Education 1") is that entry's own: a saved
+    // answer would put the same language, level or school in each of them.
+    if in_entry && (s.contains("language") || s.trim_end().ends_with(|c: char| c.is_ascii_digit())) {
+        return true;
+    }
     work_history(label.split(" (").next().unwrap_or(label)) || {
     let l = label.to_lowercase();
     ["agree", "consent", "certify", "acknowledge", "attest", "privacy", "terms", "why do you want", "why are you interested", "why this",
@@ -856,6 +861,9 @@ mod tests {
         // Your own city (under Address) is kept and reused; a job's city and an entry's dates aren't.
         assert!(!personal_in("City", "Address", "text"));
         assert!(personal_in("City", "Work Experience 2", "text"));
+        // A language entry's boxes are its own, so one saved answer never fills all of them.
+        assert!(personal_in("Language", "Languages 2", "select") && personal_in("Reading", "Languages 1", "select") && personal_in("School or University", "Education 1", "text"));
+        assert!(!personal_in("Are you legally eligible to work in Canada?", "Work Authorization", "select"));
         assert!(personal_in("From (MM/YYYY)", "Work Experience 1", "date"));
         let list = vec![json!({ "q": "City", "key": "city", "a": "Toronto" })];
         assert_eq!(from_bank(&list, &json!({ "label": "City", "type": "text", "section": "Address" })).as_deref(), Some("Toronto"));

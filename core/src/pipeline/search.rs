@@ -494,7 +494,7 @@ impl Agent {
         }
         {
             let db = self.db();
-            db.update_job(job_id, &[("salary", text.clone().into()), ("red_flags", json!(flags))])?;
+            db.update_job(job_id, &[("salary", text.clone().into()), ("red_flags", json!(job.flags_to_store(flags.clone())))])?;
             db.log(Some(job_id), "salary", &format!("{text}, {from}"))?;
         }
         if let (Some(f), true) = (low, tell && ["ready", "approved"].contains(&job.status.as_str())) {

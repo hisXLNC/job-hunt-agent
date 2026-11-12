@@ -1530,6 +1530,51 @@ pub fn jooble(c: &reqwest::blocking::Client, key: &str, keywords: &str, location
     Ok(parse_jooble(&v))
 }
 
+// --- Is a pasted key good? ----------------------------------------------------------------------
+
+/// Tries a newly pasted key against its service with one small request, before it's saved.
+/// `service` is "adzuna" (with its app id in `extra`), "jsearch" (with where the key is from),
+/// "jooble" or "apify". A service that says it's busy or out of requests has still accepted the key.
+pub fn check_key(service: &str, key: &str, extra: &str) -> Result<(), String> {
+    if cfg!(test) {
+        return if key.starts_with("bad") { Err("the key was refused".into()) } else { Ok(()) };
+    }
+    let c = reqwest::blocking::Client::builder().timeout(Duration::from_secs(25)).build().map_err(|e| e.to_string())?;
+    let sent = |r: reqwest::Result<reqwest::blocking::Response>| r.map(|r| r.status().as_u16()).map_err(|e| format!("it couldn't be tested, as the service wasn't reached ({e}). Nothing was changed; try again when you're online"));
+    let refused = "the service refused it. Copy it again from the service's website";
+    match service {
+        "adzuna" => {
+            if extra.trim().is_empty() {
+                return Err("Adzuna needs its app ID as well as the key".into());
+            }
+            match sent(c.get("https://api.adzuna.com/v1/api/jobs/gb/search/1").query(&[("app_id", extra.trim()), ("app_key", key), ("results_per_page", "1"), ("what", "manager")]).send())? {
+                400 | 401 | 403 => Err(format!("{refused} (the app ID and the key go together)")),
+                _ => Ok(()),
+            }
+        }
+        "jsearch" => {
+            let req = if extra == "rapidapi" {
+                c.get("https://jsearch.p.rapidapi.com/search").header("x-rapidapi-key", key).header("x-rapidapi-host", "jsearch.p.rapidapi.com")
+            } else {
+                c.get("https://api.openwebninja.com/jsearch/search").header("x-api-key", key)
+            };
+            match sent(req.query(&[("query", "manager"), ("page", "1"), ("num_pages", "1")]).send())? {
+                401 | 403 => Err(format!("{refused}, and check which site it's from")),
+                _ => Ok(()),
+            }
+        }
+        "jooble" => match sent(c.post(format!("https://jooble.org/api/{key}")).json(&serde_json::json!({ "keywords": "manager" })).send())? {
+            401 | 403 | 404 => Err(refused.into()),
+            _ => Ok(()),
+        },
+        "apify" => match sent(c.get("https://api.apify.com/v2/users/me").bearer_auth(key).send())? {
+            401 | 403 => Err(refused.into()),
+            _ => Ok(()),
+        },
+        _ => Ok(()),
+    }
+}
+
 // --- FreeHire (freehire.me): a free job search built for apps and AI agents ------------------
 
 /// FreeHire's search results: postings with their full text, mostly linking to the employer's own site.

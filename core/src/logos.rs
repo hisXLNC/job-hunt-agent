@@ -367,7 +367,7 @@ mod tests {
     fn kept_once_looked_for() {
         let s = crate::testkit::setup();
         assert_eq!(kept(&s.agent, "Acme Inc."), None, "not looked for yet");
-        s.agent.db().set(&key("Acme Inc."), &format!("none|{}", crate::util::now())).unwrap();
+        s.agent.db().set(&key("Acme Inc."), &format!("none2|{}", crate::util::now())).unwrap();
         assert_eq!(kept(&s.agent, "ACME"), Some(None), "looked lately, none: the same company however it's written");
         // Its site, and that site's image: shared by every spelling that leads to the site.
         s.agent.db().set(&site_key("acme.com"), &format!("image/png|{}", base64::engine::general_purpose::STANDARD.encode([1u8, 2, 3]))).unwrap();

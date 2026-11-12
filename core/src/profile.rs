@@ -163,6 +163,24 @@ pub struct Wants {
     pub avoid: Vec<String>,
     /// Things that rule a role out for you ("more than 25% travel", "on-site five days").
     pub dealbreakers: Vec<String>,
+    /// The career path you're building, in your words ("product leadership in fintech"). Each
+    /// posting is read against it, and one that leads away is flagged.
+    pub path: String,
+}
+
+/// How the scorer marks a posting against the career path, at the start of one red_flags entry:
+/// "Career path: toward. <why>" or "Career path: away. <why>".
+pub const PATH_FLAG: &str = "Career path:";
+
+/// What a job's flags say about the career path: (true when it leads toward it, why).
+pub fn path_read(flags: &[String]) -> Option<(bool, String)> {
+    let f = flags.iter().find_map(|f| f.strip_prefix(PATH_FLAG))?.trim();
+    let (dir, why) = f.split_once('.').unwrap_or((f, ""));
+    match dir.trim().to_lowercase().as_str() {
+        "toward" | "towards" => Some((true, why.trim().to_string())),
+        "away" => Some((false, why.trim().to_string())),
+        _ => None,
+    }
 }
 
 impl Wants {
@@ -186,6 +204,9 @@ impl Wants {
         }
         if !list(&self.dealbreakers).is_empty() {
             lines.push(format!("- Deal-breakers: {}. A posting that clearly has one scores below 50, with it named in red_flags; when the posting doesn't say, don't assume.", list(&self.dealbreakers)));
+        }
+        if !self.path.trim().is_empty() {
+            lines.push(format!("- The career path they're building: {}. Read every role against it and say so in red_flags with one entry, worded exactly \"Career path: toward. <why, under 14 words>\" when the role clearly moves them along it (the industry, the kind of work or the next step up), or \"Career path: away. <why, under 14 words>\" when taking it would pull them off it (another industry or kind of work that doesn't lead there, or a step back). Add neither when it's in between or the posting doesn't say. This entry doesn't change the score, which stays about how well their experience fits.", self.path.trim()));
         }
         if lines.is_empty() {
             return String::new();
@@ -750,7 +771,13 @@ mod tests {
         assert_eq!(two.search_hours(), (7, None), "the same hour twice is one search");
         // Nothing set: nothing said to the scorer. Set: one line each.
         assert_eq!(p.wants.for_scoring(), "");
-        let w = Wants { level: "senior manager".into(), work: "permanent".into(), industries: vec!["fintech".into()], avoid: vec!["gambling".into(), " ".into()], dealbreakers: vec!["on-site five days".into()] };
+        let w = Wants { level: "senior manager".into(), work: "permanent".into(), industries: vec!["fintech".into()], avoid: vec!["gambling".into(), " ".into()], dealbreakers: vec!["on-site five days".into()], path: String::new() };
+        // A career path adds its own line, and the scorer's read of a posting is told from its flags.
+        let with_path = Wants { path: "product leadership in fintech".into(), ..Wants::default() }.for_scoring();
+        assert!(with_path.lines().count() == 2 && with_path.contains("product leadership in fintech") && with_path.contains("Career path: away."), "{with_path}");
+        assert_eq!(path_read(&["Contract role".into(), "Career path: away. An insurance operations role, not fintech product.".into()]), Some((false, "An insurance operations role, not fintech product.".into())));
+        assert_eq!(path_read(&["Career path: toward. Payments product work.".into()]).map(|p| p.0), Some(true));
+        assert_eq!(path_read(&["Location mismatch".into()]), None);
         let text = w.for_scoring();
         assert!(text.starts_with("What the candidate wants from a role:") && text.lines().count() == 6, "{text}");
         assert!(text.contains("senior manager") && text.contains("Permanent roles only") && text.contains("fintech") && text.contains("don't want: gambling.") && text.contains("on-site five days"));

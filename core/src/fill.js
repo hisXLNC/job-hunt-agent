@@ -96,7 +96,7 @@
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
         <button class="b" data-k="stop" hidden>Stop: I'll submit it</button></div>
       <div class="f">
-        <button class="b" data-k="diag" hidden title="Copies what Job Hunt saw on this page (the Add buttons, the skill list), to paste to Claude when something wasn't filled in">Copy details</button>
+        <button class="b" data-k="diag" hidden title="Copies what Job Hunt saw and did on this page (each box, what it meant to put there and what the box holds now), to paste to Claude when something was filled in wrongly or not at all">Copy details</button>
         <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button>
         <button class="b" data-k="drop" title="Not for you after all (the pay, say): Job Hunt sets it aside${JOB.queue ? ' and opens the next one' : ''}">Not interested</button></div></div>`;
     statusEl = root.querySelector('.s');
@@ -829,7 +829,10 @@
       // the form again and fill every entry at once (a redraw after filling could empty the boxes).
       if (round < 1) diag = { version: ME, adds: fields.filter(f => f.type === 'add').map(f => ({ label: f.label, section: f.section, entries: f.entries, answer: answer.values && answer.values[f.key] })), roles: answer.roles,
         addButtons: [...document.querySelectorAll('button,[role=button],a')].filter(b => !own(b) && /^\s*\+?\s*add\b/i.test(clean(b.textContent || b.getAttribute('aria-label') || ''))).slice(0, 12).map(b => ({ text: clean(b.textContent || '').slice(0, 50), aria: b.getAttribute('aria-label'), shown: shown(b), section: sectionOf(b), at: where(b) })),
-        headings: heads.map(h => textOf(h).slice(0, 50)).slice(0, 40) };
+        headings: heads.map(h => textOf(h).slice(0, 50)).slice(0, 40),
+        files: Object.keys(answer.files || {}).map(k => ({ key: k, name: answer.files[k] && (answer.files[k].name || answer.files[k].kind) })), note: answer.note, job: answer.job && `${answer.job.title} at ${answer.job.company}`,
+        // Where files go on this page (an upload area can be a drop zone with its file box hidden).
+        uploads: [...document.querySelectorAll('input[type=file],[data-automation-id*="file-upload" i],[data-automation-id*="attachments" i],[class*="dropzone" i]')].filter(x => !own(x)).slice(0, 6).map(x => ({ at: where(x), shown: shown(x), html: htmlOf(x, 700) })) };
       // How many to add: Claude's answer, and for jobs at least what your CV has more than the form.
       const isWork = f => /experience|employment|work|job|position/i.test(f.section || '');
       const howMany = f => Math.max(parseInt(answer.values && answer.values[f.key], 10) || 0, isWork(f) ? (answer.roles || 0) - (f.entries || 0) : 0);
@@ -880,7 +883,13 @@
         const v = answer.values && answer.values[f.key];
         const done = await fillOne(f, v, file);
         // For Copy details: what each box got (no values: the labels and whether each was filled).
-        (diag.fields ||= []).push({ label: String(f.label || '').slice(0, 60), type: f.type, section: f.section, had: !!f.value, answered: v != null && v !== '' || !!file, filled: !!done });
+        // (Now also what Job Hunt meant to put in each box and what the box held afterwards, so a
+        // wrong or missing answer can be traced: it's your own details, copied only when you press it.)
+        { const e = (byKey[f.key] || [])[0], live = e && e.isConnected;
+          const now = !live ? '(box replaced)' : e.type === 'checkbox' || e.type === 'radio' ? String(e.checked) : e.type === 'file' ? (e.files && e.files.length ? e.files[0].name : '') : e.tagName === 'SELECT' ? clean((e.options[e.selectedIndex] || {}).text || '') : clean(e.value || e.getAttribute('aria-label') || e.textContent || '');
+          (diag.fields ||= []).push({ key: f.key, label: String(f.label || '').slice(0, 60), type: f.type, section: f.section, required: f.required || undefined, had: f.value ? String(f.value).slice(0, 60) : '', want: file ? `file: ${file.name || file.kind || 'yes'}` : v == null ? null : String(v).slice(0, 80), now: String(now).slice(0, 80), filled: !!done,
+            options: f.options ? f.options.slice(0, 15) : undefined, at: live ? where(e) : undefined,
+            html: live && (f.type === 'file' || (!done && (v != null && v !== '' || file))) ? htmlOf(e.closest('[data-automation-id^="formField"],[data-automation-id*="attachments" i],fieldset,li,section') || e.parentElement, 1500) : undefined }); }
         // Green is what Job Hunt filled; a box the site (or you) had filled already isn't marked.
         const theirs = f.value !== '' && f.type !== 'file' && (v == null || v === '' || same(f.value, v));
         if (theirs && done) continue;
