@@ -28,6 +28,8 @@ async function fill() {
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !/^https?:/.test(tab.url || '')) { $('acts').hidden = true; return say('Open a job posting or application form first', 'Then press this button on its page.', true); }
   $('send').onclick = send;
+  // The shortcut for Fill this form, as set in the browser (it can be changed there).
+  try { chrome.commands.getAll(l => { const c = (l || []).find(x => x.name === 'fill-form'); if (c && c.shortcut) $('key-hint').textContent = c.shortcut; }); } catch (e) { /* older browser */ }
   $('fill').onclick = fill;
   $('change').onclick = e => { e.preventDefault(); $('setup').hidden = false; };
   $('save').onclick = async () => {

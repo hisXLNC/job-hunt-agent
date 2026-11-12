@@ -236,6 +236,8 @@ def verify(quick=False):
     ]
     # In a real browser, against the preview with sample data. Skipped where Playwright isn't installed.
     steps.append(("Screens work (click-through)", [sys.executable, "tools/screen_test.py"], ROOT))
+    # The extension, loaded for real, filling a stand-in Workday page (skills, Field of Study).
+    steps.append(("Extension fills a form (mock Workday)", ["node", "tools/ext_test/ext_test.js", "std", "odd", "typing", "keys", "app"], ROOT))
     if not quick:
         steps.append(("Windows app compiles", ["cargo", "check", "-q", "--manifest-path", "desktop/src-tauri/Cargo.toml"], ROOT))
     env = dict(os.environ, CARGO_TERM_COLOR="never")
@@ -247,7 +249,7 @@ def verify(quick=False):
             try:
                 r = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
                 ok, out = r.returncode == 0, (r.stdout + r.stderr)
-                if r.returncode == 2 and cmd[-1].endswith("screen_test.py"):
+                if r.returncode == 2 and ("screen_test.py" in cmd[-1] or "ext_test.js" in " ".join(cmd)):
                     print(f"skip  {name}: {out.strip().splitlines()[-1] if out.strip() else 'not available here'}", flush=True)
                     continue
             except FileNotFoundError as e:

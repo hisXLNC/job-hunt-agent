@@ -5,9 +5,9 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.38.0** (job page's next step, Today and Search trimmed, keyboard picking, the
-  screen test). The working branch changes with each session (this one: `claude/brave-fermat-ti1omi`);
-  `main` is what's released. Last published before it: 2.37.0 (the Today / Jobs layout).
+- Latest version: **2.39.0** (the skills chooser rewritten against a mock Workday page, real typing and
+  keys through the debugger, Alt+Shift+F). The working branch changes with each session (this one:
+  `claude/brave-fermat-ti1omi`); `main` is what's released. Before it: 2.38.0, 2.37.0 (the layout).
 - The user's defaults (asked for, keep them): forms open in **their own browser** (`applyNow`, the Apply
   page's main button, the job page's next step: `fillBrowser`), and **Not interested doesn't learn**
   (the dialog's main button and the bulk action send `learn: false`; "and learn from it" is the other button).
@@ -76,22 +76,24 @@ Playwright screenshots of it are how the 2.37.0 layout was checked (desktop and 
 
 ## Testing the form filler
 
-The Playwright mocks lived in the old session's scratchpad and are gone; rebuild as needed:
-- Page tests: load `core/src/fill.js` with `__TOKEN__` → `'tok'` and `__JOB__` → a job object via
-  `addInitScript`, route `https://jobhunt.invalid/**` to capture what it sends, then call
-  `window.__jobhunt.fill({values, files})`.
-- Extension tests: build the extension folder (static/extension + `fill.js` with `'__TOKEN__'` → `''`
-  and `__JOB__` → `(window.__jobhuntExt || {title:'',company:''})`, `__JH_VERSION__` and the manifest
-  version set to match), add `"<all_urls>"` to host_permissions for the test, launch with
-  `launchPersistentContext('', { headless: false, args: ['--headless=new', --load-extension…] })`, run a
-  mock bridge on 127.0.0.1:47613 (`/ext/ping` with the same version, `/ext/fill`), inject with
-  `chrome.scripting.executeScript` from the service worker. Mock Workday widgets that accept only
-  `isTrusted` clicks, slow searches (4 s) and `chrome.tabs.setZoom(tab, 0.8)` caught real bugs.
+`node tools/ext_test/ext_test.js` loads the real extension into Chromium and fills a stand-in Workday
+page (`tools/ext_test/workday.html`) with answers from a stand-in for Job Hunt on 127.0.0.1:47613.
+Variants (name them to run a few; `TRACE=1` prints each skill's searches): `std`, `odd` (chosen items
+drawn with unknown markup, no aria-selected), `typing` (only real typing searches), `keys` (the mouse
+does nothing in the list), `slow` (4 s searches), `zoom` (80%), and `app` (Job Hunt's own window: the
+same script with a token, no extension). `verify` runs five of them where Playwright is installed.
+When the user reports something on a real site, make the mock behave that way first, see it fail,
+then fix it. What the mock taught (2.39.0): Workday draws chosen items with the same
+`promptOption` markup as search results (they were read as results); a second click on an option the
+filler couldn't see as chosen unticked it; the debugger going off after 45 s and on again moved the
+page under the next click. `window.__jobhunt.details()` returns what Copy details copies, including
+`skills`: each skill's searches, what was chosen and how (`click`, `box`, `keys`, `mouse`, `unseen`).
 
 ## Open / to watch
 
-- Workday skills: rewritten for accuracy in 2.36.5 (settled results, best fit, shorter search,
-  confirmed real click). Not yet confirmed by the user on the real site.
+- Workday skills and Field of Study: rewritten in 2.39.0 against the mock (see Testing). The mock is my
+  best picture of Workday, not the real site: if the user says it still misses, ask for **Copy details**
+  from the panel after a fill (its `skills` list says what each search found and how it was chosen).
 - Work Experience Add: fixed in 2.35.13–2.35.14 (button found by section heading; count from Claude's
   `_roles` list). Career transitions count as entries (2.36.1). Watch for over/under-adding.
 - First "My Information" page: needs Address/Phone in the user's facts; City is now learned (2.36.3).

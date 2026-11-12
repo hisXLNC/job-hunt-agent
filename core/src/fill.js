@@ -187,7 +187,7 @@
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
     return question(el) || clean(el.placeholder || el.name || el.id);
   }
-  let addNote = '', skillMiss = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
+  let addNote = '', skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
@@ -565,10 +565,11 @@
     // Already has an answer (yours or the site's): kept, unless Job Hunt corrects it from your CV
     // (a site's CV reader often cuts a job title short or puts it in the wrong box).
     if (f.value && same(f.value, v)) return true;
-    el.focus();
-    setter(el, String(v));
+    // Boxes that choose from the site's own list are searched, never typed into as text.
     if (f.type === 'skills') return fillSkills(el, v);
     if (f.type === 'prompt') return fillSkills(el, String(v).split(/\s*[;\n]\s*/)[0], true);
+    el.focus();
+    setter(el, String(v));
     if (f.type === 'combobox') {
       await wait(500);
       const opt = [...document.querySelectorAll('[role=option]')].find(o => near(o.textContent, v));
@@ -589,19 +590,29 @@
     el.click();
     ownClick = false;
   };
-  // A real click, through the browser itself (the extension only): Workday's skill list ignores
-  // clicks a page script makes, however mouse-like. Chrome shows "started debugging this browser"
-  // while it clicks; it goes again a few seconds after.
-  const realClick = el => new Promise(res => {
-    if (!EXT || !el || !el.isConnected) return res(false);
-    el.scrollIntoView({ block: 'nearest' });
-    const r = el.getBoundingClientRect();
-    if (!r.width || !r.height) return res(false);
-    const done = setTimeout(() => res(false), 4000);
-    try {
-      chrome.runtime.sendMessage({ jobhunt: 'click', data: { x: r.left + Math.min(r.width / 2, 60), y: r.top + r.height / 2 } }, v => { clearTimeout(done); void chrome.runtime.lastError; res(!!(v && v.ok)); });
-    } catch (e) { clearTimeout(done); res(false); }
+  // Asking the extension to act as you would (through the browser's debugger, the one way an
+  // extension can): a real click, real typing, a real key. null when it can't (not the extension,
+  // or it didn't answer). Chrome shows "started debugging this browser" while it does; that bar goes
+  // again a while after the last one.
+  const ext = (kind, data, ms = 4000) => new Promise(res => {
+    if (!EXT) return res(null);
+    const t = setTimeout(() => res(null), ms);
+    try { chrome.runtime.sendMessage({ jobhunt: kind, data: data || {} }, v => { clearTimeout(t); void chrome.runtime.lastError; res(v && v.ok ? v : null); }); }
+    catch (e) { clearTimeout(t); res(null); }
   });
+  // The debugger, on and ready. When it has just come on, its bar moves the page down: wait for
+  // that before aiming a click (a click aimed before it showed lands a row too high).
+  const debugReady = async () => { const v = await ext('debug'); if (v && v.fresh) await wait(900); return !!v; };
+  // A real click on an element: Workday's lists ignore clicks a page script makes, however
+  // mouse-like. Aimed near the element's left (its tick box and the start of its name), or its middle.
+  const realClick = async (el, middle) => {
+    if (!EXT || !el || !el.isConnected || !(await debugReady()) || !el.isConnected) return false;
+    el.scrollIntoView({ block: 'nearest' });
+    await wait(60);
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    return !!(await ext('click', { x: r.left + (middle ? r.width / 2 : Math.min(r.width / 2, 60)), y: r.top + r.height / 2 }));
+  };
   const pressKey = (el, k) => {
     for (const t of ['keydown', 'keypress', 'keyup']) {
       const n = k === 'Enter' ? 13 : k === 'Escape' ? 27 : k === 'ArrowDown' ? 40 : 0;
@@ -616,9 +627,16 @@
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, v);
     el.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].filter(o => !own(o) && shown(o) && clean(o.textContent));
-  // Each skill: type it, press Enter, wait for the list of matches, choose the closest (the same
-  // name, else one that starts with it or contains it, else the first), then the next.
+  // The options of the list that's open. Not the items already chosen: Workday draws each of those
+  // with the same markup as an option, inside the box (they were taken for search results).
+  const CHOSEN = '[data-automation-id=selectedItem],[data-automation-id=selectedItemList],[data-automation-id=multiselectInputContainer]';
+  const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].filter(o => !own(o) && !o.closest(CHOSEN) && shown(o) && clean(o.textContent));
+  // The site saying a search found nothing ("No Items."), in the box's field or in the list that opened.
+  const NOTHING = /\bno (items|results|matches|options)\b/i;
+  const LISTS = '[data-automation-id=activeListContainer],[data-automation-id*=noResult],[data-automation-id=popupContent],[role=listbox],[role=dialog]';
+  // Each skill: search for it, wait for the site's matches, choose the closest (the same name, else
+  // one that starts with it or holds it), make sure the site took it, then the next. `one`: a box
+  // that takes a single item (Field of Study).
   async function fillSkills(first, v, one) {
     const want = String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean).slice(0, one ? 1 : 12);
     // Workday redraws the box after each skill: find it again each time (by its id, else in its field).
@@ -626,6 +644,7 @@
     const box = () => first.isConnected ? first : (first.id && document.getElementById(first.id)) || [...field.querySelectorAll('input')].find(x => shown(x) && !own(x)) || first;
     const sig = () => options().map(o => clean(o.textContent)).join('|');
     const label = o => clean(o.getAttribute('data-automation-label') || o.textContent).toLowerCase();
+    const bare = x => x.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
     const words = x => x.toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9+#]+/).filter(w => w.length > 1 && !['and', 'the', 'for', 'of', '&'].includes(w)).map(w => w.slice(0, 6));
     // How well an option fits a skill: the same name best, then one that starts with it or holds it,
     // then the share of their words they have in common (both ways, so "Management" alone doesn't
@@ -633,96 +652,159 @@
     const fit = (o, skill) => {
       const x = label(o), s = skill.toLowerCase();
       if (!x || /^(search results|no (items|results|matches)|searching|loading)/.test(x)) return 0;
-      if (x === s || x.replace(/\s*\([^)]*\)/g, '') === s.replace(/\s*\([^)]*\)/g, '')) return 100;
+      if (x === s || bare(x) === bare(s)) return 100;
       const a = words(s), b = words(x);
       const common = a.filter(w => b.includes(w)).length;
       let n = a.length && b.length ? 60 * common / Math.max(a.length, b.length) : 0;
       if (x.startsWith(s)) n += 25; else if (x.includes(s)) n += 20; else if (s.includes(x) && b.length > 1) n += 10;
       return n;
     };
-    // Search: type it, press Enter, then wait for this search's own results and for the list to stop
-    // changing (Workday fills it in a bit at a time), up to about twenty seconds.
+    // Close enough to choose: a good fit, or a plainer name for the same thing (every word of the
+    // option is in the skill: "Payments" for "Payments Integration"). Not a different thing that
+    // shares a word ("Vendor Relations" for "Vendor Management").
+    const closeEnough = (o, skill, score) => score >= 45 || (score >= 30 && words(label(o)).every(w => words(skill).includes(w)));
+    // The chosen items, as far as they can be seen: named pills, and how many items the box's own
+    // list of chosen ones holds (Workday's selectedItemList), whatever they look like.
+    const names = () => skillPills(box());
+    const kids = () => { const l = field !== document.body && field.querySelector('[data-automation-id=selectedItemList]'); return l ? l.children.length : -1; };
+    const rowOf = o => o.closest('[role=option],[data-automation-id=menuItem],li') || o;
+    const tick = o => rowOf(o).querySelector('input[type=checkbox],input[type=radio]');
+    // An option the site shows as chosen: its tick box is ticked, or it's marked selected.
+    const ticked = o => { const r = rowOf(o), c = tick(o); return !!(c && c.checked) || [o, r].some(x => x.getAttribute('aria-selected') === 'true' || x.getAttribute('aria-checked') === 'true') || !!r.querySelector('[aria-checked=true]'); };
+    // Whether this option's state can be seen at all. When it can't, one real click is trusted and
+    // never repeated: a second click would untick it.
+    const visible = o => !!tick(o) || [o, rowOf(o)].some(x => x.hasAttribute('aria-selected') || x.hasAttribute('aria-checked')) || kids() >= 0 || names().length > 0;
+    const find = name => { const l = options().filter(o => same(o.getAttribute('data-automation-label') || o.textContent, name)); return l.find(o => o.matches('[data-automation-id=promptOption]')) || l[0] || null; };
+    const nothing = () => !options().length && (NOTHING.test(clean(field === document.body ? '' : field.textContent || '')) || [...document.querySelectorAll(LISTS)].some(x => !own(x) && shown(x) && NOTHING.test(clean(x.textContent).slice(0, 200))));
+    // Typing the way the page takes it: as a script does (most sites), or as real typing through the
+    // extension when the site didn't react to that.
+    let trusted = false, scriptWorks = false;
+    const trace = [];
     const search = async query => {
-      if (options().length) { pressKey(box(), 'Escape'); await wait(500); }
+      if (options().length || nothing()) { pressKey(box(), 'Escape'); await wait(350); }
       const el = box();
       const before = sig();
+      let added = 0;
+      const seen = new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && !own(n)) added++; });
+      seen.observe(document.body, { childList: true, subtree: true });
+      const t0 = Date.now();
       el.focus(); el.click();
       typeIn(el, '');
       await wait(150);
-      typeIn(el, query);
-      await wait(300);
-      pressKey(el, 'Enter');
+      if (trusted) { el.focus(); await ext('type', { text: query }); await wait(250); await ext('key', { key: 'Enter' }); }
+      else { typeIn(el, query); await wait(300); pressKey(el, 'Enter'); }
       const key = words(query);
       const ours = l => l.some(o => key.some(w => label(o).includes(w)));
-      let list = [];
-      for (let i = 0; i < 90; i++) {
+      let list = [], none = 0, reacted = true;
+      for (let i = 0; i < 70; i++) {
         await wait(170);
         list = options();
         const busy = !list.length || /^(searching|loading)/i.test(clean(list[0].textContent));
-        if (!busy && (ours(list) || (sig() !== before && i > 40))) break;
-        if (/no (items|results|matches)/i.test(clean(field.textContent || ''))) return [];
+        if (!busy && (ours(list) || (sig() !== before && i > 30))) break;
+        // "No Items", twice in a row and not straight away (the last search's may still be showing).
+        none = i > 3 && nothing() ? none + 1 : 0;
+        if (none >= 2) { list = []; break; }
+        // Nothing on the page changed in three seconds: the site didn't take the typing.
+        if (i === 18 && !added && !list.length) { reacted = false; break; }
       }
-      // Settled: the same list three looks in a row.
-      let last = sig(), same3 = 0;
-      for (let i = 0; i < 20 && same3 < 3; i++) { await wait(300); const now = sig(); same3 = now === last ? same3 + 1 : 0; last = now; }
-      return options();
+      seen.disconnect();
+      if (!reacted && EXT && !trusted && !scriptWorks) { trusted = true; return search(query); }
+      if (reacted && !trusted) scriptWorks = true;
+      // Settled: the same list three looks in a row (Workday fills it in a bit at a time).
+      if (list.length) { let last = sig(), same3 = 0; for (let i = 0; i < 20 && same3 < 3; i++) { await wait(220); const now = sig(); same3 = now === last ? same3 + 1 : 0; last = now; } }
+      list = options();
+      trace.push({ q: query, found: list.length, ms: Date.now() - t0, real: trusted || undefined, reacted: reacted || undefined });
+      return list;
+    };
+    // Choosing with real arrow keys and Enter, when clicks didn't take: only when the row the keys
+    // are on can be seen to be the right one (or it's the only one), so a wrong skill is never added.
+    const byKeys = async name => {
+      const rows = () => [...new Set(options().map(rowOf))].filter(shown);
+      const mine = r => same(r.querySelector('[data-automation-label]')?.getAttribute('data-automation-label') || r.textContent, name);
+      if (!rows().some(mine)) return false;
+      const on = () => { const id = box().getAttribute('aria-activedescendant'); const a = (id && document.getElementById(id)) || (document.activeElement && document.activeElement.closest && document.activeElement.closest('[role=option]')) || rows().find(r => /\b(active|focus(ed)?|highlight(ed)?|hover(ed)?)\b/i.test(r.className || '')); return a ? rowOf(a) : null; };
+      box().focus();
+      for (let i = 0; i < 8; i++) {
+        const a = on();
+        if (a && mine(a)) break;
+        if (!(await ext('key', { key: 'ArrowDown' }))) return false;
+        await wait(140);
+      }
+      const a = on();
+      if (!(a ? mine(a) : rows().length === 1)) return false;
+      return !!(await ext('key', { key: 'Enter' }));
+    };
+    // Choose an option and make sure the site took it. Says how ('click', 'box', 'keys', 'mouse',
+    // 'already'), 'unseen' when it was clicked but the site shows no sign either way, or ''.
+    const choose = async (best, name) => {
+      const was = { kids: kids(), names: names().length };
+      const got = () => names().some(p => same(p, name) || near(p, name)) || (was.kids >= 0 && kids() > was.kids) || names().length > was.names || options().some(o => same(o.getAttribute('data-automation-label') || o.textContent, name) && ticked(o));
+      const settle = async ms => { for (let i = 0; i < ms / 200; i++) { if (got()) return true; await wait(200); } return got(); };
+      const cur = () => find(name) || (best.isConnected ? best : null);
+      if (cur() && ticked(cur())) return 'already';
+      if (EXT) {
+        const canSee = visible(cur() || best);
+        if (await realClick(cur())) { if (await settle(canSee ? 4000 : 1500)) return 'click'; if (!canSee) return 'unseen'; }
+        // Not taken, and it shows as not chosen: its tick box itself, then the keyboard.
+        let t = cur();
+        const c = t && tick(t);
+        if (t && c && !ticked(t) && shown(c) && await realClick(c, true) && await settle(3000)) return 'box';
+        t = cur();
+        if (t && !ticked(t) && !got() && await byKeys(name) && await settle(3000)) return 'keys';
+        if (got()) return 'click';
+      }
+      // Without real clicks (the app's window, or the phone): a mouse-like press on the option, its box, its row.
+      const b = cur() || best;
+      for (const t of [b, tick(b), rowOf(b), b.querySelector('[data-automation-id=promptOption]')].filter((x, i, a) => x && a.indexOf(x) === i)) {
+        if (!t.isConnected || got()) break;
+        mouse(t);
+        if (await settle(1500)) return 'mouse';
+      }
+      return got() ? 'mouse' : '';
     };
     let added = 0;
-    // Real clicks: turn them on first. The browser's "debugging" bar moves the page down when it
-    // appears, so a click aimed before it showed lands too high.
-    if (EXT) await new Promise(res => { const t = setTimeout(res, 3000); try { chrome.runtime.sendMessage({ jobhunt: 'debug', data: {} }, () => { void chrome.runtime.lastError; clearTimeout(t); setTimeout(res, 800); }); } catch (e) { clearTimeout(t); res(); } });
+    diag.skills ||= [];
     for (const skill of want) {
-      if (skillPills(box()).some(p => same(p, skill))) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); continue; }
-      // The skill as written, then a shorter search when the list has nothing close ("Payments
-      // Integration" finds nothing, "Payments" does).
-      const shorter = words(skill).length > 1 ? skill.replace(/\s*\([^)]*\)/g, '').split(/\s+/).slice(0, 2).join(' ') : '';
-      const single = skill.replace(/\s*\([^)]*\)/g, '').replace(/(\w{3,})s\b/g, '$1');
-      const queries = [skill, single, shorter, words(skill).length > 2 ? skill.split(/\s+/).slice(-2).join(' ') : ''].filter((q, i, a) => q && a.findIndex(x => x.toLowerCase() === q.toLowerCase()) === i);
+      if (names().some(p => same(p, skill))) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); continue; }
+      // The skill as written, then plainer searches when the list has nothing close: without its
+      // plural, its first two words, its last two, its first word ("Payments Integration" finds
+      // nothing, "Payments" does).
+      const plain = skill.replace(/\s*\([^)]*\)/g, ''), parts = plain.split(/\s+/);
+      const queries = [skill, plain.replace(/(\w{3,})s\b/g, '$1'), parts.length > 2 ? parts.slice(0, 2).join(' ') : '', parts.length > 2 ? parts.slice(-2).join(' ') : '', parts.length > 1 && parts[0].length > 3 ? parts[0] : '']
+        .filter((q, i, a) => q && a.findIndex(x => x.toLowerCase() === q.toLowerCase()) === i);
       let list = [], best = null, score = 0;
+      trace.length = 0;
       for (const q of queries) {
         list = await search(q);
-        for (const o of list) { const f = fit(o, skill); if (f > score) { score = f; best = o; } }
+        for (const o of list) { const f = fit(o, skill); if (f > score && closeEnough(o, skill, f)) { score = f; best = o; } }
         if (score >= 45) break;
       }
-      if (!best || score < 30) {
+      const log = { skill, searches: trace.slice() };
+      diag.skills.push(log);
+      if (!best) {
         if (!skillMiss.some(x => same(x, skill))) skillMiss.push(skill);
+        log.notInList = list.slice(0, 8).map(o => clean(o.textContent).slice(0, 60));
         if (!diag.skill) diag.skill = { skill, notInList: true, options: list.slice(0, 10).map(o => ({ text: clean(o.textContent).slice(0, 60), label: o.getAttribute('data-automation-label'), at: where(o) })), typed: box().value, box: htmlOf(field, 2500) };
-        pressKey(box(), 'Escape'); await wait(300); typeIn(box(), ''); await wait(500);
+        pressKey(box(), 'Escape'); await wait(250); typeIn(box(), ''); await wait(300);
         continue;
       }
-      const name = clean(best.textContent);
-      const snap = (best.closest('[role=listbox]') || best.parentElement?.parentElement || best).cloneNode(true);
-      const taken = () => skillPills(box()).some(p => same(p, name) || near(p, name)) || [...options()].some(o => same(o.textContent, name) && (o.getAttribute('aria-selected') === 'true' || o.closest('[aria-selected=true]')));
-      const settle = async ms => { for (let i = 0; i < ms / 250; i++) { if (taken()) return true; await wait(250); } return taken(); };
-      let ok = false;
-      if (EXT) {
-        // A real click, then up to five seconds for Workday to take it; once more if it didn't (never
-        // a second click on one it took, which would untick it).
-        for (let n = 0; n < 2 && !ok; n++) {
-          const target = [...options()].find(o => same(o.textContent, name)) || best;
-          if (!(await realClick(target))) break;
-          ok = await settle(5000);
-          if (!ok) await wait(800);
-        }
-      }
-      if (!ok) {
-        // Without real clicks (the app's window, or the phone): a mouse-like press on the option, its box, its row.
-        const tries = [best, best.querySelector('input[type=checkbox],input[type=radio],[role=checkbox]'), best.closest('[role=option],[data-automation-id=menuItem],li'), best.querySelector('[data-automation-id=promptOption]')].filter((x, i, a) => x && a.indexOf(x) === i);
-        for (const t of tries) {
-          if (!t.isConnected) continue;
-          mouse(t);
-          if ((ok = await settle(1500))) break;
-        }
-      }
-      if (ok) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); } else if (!skillMiss.some(x => same(x, skill))) {
+      // The list as it is now (a plainer search may have replaced the one the best match came from).
+      const name = clean(best.getAttribute('data-automation-label') || best.textContent);
+      if (!best.isConnected && !find(name)) await search(name);
+      const snap = ((find(name) || best).closest('[role=listbox]') || best.parentElement?.parentElement || best).cloneNode(true);
+      const how = await choose(best, name);
+      Object.assign(log, { chose: name, fit: Math.round(score), how: how || 'not taken' });
+      if (how === 'unseen') { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); if (!skillUnsure.some(x => same(x, name))) skillUnsure.push(name); }
+      else if (how) { added++; skillMiss = skillMiss.filter(x => !same(x, skill)); }
+      else if (!skillMiss.some(x => same(x, skill))) {
         skillMiss.push(skill);
-        if (!diag.skill) diag.skill = { skill, chose: name, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), list: htmlOf(snap, 6000), pills: skillPills(box()), box: htmlOf(field, 2500) };
+        if (!diag.skill) diag.skill = { skill, chose: name, options: list.slice(0, 6).map(o => ({ text: clean(o.textContent).slice(0, 60), at: where(o) })), list: htmlOf(snap, 6000), pills: names(), box: htmlOf(field, 2500) };
       }
-      // A pause before the next, so Workday has redrawn the box.
-      await wait(1200);
-      if (options().length) { pressKey(box(), 'Escape'); await wait(400); }
-      if (box().value) typeIn(box(), '');
+      // A moment for the site to redraw the box, then clear it for the next.
       await wait(500);
+      if (options().length) { pressKey(box(), 'Escape'); await wait(300); }
+      if (box().value) typeIn(box(), '');
+      await wait(250);
     }
     return added > 0;
   }
@@ -815,7 +897,7 @@
       buttons.fill.disabled = false; buttons.fill.textContent = 'Fill in again';
       buttons.next.hidden = !todo; buttons.applied.hidden = false;
       buttons.diag.hidden = false; // what Job Hunt saw and did, to paste to Claude when something's off
-      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (skillMiss.length ? ` Not taken from Workday's lists (add these yourself): ${skillMiss.join(', ')}.` : '')
+      const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (skillMiss.length ? ` Not in the site's list, or not taken (add these yourself): ${skillMiss.join(', ')}.` : '') + (skillUnsure.length ? ` Chosen, but the site didn't show it: check ${skillUnsure.join(', ')}.` : '')
         + (EXT && answer.app_version && /^\d/.test(answer.app_version) && answer.app_version.replace(/-.*/, '') !== chrome.runtime.getManifest().version ? ` (This extension is ${chrome.runtime.getManifest().version}, Job Hunt is ${answer.app_version}: open the extension's button once so it updates, then reload this page.)` : '');
       status(todo
         ? `Filled ${ok}.${saved} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
@@ -846,6 +928,8 @@
       }
     },
     start: () => start(),
+    // What Job Hunt saw and did on this page (what Copy details copies).
+    details: () => diag,
     failed(msg) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status(msg); },
     // Job Hunt can't tell which application this page is: choose it from your jobs (Submit's first).
     choose(msg, list) {
@@ -879,7 +963,7 @@
   }
   let sent = null;
   async function start(more, dates) {
-    if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; }
+    if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; skillUnsure = []; }
     panel();
     if (retired) return;
     checkPay();

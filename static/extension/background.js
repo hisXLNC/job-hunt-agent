@@ -60,15 +60,20 @@ const fill = (tabId, data) =>
         // Job Hunt can't tell which application this is: the panel lists them to choose from.
         ? run(tabId, (m, l) => window.__jobhunt && window.__jobhunt.choose(m, l), [e.message, e.data.choose])
         : run(tabId, m => window.__jobhunt && window.__jobhunt.failed(m), ['Couldn\'t fill it in: ' + e.message]));
-// Real clicks for the page (Workday's skill list takes no other): through Chrome's debugger, the
-// one way an extension can click as you would. Let go a few seconds after the last click.
+// Acting as you would, for the page (Workday's skill list takes no other): real clicks, typing and
+// keys through Chrome's debugger, the one way an extension can. Let go a while after the last one.
 const debugging = new Map();
+// Turns it on for the tab; true when it has only just come on (Chrome's "started debugging" bar
+// then moves the page down, so the page waits before aiming a click).
 async function debugOn(tabId) {
   const t = { tabId };
-  if (!debugging.has(tabId)) { await chrome.debugger.attach(t, '1.3'); debugging.set(tabId, 0); }
+  const fresh = !debugging.has(tabId);
+  if (fresh) { await chrome.debugger.attach(t, '1.3'); debugging.set(tabId, 0); }
   clearTimeout(debugging.get(tabId));
-  // Kept on while the skills are chosen (a skill's search takes seconds): off a while after the last.
-  debugging.set(tabId, setTimeout(() => { debugging.delete(tabId); chrome.debugger.detach(t).catch(() => {}); }, 45000));
+  // Kept on while the skills are chosen (a skill the site doesn't have takes several searches): off
+  // two minutes after the last. Coming on again mid-list would move the page under the next click.
+  debugging.set(tabId, setTimeout(() => { debugging.delete(tabId); chrome.debugger.detach(t).catch(() => {}); }, 120000));
+  return fresh;
 }
 async function realClick(tabId, x, y) {
   const t = { tabId };
@@ -79,8 +84,32 @@ async function realClick(tabId, x, y) {
     await chrome.debugger.sendCommand(t, 'Input.dispatchMouseEvent', { type, x, y, button, clickCount: type === 'mouseMoved' ? 0 : 1 });
   }
 }
+// Real typing into the box that has the focus, and real keys (Enter, the arrows, Escape).
+async function realType(tabId, text) {
+  await debugOn(tabId);
+  await chrome.debugger.sendCommand({ tabId }, 'Input.insertText', { text: String(text || '') });
+}
+const KEYS = { Enter: [13, '\r'], ArrowDown: [40], ArrowUp: [38], Escape: [27] };
+async function realKey(tabId, key) {
+  const k = KEYS[key];
+  if (!k) throw new Error('No such key');
+  await debugOn(tabId);
+  const base = { key, code: key, windowsVirtualKeyCode: k[0], nativeVirtualKeyCode: k[0] };
+  await chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', { type: k[1] ? 'keyDown' : 'rawKeyDown', ...base, ...(k[1] ? { text: k[1], unmodifiedText: k[1] } : {}) });
+  await chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+}
 chrome.debugger.onDetach.addListener(s => { if (s.tabId) debugging.delete(s.tabId); });
 const run = (tabId, func, args) => chrome.scripting.executeScript({ target: { tabId }, func, args });
+// Fill this form from the keyboard (Alt+Shift+F unless you changed it in the browser's extension
+// shortcuts): the same as the popup's button, on the page you're looking at.
+chrome.commands.onCommand.addListener(async (command, tab) => {
+  if (command !== 'fill-form' || !tab || !tab.id) return;
+  try {
+    const [{ result: loaded }] = await run(tab.id, () => !!window.__jobhunt, []);
+    if (!loaded) await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['fill.js'] });
+    await run(tab.id, () => window.__jobhunt && window.__jobhunt.start(), []);
+  } catch (e) { /* a page extensions can't run on (the browser's own pages, the web store) */ }
+});
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.check) {
     checkVersion().then(reply, () => reply({ ok: true }));
@@ -95,7 +124,11 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg.jobhunt || !tabId) return;
   const { jobhunt: kind, data } = msg;
   if (kind === 'debug') {
-    debugOn(tabId).then(() => reply({ ok: true }), e => reply({ ok: false, error: String(e && e.message || e) }));
+    debugOn(tabId).then(fresh => reply({ ok: true, fresh }), e => reply({ ok: false, error: String(e && e.message || e) }));
+    return true;
+  }
+  if (kind === 'type' || kind === 'key') {
+    (kind === 'type' ? realType(tabId, data.text) : realKey(tabId, data.key)).then(() => reply({ ok: true }), e => reply({ ok: false, error: String(e && e.message || e) }));
     return true;
   }
   if (kind === 'click') {

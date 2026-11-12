@@ -4,6 +4,23 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.39.0] - 2026-11-12
+
+Skills on Workday, rebuilt and tested against a stand-in Workday.
+
+### Changes
+
+- Skills and Field of Study: rebuilt. Items already chosen are no longer mistaken for search results, which made the next skill pick the wrong thing or nothing.
+- A skill is never unticked again: when the site shows no sign that a click was taken, Job Hunt no longer clicks it a second time. It says which ones to check.
+- After a skill the site doesn't have, the following skills are chosen properly (the browser's debugging bar used to come back mid-list and move the page under the click).
+- A skill the site doesn't have is given up on in a couple of seconds, not a minute: skills take about a third of the time.
+- When a site ignores typing or clicks from the extension, Job Hunt types and presses keys as you would (real typing, arrows and Enter).
+- A plainer name is tried when the exact one isn't in the list (Payments for Payments Integration), but never a different skill that shares a word.
+- The skills box is no longer filled with the whole list as text before the skills are chosen.
+- Fill this form from the keyboard: Alt+Shift+F (change it in the browser's extension shortcuts). The extension's button shows the shortcut.
+- Copy details now lists every skill: what was searched, what the site offered, what was chosen and how. Paste it to Claude when something is off.
+- Behind the scenes: every release now loads the real extension and fills a stand-in Workday page in six ways.
+
 ## [2.38.0] - 2026-11-12
 
 One next step per job, a shorter Today, and your defaults.
@@ -1469,6 +1486,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.39.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.39.0
 [2.38.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.38.0
 [2.37.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.37.0
 [2.36.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.36.9

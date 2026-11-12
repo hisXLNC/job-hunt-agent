@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Senior Program Manager - Careers (mock Workday)</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 24px; max-width: 720px; }
+  [data-automation-id^=formField] { margin: 0 0 18px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  input[type=text] { font: inherit; padding: 6px 8px; width: 320px; }
+  [data-automation-id=multiselectInputContainer] { border: 1px solid #888; border-radius: 4px; padding: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; width: 420px; }
+  [data-automation-id=multiselectInputContainer] input { border: 0; outline: 0; flex: 1; min-width: 120px; }
+  ul.sel { list-style: none; display: contents; margin: 0; padding: 0; }
+  ul.sel li { background: #e8eefc; border-radius: 12px; padding: 2px 10px; }
+  .popup { position: absolute; background: #fff; border: 1px solid #888; box-shadow: 0 4px 16px rgba(0,0,0,.2); width: 420px; max-height: 190px; overflow: auto; z-index: 10; }
+  .popup [role=option] { padding: 7px 10px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+  .popup [role=option].active { background: #dfe8ff; }
+  .spacer { height: 260px; }
+</style></head>
+<body>
+<!-- A stand-in for a Workday application page, for tools/ext_test/ext_test.js. Its skill and
+     field-of-study boxes behave like Workday's as far as the filler can tell: type, press Enter, a
+     list of matches comes up after a pause, and an option is taken by a real click (or real keys).
+     ?pills=odd      chosen items are drawn with no recognisable markup, and rows carry no aria-selected
+     ?typing=trusted typing and Enter count only when they're real (the browser's own events)
+     ?click=keys     the mouse does nothing in the list: only real arrow keys and Enter choose
+     ?click=any      the list takes a script's clicks too (to test Job Hunt's own window, which has no real clicks)
+     ?slow=2500      how long a search takes, in ms -->
+<h2>My Experience</h2>
+<div data-automation-id="formField-email"><label for="email">Email Address</label><input type="text" id="email"></div>
+<div data-automation-id="formField-phone"><label for="phone">Phone Number</label><input type="text" id="phone"></div>
+<h3>Education 1</h3>
+<div data-automation-id="formField-school"><label for="school">School or University</label><input type="text" id="school"></div>
+<div data-automation-id="formField-fieldOfStudy"><label for="education-1--fieldOfStudy">Field of Study</label>
+  <div data-automation-id="multiSelectContainer"><div><div data-automation-id="multiselectInputContainer">
+    <ul class="sel" data-automation-id="selectedItemList"></ul>
+    <div><input type="text" id="education-1--fieldOfStudy" data-automation-id="searchBox" data-uxi-widget-type="selectinput" placeholder="Search" data-single="1" data-list="study"></div>
+    <span data-automation-id="promptIcon">☰</span></div></div></div></div>
+<div class="spacer"></div>
+<h3>Skills</h3>
+<div data-automation-id="formField-skills"><label for="skills--skills">Type to Add Skills</label>
+  <div data-automation-id="multiSelectContainer"><div><div data-automation-id="multiselectInputContainer">
+    <ul class="sel" data-automation-id="selectedItemList"></ul>
+    <div><input type="text" id="skills--skills" data-automation-id="searchBox" data-uxi-widget-type="selectinput" placeholder="Search" data-list="skills"></div>
+    <span data-automation-id="promptIcon">☰</span></div></div></div></div>
+<div class="spacer"></div>
+<button type="button">Save and Continue</button>
+<script>
+const Q = new URLSearchParams(location.search);
+const ODD = Q.get('pills') === 'odd', TRUSTED_TYPING = Q.get('typing') === 'trusted', KEYS_ONLY = Q.get('click') === 'keys', ANY_CLICK = Q.get('click') === 'any', SLOW = Number(Q.get('slow') || 1200);
+const LISTS = {
+  skills: ['Python', 'Python Programming', 'Project Management', 'Project Management Office (PMO)', 'Program Management', 'SQL', 'SQL Server', 'MySQL', 'Vendor Management', 'Vendor Relations',
+    'Agile Methodology', 'Agile Project Management', 'Stakeholder Management', 'Risk Management', 'Data Analysis', 'Microsoft Excel', 'Payments', 'Payment Processing', 'JIRA', 'Budgeting'],
+  study: ['Computer Science', 'Computer Engineering', 'Computer and Information Sciences', 'Data Science', 'Business Administration', 'Economics'],
+};
+window.mock = { clicks: [], searches: [] };
+for (const input of document.querySelectorAll('input[data-automation-id=searchBox]')) {
+  const single = !!input.dataset.single, all = LISTS[input.dataset.list];
+  const chosen = [];
+  const ul = input.closest('[data-automation-id=multiselectInputContainer]').querySelector('ul');
+  let popup = null, active = -1, typed = '', timer = 0;
+  const pills = () => {
+    ul.innerHTML = chosen.map(n => ODD ? `<li><span>${n}</span></li>`
+      : `<li><div data-automation-id="selectedItem" title="${n}"><p data-automation-id="promptOption" data-automation-label="${n}">${n}</p><span data-automation-id="DELETE_charm">×</span></div></li>`).join('');
+  };
+  const close = () => { clearTimeout(timer); if (popup) popup.remove(); popup = null; active = -1; };
+  const toggle = name => {
+    const i = chosen.indexOf(name);
+    if (single) { chosen.length = 0; chosen.push(name); close(); input.value = ''; }
+    else if (i >= 0) chosen.splice(i, 1); else chosen.push(name);
+    pills();
+    if (popup) draw(popup.dataset.q);
+  };
+  const draw = q => {
+    const hits = all.filter(n => n.toLowerCase().includes(q.toLowerCase()));
+    popup.dataset.q = q;
+    popup.innerHTML = hits.length ? `<div role="listbox">${hits.map((n, i) => `<div role="option" data-automation-id="menuItem"${ODD ? '' : ` aria-selected="${chosen.includes(n)}"`} class="${i === active ? 'active' : ''}" data-name="${n}">
+        <div data-automation-id="promptOption" data-automation-label="${n}"><input type="${single ? 'radio' : 'checkbox'}" data-automation-id="${single ? 'radioBtn' : 'checkboxPanel'}" tabindex="-1" ${chosen.includes(n) ? 'checked' : ''}> ${n}</div></div>`).join('')}</div>`
+      : '<div data-automation-id="noResults"><p>No Items.</p></div>';
+  };
+  const search = q => {
+    close();
+    window.mock.searches.push(q);
+    popup = document.createElement('div');
+    popup.className = 'popup'; popup.setAttribute('data-automation-id', 'activeListContainer');
+    const r = input.getBoundingClientRect();
+    popup.style.left = (r.left + scrollX - 6) + 'px'; popup.style.top = (r.bottom + scrollY + 8) + 'px';
+    popup.innerHTML = '<div data-automation-id="loading">Searching…</div>';
+    document.body.appendChild(popup);
+    // The list keeps the box's focus (a press in it doesn't move it), and takes real clicks only.
+    popup.addEventListener('mousedown', e => { if (e.isTrusted) e.preventDefault(); });
+    popup.addEventListener('click', e => {
+      const row = e.target.closest('[role=option]');
+      window.mock.clicks.push({ trusted: e.isTrusted, name: row && row.dataset.name });
+      e.preventDefault();
+      if (!row || !(e.isTrusted || ANY_CLICK) || KEYS_ONLY) return;
+      toggle(row.dataset.name);
+    });
+    const p = popup;
+    timer = setTimeout(() => { if (popup === p) draw(q); }, SLOW);
+  };
+  input.addEventListener('input', e => { if (!TRUSTED_TYPING || e.isTrusted) typed = input.value; });
+  input.addEventListener('keydown', e => {
+    if (TRUSTED_TYPING && !e.isTrusted) return;
+    if (e.key === 'Escape') return close();
+    const rows = popup ? [...popup.querySelectorAll('[role=option]')] : [];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!e.isTrusted || !rows.length) return;
+      active = Math.max(0, Math.min(rows.length - 1, active + (e.key === 'ArrowDown' ? 1 : -1)));
+      draw(popup.dataset.q); e.preventDefault(); return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.isTrusted && rows.length && active >= 0) return toggle(rows[active].dataset.name);
+      if (typed.trim()) search(typed.trim());
+    }
+  });
+  // Leaving the box (a click elsewhere) closes the list, as Workday's does.
+  input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) close(); }, 200));
+  window.mock[input.dataset.list] = () => [...chosen];
+}
+</script>
+</body></html>
