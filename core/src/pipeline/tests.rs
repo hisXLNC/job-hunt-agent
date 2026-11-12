@@ -1896,10 +1896,10 @@ fn postings_added_without_claude() {
     assert!(j.reasoning.unwrap().contains("without Claude"));
     assert_eq!(s.llm.calls.lock().unwrap().len(), before, "no Claude usage");
     assert_eq!(s.agent.added_notice(&id).0, "Saved to Job Hunt");
-    // From the browser without Claude: the page as sent, its first line as the title.
+    // From the browser without Claude: the page as sent, its first line as the title, the company named from the site.
     let j = s.agent.add_clip(&json!({ "url": "https://careers.globex.example/7", "claude": false,
         "text": "Delivery Lead\nGlobex is hiring a delivery lead to run release planning across its payments teams." })).unwrap();
-    assert_eq!((j.title.as_str(), j.company.as_str(), j.status.as_str()), ("Delivery Lead", "careers.globex.example", "saved"));
+    assert_eq!((j.title.as_str(), j.company.as_str(), j.status.as_str()), ("Delivery Lead", "Globex", "saved"));
     assert!(!s.llm.calls.lock().unwrap().iter().any(|c| c.starts_with("read_posting")));
     // Scoring it later is one click; one below your bar stays saved, not skipped.
     s.llm.scores.lock().unwrap().insert("Senior Business Analyst".into(), 30);
