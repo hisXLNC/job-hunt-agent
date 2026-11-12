@@ -472,9 +472,46 @@ const main = () => $('#main');
 // leaves the page alone until it's redrawn by your own action.
 let pageDirty = false;
 document.addEventListener('input', e => { if (e.target.closest?.('#main') && !e.target.dataset.act && e.target.type !== 'search') pageDirty = true; });
+/** A list kept as lines in a text box, shown as chips: type and press Enter (or a comma) to add one,
+ *  × to take one away. The text box stays the value, so saving works as it did. */
+function chipify(root) {
+  root.querySelectorAll('textarea[data-chips]:not([data-chipped])').forEach(ta => {
+    ta.dataset.chipped = '1';
+    ta.hidden = true;
+    const box = document.createElement('div');
+    box.className = 'chips-in';
+    const list = () => ta.value.split(/\n/).map(x => x.trim()).filter(Boolean);
+    const set = l => { ta.value = l.join('\n'); for (const t of ['input', 'change']) ta.dispatchEvent(new Event(t, { bubbles: true })); draw(); };
+    const draw = () => {
+      box.innerHTML = `${list().map((x, i) => `<span class="chip">${esc(x)}<button type="button" data-i="${i}" aria-label="Remove ${esc(x)}">×</button></span>`).join('')}<input type="text" class="chip-add" placeholder="${esc(ta.dataset.add || 'Add')}…" aria-label="${esc(ta.dataset.add || 'Add')}">`;
+    };
+    const add = input => { const v = input.value.split(/,|\n/).map(x => x.trim()).filter(Boolean); if (!v.length) return false; set([...list(), ...v.filter(x => !list().some(y => y.toLowerCase() === x.toLowerCase()))]); box.querySelector('.chip-add').focus(); return true; };
+    box.addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) { e.preventDefault(); const l = list(); l.splice(Number(b.dataset.i), 1); set(l); } });
+    box.addEventListener('keydown', e => {
+      if (!e.target.matches('.chip-add')) return;
+      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); e.stopPropagation(); add(e.target); }
+      else if (e.key === 'Backspace' && !e.target.value && list().length) { const l = list(); l.pop(); set(l); box.querySelector('.chip-add').focus(); }
+    });
+    box.addEventListener('focusout', e => { if (e.target.matches('.chip-add') && e.target.value.trim()) add(e.target); });
+    // Typing in the box mustn't count as an edit of the form by itself: only the list does.
+    box.addEventListener('input', e => { if (e.target.matches('.chip-add')) e.stopPropagation(); });
+    box.addEventListener('change', e => { if (e.target.matches('.chip-add')) e.stopPropagation(); });
+    ta.after(box);
+    draw();
+  });
+}
+// A slider beside a number box: each follows the other.
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.matches?.('[data-range-for]')) { const n = t.closest('.range-row')?.querySelector(`[name="${t.dataset.rangeFor}"]`); if (n && n.value !== t.value) { n.value = t.value; n.dispatchEvent(new Event('input', { bubbles: true })); } }
+  else if (t.name && t.closest?.('.range-row')) { const r = t.closest('.range-row').querySelector('[data-range-for]'); if (r && r.value !== t.value) r.value = t.value; }
+});
+document.addEventListener('change', e => { const t = e.target; if (t.matches?.('[data-range-for]')) { const n = t.closest('.range-row')?.querySelector(`[name="${t.dataset.rangeFor}"]`); if (n) n.dispatchEvent(new Event('change', { bubbles: true })); } });
+
 function page(html) {
   pageDirty = false;
   main().innerHTML = `<div class="page">${updateBarHtml()}${html}</div>`;
+  chipify(main());
   requestAnimationFrame(fitTabs);
   // Only the job page sets these; elsewhere actions name their job themselves.
   delete main().dataset.job;
@@ -554,6 +591,7 @@ async function showRoute() {
   } catch (e) {
     page(`<div class="card"><h2>Couldn't load this page</h2><p class="muted">${esc(e.message)}</p></div>`);
   }
+  syncPanel();
   // A new page (or the next job in Review) starts at the top; a refresh of the same one stays put.
   const key = `${location.hash}|${pageKey}`;
   if (key !== shownKey) { shownKey = key; window.scrollTo(0, 0); }
@@ -563,6 +601,57 @@ async function showRoute() {
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+}
+
+// ---- A job beside the Pipeline's list ----
+let panelJob = '';
+/** Room for a job beside the list: a wide window with a mouse. Elsewhere a job opens its own page. */
+const panelFits = () => matchMedia('(min-width: 1180px)').matches && !matchMedia('(pointer: coarse) and (max-height: 700px)').matches;
+function closePanel() {
+  panelJob = '';
+  const el = $('#jobPanel');
+  if (el) { el.hidden = true; el.innerHTML = ''; }
+  document.body.classList.remove('panel-open');
+  document.querySelectorAll('.in-panel').forEach(x => x.classList.remove('in-panel'));
+}
+/** Open a job beside the list: what it is, where it stands, the next thing to do with its buttons,
+ *  and why it fits. The whole job (letter, questions, interview, notes) is a click further. */
+async function openPanel(id) {
+  const el = $('#jobPanel');
+  if (!el) return;
+  const again = panelJob === id && !el.hidden;
+  panelJob = id;
+  el.hidden = false;
+  document.body.classList.add('panel-open');
+  document.querySelectorAll('.in-panel').forEach(x => x.classList.remove('in-panel'));
+  document.querySelectorAll(`tr[data-expand="${CSS.escape(id)}"], .jrow[data-job-row="${CSS.escape(id)}"]`).forEach(x => x.classList.add('in-panel'));
+  if (!again) el.innerHTML = '<p class="muted jp-wait">Loading…</p>';
+  let d;
+  try { d = await api(`/api/jobs/${encodeURIComponent(id)}`); } catch (e) { if (panelJob === id) el.innerHTML = `<div class="jp-top"><button class="x" data-act="panelClose" title="Close (Esc)">×</button></div><p class="muted jp-wait">${esc(e.message)}</p>`; return; }
+  if (panelJob !== id) return;
+  const j = d.job;
+  j.effort = d.effort;
+  const tailoring = (overview?.running || []).includes(`tailor:${id}`);
+  const w = fitWords(j), must = mustHaves(j), flags = (j.red_flags || []).filter(x => !/^must have:/i.test(x));
+  const lacks = [w.gap, ...must.map(m => `Required, not on your CV: ${m}`), ...flags].filter(Boolean);
+  const facts = [`<b>${coCell(j)}</b>`, j.location ? placeHtml(j) : '', j.salary ? esc(String(j.salary).split(/\s+[•·|]\s+/)[0]) : '', j.employment ? esc(j.employment) : '', ageTag(j)].filter(Boolean).map(x => `<span>${x}</span>`).join('');
+  el.innerHTML = `<div class="jp-top"><span class="kicker">${esc(STAGES[j.status] || j.status)}</span><span class="grow"></span><a class="btn ghost sm" href="#job/${encodeURIComponent(id)}">Open the full page</a><button class="x" data-act="panelClose" title="Close (Esc)">×</button></div>
+    <div class="jp-scroll">
+      <div class="jp-head">${avatar(j.company)}<div class="grow"><h2>${esc(j.title)}</h2><div class="facts">${facts}</div></div>${fitRing(j.score_after ?? j.score)}</div>
+      <div class="dtags">${oneTag(j)}${effortTag(j)}${closedTag(j)}${deadlineTag(j)}${belowMinTag(j)}${(d.company_history || []).length ? '<span class="pill info">Applied here before</span>' : ''}</div>
+      ${d.progress ? `<div class="jp-track">${stepsHtml(d.progress)}</div>` : ''}
+      ${jobActions(j, tailoring, d.progress)}
+      ${w.match ? `<div class="why"><b>Why it fits</b>${esc(w.match)}${j.score_after == null && canReach(j) ? ` <span class="muted">Tailored, it could reach about <b class="in">${canReach(j)}</b>.</span>` : ''}</div>` : ''}
+      ${lacks.length ? `<div class="why warnish"><b>Gaps and things to check</b><ul>${lacks.map(g => `<li>${esc(g)}</li>`).join('')}</ul></div>` : ''}
+      ${j.cv_path ? `<div class="jp-files"><button class="btn sm" data-act="open" data-what="cv" data-job="${esc(id)}">${svg('doc')}Tailored CV</button><button class="btn sm" data-act="open" data-what="letter" data-job="${esc(id)}">${svg('doc')}Cover letter</button>${j.coverage_after != null ? `<span class="muted small">${pct(j.coverage_after)} of the posting's keywords</span>` : ''}</div>` : ''}
+      ${j.notes ? `<div class="jp-notes"><b class="small">Your notes</b><p class="small">${esc(j.notes)}</p></div>` : ''}
+      <details class="jp-posting"><summary><b>The posting</b></summary><div class="posting">${esc(j.description || 'The source gave no description. Open it on the site to read it.')}</div></details>
+    </div>`;
+}
+/** After a page is drawn: the job beside the list stays open (and up to date) while you're in Pipeline. */
+function syncPanel() {
+  const inPipeline = /^#(applications|results)/.test(location.hash);
+  if (panelJob && inPipeline && panelFits()) openPanel(panelJob); else if (panelJob || !$('#jobPanel')?.hidden) closePanel();
 }
 
 // ---- Queue: one decision at a time ----
@@ -1450,7 +1539,7 @@ function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', att
   const meta = [coCell(j), j.location ? placeHtml(j) : '', j.salary ? `<span title="${esc(j.salary)}">${esc(String(j.salary).split(/\s+[•·|]\s+/)[0])}</span>` : '', j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
   const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit">${scoreBadge(j.score)}${reachTag(j)}</span>
       <span class="jmain"><span class="jtitle"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${tags}</span><span class="jmeta">${meta}</span></span>`;
-  return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" ${attrs}>${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
+  return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" data-job-row="${esc(j.id)}" ${attrs}>${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
       <span class="row jact">${actions}</span>${sub ? `<div class="jwhy small">${sub}</div>` : ''}</div>`;
 }
 
@@ -2584,10 +2673,10 @@ async function showSettings(tab, sub, host) {
       ${view === 'career' ? career : view === 'details' ? details : body}`;
   } else if (tab === 'search') {
     body = `<section class="card"><header><h2>Job titles</h2><a class="btn ghost" href="#cvs">Your CVs</a></header>
-        <p class="muted small">Each CV searches for its own titles, one per line. A posting whose title doesn't match is still scored if it mentions one of the keywords.</p>
+        <p class="muted small">Each CV searches for its own titles. Type one and press Enter to add it. A posting whose title doesn't match is still scored if it mentions one of the keywords.</p>
         ${st.cvs.length ? st.cvs.map(c => `<div class="title-set" data-cv="${esc(c.track)}"><input type="hidden" data-k="label" value="${esc(c.label)}"><input type="hidden" data-k="letter_style" value="${esc(c.letter_style || 'standard')}">
-          <div class="form"><label class="field">${st.cvs.length > 1 ? `Titles for your ${esc(c.label)} CV` : 'Job titles to search for'}<textarea data-k="titles" style="min-height:120px">${esc(lines(c.titles))}</textarea></label>
-          <label class="field">Keywords that also qualify a posting<textarea data-k="keywords" style="min-height:120px">${esc(lines(c.keywords))}</textarea></label></div>
+          <div class="form"><label class="field">${st.cvs.length > 1 ? `Titles for your ${esc(c.label)} CV` : 'Job titles to search for'}<textarea data-chips data-add="Add a job title" data-k="titles" style="min-height:120px">${esc(lines(c.titles))}</textarea></label>
+          <label class="field">Keywords that also qualify a posting<textarea data-chips data-add="Add a keyword" data-k="keywords" style="min-height:120px">${esc(lines(c.keywords))}</textarea></label></div>
           <div class="row"><button class="btn" data-act="saveCv" data-track="${esc(c.track)}">Save titles</button><button class="btn ghost" data-act="suggestCv" data-track="${esc(c.track)}">Find more titles</button></div></div>`).join('') : '<p class="muted">Add a CV first: Claude reads it and suggests the titles. <a href="#cvs">Add your CV</a></p>'}
       </section>
       <form data-form="profile" data-part="search">
@@ -2600,8 +2689,8 @@ async function showSettings(tab, sub, host) {
         </div>
       </div></section>
       <section class="card"><header><h2>Which roles</h2></header><div class="form">
-        <label class="field">Skip these companies<textarea name="exclude_companies">${esc(lines(p.exclude_companies))}</textarea></label>
-        <label class="field">Skip titles containing<textarea name="exclude_title_keywords">${esc(lines(p.exclude_title_keywords))}</textarea></label>
+        <label class="field">Skip these companies<textarea data-chips data-add="Add a company" name="exclude_companies">${esc(lines(p.exclude_companies))}</textarea></label>
+        <label class="field">Skip titles containing<textarea data-chips data-add="Add a word" name="exclude_title_keywords">${esc(lines(p.exclude_title_keywords))}</textarea></label>
         <label class="field">Don't score jobs older than<input type="number" name="max_age_days" min="0" step="1" value="${p.max_age_days ?? 30}"><span class="hint">Days since the job was posted (0: any age). Older ones are set aside before scoring, using no Claude. Jobs whose posting date isn't known are scored.</span></label>
         <label class="field">Minimum yearly salary<input type="number" name="min_salary" min="0" step="1000" value="${p.min_salary ?? ''}" placeholder="No minimum, e.g. 120000"><span class="hint">Digits only. Jobs that pay less at most are skipped before scoring, so they use no Claude: the salary a job site gives, or the pay in the posting itself (hourly rates count as 2,080 hours a year). Jobs that don't say are kept. Job Hunt looks for missing salaries once a week. <a href="#" data-act="rescanSalaries">Look now</a></span></label>
         <label class="field">Skip companies rated below<select name="min_rating">${[['', 'Any rating'], ['3', '3.0 out of 5'], ['3.5', '3.5 out of 5'], ['4', '4.0 out of 5']].map(([x, n]) => `<option value="${x}" ${String(p.min_rating ?? '') === x || (x && Number(x) === p.min_rating) ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">From what employees say (Glassdoor and the like). Companies not rated yet are kept until they are.</span></label>
@@ -2619,7 +2708,7 @@ async function showSettings(tab, sub, host) {
         <div class="field" style="margin-bottom:10px">A company you've applied to before<select data-act="repeatMode">${[['light', 'Light touch: the same headline, at most 4 paragraphs changed (recommended)'], ['same', 'The same CV as before, with a new cover letter'], ['usual', 'Tailor as usual']].map(([v, n]) => `<option value="${v}" ${(st.repeat_mode || 'light') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">They keep every CV you send on file, side by side. A different headline or a different story for the same achievement is what stands out.</span></div>
         <label class="check"><input type="checkbox" name="auto_tailor" ${p.auto_tailor ? 'checked' : ''}> <span>Tailor automatically<br><span class="muted small">Off (recommended): after each search you tick which roles to tailor your CV for, in your Queue. On: every role that fits well enough is tailored right away.</span></span></label>
         <details style="margin-top:10px"><summary class="small muted">Advanced</summary><div class="form" style="margin-top:8px">
-        <label class="field">Fit score needed to tailor<input type="number" min="0" max="100" name="score_threshold" value="${p.score_threshold}"><span class="hint">0–100. Roles below it are skipped.</span></label>
+        <label class="field">Fit score needed to tailor<span class="range-row"><input type="range" min="0" max="100" step="1" value="${p.score_threshold}" data-range-for="score_threshold" aria-label="Fit score needed to tailor"><input type="number" min="0" max="100" name="score_threshold" value="${p.score_threshold}"></span><span class="hint">0–100. Roles below it are skipped.</span></label>
         <label class="field">Most new postings scored per search<input type="number" min="5" max="200" name="max_scored_per_run" value="${p.max_scored_per_run}"><span class="hint">Spares your Claude usage; the rest are scored next time.</span></label>
         <label class="field">Most applications tailored per search<input type="number" min="1" max="50" name="max_per_run" value="${p.max_per_run}"><span class="hint">Only when tailoring automatically.</span></label>
       </div><div class="form" style="margin-top:14px">
@@ -3524,6 +3613,7 @@ let jobOrder = [];
 document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if ($('.modal-back')) return;
+  if (e.key === 'Escape' && panelJob) { closePanel(); return; }
   const t = e.target;
   if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) {
     if (e.key === 'Escape') t.blur();
@@ -3752,6 +3842,7 @@ async function act(el) {
     route(); window.scrollTo(0, 0);
     return;
   }
+  if (a === 'panelClose') return closePanel();
   if (a === 'moreMenu') { document.body.classList.toggle('more-open'); const pop = $('#statusPop'); if (pop) pop.open = document.body.classList.contains('more-open'); renderNav(); return; }
   if (a === 'connGoto') {
     const id = CONN_HOME[el.dataset.to] || el.dataset.to, target = document.getElementById(id);
@@ -4549,8 +4640,12 @@ document.addEventListener('click', e => {
   if (el && el.tagName !== 'INPUT' && el.tagName !== 'SELECT') { e.preventDefault(); act(el); return; }
   const row = e.target.closest('tr[data-href]');
   if (row) location.hash = row.dataset.href;
+  // In Pipeline, on a wide window, a job opens beside the list; elsewhere its row opens in place.
   const ex = e.target.closest('tr[data-expand]');
+  if (ex && panelFits() && location.hash.startsWith('#applications') && !e.target.closest('a,button,.open-reviews')) { openPanel(ex.dataset.expand); return; }
   if (ex) togglePosting(ex);
+  const name = e.target.closest('.jrow[data-job-row] a.qt');
+  if (name && panelFits() && location.hash.startsWith('#applications') && !e.ctrlKey && !e.metaKey) { e.preventDefault(); openPanel(name.closest('.jrow').dataset.jobRow); }
 });
 
 document.addEventListener('change', async e => {

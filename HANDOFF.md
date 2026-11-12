@@ -5,9 +5,16 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.42.0** (the from-scratch rework: a bar across the top, the Queue). The working
-  branch changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is what's
-  released. Before it: 2.41.0 (five places, the calm look), 2.40.0, 2.39.0 (skills).
+- Latest version: **2.43.0** (a job beside the Pipeline list, chips in Me, the extension reworked).
+  The working branch changes with each session (this one: `claude/brave-fermat-ti1omi`); `main` is
+  what's released. Before it: 2.42.0 (the Queue and the top bar), 2.41.0, 2.40.0, 2.39.0 (skills).
+- **2.43.0.** `openPanel(id)` draws a job in `#jobPanel` beside the list on a wide window
+  (`panelFits`); rows and titles in Pipeline open it, `syncPanel` keeps it across redraws, Esc closes
+  it. `chipify` turns `textarea[data-chips]` into chips (the textarea stays the value). The extension's
+  popup lists approved jobs to open (`/ext/jobs` now carries each one's `url`; Open calls `/ext/pick`
+  first) and shows whether it's connected; the panel on forms (`panel()` in `fill.js`) is restyled,
+  its seldom-used buttons as links at the foot. Its buttons and `.s` status text are unchanged, which
+  `tools/ext_test` relies on.
 - **Where things are (2.42.0).** The shell is a top bar (`.side` in `index.html`: brand, `#nav`, find,
   the status pill `#statusPop` with the status lines and the theme, the gear `#settingsLink`); on a
   phone it's the sheet behind `#mMenu`, and `#tabbar` has the five places. `NAV`: **Queue**
@@ -18,10 +25,8 @@ and `DEVELOPING.md`.
   (`#search/what` Looking for, `#cvs` CVs, About me, Career paths, Coach). **Settings** (the gear):
   `SETTINGS_TABS`, where Job sources is `#search` (where it looks, each source's results, set up).
   `placeOf()` says which place a route belongs to.
-- The mockups the user approved are in the session's scratchpad only; what they showed and isn't
-  built yet: a job opening in a panel beside the Pipeline list (it still opens its own page), a
-  single Timeline (dropped: the user wanted Inbox and Calendar apart), chips and sliders on Me,
-  Looking for (it's the existing form).
+- From the approved mockups, still not built: a single Timeline (dropped: the user wanted Inbox and
+  Calendar apart).
 - **The look** is the last big block of `static/app.css` ("The look, reimagined"): tokens, light menu,
   hairline cards, pill tabs. Today's first item is `todayHero`, the rest `todayRow`; `avatar` is the
   company tile on a job row.

@@ -87,6 +87,23 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('applications/waiting');
   check((await page.$$('.jrow, .trow')).length >= 1, 'Pipeline, Waiting lists it');
 
+  // In Pipeline a job opens beside the list, and its buttons work from there.
+  await at('applications/all');
+  await page.click('tr[data-expand] td.role');
+  await page.waitForTimeout(1200);
+  check(await page.evaluate(() => !document.querySelector('#jobPanel').hidden && !!document.querySelector('#jobPanel .next-step')) && (await hash()) === '#applications/all', 'A job opens beside the Pipeline list');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  check(await page.evaluate(() => document.querySelector('#jobPanel').hidden), 'Esc closes it');
+
+  // Me, Looking for: job titles are chips; adding one and saving keeps it.
+  await at('search/what');
+  await page.fill('.title-set .chips-in .chip-add', 'Portfolio Delivery Lead');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  check((await page.$$('.title-set .chips-in .chip')).length >= 2 && await page.evaluate(() => document.querySelector('textarea[data-k=titles]').value.includes('Portfolio Delivery Lead')), 'A job title is added as a chip');
+  await page.click('.title-set [data-act=saveCv]'); await page.waitForTimeout(1500);
+  check(await page.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => s.cvs[0].titles.includes('Portfolio Delivery Lead'))), 'Saving keeps the new title');
+
   // Every page in the menu draws.
   for (const h of ['overview', 'results', 'applications/files', 'applications/all', 'applications/new', 'applications/applied', 'applications/interviews', 'inbox', 'inbox/recruiters', 'calendar', 'search', 'search/what', 'search/setup',
     'cvs', 'cvs/documents', 'cvs/career', 'cvs/coach', 'cvs/details', 'results', 'settings', 'settings/inbox', 'settings/calendar', 'settings/notifications', 'settings/sync', 'settings/extension', 'settings/app', 'add', 'welcome']) {

@@ -75,21 +75,27 @@
     host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647';
     const root = host.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>
-      .p{font:14px/1.4 system-ui,'Segoe UI',sans-serif;background:#fff;color:#1d1d1f;border:1px solid #d0d0d6;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:12px 14px;width:300px}
-      .h{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:6px}.h span{flex:1}
-      .x{border:0;background:none;font-size:18px;cursor:pointer;color:#666;padding:0 4px}
-      .s{color:#444;margin:0 0 10px}.r{display:flex;flex-wrap:wrap;gap:6px}
-      button.b{font:inherit;border:1px solid #c8c8d0;background:#f6f6f8;border-radius:8px;padding:6px 10px;cursor:pointer}
-      button.b.pr{background:#2f5bd3;border-color:#2f5bd3;color:#fff}button.b[hidden]{display:none}button.b:disabled{opacity:.6;cursor:default}
-      .bar{height:6px;background:#e6e8ef;border-radius:3px;overflow:hidden;margin:0 0 10px}.bar i{display:block;height:100%;width:0;background:#2f5bd3;transition:width .45s}
-      .min .s,.min .r,.min .bar,.min .c{display:none}
-      .q{margin:0 0 10px;padding:8px 10px;border:1px solid #e0a000;border-radius:8px;background:#fff8e6}.q[hidden]{display:none}.q p{margin:0 0 6px}.min .q{display:none}
-      .c{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}.c[hidden]{display:none}.c select{font:inherit;padding:6px;border:1px solid #c8c8d0;border-radius:8px;max-width:100%}
-    </style><div class="p"><div class="h"><span class="t">Job Hunt · ${(JOB.company || '').replace(/[<>&]/g, '')}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
+      .p{font:14px/1.45 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;background:#fff;color:#16181d;border:1px solid #eae9e3;border-radius:16px;box-shadow:0 1px 2px rgba(22,24,29,.06),0 14px 40px rgba(22,24,29,.16);padding:14px 16px 12px;width:320px}
+      .h{display:flex;align-items:center;gap:9px;font-weight:650;margin-bottom:8px;letter-spacing:-.01em}.h .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .m{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#3b63f0,#2440b8);flex:none;position:relative}.m::after{content:"";position:absolute;inset:8px 6px 6px;border:2px solid #fff;border-radius:3px}
+      .x{border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:#6b7180;padding:2px 6px;border-radius:7px}.x:hover{background:#f1f0eb}
+      .s{color:#454a57;margin:0 0 10px}.r{display:flex;flex-wrap:wrap;gap:6px}
+      button.b{font:inherit;font-weight:560;border:1px solid #deddd6;background:#fff;color:#16181d;border-radius:10px;padding:8px 12px;cursor:pointer;flex:1 1 auto}
+      button.b:hover{border-color:#6b7180}
+      button.b.pr{background:#2d55e8;border-color:#2d55e8;color:#fff;flex:1 1 100%;padding:10px 14px;font-size:15px}button.b[hidden]{display:none}button.b:disabled{opacity:.55;cursor:default}
+      .f{display:flex;flex-wrap:wrap;gap:2px 14px;margin-top:10px;padding-top:9px;border-top:1px solid #eae9e3}.f:not(:has(button:not([hidden]))){display:none}
+      .f button.b{flex:none;border:0;background:none;padding:0;font-size:12.5px;font-weight:500;color:#6b7180;border-radius:0}.f button.b:hover{color:#2d55e8}
+      .bar{height:6px;background:#eae9e3;border-radius:3px;overflow:hidden;margin:0 0 10px}.bar i{display:block;height:100%;width:0;background:#2d55e8;border-radius:3px;transition:width .45s}
+      .min{width:auto}.min .s,.min .r,.min .f,.min .bar,.min .c,.min .q{display:none}.min .h{margin:0}
+      .q{margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#fbf0d4;color:#5c3a00}.q[hidden]{display:none}.q p{margin:0 0 8px}
+      .c{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}.c[hidden]{display:none}.c select{font:inherit;padding:8px 10px;border:1px solid #deddd6;border-radius:10px;max-width:100%;background:#fff}
+      @media (max-width:420px){.p{width:calc(100vw - 32px)}}
+    </style><div class="p"><div class="h"><i class="m"></i><span class="t">Job Hunt · ${(JOB.company || '').replace(/[<>&]/g, '')}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
       <p class="s"></p><div class="q" hidden><p class="qt"></p><div class="r"><button class="b pr" data-k="replace">Replace with Job Hunt's</button><button class="b" data-k="keep">Keep it</button></div></div><div class="c" hidden><select></select><button class="b pr" data-k="pick">Fill it in for this job</button></div><div class="bar" hidden><i></i></div><div class="r">
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
-        <button class="b" data-k="stop" hidden>Stop: I'll submit it</button>
+        <button class="b" data-k="stop" hidden>Stop: I'll submit it</button></div>
+      <div class="f">
         <button class="b" data-k="diag" hidden title="Copies what Job Hunt saw on this page (the Add buttons, the skill list), to paste to Claude when something wasn't filled in">Copy details</button>
         <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button>
         <button class="b" data-k="drop" title="Not for you after all (the pay, say): Job Hunt sets it aside${JOB.queue ? ' and opens the next one' : ''}">Not interested</button></div></div>`;

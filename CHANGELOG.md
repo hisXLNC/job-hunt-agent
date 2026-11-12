@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.43.0] - 2026-11-12
+
+A job beside the list, chips in Me, and the extension reworked.
+
+### Changes
+
+- Pipeline: on a wide window, clicking a job opens it beside the list: where it stands, the next thing to do with its buttons, why it fits and the gaps, its tailored files and the posting. Open the full page is one click further; Esc closes it.
+- Me, Looking for: job titles, keywords, companies to skip and title words to skip are chips. Type one and press Enter to add it; the cross removes it. The fit score needed has a slider.
+- The extension's button is reworked: whether it is connected to Job Hunt, which application this page is, Fill this form with its shortcut, and a list of the applications you approved with Open beside each, so you can submit them one after another from the browser.
+- The panel Job Hunt shows on a form has the same calm look, with one main button and Copy details and Not interested as quiet links under it.
+
 ## [2.42.0] - 2026-11-12
 
 Rebuilt around a Queue: one decision at a time.
@@ -1534,6 +1545,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.43.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.43.0
 [2.42.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.42.0
 [2.41.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.41.0
 [2.40.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.40.0

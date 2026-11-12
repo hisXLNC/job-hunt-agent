@@ -1588,3 +1588,45 @@ kbd.k { font: 11px var(--font-m); border: 1px solid currentColor; opacity: .55; 
   .dbar .btn:not(.big) { flex: 0 0 auto; }
   .deck-main { padding-bottom: 80px; }
 }
+
+/* ---- A job beside the Pipeline's list (wide windows) ---- */
+.job-panel { position: fixed; top: 60px; right: 0; bottom: 0; width: 460px; z-index: 25; background: var(--surface); border-left: 1px solid var(--line-2); box-shadow: -12px 0 32px rgba(22, 24, 29, .08); display: flex; flex-direction: column; }
+.job-panel[hidden] { display: none; }
+body.panel-open .page { max-width: none; margin: 0; padding-right: 492px; }
+.jp-top { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px 22px; border-bottom: 1px solid var(--line-2); }
+.jp-top .grow { flex: 1; }
+.jp-top .x { border: 0; background: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted); padding: 2px 8px; border-radius: 8px; }
+.jp-top .x:hover { background: var(--surface-2); color: var(--ink); }
+.jp-wait { padding: 24px; }
+.jp-scroll { flex: 1; overflow-y: auto; padding: 18px 22px 28px; display: flex; flex-direction: column; gap: 14px; }
+.jp-head { display: flex; gap: 14px; align-items: flex-start; }
+.jp-head .grow { flex: 1; min-width: 0; }
+.jp-head h2 { font-size: 19px; letter-spacing: -.015em; margin-bottom: 4px; }
+.jp-head .facts { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--ink-2); font-size: 13.5px; }
+.jp-head .facts b { color: var(--ink); }
+.jp-head .ring { width: 58px; height: 58px; font-size: 18px; }
+.job-panel .dtags { margin-top: -4px; }
+.jp-track .tsteps { margin: 0; }
+.job-panel .card.next-step { padding: 14px 16px; border-radius: 14px; box-shadow: none; }
+.job-panel .next-main p { font-size: 14.5px; }
+.job-panel .next-main .btn { flex: 1 1 auto; justify-content: center; }
+.job-panel .why { font-size: 14px; }
+.why.warnish > b:first-child { color: var(--warn); }
+.why ul { margin: 4px 0 0; padding-left: 18px; }
+.jp-files { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.jp-notes { border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px; }
+.jp-posting > summary { cursor: pointer; padding: 6px 0; }
+.jp-posting .posting { max-height: none; margin-top: 8px; }
+tr.in-panel > td, table.jobs tr.click.in-panel:hover > td { background: var(--accent-soft); }
+.jrow.in-panel { background: var(--accent-soft); }
+
+/* ---- Lists as chips, and a slider beside a number ---- */
+.chips-in { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); min-height: 46px; font-weight: 400; }
+.chips-in:focus-within { outline: 2px solid var(--accent); border-color: transparent; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 560; font-size: 13.5px; }
+.chip button { border: 0; background: none; color: inherit; font-size: 15px; line-height: 1; cursor: pointer; padding: 0 5px; border-radius: 50%; opacity: .7; }
+.chip button:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
+.chips-in input.chip-add { flex: 1; min-width: 130px; border: 0; padding: 4px 6px; background: none; outline: 0; }
+.range-row { display: flex; align-items: center; gap: 12px; }
+.range-row input[type=range] { flex: 1; accent-color: var(--accent); padding: 0; }
+.range-row input[type=number] { width: 84px; flex: none; }

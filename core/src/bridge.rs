@@ -274,7 +274,8 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
 /// (approved), then Approve's (ready).
 fn pick_list(agent: &Agent) -> Vec<Value> {
     ["approved", "ready"].iter().flat_map(|s| agent.db().jobs(Some(s), 60).unwrap_or_default())
-        .map(|j| json!({ "id": j.id, "title": j.title, "company": j.company, "status": j.status })).collect()
+        // With where to apply (the company's own page when Job Hunt found it): the extension opens it.
+        .map(|j| json!({ "id": j.id, "title": j.title, "company": j.company, "status": j.status, "url": j.apply_url.clone().filter(|u| !u.is_empty()).unwrap_or_else(|| j.url.clone()) })).collect()
 }
 
 /// The job, as the extension shows it, with the company's own link when the page isn't it.

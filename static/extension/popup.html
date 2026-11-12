@@ -1,23 +1,63 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Job Hunt</title>
-<style>body{font:14px/1.5 system-ui,"Segoe UI",sans-serif;color:#1f201d;background:#fff;margin:0;padding:14px 16px;width:300px}
-b{display:block;margin-bottom:4px}p{margin:0 0 10px;color:#636361}.bad b{color:#b42318}
-button{font:inherit;border:1px solid #c8c8d0;background:#f6f6f8;border-radius:8px;padding:7px 10px;cursor:pointer;width:100%;margin-top:6px;text-align:left}
-button.pr{background:#2f5bd3;border-color:#2f5bd3;color:#fff}input{font:inherit;width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #c8c8d0;border-radius:6px;margin-top:4px}
-[hidden]{display:none}.small{font-size:12px}.k{float:right;opacity:.75;font-size:12px}
-.tip{border-top:1px solid #e6e6ea;margin-top:10px;padding-top:8px}</style></head>
-<body><b id="what">Job Hunt</b><p id="more"></p>
-<div id="acts">
-  <button class="pr" id="fill">Fill this form <span class="k" id="key-hint"></span></button>
-  <button id="company" hidden>Apply on the company's site instead</button>
-  <button id="send">Send this job to Job Hunt</button>
+<style>
+:root { --bg:#F6F5F1; --surface:#fff; --surface-2:#F1F0EB; --ink:#16181D; --ink-2:#454A57; --muted:#6B7180; --line:#DEDDD6; --line-2:#EAE9E3; --accent:#2D55E8; --accent-soft:#E7ECFE; --good:#0B7A3B; --good-soft:#E1F3E7; --warn:#8A5700; --warn-soft:#FBF0D4; --crit:#B42D2D; --crit-soft:#FAE4E2; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0F1115; --surface:#181B21; --surface-2:#1F232B; --ink:#ECEEF2; --ink-2:#BCC1CD; --muted:#9097A6; --line:#2C313B; --line-2:#242932; --accent:#8FA6FF; --accent-soft:#1F2748; --good:#52C47F; --good-soft:#14301F; --warn:#E3A83C; --warn-soft:#33270F; --crit:#EE7474; --crit-soft:#3A1B1B; } .pr { color:#0B1233 !important; } }
+* { box-sizing: border-box; }
+body { font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); margin: 0; padding: 14px; width: 340px; }
+[hidden] { display: none !important; }
+.top { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.top img { width: 26px; height: 26px; border-radius: 7px; }
+.top b { font-size: 15.5px; letter-spacing: -.01em; flex: 1; }
+.conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); padding: 3px 9px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line-2); }
+.conn i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.conn.on i { background: #3FB36F; } .conn.off i { background: #E3A83C; }
+.card { background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; padding: 13px 14px; margin-bottom: 10px; }
+.kicker { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin: 0 0 2px; }
+.bad .kicker { color: var(--crit); }
+#what { display: block; font-size: 15.5px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 3px; }
+#more { margin: 0; color: var(--ink-2); font-size: 13px; }
+button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 9px 12px; cursor: pointer; width: 100%; margin-top: 8px; text-align: left; display: flex; align-items: center; gap: 8px; font-weight: 560; }
+button:hover { border-color: var(--muted); }
+button.pr { background: var(--accent); border-color: var(--accent); color: #fff; font-size: 15px; padding: 11px 14px; }
+button .k { margin-left: auto; font: 11px ui-monospace, Consolas, monospace; opacity: .75; border: 1px solid currentColor; border-radius: 5px; padding: 0 5px; }
+button .k:empty { display: none; }
+h3 { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 14px 2px 6px; }
+.todo { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-2); }
+.todo:first-child { border-top: 0; padding-top: 2px; } .todo:last-child { padding-bottom: 2px; }
+.todo .g { flex: 1; min-width: 0; } .todo b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 620; } .todo span { color: var(--muted); font-size: 12.5px; }
+.todo button { width: auto; margin: 0; padding: 6px 11px; font-size: 13px; }
+.todo .av { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; }
+input, select { font: inherit; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; margin-top: 6px; background: var(--surface); color: var(--ink); }
+.small { font-size: 12.5px; color: var(--muted); margin: 6px 2px 0; }
+.small b { color: var(--ink-2); }
+a { color: var(--accent); text-decoration: none; }
+.note { border-radius: 10px; padding: 8px 10px; font-size: 12.5px; margin: 0 0 10px; }
+.note.good { background: var(--good-soft); color: var(--good); } .note.bad { background: var(--crit-soft); color: var(--crit); }
+.foot { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; margin: 10px 2px 0; }
+</style></head>
+<body>
+<div class="top"><img src="icon-48.png" alt=""><b>Job Hunt</b><span class="conn" id="conn"><i></i><span id="connText">Checking…</span></span></div>
+<p class="note good" id="updated" hidden></p>
+<p class="note bad" id="stale" hidden></p>
+
+<div class="card" id="page">
+  <p class="kicker" id="kicker">This page</p>
+  <b id="what">Job Hunt</b><p id="more"></p>
+  <div id="acts">
+    <button class="pr" id="fill">Fill this form<span class="k" id="key-hint"></span></button>
+    <button id="company" hidden>Apply on the company's own site instead</button>
+    <button id="send">Send this job to Job Hunt</button>
+  </div>
+  <p class="small" id="otherline" hidden><a href="#" id="other">Not this job? Choose another</a></p>
+  <div id="choose" hidden><select id="jobs"></select><button class="pr" id="pick">This is the job</button></div>
 </div>
-<div id="setup" hidden><p class="small">To fill in forms, paste your key from Job Hunt: <b style="display:inline">Settings → Browser extension</b>.</p>
+
+<div id="submit" hidden><h3>Approved, ready to submit</h3><div class="card" id="todo"></div></div>
+
+<div class="card" id="setup" hidden><p class="kicker">Connect to Job Hunt</p>
+  <p class="small" style="margin:0">Paste your key from Job Hunt on this computer: <b>Settings → Browser extension</b>.</p>
   <input id="key" placeholder="jh-…" autocomplete="off"><button class="pr" id="save">Save the key</button></div>
-<p class="small" id="otherline" hidden><a href="#" id="other">Not this job? Choose another</a></p>
-<div id="choose" hidden><select id="jobs" style="font:inherit;width:100%;padding:6px;border:1px solid #c8c8d0;border-radius:6px"></select><button class="pr" id="pick">This is the job</button></div>
-<p class="small" id="updated" hidden style="color:#0B7A3B"></p>
-<p class="small" id="stale" hidden style="color:#b42318"></p>
-<p class="small tip" id="tip">Something not filled in right? Press <b style="display:inline">Copy details</b> in the panel on the form and paste it to Claude.</p>
-<p class="small" id="keyline"><a href="#" id="change">Change the Job Hunt key</a></p>
+
+<div class="foot"><a href="#" id="change">Change the key</a><span class="small" style="margin:0" id="tip">Not filled in right? Press <b>Copy details</b> in the panel on the form and paste it to Claude.</span></div>
 <script src="popup.js"></script></body></html>
