@@ -84,7 +84,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
 
   // Every page in the menu draws.
   for (const h of ['overview', 'applications/all', 'applications/new', 'applications/applied', 'applications/interviews', 'inbox', 'inbox/recruiters', 'calendar', 'search', 'search/what', 'search/setup',
-    'cvs', 'cvs/documents', 'cvs/career', 'cvs/coach', 'cvs/details', 'results', 'settings', 'settings/inbox', 'settings/calendar', 'settings/notifications', 'settings/sync', 'settings/app', 'add', 'welcome']) {
+    'cvs', 'cvs/documents', 'cvs/career', 'cvs/coach', 'cvs/details', 'results', 'settings', 'settings/inbox', 'settings/calendar', 'settings/notifications', 'settings/sync', 'settings/extension', 'settings/app', 'add', 'welcome']) {
     await at(h);
     const body = await text('#main');
     check(body.length > 40 && !body.includes("Couldn't load"), `#${h} draws`);
@@ -98,6 +98,15 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   for (const h of ['overview', 'applications/pick', 'applications/all', 'search']) {
     await phone.goto(`${base}/#${h}`); await phone.reload(); await phone.waitForTimeout(900);
     check(!await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), `Phone: #${h} doesn't scroll sideways`);
+  }
+  // A phone held sideways (or a wide folding one): the tabs run down the right edge.
+  const wide = await browser.newPage({ viewport: { width: 915, height: 500 }, hasTouch: true, isMobile: true });
+  wide.on('pageerror', e => errors.push(`sideways: ${e.message}`));
+  await wide.addInitScript(() => { try { sessionStorage.setItem('welcomed', '1'); } catch (e) {} });
+  for (const h of ['overview', 'applications/pick', 'settings/extension']) {
+    await wide.goto(`${base}/#${h}`); await wide.reload(); await wide.waitForTimeout(900);
+    const r = await wide.evaluate(() => { const b = document.querySelector('#tabbar').getBoundingClientRect(); return { left: b.left, right: b.right, height: b.height, w: innerWidth, h: innerHeight, scroll: document.documentElement.scrollWidth > innerWidth + 1 }; });
+    check(r.left > r.w - 110 && r.right >= r.w - 1 && r.height > r.h - 10 && !r.scroll, `Sideways phone: #${h} has its tabs down the right edge`);
   }
   check(errors.length === 0, `No script errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
   await browser.close();

@@ -5,9 +5,13 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.39.0** (the skills chooser rewritten against a mock Workday page, real typing and
-  keys through the debugger, Alt+Shift+F). The working branch changes with each session (this one:
-  `claude/brave-fermat-ti1omi`); `main` is what's released. Before it: 2.38.0, 2.37.0 (the layout).
+- Latest version: **2.40.0** (Jobs' step pages redesigned: `.steps-bar`, `jobRow`; tabs down the right
+  edge for a sideways or folding phone; Settings → Browser extension). The working branch changes
+  with each session (this one: `claude/brave-fermat-ti1omi`); `main` is what's released. Before it:
+  2.39.0 (skills rebuilt against the mock), 2.38.0, 2.37.0 (the layout).
+- The user reads Job Hunt on a wide folding phone in landscape (about 915×500 CSS px, touch): check
+  that shape as well as a narrow phone (`tools/screen_test.js` does). Still in the old style, not yet
+  restyled: the All jobs table, the job page below its Next card, Review, Inbox, Calendar, CV & Career.
 - The user's defaults (asked for, keep them): forms open in **their own browser** (`applyNow`, the Apply
   page's main button, the job page's next step: `fillBrowser`), and **Not interested doesn't learn**
   (the dialog's main button and the bulk action send `learn: false`; "and learn from it" is the other button).

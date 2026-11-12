@@ -6,7 +6,7 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.40.0] - 2026-11-12
 
-Jobs redesigned: the steps as one bar, each job a clean row.
+Jobs redesigned, tabs on the right for a sideways phone, and the extension's own Settings tab.
 
 ### Changes
 
@@ -16,6 +16,9 @@ Jobs redesigned: the steps as one bar, each job a clean row.
 - On a phone a job's main button is full width under it, where your thumb is, and the fit sits beside the name instead of pushing it off the line.
 - Each group in a step (Ready to approve, Submit on the company's site, No reply yet…) is its own card under a plain heading.
 - Messages that still said Applications or Settings, Connections now say Jobs and Settings, Accounts.
+- A phone held sideways, or a wide folding phone: the tabs (Today, Jobs, Inbox, Search, More) run down the right edge, by your thumb, and the page gets the full height. A job's buttons sit beside it again.
+- The browser extension has its own place: Settings, Browser extension. Its folder, the steps to load it, its key and the download are all there (it was at the bottom of Settings, App). Search's Set up sources and the extension itself point to it.
+- The number on the Jobs tab is a proper badge on a phone.
 
 ## [2.39.0] - 2026-11-12
 

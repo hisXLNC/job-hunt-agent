@@ -1176,3 +1176,34 @@ label.jhead { cursor: pointer; }
   .jrow .jfit .reach-arrow { display: none; }
   .jtitle .qt { font-size: 16px; }
 }
+
+/* ---- A phone held sideways, or a wide folding phone: the tabs go down the right edge, where the
+   thumb is, and the page keeps its full height. ---- */
+@media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .tabbar { grid-template-columns: none; grid-auto-flow: row; grid-auto-rows: minmax(0, 1fr); top: 0; bottom: 0; left: auto; right: 0; width: calc(76px + env(safe-area-inset-right));
+    border-top: 0; border-left: 1px solid var(--line); padding: calc(4px + env(safe-area-inset-top)) calc(4px + env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) 4px; }
+  .tabbar a, .tabbar button { min-height: 0; }
+  .tabbar .badge { left: 56%; }
+  .mtop { padding-right: calc(92px + env(safe-area-inset-right)); }
+  .page { padding: 14px calc(92px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); max-width: none; }
+  body.more-open .side { inset: 0 calc(76px + env(safe-area-inset-right)) 0 0; }
+  .toast { bottom: calc(12px + env(safe-area-inset-bottom)); right: calc(88px + env(safe-area-inset-right)); }
+  .review-bar { bottom: calc(8px + env(safe-area-inset-bottom)); }
+  .select-bar { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  /* Room across: a job's buttons go back beside it. */
+  .jhead { flex: 1 1 300px; }
+  .jact { order: 0; flex: none; margin-left: auto; }
+  .jact .btn:not(.icon-only):not(.ghost), .jact a.btn:not(.ghost) { flex: none; }
+  .jwhy, .jrow.ticks .jwhy, .jrow.pick .jwhy { flex: 1 1 100%; }
+  .hsteps { overflow: visible; }
+  .hstep { flex: 1 1 0; min-width: 0; }
+  .kpis.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .tabbar .badge { background: var(--accent); color: #fff; border-radius: 999px; text-align: center; font-weight: 700; }
+}
+@media (orientation: landscape) and (max-width: 760px), (orientation: landscape) and (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .tabbar .badge { top: 14%; }
+  .next-row { flex-wrap: nowrap; }
+  .next-act { flex: none; padding-left: 0; }
+}

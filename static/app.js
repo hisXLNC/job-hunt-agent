@@ -1759,7 +1759,7 @@ async function showApply(id) {
       ${can_fill && j.url && !done ? `<li class="card"><h2>Let Job Hunt fill it in</h2>
         <p class="muted">Opens ${j.apply_url ? 'the job on the company\'s own site' : 'the posting'} in your own browser, where your sign-ins and saved passwords work. On the form, click the Job Hunt extension and press <b>Fill this form</b>: it fills it in from your CV, letter, facts and saved answers, and attaches your files. You check it and press Submit.</p>
         <div class="row"><button class="btn primary" data-act="fillBrowser" data-job="${esc(j.id)}" title="Opens it in Chrome or Edge; the Job Hunt extension fills it in">${svg('open')}Fill it in my browser</button><button class="btn" data-act="fillForm" data-job="${esc(j.id)}" title="Opens it in a Job Hunt window and fills it in there. Sites that need you to sign in are easier in your own browser.">${svg('check')}In a Job Hunt window instead</button></div>
-        <details class="more"><summary class="small muted">How it works, and marking it applied</summary><p class="muted small">Job Hunt doesn't press Submit (unless you turned that on for simple forms): check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>Mark applied</b> here. The extension is set up in <a href="#search/setup">Search → Set up sources</a>. The steps below are there if you'd rather do it yourself, or for anything it couldn't fill.</p></details></li>` : ''}
+        <details class="more"><summary class="small muted">How it works, and marking it applied</summary><p class="muted small">Job Hunt doesn't press Submit (unless you turned that on for simple forms): check the form, fix anything in amber, and submit it yourself. When the site confirms it, Job Hunt marks the application as applied by itself; or press <b>Mark applied</b> here. The extension is set up in <a href="#settings/extension">Settings → Browser extension</a>. The steps below are there if you'd rather do it yourself, or for anything it couldn't fill.</p></details></li>` : ''}
       <li class="card"><h2>${j.apply_url ? 'Open it on the company\'s site' : 'Open the posting'}</h2><p class="muted">${j.apply_url ? 'Applying on the company\'s own site goes straight to them, not through a job board.' : 'Use the company\'s Apply button.'} If it asks you to sign in or make an account, do that first.</p>
         <div class="row">${j.apply_url ? `<button class="btn ${can_fill ? '' : 'primary'}" data-act="open" data-what="company" data-job="${esc(j.id)}">${svg('open')}Apply on the company's site</button>` : ''}
         ${j.url ? `<button class="btn ${j.apply_url ? 'ghost' : can_fill ? '' : 'primary'}" data-act="open" data-what="posting" data-job="${esc(j.id)}">${svg('open')}${j.apply_url ? 'The job board posting' : 'Open the posting'}</button>` : ''}
@@ -2266,7 +2266,7 @@ async function showSettings(tab, sub, host) {
   tab = { extras: 'app', schedule: 'calendar', preferences: 'search' }[tab] || tab;
   const st = settingsCache = await api('/api/settings');
   const p = st.profile;
-  const tabs = [['connections', 'Accounts'], ['search', 'Job search'], ['inbox', 'Email'], ['calendar', 'Calendar'], ['notifications', 'Notifications'], ['sync', 'Sync & backup'], ['app', 'App']];
+  const tabs = [['connections', 'Accounts'], ['search', 'Job search'], ['inbox', 'Email'], ['calendar', 'Calendar'], ['notifications', 'Notifications'], ['sync', 'Sync & backup'], ['extension', 'Browser extension'], ['app', 'App']];
   let body = '';
   if (tab === 'connections') {
     body = `<section class="card attention" id="connStatus" hidden></section>
@@ -2388,13 +2388,7 @@ async function showSettings(tab, sub, host) {
     <section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
       <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and puts it under Jobs to pick. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
       ${desk ? `<div class="row"><button class="btn primary" data-act="bookmarkSetup"><img src="/static/logo.svg" alt="" width="16" height="16">Set up the button</button><span class="muted small">Opens a page in your browser that walks you through it, so the button gets the Job Hunt logo.</span></div>
-      <details class="small" ${st.ext_key ? '' : ''}><summary class="muted">Or install it as a browser extension (Chrome or Edge): it also fills in application forms</summary><ol class="small steps-list">
-        <li><a class="btn sm" href="/api/extension.zip" download>${svg('download')}Download the extension</a> and unzip it (right-click → <b>Extract All</b>). Keep the <b>Send to Job Hunt</b> folder somewhere it stays, like Documents.</li>
-        <li>In Edge open <code>edge://extensions</code> (Chrome: <code>chrome://extensions</code>), turn on <b>Developer mode</b> (Edge: at the bottom of the left side), press <b>Load unpacked</b> and choose the <b>Send to Job Hunt</b> folder.</li>
-        <li>Pin it: the puzzle-piece icon by the address bar → the pin next to <b>Send to Job Hunt</b>. Then on a posting, click the Job Hunt logo.</li>
-        ${st.ext_key ? `<li>To fill in application forms in your own browser (with your sign-ins and saved passwords: best for Workday, iCIMS and the like), click the extension once and paste this key: <span class="copy-row" style="display:inline-flex;gap:6px;align-items:center"><code id="extKey">${esc(st.ext_key)}</code><button class="btn ghost sm" data-act="copy" data-from="extKey">Copy</button></span> Then on any application form, click the extension and press <b>Fill this form</b>. Job Hunt needs to be running on this computer.</li>` : ''}
-        <li>Had the extension before version 2.23? Download it again and replace the folder, then press the reload arrow on its card in <code>chrome://extensions</code>.</li></ol>
-        <p class="muted small">The browser may remind you about developer-mode extensions when it starts; keep it. It reads only the tab you click it on.</p></details>
+      <p class="small">Or use the <b>browser extension</b> (Chrome or Edge), which also fills in application forms: <a class="btn sm" href="#settings/extension">Set up the extension</a></p>
       <details class="small"><summary class="muted">Or add it yourself</summary><ol class="small steps-list">
         <li><button class="btn sm" data-act="copyBookmarklet">Copy the button</button>, or drag <a class="btn sm bookmarklet" href="${esc(bookmarklet())}" draggable="true" onclick="return false" title="Drag this onto your browser's bookmarks bar">${BOOKMARK_NAME}</a> to your bookmarks bar.</li>
         <li>In your browser (Chrome or Edge), show the bookmarks bar with <b>Ctrl+Shift+B</b>, right-click it → <b>Add page</b> (Edge: <b>Add favorite</b>). Name it <b>${BOOKMARK_NAME}</b>, paste into the address (URL) box, and save. Added this way it has no logo.</li></ol></details>
@@ -2555,6 +2549,12 @@ async function showSettings(tab, sub, host) {
           <details class="small"><summary class="muted">Your own ntfy server (optional)</summary><form data-form="phone" class="form" style="margin-top:8px"><label class="field">Server<input type="url" name="server" value="${esc(ph.server)}" placeholder="https://ntfy.sh"></label><div class="row"><button class="btn sm" type="submit">Save</button></div></form></details>
           <p class="muted small">Keep the topic name to yourself.</p>` : ''}
       </section>`;
+  } else if (tab === 'extension') {
+    // Set up on the PC Job Hunt runs on (its folder and key are there); from a phone, say so.
+    body = st.kind === 'server' || st.remote.here
+      ? `<section class="card"><header><h2>Browser extension</h2></header><p class="muted"><b>Send to Job Hunt</b> for Chrome or Edge sends a posting you're looking at to Job Hunt and fills in application forms in your own browser. It's set up on the computer Job Hunt runs on: open Job Hunt there and go to <b>Settings → Browser extension</b>.</p>
+          <p class="muted small">On this phone, use the Fill this form bookmark instead: <a href="#settings/app">Settings → App</a>.</p></section>`
+      : extensionCard(st);
   } else if (tab === 'sync') {
     const server = st.kind === 'server', here = st.remote.here;
     const b = st.backup;
@@ -2638,7 +2638,6 @@ async function showSettings(tab, sub, host) {
         <div class="row"><button class="btn" type="submit">Save</button></div></form></section>
       ${extras}
       <section class="card" id="whatsnew"><header><h2>What's new</h2></header><p class="muted small">Loading…</p></section>
-      ${server || here ? '' : extensionCard(st)}
       ${server || here ? `<section class="card"><header><h2>App</h2></header><p class="muted small">Your data: ${esc(st.app.data)}</p></section>` : `<section class="card"><header><h2>App</h2></header>
       <label class="check"><input type="checkbox" data-act="autostart" ${st.app.autostart ? 'checked' : ''}> Start Job Hunt when I sign in to Windows (in the tray, so searches and email checks keep running)</label>
       ${st.app.slept && st.app.keep_awake && Date.now() - new Date(st.app.slept.at) < 14 * 864e5 ? `<div class="card" style="box-shadow:none;border-color:var(--warn);margin:6px 0"><b>Windows put this PC to sleep during Job Hunt's work</b> <span class="muted small">(${esc(ago(st.app.slept.at))}, for ${st.app.slept.minutes} minutes, while ${esc((st.app.slept.during || []).join(', '))} was running)</span>
