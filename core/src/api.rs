@@ -249,7 +249,20 @@ fn ok() -> R<Resp> {
     Ok(Resp::json(&json!({ "ok": true })))
 }
 
+/// When you last did something in Job Hunt (pressed a button on a page), in seconds since 1970.
+static LAST_ACTION: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// How many seconds ago you last did something in Job Hunt, on any device. An update that installs
+/// by itself waits for this to be a while.
+pub fn idle_secs() -> i64 {
+    chrono::Utc::now().timestamp() - LAST_ACTION.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 pub fn handle(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> Resp {
+    // Reading a page isn't doing something; pressing a button is. (Installing an update doesn't count.)
+    if req.method != "GET" && !req.path.starts_with("/api/update/") {
+        LAST_ACTION.store(chrono::Utc::now().timestamp(), std::sync::atomic::Ordering::Relaxed);
+    }
     let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(agent, host, req)));
     match out {
         Ok(Ok(r)) => r,
@@ -704,7 +717,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "claude_desktop": crate::mcp::claude_desktop_config().as_deref().map(crate::mcp::in_claude_desktop).unwrap_or(false),
                 })));
             }
-            ["api", "emails"] => return Ok(Resp::json(&json!({ "emails": agent.db().emails(200)? }))),
+            ["api", "emails"] => return Ok(Resp::json(&json!({ "emails": agent.db().emails(200)?, "seen": agent.secret("inbox.seen") }))),
             ["api", "calendar"] => {
                 let n = |k: &str, d: i64| req.query.get(k).and_then(|v| v.parse::<i64>().ok()).unwrap_or(d).clamp(0, 400);
                 let items = agent.calendar(n("back", 14), n("ahead", 60))?;
@@ -978,6 +991,15 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     agent.undo_revision(id, what)?;
                     ok()
                 }
+                // Dealt with: a no you've read, or a draft you've sent or deleted, leaves the Queue.
+                "seen" => {
+                    let what = s(&b, "what");
+                    if !["turned", "draft"].contains(&what) {
+                        return Err(Error("Nothing to put away.".into()));
+                    }
+                    agent.db().set(&format!("seen:{what}:{id}"), &crate::util::now())?;
+                    ok()
+                }
                 // The CV checked the way an AI application review reads it; with `fix`, what it couldn't
                 // decide is stated outright first.
                 "review" => {
@@ -1001,10 +1023,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     if agent.is_running(&key) {
                         return Err(Error("The reply is being written already.".into()));
                     }
-                    let (a, id) = (agent.clone(), id.to_string());
+                    let (a, id, change) = (agent.clone(), id.to_string(), s(&b, "change").to_string());
                     std::thread::spawn(move || {
                         let Ok(_g) = a.claim(&key) else { return };
-                        if let Err(e) = a.write_rejection_reply(&id) {
+                        if let Err(e) = a.write_rejection_reply_with(&id, &change) {
                             let _ = a.db().log(Some(&id), "decline:error", &e.0);
                             a.note("The reply to the rejection didn't work", &e.0);
                         }
@@ -1528,6 +1550,12 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             let titles: Vec<String> = b.get("titles").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
             Ok(Resp::json(&json!({ "added": agent.add_titles(s(&b, "track"), &titles)? })))
         }
+        // The Inbox was opened: what's there now is no longer new.
+        ["api", "emails", "seen"] => {
+            agent.db().set("inbox.seen", &crate::util::now())?;
+            ok()
+        }
+        ["api", "emails", id, "reply"] => Ok(Resp::json(&agent.reply_to_email(id)?)),
         ["api", "results", "lessons"] => {
             if agent.is_running("lessons") {
                 return Ok(Resp::json(&json!({ "started": false })));
@@ -1976,8 +2004,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ok()
         }
         ["api", "update", "install"] => {
-            // A search or tailoring in progress finishes first; the update installs (and Job Hunt
-            // restarts) as soon as it's done. No new search starts meanwhile (see Agent::search).
+            // Whatever is running finishes first (a search, tailoring, a reply being written, a check
+            // of your email): the update installs, and Job Hunt restarts, as soon as it's done. No
+            // new search starts meanwhile (see Agent::search).
             if agent.is_running("update") {
                 return Ok(Resp::json(&json!({ "waiting": true, "for": agent.busy_for_update() })));
             }

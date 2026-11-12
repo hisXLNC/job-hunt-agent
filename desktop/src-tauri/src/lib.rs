@@ -200,6 +200,13 @@ fn update_watch(app: AppHandle) {
                 update_found(&app, &v);
                 // Installing by itself: once nothing's running and you're not using Job Hunt's windows.
                 if auto && quiet_for_update(&app) {
+                    // Said first, with a minute to stop it: opening Job Hunt or doing anything in it puts the update off.
+                    notify(&app, &format!("Job Hunt {v} installs in a minute"), "Job Hunt will restart. Open it or carry on working and the update waits until you're done.");
+                    std::thread::sleep(std::time::Duration::from_secs(60));
+                    if !quiet_for_update(&app) {
+                        std::thread::sleep(std::time::Duration::from_secs(5 * 60));
+                        continue;
+                    }
                     if let Some(ctx) = app.try_state::<Arc<Ctx>>() {
                         let _ = ctx.agent.db().set("update.auto_installed", &v);
                         let req = api::Req { method: "POST".into(), path: "/api/update/install".into(), query: Default::default(), body: vec![], remote: false };
@@ -236,6 +243,11 @@ fn quiet_for_update(app: &AppHandle) -> bool {
     let Some(ctx) = app.try_state::<Arc<Ctx>>() else { return false };
     // Nothing at all running: unlike installing on request, nobody's waiting, so it can wait for a lull.
     if !ctx.agent.running().is_empty() || app.get_webview_window("apply").is_some() {
+        return false;
+    }
+    // You did something in Job Hunt in the last ten minutes (in its window, a browser or on your
+    // phone): you're in the middle of something, even if the window isn't in front right now.
+    if api::idle_secs() < 10 * 60 {
         return false;
     }
     match app.get_webview_window("main") {

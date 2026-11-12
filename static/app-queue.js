@@ -82,6 +82,9 @@ function queueItems(o) {
   [...(o.approved || [])].filter(j => !unconfirmed.some(u => u.id === j.id)).sort((a, b) => (a.effort?.minutes ?? 10) - (b.effort?.minutes ?? 10)).forEach(j => add('submit', 'submit', j.id, { j }));
   (o.recruiter_asks || []).forEach(j => add('submit', 'ask', j.id, { j }));
   (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`)).sort((a, b) => applyRank(b) - applyRank(a)).forEach(j => add('pick', 'pick', j.id, { j }));
+  // A no, and drafts Job Hunt left in Gmail: said here, not only in a notice that's gone in a moment.
+  (o.turned_down || []).forEach(t => add('waiting', 'turned', t.job.id, { j: t.job, t }));
+  (o.drafts_waiting || []).forEach(d => add('waiting', 'draft', d.job.id, { j: d.job, d }));
   (o.contact_follow_ups || []).forEach(f => add('waiting', 'contact', f.job.id, { j: f.job, f }));
   (o.follow_ups || []).forEach(j => add('waiting', 'follow', j.id, { j }));
   (o.reach_out || []).forEach(j => add('waiting', 'reach', j.id, { j }));
@@ -92,7 +95,7 @@ function queueItems(o) {
 }
 /** How many decisions are waiting: everything but the notes that are merely worth a look. */
 const queueCount = items => items.filter(x => x.kind !== 'health' || x.h.level === 'problem').length;
-const QUEUE_KIND = { pick: 'Pick', approve: 'Approve', submit: 'Submit', filled: 'Submit', ask: 'Ask a recruiter', contact: 'Follow up', follow: 'Follow up', reach: 'Say hello', quiet: 'Tidy up', interview: 'Interview', health: 'Needs attention', held: 'Waiting to be scored' };
+const QUEUE_KIND = { pick: 'Pick', approve: 'Approve', submit: 'Submit', filled: 'Submit', ask: 'Ask a recruiter', turned: 'Turned down', draft: 'Draft to send', contact: 'Follow up', follow: 'Follow up', reach: 'Say hello', quiet: 'Tidy up', interview: 'Interview', health: 'Needs attention', held: 'Waiting to be scored' };
 let queueSkipped = new Set(), queueAt = '';
 /** How the Queue is shown: every listing at once ('list', unless you choose otherwise) or one decision at a time ('one'). Remembered on this device. */
 const queueView = () => { try { return localStorage.getItem('jh.queueView') === 'one' ? 'one' : 'list'; } catch (e) { return 'list'; } };
@@ -152,6 +155,16 @@ function decisionHtml(x, at, of) {
     return `<article class="card decision" data-kind="ask">${decisionTop(j, where)}
       <div class="dbody"><div class="why blue"><b>You know a recruiter there</b>${esc(j.recruiter || 'A recruiter')} handled an application of yours before. Ask them to put you forward: Job Hunt writes the note.</div></div>
       ${dbar('', `<button class="btn primary big" data-primary data-act="askRecruiter" data-job="${id}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}${key('Enter')}</button>`)}</article>`;
+  }
+  if (x.kind === 'turned') {
+    return `<article class="card decision" data-kind="turned">${decisionTop(j, where)}
+      <div class="dbody"><div class="why"><b>They said no ${esc(ago(x.t.at))}</b>${x.t.said ? esc(x.t.said) : 'The email gave no reason.'}${x.t.stale_follow_up ? ' <span style="color:var(--warn)">A follow-up Job Hunt drafted before this arrived is still in your Gmail drafts: delete it.</span>' : ''}</div></div>
+      ${dbar(`<button class="btn quiet" data-act="seen" data-what="turned" data-job="${id}">Got it</button>`, `<a class="btn primary big" data-primary href="#job/${enc}">Draft a reply${key('Enter')}</a>`)}</article>`;
+  }
+  if (x.kind === 'draft') {
+    return `<article class="card decision" data-kind="draft">${decisionTop(j, where)}
+      <div class="dbody"><div class="why blue"><b>A follow-up is in your Gmail drafts</b>Job Hunt wrote it ${esc(ago(x.d.at))}${x.d.to ? `, to ${esc(x.d.to)}` : ''}: “${esc(x.d.subject || '')}”. Nothing is sent until you send it.</div></div>
+      ${dbar(`<button class="btn quiet" data-act="seen" data-what="draft" data-job="${id}">Done (sent or deleted)</button>`, `<a class="btn primary big" data-primary href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Open Gmail drafts${key('Enter')}</a>`)}</article>`;
   }
   if (['follow', 'reach', 'contact'].includes(x.kind)) {
     const text = x.kind === 'follow' ? ['No reply yet', `You applied ${esc(ago(j.applied_at))}. A short, polite follow-up is worth sending; Job Hunt writes it for you to read and send.`]

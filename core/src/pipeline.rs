@@ -869,7 +869,7 @@ impl Agent {
 
     /// Work an update must not cut short: a search, tailoring, or a posting being added.
     pub fn busy_for_update(&self) -> Vec<String> {
-        self.running().into_iter().filter(|n| n == "search" || n.starts_with("tailor:") || n == "add").collect()
+        self.running().into_iter().filter(|n| n != "update").collect()
     }
 
     pub fn running(&self) -> Vec<String> {
@@ -1788,6 +1788,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             return Ok(vec![]);
         }
         let emails = self.db().job_emails()?;
+        let loose = self.loose_rejections();
         let now = Utc::now();
         let mut out = vec![];
         let applied = self.db().jobs(Some("applied"), 2000)?;
@@ -1804,7 +1805,8 @@ replies and interviews, and a little lower for kinds that got none from several 
                 continue;
             }
             let heard = emails.iter().any(|(id, cat, _, _)| *id == j.id && !["application_received", "job_alert", "not_job"].contains(&cat.as_str()));
-            if !heard {
+            // A no that names this company but not which role: nobody is chased while that's open.
+            if !heard && !loose.iter().any(|e| rejection_names(e, &j)) {
                 out.push(j);
             }
         }
@@ -1999,12 +2001,23 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// A short reply to a rejection, saved as a Gmail draft when Gmail is connected: in the thread of
     /// their email when a person sent it, otherwise a new email to whoever you dealt with there.
     pub fn write_rejection_reply(&self, job_id: &str) -> R<Value> {
+        self.write_rejection_reply_with(job_id, "")
+    }
+
+    /// The same, with what you asked to be different from the draft before ("shorter", "ask about
+    /// other teams"). A new Gmail draft is made; the one before stays until you delete it.
+    pub fn write_rejection_reply_with(&self, job_id: &str, change: &str) -> R<Value> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let profile = self.profile();
         let emails = self.db().emails(5000)?;
         let said = emails.into_iter().find(|e| e.job_id.as_deref() == Some(job_id) && e.category.as_deref() == Some("rejection"));
         let interviewed = self.db().calendar_ids().unwrap_or_default().iter().any(|e| e.kind == "interview" && e.job_id.as_deref() == Some(job_id));
         let their = said.as_ref().map(|e| format!("{}: {}", e.subject.as_deref().unwrap_or(""), e.summary.as_deref().unwrap_or(""))).unwrap_or_default();
+        let before = self.rejection_reply(job_id).filter(|_| !change.trim().is_empty());
+        let their = match &before {
+            Some(b) => format!("{their}\n\nA reply was already drafted:\n{}\n\nThe candidate asks you to write it again with this change: {}", b["body"].as_str().unwrap_or(""), change.trim()),
+            None => their,
+        };
         let mut f = self.llm().rejection_reply(&profile.name, &job, &their, interviewed)?;
         let own = self.own_words(&job, &profile);
         (f.subject, f.body) = (cv::humanize(&f.subject, &own), cv::humanize(&f.body, &own));
@@ -2029,7 +2042,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         };
         // Their email came from an address nobody reads: say so, so it isn't sent into the void.
         let robot = said.is_some() && person.is_none();
-        let v = json!({ "at": now(), "to": to, "subject": f.subject, "body": f.body, "draft": draft, "in_thread": in_thread, "robot": robot, "interviewed": interviewed });
+        let v = json!({ "at": now(), "to": to, "subject": f.subject, "body": f.body, "draft": draft, "in_thread": in_thread, "robot": robot, "interviewed": interviewed, "redrafted": before.is_some() && draft.is_some() });
         let db = self.db();
         db.set(&format!("decline:{job_id}"), &v.to_string())?;
         db.log(Some(job_id), "decline", if draft.is_some() { "reply to the rejection saved in your Gmail drafts" } else { "reply to the rejection written" })?;
@@ -2114,6 +2127,122 @@ replies and interviews, and a little lower for kinds that got none from several 
             }
         }
         Ok(done)
+    }
+
+    /// Email that matters (not alerts, receipts or mail that isn't about jobs) that arrived since you
+    /// last opened the Inbox; before you ever have, the last three days'.
+    pub fn inbox_new(&self) -> usize {
+        let seen = self.secret("inbox.seen");
+        let since = if seen.is_empty() { (Utc::now() - chrono::Duration::days(3)).to_rfc3339() } else { seen };
+        let since = chrono::DateTime::parse_from_rfc3339(&since).map(|t| t.with_timezone(&Utc)).unwrap_or_else(|_| Utc::now());
+        self.db().emails(300).unwrap_or_default().iter()
+            .filter(|e| !["job_alert", "not_job", "application_received"].contains(&e.category.as_deref().unwrap_or("not_job")))
+            .filter(|e| e.received_at.as_deref().and_then(|r| chrono::DateTime::parse_from_rfc3339(r).ok()).is_some_and(|r| r.with_timezone(&Utc) > since))
+            .count()
+    }
+
+    /// A reply to an email in the Inbox, saved in your Gmail drafts in that email's thread: the
+    /// rejection reply when it's a no about a known application, else a short answer to what they wrote.
+    pub fn reply_to_email(&self, gmail_id: &str) -> R<Value> {
+        let row = self.db().emails(5000)?.into_iter().find(|e| e.gmail_id == gmail_id).ok_or_else(|| Error("That email is no longer in the list.".into()))?;
+        let Some(mail) = self.mail.read().unwrap().clone() else { return err("Connect Gmail first: the reply is saved in your Gmail drafts.") };
+        if !crate::recruiters::looks_personal(&google::address(row.sender.as_deref().unwrap_or(""))) {
+            return err("That email came from an address that doesn't take replies. Open the application to write to a person there.");
+        }
+        if let (Some("rejection"), Some(job)) = (row.category.as_deref(), row.job_id.as_deref()) {
+            let v = self.write_rejection_reply(job)?;
+            if let Some(d) = v["draft"].as_str() {
+                self.db().set_email_draft(gmail_id, d)?;
+            }
+            return Ok(v);
+        }
+        let original = mail.get(gmail_id)?;
+        let profile = self.profile();
+        let job = match row.job_id.as_deref() {
+            Some(id) => self.db().job(id)?,
+            None => None,
+        };
+        let about = job.as_ref().map(|j| format!("{} at {}", j.title, j.company)).unwrap_or_default();
+        let input = crate::claude::EmailIn { from: &original.from, to: &original.to, date: &original.date, subject: &original.subject, body: &original.body };
+        let mut body = self.llm().email_reply(&profile.name, &input, &about)?;
+        if let Some(j) = &job {
+            body = cv::humanize(&body, &self.own_words(j, &profile));
+        }
+        let draft = mail.draft_reply(&original, &body)?;
+        let db = self.db();
+        db.set_email_draft(gmail_id, &draft)?;
+        db.log(row.job_id.as_deref(), "reply", &format!("reply to \u{201c}{}\u{201d} saved in your Gmail drafts", original.subject))?;
+        Ok(json!({ "draft": draft, "body": body, "in_thread": true }))
+    }
+
+    /// Rejection emails of the last two months that no application was matched to.
+    fn loose_rejections(&self) -> Vec<crate::db::EmailRow> {
+        let since = (Utc::now() - chrono::Duration::days(60)).to_rfc3339();
+        self.db().emails(3000).unwrap_or_default().into_iter()
+            .filter(|e| e.category.as_deref() == Some("rejection") && e.job_id.is_none() && e.received_at.as_deref().is_some_and(|r| r >= since.as_str()))
+            .collect()
+    }
+
+    /// Rejections that named no application, matched to one by the company they name: when one
+    /// application there is waiting, or one whose title the email has more of than the others.
+    /// Each becomes Rejected, with a notice. How many were matched.
+    pub fn link_rejections(&self) -> usize {
+        let loose = self.loose_rejections();
+        if loose.is_empty() {
+            return 0;
+        }
+        let waiting: Vec<Job> = ["applied", "interviewing"].iter().flat_map(|s| self.db().jobs(Some(s), 2000).unwrap_or_default()).collect();
+        let mut n = 0;
+        let mut taken: HashSet<String> = HashSet::new();
+        for e in &loose {
+            let text = email_words(e);
+            let mut there: Vec<(usize, &Job)> = waiting.iter().filter(|j| !taken.contains(&j.id) && rejection_names(e, j))
+                .map(|j| (crate::logos::title_words(&j.title).iter().filter(|w| text.contains(*w)).count(), j)).collect();
+            there.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
+            let job = match there.as_slice() {
+                [(_, j)] => *j,
+                [(a, j), (b, _), ..] if a > b => *j,
+                _ => continue,
+            };
+            let done = (|| -> R<()> {
+                let db = self.db();
+                db.set_email_job(&e.gmail_id, &job.id)?;
+                db.log(Some(&job.id), "email:rejection", e.summary.as_deref().unwrap_or(""))?;
+                db.set_status(&job.id, "rejected", &format!("from email: {}", e.subject.as_deref().unwrap_or("")))
+            })();
+            if done.is_ok() {
+                taken.insert(job.id.clone());
+                n += 1;
+                self.note(&format!("Turned down: {}", job.company), &format!("{}. It's in your Queue under Waiting, where you can read what they wrote and draft a short reply.", job.title));
+            }
+        }
+        n
+    }
+
+    /// Applications turned down in the last three weeks that you haven't dealt with: neither a
+    /// reply drafted nor put away. Each: the job, what they wrote, and whether a follow-up Job Hunt
+    /// drafted before the no is still in your Gmail drafts.
+    pub fn turned_down(&self) -> Vec<Value> {
+        let since = (Utc::now() - chrono::Duration::days(21)).to_rfc3339();
+        let emails = self.db().emails(3000).unwrap_or_default();
+        let jobs = self.db().jobs(Some("rejected"), 2000).unwrap_or_default();
+        jobs.into_iter().filter(|j| j.updated_at.as_str() >= since.as_str() && self.db().get(&format!("seen:turned:{}", j.id)).ok().flatten().is_none() && self.rejection_reply(&j.id).is_none())
+            .map(|j| {
+                let said = emails.iter().find(|e| e.job_id.as_deref() == Some(j.id.as_str()) && e.category.as_deref() == Some("rejection"));
+                let chased = self.follow_up(&j.id).is_some_and(|f| !f["draft"].is_null());
+                json!({ "job": j.brief(), "said": said.and_then(|e| e.summary.clone()), "at": said.and_then(|e| e.received_at.clone()).unwrap_or(j.updated_at.clone()), "stale_follow_up": chased })
+            }).collect()
+    }
+
+    /// Follow-ups Job Hunt saved in your Gmail drafts in the last two weeks, for applications still
+    /// waiting, that you haven't said you've dealt with.
+    pub fn drafts_waiting(&self) -> Vec<Value> {
+        let since = (Utc::now() - chrono::Duration::days(14)).to_rfc3339();
+        self.db().jobs(Some("applied"), 2000).unwrap_or_default().into_iter().filter_map(|j| {
+            let f = self.follow_up(&j.id)?;
+            (!f["draft"].is_null() && f["at"].as_str().is_some_and(|a| a >= since.as_str()) && self.db().get(&format!("seen:draft:{}", j.id)).ok().flatten().is_none())
+                .then(|| json!({ "job": j.brief(), "at": f["at"], "to": f["to"], "subject": f["subject"] }))
+        }).collect()
     }
 
     /// Draft follow-ups for applications that are due one (a few per email check).
@@ -3300,6 +3429,7 @@ impl Agent {
         // before the database is held for the rest.)
         let leads_open = crate::leads::open_count(self);
         let follow_ups: Vec<Value> = self.follow_ups_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
+        let (turned_down, drafts_waiting, inbox_new) = (self.turned_down(), self.drafts_waiting(), self.inbox_new());
         // Companies you've applied to: for "Applied here before" on the roles in your lists.
         let mut sent_to: BTreeMap<String, Vec<Value>> = BTreeMap::new();
         for s in SENT {
@@ -3407,6 +3537,9 @@ impl Agent {
             "sync_newer": newer,
             "in_use": in_use,
             "follow_ups": follow_ups,
+            "turned_down": turned_down,
+            "inbox_new": inbox_new,
+            "drafts_waiting": drafts_waiting,
             "reach_out": reach_out,
             "filled_unconfirmed": filled_unconfirmed,
             "contact_follow_ups": contact_follow_ups,
@@ -3472,3 +3605,23 @@ fn board_lists(s: &mut crate::profile::Sources) -> [(&'static str, &mut Vec<Stri
 
 #[cfg(test)]
 mod tests;
+
+/// The words of an email kept in the database: who sent it, its subject and what it said.
+fn email_words(e: &crate::db::EmailRow) -> HashSet<String> {
+    format!("{} {} {}", e.sender.as_deref().unwrap_or(""), e.subject.as_deref().unwrap_or(""), e.summary.as_deref().unwrap_or(""))
+        .to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect()
+}
+
+/// Whether a rejection email that named no application is about this job's company: it came after
+/// you applied, and names the company (every word that tells its name apart, or the name run
+/// together, as in a sender's address).
+fn rejection_names(e: &crate::db::EmailRow, job: &Job) -> bool {
+    if let (Some(a), Some(r)) = (job.applied_at.as_deref(), e.received_at.as_deref()) {
+        if r < a {
+            return false;
+        }
+    }
+    let words = crate::logos::name_words(&job.company);
+    let text = email_words(e);
+    !words.is_empty() && words.concat().len() >= 3 && (words.iter().all(|w| text.contains(w)) || text.contains(&words.concat()))
+}

@@ -228,6 +228,9 @@ impl Llm for Metered {
     fn insights(&self, candidate: &str, results: &str, applications: &str) -> R<String> {
         self.run("insights", |l| l.insights(candidate, results, applications))
     }
+    fn email_reply(&self, candidate: &str, email: &crate::claude::EmailIn, about: &str) -> R<String> {
+        self.run("thanks", |l| l.email_reply(candidate, email, about))
+    }
     fn rejection_reply(&self, candidate: &str, job: &Job, their_email: &str, interviewed: bool) -> R<FollowUp> {
         self.run("thanks", |l| l.rejection_reply(candidate, job, their_email, interviewed))
     }

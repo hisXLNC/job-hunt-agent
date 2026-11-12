@@ -74,6 +74,12 @@ impl Agent {
             self.db().record_email(&msg.id, &msg.thread_id, t.job_id.as_deref(), &msg.from, &msg.subject, &t.category, &t.summary, draft.as_deref(), &msg.received_at)?;
             *stats.entry(t.category.clone()).or_insert(0) += 1;
         }
+        // A no that named no application: matched by the company it names, so the application
+        // doesn't sit as "applied" (and get a follow-up).
+        let matched = self.link_rejections();
+        if matched > 0 {
+            stats.insert("rejections_matched".to_string(), matched);
+        }
         let drafted = self.draft_follow_ups();
         if drafted > 0 {
             stats.insert("follow_ups_drafted".to_string(), drafted);
@@ -133,6 +139,11 @@ impl Agent {
             if let Some(target) = target {
                 if target != job.status {
                     db.set_status(&job.id, target, &format!("from email: {}", msg.subject))?;
+                    // A no is said out loud, not just filed.
+                    if target == "rejected" {
+                        drop(db);
+                        self.note(&format!("Turned down: {}", job.company), &format!("{}. It's in your Queue under Waiting, where you can read what they wrote and draft a short reply.", job.title));
+                    }
                 }
             }
         }

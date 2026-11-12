@@ -1710,3 +1710,8 @@ details.kit > summary { cursor: pointer; }
 .ats-review > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .ats-review h3, .ats-tips h3 { margin: 10px 0 6px; }
 .ats-review table td { vertical-align: top; }
+
+/* Inbox: new mail stands out; what you can do sits on each row. */
+.inbox-list tr.fresh td:first-child { box-shadow: inset 3px 0 0 var(--info); }
+.inbox-acts { gap: 6px; flex-wrap: wrap; }
+.inbox-acts .btn { white-space: nowrap; }

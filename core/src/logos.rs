@@ -84,6 +84,9 @@ pub fn kept(agent: &Agent, company: &str) -> Option<Option<(String, Vec<u8>)>> {
     let saved = agent.secret(&key(company));
     let (kind, rest) = saved.split_once('|')?;
     if kind == "none" {
+        return None;
+    }
+    if kind == "none2" {
         // Looked and found none: look again after two weeks (its own site may be known by then).
         let fresh = chrono::DateTime::parse_from_rfc3339(rest).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_days() < 14);
         return fresh.then_some(None);
@@ -108,14 +111,19 @@ pub fn want(agent: &Arc<Agent>, company: &str) {
     std::thread::spawn(move || {
         let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
         let http = client();
-        let mut value = format!("none|{}", crate::util::now());
+        let mut value = format!("none2|{}", crate::util::now());
         for (site, sure) in sites_for(&a, &company) {
             // A site another spelling of the company already led to: its image is here.
             if !a.secret(&site_key(&site)).is_empty() {
                 value = format!("site|{site}");
                 break;
             }
-            if let Some((ctype, bytes)) = fetch_checked(&http, &format!("https://{site}"), &company, sure) {
+            // Its own site first (with and without www); a site that turns programs away still has
+            // its icon in a public index of site icons, asked only when the address is surely theirs.
+            let found = fetch_checked(&http, &format!("https://{site}"), &company, sure)
+                .or_else(|| fetch_checked(&http, &format!("https://www.{site}"), &company, sure))
+                .or_else(|| (sure || whole_name_site(&site, &company)).then(|| fetch_indexed(&http, INDEX, &site)).flatten());
+            if let Some((ctype, bytes)) = found {
                 let _ = a.db().set(&site_key(&site), &format!("{ctype}|{}", base64::engine::general_purpose::STANDARD.encode(bytes)));
                 value = format!("site|{site}");
                 break;
@@ -126,8 +134,44 @@ pub fn want(agent: &Arc<Agent>, company: &str) {
     });
 }
 
+/// A public index of sites' icons, for a company's site that won't answer a program: only the
+/// site's address is sent.
+const INDEX: &str = "https://icons.duckduckgo.com/ip3";
+
+/// An icon from the index: (type, bytes). None when it has none for the site.
+pub fn fetch_indexed(http: &reqwest::blocking::Client, index: &str, site: &str) -> Option<(String, Vec<u8>)> {
+    let r = http.get(format!("{index}/{site}.ico")).send().ok()?;
+    if !r.status().is_success() {
+        return None;
+    }
+    let header = r.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").split(';').next().unwrap_or("").trim().to_lowercase();
+    let bytes = r.bytes().ok()?;
+    (ICON_BYTES.contains(&bytes.len())).then(|| (if header.starts_with("image/") { header } else { "image/x-icon".into() }, bytes.to_vec()))
+}
+
+/// The sizes an icon may be: a real image, not a page and not a photograph.
+const ICON_BYTES: std::ops::RangeInclusive<usize> = 64..=250_000;
+
+/// Every word of the name, run together: "insightglobal" for Insight Global, "eqbank" for EQ Bank.
+fn whole_name(company: &str) -> String {
+    company.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty() && !["inc", "incorporated", "corp", "corporation", "ltd", "limited", "llc", "plc", "the", "lp", "llp"].contains(w)).collect()
+}
+
+/// Whether a site's address is the company's whole name ("eqbank.ca" for EQ Bank), or the words
+/// that tell it apart ("rogers.com" for Rogers Communications).
+fn whole_name_site(site: &str, company: &str) -> bool {
+    let label = site.split('.').next().unwrap_or("");
+    label.len() >= 4 && (label == whole_name(company) || label == name_words(company).concat())
+}
+
+/// The words of a job title that tell it from another: "technical", "program" for Senior Technical Program Manager.
+pub fn title_words(title: &str) -> Vec<String> {
+    const PLAIN: [&str; 14] = ["senior", "sr", "junior", "jr", "lead", "manager", "the", "of", "and", "for", "to", "in", "a", "ii"];
+    title.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() >= 3 && !PLAIN.contains(w)).map(String::from).collect()
+}
+
 /// The words of a company's name that tell it apart: no legal endings, no "bank" or "group".
-fn name_words(company: &str) -> Vec<String> {
+pub fn name_words(company: &str) -> Vec<String> {
     const PLAIN: [&str; 30] = ["inc", "incorporated", "corp", "corporation", "ltd", "limited", "llc", "plc", "co", "company", "the", "group", "holdings", "of", "and", "canada", "bank",
         "financial", "services", "solutions", "technologies", "technology", "systems", "international", "global", "communications", "consulting", "partners", "lp", "llp"];
     company.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty() && !PLAIN.contains(w)).map(String::from).collect()
@@ -172,8 +216,10 @@ fn sites_for(agent: &Agent, company: &str) -> Vec<(String, bool)> {
         add(s, sure);
     }
     // Likely addresses: the name's own words run together ("scotiabank", "rogers"), as .com and .ca.
+    // The whole name first ("insightglobal", "eqbank"): the words that tell it apart can be someone
+    // else's site ("insight.com").
     let words = name_words(company);
-    let mut slugs = vec![words.concat()];
+    let mut slugs = vec![whole_name(company), words.concat()];
     if let Some(first) = words.first().filter(|w| w.len() >= 5 && words.len() > 1) {
         slugs.push(first.clone());
     }
@@ -182,13 +228,13 @@ fn sites_for(agent: &Agent, company: &str) -> Vec<(String, bool)> {
             add(format!("{slug}.{tld}"), false);
         }
     }
-    out.truncate(6);
+    out.truncate(9);
     out
 }
 
 fn client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(8))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) JobHunt/1.0").build().expect("http client")
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36").build().expect("http client")
 }
 
 static TITLE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?is)<title[^>]*>(.*?)</title>|<meta\b[^>]*(?:og:site_name|application-name)[^>]*>"#).unwrap());
@@ -260,7 +306,7 @@ pub fn fetch_from(http: &reqwest::blocking::Client, base: &str) -> Option<(Strin
             else if path.ends_with(".png") { "image/png".into() } else if path.ends_with(".ico") { "image/x-icon".into() }
             else if path.ends_with(".svg") { "image/svg+xml".into() } else { continue };
         let Ok(bytes) = r.bytes() else { continue };
-        if (64..=80_000).contains(&bytes.len()) {
+        if ICON_BYTES.contains(&bytes.len()) {
             return Some((ctype, bytes.to_vec()));
         }
     }

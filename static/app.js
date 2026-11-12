@@ -458,8 +458,9 @@ function renderNav() {
   const active = placeOf();
   // The badge: what's waiting on you. New matches to pick from aren't counted, or it would never clear.
   const waiting = overview ? queueCount(queueItems(overview).filter(x => x.step !== 'pick')) : 0;
+  const mailNew = overview?.inbox_new || 0;
   $('#nav').innerHTML = NAV.map(([id, name, group]) =>
-    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && waiting ? `<span class="badge" title="${waiting} decision${waiting === 1 ? '' : 's'} waiting (new matches to pick from aren't counted)">${waiting}</span>` : ''}</a>`).join('');
+    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && waiting ? `<span class="badge" title="${waiting} decision${waiting === 1 ? '' : 's'} waiting (new matches to pick from aren't counted)">${waiting}</span>` : ''}${id === 'inbox' && mailNew ? `<span class="badge" title="${mailNew} new email${mailNew === 1 ? '' : 's'} about your applications (job alerts and receipts aren't counted)">${mailNew}</span>` : ''}</a>`).join('');
   const running = overview?.running || [];
   const busy = running.includes('search') ? (overview?.progress?.scoring ? `${overview.progress.paused ? 'Scoring paused' : 'Scoring waiting postings…'} ${overview.progress.done ?? 0} of ${overview.progress.total ?? 0}` : `${overview?.progress?.paused ? 'Search paused' : 'Searching for jobs…'} ${overview?.progress?.percent ?? 0}%`) : running.includes('inbox') ? 'Checking email…'
     : running.some(r => r.startsWith('tailor') || r === 'add') ? 'Tailoring…' : '';

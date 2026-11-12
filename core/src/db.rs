@@ -819,6 +819,18 @@ impl Db {
         Ok(n > 0)
     }
 
+    /// The draft reply now waiting for an email already kept.
+    pub fn set_email_draft(&self, gmail_id: &str, draft_id: &str) -> R<()> {
+        self.con.execute("UPDATE emails SET draft_id = ?2 WHERE gmail_id = ?1", params![gmail_id, draft_id])?;
+        Ok(())
+    }
+
+    /// Say which application an email already kept is about.
+    pub fn set_email_job(&self, gmail_id: &str, job_id: &str) -> R<()> {
+        self.con.execute("UPDATE emails SET job_id = ?2 WHERE gmail_id = ?1", params![gmail_id, job_id])?;
+        Ok(())
+    }
+
     pub fn email_seen(&self, gmail_id: &str) -> R<bool> {
         let n: i64 = self.con.query_row("SELECT COUNT(*) FROM emails WHERE gmail_id = ?1", [gmail_id], |r| r.get(0))?;
         Ok(n > 0)

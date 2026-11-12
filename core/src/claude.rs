@@ -546,6 +546,11 @@ pub trait Llm: Send + Sync {
     fn insights(&self, _candidate: &str, _results: &str, _applications: &str) -> R<String> {
         Err(Error("Insights aren't available.".into()))
     }
+    /// A short reply to an email about a job, in the candidate's voice. `about`: the application it
+    /// concerns, when known.
+    fn email_reply(&self, _candidate: &str, _email: &EmailIn, _about: &str) -> R<String> {
+        Err(Error("Replies aren't available.".into()))
+    }
     /// A short, gracious reply to a rejection. `their_email`: what they wrote, when it's known.
     fn rejection_reply(&self, _candidate: &str, _job: &crate::db::Job, _their_email: &str, _interviewed: bool) -> R<FollowUp> {
         Err(Error("Replies to a rejection aren't available.".into()))
@@ -1269,6 +1274,19 @@ strongest concrete reason they fit (from the posting and their application), off
 else that would help, and thank them. Never ask about the status or for an update, never paste the CV, and \
 mention no attachments. Sign with the candidate's name. subject: \"Following up: <job title> application\". \
 Never invent facts."
+    )
+}
+
+fn email_reply_system() -> String {
+    format!(
+        "You write a short reply from a job candidate to an email about a job or an application.\n\n\
+{UNTRUSTED}\n\n{HUMAN}\n\n\
+Write in the candidate's voice: warm, direct, 40-90 words, no filler. Answer what the email asks; where it asks \
+for something only the candidate knows (times, salary, documents, a decision), leave a clear placeholder in square \
+brackets for them to fill in rather than inventing it. Where the email asks nothing, acknowledge it, say the \
+candidate is still interested, and ask one useful question about what happens next. Never invent facts, never agree \
+to terms, dates or pay on the candidate's behalf. Only the body of the reply: no subject line; sign with the \
+candidate's name."
     )
 }
 
@@ -2154,6 +2172,17 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
             insights: String,
         }
         Ok(self.call::<T>(&insights_system(), &user, obj(json!({"insights": {"type": "string"}})), "medium")?.insights)
+    }
+
+    fn email_reply(&self, candidate: &str, email: &EmailIn, about: &str) -> R<String> {
+        let user = format!("Candidate: {candidate}\nThe application it's about: {}\n\n{}", if about.trim().is_empty() { "not known" } else { about }, email_block(email, 6000));
+        #[derive(Deserialize)]
+        struct Out { body: String }
+        let o: Out = self.call(&email_reply_system(), &user, obj(json!({"body": {"type": "string"}})), "low")?;
+        if o.body.trim().is_empty() {
+            return Err(Error("Claude's reply came back empty; try again.".into()));
+        }
+        Ok(o.body)
     }
 
     fn rejection_reply(&self, candidate: &str, job: &crate::db::Job, their_email: &str, interviewed: bool) -> R<FollowUp> {

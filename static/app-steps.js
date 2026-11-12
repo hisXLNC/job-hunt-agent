@@ -247,13 +247,19 @@ function stepHtml(o, step, tracked) {
       `<button class="btn sm" data-act="stage" data-status="no_response" data-job="${id(j)}" data-from="applied">No response</button>`)).join('')]);
   if (o.reach_out?.length) groups.push(['Message the recruiter or hiring team', o.reach_out.slice(0, 6).map(j => row(j, j.applied_at ? `applied ${esc(ago(j.applied_at))}. A short note within 1 to 3 days helps` : 'you know who to write to there: a short note the day you apply helps most',
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="apply" data-scroll="people">Write a note</a>`)).join('')]);
+  if (o.turned_down?.length) groups.push(['Turned down: read it, reply if a person wrote', o.turned_down.slice(0, 8).map(t => row(t.job, `they said no ${esc(ago(t.at))}${t.said ? `: ${esc(t.said)}` : ''}${t.stale_follow_up ? ' <span style="color:var(--warn)">A follow-up drafted before this is still in your Gmail drafts: delete it.</span>' : ''}`,
+    `<a class="btn sm" href="#job/${encodeURIComponent(t.job.id)}">Draft a reply</a>
+     <button class="btn ghost sm" data-act="seen" data-what="turned" data-job="${id(t.job)}" title="Take it off this list">Got it</button>`)).join('')]);
+  if (o.drafts_waiting?.length) groups.push(['In your Gmail drafts: read and send', o.drafts_waiting.slice(0, 8).map(d => row(d.job, `follow-up written ${esc(ago(d.at))}${d.to ? `, to ${esc(d.to)}` : ''}. Nothing is sent until you send it`,
+    `<a class="btn sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Open Gmail drafts</a>
+     <button class="btn ghost sm" data-act="seen" data-what="draft" data-job="${id(d.job)}" title="Sent or deleted: take it off this list">Done</button>`)).join('')]);
   if (o.contact_follow_ups?.length) groups.push(['No reply from the recruiter: follow up once', o.contact_follow_ups.slice(0, 6).map(f => row(f.job, `messaged ${esc(f.name)} ${esc(ago(f.sent_at))}${f.late ? '. Follow up now or let it go' : ''}`,
     `<a class="btn sm" href="#job/${encodeURIComponent(f.job.id)}" data-tab-to="apply">Write the follow-up</a>`)).join('')]);
   if (o.follow_ups?.length) groups.push([`No reply yet: follow up${o.follow_ups.length > 1 ? ` <button class="btn primary sm" data-act="followUpAll" data-ids="${esc(JSON.stringify(o.follow_ups.slice(0, 6).map(j => j.id)))}" style="margin-left:8px" title="Job Hunt writes a short follow-up for each; they're saved as Gmail drafts (or on each job) for you to read and send">Write all ${Math.min(6, o.follow_ups.length)}</button>` : ''}`, o.follow_ups.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
     `<button class="btn sm" data-act="followUp" data-job="${id(j)}">Write follow-up</button>`)).join('')]);
   // Each step's groups; the ones above were made for all of them.
   const has = h => groups.find(g => String(g[0]).startsWith(h));
-  const listed = new Set([...(o.follow_ups || []), ...(o.reach_out || []), ...(o.contact_follow_ups || []).map(f => f.job), ...(o.quiet || []), ...(o.approved || [])].map(j => j.id));
+  const listed = new Set([...(o.drafts_waiting || []).map(d => d.job), ...(o.follow_ups || []), ...(o.reach_out || []), ...(o.contact_follow_ups || []).map(f => f.job), ...(o.quiet || []), ...(o.approved || [])].map(j => j.id));
   const rest = (title, keep) => {
     const rows = tracked.filter(r => keep(r) && !listed.has(r.id));
     return rows.length ? [[title, rows.map(trackRow).join('')]] : [];
@@ -262,7 +268,7 @@ function stepHtml(o, step, tracked) {
     pick: [has('Pick'), has('Tailoring')].filter(Boolean),
     approve: ready,
     submit: [has('Filled in by Job Hunt'), has('Ask your recruiters'), has('Submit')].filter(Boolean),
-    waiting: [has('Message the recruiter'), has('No reply from the recruiter'), has('No reply yet'), has('Quiet'), ...rest('Everything else you applied to', r => r.status === 'applied')].filter(Boolean),
+    waiting: [has('Turned down'), has('In your Gmail drafts'), has('Message the recruiter'), has('No reply from the recruiter'), has('No reply yet'), has('Quiet'), ...rest('Everything else you applied to', r => r.status === 'applied')].filter(Boolean),
     interviews: [has('Interviews in the next'), ...rest('Interviewing and offers', r => ['interviewing', 'offer'].includes(r.status))].filter(Boolean),
   }[step];
   const empty = {

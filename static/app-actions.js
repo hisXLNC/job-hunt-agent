@@ -581,6 +581,12 @@ async function act(el) {
   if (a === 'undoRevision') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/undo`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Put back as it was.');
   }
+  if (a === 'emailReply') {
+    return busy(async () => { await api(`/api/emails/${encodeURIComponent(t.dataset.id)}/reply`, { method: 'POST' }); toast('The reply is in your Gmail drafts, in that email\'s thread. Read it, change what you like, and send it from Gmail.'); route(); }, 'Writing the reply…');
+  }
+  if (a === 'seen') {
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/seen`, { method: 'POST', body: { what: t.dataset.what } }); await refreshOverview(); route(); });
+  }
   if (a === 'review' || a === 'reviewFix') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/review`, { method: 'POST', body: { fix: a === 'reviewFix' } }); setTimeout(route, 300); }, a === 'reviewFix' ? 'Rewording, then checking again…' : 'Checking your CV…');
   }
@@ -1150,6 +1156,10 @@ document.addEventListener('submit', async e => {
   try {
     const kind = form.dataset.form;
     const f = form.elements;
+    if (kind === 'declineChange') {
+      await api(`/api/jobs/${encodeURIComponent(form.dataset.job)}/decline`, { method: 'POST', body: { change: f.change.value } });
+      toast('Rewriting the reply…'); setTimeout(route, 300); return;
+    }
     if (kind === 'add') {
       const claude = form.querySelector('[name=claude]:checked')?.value === '1';
       await api('/api/add', { method: 'POST', body: { company: f.company.value, title: f.title.value, url: f.url.value, location: f.location.value, description: f.description.value, claude } });

@@ -37,7 +37,7 @@
   }
   const send = PHONE ? (kind, data) => phoneSend(kind, { ...data, url: location.href, title: document.title }) : EXT ? (kind, data) => {
     // The extension was updated (or turned off) since this page opened: this copy can't reach it.
-    const gone = () => { waitingSince = 0; progress(null); if (buttons.fill) buttons.fill.disabled = false; status('The Job Hunt extension was updated since this page opened. Reload this page (F5), then press Fill this form in the extension again.'); };
+    const gone = () => { waitingSince = 0; progress(null); if (buttons.fill) buttons.fill.disabled = false; status('The extension was updated. Reload this page (F5), then fill again.'); };
     try {
       if (!chrome.runtime || !chrome.runtime.id) return gone();
       const r = chrome.runtime.sendMessage({ jobhunt: kind, data: { ...data, url: location.href, title: document.title } });
@@ -112,7 +112,7 @@
       const n = await replaceFiles();
       status(n ? `Replaced: Job Hunt's ${n === 1 ? 'file is' : 'files are'} attached now. Read the form over, then press its Submit button.` : 'Couldn\'t replace it here: delete the old file with its bin icon, then press Fill in again.');
     };
-    buttons.keep.onclick = () => { askEl.hidden = true; replaceAsk = []; status('Kept the file that was there. Read the form over, then press its Submit button.'); };
+    buttons.keep.onclick = () => { askEl.hidden = true; replaceAsk = []; status('Kept your file. Check the form, then submit it.'); };
     buttons.pick.onclick = () => {
       const id = chooseEl.querySelector('select').value;
       if (!id) return;
@@ -125,7 +125,7 @@
       const text = 'Job Hunt form details ' + JSON.stringify({ page: location.hostname, ...diag }, null, 1);
       try { await navigator.clipboard.writeText(text); }
       catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
-      status('Copied. Paste it into your chat with Claude, with a word on what went wrong.');
+      status('Copied. Paste it to Claude and say what went wrong.');
     };
     buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
@@ -927,7 +927,7 @@
           const tick = () => {
             if (!autoTimer && left < 10) return;
             if (left <= 0) { autoTimer = null; buttons.stop.hidden = true; status('Submitting…'); btn.click(); return; }
-            status(`Everything's answered from your saved answers and facts. Submitting in ${left}s; press Stop to check it yourself.`);
+            status(`All answered from your saved answers. Submitting in ${left}s; Stop to check.`);
             left--; autoTimer = setTimeout(tick, 1000);
           };
           autoTimer = setTimeout(tick, 0);
@@ -949,7 +949,7 @@
       for (const j of list) {
         const o = document.createElement('option');
         o.value = j.id;
-        o.textContent = j.id === 'profile' ? 'Not an application: a profile here, from my CV' : `${j.title} · ${j.company}${j.status === 'ready' ? ' (not approved yet)' : ''}`;
+        o.textContent = j.id === 'profile' ? 'A profile, from my CV' : `${j.title} · ${j.company}${j.status === 'ready' ? ' (not approved yet)' : ''}`;
         sel.appendChild(o);
       }
       // The button says what it will do with the choice.
@@ -989,7 +989,7 @@
     if (!list.length) { progress(null); status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
     // No answer in six minutes (Job Hunt closed, Claude busy): the button comes back.
     const mine = waitingSince = Date.now();
-    setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status('No answers came back from Job Hunt. Is it still running? Press Fill in this form to try again.'); } }, 360000);
+    setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status('No answer from Job Hunt. Is it running? Try again.'); } }, 360000);
     buttons.fill.disabled = true;
     // About how long Claude takes: longer with more questions (a form with several jobs on it, say).
     const usual = Math.round(15 + list.length * 0.8);
@@ -1039,7 +1039,7 @@
       await wait(1000);
       if (pressedAt() && confirmedHere(false)) { recordApplied(); return; }
       if (vouched && confirmedHere(true)) { recordApplied(); return; }
-      if (i === 8 && !recorded && pressedAt() && !waitingSince) { panel(); buttons.applied.hidden = false; status('Waiting for the site to confirm… If it says your application went through, press I submitted it (or just close this window: Job Hunt asks).'); }
+      if (i === 8 && !recorded && pressedAt() && !waitingSince) { panel(); buttons.applied.hidden = false; status('Waiting for the site to confirm… If it went through, press I submitted it.'); }
     }
   }
   // You sent the form: a Submit-like button, or the form itself (Enter, or a button Job Hunt can't name).
@@ -1098,7 +1098,7 @@
       if (frame) {
         buttons.open.hidden = false;
         buttons.open.onclick = () => { location.href = frame.src; };
-        status('The application form is inside this page. Press Open the form, and Job Hunt fills it in there.');
+        status('The form is inside this page. Press Open the form.');
         return;
       }
       if (i === 2 && !pressedAt()) status('Use the page\'s Apply button to get to the form. Job Hunt fills it in when it appears.');

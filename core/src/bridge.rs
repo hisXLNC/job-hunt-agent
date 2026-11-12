@@ -278,7 +278,7 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
             let mut jobs = pick_list(agent);
             let none = jobs.is_empty();
             jobs.push(json!({ "id": crate::fill::PROFILE, "title": "Not an application", "company": "a profile here, from my CV", "status": crate::fill::PROFILE }));
-            json_resp(400, json!({ "error": if none { "Job Hunt has no approved application for this page. If it's a profile on this site, it can fill that in from your CV." } else { "Job Hunt can't tell which application this is. Choose it below, or the last one if this is a profile to fill in from your CV." }, "choose": jobs }))
+            json_resp(400, json!({ "error": if none { "No approved application matches this page. A profile? Fill it from your CV." } else { "Which application is this? Choose it below." }, "choose": jobs }))
         }
         Err(e) => json_resp(400, json!({ "error": e.0 })),
     }

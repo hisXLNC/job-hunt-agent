@@ -2054,3 +2054,72 @@ fn a_cv_for_an_ashby_employer_is_checked_and_sharpened() {
     // What can't be shown honestly is left alone: asking again changes nothing.
     assert!(s.agent.sharpen_for_review(&ids[1]).is_err());
 }
+
+#[test]
+fn a_no_that_named_no_application_is_matched_and_said() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    p.follow_up_after = 5;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Data Analyst", "2")])).unwrap();
+    let ids: Vec<String> = s.agent.db().jobs(Some("queued"), 10).unwrap().iter().map(|j| j.id.clone()).collect();
+    let long_ago = (Utc::now() - chrono::Duration::days(8)).to_rfc3339();
+    for id in &ids {
+        let db = s.agent.db();
+        db.set_status(id, "applied", "sent").unwrap();
+        db.update_job(id, &[("applied_at", json!(long_ago))]).unwrap();
+    }
+    let analyst = ids.iter().find(|id| s.agent.db().job(id).unwrap().unwrap().title.contains("Analyst")).unwrap().clone();
+    let other = ids.iter().find(|id| **id != analyst).unwrap().clone();
+    assert_eq!(s.agent.follow_ups_due().unwrap().len(), 2);
+    // A no from the company that doesn't say which role: neither is chased, neither is closed.
+    let now = Utc::now().to_rfc3339();
+    s.agent.db().record_email("n1", "t1", None, "Acme Careers <no-reply@acme.example>", "Your application to Acme", "rejection", "They have decided not to move forward.", None, &now).unwrap();
+    assert_eq!(s.agent.link_rejections(), 0);
+    assert!(s.agent.follow_ups_due().unwrap().is_empty());
+    // One that names the role: that application becomes Rejected, you're told, and it waits in the Queue.
+    s.agent.db().record_email("n2", "t2", None, "Acme Careers <no-reply@acme.example>", "Update on Senior Data Analyst", "rejection", "Acme went with another candidate for the Data Analyst role.", None, &now).unwrap();
+    assert_eq!(s.agent.link_rejections(), 1);
+    assert_eq!(s.agent.db().job(&analyst).unwrap().unwrap().status, "rejected");
+    assert_eq!(s.agent.db().job(&other).unwrap().unwrap().status, "applied");
+    assert!(s.notes.lock().unwrap().iter().any(|t| t.contains("Turned down: Acme")));
+    let down = s.agent.turned_down();
+    assert_eq!((down.len(), down[0]["said"].as_str()), (1, Some("Acme went with another candidate for the Data Analyst role.")));
+    // Put away, it leaves the Queue; a reply drafted does the same.
+    s.agent.db().set(&format!("seen:turned:{analyst}"), "x").unwrap();
+    assert!(s.agent.turned_down().is_empty());
+    // An email from before you applied is about something else.
+    assert_eq!(s.agent.link_rejections(), 0);
+}
+
+#[test]
+fn the_inbox_counts_new_mail_and_replies_from_it() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    let job = s.agent.db().jobs(Some("queued"), 10).unwrap()[0].id.clone();
+    let now = Utc::now().to_rfc3339();
+    let theirs = crate::google::Email { id: "q1".into(), thread_id: "t1".into(), from: "Priya Shah <priya.shah@acme.example>".into(), subject: "A few questions".into(), body: "Could you share your notice period?".into(), ..Default::default() };
+    s.mail.messages.lock().unwrap().insert("q1".into(), theirs);
+    {
+        let db = s.agent.db();
+        db.record_email("q1", "t1", Some(&job), "Priya Shah <priya.shah@acme.example>", "A few questions", "other_job_related", "Asks for your notice period", None, &now).unwrap();
+        db.record_email("q2", "t2", None, "Jobs <alerts@board.example>", "12 new jobs", "job_alert", "A digest", None, &now).unwrap();
+        db.record_email("q3", "t3", Some(&job), "Acme <no-reply@acme.example>", "Assessment", "assessment", "A test to take", None, &now).unwrap();
+    }
+    // Alerts don't count; opening the Inbox clears the count.
+    assert_eq!(s.agent.inbox_new(), 2);
+    assert_eq!(s.agent.overview().unwrap()["inbox_new"], 2);
+    s.agent.db().set("inbox.seen", &(Utc::now() + chrono::Duration::seconds(5)).to_rfc3339()).unwrap();
+    assert_eq!(s.agent.inbox_new(), 0);
+    // A reply is drafted in the email's own thread, and the email shows it has one.
+    let v = s.agent.reply_to_email("q1").unwrap();
+    assert!(v["body"].as_str().unwrap().contains("Technical Program Manager at Acme"));
+    assert_eq!(s.mail.drafts.lock().unwrap().last().unwrap().0, "q1");
+    assert!(s.agent.db().emails(10).unwrap().iter().find(|e| e.gmail_id == "q1").unwrap().draft_id.is_some());
+    // Nobody reads a no-reply address.
+    assert!(s.agent.reply_to_email("q3").is_err());
+}

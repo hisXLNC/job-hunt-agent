@@ -328,16 +328,34 @@ async function showResults() {
 }
 
 async function showInbox() {
-  const { emails } = await api('/api/emails');
+  const { emails, seen } = await api('/api/emails');
+  const google = !!overview?.setup?.google;
+  const quiet = ['job_alert', 'not_job', 'application_received'];
+  const since = seen ? new Date(seen) : new Date(Date.now() - 3 * 86400000);
+  const fresh = m => !quiet.includes(m.category) && new Date(m.received_at) > since;
+  // What you can do about an email, from here: open what it's about, answer it, or read it in Gmail.
+  const acts = m => {
+    const job = m.job_id ? `#job/${encodeURIComponent(m.job_id)}` : '';
+    const main = !job ? '' : m.category === 'rejection' ? `<a class="btn sm" href="${job}">Draft a reply</a>`
+      : ['interview_request', 'interview_confirmed', 'assessment'].includes(m.category) ? `<a class="btn sm" href="${job}" data-tab-to="interview">Prepare</a>`
+      : m.category === 'offer' ? `<a class="btn sm" href="${job}">Weigh the offer</a>` : `<a class="btn sm" href="${job}">Open application</a>`;
+    const reply = m.draft_id ? `<a class="btn sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts" title="A reply is waiting in your Gmail drafts">Open the draft</a>`
+      : google && !quiet.includes(m.category) && m.category !== 'rejection' ? `<button class="btn sm" data-act="emailReply" data-id="${esc(m.gmail_id)}" title="Claude writes a short reply and saves it in your Gmail drafts, in this email's thread. Nothing is sent.">Write a reply</button>` : '';
+    const gmail = m.thread_id ? `<a class="btn ghost sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(m.thread_id)}">Open in Gmail</a>` : '';
+    return `${main}${reply}${gmail}`;
+  };
   page(`${inboxHead('email', 'Job email Job Hunt has read. Replies are saved as Gmail drafts for you to check and send.',
-      `<a class="btn ghost set-btn" href="#settings/inbox">${svg('settings')}Email settings</a>${overview?.setup?.google ? `<button class="btn primary" data-act="run" data-task="inbox">${svg('mail')}Check email now</button>` : '<a class="btn primary" href="#settings/connections">Connect Gmail</a>'}`)}
-    <section class="card" style="padding:6px 10px">${emails.length ? `<table><thead><tr><th>Received</th><th>Type</th><th>Email</th><th>Application</th></tr></thead><tbody>
-    ${emails.map(m => { const [name, cls] = CATEGORY[m.category] || [m.category, '']; return `<tr>
-      <td class="small muted" style="white-space:nowrap">${esc(fmtWhen(m.received_at))}</td>
+      `<a class="btn ghost set-btn" href="#settings/inbox">${svg('settings')}Email settings</a>${google ? `<button class="btn primary" data-act="run" data-task="inbox">${svg('mail')}Check email now</button>` : '<a class="btn primary" href="#settings/connections">Connect Gmail</a>'}`)}
+    <section class="card" style="padding:6px 10px">${emails.length ? `<table class="inbox-list"><thead><tr><th>Received</th><th>Type</th><th>Email</th><th>Application</th><th>What you can do</th></tr></thead><tbody>
+    ${emails.map(m => { const [name, cls] = CATEGORY[m.category] || [m.category, '']; return `<tr class="${fresh(m) ? 'fresh' : ''}">
+      <td class="small muted" style="white-space:nowrap">${fresh(m) ? '<span class="pill info">New</span><br>' : ''}${esc(fmtWhen(m.received_at))}</td>
       <td><span class="pill ${cls}">${esc(name)}</span>${m.draft_id ? '<br><span class="small muted">Draft reply ready</span>' : ''}</td>
       <td><b>${esc(m.subject)}</b><br><span class="small muted">${esc(m.sender)}</span><p class="small" style="margin-top:4px">${esc(m.summary)}</p></td>
-      <td class="small">${m.job_id ? `<a href="#job/${encodeURIComponent(m.job_id)}">${esc(m.company)} – ${esc(m.title)}</a>` : ''}</td></tr>`; }).join('')}
-    </tbody></table>` : `<p class="empty">${overview?.setup?.google ? 'No job email yet.' : 'Connect Google and Job Hunt sorts your job email by itself. <a href="#settings/connections">Connect Google</a>'}</p>`}</section>`);
+      <td class="small">${m.job_id ? `<a href="#job/${encodeURIComponent(m.job_id)}">${esc(m.company)} – ${esc(m.title)}</a>` : ''}</td>
+      <td><div class="row inbox-acts">${acts(m)}</div></td></tr>`; }).join('')}
+    </tbody></table>` : `<p class="empty">${google ? 'No job email yet.' : 'Connect Google and Job Hunt sorts your job email by itself. <a href="#settings/connections">Connect Google</a>'}</p>`}</section>`);
+  // Seen now: the count on Inbox clears (the New marks stay until you come back).
+  if (overview?.inbox_new) api('/api/emails/seen', { method: 'POST' }).then(refreshOverview).then(renderNav).catch(() => {});
 }
 
 // ---- Add a job ----
