@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.50.0] - 2026-11-12
+
+One logo per company, and every list sorts.
+
+### Changes
+
+- A company spelled two ways (Scotiabank and jobs.scotiabank.com) now shares one logo, and a job found on a company's own site is named for the company, not the site's address.
+- Logos are only taken from a site that is really the company's, so a wrong icon no longer appears; when the company's site isn't known, its likely address is tried, so more companies get a logo.
+- Every table has column headers, and pressing a header sorts by it (again to reverse).
+- The Queue's lists have a Sort by row: Role, Company, Location, Pay, Found and Fit.
+
 ## [2.49.0] - 2026-11-12
 
 Leads: hiring posts and newly funded companies.
@@ -1661,6 +1672,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.50.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.50.0
 [2.49.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.49.0
 [2.48.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.48.0
 [2.47.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.47.0

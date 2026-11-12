@@ -638,6 +638,12 @@ impl Db {
         Ok(())
     }
 
+    /// Give a job's company its proper name (and the key that groups it with the same role elsewhere).
+    pub fn rename_company(&self, id: &str, title: &str, company: &str) -> R<()> {
+        self.con.execute("UPDATE jobs SET company = ?2, dupe_key = ?3 WHERE id = ?1", params![id, company, dupe_key(company, title)])?;
+        Ok(())
+    }
+
     /// Update named columns. Values that are arrays or objects are stored as JSON text.
     #[cfg(test)]
     pub fn backdate(&self, id: &str, found_at: &str) -> R<()> {

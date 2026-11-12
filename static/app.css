@@ -1652,3 +1652,10 @@ details.kit > summary { cursor: pointer; }
 .lead-top .grow { flex: 1; min-width: 0; }
 .lead-own input, .lead-add input, .lead-email input { border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; background: var(--surface); color: inherit; font: inherit; }
 .lead-email input { padding: 4px 8px; }
+
+/* ---- Headers over the Queue's lists: press one to sort by it ---- */
+.list-head { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; padding: 6px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line-2); }
+.list-head > span { margin-right: 6px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 11px; }
+.list-head button { font: inherit; font-weight: 600; color: var(--muted); background: none; border: 0; border-radius: 8px; padding: 3px 8px; cursor: pointer; }
+.list-head button:hover, .list-head button.on { color: var(--ink); background: var(--surface-2); }
+.list-head .arrow { font-size: 10px; }

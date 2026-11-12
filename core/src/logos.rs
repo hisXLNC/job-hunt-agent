@@ -32,8 +32,50 @@ pub fn own_site(link: &str) -> Option<String> {
     Some(site.to_string())
 }
 
+/// A company's name from its site's address, for a page that gave none: "Scotiabank" from
+/// "https://jobs.scotiabank.com/job/1" (or from "jobs.scotiabank.com"). A job board's or a hosting
+/// site's address gives its plain host, as before; None when it isn't an address.
+pub fn name_from_site(link: &str) -> Option<String> {
+    let link = if link.contains("://") { link.trim().to_string() } else { format!("https://{}", link.trim()) };
+    let host = url::Url::parse(&link).ok()?.host_str()?.trim_start_matches("www.").to_lowercase();
+    if !host.contains('.') {
+        return None;
+    }
+    let Some(site) = own_site(&link) else { return Some(host) };
+    let label = site.split('.').next().unwrap_or("");
+    let mut c = label.chars();
+    Some(match c.next() {
+        // Short ones are initials (BMO, RBC); the rest read as a name.
+        Some(f) if label.len() > 3 => f.to_uppercase().collect::<String>() + c.as_str(),
+        _ => label.to_uppercase(),
+    })
+}
+
+/// Companies that were named by a site's address ("jobs.scotiabank.com") get the name read from
+/// it ("Scotiabank"), once: so they group, and share a logo, with the same company's other jobs.
+pub fn name_hosts_once(agent: &Agent) {
+    if !agent.secret("companies.named").is_empty() {
+        return;
+    }
+    let jobs = agent.db().jobs(None, 5000).unwrap_or_default();
+    for j in jobs {
+        let c = j.company.trim();
+        if c.contains('.') && !c.contains(' ') && own_site(&format!("https://{c}")).is_some() {
+            if let Some(name) = name_from_site(c).filter(|n| n != c) {
+                let _ = agent.db().rename_company(&j.id, &j.title, &name);
+            }
+        }
+    }
+    let _ = agent.db().set("companies.named", &crate::util::now());
+}
+
+/// Where a company's logo is kept. Two steps, so two spellings of one company ("Scotiabank" and
+/// "jobs.scotiabank.com") share one logo: the company's site, then that site's image.
 fn key(company: &str) -> String {
-    format!("logo:{}", crate::db::company_key(company))
+    format!("logo2:co:{}", crate::db::company_key(company))
+}
+fn site_key(site: &str) -> String {
+    format!("logo2:site:{site}")
 }
 
 /// What's kept for a company: None when Job Hunt hasn't looked yet (or looked long ago and found
@@ -46,8 +88,10 @@ pub fn kept(agent: &Agent, company: &str) -> Option<Option<(String, Vec<u8>)>> {
         let fresh = chrono::DateTime::parse_from_rfc3339(rest).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_days() < 14);
         return fresh.then_some(None);
     }
-    let bytes = base64::engine::general_purpose::STANDARD.decode(rest).ok()?;
-    Some(Some((kind.to_string(), bytes)))
+    let image = agent.secret(&site_key(rest));
+    let (ctype, data) = image.split_once('|')?;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data).ok()?;
+    Some(Some((ctype.to_string(), bytes)))
 }
 
 static WANTED: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| Mutex::new(HashSet::new()));
@@ -63,30 +107,115 @@ pub fn want(agent: &Arc<Agent>, company: &str) {
     let (a, company) = (agent.clone(), company.to_string());
     std::thread::spawn(move || {
         let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        let found = site_of(&a, &company).and_then(|site| fetch_from(&client(), &format!("https://{site}")));
-        let value = match found {
-            Some((ctype, bytes)) => format!("{ctype}|{}", base64::engine::general_purpose::STANDARD.encode(bytes)),
-            None => format!("none|{}", crate::util::now()),
-        };
+        let http = client();
+        let mut value = format!("none|{}", crate::util::now());
+        for (site, sure) in sites_for(&a, &company) {
+            // A site another spelling of the company already led to: its image is here.
+            if !a.secret(&site_key(&site)).is_empty() {
+                value = format!("site|{site}");
+                break;
+            }
+            if let Some((ctype, bytes)) = fetch_checked(&http, &format!("https://{site}"), &company, sure) {
+                let _ = a.db().set(&site_key(&site), &format!("{ctype}|{}", base64::engine::general_purpose::STANDARD.encode(bytes)));
+                value = format!("site|{site}");
+                break;
+            }
+        }
         let _ = a.db().set(&k, &value);
         WANTED.lock().unwrap_or_else(|e| e.into_inner()).remove(&k);
     });
 }
 
-/// The company's own site, from where its jobs apply (or were found).
-fn site_of(agent: &Agent, company: &str) -> Option<String> {
+/// The words of a company's name that tell it apart: no legal endings, no "bank" or "group".
+fn name_words(company: &str) -> Vec<String> {
+    const PLAIN: [&str; 30] = ["inc", "incorporated", "corp", "corporation", "ltd", "limited", "llc", "plc", "co", "company", "the", "group", "holdings", "of", "and", "canada", "bank",
+        "financial", "services", "solutions", "technologies", "technology", "systems", "international", "global", "communications", "consulting", "partners", "lp", "llp"];
+    company.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty() && !PLAIN.contains(w)).map(String::from).collect()
+}
+
+/// Whether a site's name is the company's: "scotiabank.com" for Scotiabank, "rbc.com" for Royal
+/// Bank of Canada (its initials), "bmo.com" for BMO Financial Group.
+fn site_is_named_for(site: &str, company: &str) -> bool {
+    let label = site.split('.').next().unwrap_or("").replace('-', "");
+    let all: Vec<String> = company.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect();
+    let words = name_words(company);
+    let initials: String = all.iter().filter(|w| !["of", "the", "and"].contains(&w.as_str())).filter_map(|w| w.chars().next()).collect();
+    label.len() >= 2 && (words.iter().any(|w| w.len() >= 3 && (label.contains(w.as_str()) || (label.len() >= 4 && w.contains(&label)))) || words.concat() == label || (initials.len() >= 3 && initials.starts_with(&label) && label.len() >= 3))
+}
+
+/// The sites to try for a company, best first, each with whether its name alone says it's theirs
+/// (else the home page has to name the company before its icon is taken): the company's name when
+/// it is a site's address, the sites its jobs apply on, then likely addresses made from its name.
+fn sites_for(agent: &Agent, company: &str) -> Vec<(String, bool)> {
+    let mut out: Vec<(String, bool)> = vec![];
+    let mut add = |site: String, sure: bool| {
+        if !site.is_empty() && !out.iter().any(|(s, _)| *s == site) {
+            out.push((site, sure));
+        }
+    };
+    // "jobs.scotiabank.com", kept as a company's name when a page gave none.
+    let name = company.trim().to_lowercase();
+    if name.contains('.') && !name.contains(' ') {
+        if let Some(site) = own_site(&format!("https://{name}")) {
+            add(site, true);
+        }
+    }
     let want = crate::db::company_key(company);
-    let jobs = agent.db().jobs(None, 5000).ok()?;
-    let from_jobs = jobs.iter().filter(|j| crate::db::company_key(&j.company) == want)
-        .find_map(|j| j.apply_url.as_deref().and_then(own_site).or_else(|| own_site(&j.url)));
-    drop(jobs);
+    let jobs = agent.db().jobs(None, 5000).unwrap_or_default();
+    let mut from_jobs: Vec<String> = jobs.iter().filter(|j| crate::db::company_key(&j.company) == want)
+        .flat_map(|j| [j.apply_url.as_deref().and_then(own_site), own_site(&j.url)]).flatten().collect();
     // A lead's company has no job, but its own site is often known.
-    from_jobs.or_else(|| crate::leads::all(agent).into_iter().find(|l| crate::db::company_key(&l.company) == want && !l.site.is_empty()).map(|l| l.site))
+    from_jobs.extend(crate::leads::all(agent).into_iter().filter(|l| crate::db::company_key(&l.company) == want && !l.site.is_empty()).map(|l| l.site));
+    from_jobs.sort_by_key(|s| !site_is_named_for(s, company));
+    for s in from_jobs {
+        let sure = site_is_named_for(&s, company);
+        add(s, sure);
+    }
+    // Likely addresses: the name's own words run together ("scotiabank", "rogers"), as .com and .ca.
+    let words = name_words(company);
+    let mut slugs = vec![words.concat()];
+    if let Some(first) = words.first().filter(|w| w.len() >= 5 && words.len() > 1) {
+        slugs.push(first.clone());
+    }
+    for slug in slugs.into_iter().filter(|s| s.len() >= 3 && s.is_ascii()) {
+        for tld in ["com", "ca"] {
+            add(format!("{slug}.{tld}"), false);
+        }
+    }
+    out.truncate(6);
+    out
 }
 
 fn client() -> reqwest::blocking::Client {
-    reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(12))
+    reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(8))
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) JobHunt/1.0").build().expect("http client")
+}
+
+static TITLE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?is)<title[^>]*>(.*?)</title>|<meta\b[^>]*(?:og:site_name|application-name)[^>]*>"#).unwrap());
+
+/// Whether a home page says it's the company's: its title or site name has one of the words that
+/// tell the company's name apart.
+fn page_names(html: &str, company: &str) -> bool {
+    let said: String = TITLE.find_iter(html).map(|m| m.as_str().to_lowercase()).collect::<Vec<_>>().join(" ");
+    let said: Vec<&str> = said.split(|c: char| !c.is_alphanumeric()).collect();
+    let words = name_words(company);
+    words.iter().any(|w| w.len() >= 3 && said.contains(&w.as_str())) || (!words.is_empty() && said.join("").contains(&words.concat()))
+}
+
+/// A site's icon (see fetch_from), taken only when the site is the company's: its name says so
+/// (`sure`), or its home page names the company. A guessed address that's someone else's gives none.
+fn fetch_checked(http: &reqwest::blocking::Client, base: &str, company: &str, sure: bool) -> Option<(String, Vec<u8>)> {
+    if !sure {
+        let home = http.get(base).send().ok()?;
+        if !home.status().is_success() {
+            return None;
+        }
+        let html: String = home.text().unwrap_or_default().chars().take(400_000).collect();
+        if !page_names(&html, company) {
+            return None;
+        }
+    }
+    fetch_from(http, base)
 }
 
 static LINK: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?is)<link\b[^>]*>"#).unwrap());
@@ -194,7 +323,62 @@ mod tests {
         assert_eq!(kept(&s.agent, "Acme Inc."), None, "not looked for yet");
         s.agent.db().set(&key("Acme Inc."), &format!("none|{}", crate::util::now())).unwrap();
         assert_eq!(kept(&s.agent, "ACME"), Some(None), "looked lately, none: the same company however it's written");
-        s.agent.db().set(&key("Acme"), &format!("image/png|{}", base64::engine::general_purpose::STANDARD.encode([1u8, 2, 3]))).unwrap();
+        // Its site, and that site's image: shared by every spelling that leads to the site.
+        s.agent.db().set(&site_key("acme.com"), &format!("image/png|{}", base64::engine::general_purpose::STANDARD.encode([1u8, 2, 3]))).unwrap();
+        s.agent.db().set(&key("Acme"), "site|acme.com").unwrap();
+        s.agent.db().set(&key("jobs.acme.com"), "site|acme.com").unwrap();
         assert_eq!(kept(&s.agent, "Acme Inc."), Some(Some(("image/png".to_string(), vec![1, 2, 3]))));
+        assert_eq!(kept(&s.agent, "jobs.acme.com"), kept(&s.agent, "Acme"), "one company, one logo");
+    }
+
+    #[test]
+    fn a_name_from_a_sites_address() {
+        assert_eq!(name_from_site("https://jobs.scotiabank.com/job/Toronto/1").as_deref(), Some("Scotiabank"));
+        assert_eq!(name_from_site("careers.bmo.com").as_deref(), Some("BMO"));
+        assert_eq!(name_from_site("https://boards.greenhouse.io/acme/jobs/1").as_deref(), Some("boards.greenhouse.io"), "a hosting site: its address, as before");
+        assert_eq!(name_from_site("not an address"), None);
+        let s = crate::testkit::setup();
+        let j = crate::db::Job { id: "x:1".into(), title: "Senior Delivery Manager".into(), company: "jobs.scotiabank.com".into(), url: "https://jobs.scotiabank.com/job/1".into(), status: "queued".into(), found_at: crate::util::now(), updated_at: crate::util::now(), ..Default::default() };
+        s.agent.db().insert_job(&j).unwrap();
+        name_hosts_once(&s.agent);
+        assert_eq!(s.agent.db().job("x:1").unwrap().unwrap().company, "Scotiabank");
+    }
+
+    #[test]
+    fn the_sites_to_try_for_a_company() {
+        let s = crate::testkit::setup();
+        // A site's address kept as the company's name: that site, and no checking needed.
+        assert_eq!(sites_for(&s.agent, "jobs.scotiabank.com")[0], ("scotiabank.com".to_string(), true));
+        // Seen only on a job board: likely addresses from its name, each to be checked.
+        assert_eq!(sites_for(&s.agent, "Scotiabank"), vec![("scotiabank.com".to_string(), false), ("scotiabank.ca".to_string(), false)]);
+        let rogers = sites_for(&s.agent, "Rogers Communications Inc.");
+        assert!(rogers.contains(&("rogers.com".to_string(), false)), "{rogers:?}");
+        // Where its jobs apply comes first; a site named for the company before one that isn't.
+        for (id, url) in [("x:1", "https://careers.somewhere-else.io/job/1"), ("x:2", "https://jobs.rbc.com/ca/en/job/2")] {
+            let j = crate::db::Job { id: id.into(), title: "Analyst".into(), company: "Royal Bank of Canada".into(), url: url.into(), status: "queued".into(), found_at: crate::util::now(), updated_at: crate::util::now(), ..Default::default() };
+            s.agent.db().insert_job(&j).unwrap();
+        }
+        let rbc = sites_for(&s.agent, "Royal Bank of Canada");
+        assert_eq!(rbc[0], ("rbc.com".to_string(), true), "its initials: {rbc:?}");
+        assert_eq!(rbc[1], ("somewhere-else.io".to_string(), false), "not named for it: its home page has to say so");
+        assert!(site_is_named_for("bmo.com", "BMO Financial Group") && site_is_named_for("mufgub.com", "MUFG") && !site_is_named_for("workopolis.com", "Scotiabank"));
+        // A home page names the company in its title, or it isn't theirs.
+        assert!(page_names("<html><head><title>Rogers: Wireless, Internet, TV</title></head></html>", "Rogers Communications Inc."));
+        assert!(page_names(r#"<meta property="og:site_name" content="ScotiaBank">"#, "Scotiabank"));
+        assert!(!page_names("<title>Domain for sale</title>", "Scotiabank"));
+    }
+
+    #[test]
+    fn a_guessed_site_must_name_the_company() {
+        let png = vec![7u8; 900];
+        // Someone else's site at the guessed address: no icon is taken (and none is asked for).
+        let (url, h) = serve(vec![("text/html", b"<html><head><title>Domain for sale</title></head></html>".to_vec())]);
+        assert_eq!(fetch_checked(&client(), &url, "Scotiabank", false), None);
+        assert_eq!(h.join().unwrap().len(), 1);
+        // The company's: its home page says so, then its icon as usual.
+        let home = br#"<html><head><title>Scotiabank Canada</title><link rel="icon" href="/i.png" sizes="64x64"></head></html>"#.to_vec();
+        let (url, h) = serve(vec![("text/html", home.clone()), ("text/html", home), ("image/png", png.clone())]);
+        assert_eq!(fetch_checked(&client(), &url, "Scotiabank", false), Some(("image/png".to_string(), png)));
+        h.join().unwrap();
     }
 }

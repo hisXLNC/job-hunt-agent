@@ -55,6 +55,17 @@ and `DEVELOPING.md`.
   `app.js` or `pipeline.rs` for something, look in the parts too. The Rust linter's safe fixes
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
+- **2.50.0: logos by site, and everything sorts.** `logos.rs` keeps a logo per site
+  (`logo2:site:<domain>`) and a pointer per company (`logo2:co:<key>`), so two spellings of one
+  company share one image; the old `logo:` keys are simply left behind. A site is only used when its
+  address is named for the company (`site_is_named_for`) or its home page names it (`page_names`);
+  with no known site, `<name>.com` and `.ca` are tried under the same check. **Not seen against real
+  sites** (the sandbox can't reach them). A job whose company came out as a host
+  (`jobs.scotiabank.com`) is named from it (`name_from_site`; existing ones once, `companies.named`).
+  Every `<table>` with a `<thead>` is made sortable by `sortableTables` in `app-pipeline.js` (a
+  MutationObserver; opt out with `.no-sort`), so a new table needs only a header row. The Queue's card
+  lists get a strip of sort buttons (`listHeads` / `applyListSort` in `app-steps.js`, kept in
+  `jh.listSort`); choosing from the Sort by menu lets go of it.
 - **2.49.0: Leads.** `core/src/leads.rs` (kept as one JSON list under the key `leads`, not as jobs):
   hiring posts the extension reads (`clip.js` `clipPosts`, sent by `background.js` `sendPosts` to
   `/ext/leads`), funding news and posts from one web search (`Llm::find_leads`, Claude Code only, run

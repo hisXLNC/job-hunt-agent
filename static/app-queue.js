@@ -313,6 +313,6 @@ async function showOverview(arg) {
     <details class="card activity"><summary><b>What Job Hunt did lately</b></summary>
       ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
     </details>`);
-  if (listing) restorePickViews();
+  if (listing) { restorePickViews(); listHeads(); }
 }
 

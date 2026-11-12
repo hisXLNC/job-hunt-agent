@@ -36,6 +36,21 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   // The Queue opens as a list of everything waiting; One by one is a choice, and it's remembered.
   await at('overview');
   check((await page.$$('.pick-list .jrow.pick')).length >= 3 && !(await page.$('.decision[data-kind]')), 'The Queue opens as a list of every listing');
+  // Headers over the Queue's lists sort them: by company A to Z, then turned round; and a table
+  // that was built without sorting (the usage table in Settings) sorts by its headers too.
+  const listCos = () => page.evaluate(() => { const h = document.querySelector('.list-head'); return h ? [...h.parentElement.children].filter(c => c.matches('.jrow[data-job-row]')).map(r => r.dataset.lco) : null; });
+  const cos = await listCos();
+  if (cos && cos.length > 1) {
+    const az = [...cos].sort();
+    await page.click('.list-head [data-lsort=co]');
+    check(JSON.stringify(await listCos()) === JSON.stringify(az) && await page.evaluate(() => /▲/.test(document.querySelector('.list-head button.on')?.textContent || '')), 'Queue: the Company header sorts the list A to Z');
+    await page.click('.list-head [data-lsort=co]');
+    check(JSON.stringify(await listCos()) === JSON.stringify([...az].reverse()), 'Queue: pressed again, Z to A');
+    await page.click('.list-head [data-lsort=co]');
+    check(await until(async () => page.evaluate(() => !!document.querySelector('.list-head') && !document.querySelector('.list-head button.on')), 15), 'Queue: a third press goes back to the list\'s own order');
+  } else check(false, 'Queue: a list of two or more jobs has headers to sort by');
+  await page.evaluate(() => localStorage.removeItem('jh.listSort'));
+  await at('overview');
   await page.click('[data-act=queueView][data-view=one]'); await page.waitForTimeout(500);
   // One by one: a decision on its own, with its buttons.
   await at('overview');
@@ -184,6 +199,9 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await until(async () => page.evaluate(() => /Written to/.test(document.querySelector('.lead-who')?.textContent || '') && /saw your post/.test(document.querySelector('.lead-sent .posting')?.textContent || '')), 15), 'Leads: under Written to, with what you wrote');
   await page.click('.lead [data-act=leadReplied]');
   check(await until(async () => page.evaluate(() => /Replied/.test(document.querySelector('.lead-who')?.textContent || '')), 15), 'Leads: They replied is kept');
+
+  await at('applications');
+  check(await page.evaluate(() => { const t = document.querySelector('#main table'); return !!t && [...t.tHead.rows[0].cells].filter(th => th.textContent.trim()).every(th => th.classList.contains('sortable')); }), 'All jobs: every column header sorts');
 
   // The Queue's own sort and filters: Shows pay hides the jobs that state none, and is remembered.
   await at('overview');

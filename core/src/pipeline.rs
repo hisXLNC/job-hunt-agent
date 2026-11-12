@@ -2584,6 +2584,7 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     use chrono::Timelike;
     let mut out = vec![];
     agent.jobbank_on_once();
+    crate::logos::name_hosts_once(agent);
     agent.canada_employers_once();
     let p = agent.profile();
     let tz = p.tz();

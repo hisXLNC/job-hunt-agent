@@ -205,12 +205,45 @@ function applySort(table) {
   table.querySelectorAll('tr.xrow').forEach(r => r.remove());
   table.querySelectorAll('tr.open').forEach(r => r.classList.remove('open'));
   const body = table.tBodies[0];
-  const num = ['num', 'rank'].includes(th.dataset.type);
-  const val = r => { const v = r.cells[st.col]?.dataset.v ?? r.cells[st.col]?.textContent ?? ''; return num ? Number(v) : v; };
+  const type = th.dataset.type, num = ['num', 'rank'].includes(type);
+  // A number as it's written in a cell: "$1,200", "85K", "1.2M", "44%", "12 min". Nothing there sorts last.
+  const asNum = v => { const s = String(v).replace(/,/g, ''), m = s.match(/-?\d+(\.\d+)?/); if (!m) return -Infinity; return Number(m[0]) * (/^\s*[kK]\b/.test(s.slice(m.index + m[0].length)) ? 1e3 : /^\s*M\b/.test(s.slice(m.index + m[0].length)) ? 1e6 : 1); };
+  const val = r => {
+    const c = r.cells[st.col];
+    if (c?.dataset.v != null) return num ? Number(c.dataset.v) : c.dataset.v;
+    const t = (c?.textContent ?? '').trim();
+    if (num) return asNum(t);
+    if (type === 'date') { const when = c?.querySelector('time')?.getAttribute('datetime') || c?.querySelector('[title]')?.title || t; return Date.parse(when) || 0; }
+    return t.toLowerCase();
+  };
   const rows = [...body.rows].sort((a, b) => { const x = val(a), y = val(b); const c = x < y ? -1 : x > y ? 1 : 0; return st.dir === 'asc' ? c : -c; });
   rows.forEach(r => body.appendChild(r));
   [...table.tHead.rows[0].cells].forEach((c, i) => { c.classList.toggle('sorted', i === st.col); const a = c.querySelector('.arrow'); if (a) a.textContent = i === st.col ? (st.dir === 'asc' ? ' ▲' : ' ▼') : ''; });
 }
+
+/** Every table on the page sorts by its headers: one that wasn't built with sortTh gets the same
+ *  headers (a number column by its numbers, a date column by its dates), and its last order back. */
+function sortableTables(root) {
+  const where = (location.hash.slice(1) || 'overview').replace(/[^a-z0-9]+/gi, '-');
+  [...root.querySelectorAll('table')].forEach((t, i) => {
+    if (t.dataset.sortReady || !t.tHead || !t.tBodies[0] || t.closest('.no-sort')) return;
+    t.dataset.sortReady = '1';
+    if (!t.id) t.id = `t-${where}-${t.closest('[id]')?.id || ''}-${i}`;
+    [...t.tHead.rows[0].cells].forEach((th, col) => {
+      if (th.classList.contains('sortable') || !th.textContent.trim() || th.querySelector('input, button')) return;
+      const cells = [...t.tBodies[0].rows].slice(0, 8).map(r => (r.cells[col]?.dataset.v ?? r.cells[col]?.textContent ?? '').trim()).filter(Boolean);
+      const label = th.textContent.trim();
+      th.dataset.type = th.classList.contains('num') || (cells.length && cells.every(c => /^[-+$≈~]?\s*\d[\d,.]*\s*(%|k|m|min|h|days?|hrs?)?$/i.test(c))) ? 'num'
+        : /^(received|updated|date|found|applied|when|sent|added|posted)\b/i.test(label) ? 'date' : 'text';
+      th.classList.add('sortable');
+      th.title = `Sort by ${label.toLowerCase()}`;
+      th.insertAdjacentHTML('beforeend', '<span class="arrow"></span>');
+    });
+    if (sortState[t.id]) applySort(t);
+  });
+}
+// Tables arrive with a page, and later inside one (a test's results, suggestions): each as it comes.
+new MutationObserver(() => { const m = document.getElementById('main'); if (m && m.querySelector('table:not([data-sort-ready])')) sortableTables(m); }).observe(document.documentElement, { childList: true, subtree: true });
 
 document.addEventListener('click', e => {
   const th = e.target.closest('th.sortable');

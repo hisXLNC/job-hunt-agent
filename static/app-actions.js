@@ -617,8 +617,8 @@ async function act(el) {
         box.dataset.ideas = JSON.stringify(boards);
         box.innerHTML = boards.length ? `<div class="card ideas-card">
           <p><b>${boards.length} employers with live job boards.</b> The ones with matching jobs are ticked.</p>
-          <table><tbody>${boards.map((b, i) => `<tr><td><label class="check"><input type="checkbox" data-idea="${i}" ${b.matching ? 'checked' : ''}> ${esc(b.company)}</label></td>
-            <td class="small muted">${esc(b.board)}</td><td class="small">${b.matching} of ${b.jobs} jobs match</td></tr>`).join('')}</tbody></table>
+          <table><thead><tr><th>Company</th><th>Job board</th><th>Matching jobs</th></tr></thead><tbody>${boards.map((b, i) => `<tr><td data-v="${esc(b.company.toLowerCase())}"><label class="check"><input type="checkbox" data-idea="${i}" ${b.matching ? 'checked' : ''}> ${esc(b.company)}</label></td>
+            <td class="small muted">${esc(b.board)}</td><td class="small" data-v="${b.matching}">${b.matching} of ${b.jobs} jobs match</td></tr>`).join('')}</tbody></table>
           <div class="row"><button class="btn primary" type="button" data-act="addIdeas">Add ticked and search</button></div></div>`
           : '<p class="muted">None of the suggested employers had a live job board this time. Try again later, or add companies yourself in Search → Set up sources → Company job boards.</p>';
       } catch (e) { box.innerHTML = ''; throw e; }
@@ -852,7 +852,7 @@ async function showSourceTest(start) {
   const status = x => x.ok ? '<span class="pill good">Working</span>' : x.skipped ? '<span class="pill">Not used</span>' : '<span class="pill crit">Problem</span>';
   const what = x => x.ok || x.found != null ? (x.unit ? `${x.found} ${esc(x.unit)}` : `${x.found} open${x.matching != null ? `, <b>${x.matching}</b> match your CVs` : ''}`) : esc(x.error || '');
   const broken = rows.filter(x => x.kind === 'board' && !x.ok && /not found/.test(x.error || ''));
-  box.innerHTML = `<p class="muted small">Each source is tried once, with one of your job titles, to see that it works. Real searches use all your titles.</p><table><tbody>${rows.map(x => `<tr><td>${esc(x.name)}</td><td>${status(x)}</td><td class="small">${what(x)}${x.hint ? `<br><span class="muted">${esc(x.hint)}</span>` : ''}</td>
+  box.innerHTML = `<p class="muted small">Each source is tried once, with one of your job titles, to see that it works. Real searches use all your titles.</p><table><thead><tr><th>Source</th><th>Result</th><th>What it found</th><th></th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(x.name)}</td><td>${status(x)}</td><td class="small">${what(x)}${x.hint ? `<br><span class="muted">${esc(x.hint)}</span>` : ''}</td>
       <td>${x.kind === 'board' && !x.ok && x.source ? `<button class="btn ghost" data-act="removeBoard" data-source="${esc(x.source)}" data-name="${esc(x.board)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>
     ${broken.length || rows.some(x => x.kind === 'board' && x.ok && !x.matching) ? `<div class="row"><button class="btn primary" data-act="suggestBoards" data-into="testIdeas">Suggest companies to add</button><span class="muted small">Claude suggests employers near you whose job boards have matching roles.</span></div><div id="testIdeas" class="ideas"></div>` : ''}
     <p class="muted small">${t.running ? `${testBar(t.last)} Indeed goes through Claude Code and can take a minute.` : t.last?.finished ? `Tested ${esc(ago(t.last.finished))}.` : ''}</p>`;

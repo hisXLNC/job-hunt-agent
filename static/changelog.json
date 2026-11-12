@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.50.0",
+    "date": "2026-11-12",
+    "title": "One logo per company, and every list sorts",
+    "changes": [
+      "A company spelled two ways (Scotiabank and jobs.scotiabank.com) now shares one logo, and a job found on a company's own site is named for the company, not the site's address.",
+      "Logos are only taken from a site that is really the company's, so a wrong icon no longer appears; when the company's site isn't known, its likely address is tried, so more companies get a logo.",
+      "Every table has column headers, and pressing a header sorts by it (again to reverse).",
+      "The Queue's lists have a Sort by row: Role, Company, Location, Pay, Found and Fit."
+    ]
+  },
+  {
     "version": "2.49.0",
     "date": "2026-11-12",
     "title": "Leads: hiring posts and newly funded companies",

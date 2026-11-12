@@ -1047,7 +1047,7 @@ impl Agent {
             }
         }
         if company.is_empty() {
-            company = url::Url::parse(&url).ok().and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_string())).unwrap_or_else(|| "Unknown".into());
+            company = crate::logos::name_from_site(&url).unwrap_or_else(|| "Unknown".into());
         }
         let host = url::Url::parse(&url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default();
         let source = ["linkedin", "indeed", "glassdoor", "jobbank", "workopolis", "eluta", "ziprecruiter", "monster"].iter()

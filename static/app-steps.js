@@ -174,7 +174,7 @@ function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', att
   const meta = [coCell(j), j.location ? placeHtml(j) : '', payFact(j), j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
   const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit${j.score != null && j.score_after != null && j.score_after !== j.score ? ' has-after' : canReach(j) ? ' has-fore' : ''}">${scoreBadge(j.score)}${reachTag(j)}${fitNote(j)}</span>
       <span class="jmain"><span class="jtitle"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${tags}</span><span class="jmeta">${meta}</span></span>`;
-  return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" data-job-row="${esc(j.id)}" ${attrs} data-qnow="${applyRank(j)}" data-qfit="${j.score_after ?? j.score ?? 0}" data-qnew="${+new Date(ageValue(j) || 0) || 0}" data-qpay="${Math.max(0, salaryValue(j.salary))}" data-qhaspay="${j.salary ? 1 : 0}" data-qflags="${(j.red_flags || []).length}">${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
+  return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" data-job-row="${esc(j.id)}" ${attrs} data-lrole="${esc(String(j.title || '').toLowerCase())}" data-lco="${esc(String(j.company || '').toLowerCase())}" data-lloc="${esc(String(j.location || '').toLowerCase())}" data-qnow="${applyRank(j)}" data-qfit="${j.score_after ?? j.score ?? 0}" data-qnew="${+new Date(ageValue(j) || 0) || 0}" data-qpay="${Math.max(0, salaryValue(j.salary))}" data-qhaspay="${j.salary ? 1 : 0}" data-qflags="${(j.red_flags || []).length}">${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
       <span class="row jact">${actions}</span>${sub ? `<div class="jwhy small">${sub}</div>` : ''}</div>`;
 }
 
@@ -466,3 +466,50 @@ function cvHtml(blocks) {
     b.kind === 'name' ? `<p class="name">${esc(b.text.replace(/\*\*/g, ''))}</p>` :
     `<p class="${b.kind === 'bullet' ? 'li' : ''}${b.changed ? ' chg' : ''}${b.center ? ' c' : ''}">${marked(b.text)}</p>`).join('');
 }
+
+// ---- The Queue's lists sort by their headers, like the tables do ----
+/** What a list of jobs can be put in order by: (key, its name, whether it's a number). Numbers start
+ *  largest first (best fit, highest pay, newest); names start at A. */
+const LIST_COLS = [['role', 'Role'], ['co', 'Company'], ['loc', 'Location'], ['pay', 'Pay', 1], ['new', 'Found', 1], ['fit', 'Fit', 1]];
+let listSort = null;
+try { listSort = JSON.parse(localStorage.getItem('jh.listSort') || 'null'); } catch (e) {}
+const jobLists = () => [...new Set([...document.querySelectorAll('.page .jrow[data-job-row]')].map(r => r.parentElement))];
+/** A row of headers over each list of jobs (two or more): press one to sort by it, again to turn it round. */
+function listHeads() {
+  for (const p of jobLists()) {
+    const rows = [...p.children].filter(c => c.matches('.jrow[data-job-row]'));
+    if (rows.length < 2 || p.querySelector(':scope > .list-head')) continue;
+    rows[0].insertAdjacentHTML('beforebegin', `<div class="list-head" role="group" aria-label="Sort this list"><span>Sort by</span>${LIST_COLS.map(([k, name]) => `<button type="button" data-lsort="${k}" title="Sort by ${name.toLowerCase()}">${name}<span class="arrow"></span></button>`).join('')}</div>`);
+  }
+  applyListSort();
+}
+function applyListSort() {
+  const col = listSort && LIST_COLS.find(c => c[0] === listSort.key);
+  document.querySelectorAll('.list-head [data-lsort]').forEach(b => { const on = col && b.dataset.lsort === col[0]; b.classList.toggle('on', !!on); b.querySelector('.arrow').textContent = on ? (listSort.dir === 'asc' ? ' ▲' : ' ▼') : ''; });
+  if (!col) return;
+  const val = r => col[2] ? Number(r.dataset['q' + col[0]]) || 0 : r.dataset['l' + col[0]] || '';
+  for (const p of jobLists()) {
+    const rows = [...p.children].filter(c => c.matches('.jrow[data-job-row]'));
+    const after = rows[rows.length - 1].nextSibling;
+    // Expired postings last, and a name that's missing after the ones that are there.
+    rows.sort((a, b) => (a.dataset.expired === '1') - (b.dataset.expired === '1') || (col[2] ? 0 : !val(a) - !val(b)) || ((x, y) => (x < y ? -1 : x > y ? 1 : 0) * (listSort.dir === 'asc' ? 1 : -1))(val(a), val(b)))
+      .forEach(r => p.insertBefore(r, after));
+  }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-lsort]');
+  if (!b) return;
+  const col = LIST_COLS.find(c => c[0] === b.dataset.lsort), first = col[2] ? 'desc' : 'asc';
+  // A third press lets go: back to each list's own order.
+  const off = listSort && listSort.key === col[0] && listSort.dir !== first;
+  listSort = off ? null : { key: col[0], dir: listSort && listSort.key === col[0] ? (first === 'asc' ? 'desc' : 'asc') : first };
+  try { localStorage.setItem('jh.listSort', JSON.stringify(listSort)); } catch (err) {}
+  if (off) route(); else applyListSort();
+});
+// Choosing an order from a list's own Sort by menu takes over from the headers.
+document.addEventListener('change', e => {
+  if (!e.target.matches?.('[data-queuef=sort], [data-pickf=sort]') || !listSort) return;
+  listSort = null;
+  try { localStorage.removeItem('jh.listSort'); } catch (err) {}
+  applyListSort();
+}, true);

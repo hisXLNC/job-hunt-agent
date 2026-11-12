@@ -210,7 +210,7 @@ function payHtml(p) {
       ${p.minimum ? `<span class="paymark min" style="left:${at(p.minimum)}%" title="Your minimum ${k(p.minimum)}"></span>` : ''}</div>
     <div class="row small muted" style="justify-content:space-between;margin-top:4px"><span>${k(lo)}</span><span><i class="key"></i> typical${p.minimum ? ' <i class="key min"></i> your minimum' : ''}</span><span>${k(hi)}</span></div>
     <h3 class="sub" style="margin-top:14px">Best paid</h3>
-    <table><tbody>${p.roles.map(x => `<tr><td><a href="#job/${encodeURIComponent(x.id)}">${esc(x.title)}</a> <span class="muted small">${esc(x.company)}</span></td><td class="num">${x.low === x.high ? k(x.high) : `${k(x.low)}–${k(x.high)}`}</td><td>${stagePill(x.status)}</td></tr>`).join('')}</tbody></table>
+    <table><thead><tr><th>Role</th><th class="num">Pay</th><th>Stage</th></tr></thead><tbody>${p.roles.map(x => `<tr><td><a href="#job/${encodeURIComponent(x.id)}">${esc(x.title)}</a> <span class="muted small">${esc(x.company)}</span></td><td class="num" data-v="${x.high || 0}">${x.low === x.high ? k(x.high) : `${k(x.low)}–${k(x.high)}`}</td><td>${stagePill(x.status)}</td></tr>`).join('')}</tbody></table>
   </section>`;
 }
 

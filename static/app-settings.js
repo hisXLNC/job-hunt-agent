@@ -450,7 +450,7 @@ async function showSettings(tab, sub, host) {
         <div class="row"><button class="btn" type="submit">Save</button></div>
       </form>
       <p class="muted small">${b.last ? `Last backup ${esc(ago(b.last))}` : 'No backup yet.'} · Saved in ${esc(b.folder)}</p>
-      ${b.files.length ? `<table><tbody>${b.files.slice(0, 5).map(f => `<tr><td class="small">${esc(f.name.replace('JobHunt backup ', '').replace('.zip', ''))}</td><td class="small muted">${kb(f.size)}</td><td style="text-align:right"><a class="btn ghost" href="/api/backup/download/${encodeURIComponent(f.name)}" download>Download</a></td></tr>`).join('')}</tbody></table>` : ''}
+      ${b.files.length ? `<table><thead><tr><th>Backup</th><th>Size</th><th></th></tr></thead><tbody>${b.files.slice(0, 5).map(f => `<tr><td class="small">${esc(f.name.replace('JobHunt backup ', '').replace('.zip', ''))}</td><td class="small muted" data-v="${f.size}">${kb(f.size)}</td><td style="text-align:right"><a class="btn ghost" href="/api/backup/download/${encodeURIComponent(f.name)}" download>Download</a></td></tr>`).join('')}</tbody></table>` : ''}
       <div class="row" style="margin-top:10px"><label class="btn">Restore from a backup…<input type="file" accept=".zip" data-upload="restore" hidden></label>
         <span class="muted small">Replaces everything here with the backup and restarts Job Hunt. What's here now is kept in a "before-restore" folder.</span></div>
     </section>`;
@@ -832,6 +832,7 @@ function applyQueueView(restore) {
     if (v.sort) set('sort', v.sort);
     applyPickView(pb);
   });
+  if (typeof applyListSort === 'function') applyListSort();
   const n = box.querySelector('[data-queuecount]');
   if (n) n.innerHTML = shown < rows.length ? `Showing ${shown} of ${rows.length}. <a href="#" data-act="queueFClear">Show all</a>` : '';
 }
@@ -1292,7 +1293,7 @@ function keysHelp() {
   const back = document.createElement('div');
   back.className = 'modal-back';
   back.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="Keys"><h2>Keys</h2>
-    <table class="keys"><tbody>${rows.map(([k, w]) => `<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(w)}</td></tr>`).join('')}</tbody></table>
+    <table class="keys"><thead><tr><th>Key</th><th>What it does</th></tr></thead><tbody>${rows.map(([k, w]) => `<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(w)}</td></tr>`).join('')}</tbody></table>
     <p class="muted small">In Review: a approve · s save for later · x not interested · n next.</p>
     <div class="modal-btns"><button class="btn primary">Close</button></div></div>`;
   const close = () => { back.remove(); document.removeEventListener('keydown', key, true); };
