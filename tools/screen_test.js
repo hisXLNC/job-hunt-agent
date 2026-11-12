@@ -133,6 +133,26 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.selectOption('#otherCard [name=service]', '');
   check(await page.evaluate(() => !document.querySelector('[data-other-url]').hidden), 'Another AI: choosing "Another one" asks for its address');
 
+  // The Queue's own sort and filters: Shows pay hides the jobs that state none, and is remembered.
+  await at('overview');
+  await page.evaluate(() => localStorage.setItem('jh.queueView', 'list'));
+  await at('overview');
+  if (await page.$('[data-queuebox]')) {
+    const rowsShown = () => page.evaluate(() => [...document.querySelectorAll('.page .jrow[data-job-row]')].filter(r => r.offsetParent).length);
+    const before = await rowsShown();
+    const paid = await page.evaluate(() => [...document.querySelectorAll('.page .jrow[data-job-row]')].filter(r => r.dataset.qhaspay === '1').length);
+    await page.check('[data-queuef=pay]');
+    check(await rowsShown() === paid && paid <= before, `Queue: Shows pay leaves the ${paid} that state pay (of ${before})`);
+    await at('overview');
+    check(await page.evaluate(() => document.querySelector('[data-queuef=pay]').checked) && await rowsShown() === paid, 'Queue: the filter is remembered');
+    await page.uncheck('[data-queuef=pay]');
+    await page.selectOption('[data-queuef=sort]', 'fit');
+    check(await rowsShown() === before && await page.evaluate(() => [...document.querySelectorAll('.page .todo-group')].every(g => { const s = [...g.querySelectorAll(':scope > .jrow[data-job-row], :scope > [data-approvebox] > .jrow[data-job-row]')].map(r => Number(r.dataset.qfit)); return s.every((x, i) => !i || s[i - 1] >= x); })), 'Queue: sorted by best fit, with everything back');
+    // The Pick list follows the Queue's sort: back to best to apply to now, then the steps' own order.
+    await page.selectOption('[data-queuef=sort]', 'now');
+    await page.selectOption('[data-queuef=sort]', '');
+  } else check(false, 'Queue: its sort and filters are there');
+
   // Pick is in the order of what's best to apply to now, unless you choose another.
   await at('applications/pick');
   check(await page.evaluate(() => { const s = document.querySelector('[data-pickf=sort]'); return !s || s.value === 'now'; }), 'Pick is ordered by what is best to apply to now');

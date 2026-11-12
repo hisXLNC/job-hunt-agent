@@ -1725,3 +1725,11 @@ table.jobs td.fit, table.jobs td.stage, table.jobs td.next { white-space: nowrap
   .jrow .jact .btn { white-space: nowrap; }
   .qsteps .view-seg { position: sticky; right: 0; box-shadow: -14px 0 10px var(--bg); }
 }
+
+/* ---- The Queue's sort and filters, over every group ---- */
+.queue-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin: 2px 2px 4px; }
+.queue-filters select { width: auto; min-height: 34px; }
+.qf-hide { display: none !important; }
+/* A short Pick list: its own sort and filters fold under one line, on any screen. */
+.fold-filters.few > summary { display: inline-flex; margin-left: -8px; }
+.fold-filters.few[open] > summary { margin-bottom: 8px; }

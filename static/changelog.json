@@ -7,12 +7,13 @@
       "Scoring uses less of your plan: four postings are scored in one request, so your CVs and the instructions are sent once for the four. Change it in Settings, Accounts, Claude, Advanced.",
       "Another AI can do the searching, or everything: Grok, ChatGPT, Gemini, OpenRouter or a model on your own PC. Set it up in Settings, Accounts, Another AI. Looking things up on the web (Indeed, company ratings, recruiters) stays with Claude.",
       "One search a day, or two: choose in Settings, Job sources, When. The second finds new postings hours sooner.",
+      "The Queue has its own sort and filters again, over every group: sort by best to apply to now, best fit, newest or highest pay, and tick Shows pay to see only the jobs that state their pay, or No red flags. It remembers your choice.",
       "With more than 40 matches waiting to be picked, a search by itself scores half as many, newest first, so usage goes on jobs you will get to.",
       "A tailored CV no longer shows a slightly lower fit than before by chance: the two scores are now measured against each other.",
       "A tailored CV that covers under 60% of a posting's keywords is marked, and Review lists the missing ones to tick if you really have them.",
       "Apply to all, and Apply to the quick ones, now open each form in your browser one after another: submit, press next, and the next one opens.",
       "Ready to approve and Review are in the order of what is best to apply to now.",
-      "Sort and filter is folded away when there are fewer than eight to pick, and a company's coloured letter shows its name when you point at it.",
+      "With fewer than eight to pick, the Pick list's own Sort and filter folds under one line, and a company's coloured letter shows its name when you point at it.",
       "On a phone held sideways, the Queue's side column goes under the list, so each job has the whole width: its name is no longer squeezed into a few words a line, and List / One by one stays in reach.",
       "Fill forms on your phone has moved to Settings, Browser extension (it was at the bottom of Job sources). On the phone, that page now says where to get the bookmark: it is handed out on your PC only, because it carries your key."
     ]

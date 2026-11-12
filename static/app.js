@@ -170,7 +170,7 @@ function nextStepId(c = overview?.counts || {}) {
   return ['approve', 'submit', 'pick', 'waiting', 'interviews'].find(id => FLOW.find(f => f[0] === id)[2](c)) || '';
 }
 /** A list's sort and filters: shown on a wide window, folded under one line on a phone so the jobs come first. */
-const foldFilters = (html, few) => `<details class="fold-filters" ${!few && matchMedia('(min-width: 761px)').matches && !matchMedia('(pointer: coarse) and (max-width: 1100px) and (max-height: 700px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
+const foldFilters = (html, few) => `<details class="fold-filters${few ? ' few' : ''}" ${!few && matchMedia('(min-width: 761px)').matches && !matchMedia('(pointer: coarse) and (max-width: 1100px) and (max-height: 700px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
 /** Find any job, and add one you found: at the top of Today and Jobs. */
 const findBox = () => `<button class="find-box" data-act="palette" title="Find any job (Ctrl+K)">${svg('search')}<span>Find a job…</span><kbd>Ctrl K</kbd></button>`;
 /** Pipeline's views: every job, each step with how many are in it, the files tailored for them, and how it's going. */
@@ -841,7 +841,13 @@ async function showOverview(arg) {
         ${x.h.fix ? `<button class="btn sm" data-act="${esc(x.h.fix.act)}" data-task="${esc(x.h.fix.task)}">${esc(x.h.fix.label)}</button>` : ''}${x.h.link && x.h.link !== '#overview' ? `<a class="btn sm" href="${esc(x.h.link)}">Fix it</a>` : ''}</span></div>`;
     // What's furthest along first, as in the one-by-one order; a step you chose shows all of itself.
     const order = step ? [step] : ['interviews', 'approve', 'submit', 'pick', 'waiting'].filter(s => all.some(x => x.step === s));
-    listing = `${notes.some(x => x.h.level === 'problem') ? `<section class="card next-card">${notes.filter(x => x.h.level === 'problem').map(noteRow).join('')}</section>` : ''}
+    const qopt = (v, n) => `<option value="${v}">${n}</option>`;
+    const qbar = all.filter(x => x.j).length > 1 ? `<div class="queue-filters" data-queuebox>
+        <label class="small">Sort by <select data-queuef="sort">${qopt('', 'Each step\'s own order')}${qopt('now', 'Best to apply to now')}${qopt('fit', 'Best fit')}${qopt('new', 'Newest')}${qopt('pay', 'Highest pay')}</select></label>
+        <label class="check small"><input type="checkbox" data-queuef="pay"> Shows pay</label>
+        <label class="check small"><input type="checkbox" data-queuef="flags"> No red flags</label>
+        <span class="muted small" data-queuecount></span></div>` : '';
+    listing = `${qbar}${notes.some(x => x.h.level === 'problem') ? `<section class="card next-card">${notes.filter(x => x.h.level === 'problem').map(noteRow).join('')}</section>` : ''}
       ${order.map(s => `${s === 'pick' ? heldLine() : ''}${stepHtml(o, s, s === step ? tracked : [])}`).join('')}
       ${notes.some(x => x.h.level !== 'problem') ? `<section class="card next-card">${notes.filter(x => x.h.level !== 'problem').map(noteRow).join('')}</section>` : ''}
       <div id="healthIdeas" class="ideas"></div>`;
@@ -1627,7 +1633,7 @@ function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', att
   const meta = [coCell(j), j.location ? placeHtml(j) : '', payFact(j), j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
   const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit${j.score != null && j.score_after != null && j.score_after !== j.score ? ' has-after' : canReach(j) ? ' has-fore' : ''}">${scoreBadge(j.score)}${reachTag(j)}${fitNote(j)}</span>
       <span class="jmain"><span class="jtitle"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${tags}</span><span class="jmeta">${meta}</span></span>`;
-  return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" data-job-row="${esc(j.id)}" ${attrs}>${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
+  return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" data-job-row="${esc(j.id)}" ${attrs} data-qnow="${applyRank(j)}" data-qfit="${j.score_after ?? j.score ?? 0}" data-qnew="${+new Date(ageValue(j) || 0) || 0}" data-qpay="${Math.max(0, salaryValue(j.salary))}" data-qhaspay="${j.salary ? 1 : 0}" data-qflags="${(j.red_flags || []).length}">${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
       <span class="row jact">${actions}</span>${sub ? `<div class="jwhy small">${sub}</div>` : ''}</div>`;
 }
 
@@ -3291,6 +3297,49 @@ function restorePickViews() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('jh.pickView') || 'null'); } catch (e) {}
   document.querySelectorAll('[data-pickbox]').forEach(b => applyPickView(b, saved || {}));
+  applyQueueView(true);
+}
+/** The Queue's sort and filters, over every group in its list, and remembered: jobs that state no
+ *  pay or have red flags are hidden when you ask, and each group is put in the order chosen. The
+ *  Pick group has its own, finer controls; these set them to match. */
+function applyQueueView(restore) {
+  const box = document.querySelector('[data-queuebox]');
+  if (!box) return;
+  const controls = [...box.querySelectorAll('[data-queuef]')];
+  if (restore) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('jh.queueF') || '{}') || {}; } catch (e) {}
+    controls.forEach(el => { if (el.dataset.queuef in saved) el.type === 'checkbox' ? el.checked = !!saved[el.dataset.queuef] : el.value = saved[el.dataset.queuef]; });
+  }
+  const v = Object.fromEntries(controls.map(el => [el.dataset.queuef, el.type === 'checkbox' ? el.checked : el.value]));
+  if (!restore) { try { localStorage.setItem('jh.queueF', JSON.stringify(v)); } catch (e) {} }
+  const rows = [...document.querySelectorAll('.page .jrow[data-job-row]')];
+  let shown = 0;
+  const parents = new Set();
+  for (const r of rows) {
+    const hide = (v.pay && r.dataset.qhaspay !== '1') || (v.flags && Number(r.dataset.qflags) > 0);
+    r.classList.toggle('qf-hide', hide);
+    if (hide) r.querySelectorAll('input[type=checkbox]:checked').forEach(c => { c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); }); // never act on what you can't see
+    else shown++;
+    if (!r.parentElement.classList.contains('pick-list')) parents.add(r.parentElement);
+  }
+  // Each group in the order chosen; its heading, buttons and bar stay where they are.
+  if (v.sort) for (const p of parents) {
+    const mine = [...p.children].filter(c => c.matches('.jrow[data-job-row]'));
+    const after = mine[mine.length - 1].nextSibling;
+    mine.sort((a, b) => Number(b.dataset['q' + v.sort]) - Number(a.dataset['q' + v.sort])).forEach(r => p.insertBefore(r, after));
+  }
+  // A group with nothing left to show steps aside.
+  document.querySelectorAll('.page .todo-group').forEach(g => { const all = g.querySelectorAll('.jrow[data-job-row]'); const card = g.closest('.card'); if (card && all.length) card.classList.toggle('qf-hide', !g.querySelector('.jrow[data-job-row]:not(.qf-hide)')); });
+  // The Pick group's own controls follow these (only when you change one here).
+  if (!restore) document.querySelectorAll('[data-pickbox]').forEach(pb => {
+    const set = (k, val) => { const el = pb.querySelector(`[data-pickf="${k}"]`); if (el) el.type === 'checkbox' ? el.checked = val : el.value = val; };
+    set('pay', !!v.pay); set('flags', !!v.flags);
+    if (v.sort) set('sort', v.sort);
+    applyPickView(pb);
+  });
+  const n = box.querySelector('[data-queuecount]');
+  if (n) n.innerHTML = shown < rows.length ? `Showing ${shown} of ${rows.length}. <a href="#" data-act="queueFClear">Show all</a>` : '';
 }
 /** The bar at the bottom while jobs are ticked: how many, and what to do with them. */
 function selectBar(box, n) {
@@ -3325,6 +3374,7 @@ document.addEventListener('change', e => {
   const box = e.target.closest?.('[data-pickbox]');
   if (box && e.target.matches('[data-pick]')) pickChanged(box);
   if (box && e.target.matches('[data-pickf]')) applyPickView(box);
+  if (e.target.matches?.('[data-queuef]')) applyQueueView(false);
   const abox = e.target.closest?.('[data-approvebox]');
   if (abox && e.target.matches('[data-appr]')) approveChanged(abox);
 });
@@ -4312,6 +4362,7 @@ async function act(el) {
   }
   if (a === 'runSkip') { if (applyRun) { applyRun.at++; return runOpen(); } return; }
   if (a === 'runAgain') { if (applyRun) return runOpen(); return; }
+  if (a === 'queueFClear') { document.querySelectorAll('[data-queuef]').forEach(c => { if (c.type === 'checkbox') c.checked = false; }); return applyQueueView(false); }
   if (a === 'runStop') { applyRun = null; return runBar(); }
   if (a === 'fillBrowser') {
     return busy(async () => {
