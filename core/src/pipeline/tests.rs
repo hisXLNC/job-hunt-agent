@@ -2029,3 +2029,28 @@ fn rejections_are_studied_and_tailoring_is_told() {
     let ashby = crate::db::Job { apply_url: Some("https://jobs.ashbyhq.com/acme/1/application".into()), ..other };
     assert!(s.agent.tailoring_guidance(&ashby).contains("undecided"));
 }
+
+#[test]
+fn a_cv_for_an_ashby_employer_is_checked_and_sharpened() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
+    let ids: Vec<String> = s.agent.db().jobs(Some("queued"), 10).unwrap().iter().map(|j| j.id.clone()).collect();
+    // Not tailored yet: nothing to check. Any other employer: tailoring makes no check.
+    assert!(s.agent.write_criteria_review(&ids[0]).is_err());
+    s.agent.tailor(&ids[0], None).unwrap();
+    assert!(s.agent.criteria_review(&ids[0]).is_none());
+    // An employer on Ashby: the tailored CV is checked, what the check couldn't decide is stated
+    // outright (one revision, which can be undone), and it is checked again.
+    s.agent.db().update_job(&ids[1], &[("apply_url", json!("https://jobs.ashbyhq.com/acme/2/application"))]).unwrap();
+    s.agent.tailor(&ids[1], None).unwrap();
+    let v = s.agent.criteria_review(&ids[1]).unwrap();
+    assert_eq!((v["total"].as_u64(), v["met"].as_u64(), v["undecided"].as_u64(), v["not"].as_u64(), v["sharpened"].as_u64()), (Some(2), Some(1), Some(0), Some(1), Some(1)), "{v}");
+    let calls = s.llm.calls.lock().unwrap().clone();
+    assert_eq!(calls.iter().filter(|c| *c == "criteria_review").count(), 2);
+    assert!(calls.iter().any(|c| c.starts_with("revise_cv:") && c.contains("Has managed vendors or system integrators: Name the vendors")), "{calls:?}");
+    // What can't be shown honestly is left alone: asking again changes nothing.
+    assert!(s.agent.sharpen_for_review(&ids[1]).is_err());
+}

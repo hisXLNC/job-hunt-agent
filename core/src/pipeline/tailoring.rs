@@ -429,6 +429,8 @@ impl Agent {
                 db.log(Some(job_id), "rescored", &format!("fit {a} before tailoring, {after} after{}", if after != s.score { format!(" (scored {}: within the few points two scorings differ by)", s.score) } else { String::new() }))?;
             }
         }
+        // An employer whose system checks CVs criterion by criterion: check this one the same way.
+        self.review_after_tailoring(&job);
         self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
     }
 

@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.54.0] - 2026-11-12
+
+Your CV, checked the way Ashby's AI checks it.
+
+### Changes
+
+- For an employer on Ashby, Job Hunt now reads your tailored CV the way Ashby's AI review does: the requirements a recruiter would set from the posting, each marked Meets, Undecided or Not shown, with the line of your CV it would quote.
+- Anything it can't decide, though your CV has the evidence, is reworded to say it outright, then checked again. Wording only, and it can be undone like any revision.
+- This happens by itself after tailoring for an Ashby employer. Open the job and look under the Ashby note, or press Check my CV on one tailored earlier.
+- Tailoring for Ashby is sharper: evidence goes in the experience and not only a skills list, total years are stated when your dates add up, and the summary leads with the top requirements.
+- Answers written for an Ashby form are kept in step with your CV, because Ashby can compare them.
+
 ## [2.53.0] - 2026-11-12
 
 Learns from your rejections, and knows how Ashby reads applications.
@@ -1735,6 +1747,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.54.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.54.0
 [2.53.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.53.0
 [2.52.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.52.1
 [2.52.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.52.0

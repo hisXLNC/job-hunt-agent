@@ -1705,3 +1705,8 @@ details.kit > summary { cursor: pointer; }
 .ats-tips > summary { cursor: pointer; }
 .ats-tips ul { margin: 10px 0 6px; padding-left: 20px; }
 .ats-tips li { margin: 6px 0; }
+
+.ats-review { margin: 12px 0 4px; }
+.ats-review > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ats-review h3, .ats-tips h3 { margin: 10px 0 6px; }
+.ats-review table td { vertical-align: top; }

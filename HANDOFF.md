@@ -56,6 +56,18 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.54.0: a CV for an Ashby employer is checked the way Ashby's AI checks it.** `Llm::criteria_review` writes
+  the 5 to 8 criteria a recruiter would set from the posting and reads the tailored CV against each, strictly:
+  meets / not / undecided, with the CV line as evidence and, for an undecided one the CV supports, a `fix`.
+  `write_criteria_review` keeps it under `review:<job>`; `sharpen_for_review` turns the fixes into one `revise`
+  of the CV (so the honesty checks and Undo apply) and checks again; `review_after_tailoring` does both after
+  `tailor()` for Ashby jobs only (up to three more requests), skipping the rewording when the CV is being kept
+  close to one already sent to that company. `POST /api/jobs/<id>/review` (`fix: true` to reword first). The
+  job JSON has `review` / `reviewing`; the card is in `app-job.js` (`.ats-review`). `ats::tailoring` now also
+  says: evidence in the experience, not only a skills list; total years in the summary when the dates add up;
+  the top requirements in the summary; nothing evidenced only in the cover letter. `ats::answers` tells the
+  form answers (questions and the extension's fill) to agree with the CV. The employer's real criteria can't
+  be seen: the page says so. Not tested: a real Claude review, and whether it predicts real criteria well.
 - **2.53.0: learning from rejections, and Ashby** (carries 2.52.0 and 2.52.1, which were never published alone).
   `study_rejections()` in `pipeline.rs` gives Claude each rejection email matched to a job (fit, days from applying,
   interviewed or not, the email's words via Gmail) through `Llm::rejection_lessons`; the result is kept under `lessons`

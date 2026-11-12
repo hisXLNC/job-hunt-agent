@@ -581,7 +581,7 @@ async function showWhatsNew() {
 // slows as it nears the end and stops short of full, so it never says "done" before the work is.
 // Work with real progress (a search) gives its percentage in data-p. A page redrawn while the work
 // runs carries on from where its bar was, rather than starting again.
-const GUESS_SECS = { score: 25, tailor: 100, revise: 40, answers: 45, followup: 25, outreach: 25, offer: 50, chat: 25, prep: 80, thanks: 25, decline: 25, lessons: 45,
+const GUESS_SECS = { score: 25, tailor: 100, revise: 40, answers: 45, followup: 25, outreach: 25, offer: 50, chat: 25, prep: 80, thanks: 25, decline: 25, lessons: 45, review: 40,
   career: 120, coach: 90, insights: 60, ratings: 45, recruiters: 60, employers: 120 };
 let typicalSecs = {};
 async function loadTypical() {

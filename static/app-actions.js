@@ -581,6 +581,9 @@ async function act(el) {
   if (a === 'undoRevision') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/undo`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Put back as it was.');
   }
+  if (a === 'review' || a === 'reviewFix') {
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/review`, { method: 'POST', body: { fix: a === 'reviewFix' } }); setTimeout(route, 300); }, a === 'reviewFix' ? 'Rewording, then checking again…' : 'Checking your CV…');
+  }
   if (a === 'decline') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/decline`, { method: 'POST' }); setTimeout(route, 300); }, 'Writing the reply…');
   }

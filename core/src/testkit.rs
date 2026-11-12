@@ -168,6 +168,16 @@ impl Llm for FakeLlm {
         self.calls.lock().unwrap().push("rejection_reply".into());
         Ok(FollowUp { subject: format!("Thank you: {}", job.title), body: format!("Thank you for letting me know.{} They wrote: {their_email}. {c}", if interviewed { " Any feedback?" } else { "" }) })
     }
+    fn criteria_review(&self, _job: &Job, cv: &str) -> R<crate::claude::CriteriaReview> {
+        use crate::claude::{CriteriaReview, Criterion};
+        self.calls.lock().unwrap().push("criteria_review".into());
+        // Clear once the CV has been sharpened (see revise_cv); never clear on Kubernetes.
+        let clear = cv.contains("contracted teams and integrators");
+        Ok(CriteriaReview { note: "Reads well.".into(), criteria: vec![
+            Criterion { criterion: "Has managed vendors or system integrators".into(), verdict: if clear { "meets" } else { "undecided" }.into(), evidence: "Led vendor management".into(), fix: if clear { "" } else { "Name the vendors as system integrators in that line" }.into() },
+            Criterion { criterion: "Kubernetes in production".into(), verdict: "not".into(), evidence: String::new(), fix: String::new() },
+        ] })
+    }
     fn rejection_lessons(&self, _c: &str, rejections: &str) -> R<crate::claude::Lessons> {
         self.calls.lock().unwrap().push("rejection_lessons".into());
         let n = rejections.lines().filter(|l| l.starts_with("- ")).count() as u32;

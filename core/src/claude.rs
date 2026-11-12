@@ -533,6 +533,11 @@ pub trait Llm: Send + Sync {
     fn chat(&self, _candidate: &str, _cv: &str, _job: &crate::db::Job, _notes: &str, _history: &[(String, String)], _message: &str) -> R<String> {
         Err(Error("Chat isn't available.".into()))
     }
+    /// The CV checked the way an employer's AI application review checks it: the criteria the posting
+    /// implies, each one met, not met or undecided, with the CV's own line as the evidence.
+    fn criteria_review(&self, _job: &crate::db::Job, _cv: &str) -> R<CriteriaReview> {
+        Err(Error("The review isn't available.".into()))
+    }
     /// What a set of rejections says, and what to do differently when tailoring the next application.
     fn rejection_lessons(&self, _candidate: &str, _rejections: &str) -> R<Lessons> {
         Err(Error("Studying rejections isn't available.".into()))
@@ -911,6 +916,56 @@ questions, cover letter and message drafts, interview preparation, what to say a
 Anything you write for them to send (answers, letters, messages) follows this:\n{HUMAN}\n\n\
 Use only facts from their CV and notes; when something isn't there, ask or leave a [placeholder] rather than \
 inventing it. Keep replies short unless they ask for something long. Plain text or light Markdown."
+    )
+}
+
+/// A CV read criterion by criterion, as an employer's AI application review reads it.
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct CriteriaReview {
+    pub criteria: Vec<Criterion>,
+    pub note: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Criterion {
+    pub criterion: String,
+    /// "meets", "not" or "undecided".
+    pub verdict: String,
+    /// The CV's own line that shows it, word for word; empty when there is none.
+    pub evidence: String,
+    /// For an undecided one the CV does support: what to state outright. Empty otherwise.
+    pub fix: String,
+}
+
+fn criteria_review_system() -> String {
+    format!(
+        "You check a CV the way an applicant tracking system's AI application review does, so the candidate sees \
+what a recruiter will see before they apply.\n\n{UNTRUSTED}\n\n\
+How that review works: the recruiter writes a short list of criteria for the role, usually starting from what the \
+posting requires. Each criterion is one thing that can be verified from a CV alone. The AI reads only the CV (not \
+the cover letter) and, for each criterion, answers that the CV meets it, does not meet it, or that it can't decide, \
+quoting the lines of the CV it relied on. It does not rank or score. A recruiter then goes through the applications \
+in batches grouped by which criteria were met, a few seconds each.\n\n\
+First write the criteria a careful recruiter would set for this posting: 5 to 8, the stated must-haves first, then \
+the strongest preferences. One requirement per criterion, phrased as the posting phrases it, with the number of \
+years or the level when the posting gives one (for example \"5+ years of program management\", \"Has managed \
+vendors or system integrators\", \"Experience in regulated financial services\"). Leave out anything a CV can't \
+show (attitude, 'passion', culture fit), and location or right to work, which the form asks.\n\n\
+Then judge the CV against each, strictly, as a literal-minded reader would:\n\
+- meets: a line of the CV shows it outright. evidence is that line, copied word for word. For a criterion with a \
+number of years, the CV must state the years or its dated roles must plainly add up to them.\n\
+- undecided: the CV points that way but doesn't say it: implied by a job title, split across several lines, named \
+with different words than the posting uses, listed as a skill with nothing in the experience showing it used, or \
+years that can't be worked out. evidence is the nearest line.\n\
+- not: nothing in the CV shows it, or the CV contradicts it. evidence is empty.\n\
+Do not be generous: a human recruiter might infer it, this reader does not.\n\n\
+fix: only for an undecided criterion where the CV's own content supports it: say in one sentence which existing \
+line to reword and what it should state outright, using only facts already in the CV. Empty for the rest, and \
+empty whenever making it clear would need experience, tools, numbers or years the CV doesn't state.\n\
+note: two plain sentences to the candidate: how the CV would come across in this review, and the one thing that \
+would most change it. These criteria are your best reading of the posting; say nothing about that, the page does."
     )
 }
 
@@ -2067,6 +2122,20 @@ The conversation so far, oldest first (<you> is the job seeker, <claude> is you)
         let r = self.call::<T>(&chat_system(), &user, obj(json!({"reply": {"type": "string"}})), "low")?.reply;
         if r.trim().is_empty() {
             return Err(Error("Claude's reply came back empty; try again.".into()));
+        }
+        Ok(r)
+    }
+
+    fn criteria_review(&self, job: &crate::db::Job, cv: &str) -> R<CriteriaReview> {
+        let user = format!("{}\n\nThe CV they will send:\n<posting>\n{}\n</posting>",
+            posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description),
+            cv.chars().take(16000).collect::<String>());
+        let text = json!({"type": "string"});
+        let item = json!({"type": "object", "properties": {"criterion": text, "verdict": {"type": "string", "enum": ["meets", "not", "undecided"]}, "evidence": text, "fix": text},
+            "required": ["criterion", "verdict", "evidence", "fix"], "additionalProperties": false});
+        let r: CriteriaReview = self.call(&criteria_review_system(), &user, obj(json!({"criteria": {"type": "array", "items": item}, "note": text})), "medium")?;
+        if r.criteria.is_empty() {
+            return Err(Error("Claude's review came back empty; try again.".into()));
         }
         Ok(r)
     }

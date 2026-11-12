@@ -55,7 +55,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, decline, declining, system: sys, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   j.effort = effort;
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
@@ -81,8 +81,20 @@ async function showJob(id) {
       </div>
     </div>
     ${jobActions(j, tailoring, progress)}
-    ${sys ? `<details class="card ats-tips"><summary><b>${esc(j.company)} takes applications through ${esc(sys.name)}.</b> <span class="muted">What that means for this one</span></summary>
+    ${sys ? `<details class="card ats-tips"${review || reviewing ? ' open' : ''}><summary><b>${esc(j.company)} takes applications through ${esc(sys.name)}.</b> <span class="muted">What that means for this one</span></summary>
       ${(sys.here || []).length ? `<p style="color:var(--warn)">You've applied to ${sys.here.length} other role${sys.here.length === 1 ? '' : 's'} here in the last 90 days (${sys.here.slice(0, 3).map(h => esc(h.title) + (h.status === 'rejected' ? ', turned down' : '')).join('; ')}). ${esc(sys.name)} lets employers block repeat applications, so check this one is worth it.</p>` : ''}
+      <div class="ats-review"><header><h3>How ${esc(sys.name)}'s AI check would read your CV</h3>
+        ${reviewing ? '<span class="muted small"><span class="spin" data-kind="review"></span>Checking…</span>' : j.cv_path ? `<button class="btn" data-act="review">${review ? 'Check again' : 'Check my CV'}</button>` : ''}</header>
+        ${review ? `<p><b>Meets ${review.met} of ${review.total}</b>${review.undecided ? `, ${review.undecided} it can't decide` : ''}${review.not ? `, ${review.not} not shown` : ''}. ${esc(review.note || '')}</p>
+          ${review.sharpened ? `<p class="muted small">Job Hunt reworded your CV to state ${review.sharpened} requirement${review.sharpened === 1 ? '' : 's'} outright, then checked again. The changes are listed with the CV, and can be undone there.</p>` : ''}
+          <table><thead><tr><th>Requirement</th><th>Reads as</th><th>The line of your CV it would quote</th></tr></thead><tbody>${review.criteria.map(c => `<tr><td>${esc(c.criterion)}</td>
+            <td><span class="pill ${c.verdict === 'meets' ? 'good' : c.verdict === 'not' ? 'crit' : 'warn'}">${c.verdict === 'meets' ? 'Meets' : c.verdict === 'not' ? 'Not shown' : 'Undecided'}</span></td>
+            <td class="small">${c.evidence ? `“${esc(c.evidence)}”` : c.verdict === 'meets' ? '' : '<span class="muted">Nothing in your CV shows this.</span>'}${c.verdict === 'undecided' && c.fix ? `<br><span class="muted">To settle it: ${esc(c.fix)}</span>` : ''}</td></tr>`).join('')}</tbody></table>
+          ${review.fixable && !reviewing ? `<p><button class="btn primary" data-act="reviewFix">State the undecided ones outright</button> <span class="muted small">Wording only: nothing is added that your CV doesn't already state.</span></p>` : ''}
+          <p class="muted small">Checked ${esc(ago(review.at))}. The employer's own criteria can't be seen; these are the ones the posting implies, read as strictly as the AI reads them. “Not shown” is honest: leave it, or add it to your CV if you really have it.</p>`
+        : `<p class="muted">${j.cv_path ? 'Claude writes the criteria a recruiter would set from this posting and reads your tailored CV against each one, as strictly as the AI does: met, not shown, or undecided, with the line it would quote.' : 'Once the CV is tailored, Claude checks it against the criteria a recruiter would set from this posting, the way the AI does, and states outright anything it could not decide.'}</p>`}
+      </div>
+      <h3>What else to know</h3>
       <ul>${sys.tips.map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join('')}</ul>
       <p class="muted small">From ${esc(sys.name)}'s own published help pages. Employers choose which of these they switch on, so not all of it applies to every company.</p></details>` : ''}
     ${decline || declining || j.status === 'rejected' ? `<section class="card">

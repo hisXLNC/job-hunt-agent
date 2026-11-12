@@ -1863,6 +1863,64 @@ replies and interviews, and a little lower for kinds that got none from several 
             .collect()
     }
 
+    /// The last check of this job's CV against the criteria its posting implies (see `write_criteria_review`).
+    pub fn criteria_review(&self, job_id: &str) -> Option<Value> {
+        self.db().get(&format!("review:{job_id}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
+    }
+
+    /// Claude reads the tailored CV the way an employer's AI application review does: the criteria the
+    /// posting implies, each met, not met or undecided, with the CV's own line as the evidence.
+    pub fn write_criteria_review(&self, job_id: &str) -> R<Value> {
+        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        let cv = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok()).map(|d| d.plain_text())
+            .ok_or_else(|| Error("Tailor this application first: the check reads the CV you'll send.".into()))?;
+        let r = self.llm().criteria_review(&job, &cv)?;
+        let count = |v: &str| r.criteria.iter().filter(|c| c.verdict == v).count();
+        let fixable = r.criteria.iter().filter(|c| c.verdict == "undecided" && !c.fix.trim().is_empty()).count();
+        let v = json!({ "at": now(), "criteria": r.criteria, "note": r.note, "total": r.criteria.len(), "met": count("meets"), "undecided": count("undecided"), "not": count("not"), "fixable": fixable });
+        let db = self.db();
+        db.set(&format!("review:{job_id}"), &v.to_string())?;
+        db.log(Some(job_id), "reviewed", &format!("checked the way an AI application review reads it: meets {} of {}, {} undecided", count("meets"), r.criteria.len(), count("undecided")))?;
+        Ok(v)
+    }
+
+    /// The requirements the check couldn't decide, though the CV has the evidence: each is stated
+    /// outright (wording only; the usual honesty rules refuse anything else), and the CV is checked
+    /// again. The CV before is kept, so it can be undone like any revision.
+    pub fn sharpen_for_review(&self, job_id: &str) -> R<Value> {
+        let review = match self.criteria_review(job_id) {
+            Some(v) => v,
+            None => self.write_criteria_review(job_id)?,
+        };
+        let fixes: Vec<String> = review["criteria"].as_array().into_iter().flatten()
+            .filter(|c| c["verdict"] == "undecided" && !c["fix"].as_str().unwrap_or("").trim().is_empty())
+            .map(|c| format!("- {}: {}", c["criterion"].as_str().unwrap_or(""), c["fix"].as_str().unwrap_or("")))
+            .collect();
+        if fixes.is_empty() {
+            return err("Nothing here can be made clearer without adding experience your CV doesn't state.");
+        }
+        let note = format!("An AI check of this CV against the posting's requirements could not decide on the ones below, though the CV has the evidence. For each, reword an existing line so it states the requirement outright, in one self-contained line a reviewer could quote, named the way the posting names it. Change wording only; add no experience, tools, numbers or years the CV doesn't already state.\n{}", fixes.join("\n"));
+        self.revise(job_id, "cv", &note)?;
+        let mut v = self.write_criteria_review(job_id)?;
+        v["sharpened"] = json!(fixes.len());
+        self.db().set(&format!("review:{job_id}"), &v.to_string())?;
+        Ok(v)
+    }
+
+    /// After tailoring for an employer whose system reviews CVs this way: check the CV, and state
+    /// outright what the check couldn't decide. Never fails the tailoring.
+    pub fn review_after_tailoring(&self, job: &Job) {
+        if crate::ats::of(job).is_none() {
+            return;
+        }
+        let Ok(v) = self.write_criteria_review(&job.id) else { return };
+        // A CV kept the same as one already sent to this company stays as it is.
+        let kept = self.sent_before(job).is_some() && self.repeat_mode() != "usual";
+        if v["fixable"].as_u64().unwrap_or(0) > 0 && !kept {
+            let _ = self.sharpen_for_review(&job.id);
+        }
+    }
+
     /// What the last study of your rejections found (see `study_rejections`).
     pub fn rejection_lessons(&self) -> Option<Value> {
         self.db().get("lessons").ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
@@ -2131,6 +2189,9 @@ replies and interviews, and a little lower for kinds that got none from several 
         let mut facts = profile.application_facts.trim().to_string();
         if let Some(min) = profile.min_salary {
             facts.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
+        }
+        if let Some(a) = crate::ats::of(&job) {
+            facts.push_str(&format!("\n{}", crate::ats::answers(a)));
         }
         let mut list = self.llm().answer_questions(&profile.name, &cv, &job, questions, &facts, &profile.stories)?;
         let own = self.own_words(&job, &profile);

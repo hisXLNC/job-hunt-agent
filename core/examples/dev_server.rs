@@ -45,6 +45,19 @@ impl Llm for DemoLlm {
     fn rejection_reply(&self, c: &str, job: &Job, _their: &str, interviewed: bool) -> R<jobhunt_core::claude::FollowUp> {
         Ok(jobhunt_core::claude::FollowUp { subject: format!("Thank you: {}", job.title), body: format!("Hello,\n\nThank you for letting me know about the {} role, and for the time your team gave me.{} I'd be glad to be kept in mind if a role like it opens later at {}.\n\n{c}", job.title, if interviewed { " If you're able to share any feedback from the interviews, I'd find it useful; no worries if not." } else { "" }, job.company) })
     }
+    fn criteria_review(&self, _job: &Job, cv: &str) -> R<jobhunt_core::claude::CriteriaReview> {
+        use jobhunt_core::claude::{CriteriaReview, Criterion};
+        let c = |criterion: &str, verdict: &str, evidence: &str, fix: &str| Criterion { criterion: criterion.into(), verdict: verdict.into(), evidence: evidence.into(), fix: fix.into() };
+        let line = |word: &str| cv.lines().find(|l| l.to_lowercase().contains(word)).unwrap_or("").trim().chars().take(160).collect::<String>();
+        Ok(CriteriaReview { note: "Four of six requirements are stated outright. Saying the years of programme delivery in the summary would settle the one a reviewer can't decide.".into(), criteria: vec![
+            c("Has led delivery of regulated financial platforms", "meets", &line("regulat"), ""),
+            c("Owns program governance, UAT and release management", "meets", &line("uat"), ""),
+            c("Has managed vendors or system integrators", "meets", &line("vendor"), ""),
+            c("Reports to steering committees or executives", "meets", &line("steering"), ""),
+            c("7+ years of program management", "undecided", &line("program"), "State the total years of programme delivery in the summary line; the dated roles add up to it."),
+            c("PMP or equivalent certification", "not", "", ""),
+        ] })
+    }
     fn rejection_lessons(&self, _c: &str, rejections: &str) -> R<jobhunt_core::claude::Lessons> {
         use jobhunt_core::claude::{Lessons, SaidReason};
         let n = rejections.lines().filter(|l| l.starts_with("- ")).count() as u32;

@@ -395,6 +395,9 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
         o.to_string()
     }).collect();
     let mut facts = profile.application_facts.trim().to_string();
+    if let Some(a) = crate::ats::of(&job) {
+        facts.push_str(&format!("\n{}", crate::ats::answers(a)));
+    }
     if !profile.email.trim().is_empty() {
         facts.push_str(&format!("\nEmail: {}", profile.email.trim()));
     }

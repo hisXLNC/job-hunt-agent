@@ -231,6 +231,9 @@ impl Llm for Metered {
     fn rejection_reply(&self, candidate: &str, job: &Job, their_email: &str, interviewed: bool) -> R<FollowUp> {
         self.run("thanks", |l| l.rejection_reply(candidate, job, their_email, interviewed))
     }
+    fn criteria_review(&self, job: &Job, cv: &str) -> R<crate::claude::CriteriaReview> {
+        self.run("tailor", |l| l.criteria_review(job, cv))
+    }
     fn rejection_lessons(&self, candidate: &str, rejections: &str) -> R<crate::claude::Lessons> {
         self.run("insights", |l| l.rejection_lessons(candidate, rejections))
     }

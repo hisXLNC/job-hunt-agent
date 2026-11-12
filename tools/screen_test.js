@@ -170,7 +170,13 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   // A job whose employer uses Ashby says what that means for the application.
   const ashbyId = await page.evaluate(async () => (await (await fetch('/api/jobs?limit=100')).json()).jobs.find(j => /ashbyhq\.com/.test(j.url))?.id);
   if (ashbyId) { await at(`job/${encodeURIComponent(ashbyId)}`); }
-  check(!!ashbyId && await page.evaluate(() => { const d = document.querySelector('.ats-tips'); return !!d && /through Ashby/.test(d.querySelector('summary').textContent) && d.querySelectorAll('li').length === 6; }), 'A job on Ashby says how Ashby handles applications');
+  check(!!ashbyId && await page.evaluate(() => { const d = document.querySelector('.ats-tips'); return !!d && /through Ashby/.test(d.querySelector('summary').textContent) && d.querySelectorAll('li').length === 7; }), 'A job on Ashby says how Ashby handles applications');
+  // Its tailored CV is read the way Ashby's AI check reads it: each requirement met, not shown or undecided.
+  if (ashbyId) {
+    await page.evaluate(async id => { await fetch(`/api/jobs/${encodeURIComponent(id)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); }, ashbyId);
+    await page.waitForTimeout(1500); await at(`job/${encodeURIComponent(ashbyId)}`);
+  }
+  check(!!ashbyId && await page.evaluate(() => { const r = document.querySelector('.ats-review'); return !!r && /Meets 4 of 6/.test(r.textContent) && r.querySelectorAll('tbody tr').length === 6 && !!r.querySelector('.pill.warn') && !!r.querySelector('[data-act="reviewFix"]') && document.querySelector('.ats-tips').open; }), 'A job on Ashby shows how its AI check would read the tailored CV');
   await at('results');
 
   // The version sits under the app's name and opens what's new.

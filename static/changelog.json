@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.54.0",
+    "date": "2026-11-12",
+    "title": "Your CV, checked the way Ashby's AI checks it",
+    "changes": [
+      "For an employer on Ashby, Job Hunt now reads your tailored CV the way Ashby's AI review does: the requirements a recruiter would set from the posting, each marked Meets, Undecided or Not shown, with the line of your CV it would quote.",
+      "Anything it can't decide, though your CV has the evidence, is reworded to say it outright, then checked again. Wording only, and it can be undone like any revision.",
+      "This happens by itself after tailoring for an Ashby employer. Open the job and look under the Ashby note, or press Check my CV on one tailored earlier.",
+      "Tailoring for Ashby is sharper: evidence goes in the experience and not only a skills list, total years are stated when your dates add up, and the summary leads with the top requirements.",
+      "Answers written for an Ashby form are kept in step with your CV, because Ashby can compare them."
+    ]
+  },
+  {
     "version": "2.53.0",
     "date": "2026-11-12",
     "title": "Learns from your rejections, and knows how Ashby reads applications",
