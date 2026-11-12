@@ -170,7 +170,7 @@ function nextStepId(c = overview?.counts || {}) {
   return ['approve', 'submit', 'pick', 'waiting', 'interviews'].find(id => FLOW.find(f => f[0] === id)[2](c)) || '';
 }
 /** A list's sort and filters: shown on a wide window, folded under one line on a phone so the jobs come first. */
-const foldFilters = html => `<details class="fold-filters" ${matchMedia('(min-width: 761px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
+const foldFilters = html => `<details class="fold-filters" ${matchMedia('(min-width: 761px)').matches && !matchMedia('(pointer: coarse) and (max-width: 1100px) and (max-height: 700px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
 /** Find any job, and add one you found: at the top of Today and Jobs. */
 const findBox = () => `<button class="find-box" data-act="palette" title="Find any job (Ctrl+K)">${svg('search')}<span>Find a job…</span><kbd>Ctrl K</kbd></button>`;
 /** Pipeline's views: every job, each step with how many are in it, the files tailored for them, and how it's going. */
@@ -371,6 +371,11 @@ function ratingCard(r, busy, company) {
 }
 /** The predicted fit after tailoring, while it isn't tailored yet: "could reach ~85". */
 const canReach = j => j.score_after == null && j.score_potential != null && j.score != null && j.score_potential >= j.score ? j.score_potential : null;
+/** On a phone a row shows one fit badge (the tailored CV's once there is one) and says the other
+ *  figure in words under it: "was 76", or "~97 tailored" while it's a forecast. */
+const fitNote = j => j.score != null && j.score_after != null && j.score_after !== j.score
+  ? `<small class="fit-note">was ${j.score}</small>`
+  : canReach(j) && canReach(j) > j.score ? `<small class="fit-note">~${canReach(j)} tailored</small>` : '';
 /** After the fit badge: the tailored CV's fit as a second badge, or the forecast one (dashed) before tailoring. */
 const reachTag = j => j.score != null && j.score_after != null && j.score_after !== j.score
   ? `<span class="reach"><span class="reach-arrow">→</span><span class="score ${scoreBand(j.score_after)}" title="Fit of the tailored CV">${j.score_after}</span></span>`
@@ -858,7 +863,7 @@ async function showOverview(arg) {
           : `<button class="btn${all.length ? '' : ' primary'}" data-act="run" data-task="search" ${!o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${svg('search')}Search for jobs now</button>`}
       </div>
     </div>
-    ${all.length ? `<nav class="tabs qsteps" aria-label="Kinds of decision"><a href="#overview" class="${step ? '' : 'on'}">Everything <span class="n">${all.length}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === step ? 'on' : ''}${n(id) ? '' : ' none'}">${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}
+    ${all.length ? `<nav class="tabs qsteps" aria-label="Kinds of decision"><a href="#overview" class="${step ? '' : 'on'}">Everything <span class="n">${queueCount(all)}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === step ? 'on' : ''}${n(id) ? '' : ' none'}">${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}
       <span class="tabs-gap"></span><span class="seg view-seg" role="group" aria-label="How to show them"><button type="button" data-act="queueView" data-view="list" class="${view === 'list' ? 'on' : ''}" title="Every listing at once">List</button><button type="button" data-act="queueView" data-view="one" class="${view === 'one' ? 'on' : ''}" title="One decision at a time, with everything you need to decide">One by one</button></span></nav>` : ''}
     ${syncNewerHtml(o.sync_newer)}
     ${showSteps && !neededDone ? `<section class="card"><header><h2>Finish setting up</h2><a class="btn ghost" href="#welcome">Guided setup</a></header><div class="steps">${steps.map(([done, t, d, href, key]) =>
@@ -1581,7 +1586,7 @@ const daysUp = j => Math.max(0, (Date.now() - (+new Date(ageValue(j) || 0) || Da
  *  (a press anywhere on them ticks it); the why line and the buttons are outside it. */
 function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', attrs = '', facts = '' }) {
   const meta = [coCell(j), j.location ? placeHtml(j) : '', payFact(j), j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
-  const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit">${scoreBadge(j.score)}${reachTag(j)}</span>
+  const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit${j.score != null && j.score_after != null && j.score_after !== j.score ? ' has-after' : canReach(j) ? ' has-fore' : ''}">${scoreBadge(j.score)}${reachTag(j)}${fitNote(j)}</span>
       <span class="jmain"><span class="jtitle"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${tags}</span><span class="jmeta">${meta}</span></span>`;
   return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" data-job-row="${esc(j.id)}" ${attrs}>${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
       <span class="row jact">${actions}</span>${sub ? `<div class="jwhy small">${sub}</div>` : ''}</div>`;

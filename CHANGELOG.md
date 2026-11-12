@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.44.1] - 2026-11-12
+
+Clearer scores on a phone.
+
+### Changes
+
+- On a phone, a job shows one fit score, with the other in words under it: was 76 once the CV is tailored, or ~97 tailored while it is a forecast. Before, two unlabelled scores sat one above the other.
+- The Queue: the Everything count now matches the number waiting for you. A notice about your setup was being counted as a decision.
+- On a phone held sideways, Sort and filter starts folded, and the Email line's buttons no longer sit on top of its words.
+
 ## [2.44.0] - 2026-11-12
 
 Getting to the best matches sooner.
@@ -1562,6 +1572,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.44.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.44.1
 [2.44.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.44.0
 [2.43.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.43.0
 [2.42.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.42.0

@@ -1702,3 +1702,17 @@ table.jobs td.fit, table.jobs td.stage, table.jobs td.next { white-space: nowrap
 .jrow.ticks .jhead > .avatar { grid-column: 2; }
 .jrow.ticks .jhead > .jmain { grid-column: 3; }
 .jrow.ticks .jhead > .jfit { grid-column: 4; }
+
+/* ---- Fit on a phone: one badge, and the other figure in words under it ---- */
+.fit-note { display: none; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .jrow .jfit { flex-direction: column; align-items: center; gap: 2px; }
+  .jrow .jfit.has-after > .score, .jrow .jfit.has-fore .reach, .jrow .jfit .reach-arrow { display: none; }
+  .jrow .jfit .reach { margin: 0; }
+  .fit-note { display: block; font-size: 11px; line-height: 1.2; color: var(--muted); white-space: nowrap; font-weight: 500; }
+}
+/* The Queue's side column when it's narrow: a line's buttons go under its words, never over them. */
+@media (max-width: 1100px) {
+  .deck-side .auto-line { flex-wrap: wrap; }
+  .deck-side .auto-line .grow { min-width: 130px; }
+}

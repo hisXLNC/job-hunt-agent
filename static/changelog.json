@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.44.1",
+    "date": "2026-11-12",
+    "title": "Clearer scores on a phone",
+    "changes": [
+      "On a phone, a job shows one fit score, with the other in words under it: was 76 once the CV is tailored, or ~97 tailored while it is a forecast. Before, two unlabelled scores sat one above the other.",
+      "The Queue: the Everything count now matches the number waiting for you. A notice about your setup was being counted as a decision.",
+      "On a phone held sideways, Sort and filter starts folded, and the Email line's buttons no longer sit on top of its words."
+    ]
+  },
+  {
     "version": "2.44.0",
     "date": "2026-11-12",
     "title": "Getting to the best matches sooner",
