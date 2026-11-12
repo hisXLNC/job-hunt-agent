@@ -329,10 +329,22 @@ mod tests {
         let r = handle(&s.agent, "POST", "/ext/which", &k, page);
         let v: Value = serde_json::from_slice(&r.body).unwrap();
         assert_eq!(r.status, 400);
-        assert_eq!(v["choose"].as_array().unwrap().len(), 2, "two at that company: you choose");
+        let choose = v["choose"].as_array().unwrap();
+        assert_eq!(choose.len(), 3, "two at that company, and last, no application at all: a profile");
+        assert_eq!(choose[2]["id"], crate::fill::PROFILE);
         let r = handle(&s.agent, "POST", "/ext/pick", &k, br#"{"job_id":"a2"}"#);
         assert_eq!(r.status, 200);
         let v: Value = serde_json::from_slice(&handle(&s.agent, "POST", "/ext/which", &k, page).body).unwrap();
         assert_eq!(v["job"]["id"], "a2", "the one you chose, for the rest of the form");
+        // The profile, chosen on a job site: that site's pages are the profile, and there's nothing
+        // to mark applied or set aside.
+        let bank = br#"{"url":"https://www.jobbank.gc.ca/match/profile/experience","title":"Job Match","fields":[]}"#;
+        let r = handle(&s.agent, "POST", "/ext/pick", &k, br#"{"job_id":"profile","url":"https://www.jobbank.gc.ca/match/profile/experience"}"#);
+        assert_eq!(r.status, 200);
+        let v: Value = serde_json::from_slice(&handle(&s.agent, "POST", "/ext/which", &k, bank).body).unwrap();
+        assert_eq!(v["job"]["id"], crate::fill::PROFILE);
+        let v: Value = serde_json::from_slice(&handle(&s.agent, "POST", "/ext/applied", &k, bank).body).unwrap();
+        assert_eq!(v["profile"], true);
+        assert_eq!(s.agent.db().jobs(Some("applied"), 10).unwrap().len(), 0, "nothing was marked applied");
     }
 }
