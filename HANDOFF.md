@@ -5,9 +5,25 @@ and `DEVELOPING.md`.
 
 ## State
 
-- Latest version: **2.45.0** (below). Before it: **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
+- Latest version: **2.46.0** (below). Before it: **2.45.0**, **2.44.1**, **2.44.0** (getting to the best matches sooner: the apply-now order, best 10, stale
   tidy-up, strong-fit auto-tailoring, What you want). The working branch changes with each session
   (this one: `claude/brave-fermat-ti1omi`); `main` is what's released. Before it: 2.43.0, 2.42.0.
+- **2.46.0, and why.** The Queue lost its side column (search menu on the Search button, email
+  button, `week-line` under the heading; `deck.solo`), the Queue's filters move beside Select all
+  after render (`applyQueueView`), and the guided setup (`showWelcome`) is a list of steps with one
+  open, for friends new to it. LinkedIn's hiring team: `clip.js` reads the people under "Meet the
+  hiring team" into `people`; `add_clip` keeps them (`add_hiring_team`), also for a job already
+  here (`job_for_clip`). **Its selectors were written without seeing LinkedIn signed in** (tested on
+  a stand-in page in `screen_test.js`): the first report of it finding nobody means checking the
+  real page's markup. Contacts gained `replied_at` (`contact_replied`) and keep `message_kind`
+  (it was being dropped on save, which hid the follow-up's I sent it button). `/api/overview`
+  carries `rev`, and answers `{same: true}` to `?have=<rev>`. The stylesheet was tidied by a script
+  (rules for unused names, declarations a later same-selector rule overrides) and every screen
+  compared before and after; the script isn't in the repo. Left alone on purpose: the old
+  apply-in-a-Job-Hunt-window queue (`fill::start_queue`, used by the Windows Apply window), and
+  caching the profile (reading it takes a few milliseconds).
+- A group on a Pipeline step is found by the start of its heading (`has('Message the recruiter')` in
+  `stepHtml`): rename a heading and its lookup together.
 - **2.45.0, and why.** Less of the Claude plan per search, and not only Claude. (1) Scoring is
   grouped: `Llm::score_batch`/`score_many` (claude.rs) put four postings in one request, so the CVs
   and instructions go once; `score_these` (pipeline.rs) falls back to one at a time for any the

@@ -4,6 +4,22 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.46.0] - 2026-11-12
+
+A simpler Queue, the hiring team from LinkedIn, and an easier setup.
+
+### Changes
+
+- The Queue's side column is gone, so the list has the whole width. Search for jobs now has a small arrow with the last search, its results and the daily search. Email is a small button beside it, and this week is a line under the heading.
+- The Queue's sort and filters sit beside Select all. Review them one by one is gone: List and One by one do the same.
+- The hiring team from LinkedIn: send a LinkedIn posting with the extension and the people it lists under Meet the hiring team are saved on the job, with a note written to the first. For a job already in Job Hunt, open it, People, Open the posting, then Send to Job Hunt.
+- A note to someone on LinkedIn has Copy it and open their profile. Notes are sized to your account (Settings, Email: 300 characters with Premium, 200 on a free account), and a note to a hiring manager is written differently from one to a recruiter.
+- They replied: press it on a person who wrote back on LinkedIn and Job Hunt stops asking you to follow up. Insights shows how often your notes get a reply, by who they went to.
+- A first note is offered before you apply, once Job Hunt knows who to write to.
+- The guided setup is easier for someone new: it says what you need, shows how far along you are, opens one step at a time, and asks what you are looking for. Getting started has a section on giving Job Hunt to a friend.
+- Faster and lighter: the page no longer fetches everything every few seconds when nothing changed, saving a setting no longer reconnects Claude and Google, and the stylesheet lost a sixth of its weight.
+- Fixed: a follow-up note written to a person did not show its I sent it button. Fixed: starting sync for the first time could wrongly say this computer has newer data.
+
 ## [2.45.0] - 2026-11-12
 
 Less of your Claude plan, another AI, and applying in a row.
@@ -1592,6 +1608,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.46.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.46.0
 [2.45.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.45.0
 [2.44.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.44.1
 [2.44.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.44.0

@@ -120,6 +120,16 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.selectOption('[name=auto_tailor_mode]', 'off');
   check(await until(async () => (await prefs()).auto_tailor_min === 0, 15), 'Tailor by itself can be turned off again');
 
+  // The guided setup: says how far along you are, has exactly one step open, and its questions save.
+  await at('welcome');
+  check(await page.evaluate(() => !!document.querySelector('.setup-progress') && document.querySelectorAll('.setup-steps .wstep').length === 8 && document.querySelectorAll('.setup-steps .wstep > details[open]').length <= 1), 'Guided setup: eight steps, at most one open, with a progress bar');
+  await page.evaluate(() => { const d = document.querySelector('form[data-form=welcomeWant]').closest('details'); d.open = true; });
+  await page.fill('form[data-form=welcomeWant] [name=min_salary]', '90000');
+  await page.selectOption('form[data-form=welcomeWant] [name=want_work]', 'permanent');
+  await page.click('form[data-form=welcomeWant] button[type=submit]');
+  check(await until(async () => { const p = await prefs(); return p.min_salary === 90000 && p.wants.work === 'permanent' && p.wants.level === 'senior manager' && p.auto_tailor_min === 85; }, 15), 'Guided setup: what you are looking for is saved, and the best matches get ready by themselves');
+  await page.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => fetch('/api/settings/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s.profile, min_salary: null, auto_tailor_min: 0, seen_sources: s.profile.sources }) })));
+
   // One search a day unless you choose two: the second time appears, and both are saved.
   await at('settings/search');
   check(await page.evaluate(() => document.querySelector('[data-second-search]').hidden), 'One search a day: no second time shown');

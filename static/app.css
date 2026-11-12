@@ -1531,3 +1531,18 @@ table.jobs td.fit, table.jobs td.stage, table.jobs td.next { white-space: nowrap
   .split { flex: 1; }
   .split > .btn { flex: 1; justify-content: center; }
 }
+
+/* ---- The guided setup: what you need, how far along, and one step open at a time ---- */
+.setup-need ul { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.setup-progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.setup-progress span { display: block; height: 100%; background: var(--good); border-radius: 999px; transition: width .3s; }
+.setup-count { margin: -6px 2px 0; }
+.setup-steps .wstep > details > summary { list-style: none; display: flex; align-items: center; gap: 10px; cursor: pointer; min-height: 30px; }
+.setup-steps .wstep > details > summary::-webkit-details-marker { display: none; }
+.setup-steps .wstep > details > summary h2 { margin: 0; flex: 1; }
+.setup-steps .wstep > details[open] > summary { margin-bottom: 8px; }
+.setup-steps .wstep:not(.now):not(.done) { opacity: .75; }
+.setup-steps .wstep.now { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.setup-more > summary { cursor: pointer; }
+.setup-more[open] > summary { margin-bottom: 12px; }
+.card.flat { border: 0; padding: 0; box-shadow: none; background: none; }
