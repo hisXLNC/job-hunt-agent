@@ -252,6 +252,12 @@ impl Llm for Metered {
     fn shorten_reasons(&self, reasons: &[String]) -> R<Vec<String>> {
         self.run("reasons", |l| l.shorten_reasons(reasons))
     }
+    fn size_up_leads(&self, candidate: &str, cv: &str, wants: &str, leads: &str) -> R<Vec<crate::claude::LeadView>> {
+        self.run("leads", |l| l.size_up_leads(candidate, cv, wants, leads))
+    }
+    fn find_leads(&self, candidate: &str, cv: &str, wants: &str, skip: &str) -> R<Vec<crate::claude::FoundLead>> {
+        self.run("leads", |l| l.find_leads(candidate, cv, wants, skip))
+    }
 }
 
 #[cfg(test)]

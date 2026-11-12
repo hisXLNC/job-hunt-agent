@@ -81,3 +81,38 @@ function clipPage(only) {
   var fallback = function () { var ta = document.createElement('textarea'); ta.value = out; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(out).then(done, fallback); else fallback();
 }
+
+/** The posts on the page you're on, for Job Hunt's leads: on LinkedIn (the feed, or a search of
+ *  posts) each post with who wrote it; on any other page, the text you selected or the page's own
+ *  text as one post. Returns { posts: [{author, headline, link, text, url}], many }. Job Hunt keeps
+ *  only the ones where someone says they're hiring. */
+function clipPosts() {
+  var t = function (x) { return (x == null ? '' : String(x)).trim(); };
+  var first = function (el, sels) { for (var i = 0; i < sels.length; i++) { var e = el.querySelector(sels[i]); if (e && t(e.innerText)) return e; } return null; };
+  var line = function (e) { return e ? t(t(e.innerText).split('\n')[0]) : ''; };
+  var posts = [], taken = [];
+  var boxes = document.querySelectorAll('[data-urn^="urn:li:activity"], [data-urn^="urn:li:share"], [data-urn^="urn:li:ugcPost"], [data-id^="urn:li:activity"], [data-id^="urn:li:share"], [data-id^="urn:li:ugcPost"], .feed-shared-update-v2');
+  [].forEach.call(boxes, function (box) {
+    // A post inside one already read (LinkedIn nests the same post's boxes): once.
+    if (taken.some(function (b) { return b.contains(box) || box.contains(b); })) return;
+    var body = first(box, ['.update-components-text', '.feed-shared-update-v2__description', '.feed-shared-inline-show-more-text', '[class*="update-components-text"]', '[class*="commentary"]', '.break-words']);
+    var text = t(body && body.innerText).replace(/\s*…\s*(see more|more)\s*$/i, '');
+    if (text.length < 40) return;
+    taken.push(box);
+    var urn = box.getAttribute('data-urn') || box.getAttribute('data-id') || '';
+    var a = box.querySelector('a[href*="/in/"]') || box.querySelector('a[href*="/company/"]');
+    var m = a && String(a.href).match(/linkedin\.com\/(in|company)\/([^\/?#]+)/);
+    var name = line(first(box, ['.update-components-actor__title span[aria-hidden="true"]', '.update-components-actor__title', '.update-components-actor__name', '[class*="actor__title"]', '[class*="actor__name"]']))
+      || t(a && a.getAttribute('aria-label')).replace(/^view\s+/i, '').replace(/[’']s?\s+(verified\s+)?profile.*$/i, '');
+    name = t(name.replace(/\s*[•·]\s*(1st|2nd|3rd\+?|Following|Follow).*$/i, '').replace(/\s+(is verified|verified).*$/i, ''));
+    var headline = line(first(box, ['.update-components-actor__description span[aria-hidden="true"]', '.update-components-actor__description', '[class*="actor__description"]']));
+    posts.push({ author: name.slice(0, 80), headline: headline.slice(0, 200), link: m ? 'https://www.linkedin.com/' + m[1] + '/' + m[2] : (a ? String(a.href).split('?')[0] : ''),
+      text: text.slice(0, 6000), url: urn ? 'https://www.linkedin.com/feed/update/' + urn + '/' : location.href.split('#')[0] + '#post-' + posts.length });
+  });
+  if (posts.length) return { posts: posts.slice(0, 60), many: true };
+  // Any other page: what you selected, or what the page says.
+  var sel = t(getSelection());
+  var author = document.querySelector('meta[name="author"]');
+  var text = sel.length >= 40 ? sel : t((document.querySelector('article') || document.querySelector('main') || document.body).innerText);
+  return { posts: text.length >= 40 ? [{ author: t(author && author.content), headline: '', link: '', text: text.slice(0, 6000), url: location.href }] : [], many: false, title: document.title };
+}

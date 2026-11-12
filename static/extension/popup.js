@@ -26,6 +26,16 @@ async function fill() {
     setTimeout(() => window.close(), 2500);
   } catch (e) { say("Couldn't fill it in", String(e.message || e), true); }
 }
+// Leads: the hiring posts on this page (LinkedIn's feed or a search of posts), or this one page.
+async function posts(chosen) {
+  say('Reading the posts…', 'Job Hunt keeps the ones where someone says they\'re hiring, and reads each against your CV.', false, 'Working');
+  const r = await new Promise(ok => chrome.runtime.sendMessage({ posts: tab.id, chosen }, ok));
+  if (!r || !r.ok) return say("Couldn't send them", r ? r.error : '', true);
+  const { seen, added, hiring, note, many } = r.v;
+  if (!many) return say(added ? 'Added to your leads' : 'Already in your leads', added ? 'It\'s under Leads in Job Hunt\'s Queue, with where you\'d help and who to write to.' : 'Job Hunt has this one.', false, 'Done');
+  say(added ? `${added} hiring post${added === 1 ? '' : 's'} added` : 'No new hiring posts here',
+    `${seen} post${seen === 1 ? '' : 's'} read, ${hiring} about hiring${hiring > added ? `, ${hiring - added} already seen or not really hiring` : ''}. ${added ? 'They\'re under Leads in Job Hunt\'s Queue.' : 'Scroll down for more posts and press again.'}${note ? ' ' + note : ''}`, false, 'Done');
+}
 // A company's initial on a tile whose colour comes from its name, as in Job Hunt.
 function tile(name) {
   const s = String(name || '?').trim(); let h = 0;
@@ -65,6 +75,8 @@ function submitList(jobs) {
   const onPage = tab && /^https?:/.test(tab.url || '');
   $('send').onclick = send;
   $('fill').onclick = fill;
+  $('posts').onclick = () => posts(false);
+  $('lead').onclick = e => { e.preventDefault(); posts(true); };
   // The shortcut for Fill this form, as set in the browser (it can be changed there).
   try { chrome.commands.getAll(l => { const c = (l || []).find(x => x.name === 'fill-form'); if (c && c.shortcut) $('key-hint').textContent = c.shortcut; }); } catch (e) { /* older browser */ }
   $('change').onclick = e => { e.preventDefault(); $('setup').hidden = false; $('key').focus(); };
@@ -100,6 +112,20 @@ function submitList(jobs) {
     return;
   }
   conn('on', 'Connected');
+  // Leads: on LinkedIn's feed or a search of posts, send the hiring ones; and the searches to open.
+  const postsPage = onPage && /linkedin\.com\/(feed|search\/results\/(content|all)|posts|in\/[^/]+\/recent-activity)/.test(tab.url);
+  if (postsPage) { $('posts').hidden = false; $('posts').className = 'pr'; $('fill').hidden = true; $('send').hidden = true; }
+  ask('/ext/leads/searches').then(r => {
+    const list = (r && r.ok && r.v.searches) || [];
+    if (!list.length && !onPage) return;
+    $('leads').hidden = false;
+    for (const s of list.slice(0, 5)) {
+      const b = document.createElement('button'); b.textContent = s.title; b.title = `LinkedIn posts from the last week that say hiring and ${s.title}`;
+      b.onclick = () => { chrome.tabs.create({ url: s.url }); window.close(); };
+      $('searches').appendChild(b);
+    }
+    if (onPage && !postsPage) $('leadline').hidden = false;
+  });
   const l = await ask('/ext/jobs');
   const jobs = (l && l.ok && l.v.jobs) || [];
   submitList(jobs);
@@ -122,5 +148,5 @@ function submitList(jobs) {
     const j = r.v.job;
     say(j.title, r.v.company_link ? `${j.company}. Job Hunt found this job on the company's own site: applying there goes straight to them.` : `${j.company}. Get to the application form, then press Fill this form.`, false, 'This application');
     if (r.v.company_link) { $('company').hidden = false; $('company').onclick = () => { chrome.tabs.update(tab.id, { url: r.v.company_link }); window.close(); }; }
-  } else say('A job posting or a form?', 'Send the posting to Job Hunt, or fill in the application form on this page.', false, 'This page');
+  } else say(...(postsPage ? ['Hiring posts on this page', 'Job Hunt keeps the posts where someone says they\'re hiring, with how well you fit and who to write to. Scroll first to read more of them.'] : ['A job posting or a form?', 'Send the posting to Job Hunt, or fill in the application form on this page.']), false, 'This page');
 })();

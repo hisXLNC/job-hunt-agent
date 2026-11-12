@@ -77,8 +77,11 @@ pub fn want(agent: &Arc<Agent>, company: &str) {
 fn site_of(agent: &Agent, company: &str) -> Option<String> {
     let want = crate::db::company_key(company);
     let jobs = agent.db().jobs(None, 5000).ok()?;
-    jobs.iter().filter(|j| crate::db::company_key(&j.company) == want)
-        .find_map(|j| j.apply_url.as_deref().and_then(own_site).or_else(|| own_site(&j.url)))
+    let from_jobs = jobs.iter().filter(|j| crate::db::company_key(&j.company) == want)
+        .find_map(|j| j.apply_url.as_deref().and_then(own_site).or_else(|| own_site(&j.url)));
+    drop(jobs);
+    // A lead's company has no job, but its own site is often known.
+    from_jobs.or_else(|| crate::leads::all(agent).into_iter().find(|l| crate::db::company_key(&l.company) == want && !l.site.is_empty()).map(|l| l.site))
 }
 
 fn client() -> reqwest::blocking::Client {

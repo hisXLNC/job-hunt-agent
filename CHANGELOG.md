@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.49.0] - 2026-11-12
+
+Leads: hiring posts and newly funded companies.
+
+### Changes
+
+- A new Leads tab in the Queue: people saying they are hiring, and companies that just raised money, to write to directly before or instead of applying to a posting.
+- The extension reads hiring posts from LinkedIn: open one of the post searches Job Hunt gives you for your job titles, press the extension's button, and choose Send this page's hiring posts. Any other page can be added as a lead too.
+- Claude can look on the web for seed and Series A rounds and founders' own hiring posts in your field: when you ask, or once a day if you turn that on (it is off to begin with).
+- Each lead shows how well you fit, where you would help, things worth saying, and who to write to, with their profile and a likely or published email address.
+- You write the message yourself, with a rough draft if you want a starting point. Job Hunt keeps who you wrote to, suggests one follow-up after a week, and notes who replied.
+
 ## [2.48.0] - 2026-11-12
 
 Profiles on job sites, one look for scores, and less repetition.
@@ -1649,6 +1661,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.49.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.49.0
 [2.48.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.48.0
 [2.47.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.47.0
 [2.46.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.46.1

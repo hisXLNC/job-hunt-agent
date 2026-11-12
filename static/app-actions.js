@@ -9,6 +9,7 @@ async function act(el) {
     el.disabled = true;
     try { await fn(); if (done) toast(done); } catch (e) { toast(e.message, true); } finally { el.disabled = false; }
   };
+  if (a.startsWith('lead') || a === 'openUrl') return leadAct(el);
   if (a === 'updatedOk') { updated = null; $('#updatedBar')?.remove(); if (el.getAttribute('href')) location.hash = el.getAttribute('href'); return; }
   if (a === 'updateLater') { updateBarLater = update?.version || null; $('#updateBar')?.remove(); return; }
   if (a === 'updateCheck') {

@@ -63,10 +63,11 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
 (async () => {
   const only = process.argv.slice(2);
   const names = Object.keys(VARIANTS).filter(n => !only.length || only.includes(n));
-  if (only.some(n => n !== 'app' && n !== 'profile' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile`); process.exit(1); }
+  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
   // Job Hunt's side: says its version, and answers a form's questions.
   let asked = null;
   let picked = '';
+  let leads = null;
   let bridge;
   try {
     bridge = await listen(http.createServer((req, res) => {
@@ -75,6 +76,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
       req.on('data', c => { body += c; });
       req.on('end', () => {
         if (req.url === '/ext/ping') return json(res, { ok: true, version: VERSION });
+        if (req.url === '/ext/leads') { leads = JSON.parse(body || '{}'); const hiring = leads.posts.filter(p => /hiring/i.test(p.text)).length; return json(res, { seen: leads.posts.length, hiring, added: hiring, note: '' }); }
         if (req.url === '/ext/pick') { picked = JSON.parse(body || '{}').job_id || ''; return json(res, { ok: true }); }
         if (req.url === '/ext/fill') {
           asked = JSON.parse(body || '{}');
@@ -95,7 +97,8 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   } catch (e) { console.log('skipped: 127.0.0.1:47613 is in use (is Job Hunt running here?)'); process.exit(2); }
   const html = fs.readFileSync(path.join(__dirname, 'workday.html'));
   const profileHtml = fs.readFileSync(path.join(__dirname, 'profile.html'));
-  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/match/profile') ? profileHtml : html); }), 0);
+  const postsHtml = fs.readFileSync(path.join(__dirname, 'posts.html'));
+  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
   const base = `http://127.0.0.1:${site.address().port}/apply`;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
@@ -210,6 +213,42 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (got.applied || got.drop) problems.push('I submitted it or Not interested is offered on a profile');
     console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'profile'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  ${got.title || 'no title'} at ${got.employer || 'no employer'}, from ${got.start || 'no date'}`);
     if (problems.length) { failed.push('profile'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
+    await page.close();
+  }
+  // Hiring posts: a page of posts (a stand-in for LinkedIn's search) read by the extension and sent
+  // to Job Hunt, each with who wrote it and its own link; and one ordinary page, sent as chosen.
+  if (!only.length || only.includes('posts')) {
+    const page = await ctx.newPage();
+    const url = `http://127.0.0.1:${site.address().port}/search/results/content/?keywords=hiring`;
+    await page.goto(url);
+    const t0 = Date.now();
+    const send = (url, chosen) => sw.evaluate(async ({ url, chosen }) => {
+      const [tab] = await chrome.tabs.query({ url: url.split('?')[0] + '*', active: true });
+      try { return await sendPosts(tab.id, chosen); } catch (e) { return { error: e.message }; }
+    }, { url, chosen });
+    const r = await send(url, false);
+    const problems = [];
+    const got = (leads && leads.posts) || [];
+    if (r.error) problems.push(`sending failed: ${r.error}`);
+    if (got.length !== 3) problems.push(`${got.length} posts were read, not 3 (a nested box read twice, or one missed)`);
+    const d = got[0] || {};
+    if (d.author !== 'Dana Okafor') problems.push(`the first post's writer is "${d.author}", not "Dana Okafor"`);
+    if (d.headline !== 'Co-founder at Brightloop') problems.push(`her headline is "${d.headline}"`);
+    if (d.link !== 'https://www.linkedin.com/in/dana-okafor-123') problems.push(`her profile link is "${d.link}"`);
+    if (d.url !== 'https://www.linkedin.com/feed/update/urn:li:activity:7001/') problems.push(`the post's link is "${d.url}"`);
+    if (!/closed our seed round/.test(d.text || '')) problems.push('the post\'s text is cut short');
+    if (got[2] && (got[2].link !== 'https://www.linkedin.com/company/northwind-robotics' || /see more/.test(got[2].text))) problems.push(`a company's post: link "${got[2].link}", text ends "${got[2].text.slice(-20)}"`);
+    if (leads && leads.chosen) problems.push('a page of many posts was sent as one you chose');
+    if (!r.error && (r.added !== 2 || !r.many)) problems.push(`Job Hunt's answer didn't come back (${JSON.stringify(r)})`);
+    // An ordinary page (the mock form): one post, kept because you chose it.
+    leads = null;
+    const other = await ctx.newPage();
+    await other.goto(`${base}?click=any`);
+    const r2 = await send(`${base}?click=any`, true);
+    if (r2.error || !leads || leads.posts.length !== 1 || !leads.chosen) problems.push(`one page you chose wasn't sent as one chosen post (${JSON.stringify(r2).slice(0, 120)})`);
+    await other.close();
+    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'posts'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  ${got.map(p => p.author).join(', ') || 'no posts'}`);
+    if (problems.length) { failed.push('posts'); for (const p of problems) console.log(`        ${p}`); }
     await page.close();
   }
   await ctx.close();

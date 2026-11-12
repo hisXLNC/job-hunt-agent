@@ -262,6 +262,9 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
         ("POST", "/ext/salary" | "/ext/dismiss" | "/ext/applied") if crate::fill::job_for_page(agent, url, title).is_ok_and(|j| j.id == crate::fill::PROFILE) => Ok(json!({ "ok": true, "profile": true })),
         ("POST", "/ext/salary") => crate::fill::job_for_page(agent, url, title).and_then(|j| agent.found_salary(&j.id, b["text"].as_str().unwrap_or(""), "on the company's page")).map(|n| json!({ "new": n })),
         ("POST", "/ext/dismiss") => crate::fill::job_for_page(agent, url, title).and_then(|j| agent.db().set_status(&j.id, "dismissed", "not interested (from your browser)").map(|_| json!({ "ok": true }))),
+        // Hiring posts read from the page you're on (LinkedIn's post search, or one page you chose).
+        ("POST", "/ext/leads") => crate::leads::add_posts(agent, b["posts"].as_array().map(|a| a.as_slice()).unwrap_or(&[]), b["chosen"].as_bool().unwrap_or(false)),
+        ("GET", "/ext/leads/searches") => Ok(json!({ "searches": crate::leads::linkedin_searches(agent).into_iter().map(|(t, u)| json!({ "title": t, "url": u })).collect::<Vec<_>>() })),
         ("POST", "/ext/learn") => crate::fill::learn(agent, &fields).map(|n| json!({ "kept": n })),
         ("POST", "/ext/applied") => crate::fill::job_for_page(agent, url, title)
             .and_then(|j| crate::fill::submitted_with(agent, &j.id, url, b["auto"].as_bool().unwrap_or(false), &fields).map(|_| json!({ "ok": true }))),

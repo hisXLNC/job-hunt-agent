@@ -454,6 +454,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 })));
             }
             ["api", "usage"] => return Ok(Resp::json(&agent.usage_summary())),
+            // Leads: people saying they're hiring and companies that just raised money (see leads.rs).
+            ["api", "leads"] => return Ok(Resp::json(&crate::leads::view(agent))),
             // A company's full rating (lists carry only the stars), for the popup on a star.
             ["api", "rating"] => {
                 let company = req.query.get("company").cloned().unwrap_or_default();
@@ -1500,6 +1502,40 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
             });
             Ok(Resp::json(&json!({ "started": true })))
+        }
+        ["api", "leads", "find"] => {
+            if agent.is_running("leads") {
+                return Err(Error("Job Hunt is already looking for leads.".into()));
+            }
+            if agent.engine_name() != "code" {
+                return Err(Error("Looking for leads on the web needs Claude Code on this PC (Settings \u{2192} Accounts). Hiring posts you send from your browser work without it.".into()));
+            }
+            crate::leads::find_in_background(agent);
+            Ok(Resp::json(&json!({ "started": true })))
+        }
+        ["api", "leads", "daily"] => {
+            agent.db().set("leads.daily", if b["on"].as_bool() == Some(true) { "1" } else { "" })?;
+            ok()
+        }
+        ["api", "leads", "add"] => Ok(Resp::json(&crate::leads::add_own(agent, s(&b, "url"), s(&b, "text"))?)),
+        ["api", "leads", "read"] => Ok(Resp::json(&json!({ "read": crate::leads::size_up_waiting(agent)? }))),
+        ["api", "leads", id, action] => {
+            let index = b["index"].as_u64().unwrap_or(0) as usize;
+            let lead = match *action {
+                "aside" => crate::leads::set_aside(agent, id, false)?,
+                "back" => crate::leads::set_aside(agent, id, true)?,
+                "site" => crate::leads::set_site(agent, id, s(&b, "site"))?,
+                "person" => crate::leads::set_person(agent, id, index, &b)?,
+                "draft" => crate::leads::draft(agent, id, index)?,
+                "sent" => crate::leads::sent(agent, id, index)?,
+                "replied" => crate::leads::replied(agent, id, index)?,
+                "emails" => {
+                    let n = crate::leads::look_for_emails(agent, id)?;
+                    return Ok(Resp::json(&json!({ "found": n })));
+                }
+                _ => return Err(Error("No such action.".into())),
+            };
+            Ok(Resp::json(&json!({ "lead": lead })))
         }
         ["api", "read-link"] => {
             // Fill in the Add a job form from a link, without Claude.

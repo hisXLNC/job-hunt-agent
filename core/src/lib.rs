@@ -14,6 +14,7 @@ pub mod db;
 pub mod filters;
 pub mod fill;
 pub mod google;
+pub mod leads;
 pub mod links;
 pub mod logos;
 pub mod mcp;

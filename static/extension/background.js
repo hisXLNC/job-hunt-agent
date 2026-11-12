@@ -110,7 +110,21 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
     await run(tab.id, () => window.__jobhunt && window.__jobhunt.start(), []);
   } catch (e) { /* a page extensions can't run on (the browser's own pages, the web store) */ }
 });
+// Leads: read the posts on a tab (clip.js's clipPosts) and send them to Job Hunt, which keeps the
+// ones where someone says they're hiring. `chosen`: a page you picked yourself, kept whatever it says.
+async function sendPosts(tabId, chosen) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['clip.js'] });
+  const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: () => clipPosts() });
+  if (!result || !result.posts.length) throw new Error(chosen ? 'Select the post\'s text on the page, then press this again.' : 'No posts found on this page. Scroll so some are showing, then press this again.');
+  // One page you chose is kept whatever it says; a page of many is sieved for the hiring ones.
+  const r = await ask('/ext/leads', { posts: result.posts, chosen: !!chosen && !result.many });
+  return { ...r, many: result.many };
+}
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg.posts) {
+    sendPosts(msg.posts, msg.chosen).then(v => reply({ ok: true, v }), e => reply({ ok: false, error: e.message }));
+    return true;
+  }
   if (msg.check) {
     checkVersion().then(reply, () => reply({ ok: true }));
     return true;

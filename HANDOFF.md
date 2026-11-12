@@ -55,6 +55,18 @@ and `DEVELOPING.md`.
   `app.js` or `pipeline.rs` for something, look in the parts too. The Rust linter's safe fixes
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
+- **2.49.0: Leads.** `core/src/leads.rs` (kept as one JSON list under the key `leads`, not as jobs):
+  hiring posts the extension reads (`clip.js` `clipPosts`, sent by `background.js` `sendPosts` to
+  `/ext/leads`), funding news and posts from one web search (`Llm::find_leads`, Claude Code only, run
+  on request or once a day when `leads.daily` is `1`), and ones pasted in. `looks_like_hiring` is a
+  free sieve; `Llm::size_up_leads` then reads up to eight at a time against the CV (fit, where you'd
+  help, points worth saying) and drops what isn't hiring. People get a likely address (first name at
+  the site, flagged `guess`) and any the site publishes (`published_emails`). The user writes the
+  message; Rough draft reuses `outreach` with a brief that says there is no posting. One follow-up
+  after a week, as for recruiters. The screen is `static/app-leads.js` (`#leads`, a tab of the Queue).
+  **Not seen against the real LinkedIn**: the post selectors and the search link's parameters were
+  written from memory and tested on `tools/ext_test/posts.html`. A new `Llm` method must also be
+  forwarded in `usage.rs` (`Metered`), or it answers "isn't available" in the app though tests pass.
 - **2.46.0, and why.** The Queue lost its side column (search menu on the Search button, email
   button, `week-line` under the heading; `deck.solo`), the Queue's filters move beside Select all
   after render (`applyQueueView`), and the guided setup (`showWelcome`) is a list of steps with one

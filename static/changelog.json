@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.49.0",
+    "date": "2026-11-12",
+    "title": "Leads: hiring posts and newly funded companies",
+    "changes": [
+      "A new Leads tab in the Queue: people saying they are hiring, and companies that just raised money, to write to directly before or instead of applying to a posting.",
+      "The extension reads hiring posts from LinkedIn: open one of the post searches Job Hunt gives you for your job titles, press the extension's button, and choose Send this page's hiring posts. Any other page can be added as a lead too.",
+      "Claude can look on the web for seed and Series A rounds and founders' own hiring posts in your field: when you ask, or once a day if you turn that on (it is off to begin with).",
+      "Each lead shows how well you fit, where you would help, things worth saying, and who to write to, with their profile and a likely or published email address.",
+      "You write the message yourself, with a rough draft if you want a starting point. Job Hunt keeps who you wrote to, suggests one follow-up after a week, and notes who replied."
+    ]
+  },
+  {
     "version": "2.48.0",
     "date": "2026-11-12",
     "title": "Profiles on job sites, one look for scores, and less repetition",

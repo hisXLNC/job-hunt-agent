@@ -2710,6 +2710,11 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
             out.push("discover");
         }
     }
+    // Leads from the web (companies that raised money, people saying they're hiring): once a day,
+    // when you've turned that on.
+    if ready && !agent.budget_wait() && !out.contains(&"search") && crate::leads::due(agent) {
+        out.push("leads");
+    }
     let checked_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.check"))
         .map(|t| (now - t.with_timezone(&Utc)).num_hours() < 20)
         .unwrap_or(false);
@@ -2766,6 +2771,7 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
             "backup" => backup_in_background(agent),
             "sync" => sync_in_background(agent),
             "check-postings" => check_in_background(agent),
+            "leads" => crate::leads::find_in_background(agent),
             "discover" => {
                 let a = agent.clone();
                 std::thread::spawn(move || match a.discover_boards() {
@@ -3075,6 +3081,9 @@ impl Agent {
     /// look, so the page doesn't wait on the network; see sync::overview_view).
     pub fn overview_with(&self, newer: Value, in_use: Value) -> R<Value> {
         let profile = self.profile();
+        // Leads you haven't written to yet: the number on the Queue's Leads tab. (Counted here,
+        // before the database is held for the rest.)
+        let leads_open = crate::leads::open_count(self);
         let follow_ups: Vec<Value> = self.follow_ups_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
         // Companies you've applied to: for "Applied here before" on the roles in your lists.
         let mut sent_to: BTreeMap<String, Vec<Value>> = BTreeMap::new();
@@ -3167,6 +3176,7 @@ impl Agent {
             "weeks": weeks.iter().map(|(d, c)| json!({"week": d, "count": c})).collect::<Vec<_>>(),
             "ready": ready,
             "to_tailor": to_tailor,
+            "leads": leads_open,
             "recruiter_asks": asks,
             "track_labels": profile.tracks.iter().map(|t| (t.name.clone(), t.label.clone())).collect::<BTreeMap<_, _>>(),
             "quiet": quiet,

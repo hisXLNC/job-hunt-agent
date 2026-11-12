@@ -237,7 +237,7 @@ def verify(quick=False):
     # In a real browser, against the preview with sample data. Skipped where Playwright isn't installed.
     steps.append(("Screens work (click-through)", [sys.executable, "tools/screen_test.py"], ROOT))
     # The extension, loaded for real, filling a stand-in Workday page (skills, Field of Study).
-    steps.append(("Extension fills a form (mock Workday)", ["node", "tools/ext_test/ext_test.js", "std", "odd", "typing", "keys", "app", "profile"], ROOT))
+    steps.append(("Extension fills a form (mock Workday)", ["node", "tools/ext_test/ext_test.js", "std", "odd", "typing", "keys", "app", "profile", "posts"], ROOT))
     if not quick:
         steps.append(("Windows app compiles", ["cargo", "check", "-q", "--manifest-path", "desktop/src-tauri/Cargo.toml"], ROOT))
     env = dict(os.environ, CARGO_TERM_COLOR="never")

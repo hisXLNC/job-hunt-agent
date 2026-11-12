@@ -36,6 +36,9 @@ in), your CV, where you want to work, where to look, and your first search.
   then **Approve**.
 - **Apply:** Job Hunt opens the company's form and fills it in. You check it and press Submit. When
   the site confirms, Job Hunt marks it applied (or press **I submitted it**).
+- **Leads:** people saying they're hiring (read from LinkedIn's posts by the extension) and companies
+  that just raised money, each with how well you fit, where you'd help and who to write to. You write
+  the message; Job Hunt keeps track of who you wrote to and who replied.
 - **Email:** replies from employers are sorted and matched to the application; interview requests
   get a draft reply with times that suit you.
 - Closing the window keeps Job Hunt running in the tray (next to the clock), so searches and email

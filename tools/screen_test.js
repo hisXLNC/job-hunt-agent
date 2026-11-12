@@ -168,6 +168,23 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.selectOption('#otherCard [name=service]', '');
   check(await page.evaluate(() => !document.querySelector('[data-other-url]').hidden), 'Another AI: choosing "Another one" asks for its address');
 
+  // Leads: hiring posts and newly funded companies, each with who to write to. Your own message is
+  // kept; once it's sent the lead moves to Written to and off the tab's count.
+  await at('leads');
+  const leadCards = () => page.$$eval('.lead', l => l.length);
+  const leadTab = async () => Number((await text('.qsteps a.leads-tab .n')).trim());
+  const hadLeads = await leadCards();
+  check(hadLeads >= 2 && await leadTab() === hadLeads, `Leads: the sample leads are listed, and counted on the Queue's tab (${hadLeads})`);
+  check(await page.evaluate(() => { const c = document.querySelector('.lead'); return !!c && !!c.querySelector('.score') && /Where you'd help/.test(c.textContent) && !!c.querySelector('.lead-person textarea'); }), 'Leads: each has its fit, where you\'d help, and a box to write in');
+  check((await page.$$('.lead-way [data-act=openUrl]')).length >= 1, 'Leads: a LinkedIn post search for each kind of role you look for');
+  await page.fill('.lead .lead-person textarea', 'Hi, saw your post. I ran a programme like the one you describe.');
+  await page.click('.lead .lead-person [data-act=leadSent]');
+  check(await until(async () => await leadCards() === hadLeads - 1 && await leadTab() === hadLeads - 1, 15), 'Leads: I sent it takes the lead off what\'s waiting');
+  await page.click('[data-act=leadsShow][data-show=wrote]');
+  check(await until(async () => page.evaluate(() => /Written to/.test(document.querySelector('.lead-who')?.textContent || '') && /saw your post/.test(document.querySelector('.lead-sent .posting')?.textContent || '')), 15), 'Leads: under Written to, with what you wrote');
+  await page.click('.lead [data-act=leadReplied]');
+  check(await until(async () => page.evaluate(() => /Replied/.test(document.querySelector('.lead-who')?.textContent || '')), 15), 'Leads: They replied is kept');
+
   // The Queue's own sort and filters: Shows pay hides the jobs that state none, and is remembered.
   await at('overview');
   await page.evaluate(() => localStorage.setItem('jh.queueView', 'list'));

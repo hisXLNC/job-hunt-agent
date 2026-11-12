@@ -136,7 +136,7 @@ const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</
 /** Four places. Queue: what's waiting for you, and behind its last tab every job, wherever it stands. Inbox: the email about them. Calendar: interviews and reminders. Me: what you're looking for, your CVs and details, the files tailored from them, and how it's going. The same four are the phone's tabs. Settings (the gear) has the accounts, the job sources and the app itself. */
 const NAV = [['overview', 'Queue'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['cvs', 'Me']];
 /** Pages that belong to a place: a job, applying, review and every job to the Queue; the tailored files and the insights to Me; Recruiters to Inbox. */
-const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applications: 'overview', pipeline: 'overview', review: 'overview', welcome: 'overview', documents: 'cvs', results: 'cvs', recruiters: 'inbox' };
+const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applications: 'overview', pipeline: 'overview', review: 'overview', welcome: 'overview', leads: 'overview', documents: 'cvs', results: 'cvs', recruiters: 'inbox' };
 /** Which place a page belongs to. What you're looking for is part of Me; where it looks is part of Settings. */
 const placeOf = () => { const [page, arg] = (location.hash.slice(1) || 'overview').split('/'); return page === 'search' ? (arg === 'what' ? 'cvs' : 'settings') : page === 'applications' && arg === 'files' ? 'cvs' : NAV_HOME[page] || page; };
 /** Each place's views, as the same row of tabs wherever you are in it. */
@@ -194,6 +194,7 @@ function queueTabs(on, view) {
   const all = overview ? queueItems(overview) : [];
   const n = k => all.filter(x => x.step === k).length;
   return `<nav class="tabs qsteps" aria-label="What's waiting, and every job"><a href="#overview" class="${on ? '' : 'on'}">Everything <span class="n">${queueCount(all)}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(id) ? '' : ' none'}">${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}
+      <a href="#leads" class="leads-tab${on === 'leads' ? ' on' : ''}${overview?.leads ? '' : ' none'}" title="People saying they're hiring and companies that just raised money: write to them directly">Leads <span class="n">${overview?.leads || 0}</span></a>
       <a href="#applications" class="all-jobs${on === 'jobs' ? ' on' : ''}" title="Every job Job Hunt has seen, wherever it stands: applied, closed, set aside">All jobs</a>
       ${view ? `<span class="tabs-gap"></span><span class="seg view-seg" role="group" aria-label="How to show them"><button type="button" data-act="queueView" data-view="list" class="${view === 'list' ? 'on' : ''}" title="Every listing at once">List</button><button type="button" data-act="queueView" data-view="one" class="${view === 'one' ? 'on' : ''}" title="One decision at a time, with everything you need to decide">One by one</button></span>` : ''}</nav>`;
 }
@@ -608,6 +609,7 @@ async function showRoute() {
     else if (name === 'applications' && FLOW.some(([id]) => id === arg)) { location.replace(`#overview/${arg}/list`); return; }
     else if (name === 'applications') { if (!overview || Date.now() - overviewAt > 1500) await refreshOverview(); await showPipeline(arg); }
     else if (name === 'overview') await showOverview(arg);
+    else if (name === 'leads') { if (!overview) await refreshOverview(); await showLeads(); }
     else if (name === 'job') await showJob(arg);
     // The old Review page: the Queue's tailored applications, where each opens with its CV and letter.
     else if (name === 'review') { location.replace('#overview/approve'); return; }

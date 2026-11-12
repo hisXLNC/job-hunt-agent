@@ -92,6 +92,29 @@ impl Llm for FakeLlm {
     fn outreach(&self, c: &str, _cv: &str, job: &Job, contact: &str, brief: &str) -> R<String> {
         Ok(format!("Hi {}, I applied for {}. {c}\n[{brief}]", contact.lines().next().unwrap_or(""), job.title))
     }
+    fn size_up_leads(&self, _c: &str, _cv: &str, _wants: &str, leads: &str) -> R<Vec<crate::claude::LeadView>> {
+        // Each "### n" block: hiring unless it says NOT-HIRING; the company from its Company line.
+        Ok(leads.split("### ").skip(1).map(|b| {
+            let n = b.lines().next().and_then(|x| x.trim().parse().ok()).unwrap_or(0);
+            let company = b.lines().find_map(|l| l.strip_prefix("Company: ")).map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).unwrap_or_else(|| "Northwind".into());
+            crate::claude::LeadView { n, hiring: !b.contains("NOT-HIRING"), company, about: "Workflow software for clinics".into(), role: "Senior Program Manager".into(), site: String::new(), fit: 82,
+                help: vec!["Their platform rebuild is the kind of programme you ran at the bank.".into(), "You've managed two system integrators; they're about to hire their first.".into()],
+                points: vec!["Moved 30 services online in 14 months.".into(), "Ran a 40-person programme across three vendors.".into()] }
+        }).collect())
+    }
+    fn find_leads(&self, _c: &str, _cv: &str, _wants: &str, skip: &str) -> R<Vec<crate::claude::FoundLead>> {
+        self.calls.lock().unwrap().push(format!("find_leads:{skip}"));
+        let person = |name: &str, role: &str| crate::claude::LeadPerson { name: name.into(), role: role.into(), linkedin: format!("https://www.linkedin.com/in/{}", name.to_lowercase().replace(' ', "-")) };
+        let all = vec![
+            crate::claude::FoundLead { kind: "funding".into(), company: "Northwind Robotics".into(), about: "Warehouse robots for mid-sized retailers".into(), detail: "Raised a $6M seed round, announced November 3".into(),
+                role: String::new(), url: "https://news.example/northwind-seed".into(), site: "northwind.example".into(), people: vec![person("Maya Chen", "Co-founder and CEO"), person("Omar Haddad", "Co-founder and CTO")],
+                fit: 78, help: vec!["They're going from pilots to rollouts: the delivery work you led for 40 stores.".into()], points: vec!["Rolled out to 40 sites in a year.".into(), "Managed two hardware vendors.".into()] },
+            crate::claude::FoundLead { kind: "post".into(), company: "Ledgerline".into(), about: "Accounting tools for freelancers".into(), detail: "Their COO wrote that they're hiring a programme lead for a banking integration".into(),
+                role: "Programme Lead".into(), url: "https://blog.example/ledgerline-hiring".into(), site: "ledgerline.example".into(), people: vec![person("Priya Nair", "COO")],
+                fit: 86, help: vec!["A banking integration: you've delivered two under regulation.".into()], points: vec!["Delivered a payments integration with two banks.".into()] },
+        ];
+        Ok(all.into_iter().filter(|l| !skip.contains(&l.company)).collect())
+    }
     fn find_recruiters(&self, job: &Job) -> R<Vec<crate::claude::FoundPerson>> {
         Ok(vec![crate::claude::FoundPerson { name: "Priya Shah".into(), title: format!("Talent Acquisition Partner at {}", job.company), linkedin: "https://www.linkedin.com/in/priya-shah-ta".into(), why: "hires for PMO roles in Toronto".into() }])
     }
