@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.58.0] - 2026-11-13
+
+Searches only at their scheduled time.
+
+### Changes
+
+- A scheduled search now runs only during its own hour. One that was missed (Job Hunt closed, the computer off, an update being installed) is skipped, not run when the app next opens or restarts after an update. Search now still runs one whenever you like.
+- Adding employers by itself no longer starts a search: their jobs come with the next scheduled one.
+- The search times every install began with (7 AM, and 4 PM for a second) move once to noon and 5 PM, just after the two times of day most postings go up. Times you chose yourself are kept.
+- Settings, Job sources, When shows the hours your own postings went up, and offers the two search times that follow from them once 40 postings say when they were posted.
+
 ## [2.57.0] - 2026-11-13
 
 Recommended career paths, and the Workday form fixes.
@@ -1798,6 +1809,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.58.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.0
 [2.57.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.57.0
 [2.56.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.56.1
 [2.56.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.56.0
