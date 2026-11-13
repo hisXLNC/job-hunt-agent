@@ -2,8 +2,9 @@
   {
     "version": "2.65.2",
     "date": "2026-11-13",
-    "title": "Settings: App",
+    "title": "The fix beside the problem",
     "changes": [
+      "When a source can't work because Claude Code is signed out, its notice now has the Sign in to Claude button on it (under Needs attention and in the list of sources), not directions to another page.",
       "The last place in Settings is called App again, not This computer."
     ]
   },

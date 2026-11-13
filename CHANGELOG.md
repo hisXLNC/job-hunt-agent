@@ -6,10 +6,11 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.65.2] - 2026-11-13
 
-Settings: App.
+The fix beside the problem.
 
 ### Changes
 
+- When a source can't work because Claude Code is signed out, its notice now has the Sign in to Claude button on it (under Needs attention and in the list of sources), not directions to another page.
 - The last place in Settings is called App again, not This computer.
 
 ## [2.65.1] - 2026-11-13

@@ -1387,6 +1387,13 @@ const testBar = p => {
   return `<span class="test-bar" title="Testing"><span class="meter"><i style="width:${Math.max(4, done / total * 100)}%"></i></span><span class="small muted">${done} of ${total} checked</span></span>`;
 };
 let connWasTesting = false;
+/** A problem whose fix is a button: the button goes beside it, so there's nowhere else to go.
+ *  Claude Code signed out: Sign in to Claude, here. Returns [what to say, the button]. */
+function connFix(r) {
+  const signedOut = /Claude Code isn't signed in/.test(r.detail || '');
+  if (!signedOut) return [r.detail || '', ''];
+  return ["Claude Code isn't signed in on this PC. Sign it in here, then press Test.", '<button class="btn primary sm" data-act="claudeSetup" data-install="">Sign in to Claude</button>'];
+}
 async function renderConnStatus() {
   clearTimeout(connPoll);
   let d;
@@ -1398,19 +1405,20 @@ async function renderConnStatus() {
     t.querySelector('.tile-state').innerHTML = `<span class="pill ${cls}">${label}</span>`;
     t.classList.toggle('off', ['off', 'setup'].includes(r.status));
     t.classList.toggle('problem', ['problem', 'partial'].includes(r.status));
+    const [said, fix] = connFix(r);
     t.querySelector('.tile-detail').innerHTML = ['off', 'setup'].includes(r.status) ? ''
-      : `${esc(r.detail)}${r.at ? ` <span class="muted">· ${esc(ago(r.at))}</span>` : ''}`;
+      : `${esc(said)}${r.at ? ` <span class="muted">· ${esc(ago(r.at))}</span>` : ''}`;
     // The one being tested shows how far along it is instead of its buttons.
     t.querySelector('.tile-acts').innerHTML = d.progress && d.progress.only === r.id ? testBar(d.progress)
-      : (r.actions || []).filter(a => !a.startsWith('goto:')).map(a => connBtn(r, a, d.testing)).join('');
+      : fix + (r.actions || []).filter(a => !a.startsWith('goto:') && !(fix && a.startsWith('link:'))).map(a => connBtn(r, a, d.testing)).join('');
   });
   const box = $('#connStatus');
   if (box) {
     const probs = d.rows.filter(r => ['problem', 'partial'].includes(r.status));
     box.hidden = !probs.length;
-    box.innerHTML = `<header><h2>Needs attention</h2></header>${probs.map(r => `<div class="conn-row problem">
-      <span class="conn-name"><b>${esc(r.name)}</b></span><span class="grow small">${esc(r.detail)}</span>
-      <span class="row todo-act">${(r.actions || []).map(a => connBtn(r, a, d.testing)).join('')}</span></div>`).join('')}`;
+    box.innerHTML = `<header><h2>Needs attention</h2></header>${probs.map(r => { const [said, fix] = connFix(r); return `<div class="conn-row problem">
+      <span class="conn-name"><b>${esc(r.name)}</b></span><span class="grow small">${esc(said)}</span>
+      <span class="row todo-act">${fix}${(r.actions || []).filter(a => !(fix && a.startsWith('link:'))).map(a => connBtn(r, a, d.testing)).join('')}</span></div>`; }).join('')}`;
   }
   // Done testing: the sources page shows each site's result.
   if (connWasTesting && !d.testing && location.hash.startsWith('#search/setup')) { connWasTesting = false; settingsCache = null; route(); return; }
