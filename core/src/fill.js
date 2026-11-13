@@ -170,7 +170,7 @@
         <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
         <button class="b" data-k="stop" hidden>Stop: I'll submit it</button></div>
       <div class="f">
-        <button class="b" data-k="diag" hidden title="Copies what Job Hunt saw and did on this page (each box, what it meant to put there and what the box holds now), to paste to Claude when something was filled in wrongly or not at all">Copy details</button>
+        <button class="b" data-k="diag" ${EXT ? '' : 'hidden'} title="Copies what Job Hunt saw and did on this page (each box, what it meant to put there and what the box holds now), to paste to Claude when something was filled in wrongly or not at all">Copy details</button>
         <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button>
         <button class="b" data-k="brief" ${EXT ? '' : 'hidden'} title="For a form Job Hunt can't fill: copies everything another assistant needs to fill it in (the Claude extension for Chrome, say): who you are, your facts, this job's tailored CV and cover letter, and to stop before Submit. Paste it to that assistant on this page.">Copy a brief for Claude</button>
         <button class="b" data-k="drop" title="Not for you after all (the pay, say): Job Hunt sets it aside${JOB.queue ? ' and opens the next one' : ''}">Not interested</button></div></div>`;
@@ -178,7 +178,7 @@
     barEl = root.querySelector('.bar');
     root.querySelectorAll('[data-k]').forEach(b => { buttons[b.dataset.k] = b; });
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
-    buttons.fill.onclick = () => start();
+    buttons.fill.onclick = () => { trace('Fill in this form pressed'); start(); };
     chooseEl = root.querySelector('.c');
     askEl = root.querySelector('.q');
     buttons.replace.onclick = async () => {
@@ -197,6 +197,7 @@
     };
     buttons.next.onclick = () => nextAmber();
     buttons.diag.onclick = async () => {
+      if (!(diag.fields || []).length && !diag.snapshot) diag = { ...diag, version: ME, snapshot: snapshot() };
       let text = 'Job Hunt form details ' + JSON.stringify({ page: location.hostname, ...diag, trail: trail.map(e => ({ ...e, t: new Date(e.t).toISOString() })) }, null, 1);
       // With the extension's own log (what it asked Job Hunt and what came back, no answers in it).
       if (EXT) { flush(); try { const more = await Promise.race([chrome.runtime.sendMessage({ report: 'copy details', page: location.hostname }), wait(4000)]); if (more) text += '\n\n' + more; } catch (e) { /* the extension was updated */ } }
@@ -294,6 +295,12 @@
       if (own(b) || !shown(b)) continue;
       const t = clean(b.textContent || b.getAttribute('aria-label') || '');
       if (!t || t.length > 40 || !ADD.test(t) || NOT_ADD.test(t)) continue;
+      // The button that saves the entry you're filling in ("Add" beside Cancel, a small form's own
+      // submit) adds no new entry: pressed as one, it sent the empty form (Job Bank's Add a work
+      // experience came back with "Value is required" and a fresh page, as if nothing had happened).
+      const beside = b.parentElement ? [...b.parentElement.querySelectorAll('button,input[type=button],input[type=submit],a')].some(x => x !== b && /^\s*cancel\s*$/i.test(x.textContent || x.value || '')) : false;
+      const saves = /^\s*add\s*$/i.test(t) && b.type === 'submit' && !b.hasAttribute('data-automation-id') && b.form && b.form.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]),select,textarea').length >= 2;
+      if (beside || saves) continue;
       // Its section: the nearest heading before it that names one (a heading inside the entry, say
       // a date picker's, doesn't count), or what the button says ("Add Another Work Experience").
       let sec = sectionOf(b);
@@ -1286,7 +1293,31 @@
     amberAt++;
   }
   let sent = null, opens = 0, unfolded = false;
+  // What's on the page, for Copy details when nothing was filled (or Job Hunt tripped on the page):
+  // each box and button with its label, and the form's own markup without what's typed in it.
+  const snapshot = () => {
+    try {
+      return { path: location.pathname, boxes: [...document.querySelectorAll('input,select,textarea,button,a[role=button]')].filter(x => !own(x)).slice(0, 80).map(x => ({ tag: x.tagName.toLowerCase(), type: x.type || undefined, id: x.id || undefined, name: x.name || undefined, shown: shown(x), required: x.required || x.getAttribute('aria-required') === 'true' || undefined,
+          label: clean((x.labels && x.labels[0] ? x.labels[0].textContent : '') || x.getAttribute('aria-label') || (/^(BUTTON|A)$/.test(x.tagName) ? x.textContent : '') || x.placeholder || '').slice(0, 70) })),
+        html: htmlOf(document.querySelector('main form, form, main') || document.body, 7000) };
+    } catch (e) { return { error: String(e && e.stack || e) }; }
+  };
+  // Pressing Fill in this form always ends in something said. A page that trips Job Hunt (it did
+  // nothing on Job Bank's Add a work experience, with nothing to go on) is said so, with what
+  // happened and what the page holds in Copy details.
   async function start(more, dates) {
+    try { return await startNow(more, dates); }
+    catch (e) {
+      trace(`error reading the page: ${e && e.stack || e}`);
+      diag = { ...diag, version: ME, error: String(e && e.stack || e).slice(0, 1500), snapshot: snapshot() };
+      flush('start error');
+      waitingSince = 0; waitNote = ''; progress(null);
+      if (buttons.fill) buttons.fill.disabled = false;
+      if (buttons.diag) buttons.diag.hidden = false;
+      status(`Job Hunt tripped on this page (${String(e && e.message || e).slice(0, 120)}). Press Copy details below and send it to Claude; or Copy a brief for Claude to have the Claude extension fill it in.`);
+    }
+  }
+  async function startNow(more, dates) {
     if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
     if (retired) return;

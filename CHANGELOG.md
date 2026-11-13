@@ -13,6 +13,8 @@ Folded forms, and a brief for Claude.
 - A form whose parts are folded away (Rogers' application: Expand all sections, then closed bars) showed Job Hunt no boxes, so it said there was no form. It now opens the sections first, then reads and fills them.
 - Copy a brief for Claude, at the foot of the panel: for a form Job Hunt cannot fill, it copies everything another assistant needs to fill it in on the page (the Claude extension for Chrome, say): your details and facts, this job's tailored CV and cover letter, answers already written, and the rule to stop before Submit. Paste it to that assistant.
 - When Job Hunt finds no form, the panel says so and points to the brief, and no longer only to the page's Apply button.
+- On a form that adds one entry (Job Bank's Add a work experience), the form's own Add button beside Cancel was taken for an add-another button and pressed, which sent the empty form: the page came back with Value is required and a fresh panel, as if nothing had happened. That button is now left for you.
+- Fill in this form always ends in something said. If a page trips Job Hunt, the panel says so, and Copy details (there from the start now, not only after a fill) includes what happened and what the page holds, so it can be put right.
 
 ## [2.65.7] - 2026-11-13
 
