@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.58.2] - 2026-11-13
+
+All jobs: a table that fits.
+
+### Changes
+
+- The All jobs table fits its card: the next step wraps instead of running over the age, and on narrower windows the Type column is left out so nothing is cut off.
+- Each company shows its logo in the table.
+- Pay written as bare figures reads as money (CAD 85,500–185,000).
+- An expired posting no longer also says Closes today.
+
 ## [2.58.1] - 2026-11-13
 
 Logos for companies that apply through Workday.
@@ -1818,6 +1829,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.58.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.2
 [2.58.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.1
 [2.58.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.0
 [2.57.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.57.0

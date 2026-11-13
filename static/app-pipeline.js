@@ -47,7 +47,7 @@ async function showPipeline(view) {
     <section class="card" style="padding:6px 10px"><table class="jobs" id="t-all"><thead><tr>${sortTh('Company')}${sortTh('Role')}${sortTh('Location')}${sortTh('Salary', 'num')}${sortTh('Fit', 'num')}${sortTh('Stage', 'rank')}${sortTh('Next step', 'num')}${sortTh('Age', 'date')}${sortTh('Type')}</tr></thead><tbody>
       ${jobs.map(j => `<tr class="click" data-expand="${esc(j.id)}" data-who="${esc(tracked[j.id]?.who || '')}" data-status="${esc(j.status)}" data-source="${esc(j.source)}"
         data-fit="${j.score_after ?? j.score ?? 0}" data-emp="${esc(empKind(j))}" data-pay="${salaryValue(j.salary) > 0 ? 1 : 0}" data-found="${+new Date(j.found_at || 0) || 0}" data-text="${esc(`${j.company} ${j.title} ${j.location || ''}`.toLowerCase())}">
-        <td class="co" data-v="${esc(j.company.toLowerCase())}">${coCell(j)}</td>
+        <td class="co" data-v="${esc(j.company.toLowerCase())}"><span class="co-line">${avatar(j.company)}<span class="co-name">${coCell(j)}</span></span></td>
         <td class="role" data-v="${esc(j.title.toLowerCase())}"><b>${esc(j.title)}</b> ${closedTag(j)}${deadlineTag(j)}${coLocLine(j)}<span class="phone-only"><br>${stagePill(j.status)}</span></td>
         <td class="loc small" data-v="${esc((j.location || '').toLowerCase())}">${locCell(j)}</td>
         <td class="small salary" data-v="${salaryValue(j.salary)}">${salaryCell(j)}</td>
@@ -176,7 +176,9 @@ function markRevision(r) {
 const salaryCell = j => {
   if (!j.salary) return '<span class="muted">—</span>';
   const [pay, ...rest] = String(j.salary).split(/\s+[•·|]\s+/);
-  return `<span title="${esc(j.salary)}">${esc(pay)}</span>${rest.length ? `<br><span class="muted">${esc(rest.join(' · '))}</span>` : ''}`;
+  // Bare figures read as money: "CAD 85500–185000" as "CAD 85,500–185,000".
+  const tidy = pay.replace(/(?<![\d.,])\d{5,}(?![\d.,]*\d)/g, n => Number(n).toLocaleString('en-US')).replace(/\s*[-–]\s*(?=[$\d])/g, '–');
+  return `<span title="${esc(j.salary)}">${esc(tidy)}</span>${rest.length ? `<br><span class="muted">${esc(rest.join(' · '))}</span>` : ''}`;
 };
 
 /** The top of a salary as a yearly number, for sorting: "$110,000–$135,000" → 135000, "CA$95K–120K" → 120000, "$45–$55/hour" → 114400. */

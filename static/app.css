@@ -1744,3 +1744,26 @@ details.kit > summary { cursor: pointer; }
 .hourbars span { flex: 1; background: var(--line); border-radius: 2px 2px 0 0; }
 .hourbars span.peak { background: var(--accent); }
 .hourticks { display: flex; justify-content: space-between; max-width: 420px; font-size: 11px; color: var(--muted); }
+
+/* All jobs: every column fits the card; the next step wraps instead of running over the age. */
+#t-all { table-layout: auto; width: 100%; }
+#t-all td.role { width: 26%; min-width: 180px; }
+#t-all td.co { min-width: 150px; }
+#t-all td.next { white-space: normal; max-width: 210px; min-width: 120px; }
+#t-all td.next .small { display: block; line-height: 1.35; }
+#t-all td.salary { max-width: 150px; white-space: normal; }
+#t-all td.nowrap { white-space: nowrap; padding-right: 10px; }
+#t-all td.role .pill { margin: 2px 4px 2px 0; }
+.co-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.co-line .avatar { width: 28px; height: 28px; border-radius: 8px; font-size: 13px; }
+.co-line .co-name { min-width: 0; }
+.card:has(> #t-all) { overflow-x: auto; }
+#t-all td.nowrap { white-space: normal; min-width: 64px; max-width: 96px; line-height: 1.3; }
+#t-all th, #t-all td { padding-left: 6px; padding-right: 6px; }
+@media (max-width: 1300px) and (min-width: 761px) {
+  #t-all th:nth-child(9), #t-all td:nth-child(9) { display: none; }
+  #t-all td.role { min-width: 150px; }
+  #t-all td.co { min-width: 120px; }
+  #t-all td.loc { min-width: 80px; }
+  #t-all td.salary { min-width: 70px; }
+}

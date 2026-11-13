@@ -402,7 +402,7 @@ const trackLabel = t => (settingsCache?.profile?.tracks || []).find(x => x.name 
 const stagePill = s => `<span class="pill ${esc(s)}">${esc(STAGES[s] || s)}</span>`;
 /** When the posting stops taking applications, if it says; red when it's two days or less away. */
 function deadlineTag(j) {
-  if (!j.deadline || j.closed_at || !['queued', 'ready', 'approved', 'skipped', 'saved'].includes(j.status)) return '';
+  if (!j.deadline || j.closed_at || expiredWhy(j) || !['queued', 'ready', 'approved', 'skipped', 'saved'].includes(j.status)) return '';
   const days = Math.round((new Date(j.deadline + 'T23:59:59') - Date.now()) / 86400000);
   if (days < 0 || days > 21) return '';
   return `<span class="pill ${days <= 2 ? 'crit' : 'warn'}" title="Last day to apply: ${esc(j.deadline)}">Closes ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : esc(fmtDate(j.deadline + 'T12:00:00'))}</span>`;

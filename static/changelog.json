@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.58.2",
+    "date": "2026-11-13",
+    "title": "All jobs: a table that fits",
+    "changes": [
+      "The All jobs table fits its card: the next step wraps instead of running over the age, and on narrower windows the Type column is left out so nothing is cut off.",
+      "Each company shows its logo in the table.",
+      "Pay written as bare figures reads as money (CAD 85,500–185,000).",
+      "An expired posting no longer also says Closes today."
+    ]
+  },
+  {
     "version": "2.58.1",
     "date": "2026-11-13",
     "title": "Logos for companies that apply through Workday",
