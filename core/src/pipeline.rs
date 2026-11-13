@@ -624,7 +624,8 @@ impl Agent {
     /// for the night by budget mode. A minute after each, so the hour has turned.
     pub fn next_wake(&self) -> Option<chrono::DateTime<Utc>> {
         use chrono::Datelike;
-        if self.secret("app.wake") != "1" {
+        // On unless you turned it off.
+        if self.secret("app.wake") == "0" {
             return None;
         }
         let p = self.profile();

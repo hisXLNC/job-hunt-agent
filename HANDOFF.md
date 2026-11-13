@@ -61,6 +61,8 @@ and `DEVELOPING.md`.
   longer searches. Defaults are noon and 5 PM (`search_hours_once` moves installs still on 7/16, once).
   `Agent::posting_hours` + `Profile::hours_after_peaks` feed `postingHoursHtml` in Settings (needs 40 timed postings).
   Call `posting_hours()` before taking the `db()` guard in `/api/settings`: inside it, it deadlocks.
+  Also 2.58.0: waking the PC (`app.wake`) is on unless set to "0"; `wake_timer` runs `powercfg` once per start to allow
+  wake timers on AC (result in `wake.allowed`). Untested on a real Windows PC.
 - **2.57.0: recommended career paths.** `CareerPath.recommended` / `recommended_why` (prompt in `career_system()`,
   kept to at most three and never all by `claude::tidy_recommended`). `careerHtml` shows them in `#careerRecs`, the
   table (`tr.rec`) and the cards (`.path.rec`). Careers stored before this have none: a hint says to press Think again.

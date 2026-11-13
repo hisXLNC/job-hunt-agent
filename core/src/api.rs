@@ -412,7 +412,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
             use base64::Engine;
             format!("data:image/{ext};base64,{}", base64::engine::general_purpose::STANDARD.encode(&b))
         })),
-        "app": { "version": host.version(), "autostart": host.autostart(), "close": Some(get("app.close")).filter(|c| !c.is_empty()).unwrap_or_else(|| "tray".into()), "keep_awake": get("app.keep_awake") != "0", "wake": get("app.wake") == "1", "update_auto": get("update.auto") == "1", "browser": get("app.browser"), "slept": serde_json::from_str::<Value>(&get("awake.slept")).ok(), "next_wake": next_wake, "last_wake": get("last.wake"), "data": agent.data.to_string_lossy() },
+        "app": { "version": host.version(), "autostart": host.autostart(), "close": Some(get("app.close")).filter(|c| !c.is_empty()).unwrap_or_else(|| "tray".into()), "keep_awake": get("app.keep_awake") != "0", "wake": get("app.wake") != "0", "update_auto": get("update.auto") == "1", "browser": get("app.browser"), "slept": serde_json::from_str::<Value>(&get("awake.slept")).ok(), "next_wake": next_wake, "last_wake": get("last.wake"), "data": agent.data.to_string_lossy() },
     }))
 }
 

@@ -495,6 +495,7 @@ fn wake_timer(app: AppHandle) {
             return;
         }
         let mut armed: Option<i64> = None;
+        let mut allowed = false;
         loop {
             let Some(ctx) = app.try_state::<Arc<Ctx>>() else {
                 std::thread::sleep(std::time::Duration::from_secs(30));
@@ -502,6 +503,16 @@ fn wake_timer(app: AppHandle) {
             };
             let agent = ctx.agent.clone();
             let next = agent.next_wake().map(|t| t.timestamp());
+            // Windows lets apps wake the PC only when its "Allow wake timers" setting is on, and on
+            // many PCs it isn't: turn it on for when the PC is plugged in (not on battery, so a
+            // laptop in a bag stays asleep). Once each time Job Hunt starts; failing is harmless.
+            if next.is_some() && !allowed {
+                allowed = true;
+                use std::os::windows::process::CommandExt;
+                let run = |args: &[&str]| std::process::Command::new("powercfg").args(args).creation_flags(0x0800_0000).status().map(|s| s.success()).unwrap_or(false);
+                let ok = run(&["/setacvalueindex", "scheme_current", "sub_sleep", "rtcwake", "1"]) && run(&["/setactive", "scheme_current"]);
+                let _ = agent.db().set("wake.allowed", if ok { "1" } else { "0" });
+            }
             if next != armed {
                 // SAFETY: the timer handle is valid; `due` outlives the call.
                 unsafe {

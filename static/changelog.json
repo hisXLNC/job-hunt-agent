@@ -2,12 +2,13 @@
   {
     "version": "2.58.0",
     "date": "2026-11-13",
-    "title": "Searches only at their scheduled time",
+    "title": "Searches only at their scheduled time, and the PC wakes for them",
     "changes": [
       "A scheduled search now runs only during its own hour. One that was missed (Job Hunt closed, the computer off, an update being installed) is skipped, not run when the app next opens or restarts after an update. Search now still runs one whenever you like.",
       "Adding employers by itself no longer starts a search: their jobs come with the next scheduled one.",
       "The search times every install began with (7 AM, and 4 PM for a second) move once to noon and 5 PM, just after the two times of day most postings go up. Times you chose yourself are kept.",
-      "Settings, Job sources, When shows the hours your own postings went up, and offers the two search times that follow from them once 40 postings say when they were posted."
+      "Settings, Job sources, When shows the hours your own postings went up, and offers the two search times that follow from them once 40 postings say when they were posted.",
+      "Job Hunt now wakes this PC from sleep for its scheduled tasks unless you turn that off (Settings, App), and turns on Windows' \"Allow wake timers\" for when the PC is plugged in. It already keeps the PC awake until the work is done."
     ]
   },
   {

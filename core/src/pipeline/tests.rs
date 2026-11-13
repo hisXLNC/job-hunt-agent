@@ -387,8 +387,10 @@ fn recruiters_you_know_and_asking_them() {
 #[test]
 fn next_wake_for_the_daily_search() {
     let s = setup();
-    assert!(s.agent.next_wake().is_none(), "off until turned on");
-    s.agent.db().set("app.wake", "1").unwrap();
+    // Waking the PC is on unless you turned it off.
+    s.agent.db().set("app.wake", "0").unwrap();
+    assert!(s.agent.next_wake().is_none(), "off when turned off");
+    s.agent.db().delete("app.wake").unwrap();
     let tz = s.agent.profile().tz();
     let w = s.agent.next_wake().unwrap().with_timezone(&tz);
     let now = Utc::now();

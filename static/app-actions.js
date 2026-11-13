@@ -1113,7 +1113,7 @@ document.addEventListener('change', async e => {
     return;
   }
   if (el.dataset.act === 'wakePc') {
-    await api('/api/settings/app', { method: 'POST', body: { wake: el.checked } }).then(() => { settingsCache = null; route(); toast(el.checked ? 'Job Hunt will wake this PC for its tasks. Check that Windows allows wake timers (see below).' : 'Job Hunt won\'t wake this PC.'); }).catch(err => toast(err.message, true));
+    await api('/api/settings/app', { method: 'POST', body: { wake: el.checked } }).then(() => { settingsCache = null; route(); toast(el.checked ? 'Job Hunt will wake this PC for its tasks when it is plugged in.' : 'Job Hunt won\'t wake this PC.'); }).catch(err => toast(err.message, true));
   }
   if (el.dataset.act === 'applyMode' || el.dataset.act === 'applyCv') {
     const body = el.dataset.act === 'applyMode' ? { mode: el.value } : { attach_cv: el.checked };
