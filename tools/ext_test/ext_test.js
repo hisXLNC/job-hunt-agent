@@ -51,10 +51,11 @@ function buildExtension(dir) {
 // The CV here has a school and a certificate the site's lists don't have, three languages (two
 // fluent, one not) and a second certificate, as the form that showed these bugs did.
 const LANGS = ['English', 'Arabic', 'French'];
-let lastFields = [];
-function answers(fields) {
+// The variants run side by side, each in its own browser: what belongs to one is kept under its name.
+const fieldsOf = {};
+function answers(fields, name) {
   const values = {}, files = {};
-  lastFields = fields || [];
+  fieldsOf[name] = fields || [];
   for (const f of fields || []) {
     const nth = Number((/(\d+)\s*$/.exec(f.section || '') || [])[1] || 1), sec = f.section || '';
     if (f.type === 'add') { if (/certif/i.test(sec)) values[f.key] = String(Math.max(0, 2 - (f.entries || 0))); else if (/language/i.test(sec)) values[f.key] = String(Math.max(0, 3 - (f.entries || 0))); }
@@ -81,11 +82,13 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   const names = Object.keys(VARIANTS).filter(n => !only.length || only.includes(n));
   if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
   // Job Hunt's side: says its version, and answers a form's questions.
-  let asked = null;
   let picked = '';
   let leads = null;
   const tickets = new Map(), logs = [];
-  let starts = 0, polls = 0, fault = {};
+  // Per variant (the page's address carries its name as v=): how often it asked, and what goes wrong for it.
+  const st = {}, of = n => (st[n] ||= { starts: 0, polls: 0, fault: {} });
+  const nameOf = url => { try { return new URL(url).searchParams.get('v') || 'misc'; } catch (e) { return 'misc'; } };
+  let ticketNo = 0;
   let bridge;
   try {
     bridge = await listen(http.createServer((req, res) => {
@@ -100,7 +103,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
         // The answers: in one request (/ext/fill, the phone), or for a ticket that is then asked
         // after (/ext/fill/start and /ext/fill/poll, the extension). ANSWER_DELAY=45000: Claude is slow.
         if (req.url === '/ext/fill' || req.url === '/ext/fill/start') {
-          asked = JSON.parse(body || '{}');
+          const asked = JSON.parse(body || '{}'), name = nameOf(asked.url), mine = of(name);
           let v;
           // A site's own profile: no application to match it to, so the panel is given the choice,
           // and once the profile is chosen, one job from the CV.
@@ -110,18 +113,20 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
             const values = {};
             for (const f of asked.fields || []) for (const k of Object.keys(by)) if (String(f.label || '').toLowerCase().includes(k)) values[f.key] = by[k];
             v = { values, files: {}, roles: 0, banked: [], job: { id: 'profile', title: 'Your profile', company: '127.0.0.1' }, app_version: VERSION, profile: true, note: 'That was job 1 on your CV (Senior Program Manager).' };
-          } else v = answers(asked.fields);
-          const delay = Number(process.env.ANSWER_DELAY || 0) || fault.delay || 0;
+          } else v = answers(asked.fields, name);
+          const delay = Number(process.env.ANSWER_DELAY || 0) || mine.fault.delay || 0;
           if (req.url === '/ext/fill') return setTimeout(() => json(res, v), delay);
-          const ticket = 't' + (++starts);
-          tickets.set(ticket, { at: Date.now(), ready: Date.now() + delay, v });
+          mine.starts++;
+          const ticket = 't' + (++ticketNo);
+          tickets.set(ticket, { at: Date.now(), ready: Date.now() + delay, v, name });
           return json(res, { ticket });
         }
         if (req.url === '/ext/fill/poll') {
-          polls++;
           const { ticket } = JSON.parse(body || '{}');
-          if (fault.forget > 0 && tickets.has(ticket)) { fault.forget--; tickets.delete(ticket); }
-          else if (fault.drop > 0) { fault.drop--; return req.socket.destroy(); }
+          const mine = tickets.has(ticket) ? of(tickets.get(ticket).name) : null;
+          if (mine) mine.polls++;
+          if (mine && mine.fault.forget > 0) { mine.fault.forget--; tickets.delete(ticket); }
+          else if (mine && mine.fault.drop > 0) { mine.fault.drop--; return req.socket.destroy(); }
           const f = tickets.get(ticket);
           if (!f) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'Job Hunt was restarted while it was writing the answers.', gone: true })); }
           return json(res, Date.now() < f.ready ? { waiting: true, secs: Math.round((Date.now() - f.at) / 1000) } : f.v);
@@ -139,15 +144,20 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
   const extDir = path.join(tmp, 'ext');
   buildExtension(extDir);
-  const ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { headless: false, viewport: { width: 1100, height: 700 },
-    args: ['--headless=new', `--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`] });
-  const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
-  await sw.evaluate(() => chrome.storage.local.set({ key: 'jh-test' }));
+  // A browser of its own with the extension loaded, for one variant.
+  let browsers = 0;
+  const open = async () => {
+    const ctx = await chromium.launchPersistentContext(path.join(tmp, `profile-${++browsers}`), { headless: false, viewport: { width: 1100, height: 700 },
+      args: ['--headless=new', `--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`] });
+    const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
+    await sw.evaluate(() => chrome.storage.local.set({ key: 'jh-test' }));
+    return { ctx, sw };
+  };
 
   const failed = [];
-  let running = '';
   // What a run must have done, whoever filled it in.
-  const judge = (got, s) => {
+  const judge = (got, s, running) => {
+    const lastFields = fieldsOf[running] || [];
     const problems = [];
     for (const w of WANT) if (!got.skills.includes(w)) problems.push(`"${w}" wasn't chosen`);
     if (!got.skills.some(x => /^Payment/.test(x))) problems.push('nothing chosen for "Payments Integration" (the list has Payments)');
@@ -177,12 +187,13 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (up.length !== 1 || up[0].section !== 'Resume/CV') problems.push(`the upload box's section is ${JSON.stringify(up.map(f => f.section))}`);
     return problems;
   };
-  for (const name of names) {
+  const runVariant = async name => {
+    const { ctx, sw } = await open();
+    const said = [], say = x => said.push(x); // printed together, not mixed with another variant's
     const page = await ctx.newPage();
-    const url = `${base}?${VARIANTS[name]}`;
-    running = name;
-    fault = name === 'heal' ? { forget: 1, drop: 3, delay: 3000 } : {};
-    const before = { starts, polls };
+    const url = `${base}?${VARIANTS[name]}${VARIANTS[name] ? '&' : ''}v=${name}`;
+    const mine = of(name);
+    mine.fault = name === 'heal' ? { forget: 1, drop: 3, delay: 3000 } : {};
     await page.goto(url);
     const t0 = Date.now();
     await sw.evaluate(async ({ url, zoom }) => {
@@ -200,9 +211,9 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
       const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => ({ ...window.__jobhunt.details(), trail: window.__jobhunt.trail() }) });
       return r.result;
     }, url).catch(() => null);
-    if (process.env.TRACE) for (const k of (details && details.skills) || []) console.log(`        ${k.skill} -> ${k.chose || 'nothing'} (${k.how || ''}) ${k.searches.map(x => `${x.q}: ${x.found} in ${x.ms}ms${x.real ? ' real' : ''}`).join('; ')}`);
-    const problems = judge(got, s);
-    if (starts === before.starts || polls === before.polls) problems.push('the answers weren\'t asked for with a ticket (/ext/fill/start, then /ext/fill/poll)');
+    if (process.env.TRACE) for (const k of (details && details.skills) || []) say(`        ${k.skill} -> ${k.chose || 'nothing'} (${k.how || ''}) ${k.searches.map(x => `${x.q}: ${x.found} in ${x.ms}ms${x.real ? ' real' : ''}`).join('; ')}`);
+    const problems = judge(got, s, name);
+    if (!mine.starts || !mine.polls) problems.push('the answers weren\'t asked for with a ticket (/ext/fill/start, then /ext/fill/poll)');
     if (name === 'heal') {
       // Put right by itself, and written down: in the page's trail and in the extension's log.
       const trail = ((details && details.trail) || []).map(e => e.m).join(' | ');
@@ -213,16 +224,19 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
       await page.waitForTimeout(500);
       if (!logs.some(l => l.why === 'test' && (l.events || []).length)) problems.push('Job Hunt was not given the log');
     }
-    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${name.padEnd(7)} ${secs}s  skills: ${got.skills.join(', ') || 'none'} | study: ${got.study.join(', ') || 'none'}`);
+    say(`${problems.length ? 'FAIL' : 'ok  '}  ${name.padEnd(7)} ${secs}s  skills: ${got.skills.join(', ') || 'none'} | study: ${got.study.join(', ') || 'none'}`);
     if (problems.length) {
       failed.push(name);
-      for (const p of problems) console.log(`        ${p}`);
-      console.log(`        panel: ${s.slice(0, 300)}`);
-      if (details && details.drops) console.log(`        dropdowns: ${JSON.stringify(details.drops).slice(0, 700)}`);
-      console.log(`        searches: ${got.searches.join(' | ')}  clicks in the list: ${got.clicks}`);
+      for (const p of problems) say(`        ${p}`);
+      say(`        panel: ${s.slice(0, 300)}`);
+      if (details && details.drops) say(`        dropdowns: ${JSON.stringify(details.drops).slice(0, 700)}`);
+      say(`        searches: ${got.searches.join(' | ')}  clicks in the list: ${got.clicks}`);
     }
-    await page.close();
-  }
+    await ctx.close();
+    console.log(said.join('\n'));
+  };
+  const rest = async () => {
+  const { ctx, sw } = await open();
   // Job Hunt's own Apply window: the same script without the extension (no real clicks), talking to
   // the app through addresses it catches. The list here takes a script's clicks.
   if (!only.length || only.includes('app')) {
@@ -231,7 +245,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     let answer = null;
     await page.route('https://jobhunt.invalid/**', route => {
       const [, kind, b64] = new URL(route.request().url()).pathname.split('/');
-      if (kind === 'fields') answer = answers(JSON.parse(Buffer.from(b64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')).fields);
+      if (kind === 'fields') answer = answers(JSON.parse(Buffer.from(b64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')).fields, 'app');
       return route.fulfill({ status: 204 }); // no content: the page stays where it is, as when the app cancels it
     });
     await page.addInitScript(fill);
@@ -245,7 +259,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
       for (let i = 0; i < 500; i++) { if (answer !== given) { given = answer; await page.evaluate(a => { window.__jobhunt.fill(a); }, answer); } await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s)) break; }
       got = await page.evaluate(() => ({ skills: window.mock.skills(), study: window.mock.study(), state: window.mock.state() }));
     }
-    const problems = answer ? judge(got, s) : ['the form was never read (no questions were sent to Job Hunt)'];
+    const problems = answer ? judge(got, s, 'app') : ['the form was never read (no questions were sent to Job Hunt)'];
     console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'app'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  skills: ${got.skills.join(', ') || 'none'} | study: ${got.study.join(', ') || 'none'}`);
     if (problems.length) { failed.push('app'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();
@@ -322,6 +336,13 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     await page.close();
   }
   await ctx.close();
+  };
+  // Three browsers at a time (JOBS=1 for one after another, when reading a failure).
+  const jobs = names.map(n => () => runVariant(n));
+  if (!only.length || ['app', 'profile', 'posts'].some(n => only.includes(n))) jobs.push(rest);
+  const t0 = Date.now();
+  await Promise.all(Array.from({ length: Math.max(1, Number(process.env.JOBS) || 3) }, async () => { while (jobs.length) await jobs.shift()(); }));
+  console.log(`      (${Math.round((Date.now() - t0) / 1000)}s in all)`);
   bridge.close(); site.close();
   fs.rmSync(tmp, { recursive: true, force: true });
   if (failed.length) { console.log(`\n${failed.length} failed: ${failed.join(', ')}`); process.exit(1); }

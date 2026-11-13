@@ -852,28 +852,38 @@ function cvChangeNote(c) {
   return parts.length ? ` ${parts.join('; ')}.` : '';
 }
 
-/** What Job Hunt is redoing after a CV got a new file, and how far it is (the CVs page). */
+/** What Job Hunt is redoing after a CV got a new file, each step with its own bar (the CVs page). */
 function cvUpdateHtml(u) {
-  if (!u || (!u.running && Date.now() - new Date(u.finished || u.at).getTime() > 36 * 3600 * 1000)) return '';
+  if (!u || (!u.running && !u.tailoring && Date.now() - new Date(u.finished || u.at).getTime() > 36 * 3600 * 1000)) return '';
   const order = ['titles', 'scoring', 'tailoring', 'career', 'leads', 'done'], at = order.indexOf(u.step);
-  const line = (step, text) => { const i = order.indexOf(step), state = !u.running || at > i ? 'done' : at === i ? 'now' : 'next'; return `<li class="${state}">${state === 'done' ? svg('check') : state === 'now' ? '<span class="dot now"></span>' : '<span class="dot"></span>'}<span>${text}</span></li>`; };
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  // One step: its state (done, now, next), what it says, and how far it is: [done, of] when it
+  // counts, else a bar that moves while it works. `state` is given for a step that keeps its own time.
+  const line = (step, text, count, state) => {
+    const i = order.indexOf(step);
+    state ||= !u.running || at > i ? 'done' : at === i ? 'now' : 'next';
+    const [did, of] = count || [];
+    const share = state === 'done' ? 100 : of ? Math.round(100 * Math.min(did, of) / of) : 0;
+    const bar = state === 'now' && !of ? '<span class="step-bar busy"><i></i></span>' : `<span class="step-bar"><i style="width:${share}%"></i></span>`;
+    return `<li class="${state}">${state === 'done' ? svg('check') : state === 'now' ? '<span class="dot now"></span>' : '<span class="dot"></span>'}<span class="step-text">${text}${bar}</span><span class="step-n">${of && state !== 'next' ? `${Math.min(did, of)} of ${of}` : state === 'done' ? 'Done' : state === 'now' ? 'Working' : ''}</span></li>`;
+  };
   const added = (u.titles_added || []).length;
+  const toTailor = (u.retailor || []).length || u.to_tailor || 0, tailored = Math.min(u.tailored ?? (u.running ? 0 : toTailor), toTailor);
+  const tailorState = !toTailor ? undefined : tailored >= toTailor ? 'done' : u.tailoring || (u.running && at >= 2) ? 'now' : !u.running ? 'done' : 'next';
+  const approvedDone = u.approved_done || 0;
   const lines = [
     line('titles', !u.claude ? 'Job titles: not read (Claude isn\'t set up)' : at > 0 || !u.running ? (added ? `${n(added, 'new job title', 'new job titles')} to search for, from the new CV: ${esc(u.titles_added.slice(0, 4).join(', '))}${added > 4 ? '…' : ''}` : 'Job titles and keywords: nothing new to add') : 'Reading the new CV for job titles and keywords'),
-    line('scoring', u.to_score ? `Fits scored again: ${u.scored || 0} of ${u.to_score}${u.held ? ' (Claude reached its limit: the rest are scored when it resets)' : !u.running && u.unscored_left ? ` (${u.unscored_left} set aside earlier are left: Score it anyway on any of them)` : ''}` : 'Fits: none were against this CV'),
-    line('tailoring', u.to_tailor ? `${n(u.to_tailor, 'application waiting for your approval is', 'applications waiting for your approval are')} tailored again${at > 2 || !u.running ? ' (they come back to Approve as each is ready)' : ''}` : 'Applications waiting for approval: none from this CV') + (u.kept ? ` · ${n(u.kept, 'keeps', 'keep')} your own file or edits` : ''),
-    ...(u.approved ? [line('tailoring', `Approved and ready to submit: ${u.approved_done || 0} of ${u.approved} tailored again from the new CV${u.approved_failed && (!u.running || at > 2) ? ` (${u.approved_failed} couldn't be: open ${u.approved_failed === 1 ? 'it' : 'them'} under Submit and press Tailor again before sending)` : (u.approved_done || 0) < u.approved ? '. Wait for these before you submit them' : '. They stay approved: read each over before you submit it'}`)] : []),
-    line('career', u.career ? `Career paths rewritten${u.coach ? ', and the coach\'s advice' : ''}: <a href="#cvs/career">see them</a>` : !u.running ? 'Career paths: not rewritten this time (press Think again on Career)' : 'Career paths'),
-    line('leads', u.leads ? `${n(u.leads, 'open lead', 'open leads')} read against it again` : 'Leads: none waiting to be read again'),
+    line('scoring', u.to_score ? `Fits scored again (the roles that had cleared your bar)${u.held ? '. Claude reached its limit: the rest are scored when it resets' : ''}` : 'Fits: none to score again', u.to_score ? [u.scored || 0, u.to_score] : null),
+    ...(u.approved ? [line('tailoring', `Approved and ready to submit, tailored again from the new CV${u.approved_failed && (!u.running || at > 2) ? ` (${u.approved_failed} couldn't be: open ${u.approved_failed === 1 ? 'it' : 'them'} under Submit and press Tailor again before sending)` : approvedDone < u.approved ? '. Wait for these before you submit them' : '. They stay approved: read each over before you submit it'}`, [approvedDone, u.approved], approvedDone >= u.approved ? 'done' : undefined)] : []),
+    line('tailoring', toTailor ? `Applications waiting for your approval, tailored again${tailored >= toTailor ? '' : ' (each comes back to Approve when it\'s ready)'}` : 'Applications waiting for approval: none from this CV', toTailor ? [tailored, toTailor] : null, tailorState) ,
+    line('career', u.career ? `Career paths rewritten${u.coach ? ', and the coach\'s advice' : ''}: <a href="#cvs/career">see them</a>` : !u.running ? 'Career paths: not rewritten this time (press Think again on Career)' : 'Career paths and the coach\'s advice'),
+    line('leads', u.leads ? `${n(u.leads, 'open lead', 'open leads')} read against it again` : !u.running || at > 4 ? 'Leads: none waiting to be read again' : 'Open leads, read against it again'),
   ];
-  const left = !u.running && !u.held && u.unscored_left;
-  const more = [
-    left ? `<div class="row"><span>${n(left, 'role set aside earlier still has', 'roles set aside earlier still have')} no new fit.</span><button class="btn sm" type="button" data-act="rescore" data-group="skipped">Score them again</button></div>` : '',
-  ].join('');
-  return `<section class="card cv-update ${u.running ? 'running' : ''}"><header><h2>${u.running ? `Updating everything for your new ${esc(u.cv)} CV` : u.stopped ? `The update for your new ${esc(u.cv)} CV was cut short` : `Up to date with your new ${esc(u.cv)} CV`}</h2>${u.running ? '<span class="pill">Working</span>' : u.stopped ? '<span class="pill warn">Stopped</span>' : '<span class="pill good">Done</span>'}</header>
-    <ul class="steps-list">${lines.join('')}</ul>${more}
-    <p class="muted small">${u.stopped ? 'Job Hunt was closed part-way. Press Update this CV with the same file to finish it.' : `What you sent stays as it went out, and what you typed yourself (titles, facts, saved answers) is never changed.${u.running ? ' You can keep using Job Hunt while this runs.' : ''}`}</p></section>`;
+  const working = u.running || u.tailoring;
+  const all = lines.length, finished = lines.filter(l => l.startsWith('<li class="done"')).length;
+  return `<section class="card cv-update ${working ? 'running' : ''}"><header><h2>${working ? `Updating everything for your new ${esc(u.cv)} CV` : u.stopped ? `The update for your new ${esc(u.cv)} CV was cut short` : `Up to date with your new ${esc(u.cv)} CV`}</h2>${working ? `<span class="pill">Step ${Math.min(finished + 1, all)} of ${all}</span>` : u.stopped ? '<span class="pill warn">Stopped</span>' : '<span class="pill good">Done</span>'}</header>
+    <ul class="steps-list">${lines.join('')}</ul>${u.kept ? `<p class="small">${n(u.kept, 'application keeps', 'applications keep')} your own file or edits (tailor ${u.kept === 1 ? 'it' : 'them'} again to use the new CV).</p>` : ''}
+    <p class="muted small">${u.stopped ? 'Job Hunt was closed part-way. Press Update this CV with the same file to finish it.' : `Roles that were set aside keep the fit they had. What you sent stays as it went out, and what you typed yourself (titles, facts, saved answers) is never changed.${working ? ' You can keep using Job Hunt while this runs.' : ''}`}</p></section>`;
 }
 let cvUpdatePoll;
 /** Keep the card current while the update runs, without redrawing the page (you may be typing in it). */
@@ -885,7 +895,7 @@ function watchCvUpdate() {
     try {
       const st = await api('/api/settings');
       box.innerHTML = cvUpdateHtml(st.cv_update);
-      if (st.cv_update?.running) return watchCvUpdate();
+      if (st.cv_update?.running || st.cv_update?.tailoring) return watchCvUpdate();
       refreshOverview();
     } catch (err) { watchCvUpdate(); }
   }, 2500);

@@ -16,7 +16,7 @@ To release:
     python tools/release_ci.py bump patch "Fixes" "What was fixed."
     python tools/release_ci.py verify      # must pass; then commit and push to main
 
-`verify` runs what the builds depend on and stops at the first failure: versions in step, the page
+`verify` runs what the builds depend on (the slow checks side by side) and stops at a failure: versions in step, the page
 scripts parse, every core test passes, the server compiles, the screens work when clicked through in a
 real browser (tools/screen_test.py; skipped where Playwright isn't installed), and the Windows app compiles. The pre-push hook in
 .githooks runs it before anything is pushed to main (git config core.hooksPath .githooks).
@@ -223,45 +223,78 @@ def personal_details():
 
 
 def verify(quick=False):
-    """Run each check in turn; stop at the first that fails, with its output. True if all passed."""
+    """Run every check; True if all passed. The quick ones first, in turn; then the slow ones side by
+    side, since they share nothing (the core's tests then the screens, the extension on its mock
+    form, the Windows app): the wait is the longest of them, not their sum. Nothing is left out."""
     import glob
     import subprocess
+    import threading
+    import time
     node = "node"
-    steps = [("Versions in step", None, None), ("No personal details in the code", "personal", None)]
-    scripts = sorted(glob.glob(os.path.join(ROOT, "static", "*.js"))) + [os.path.join(ROOT, "core", "src", "fill.js")]
-    steps += [(f"Page script {os.path.relpath(f, ROOT)} parses", [node, "--check", f], ROOT) for f in scripts if os.path.exists(f)]
-    steps += [
-        ("Core tests pass", ["cargo", "test", "-q", "--manifest-path", "core/Cargo.toml"], ROOT),
-        ("Server compiles", ["cargo", "build", "-q", "--manifest-path", "core/Cargo.toml", "--bin", "jobhunt-server"], ROOT),
-    ]
-    # In a real browser, against the preview with sample data. Skipped where Playwright isn't installed.
-    steps.append(("Screens work (click-through)", [sys.executable, "tools/screen_test.py"], ROOT))
-    # The extension, loaded for real, filling a stand-in Workday page (skills, Field of Study).
-    steps.append(("Extension fills a form (mock Workday)", ["node", "tools/ext_test/ext_test.js", "std", "odd", "typing", "keys", "issuer", "heal", "app", "profile", "posts"], ROOT))
-    if not quick:
-        steps.append(("Windows app compiles", ["cargo", "check", "-q", "--manifest-path", "desktop/src-tauri/Cargo.toml"], ROOT))
     env = dict(os.environ, CARGO_TERM_COLOR="never")
-    for name, cmd, cwd in steps:
+    started = time.time()
+    lock = threading.Lock()
+
+    def run(name, cmd, cwd):
+        """One check: (passed, skipped, its output)."""
+        t0 = time.time()
         if cmd is None or cmd == "personal":
             bad = problems() if cmd is None else personal_details()
-            ok, out = not bad, "\n".join(bad)
+            ok, out, skipped = not bad, "\n".join(bad), False
         else:
             try:
                 r = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
                 ok, out = r.returncode == 0, (r.stdout + r.stderr)
-                if r.returncode == 2 and ("screen_test.py" in cmd[-1] or "ext_test.js" in " ".join(cmd)):
-                    print(f"skip  {name}: {out.strip().splitlines()[-1] if out.strip() else 'not available here'}", flush=True)
-                    continue
+                skipped = r.returncode == 2 and ("screen_test.py" in cmd[-1] or "ext_test.js" in " ".join(cmd))
             except FileNotFoundError as e:
-                ok, out = False, f"{cmd[0]} isn't installed ({e})"
-        print(f"{'ok  ' if ok else 'FAIL'}  {name}", flush=True)
-        if not ok:
-            lines = [l for l in out.splitlines() if l.strip()]
-            # The useful part: failing tests and errors, else the end.
-            keep = [l for l in lines if re.search(r"panicked|FAILED|^error|^---- |assertion|left:|right:|SyntaxError", l)] or lines[-25:]
-            print("\n".join("      " + l for l in keep[:40]))
+                ok, out, skipped = False, f"{cmd[0]} isn't installed ({e})", False
+        with lock:
+            if skipped:
+                print(f"skip  {name}: {out.strip().splitlines()[-1] if out.strip() else 'not available here'}", flush=True)
+                return True
+            secs = time.time() - t0
+            print(f"{'ok  ' if ok else 'FAIL'}  {name}{f' ({secs:.0f}s)' if secs >= 5 else ''}", flush=True)
+            if not ok:
+                lines = [l for l in out.splitlines() if l.strip()]
+                # The useful part: failing tests and errors, else the end.
+                keep = [l for l in lines if re.search(r"panicked|FAILED|^FAIL|^error|^---- |assertion|left:|right:|SyntaxError", l)] or lines[-25:]
+                print("\n".join("      " + l for l in keep[:40]), flush=True)
+        return ok
+
+    quick_steps = [("Versions in step", None, None), ("No personal details in the code", "personal", None)]
+    scripts = sorted(glob.glob(os.path.join(ROOT, "static", "*.js"))) + sorted(glob.glob(os.path.join(ROOT, "static", "extension", "*.js"))) + [os.path.join(ROOT, "core", "src", "fill.js")]
+    quick_steps += [(f"Page script {os.path.relpath(f, ROOT)} parses", [node, "--check", f], ROOT) for f in scripts if os.path.exists(f)]
+    for step in quick_steps:
+        if not run(*step):
             return False
-    return True
+
+    # Each line is done in turn; the lines run side by side.
+    lines = [
+        [("Core tests pass", ["cargo", "test", "-q", "--manifest-path", "core/Cargo.toml"], ROOT),
+         ("Server compiles", ["cargo", "build", "-q", "--manifest-path", "core/Cargo.toml", "--bin", "jobhunt-server"], ROOT),
+         # In a real browser, against the preview with sample data. Skipped where Playwright isn't installed.
+         ("Screens work (click-through)", [sys.executable, "tools/screen_test.py"], ROOT)],
+        # The extension, loaded for real, filling a stand-in Workday page (skills, Field of Study).
+        [("Extension fills a form (mock Workday)", ["node", "tools/ext_test/ext_test.js", "std", "odd", "typing", "keys", "issuer", "heal", "app", "profile", "posts"], ROOT)],
+        [] if quick else [("Windows app compiles", ["cargo", "check", "-q", "--manifest-path", "desktop/src-tauri/Cargo.toml"], ROOT)],
+    ]
+    failed = []
+
+    def line(steps):
+        for step in steps:
+            if failed:
+                return
+            if not run(*step):
+                failed.append(step[0])
+                return
+    threads = [threading.Thread(target=line, args=(l,)) for l in lines if l]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    if not failed:
+        print(f"      ({time.time() - started:.0f}s in all)", flush=True)
+    return not failed
 
 
 def main():

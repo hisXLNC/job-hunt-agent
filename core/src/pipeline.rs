@@ -2988,6 +2988,7 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     let mut out = vec![];
     agent.jobbank_on_once();
     crate::logos::name_hosts_once(agent);
+    agent.restore_cleared_fits_once();
     agent.canada_employers_once();
     agent.search_hours_once();
     let p = agent.profile();

@@ -1862,6 +1862,35 @@ fn a_new_cv_updates_everything_worked_out_from_the_old_one() {
     assert!(!s.agent.secret("career").is_empty());
 }
 
+/// A new file for a CV scores again only what had cleared the bar: a role set aside keeps its fit.
+/// And the fits an earlier version cleared from set-aside roles are put back, once.
+#[test]
+fn a_new_cv_leaves_set_aside_roles_their_fit() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.search(Some(vec![posting("Program Manager", "1"), Posting { company: "Globex".into(), ..posting("Program Manager", "2") }])).unwrap();
+    let jobs: Vec<Job> = s.agent.db().jobs(Some("queued"), 10).unwrap();
+    assert_eq!(jobs.len(), 2);
+    let track = jobs[0].track.clone().unwrap();
+    // One was set aside with a fit under the bar.
+    s.agent.db().update_job(&jobs[1].id, &[("status", "skipped".into()), ("score", 55.into())]).unwrap();
+    let bytes = std::fs::read(s.agent.cv_path(&track)).unwrap();
+    let (_, change) = s.agent.replace_cv(&track, "new.docx", &bytes, false).unwrap();
+    assert_eq!(change.unscored, vec![jobs[0].id.clone()], "only the one waiting for you");
+    assert_eq!(s.agent.db().job(&jobs[1].id).unwrap().unwrap().score, Some(55));
+    // As 2.60 left such a role: no fit, and why in its history. Put back, once.
+    s.agent.db().update_job(&jobs[1].id, &[("score", Value::Null), ("reasoning", "Not scored: the Program delivery CV it was scored against was replaced.".into())]).unwrap();
+    s.agent.db().log(Some(&jobs[1].id), "unscored", "its fit of 55 was against the Program delivery CV, which was replaced").unwrap();
+    s.agent.restore_cleared_fits_once();
+    let j = s.agent.db().job(&jobs[1].id).unwrap().unwrap();
+    assert_eq!((j.score, j.status.as_str()), (Some(55), "skipped"));
+    assert!(j.reasoning.unwrap().starts_with("Fit of 55"));
+    // The one waiting for you is still to be scored against the new CV.
+    assert!(s.agent.db().job(&jobs[0].id).unwrap().unwrap().score.is_none());
+}
+
 /// Approved, not sent, when the CV changes: tailored again, so a stale CV isn't what gets submitted.
 #[test]
 fn an_approved_application_is_tailored_again_and_stays_approved() {

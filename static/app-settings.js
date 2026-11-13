@@ -507,7 +507,7 @@ async function showSettings(tab, sub, host) {
     page(`${meHead(sub === 'details' ? 'details' : sub === 'career' ? 'career' : 'cvs', 'What Job Hunt knows about you: your CVs, your details, and where your career could go.', st.cvs.length)}
       ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${body}`);
     if (st.career_thinking) watchCareer(location.hash);
-    if (st.cv_update?.running) watchCvUpdate();
+    if (st.cv_update?.running || st.cv_update?.tailoring) watchCvUpdate();
     if ($('#bankCard')) renderBank();
     return;
   }

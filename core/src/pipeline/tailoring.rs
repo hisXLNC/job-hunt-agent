@@ -126,12 +126,20 @@ impl Agent {
     pub(super) fn cv_changed(&self, id: &str, label: &str, removed: bool) -> R<CvChange> {
         let mut c = CvChange::default();
         let what = if removed { "was removed" } else { "was replaced" };
-        // What you're waiting on first (they're scored again first too).
-        for st in ["queued", "saved", "skipped", "dismissed"] {
+        // A new file for the CV: only the fits that cleared your bar are scored again (the roles
+        // waiting for you to pick, and saved ones that did). What was set aside or scored below it
+        // keeps its fit: scoring those again cost a request each for some 1,800 roles nobody was
+        // waiting on. A CV that's gone leaves nothing to keep, so there everything it scored goes.
+        let bar = self.profile().score_threshold;
+        let statuses: &[&str] = if removed { &["queued", "saved", "skipped", "dismissed"] } else { &["queued", "saved"] };
+        for st in statuses {
             // Read first: the lock would otherwise be held through the loop, which takes it again.
             let jobs = self.db().jobs(Some(st), 100_000)?;
             for j in jobs {
                 if j.track.as_deref() != Some(id) || j.score.is_none() {
+                    continue;
+                }
+                if !removed && *st == "saved" && j.score.is_some_and(|s| s < bar) {
                     continue;
                 }
                 let db = self.db();
@@ -190,7 +198,7 @@ impl Agent {
             if self.profile().tracks.len() > 1 {
                 for st in ["queued", "saved"] {
                     let jobs = self.db().jobs(Some(st), 100_000)?;
-                    for j in jobs.into_iter().filter(|j| j.score.is_some() && j.track.as_deref().is_some_and(|t| t != id)) {
+                    for j in jobs.into_iter().filter(|j| j.score.is_some_and(|s| s >= bar) && j.track.as_deref().is_some_and(|t| t != id)) {
                         let db = self.db();
                         db.update_job(&j.id, &[("score", Value::Null), ("score_potential", Value::Null), ("score_after", Value::Null),
                             ("reasoning", format!("Not scored: your {label} CV changed and may now be the better match for this.").into())])?;
@@ -278,6 +286,14 @@ impl Agent {
             v["running"] = json!(false);
             v["stopped"] = json!(true);
         }
+        // The applications being tailored again go on after the rest is done: counted as they are now
+        // (one has its fit again once it's tailored).
+        let ids: Vec<String> = serde_json::from_value(v["retailor"].clone()).unwrap_or_default();
+        if !ids.is_empty() {
+            let done = ids.iter().filter(|id| !self.is_running(&format!("tailor:{id}")) && self.db().job(id).ok().flatten().is_none_or(|j| j.score.is_some() || j.status != "ready")).count();
+            v["tailored"] = json!(done);
+            v["tailoring"] = json!(ids.iter().any(|id| self.is_running(&format!("tailor:{id}"))));
+        }
         Some(v)
     }
 
@@ -293,7 +309,7 @@ impl Agent {
         let label = self.profile().tracks.iter().find(|t| t.name == id).map(|t| t.label.clone()).unwrap_or_else(|| id.to_string());
         let claude = self.claude_ready();
         let start = json!({ "at": now(), "cv": label, "running": true, "step": "titles", "claude": claude,
-            "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept, "approved": c.approved.len(), "approved_done": 0 });
+            "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept, "approved": c.approved.len(), "approved_done": 0, "retailor": c.retailor });
         let _ = self.db().set("cv.update", &start.to_string());
         let (a, id) = (self.clone(), id.to_string());
         std::thread::spawn(move || {
@@ -384,6 +400,31 @@ impl Agent {
             put(json!({ "step": "done", "running": false, "finished": now() }));
             a.note("Job Hunt is up to date with your new CV", &format!("The {label} CV: fits scored again, applications waiting for you tailored again, and your career paths rewritten. See Me, CVs."));
         });
+    }
+
+    /// Once (2.62.0): updating a CV in 2.60 and 2.61 cleared the fit of every role it had scored,
+    /// set-aside ones too, and scored only a few of those again. The ones still without a fit get
+    /// back the one they had (it's in their history), so the lists and filters read as before.
+    pub fn restore_cleared_fits_once(&self) {
+        if !self.secret("cv.fits_restored").is_empty() {
+            return;
+        }
+        let mut n = 0;
+        for st in ["skipped", "dismissed"] {
+            let jobs = self.db().jobs(Some(st), 100_000).unwrap_or_default();
+            for j in jobs.into_iter().filter(|j| j.score.is_none() && j.reasoning.as_deref().is_some_and(|r| r.starts_with("Not scored: "))) {
+                let was = self.db().history(&j.id).ok().and_then(|h| h.into_iter().find(|e| e.kind == "unscored"))
+                    .and_then(|e| e.detail.strip_prefix("its fit of ").and_then(|d| d.split_whitespace().next().and_then(|x| x.parse::<i64>().ok())));
+                if let Some(score) = was {
+                    let db = self.db();
+                    if db.update_job(&j.id, &[("score", score.into()), ("reasoning", format!("Fit of {score}, from before you updated your CV (roles set aside aren't scored again).").into())]).is_ok() {
+                        let _ = db.log(Some(&j.id), "scored", &format!("{score}: the fit it had before your CV was updated, put back"));
+                        n += 1;
+                    }
+                }
+            }
+        }
+        let _ = self.db().set("cv.fits_restored", &format!("{n}|{}", now()));
     }
 
     /// A CV was added: what a removed CV left waiting (your only one, so nothing to redo it with)
