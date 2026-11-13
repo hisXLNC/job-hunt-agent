@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.65.3",
+    "date": "2026-11-13",
+    "title": "Sign in to Claude opens its window",
+    "changes": [
+      "Sign in to Claude (and Install and sign in) did nothing: a slip in the button's code meant the request to open the sign-in window was never sent, though a message said a window had opened. It opens now, and says so plainly if it can't."
+    ]
+  },
+  {
     "version": "2.65.2",
     "date": "2026-11-13",
     "title": "The fix beside the problem",

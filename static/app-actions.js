@@ -855,9 +855,15 @@ async function act(el) {
   }
   if (a === 'checkClaude') { const w = $('#welcomeClaude'); if (w) return welcomeClaude(true); return checkClaude(true); }
   if (a === 'claudeSetup') {
-    await busy(el, async () => { await api('/api/claude/setup', { method: 'POST', body: { install: el.dataset.install === '1' } }); });
-    toast('Follow the steps in the window that opened. Job Hunt checks by itself.');
-    watchClaude();
+    // (This called busy(el, …): busy takes the work first, so nothing was ever asked of Job Hunt and
+    // no window opened, while the toast said one had.)
+    el.disabled = true;
+    try {
+      await api('/api/claude/setup', { method: 'POST', body: { install: el.dataset.install === '1' } });
+      toast('A window opened for signing in (look on the taskbar if it is behind this one). Follow its steps; Job Hunt checks by itself.');
+      watchClaude();
+    } catch (err) { toast(`Couldn't open the sign-in window: ${err.message}`, true); }
+    el.disabled = false;
     return;
   }
 }

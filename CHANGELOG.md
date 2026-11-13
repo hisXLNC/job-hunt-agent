@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.65.3] - 2026-11-13
+
+Sign in to Claude opens its window.
+
+### Changes
+
+- Sign in to Claude (and Install and sign in) did nothing: a slip in the button's code meant the request to open the sign-in window was never sent, though a message said a window had opened. It opens now, and says so plainly if it can't.
+
 ## [2.65.2] - 2026-11-13
 
 The fix beside the problem.
@@ -1968,6 +1976,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.65.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.3
 [2.65.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.2
 [2.65.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.1
 [2.65.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.0
