@@ -714,7 +714,6 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "offer": agent.offer(id), "advising": agent.is_running(&format!("offer:{id}")),
                     "know": crate::network::at_company(&crate::network::list(agent), &job.company),
                     "links": crate::links::for_job(agent, id),
-                    "chat": agent.chat(id), "chatting": agent.is_running(&format!("chat:{id}")),
                     "contacts": agent.contacts(id), "writing_to": agent.is_running(&format!("contact:{id}")),
                     "playbook": agent.playbook(&job),
                     "ats": job.cv_path.as_deref().and_then(|p| crate::cv::open(Path::new(p)).ok()).map(|d| crate::cv::ats_check(&d)),
@@ -755,6 +754,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
                 return Ok(Resp::json(&u));
             }
+            // The assistant: the conversation, and whether an answer is on its way.
+            ["api", "ask"] => return Ok(Resp::json(&agent.ask_state())),
             ["api", "changelog"] => {
                 let log = host.asset("changelog.json").and_then(|b| serde_json::from_slice::<Value>(&b).ok()).unwrap_or(json!([]));
                 return Ok(Resp::json(&json!({ "current": host.version(), "log": log })));
@@ -935,28 +936,6 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         if let Err(e) = r {
                             let _ = a.db().log(Some(&id), &format!("{what}:error"), &e.0);
                             a.note("That didn't work", &e.0);
-                        }
-                    });
-                    Ok(Resp::json(&json!({ "started": true })))
-                }
-                "chat" => {
-                    if b.get("clear").and_then(|v| v.as_bool()) == Some(true) {
-                        agent.chat_clear(id)?;
-                        return ok();
-                    }
-                    let key = format!("chat:{id}");
-                    if agent.is_running(&key) {
-                        return Err(Error("Claude is still answering the last message.".into()));
-                    }
-                    if s(&b, "message").trim().is_empty() {
-                        return Err(Error("Write a message first.".into()));
-                    }
-                    let (a, id, msg) = (agent.clone(), id.to_string(), s(&b, "message").to_string());
-                    std::thread::spawn(move || {
-                        let Ok(_g) = a.claim(&key) else { return };
-                        if let Err(e) = a.chat_send(&id, &msg) {
-                            let _ = a.db().log(Some(&id), "chat:error", &e.0);
-                            a.note("Claude couldn't answer", &e.0);
                         }
                     });
                     Ok(Resp::json(&json!({ "started": true })))
@@ -1349,6 +1328,15 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             agent.connect();
             ok()
+        }
+        // Ask the assistant ({message, page}), or start the conversation over ({clear}).
+        ["api", "ask"] => {
+            if b["clear"].as_bool() == Some(true) {
+                agent.ask_clear()?;
+            } else {
+                agent.ask_start(s(&b, "message"), &b["page"])?;
+            }
+            Ok(Resp::json(&agent.ask_state()))
         }
         // The update after a new CV: stop it, or take its card off the CVs page.
         ["api", "cv-update"] => {

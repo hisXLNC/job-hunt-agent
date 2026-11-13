@@ -332,6 +332,53 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await page.evaluate(() => location.hash === '#search') && (await page.getAttribute('#dSync', 'title') || '').length > 3, 'The search chip in the top bar opens what the search found, and each chip says its status');
 
   // A phone: nothing wider than the screen.
+  // Certifications under Me, About me: added, saved, and still there when the page is opened again.
+  await page.goto(`${base}/#cvs/details`);
+  await page.waitForSelector('#certsCard');
+  await page.click('[data-act=certAdd]');
+  await page.fill('#certList [data-cert]:last-child [data-k=name]', 'Project Management Professional (PMP)');
+  await page.fill('#certList [data-cert]:last-child [data-k=issuer]', 'PMI');
+  await page.waitForFunction(() => /saved/i.test(document.querySelector('#saveState')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  await page.reload();
+  await page.waitForSelector('#certsCard');
+  check(await page.evaluate(() => document.querySelectorAll('#certList [data-cert]').length === 1 && document.querySelector('#certList [data-k=name]').value === 'Project Management Professional (PMP)' && document.querySelector('#certList [data-k=issuer]').value === 'PMI'), 'A certification added under Me, About me is kept');
+  check(await page.evaluate(async () => (await api('/api/settings')).profile.certifications?.[0]?.issuer === 'PMI'), 'Job Hunt has the certification to use');
+  // The assistant floats over every screen: it opens beside a job, answers about it, takes selected
+  // words as what "this" means, and stays open on the next screen. The job page has no chat tab.
+  await page.evaluate(() => { try { localStorage.removeItem('ask.open'); } catch (e) {} });
+  await page.goto(`${base}/#job/${encodeURIComponent(jobId)}`);
+  await page.waitForSelector('#main h1');
+  check(await page.evaluate(() => !document.querySelector('[data-jtab=chat]') && !document.querySelector('#chatMsg')), 'A job has no Ask Claude tab of its own');
+  check(await page.isVisible('#askFab') && !(await page.isVisible('#askPanel')), 'Ask Claude floats over the page as a button');
+  await page.click('#askFab');
+  check(await page.isVisible('#askPanel') && /Looking at: /.test(await page.textContent('#askWhere')) && await page.locator('.ask-idea').count() > 1, 'Ask Claude opens a conversation that names the screen and offers questions');
+  await page.fill('#askMsg', 'Why this score?');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('#askLog .ask-msg.them:not(.wait)').length === 1, null, { timeout: 20000 });
+  check(await page.evaluate(() => document.querySelector('#askLog .ask-msg.me').textContent === 'Why this score?' && /scored/.test(document.querySelector('#askLog .ask-msg.them').textContent)), 'Ask Claude answers about the job on screen');
+  await page.evaluate(() => { const el = document.querySelector('#main h1'); const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); });
+  await page.waitForSelector('#askSel:not([hidden])');
+  await page.click('#askSel');
+  check(await page.evaluate(() => !document.querySelector('#askQuote').hidden && document.querySelector('#askQuote').textContent.includes(document.querySelector('#main h1').textContent.trim().slice(0, 20))), 'Selected words get their own Ask Claude button and go along with the question');
+  await page.click('.ask-idea');
+  await page.waitForFunction(() => document.querySelectorAll('#askLog .ask-msg.them:not(.wait)').length === 2, null, { timeout: 20000 });
+  check(await page.evaluate(() => /is something the posting asks for/.test([...document.querySelectorAll('#askLog .ask-msg.them')].pop().textContent) && document.querySelector('#askQuote').hidden), 'The answer is about the selected words');
+  await page.click('#askLog .ask-msg.them a[href="#applications"]');
+  await page.waitForFunction(() => location.hash === '#applications');
+  check(await page.isVisible('#askPanel') && await page.locator('#askLog .ask-msg').count() === 4, 'A link in an answer opens that screen and the conversation stays');
+  await page.fill('#askMsg', 'please fail');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#askLog .ask-err');
+  check(await page.inputValue('#askMsg') === 'please fail' && await page.locator('#askLog .ask-msg').count() === 4, 'When Claude cannot answer, it says why and the message is back in the box');
+  await page.fill('#askMsg', '');
+  await page.keyboard.press('Escape');
+  check(await page.isVisible('#askFab') && !(await page.isVisible('#askPanel')), 'Esc closes the conversation back to the button');
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('c');
+  check(await page.isVisible('#askPanel'), 'The C key opens Ask Claude from any screen');
+  await page.keyboard.press('Escape');
+
   const phone = await browser.newPage({ ...devices['iPhone 13'] });
   phone.on('pageerror', e => errors.push(`phone: ${e.message}`));
   await phone.addInitScript(() => { try { sessionStorage.setItem('welcomed', '1'); } catch (e) {} });

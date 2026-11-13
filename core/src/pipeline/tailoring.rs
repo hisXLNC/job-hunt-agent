@@ -656,7 +656,7 @@ impl Agent {
                 job.company, p.applied_at.as_deref().unwrap_or("").get(..10).unwrap_or(""), p.title, d.plain_text().chars().take(8000).collect::<String>()),
             _ => String::new(),
         };
-        let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.stories, &t.letter_style, &consistency, &self.tailoring_guidance(&job))?;
+        let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.letter_facts(), &t.letter_style, &consistency, &self.tailoring_guidance(&job))?;
         // Held to it, whatever came back: the headline as they saw it, and only the few edits that add most.
         if let Some(pd) = prior_doc.as_ref().filter(|_| mode == "light") {
             let headline = headline_indices(&doc);
@@ -674,7 +674,7 @@ impl Agent {
             }
         }
         // Take out AI tells Claude slipped in (your CV's own style stays).
-        let own = format!("{}\n{}", doc.plain_text(), profile.stories);
+        let own = format!("{}\n{}", doc.plain_text(), profile.letter_facts());
         result.cover_letter = cv::humanize(&result.cover_letter, &own);
         result.email_subject = cv::humanize(&result.email_subject, &own);
 
@@ -736,27 +736,61 @@ impl Agent {
         }
         drop(db);
         // The tailored CV scored the same way your CV was (one more request), once the
-        // application is already waiting for you; on failure the page shows the score before.
-        // Two scorings of the same experience differ by a few points by chance, so the scorer is told
-        // the fit before, and a fit a little lower than it is taken as that chance, not a worse CV.
-        let mut guidance = self.scoring_guidance(&profile);
-        if let Some(a) = job.score {
-            guidance.push_str(&format!("\n\nThis CV is the candidate's own, reworded for this posting. Before the rewording you scored it {a} for this same posting. Use the same scale: score it lower than {a} only if the rewording lost or hid something the posting asks for."));
-        }
-        if let Ok(s) = self.llm().score(&[(t.name.clone(), tailored_text)], &guidance, &job) {
-            let after = match job.score {
-                Some(a) if s.score < a && a - s.score <= RESCORE_NOISE => a,
-                _ => s.score,
-            };
-            let db = self.db();
-            db.update_job(job_id, &[("score_after", after.into())])?;
-            if let Some(a) = job.score {
-                db.log(Some(job_id), "rescored", &format!("fit {a} before tailoring, {after} after{}", if after != s.score { format!(" (scored {}: within the few points two scorings differ by)", s.score) } else { String::new() }))?;
-            }
-        }
+        // application is already waiting for you; on failure the page shows the score before, and
+        // it's tried again later (see score_tailored_missing).
+        let _ = self.score_tailored(&job, &t.name, &tailored_text);
         // An employer whose system checks CVs criterion by criterion: check this one the same way.
         self.review_after_tailoring(&job);
         self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
+    }
+
+    /// Score a job's tailored CV the way the CV before it was scored, and keep it as the fit after
+    /// tailoring. Two scorings of the same experience differ by a few points by chance, so the
+    /// scorer is told the fit before, and a fit a little lower than it is taken as that chance,
+    /// not a worse CV.
+    fn score_tailored(&self, job: &Job, track: &str, tailored_text: &str) -> R<i64> {
+        let mut guidance = self.scoring_guidance(&self.profile());
+        if let Some(a) = job.score {
+            guidance.push_str(&format!("\n\nThis CV is the candidate's own, reworded for this posting. Before the rewording you scored it {a} for this same posting. Use the same scale: score it lower than {a} only if the rewording removed or weakened evidence the posting asks for, and higher only where it now shows evidence it didn't."));
+        }
+        let s = self.llm().score(&[(track.to_string(), tailored_text.to_string())], &guidance, job)?;
+        let after = match job.score {
+            Some(a) if s.score < a && a - s.score <= RESCORE_NOISE => a,
+            _ => s.score,
+        };
+        let db = self.db();
+        db.update_job(&job.id, &[("score_after", after.into())])?;
+        if let Some(a) = job.score {
+            db.log(Some(&job.id), "rescored", &format!("fit {a} before tailoring, {after} after{}", if after != s.score { format!(" (scored {}: within the few points two scorings differ by)", s.score) } else { String::new() }))?;
+        }
+        Ok(after)
+    }
+
+    /// Applications waiting with a tailored CV whose fit after tailoring was never scored (Claude was
+    /// busy or at its limit when they were tailored): best first.
+    pub fn without_after_score(&self) -> Vec<Job> {
+        let mut jobs: Vec<Job> = ["ready", "approved"].iter().flat_map(|st| self.db().jobs(Some(st), 100_000).unwrap_or_default())
+            .filter(|j| j.score.is_some() && j.score_after.is_none() && j.applied_at.is_none() && j.cv_path.is_some())
+            .collect();
+        jobs.sort_by_key(|j| std::cmp::Reverse(j.score.unwrap_or(0)));
+        jobs
+    }
+
+    /// Score a few of those now. Returns how many got their score.
+    pub fn score_tailored_missing(&self, max: usize) -> usize {
+        let profile = self.profile();
+        let mut n = 0;
+        for job in self.without_after_score().into_iter().take(max) {
+            if self.limited().is_some() || !self.claude_ready() {
+                break;
+            }
+            let Some(text) = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok()).map(|d| d.plain_text()) else { continue };
+            let track = profile.track(job.track.as_deref()).map(|t| t.name.clone()).unwrap_or_default();
+            if self.score_tailored(&job, &track, &text).is_ok() {
+                n += 1;
+            }
+        }
+        n
     }
 
     /// Your applications to a company: every job there you sent a CV to (applied, or further), newest
@@ -993,7 +1027,7 @@ impl Agent {
     /// alone the style you chose yourself.
     pub(crate) fn own_words(&self, job: &Job, profile: &Profile) -> String {
         let cv = profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()).map(|d| d.plain_text()).unwrap_or_default();
-        format!("{cv}\n{}", profile.stories)
+        format!("{cv}\n{}", profile.letter_facts())
     }
 
     /// Whether you picked this posting yourself (Tailor anyway): filters then leave it alone.

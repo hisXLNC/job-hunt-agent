@@ -183,6 +183,30 @@ pub fn path_read(flags: &[String]) -> Option<(bool, String)> {
     }
 }
 
+impl Profile {
+    /// Your certifications as lines for Claude, under their own heading; empty when you listed none.
+    pub fn cert_lines(&self) -> String {
+        let lines: Vec<String> = self.certifications.iter().filter(|c| !c.name.trim().is_empty()).map(|c| {
+            let mut l = format!("- {}", c.name.trim());
+            for (what, v) in [("issued by", &c.issuer), ("credential number", &c.number), ("issued", &c.issued), ("expires", &c.expires)] {
+                if !v.trim().is_empty() {
+                    l.push_str(&format!("; {what} {}", v.trim()));
+                }
+            }
+            l
+        }).collect();
+        if lines.is_empty() {
+            return String::new();
+        }
+        format!("\nCertifications and licences they hold (true and current, whether or not the CV lists them):\n{}", lines.join("\n"))
+    }
+
+    /// What cover letters and answers may draw on beyond the CV: your stories and your certifications.
+    pub fn letter_facts(&self) -> String {
+        format!("{}{}", self.stories, self.cert_lines())
+    }
+}
+
 impl Wants {
     /// These, as lines for the scorer; empty when nothing is set.
     pub fn for_scoring(&self) -> String {
@@ -222,6 +246,23 @@ impl Wants {
         }
         format!("What the candidate wants from a role:\n{}", lines.join("\n"))
     }
+}
+
+/// A certification or licence you hold (Me, About me). Job Hunt counts it as yours wherever your CV
+/// is read: scoring, cover letters, application forms and their answers.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Certification {
+    /// Its name as you'd write it: "Project Management Professional (PMP)".
+    pub name: String,
+    /// Who issued it: "PMI".
+    pub issuer: String,
+    /// The credential or licence number, when forms ask for one.
+    pub number: String,
+    /// When you got it, as you'd type it ("2021-05" or "May 2021").
+    pub issued: String,
+    /// When it runs out; empty when it doesn't.
+    pub expires: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -275,6 +316,8 @@ pub struct Profile {
     pub follow_up_after: u32,
     /// Facts application forms ask for: work authorization, notice period, salary expectations…
     pub application_facts: String,
+    /// The certifications and licences you hold, whether or not a CV lists them.
+    pub certifications: Vec<Certification>,
     /// Applications you aim to send each week (0: no target).
     pub weekly_goal: u32,
     /// Remove postings you never acted on after this many days (0: keep them).
@@ -316,6 +359,7 @@ impl Default for Profile {
             stories: String::new(),
             follow_up_after: 8,
             application_facts: String::new(),
+            certifications: vec![],
             weekly_goal: 10,
         }
     }
@@ -806,6 +850,13 @@ mod tests {
         two.search_hour_2 = 12;
         assert_eq!(two.search_hours(), (12, None), "the same hour twice is one search");
         // Nothing set: only the career warning (for a real setback, never for a change of industry).
+        // Certifications: none listed says nothing; listed ones go out as lines, with what was given.
+        assert_eq!(p.cert_lines(), "");
+        let mut q = p.clone();
+        q.stories = "Ran a hard launch.".into();
+        q.certifications = vec![Certification { name: "Project Management Professional (PMP)".into(), issuer: "PMI".into(), expires: "2027-05".into(), ..Default::default() }, Certification::default()];
+        assert!(q.cert_lines().ends_with("- Project Management Professional (PMP); issued by PMI; expires 2027-05"), "{}", q.cert_lines());
+        assert!(q.letter_facts().starts_with("Ran a hard launch.") && q.letter_facts().contains("PMP"));
         let bare = p.wants.for_scoring();
         assert!(bare.lines().count() == 2 && bare.contains("Career path: away.") && bare.contains("SIGNIFICANTLY") && bare.contains("does NOT mean a different industry"), "{bare}");
         let w = Wants { level: "senior manager".into(), work: "permanent".into(), industries: vec!["fintech".into()], avoid: vec!["gambling".into(), " ".into()], dealbreakers: vec!["on-site five days".into()], path: String::new() };

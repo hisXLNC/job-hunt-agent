@@ -1029,7 +1029,8 @@ impl Agent {
         let results = self.results_for_scoring();
         // What you want (the fields in Me, Looking for), then your own notes.
         let wants = profile.wants.for_scoring();
-        let own = [wants.as_str(), profile.guidance.trim()].iter().filter(|x| !x.is_empty()).cloned().collect::<Vec<_>>().join("\n\n");
+        let certs = profile.cert_lines();
+        let own = [wants.as_str(), profile.guidance.trim(), certs.trim()].iter().filter(|x| !x.is_empty()).cloned().collect::<Vec<_>>().join("\n\n");
         if list.is_empty() {
             return format!("{own}{results}");
         }
@@ -1620,7 +1621,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                     .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
                     .map(|d| d.plain_text())
                     .unwrap_or_default();
-                let new = cv::humanize(&self.llm().revise_letter(&profile.name, &cv_text, &letter, &job, note, &profile.stories)?, &self.own_words(&job, &profile));
+                let new = cv::humanize(&self.llm().revise_letter(&profile.name, &cv_text, &letter, &job, note, &profile.letter_facts())?, &self.own_words(&job, &profile));
                 self.db().set(&undo_key, &json!({ "letter": letter }).to_string())?;
                 self.save_cover_letter(job_id, &new)?;
                 self.db().log(Some(job_id), "revised", &format!("cover letter: \u{201c}{note}\u{201d}"))?;
@@ -2334,14 +2335,14 @@ replies and interviews, and a little lower for kinds that got none from several 
             .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
             .map(|d| d.plain_text())
             .ok_or_else(|| Error("No CV uploaded yet. Add one in CV & Career.".into()))?;
-        let mut facts = profile.application_facts.trim().to_string();
+        let mut facts = format!("{}{}", profile.application_facts.trim(), profile.cert_lines());
         if let Some(min) = profile.min_salary {
             facts.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
         }
         if let Some(a) = crate::ats::of(&job) {
             facts.push_str(&format!("\n{}", crate::ats::answers(a)));
         }
-        let mut list = self.llm().answer_questions(&profile.name, &cv, &job, questions, &facts, &profile.stories)?;
+        let mut list = self.llm().answer_questions(&profile.name, &cv, &job, questions, &facts, &profile.letter_facts())?;
         let own = self.own_words(&job, &profile);
         for a in &mut list {
             a.answer = cv::humanize(&a.answer, &own);
@@ -3186,6 +3187,13 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
             "cvwork" => {
                 let _ = agent.db().set("last.cvwork", &Utc::now().timestamp().to_string());
                 agent.resume_cv_work();
+                // And the tailored CVs whose fit was never scored, a few at a time.
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    if let Ok(_g) = a.claim("after-scores") {
+                        a.score_tailored_missing(8);
+                    }
+                });
             }
             "sync" => sync_in_background(agent),
             "check-postings" => check_in_background(agent),

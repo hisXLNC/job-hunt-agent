@@ -296,6 +296,10 @@ async function settingsCards(tab, sub, host, given) {
         ${st.signature ? '<button class="btn ghost" data-act="forget" data-what="signature">Remove</button>' : ''}
       </div>
       <p class="muted small">Letters already written keep what they had. Saving a cover letter again adds it.</p></section>
+    <form data-form="profile" data-part="certs"><section class="card" id="certsCard"><header><h2>Certifications</h2></header>
+      <p class="muted">The certifications and licences you hold, like PMP or CPMAI. Job Hunt counts them as yours when it scores a posting, writes a cover letter and fills in an application form, whether or not your CV lists them. Only the name is needed; forms sometimes ask for the rest.</p>
+      <div class="cert-list" id="certList">${(p.certifications || []).map(certRow).join('')}</div>
+      <div class="row"><button class="btn" type="button" data-act="certAdd">${svg('add')}Add a certification</button></div></section></form>
     <form data-form="profile" data-part="stories"><section class="card"><header><h2>Your stories</h2></header>
       <p class="muted">True achievements and stories that aren't in your CV, for cover letters to draw on, like a hard delivery you pulled off or a problem only you solved. Cover letters may use them; your CV is never changed with them.</p>
       <label class="field">Stories<textarea name="stories" style="min-height:160px" placeholder="e.g. Managed a key shipment for a \$2B oil project in Iran.\nCoordinated urgent delivery of medical supplies to Iraq.">${esc(st.profile.stories || '')}</textarea><span class="hint">One per line or paragraph. Keep the real numbers.</span></label>
@@ -884,6 +888,15 @@ async function checkUpdate() {
   return update;
 }
 
+/** One certification, as a row of boxes on Me, About me. */
+const certRow = (c = {}) => `<div class="cert-row" data-cert>
+  <label class="field">Certification<input type="text" data-k="name" value="${esc(c.name || '')}" placeholder="Project Management Professional (PMP)"></label>
+  <label class="field">Issued by<input type="text" data-k="issuer" value="${esc(c.issuer || '')}" placeholder="PMI"></label>
+  <label class="field">Credential number<input type="text" data-k="number" value="${esc(c.number || '')}" placeholder="Optional"></label>
+  <label class="field">Issued<input type="text" data-k="issued" value="${esc(c.issued || '')}" placeholder="May 2021"></label>
+  <label class="field">Expires<input type="text" data-k="expires" value="${esc(c.expires || '')}" placeholder="Never, or a date"></label>
+  <button class="btn ghost danger sm" type="button" data-act="certRemove" aria-label="Remove this certification">Remove</button></div>`;
+
 /** The profile with whatever fields this form holds: settings can sit in any card or tab. */
 function readProfile(form, part) {
   const p = JSON.parse(JSON.stringify(settingsCache.profile));
@@ -892,6 +905,7 @@ function readProfile(form, part) {
   const has = n => el(n) != null;
   for (const k of ['name', 'email', 'timezone', 'guidance', 'stories', 'application_facts']) if (has(k)) p[k] = v(k).trim();
   for (const k of ['remote_ok', 'include_metro', 'auto_tailor']) if (has(k)) p[k] = !!el(k).checked;
+  if (part === 'certs') p.certifications = [...form.querySelectorAll('[data-cert]')].map(r => Object.fromEntries([...r.querySelectorAll('[data-k]')].map(i => [i.dataset.k, i.value.trim()]))).filter(c => c.name);
   if (has('auto_tailor_mode')) { p.auto_tailor = v('auto_tailor_mode') === 'all'; p.auto_tailor_min = v('auto_tailor_mode') === 'strong' ? 85 : 0; }
   // What you want from a role (Me, Looking for): told to the scorer.
   if (has('want_level')) p.wants = { level: v('want_level').trim(), work: v('want_work'), industries: fromLines(v('want_industries')), avoid: fromLines(v('want_avoid')), dealbreakers: fromLines(v('want_dealbreakers')), path: has('want_path') ? v('want_path').trim() : (p.wants?.path || '') };
@@ -1501,8 +1515,8 @@ document.addEventListener('keydown', e => {
 });
 /** Every key, in Job Hunt's own dialog. */
 function keysHelp() {
-  const rows = [['Ctrl + K', 'Find any job'], ['/', 'Search the list on this page'], ['j / k', 'Next or previous job'], ['Enter X L →', 'In the Queue: do it, not interested, later, skip'], ['↑ ↓ Space X T', 'In the Pick list: move, tick, not interested, tailor the ticked ones'], ['a', 'Approve (on a job ready to approve)'],
-    ['o', 'Open the posting'], ['t', 'Tailor my CV for this role'], ['c', 'Ask Claude about this job'], ['Esc', 'Back to the list'], ['?', 'These keys']];
+  const rows = [['Ctrl + K', 'Find any job'], ['c', 'Ask Claude about what is on screen'], ['/', 'Search the list on this page'], ['j / k', 'Next or previous job'], ['Enter X L →', 'In the Queue: do it, not interested, later, skip'], ['↑ ↓ Space X T', 'In the Pick list: move, tick, not interested, tailor the ticked ones'], ['a', 'Approve (on a job ready to approve)'],
+    ['o', 'Open the posting'], ['t', 'Tailor my CV for this role'], ['Esc', 'Back to the list'], ['?', 'These keys']];
   const back = document.createElement('div');
   back.className = 'modal-back';
   back.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="Keys"><h2>Keys</h2>
@@ -1567,9 +1581,8 @@ document.addEventListener('keydown', e => {
   } else if (e.key === 't' && onJob) {
     const b = document.querySelector('.actions [data-act=tailorPicked]');
     if (b) { e.preventDefault(); b.click(); }
-  } else if (e.key === 'c' && onJob) {
-    const b = document.querySelector('[data-jtab=chat]');
-    if (b) { e.preventDefault(); b.click(); setTimeout(() => $('#chatMsg')?.focus(), 50); }
+  } else if (e.key === 'c') {
+    e.preventDefault(); askOpen();
   } else if (e.key === 'Escape' && onJob) {
     history.length > 1 ? history.back() : (location.hash = '#applications');
   } else if (e.key === 'a' && onJob) {

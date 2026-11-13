@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.67.0",
+    "date": "2026-11-13",
+    "title": "Ask Claude from anywhere, certifications, and more forms filled",
+    "changes": [
+      "Ask Claude is now a button that floats over every screen, in place of the tab on each job. It sees the screen you are on, the job, your CV and what Job Hunt knows, so you can ask what a keyword means or why a role scored as it did without leaving the page. Select words on a page to ask about just those; press C to open it.",
+      "Me, About me has a Certifications list (PMP, CPMAI and the like). Job Hunt counts them as yours in scoring, cover letters, form answers and the forms themselves, whether or not your CV lists them.",
+      "The extension opens a cover letter kept behind a link (Supporting documents, Add) and attaches your letter there.",
+      "The extension fills dropdowns that say No Selection and open their own list, as on Rogers' application form.",
+      "Applications waiting for approval always show the fit before and after tailoring. A tailored CV that never got its score is scored within half an hour."
+    ]
+  },
+  {
     "version": "2.66.0",
     "date": "2026-11-13",
     "title": "Folded forms, and a brief for Claude",

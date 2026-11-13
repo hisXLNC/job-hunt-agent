@@ -389,12 +389,12 @@ function ratingCard(r, busy, company) {
 const canReach = j => j.score_after == null && j.score_potential != null && j.score != null && j.score_potential >= j.score ? j.score_potential : null;
 /** On a phone a row shows one fit badge (the tailored CV's once there is one) and says the other
  *  figure in words under it: "was 76", or "~97 tailored" while it's a forecast. */
-const fitNote = j => j.score != null && j.score_after != null && j.score_after !== j.score
-  ? `<small class="fit-note">was ${j.score}</small>`
+const fitNote = j => j.score != null && j.score_after != null
+  ? `<small class="fit-note">${j.score_after === j.score ? 'same before' : `was ${j.score}`}</small>`
   : canReach(j) && canReach(j) > j.score ? `<small class="fit-note">~${canReach(j)} tailored</small>` : '';
 /** After the fit badge: the tailored CV's fit as a second badge, or the forecast one (dashed) before tailoring. */
-const reachTag = j => j.score != null && j.score_after != null && j.score_after !== j.score
-  ? `<span class="reach"><span class="reach-arrow">→</span><span class="score ${scoreBand(j.score_after)}" style="--p:${j.score_after}" title="Fit of the tailored CV">${j.score_after}</span></span>`
+const reachTag = j => j.score != null && j.score_after != null
+  ? `<span class="reach"><span class="reach-arrow">→</span><span class="score ${scoreBand(j.score_after)}" style="--p:${j.score_after}" title="${j.score_after === j.score ? 'Fit of the tailored CV: the same as before tailoring' : 'Fit of the tailored CV'}">${j.score_after}</span></span>`
   : canReach(j) ? `<span class="reach"><span class="reach-arrow">→</span><span class="score forecast ${scoreBand(canReach(j))}" style="--p:${canReach(j)}" title="${canReach(j) > j.score ? 'Predicted fit once your CV is tailored to this posting' : 'Tailoring is unlikely to raise this fit: the gap is in experience, not wording'}">~${canReach(j)}</span></span>` : '';
 const trackLabel = t => (settingsCache?.profile?.tracks || []).find(x => x.name === t)?.label || overview?.track_labels?.[t] || (t || '').replace(/[-_]/g, ' ');
 const stagePill = s => `<span class="pill ${esc(s)}">${esc(STAGES[s] || s)}</span>`;

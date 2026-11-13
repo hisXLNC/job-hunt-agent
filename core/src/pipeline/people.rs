@@ -1,4 +1,4 @@
-//! People at a company: contacts, the notes written to them, and the chat about one job.
+//! People at a company: contacts, the notes written to them, and the assistant you can ask anything.
 
 use super::*;
 
@@ -222,38 +222,161 @@ impl Agent {
         Ok(out)
     }
 
-    // --- chat about one job ---------------------------------------------------------------------------
+    // --- the assistant: one conversation, wherever you are in Job Hunt -----------------------------
 
-    /// The job's chat: [{who: "you"|"claude", text, at}], oldest first.
-    pub fn chat(&self, job_id: &str) -> Vec<Value> {
-        serde_json::from_str(&self.secret(&format!("chat:{job_id}"))).unwrap_or_default()
+    /// The conversation with the assistant: [{who: "you"|"claude", text, at, about}], oldest first.
+    pub fn ask_log(&self) -> Vec<Value> {
+        serde_json::from_str(&self.secret("ask:chat")).unwrap_or_default()
     }
 
-    /// Send a message in the job's chat and keep Claude's reply. Returns the reply.
-    pub fn chat_send(&self, job_id: &str, message: &str) -> R<String> {
-        let message = message.trim();
+    /// The assistant as the page shows it: the conversation, whether an answer is being written,
+    /// and, when the last message got no answer, why and the message itself (to send again).
+    pub fn ask_state(&self) -> Value {
+        json!({ "chat": self.ask_log(), "busy": self.is_running("ask"), "error": self.secret("ask:error"), "draft": self.secret("ask:draft") })
+    }
+
+    /// Take a message for the assistant and answer it in the background. `page` is what you were
+    /// looking at: {where, hash, job, seen, quote}.
+    pub fn ask_start(self: &Arc<Self>, message: &str, page: &Value) -> R<()> {
+        let message = message.trim().to_string();
         if message.is_empty() {
             return err("Write a message first.");
         }
-        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        let Some(guard) = self.claim_owned("ask") else { return err("Claude is still answering the last message.") };
+        let mut list = self.ask_log();
+        list.push(json!({ "who": "you", "text": message, "at": now(), "about": page["where"].as_str().unwrap_or("") }));
+        self.db().set("ask:chat", &json!(list).to_string())?;
+        self.db().set("ask:error", "")?;
+        self.db().set("ask:draft", "")?;
+        let (a, page) = (self.clone(), page.clone());
+        std::thread::spawn(move || {
+            let _g = guard;
+            if let Err(e) = a.ask_answer(&message, &page) {
+                // The message comes back to the box, so nothing typed is lost.
+                let mut list = a.ask_log();
+                if list.last().is_some_and(|m| m["who"] == "you") {
+                    list.pop();
+                }
+                let _ = a.db().set("ask:chat", &json!(list).to_string());
+                let _ = a.db().set("ask:error", &e.0);
+                let _ = a.db().set("ask:draft", &message);
+                let _ = a.db().log(None, "ask:error", &e.0);
+            }
+        });
+        Ok(())
+    }
+
+    /// Answer the last message of the conversation (already kept by ask_start) and keep the reply.
+    pub fn ask_answer(&self, message: &str, page: &Value) -> R<String> {
+        let text = |k: &str, max: usize| page[k].as_str().unwrap_or("").trim().chars().take(max).collect::<String>();
         let profile = self.profile();
-        let cv = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
-            .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
+        let job = match page["job"].as_str().filter(|j| !j.is_empty()) {
+            Some(id) => self.db().job(id)?,
+            None => None,
+        };
+        // The CV in play: the one tailored for the job on screen, else that job's CV, else the first.
+        let cv = job.as_ref().and_then(|j| j.cv_path.as_deref()).and_then(|p| cv::open(Path::new(p)).ok())
+            .or_else(|| {
+                let t = job.as_ref().and_then(|j| profile.track(j.track.as_deref())).or(profile.tracks.first())?;
+                cv::open(&self.cv_path(&t.name)).ok()
+            })
             .map(|d| d.plain_text())
             .unwrap_or_default();
-        let mut list = self.chat(job_id);
-        // The last 20 turns are plenty of context.
-        let history: Vec<(String, String)> = list.iter().rev().take(20).rev()
+        let list = self.ask_log();
+        // The turns before this message; the last 20 are plenty.
+        let before = list.len().saturating_sub(1);
+        let history: Vec<(String, String)> = list[..before].iter().rev().take(20).rev()
             .map(|m| (m["who"].as_str().unwrap_or("you").to_string(), m["text"].as_str().unwrap_or("").to_string())).collect();
-        let reply = self.llm().chat(&profile.name, &cv, &job, &job.notes, &history, message)?;
-        let at = now();
-        list.push(json!({ "who": "you", "text": message, "at": at }));
-        list.push(json!({ "who": "claude", "text": reply, "at": at }));
-        self.db().set(&format!("chat:{job_id}"), &json!(list).to_string())?;
+        let asked = crate::claude::Asked {
+            candidate: &profile.name,
+            cv: &cv,
+            job: job.as_ref(),
+            facts: &self.ask_facts(&profile, job.as_ref()),
+            place: &text("where", 200),
+            screen: &text("seen", 9000),
+            quote: &text("quote", 2000),
+            history: &history,
+            message,
+        };
+        let reply = self.llm().assist(&asked)?;
+        let mut list = self.ask_log();
+        list.push(json!({ "who": "claude", "text": reply, "at": now() }));
+        self.db().set("ask:chat", &json!(list).to_string())?;
         Ok(reply)
     }
 
-    pub fn chat_clear(&self, job_id: &str) -> R<()> {
-        self.db().set(&format!("chat:{job_id}"), "")
+    /// What Job Hunt knows that an answer may need: how it's set up, and where the job on screen stands.
+    fn ask_facts(&self, p: &crate::profile::Profile, job: Option<&Job>) -> String {
+        let mut l = vec![];
+        l.push(format!("The bar: postings scoring {} or more get a tailored CV and cover letter.", p.score_threshold));
+        for t in &p.tracks {
+            let name = if t.label.trim().is_empty() { &t.name } else { &t.label };
+            l.push(format!("CV \"{name}\" searches for: {}.", t.titles.join(", ")));
+        }
+        if !p.locations.is_empty() {
+            l.push(format!("Where they look: {}{}.", p.locations.join("; "), if p.remote_ok { "; remote is fine" } else { "" }));
+        }
+        if let Some(m) = p.min_salary {
+            l.push(format!("Lowest salary they'd take: {m:.0}."));
+        }
+        let wants = p.wants.for_scoring();
+        if !wants.trim().is_empty() {
+            l.push(format!("What they want from a role, as the scorer is told:\n{wants}"));
+        }
+        let certs = p.cert_lines();
+        if !certs.is_empty() {
+            l.push(certs.trim().to_string());
+        }
+        if !p.guidance.trim().is_empty() {
+            l.push(format!("Their own guidance for scoring: {}", p.guidance.trim()));
+        }
+        if let Some(j) = job {
+            l.push(format!("\nThe job on screen: {} at {}. Stage: {}.", j.title, j.company, j.status));
+            if let Some(s) = j.score {
+                l.push(format!("Fit score of their CV as it is: {s} of 100."));
+            }
+            if let Some(s) = j.score_after {
+                l.push(format!("Fit score of the CV tailored for it: {s}."));
+            } else if let Some(s) = j.score_potential {
+                l.push(format!("What the fit could reach once the CV is tailored: {s}."));
+            }
+            if let Some(r) = j.reasoning.as_deref().filter(|r| !r.trim().is_empty()) {
+                l.push(format!("Why it scored that: {r}"));
+            }
+            if !j.red_flags.is_empty() {
+                l.push(format!("Concerns the scorer raised: {}", j.red_flags.join(" | ")));
+            }
+            if let Some(c) = &j.career {
+                l.push(format!("Against their career path: {}. {}", if c.toward { "leads toward it" } else { "could set them back" }, c.why));
+            }
+            if !j.keywords.is_empty() {
+                l.push(format!("Keywords the posting asks for: {}.", j.keywords.join(", ")));
+            }
+            if let (Some(b), Some(a)) = (j.coverage_before, j.coverage_after) {
+                l.push(format!("Share of those keywords in the CV: {:.0}% before tailoring, {:.0}% after.", b * 100.0, a * 100.0));
+            }
+            if !j.keyword_gaps.is_empty() {
+                l.push(format!("Keywords left out of the tailored CV because nothing in the CV backs them: {}.", j.keyword_gaps.join(", ")));
+            }
+            if !j.cv_changes.is_empty() {
+                l.push(format!("Paragraphs of the CV reworded for this job: {}.", j.cv_changes.len()));
+            }
+            if let Some(d) = &j.deadline {
+                l.push(format!("Last day to apply: {d}."));
+            }
+            if j.closed_at.is_some() {
+                l.push("The posting has closed.".into());
+            }
+            if !j.notes.trim().is_empty() {
+                l.push(format!("Their notes on this job: {}", j.notes.trim()));
+            }
+        }
+        l.join("\n")
+    }
+
+    pub fn ask_clear(&self) -> R<()> {
+        self.db().set("ask:chat", "")?;
+        self.db().set("ask:error", "")?;
+        self.db().set("ask:draft", "")
     }
 }

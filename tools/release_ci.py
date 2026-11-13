@@ -275,7 +275,7 @@ def verify(quick=False):
          # In a real browser, against the preview with sample data. Skipped where Playwright isn't installed.
          ("Screens work (click-through)", [sys.executable, "tools/screen_test.py"], ROOT)],
         # The extension, loaded for real, filling a stand-in Workday page (skills, Field of Study).
-        [("Extension fills a form (mock Workday)", ["node", "tools/ext_test/ext_test.js", "std", "odd", "typing", "keys", "issuer", "heal", "app", "profile", "folded", "posts"], ROOT)],
+        [("Extension fills a form (mock Workday)", ["node", "tools/ext_test/ext_test.js", "std", "odd", "typing", "keys", "issuer", "heal", "app", "profile", "folded", "letter", "posts"], ROOT)],
         [] if quick else [("Windows app compiles", ["cargo", "check", "-q", "--manifest-path", "desktop/src-tauri/Cargo.toml"], ROOT)],
     ]
     failed = []

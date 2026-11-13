@@ -353,24 +353,10 @@ async function act(el) {
     try { localStorage.setItem('jh.resultsDays', String(resultsDays)); } catch (e) {}
     return route();
   }
-  if (a === 'chatSend') {
-    const msg = $('#chatMsg').value.trim();
-    if (!msg) { toast('Write a message first.', true); return; }
-    jobTabs[jobId] = 'chat';
-    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/chat`, { method: 'POST', body: { message: msg } }); setTimeout(route, 300); });
-  }
-  // A mock interview, in the job's own chat: Claude asks, you answer, it says how the answer landed.
-  if (a === 'practise') {
-    jobTabs[jobId] = 'chat';
-    return busy(async () => {
-      await api(`/api/jobs/${encodeURIComponent(jobId)}/chat`, { method: 'POST', body: { message: "Let's practise my interview for this role. You play the interviewer. Ask one question at a time, the kind this company would really ask for this role, and wait for my answer. After each answer, say in two or three plain sentences what worked and what to change, then ask the next question. Start with the first question now." } });
-      setTimeout(route, 300);
-    }, 'Starting the practice…');
-  }
-  if (a === 'chatClear') {
-    if (!await ask('Start the conversation over? This one is deleted.')) return;
-    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/chat`, { method: 'POST', body: { clear: true } }); route(); });
-  }
+  // A mock interview with the assistant: Claude asks, you answer, it says how the answer landed.
+  if (a === 'practise') return askSend(PRACTISE);
+  if (a === 'certAdd') { $('#certList').insertAdjacentHTML('beforeend', certRow()); $('#certList').lastElementChild.querySelector('input').focus(); return; }
+  if (a === 'certRemove') { const f = el.closest('form'); el.closest('[data-cert]').remove(); f.dispatchEvent(new Event('change', { bubbles: true })); return; }
   if (a === 'forgetNetwork') {
     if (!await ask('Remove your LinkedIn connections from Job Hunt?')) return;
     return busy(async () => { await api('/api/network/forget', { method: 'POST' }); route(); }, 'Removed.');

@@ -59,13 +59,14 @@ function answers(fields, name) {
   for (const f of fields || []) {
     const nth = Number((/(\d+)\s*$/.exec(f.section || '') || [])[1] || 1), sec = f.section || '';
     if (f.type === 'add') { if (/certif/i.test(sec)) values[f.key] = String(Math.max(0, 2 - (f.entries || 0))); else if (/language/i.test(sec)) values[f.key] = String(Math.max(0, 3 - (f.entries || 0))); }
-    else if (f.type === 'file') { if (/resume|cv/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - CV.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 test').toString('base64') }; }
+    else if (f.type === 'file') { if (/cover|letter/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - Cover letter.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 letter').toString('base64') }; else if (/resume|cv/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - CV.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 test').toString('base64') }; }
     else if (f.type === 'skills') values[f.key] = SKILLS;
     else if (f.type === 'prompt') values[f.key] = /school|university/i.test(f.label) ? 'American University of Kuwait' : /certif/i.test(f.label) ? (nth === 1 ? 'PMP' : 'PMI-CPMAI') : 'Computer Science';
     else if (/^language$/i.test(f.label)) values[f.key] = LANGS[nth - 1] || '';
     else if (/comprehension/i.test(f.label)) values[f.key] = nth === 3 ? 'Beginner' : 'Fluent';
     else if (/fluent/i.test(f.label)) values[f.key] = nth === 3 ? 'no' : 'yes';
     else if (f.type === 'date' && /^from/i.test(f.label)) { if (/education/i.test(sec)) values[f.key] = '2005'; else if (/work experience/i.test(sec)) values[f.key] = '03/2019'; }
+    else if (/province/i.test(f.label)) values[f.key] = 'Ontario';
     else if (/email/i.test(f.label)) values[f.key] = 'sam@example.com';
     else if (/phone/i.test(f.label)) values[f.key] = '416-555-0100';
     else if (/job title/i.test(f.label)) values[f.key] = 'Program Manager';
@@ -80,7 +81,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
 (async () => {
   const only = process.argv.slice(2);
   const names = Object.keys(VARIANTS).filter(n => !only.length || only.includes(n));
-  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
+  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && n !== 'letter' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
   // Job Hunt's side: says its version, and answers a form's questions.
   let picked = '';
   let leads = null;
@@ -141,8 +142,17 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   const foldedHtml = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Solution Delivery Manager - Mock Careers</title></head><body><h1>Solution Delivery Manager (343472)</h1><p><a href="#" onclick="document.getElementById(\'profile\').style.display=\'block\';return false">Expand all sections</a> <a href="#" onclick="return false">Collapse all sections</a></p><h2>My Documents</h2><p>Accepted file types: DOCX, PDF</p><h2>Profile Information</h2><div id="profile" style="display:none"><label for="email">Email</label><input id="email" type="email"><label for="phone">Phone</label><input id="phone" type="tel"><label for="city">City</label><input id="city" type="text"><label for="note">Anything else</label><input id="note" type="text"></div></body></html>';
   // The profile's list of jobs, as Job Bank's "Manage your work experience and skills": no boxes, a link to the form.
   const listHtml = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Job Match - Mock Job Site</title></head><body><h1>Manage your work experience and skills</h1><h2>Experience and skills</h2><p>Add your latest work experience and acquired skills, then list other jobs you\u2019ve held before.</p><p><a class="btn" href="/match/profile/experience">Add a new experience</a></p><table><thead><tr><th>Job title (NOC code)</th><th>Employer Name</th><th>Employment Period</th></tr></thead><tbody><tr><td colspan="3">No experience listed. Click on "Add new experience" to fill in the table.</td></tr></tbody></table><p><button>Previous</button> <button>Continue</button></p></body></html>';
+  // A review page as Indeed draws it: the CV is there already, and the cover letter sits behind
+  // "Supporting documents · Add", which opens a plain upload box.
+  const letterHtml = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Review your application - Mock Jobs</title></head><body><h1>Please review your application</h1>'
+    + '<div><h2>Resume</h2><div>Sam Lee - CV.pdf</div></div><div><label for="email">Email</label><input id="email" type="email"><label for="phone">Phone</label><input id="phone" type="tel"><label for="city">City</label><input id="city" type="text"></div>'
+    // A choice as SuccessFactors draws it: a box that says "No Selection", and a list of its own that a click opens.
+    + '<div><div id="p:_selectContainer"><input aria-label="Province/Territory/State" autocomplete="off" type="text" placeholder="No Selection" aria-owns="p:_listSelect" role="combobox" aria-required="true" aria-expanded="false" id="prov" onclick="document.getElementById(\'p:_listSelect\').style.display=\'block\'" readonly><button type="button" tabindex="-1" aria-label="Province/Territory/State"><span></span></button></div>'
+    + '<ul id="p:_listSelect" style="display:none">' + ['Alberta', 'British Columbia', 'Ontario', 'Quebec'].map(n => `<li><a href="javascript:void(0)" onclick="document.getElementById(\'prov\').value=\'${n}\';document.getElementById(\'p:_listSelect\').style.display=\'none\'">${n}</a></li>`).join('') + '</ul></div>'
+    + '<div id="docs"><div style="display:flex;justify-content:space-between"><h2>Supporting documents</h2><a href="#" id="addDocs" onclick="document.getElementById(\'up\').style.display=\'block\';this.remove();return false">Add</a></div><div>No cover letter or additional documents added. This is optional to add.</div>'
+    + '<div id="up" style="display:none"><label for="doc">Upload a file</label><input id="doc" type="file"></div></div><button type="button">Submit your application</button></body></html>';
   const postsHtml = fs.readFileSync(path.join(__dirname, 'posts.html'));
-  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
+  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/letter') ? letterHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
   const base = `http://127.0.0.1:${site.address().port}/apply`;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
@@ -327,6 +337,26 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (problems.length) { failed.push('folded'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();
   }
+  // A cover letter kept behind "Supporting documents · Add" (Indeed's review page): the link is
+  // pressed, and the upload box it shows gets the letter, not the CV.
+  if (!only.length || only.includes('letter')) {
+    const page = await ctx.newPage();
+    const url = `http://127.0.0.1:${site.address().port}/letter/review`;
+    await page.goto(url);
+    const t0 = Date.now();
+    await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, url);
+    let s = '';
+    for (let i = 0; i < 80; i++) { await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s) || /Couldn't|can't find|No answers|tripped/.test(s)) break; }
+    const got = await page.evaluate(() => ({ open: document.getElementById('up').style.display !== 'none', file: document.getElementById('doc').files[0]?.name || '', email: document.getElementById('email').value, prov: document.getElementById('prov').value }));
+    const problems = [];
+    if (got.prov !== 'Ontario') problems.push(`the box with a list of its own holds "${got.prov}", not Ontario`);
+    if (!got.open) problems.push('the Add beside Supporting documents was not pressed');
+    if (got.file !== 'Sam Lee - Cover letter.pdf') problems.push(`the box it opened holds "${got.file || 'nothing'}", not the cover letter`);
+    if (got.email !== 'sam@example.com') problems.push(`the rest of the page wasn't filled (email "${got.email}")`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'letter'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  ${got.file || 'no file'}`);
+    if (problems.length) { failed.push('letter'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
+    await page.close();
+  }
   // Hiring posts: a page of posts (a stand-in for LinkedIn's search) read by the extension and sent
   // to Job Hunt, each with who wrote it and its own link; and one ordinary page, sent as chosen.
   if (!only.length || only.includes('posts')) {
@@ -367,7 +397,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   };
   // Three browsers at a time (JOBS=1 for one after another, when reading a failure).
   const jobs = names.map(n => () => runVariant(n));
-  if (!only.length || ['app', 'profile', 'posts', 'folded'].some(n => only.includes(n))) jobs.push(rest);
+  if (!only.length || ['app', 'profile', 'posts', 'folded', 'letter'].some(n => only.includes(n))) jobs.push(rest);
   const t0 = Date.now();
   await Promise.all(Array.from({ length: Math.max(1, Number(process.env.JOBS) || 3) }, async () => { while (jobs.length) await jobs.shift()(); }));
   console.log(`      (${Math.round((Date.now() - t0) / 1000)}s in all)`);

@@ -56,6 +56,36 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.67.0: the assistant; the letter's place; certifications; dropdowns with their own list; after scores.**
+  - *Ask Claude floats over every screen* (`static/app-ask.js`, last script in `index.html`; styles at the end of
+    `app.css` under "Ask Claude"). The job page's Ask Claude tab, `chat*` actions, `/api/jobs/<id>/chat`, `Llm::chat`
+    and `chat:<job>` storage are gone (old per-job conversations are left in the database, unread). One conversation,
+    `ask:chat` (+ `ask:error`, `ask:draft`), `Agent::ask_start/ask_answer/ask_state/ask_clear` in
+    `pipeline/people.rs`, routes GET/POST `/api/ask`. Each message carries `page` = {where, hash, job, seen (the
+    screen's innerText, 9000 chars), quote (selected words)}; `ask_facts` adds the bar, titles, wants, certifications and
+    the on-screen job's score, reasons, keywords, gaps. `Llm::assist(&Asked)` with `assist_system()` (a primer on how Job
+    Hunt works; may link `[All jobs](#applications)` etc., which `marked()` in `app-steps.js` now renders for `#` links
+    only). On failure the user's message is taken back off the log and returned as `draft`. Usage kind stays "chat".
+    Selecting words in `#main`/`#jobPanel` shows `#askSel`; key `c` opens it anywhere; "Practise this interview" sends
+    `PRACTISE` through it. `dev_server.rs` DemoLlm and `testkit` FakeLlm answer `assist` ("fail" in the message errors).
+  - *Cover letter behind a link* (`fill.js` `letterAdder`, in `startNow` before `collect`): an Add/Upload whose small
+    block says cover letter / supporting documents and holds no file is pressed once (`lettersTried`); an upload box
+    that shows within 3 min (`letterOpened`, also `sessionStorage['jobhunt-letter']` for a page of its own) and names
+    no other document gets `section: "Cover letter"`, so `file_for` gives it the letter. `fill.rs` `is_letter_box`: an
+    empty textarea named for the cover letter gets the job's own letter text. Modelled on a screenshot of Indeed's
+    review page; the page it opens is unseen.
+  - *Certifications* (`Profile.certifications: Vec<Certification>`, Me → About me, autosaved like the rest;
+    `certRow` in `app-settings.js`). `Profile::cert_lines()` goes to scoring (`scoring_guidance`), form facts
+    (`fill.rs`, `answer_questions`), letters and tailoring (`letter_facts()` replaces `stories` there), the assistant,
+    and `/ext` details; a form's Certifications Add gets max(CV's, listed).
+  - *Dropdowns that own their list* (`fill.js` `fillOwned`, tried first for `combobox`): SuccessFactors' "No
+    Selection" boxes (`aria-owns="NN:_listSelect"`, opened by `juic.fire(..."_click")` on click). Click the box, else
+    its arrow, else type; choose from the list's innermost `[role=option],li,a`; a real click if a script's is ignored.
+    Traces "a list of its own never opened" / "no such choice in its list" (with the choices) / "its list took no
+    choice". Written from Rogers' Copy details; the list's real markup is unseen.
+  - *After scores*: `score_tailored` (split out of `tailor`), `without_after_score`, `score_tailored_missing(8)` run
+    with the half-hourly `cvwork` task for ready/approved jobs whose tailored CV was never scored. Rows show
+    before → after whenever `score_after` is set, also when equal ("same before").
 - **2.66.0: folded forms; a brief for Claude.** `start()` first presses "Expand all (sections)" (or, on a page with
   under three boxes, each `aria-expanded=false` bar that isn't a menu): Rogers is SuccessFactors and showed no boxes.
   `fill::brief` + `POST /ext/brief` + the panel's `brief` button: the user asked for Job Hunt to work with the Claude

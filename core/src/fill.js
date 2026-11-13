@@ -737,6 +737,9 @@
     // Boxes that choose from the site's own list are searched, never typed into as text.
     if (f.type === 'skills') return fillSkills(el, v);
     if (f.type === 'prompt') return fillSkills(el, String(v).split(/\s*[;\n]\s*/)[0], true);
+    // A box that opens a list of its own, named by the box (SuccessFactors: "No Selection", its
+    // list in aria-owns): opened as a click opens it, and the answer chosen from that list.
+    if (f.type === 'combobox' && await fillOwned(el, v)) return true;
     el.focus();
     setter(el, String(v));
     if (f.type === 'combobox') {
@@ -746,6 +749,43 @@
       opt.click();
     }
     return true;
+  }
+  async function fillOwned(el, v) {
+    const id = el.getAttribute('aria-owns') || el.getAttribute('aria-controls');
+    if (!id) return false;
+    const rows = () => {
+      const list = document.getElementById(id);
+      if (!list || !shown(list)) return [];
+      const all = [...list.querySelectorAll('[role=option],li,a')].filter(o => shown(o) && clean(o.textContent).length > 0 && clean(o.textContent).length < 120);
+      // The innermost of each (an li around an a is one option, not two).
+      return all.filter(o => !all.some(x => x !== o && o.contains(x)));
+    };
+    const choose = list => { const names = list.map(o => clean(o.textContent)); let i = names.findIndex(n => same(n, v)); if (i < 0) i = names.findIndex(n => near(n, v)); return i < 0 ? null : list[i]; };
+    const was = el.value;
+    let list = [];
+    // Opened by a click on the box; if that shows nothing, by its arrow; then by typing the answer.
+    const arrow = el.parentElement && el.parentElement.querySelector('button');
+    for (const open of [() => mouse(el), () => arrow && mouse(arrow), () => { el.focus(); setter(el, String(v)); pressKey(el, 'ArrowDown'); }]) {
+      open();
+      for (let i = 0; i < 6 && !list.length; i++) { await wait(250); list = rows(); }
+      if (list.length) break;
+    }
+    if (!list.length) { trace('a list of its own never opened', { label: labelOf(el).slice(0, 60), id }); if (el.value !== was) setter(el, was); return false; }
+    let opt = choose(list);
+    if (!opt) {
+      trace('no such choice in its list', { label: labelOf(el).slice(0, 60), want: String(v).slice(0, 40), has: list.slice(0, 12).map(o => clean(o.textContent).slice(0, 30)) });
+      if (el.value !== was) setter(el, was);
+      pressKey(el, 'Escape');
+      return false;
+    }
+    const name = clean(opt.textContent);
+    const took = () => same(el.value, name) || near(el.value, name);
+    mouse(opt);
+    await wait(350);
+    // A list that ignores a script's click takes a real one.
+    if (!took() && opt.isConnected && shown(opt)) { await realClick(opt, true); await wait(350); }
+    if (!took()) trace('its list took no choice', { label: labelOf(el).slice(0, 60), want: name.slice(0, 40), now: String(el.value).slice(0, 40) });
+    return took();
   }
   // A click the way a mouse makes one: pointer and mouse press and release at the element's middle,
   // then the click (sites that act on the press ignore a bare click()).
@@ -1292,7 +1332,30 @@
     amber[amberAt % amber.length].scrollIntoView({ behavior: 'smooth', block: 'center' });
     amberAt++;
   }
-  let sent = null, opens = 0, unfolded = false;
+  let sent = null, opens = 0, unfolded = false, lettersTried = false, letterOpened = 0;
+  try { letterOpened = Number(sessionStorage.getItem('jobhunt-letter') || 0); } catch (e) { /* storage off */ }
+  // A form that keeps its cover letter behind a link (Indeed: "Supporting documents", an Add link
+  // and "No cover letter or additional documents added"): the link that opens it, or nothing.
+  const LETTER_BOX = /cover letter|supporting documents?|motivation letter/i;
+  function letterAdder() {
+    for (const b of document.querySelectorAll('a,button,[role=button]')) {
+      if (own(b) || !shown(b)) continue;
+      const t = clean(b.textContent || b.getAttribute('aria-label') || '');
+      if (!t || t.length > 45 || !/^\W*(add|upload|attach)\b/i.test(t)) continue;
+      if (/\b(resume|cv|experience|education|skill|language|certif|licen[cs]e|link|website|reference)/i.test(t)) continue;
+      if (LETTER_BOX.test(t)) return b;
+      if (!/^\W*(add|upload|attach)\W*$/i.test(t)) continue;
+      // A bare "Add": it's the letter's when the small block around it says so and holds no file yet.
+      let node = b;
+      for (let i = 0; i < 4 && node.parentElement && node.parentElement !== document.body; i++) {
+        node = node.parentElement;
+        const said = textOf(node);
+        if (said.length > 400) break;
+        if (LETTER_BOX.test(said)) { if (!FILE_NAME.test(said) && !node.querySelector('input[type=file],textarea')) return b; break; }
+      }
+    }
+    return null;
+  }
   // What's on the page, for Copy details when nothing was filled (or Job Hunt tripped on the page):
   // each box and button with its label, and the form's own markup without what's typed in it.
   const snapshot = () => {
@@ -1341,8 +1404,34 @@
         await wait(1200);
       }
     }
+    // The cover letter's place, when the form keeps it behind a link: opened, so the letter goes in
+    // with the rest. It may open here or on a page of its own (carried on with there).
+    if (!more && !lettersTried) {
+      lettersTried = true;
+      const before = collect();
+      const opener = before.some(f => ['file', 'textarea'].includes(f.type) && /cover|letter|motivation/i.test(`${f.label} ${f.section}`)) ? null : letterAdder();
+      if (opener) {
+        const name = clean(opener.textContent || opener.getAttribute('aria-label') || 'Add').slice(0, 40), boxes = () => document.querySelectorAll('input[type=file],textarea').length, had = boxes(), from = location.href;
+        trace('opening the cover letter\'s place', { name });
+        status('Opening the place for your cover letter…');
+        letterOpened = Date.now();
+        try { sessionStorage.setItem('jobhunt-letter', String(letterOpened)); sessionStorage.setItem('jobhunt-continue', String(letterOpened)); } catch (e) { /* storage off: you press Fill in this form on the next page */ }
+        ownClick = true; opener.click(); ownClick = false;
+        for (let i = 0; i < 12; i++) { await wait(500); if (boxes() > had || location.href !== from) break; }
+        await wait(600);
+        // Offered a choice of uploading or writing it: the upload, when the page has no box for it yet.
+        if (!document.querySelector('input[type=file]')) {
+          const up = [...document.querySelectorAll('a,button,[role=button],label')].find(b => !own(b) && shown(b) && /^\W*upload\b.{0,30}$/i.test(clean(b.textContent || '')) && !/resume|cv\b/i.test(b.textContent || ''));
+          if (up && up.tagName !== 'LABEL') { ownClick = true; up.click(); ownClick = false; await wait(900); }
+        }
+        try { sessionStorage.removeItem('jobhunt-continue'); } catch (e) { /* as above */ }
+      }
+    }
     if (document.querySelector(DROPS)) { status('Reading the form…'); await readDrops(); }
     const all = collect();
+    // An upload box in the place Job Hunt just opened for the letter is the letter's, whatever it's
+    // called there ("Upload a file").
+    if (Date.now() - letterOpened < 180000) for (const f of all) if (f.type === 'file' && !/resume|r\u00e9sum\u00e9|\bcv\b|curriculum|cover|letter|certif|licen|transcript|portfolio|reference/i.test(`${f.label} ${f.section || ''}`)) f.section = 'Cover letter';
     sent = { fields, byKey, adders };
     // The end dates that appeared: only the boxes still empty go (with the entries' checkboxes), not
     // the whole form again.

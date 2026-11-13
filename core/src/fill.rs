@@ -305,6 +305,12 @@ pub fn message(url: &url::Url, token: &str) -> Option<(String, Value)> {
     (v["t"].as_str() == Some(token)).then(|| (kind.to_string(), v))
 }
 
+/// A box to type or paste the cover letter into: a big text box named for it and nothing else.
+fn is_letter_box(f: &Value) -> bool {
+    let l = f["label"].as_str().unwrap_or("").to_lowercase();
+    f["type"] == "textarea" && f["value"].as_str().unwrap_or("").trim().is_empty() && l.len() < 60 && (l.contains("cover letter") || l.contains("motivation letter") || l.contains("letter of motivation"))
+}
+
 /// Which of your files a file field wants, from its label: the CV, the cover letter, or neither.
 fn file_for(label: &str, only_one: bool) -> Option<&'static str> {
     let l = label.to_lowercase();
@@ -407,6 +413,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     if let Some(a) = crate::ats::of(&job) {
         facts.push_str(&format!("\n{}", crate::ats::answers(a)));
     }
+    facts.push_str(&profile.cert_lines());
     if !profile.email.trim().is_empty() {
         facts.push_str(&format!("\nEmail: {}", profile.email.trim()));
     }
@@ -446,7 +453,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     if lines.iter().any(|l| !l.contains("\"value\"")) {
         let own = agent.own_words(&job, &profile);
         let known: std::collections::HashSet<&str> = fields.iter().filter_map(|f| f["key"].as_str()).collect();
-        for v in agent.llm().fill_form(&profile.name, &cv_text, &job, &lines.join("\n"), &facts, &profile.stories)? {
+        for v in agent.llm().fill_form(&profile.name, &cv_text, &job, &lines.join("\n"), &facts, &profile.letter_facts())? {
             if v.key == "_roles" {
                 // One per line, as asked; Claude sometimes joins them with "; " instead.
                 let by_line = v.value.lines().filter(|l| l.trim().len() > 3).count();
@@ -461,7 +468,16 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
             }
         }
     }
-    tidy_answers(fields, &mut values, &cv_text, &profile.application_facts, roles_listed);
+    // A box for the cover letter itself gets the letter written for this job, not a new one.
+    if let Some(letter) = job.cover_letter.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+        for f in fields.iter().filter(|f| is_letter_box(f)) {
+            if let Some(key) = f["key"].as_str() {
+                values.insert(key.to_string(), json!(letter));
+            }
+        }
+    }
+    let certs = cv_listed(&cv_text, "cert").max(profile.certifications.iter().filter(|c| !c.name.trim().is_empty()).count());
+    tidy_answers(fields, &mut values, &cv_text, &profile.application_facts, roles_listed, certs);
     let n = values.len() + files.len();
     if is_profile {
         agent.db().log(None, "fill", &format!("{n} of {} fields filled in on your profile at {}", fields.len(), job.company))?;
@@ -509,7 +525,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
 /// What Claude wrote, made right where it can be checked: links in full (a LinkedIn box given
 /// "linkedin.com/in/jane" gets "https://www.linkedin.com/in/jane"), and a work-history Add button
 /// Claude left at nothing pressed once for each role the CV has that the form doesn't.
-fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, cv_text: &str, facts: &str, roles_listed: usize) {
+fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, cv_text: &str, facts: &str, roles_listed: usize, certs: usize) {
     for f in fields {
         let (Some(key), label) = (f["key"].as_str(), f["label"].as_str().unwrap_or("").to_lowercase()) else { continue };
         if f["type"] == "add" {
@@ -523,8 +539,8 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
                 let more = if langs > 0 { (langs - have).max(0) } else { given.min(1) };
                 values.insert(key.to_string(), json!(more.to_string()));
             } else if section.contains("certif") || section.contains("licen") {
-                // Certifications: at least as many entries as the CV lists.
-                let more = cv_listed(cv_text, "cert") as i64 - have;
+                // Certifications: at least as many entries as the CV lists, or as you listed under Me.
+                let more = certs as i64 - have;
                 if more > given {
                     values.insert(key.to_string(), json!(more.min(6).to_string()));
                 }
@@ -651,6 +667,7 @@ pub fn kit(agent: &Agent, job_id: &str) -> R<Value> {
     let (jobs, schools, skills) = cv_sections(&cv_text);
     Ok(json!({
         "contact": contact, "facts": facts, "jobs": jobs, "schools": schools, "skills": skills,
+        "certifications": profile.certifications.iter().filter(|c| !c.name.trim().is_empty()).collect::<Vec<_>>(),
         "languages": cv_languages(&format!("{cv_text}\n{}", profile.application_facts)),
         "letter": job.cover_letter.clone().unwrap_or_default(), "cv": cv_text,
         "answers": agent.answers(job_id),
@@ -874,12 +891,12 @@ mod tests {
         let fields = vec![json!({"key": "f1", "type": "text", "label": "Please provide your Linkedin profile:"}), json!({"key": "a1", "type": "add", "section": "Work Experience", "entries": 1})];
         let mut v = serde_json::Map::new();
         v.insert("f1".into(), json!("linkedin.com/in/jane-c"));
-        tidy_answers(&fields, &mut v, cv, "", 0);
+        tidy_answers(&fields, &mut v, cv, "", 0, cv_listed(cv, "cert"));
         assert_eq!(v["f1"], "https://www.linkedin.com/in/jane-c");
         assert_eq!(v["a1"], "2", "two more roles than the one entry there");
         // Claude's list of roles counts when the CV's own layout hides them.
         let mut v = serde_json::Map::new();
-        tidy_answers(&fields, &mut v, "Jane\nno dates here", "", 5);
+        tidy_answers(&fields, &mut v, "Jane\nno dates here", "", 5, cv_listed("Jane\nno dates here", "cert"));
         assert_eq!(v["a1"], "4");
         // Headings in markdown or capitals, and a CV with no Experience heading at all.
         assert_eq!(cv_roles("## PROFESSIONAL EXPERIENCE\n**Lead**, X | Jul 2023 \u{2013} Present\nB, Y | 2019 - 2023\n## EDUCATION\nBSc 2005 - 2009"), 2);
@@ -891,7 +908,7 @@ mod tests {
         let fields = vec![json!({"key": "a2", "type": "add", "section": "Languages", "entries": 1})];
         let mut v = serde_json::Map::new();
         v.insert("a2".into(), json!("3"));
-        tidy_answers(&fields, &mut v, &cv, "", 0);
+        tidy_answers(&fields, &mut v, &cv, "", 0, cv_listed(&cv, "cert"));
         assert_eq!(v["a2"], "1");
         // Certifications and degrees: at least what the CV lists; a career break isn't one.
         let cv2 = "EXPERIENCE\nLead, X | 2019 - Present\nEDUCATION\nMBA, Rotman | 2012\nBachelor of Finance, AUK | 2005 - 2009\nCERTIFICATIONS\nPMP, PMI-CPMAI\nLANGUAGES\nEnglish (native), Arabic (native), French (elementary)\n";
@@ -901,13 +918,13 @@ mod tests {
             json!({"key": "l3", "type": "select", "label": "Language", "section": "Languages 3"}), json!({"key": "x3", "type": "checkbox", "label": "I am fluent in this language.", "section": "Languages 3"})];
         let mut v2 = serde_json::Map::new();
         for (k, val) in [("e1", "1"), ("l1", "English"), ("x1", "yes"), ("l3", "French"), ("x3", "yes")] { v2.insert(k.into(), json!(val)); }
-        tidy_answers(&fields2, &mut v2, cv2, "", 0);
+        tidy_answers(&fields2, &mut v2, cv2, "", 0, cv_listed(cv2, "cert"));
         assert_eq!((v2["c1"].as_str(), v2["e1"].as_str()), (Some("1"), Some("2")), "one more certificate, two schools");
         assert_eq!((v2["x1"].as_str(), v2["x3"].as_str()), (Some("yes"), Some("no")), "fluent follows each entry's own language");
         // The CV goes in the box under Resume/CV even when the box only says "Select files".
         assert_eq!(file_for("Select files", false).or_else(|| file_for("Resume/CV", false)), Some("cv"));
         // A language only in your facts counts too.
-        tidy_answers(&fields, &mut v, &cv, "French: beginner (school, to grade 6)", 0);
+        tidy_answers(&fields, &mut v, &cv, "French: beginner (school, to grade 6)", 0, cv_listed(&cv, "cert"));
         assert_eq!(v["a2"], "2");
     }
 
@@ -923,6 +940,16 @@ mod tests {
         assert!(message(&url::Url::parse("https://boards.greenhouse.io/acme/jobs/1").unwrap(), &tok).is_none());
         assert_eq!(file_for("Resume/CV", false), Some("cv"));
         assert_eq!(file_for("Cover Letter", false), Some("letter"));
+        // A box to paste the letter into is the letter's; a question that mentions one is not.
+        assert!(is_letter_box(&json!({"type": "textarea", "label": "Cover letter", "value": ""})));
+        assert!(!is_letter_box(&json!({"type": "textarea", "label": "Cover letter", "value": "Dear team"})));
+        assert!(!is_letter_box(&json!({"type": "text", "label": "Cover letter"})));
+        assert!(!is_letter_box(&json!({"type": "textarea", "label": "Is there anything not in your cover letter that you would like us to know about you?", "value": ""})));
+        // Certifications you listed under Me count for the form's Add, when the CV names fewer.
+        let fields = vec![json!({"key": "c1", "type": "add", "section": "Certifications", "entries": 0})];
+        let mut v = serde_json::Map::new();
+        tidy_answers(&fields, &mut v, "Jane\nEXPERIENCE\nLead, X | 2019 - Present", "", 0, 2);
+        assert_eq!(v["c1"].as_str(), Some("2"));
         assert_eq!(file_for("Transcript", false), None);
         assert_eq!(file_for("Attach", true), Some("cv"));
         let s = script(&tok, "Tax Manager", "Acme <b>");

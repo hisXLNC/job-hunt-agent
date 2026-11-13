@@ -19,6 +19,18 @@ use std::sync::Arc;
 struct DemoLlm;
 
 impl Llm for DemoLlm {
+    fn assist(&self, a: &jobhunt_core::claude::Asked) -> R<String> {
+        if a.message.contains("fail") {
+            return Err(jobhunt_core::Error("Claude is busy just now.".into()));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(700));
+        let about = match (a.quote.is_empty(), a.job) {
+            (false, _) => format!("**“{}”** is something the posting asks for.", a.quote.chars().take(60).collect::<String>()),
+            (true, Some(j)) => format!("**{}** at {} scored {} because your CV shows most of what it asks for.", j.title, j.company, j.score.unwrap_or(0)),
+            (true, None) => format!("You're on **{}**.", a.place),
+        };
+        Ok(format!("{about}\n\n- Your CV covers the delivery side well.\n- It says little about the data tooling.\n\nYou can compare it with your other roles in [All jobs](#applications). ({} earlier turns.)", a.history.len()))
+    }
     fn size_up_leads(&self, _c: &str, _cv: &str, _wants: &str, leads: &str) -> R<Vec<jobhunt_core::claude::LeadView>> {
         // Each "### n" block: hiring unless it says NOT-HIRING; the company from its Company line.
         Ok(leads.split("### ").skip(1).map(|b| {

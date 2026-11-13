@@ -178,7 +178,7 @@ const daysUp = j => Math.max(0, (Date.now() - (+new Date(ageValue(j) || 0) || Da
  *  (a press anywhere on them ticks it); the why line and the buttons are outside it. */
 function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', attrs = '', facts = '' }) {
   const meta = [coCell(j), j.location ? placeHtml(j) : '', payFact(j), j.employment ? esc(j.employment) : '', facts].filter(Boolean).join('<i class="sep">·</i>');
-  const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit${j.score != null && j.score_after != null && j.score_after !== j.score ? ' has-after' : canReach(j) ? ' has-fore' : ''}">${scoreBadge(j.score)}${reachTag(j)}${fitNote(j)}</span>
+  const head = `${tick ? `<span class="jtick">${tick}</span>` : ''}${avatar(j.company)}<span class="jfit${j.score != null && j.score_after != null ? ' has-after' : canReach(j) ? ' has-fore' : ''}">${scoreBadge(j.score)}${reachTag(j)}${fitNote(j)}</span>
       <span class="jmain"><span class="jtitle"><a class="qt" href="#job/${encodeURIComponent(j.id)}">${esc(j.title)}</a>${tags}</span><span class="jmeta">${meta}</span></span>`;
   return `<div class="jrow${cls ? ` ${cls}` : ''}${tick ? ' ticks' : ''}${expiredWhy(j) ? ' expired-row' : ''}" data-job-row="${esc(j.id)}" ${attrs} data-lrole="${esc(String(j.title || '').toLowerCase())}" data-lco="${esc(String(j.company || '').toLowerCase())}" data-lloc="${esc(String(j.location || '').toLowerCase())}" data-qnow="${applyRank(j)}" data-qfit="${j.score_after ?? j.score ?? 0}" data-qnew="${+new Date(ageValue(j) || 0) || 0}" data-qpay="${Math.max(0, salaryValue(j.salary))}" data-qhaspay="${j.salary ? 1 : 0}" data-qflags="${(j.red_flags || []).length}">${tick ? `<label class="jhead">${head}</label>` : `<div class="jhead">${head}</div>`}
       <span class="row jact">${actions}</span>${sub ? `<div class="jwhy small">${sub}</div>` : ''}</div>`;
@@ -452,7 +452,7 @@ async function togglePosting(tr) {
 
 // ---- Documents ----
 /** Escaped text with **bold** marks turned into bold. */
-const marked = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+const marked = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\[([^\]\n]+)\]\((#[a-z0-9\/_-]*)\)/gi, '<a href="$2">$1</a>');
 
 /** The cover letter as it prints: paragraphs, bullets, bold, and your signature above your name. */
 function letterHtml(text, signature) {

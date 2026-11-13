@@ -3,7 +3,7 @@
 
 // ---- Job ----
 let jobPoll;
-const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions &amp; contacts'], ['interview', 'Interview'], ['chat', 'Ask Claude']];
+const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions &amp; contacts'], ['interview', 'Interview']];
 const jobTabs = {};
 /** The job's buttons: its next step first, as the main one, then the rest, all in view. */
 function jobActions(j, tailoring, progress) {
@@ -56,7 +56,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, chat, chatting, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const reviewBox = `<div class="ats-review"><header><h3>${sys ? `How ${esc(sys.name)}'s AI check would read your CV` : 'How an AI screen would read your CV'}</h3>
         ${reviewing ? '<span class="muted small"><span class="spin" data-kind="review"></span>Checking…</span>' : j.cv_path ? `<button class="btn" data-act="review">${review ? 'Check again' : 'Check my CV'}</button>` : ''}</header>
         ${review ? `<p><b>Meets ${review.met} of ${review.total}</b>${review.undecided ? `, ${review.undecided} it can't decide` : ''}${review.not ? `, ${review.not} not shown` : ''}. ${esc(review.note || '')}</p>
@@ -251,23 +251,13 @@ async function showJob(id) {
       ${offer?.advice ? mdHtml(offer.advice) : ''}
     </section>` : ''}
     </div>
-    <div class="jpane" data-pane="chat" ${tab === 'chat' ? '' : 'hidden'}>
-    <section class="card chat">
-      <header><h2>Ask Claude about this job</h2>${(chat || []).length ? '<button class="btn ghost sm" data-act="chatClear">Start over</button>' : ''}</header>
-      <p class="muted small">Claude knows this posting, your CV for it and your notes. Ask for an answer to a form question, a shorter cover letter, what to say about salary, or how to prepare.</p>
-      <div class="chat-log">${(chat || []).map((m, i) => `<div class="chat-msg ${m.who === 'you' ? 'me' : 'them'}">${m.who === 'you' ? esc(m.text) : `<div id="chat${i}">${mdHtml(m.text)}</div><button class="btn ghost sm" data-act="copy" data-from="chat${i}">Copy</button>`}</div>`).join('')}
-        ${chatting ? '<div class="chat-msg them"><span class="spin" data-kind="chat"></span>Writing…</div>' : ''}</div>
-      <div class="chat-send"><textarea id="chatMsg" rows="2" placeholder="e.g. Write a 100-word answer to “Why do you want to work here?”" ${chatting ? 'disabled' : ''}></textarea>
-        <button class="btn primary" data-act="chatSend" ${chatting ? 'disabled' : ''}>Send</button></div>
-    </section>
-    </div>
     <div class="jpane" data-pane="interview" ${tab === 'interview' ? '' : 'hidden'}>
     <section class="card prep">
       <header><h2>Interview prep</h2>${preparing ? '<span class="muted small"><span class="spin" data-kind="prep"></span>Writing…</span>' : `<button class="btn" data-act="prep">${prep ? 'Write again' : 'Write prep sheet'}</button>`}</header>
       ${prep ? mdHtml(prep) : `<p class="muted">${preparing ? 'Claude is writing likely questions, answers from your CV, gaps to prepare for and questions to ask. This page updates by itself.' : 'Likely questions with answers from your CV, what the company is up to now (from a quick web search), gaps to prepare for, and questions to ask them.'}</p>`}
       ${prep ? '<p class="muted small">Also saved as “Interview prep.md” with this application\'s files.</p>' : ''}
       <p class="muted small">The evening before an interview on your calendar, Job Hunt makes sure this sheet is ready and reminds you.</p>
-      <p><button class="btn" type="button" data-act="practise">Practise this interview</button> <span class="muted small">Claude plays the interviewer here, one question at a time, with feedback on each answer.</span></p>
+      <p><button class="btn" type="button" data-act="practise">Practise this interview</button> <span class="muted small">Claude plays the interviewer in the Ask Claude window, one question at a time, with feedback on each answer.</span></p>
       <p class="muted small">${claude_desktop ? `Practise out loud: in the Claude app, ask <b>“Practise my interview for ${esc(j.company)}”</b>. Claude plays the interviewer and gives feedback on each answer.` : 'Want a mock interview with feedback? Add Job Hunt to the Claude app in <a href="#settings/app">Settings → App</a>.'}</p>
     </section>
     ${thanks || thanking || ['interviewing', 'offer'].includes(j.status) ? `<section class="card">
@@ -301,7 +291,7 @@ async function showJob(id) {
   // Opened for one part of the page (Write a note → People at the company): go there.
   if (scrollToAfter) { const at = document.getElementById(scrollToAfter); scrollToAfter = ''; if (at) setTimeout(() => at.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
   loadKit();
-  if (tailoring || preparing || revising || following_up || answering || advising || writing_to || thanking || chatting) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
+  if (tailoring || preparing || revising || following_up || answering || advising || writing_to || thanking) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
 }
 
 /** The copy-and-paste kit on a job's Apply tab: each detail with its own Copy button. */

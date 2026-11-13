@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.67.0] - 2026-11-13
+
+Ask Claude from anywhere, certifications, and more forms filled.
+
+### Changes
+
+- Ask Claude is now a button that floats over every screen, in place of the tab on each job. It sees the screen you are on, the job, your CV and what Job Hunt knows, so you can ask what a keyword means or why a role scored as it did without leaving the page. Select words on a page to ask about just those; press C to open it.
+- Me, About me has a Certifications list (PMP, CPMAI and the like). Job Hunt counts them as yours in scoring, cover letters, form answers and the forms themselves, whether or not your CV lists them.
+- The extension opens a cover letter kept behind a link (Supporting documents, Add) and attaches your letter there.
+- The extension fills dropdowns that say No Selection and open their own list, as on Rogers' application form.
+- Applications waiting for approval always show the fit before and after tailoring. A tailored CV that never got its score is scored within half an hour.
+
 ## [2.66.0] - 2026-11-13
 
 Folded forms, and a brief for Claude.
@@ -2023,6 +2035,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.67.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.0
 [2.66.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.66.0
 [2.65.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.7
 [2.65.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.6

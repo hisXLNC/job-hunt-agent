@@ -800,18 +800,58 @@ fn canadas_big_employers_are_added_once() {
 }
 
 #[test]
-fn chatting_about_a_job_keeps_the_conversation() {
+fn a_tailored_cv_left_without_its_fit_gets_one_later() {
     let s = setup();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
-    assert!(s.agent.chat_send("test:1", "  ").is_err());
-    let r = s.agent.chat_send("test:1", "How do I answer the salary question?").unwrap();
-    assert!(r.contains("(0 before)"), "{r}");
-    let r = s.agent.chat_send("test:1", "Shorter please").unwrap();
-    assert!(r.contains("(2 before)"), "the earlier turns go along: {r}");
-    assert_eq!(s.agent.chat("test:1").len(), 4);
-    assert_eq!(s.agent.chat("test:1")[1]["who"], "claude");
-    s.agent.chat_clear("test:1").unwrap();
-    assert!(s.agent.chat("test:1").is_empty());
+    s.agent.tailor("test:1", None).unwrap();
+    let one = s.agent.db().job("test:1").unwrap().unwrap();
+    assert_eq!((one.status.as_str(), one.score_after), ("ready", Some(92)));
+    assert!(s.agent.without_after_score().is_empty());
+    // Claude was at its limit when the tailored CV would have been scored: only the fit before shows.
+    s.agent.db().update_job("test:1", &[("score_after", Value::Null)]).unwrap();
+    assert_eq!(s.agent.without_after_score().len(), 1);
+    assert_eq!(s.agent.score_tailored_missing(5), 1);
+    let one = s.agent.db().job("test:1").unwrap().unwrap();
+    assert!(one.score_after.is_some() && s.agent.without_after_score().is_empty());
+}
+
+#[test]
+fn the_assistant_answers_from_any_screen_and_keeps_the_conversation() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    let wait = || {
+        for _ in 0..400 {
+            if !s.agent.is_running("ask") {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("the assistant never finished");
+    };
+    assert!(s.agent.ask_start("  ", &json!({})).is_err());
+    // On a settings screen, with words selected: no job, the screen's name and the quote go along.
+    s.agent.ask_start("What does this mean?", &json!({ "where": "Settings › CVs", "seen": "Your CVs", "quote": "score threshold" })).unwrap();
+    wait();
+    let log = s.agent.ask_log();
+    assert_eq!(log.len(), 2);
+    assert_eq!(log[0]["about"], "Settings › CVs");
+    let r = log[1]["text"].as_str().unwrap();
+    assert!(r.contains("On Settings › CVs about no job (0 before, quote: score threshold)"), "{r}");
+    // On a job: the job goes along, and so do the earlier turns.
+    s.agent.ask_start("And this keyword?", &json!({ "where": "Technical Program Manager", "job": "test:1" })).unwrap();
+    wait();
+    let r = s.agent.ask_log()[3]["text"].as_str().unwrap().to_string();
+    assert!(r.contains("about Technical Program Manager (2 before"), "{r}");
+    // No answer: the message comes back to send again, with why, and the conversation is as it was.
+    s.agent.ask_start("please fail", &json!({})).unwrap();
+    wait();
+    let st = s.agent.ask_state();
+    assert_eq!(st["chat"].as_array().unwrap().len(), 4);
+    assert_eq!(st["draft"], "please fail");
+    assert!(st["error"].as_str().unwrap().contains("busy"));
+    assert_eq!(st["busy"], false);
+    s.agent.ask_clear().unwrap();
+    assert!(s.agent.ask_log().is_empty() && s.agent.ask_state()["error"] == "");
 }
 
 #[test]
