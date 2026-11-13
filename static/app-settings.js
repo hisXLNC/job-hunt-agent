@@ -240,7 +240,8 @@ async function showSettings(tab, sub, host) {
       <label class="drop" id="drop"><input type="file" accept=".docx,.pdf,.txt" multiple data-upload="cv-add" hidden>
         <b>Add CVs</b><span class="muted small">Drop Word, PDF or text files here, or click to choose. Claude reads each one and suggests the job titles to search for.</span></label>
     </section>
-    ${st.cvs.map(c => `<section class="card" data-cv="${esc(c.track)}">
+    <div id="cvUpdate">${cvUpdateHtml(st.cv_update)}</div>
+    ${st.cvs.map(c => `<section class="card" data-cv="${esc(c.track)}" data-drop-cv="${esc(c.track)}" title="Drop a newer file of this CV here to replace it">
       <header><h2>${esc(c.label)}</h2><span class="pill ${c.exists ? (c.editable ? 'good' : 'warn') : 'crit'}">${c.exists ? (c.editable ? `${c.editable} parts can be tailored` : 'Layout can\'t be tailored') : 'File missing'}</span></header>
       <p class="muted small">${esc(kindName[c.kind] || 'Word')}${c.original ? ` · ${esc(c.original)}` : ''}${c.updated ? ` · updated ${esc(fmtDate(c.updated))}` : ''}</p>
       ${(c.areas || []).length ? `<div class="areas"><b class="small">Experience Claude found in it</b><ul class="small">${c.areas.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
@@ -257,7 +258,7 @@ async function showSettings(tab, sub, host) {
       <div class="row">
         <button class="btn primary" data-act="saveCv" data-track="${esc(c.track)}">Save</button>
         ${c.exists ? `<button class="btn" data-act="openCv" data-track="${esc(c.track)}">${svg('doc')}Open</button>` : ''}
-        <label class="btn">Replace file<input type="file" accept=".docx,.pdf,.txt" data-upload="cv-replace" data-track="${esc(c.track)}" hidden></label>
+        <label class="btn" title="A newer version of this CV: Job Hunt then scores your waiting jobs again, tailors again what's waiting for your approval, and rewrites your career paths. You can also drop the file on this card.">Update this CV<input type="file" accept=".docx,.pdf,.txt" data-upload="cv-replace" data-track="${esc(c.track)}" hidden></label>
         <button class="btn" data-act="suggestCv" data-track="${esc(c.track)}">Find more titles</button>
         <button class="btn ghost danger" data-act="removeCv" data-track="${esc(c.track)}">Remove</button>
       </div></section>`).join('')}
@@ -506,6 +507,7 @@ async function showSettings(tab, sub, host) {
     page(`${meHead(sub === 'details' ? 'details' : sub === 'career' ? 'career' : 'cvs', 'What Job Hunt knows about you: your CVs, your details, and where your career could go.', st.cvs.length)}
       ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${body}`);
     if (st.career_thinking) watchCareer(location.hash);
+    if (st.cv_update?.running) watchCvUpdate();
     if ($('#bankCard')) renderBank();
     return;
   }

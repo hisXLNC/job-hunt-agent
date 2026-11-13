@@ -318,6 +318,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
     let builtin_google = google::builtin_client().is_some();
     let site_catalog: Vec<Value> = crate::sites::SITES.iter().map(|x| json!({ "id": x.id, "name": x.name, "kind": x.kind, "about": x.about, "country": x.country })).collect();
     let posting_hours = agent.posting_hours();
+    let cv_update = agent.cv_update(); // reads the database: before it's held below
     let db = agent.db();
     let get = |k: &str| db.get(k).ok().flatten().unwrap_or_default();
     let token: google::Token = serde_json::from_str(&get("google.token")).unwrap_or_default();
@@ -389,6 +390,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "sites": { "catalog": site_catalog, "status": site_status },
         "career": serde_json::from_str::<Value>(&get("career")).ok(),
         "career_thinking": agent.is_running("career"),
+        "cv_update": cv_update,
         "posting_hours": posting_hours,
         "countries": crate::profile::COUNTRIES.iter().map(|c| json!({ "code": c.0, "name": c.1, "tz": c.3,
             "cities": crate::profile::CITIES.iter().find(|x| x.0 == c.0).map(|x| x.1).unwrap_or(&[]) })).collect::<Vec<_>>(),
@@ -1931,8 +1933,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     let name = req.query.get("filename").cloned().unwrap_or_else(|| "CV.docx".into());
                     let (t, change) = agent.replace_cv(id, &name, &req.body, req.query.get("convert").is_some())?;
                     let summary = json!(change);
-                    agent.apply_cv_change(change);
-                    Ok(Resp::json(&json!({ "ok": true, "track": t, "change": summary })))
+                    // Everything worked out from the old file is redone from this one, in the background.
+                    agent.refresh_after_cv(id, change);
+                    Ok(Resp::json(&json!({ "ok": true, "track": t, "change": summary, "updating": true })))
                 }
                 "meta" => {
                     let mut p = agent.profile();

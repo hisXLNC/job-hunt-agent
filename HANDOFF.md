@@ -56,6 +56,13 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.60.0: a new file for a CV updates everything.** `Agent::refresh_after_cv(id, change)` (tailoring.rs) runs after
+  `replace_cv` in the background under the claim `cv-update`: `suggest_for_cv` (titles/keywords added), `rescore_through`
+  (rounds of `rescore_jobs` past the cap while the next unscored job is queued or saved; `cv_changed` now lists queued,
+  saved, skipped, dismissed in that order), `tailor_picked`, `write_career_paths`, `write_coach` if there is one. Progress
+  is the JSON under `cv.update` (`Agent::cv_update`, `cv_update` in `/api/settings`), drawn by `cvUpdateHtml` and kept
+  current by `watchCvUpdate` (app-actions.js). A usage limit part-way defers `{kind: "cv", ids}` (`run_deferred`).
+  Removing a CV still goes through `apply_cv_change`. Seen in the preview with the demo Claude only.
 - **2.59.0: the extension's line to Job Hunt, rebuilt** (carries 2.58.2, never published: All jobs table, logos in it).
   The user's panel sat on "Reading 14 questions… 106s". Not reproduced here (Playwright keeps the service worker
   awake), but an MV3 worker is stopped when idle and its fetch dropped after ~30 s, and Claude often takes longer.

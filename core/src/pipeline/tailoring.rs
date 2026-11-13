@@ -126,7 +126,8 @@ impl Agent {
     pub(super) fn cv_changed(&self, id: &str, label: &str, removed: bool) -> R<CvChange> {
         let mut c = CvChange::default();
         let what = if removed { "was removed" } else { "was replaced" };
-        for st in ["queued", "skipped", "saved", "dismissed"] {
+        // What you're waiting on first (they're scored again first too).
+        for st in ["queued", "saved", "skipped", "dismissed"] {
             // Read first: the lock would otherwise be held through the loop, which takes it again.
             let jobs = self.db().jobs(Some(st), 100_000)?;
             for j in jobs {
@@ -209,6 +210,109 @@ impl Agent {
             if !c.retailor.is_empty() && !a.profile().tracks.is_empty() {
                 let _ = a.tailor_picked(&c.retailor);
             }
+        });
+    }
+
+    /// Score these again until none is left without a fit. A round is the per-search cap; rounds go
+    /// on past it only while the next in line is one you're waiting on (to pick, or saved): roles
+    /// set aside get the one round. Stops at Claude's usage limit. Returns (scored, still unscored).
+    pub fn rescore_through(&self, ids: &[String], mut each: impl FnMut(usize)) -> (usize, Vec<String>) {
+        let unscored = |a: &Self, id: &String| a.db().job(id).ok().flatten().filter(|j| j.score.is_none());
+        let mut left: Vec<String> = ids.iter().filter(|i| unscored(self, i).is_some()).cloned().collect();
+        let mut scored = 0;
+        while !left.is_empty() && self.limited().is_none() {
+            let n = self.rescore_jobs(&left).unwrap_or(0);
+            scored += n;
+            each(scored);
+            left.retain(|i| unscored(self, i).is_some());
+            let waiting = left.first().and_then(|i| unscored(self, i)).is_some_and(|j| j.status == "queued" || j.status == "saved");
+            if n == 0 || !waiting {
+                break;
+            }
+        }
+        (scored, left)
+    }
+
+    /// How far the update after a new CV has got (see refresh_after_cv), for the CVs page.
+    pub fn cv_update(&self) -> Option<Value> {
+        let mut v: Value = serde_json::from_str(&self.secret("cv.update")).ok()?;
+        // Job Hunt was closed part-way: not running any more, whatever was written down.
+        if v["running"] == true && !self.is_running("cv-update") {
+            v["running"] = json!(false);
+            v["stopped"] = json!(true);
+        }
+        Some(v)
+    }
+
+    /// Your CV `id` has a new file: everything worked out from the old one is redone, in the
+    /// background, in this order. (1) Claude reads the new CV for job titles and keywords the old
+    /// one didn't suggest (added to yours, never taken away) and the experience in it. (2) Fits
+    /// against the old CV are scored again: all of the roles waiting for you, a round of the ones
+    /// set aside. (3) Applications waiting for your approval are tailored again. (4) Your career
+    /// paths, and the coach's advice if you have any, are written again. How far it is: cv_update.
+    pub fn refresh_after_cv(self: &Arc<Self>, id: &str, c: CvChange) {
+        let label = self.profile().tracks.iter().find(|t| t.name == id).map(|t| t.label.clone()).unwrap_or_else(|| id.to_string());
+        let claude = self.claude_ready();
+        let start = json!({ "at": now(), "cv": label, "running": true, "step": "titles", "claude": claude,
+            "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept });
+        let _ = self.db().set("cv.update", &start.to_string());
+        let (a, id) = (self.clone(), id.to_string());
+        std::thread::spawn(move || {
+            let Ok(_g) = a.claim("cv-update") else { return };
+            let state = std::cell::RefCell::new(start);
+            let put = |patch: Value| {
+                let mut s = state.borrow_mut();
+                for (k, v) in patch.as_object().into_iter().flatten() {
+                    s[k.as_str()] = v.clone();
+                }
+                let _ = a.db().set("cv.update", &s.to_string());
+            };
+            // (1) Titles and keywords the new CV suggests.
+            if claude {
+                let had = |a: &Agent| a.profile().tracks.iter().find(|t| t.name == id).map(|t| (t.titles.clone(), t.keywords.len())).unwrap_or_default();
+                let (titles, keywords) = had(&a);
+                match a.suggest_for_cv(&id) {
+                    Ok(t) => put(json!({ "titles_added": t.titles.iter().filter(|x| !titles.contains(x)).collect::<Vec<_>>(), "keywords_added": t.keywords.len().saturating_sub(keywords) })),
+                    Err(e) => { let _ = a.db().log(None, "cv:error", &format!("reading the new CV for titles: {}", e.0)); }
+                }
+            }
+            // (2) Fits.
+            put(json!({ "step": "scoring" }));
+            let (scored, left) = a.rescore_through(&c.unscored, |n| put(json!({ "scored": n })));
+            put(json!({ "scored": scored, "unscored_left": left.len() }));
+            if scored > 0 {
+                a.note("Scored again", &format!("{scored} job{} now {} a fit against your new CV.", if scored == 1 { "" } else { "s" }, if scored == 1 { "has" } else { "have" }));
+            }
+            // Stopped by Claude's usage limit with roles you're waiting on still unscored: held, and
+            // scored when the limit resets.
+            if !left.is_empty() && a.limited().is_some() {
+                let _ = a.defer(json!({ "kind": "cv", "ids": left }));
+                put(json!({ "held": true }));
+            }
+            // (3) Applications waiting for your approval.
+            put(json!({ "step": "tailoring" }));
+            if !c.retailor.is_empty() {
+                let _ = a.tailor_picked(&c.retailor);
+            }
+            // (4) Career paths and the coach.
+            put(json!({ "step": "career" }));
+            if claude && a.limited().is_none() {
+                if let Ok(_c) = a.claim("career") {
+                    match a.write_career_paths() {
+                        Ok(_) => put(json!({ "career": true })),
+                        Err(e) => { let _ = a.db().log(None, "career:error", &e.0); }
+                    }
+                }
+                if !a.secret("coach").is_empty() {
+                    if let Ok(_c) = a.claim("coach") {
+                        if a.write_coach().is_ok() {
+                            put(json!({ "coach": true }));
+                        }
+                    }
+                }
+            }
+            put(json!({ "step": "done", "running": false, "finished": now() }));
+            a.note("Job Hunt is up to date with your new CV", &format!("The {label} CV: fits scored again, applications waiting for you tailored again, and your career paths rewritten. See Me, CVs."));
         });
     }
 

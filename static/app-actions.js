@@ -852,6 +852,39 @@ function cvChangeNote(c) {
   return parts.length ? ` ${parts.join('; ')}.` : '';
 }
 
+/** What Job Hunt is redoing after a CV got a new file, and how far it is (the CVs page). */
+function cvUpdateHtml(u) {
+  if (!u || (!u.running && Date.now() - new Date(u.finished || u.at).getTime() > 36 * 3600 * 1000)) return '';
+  const order = ['titles', 'scoring', 'tailoring', 'career', 'done'], at = order.indexOf(u.step);
+  const line = (step, text) => { const i = order.indexOf(step), state = !u.running || at > i ? 'done' : at === i ? 'now' : 'next'; return `<li class="${state}">${state === 'done' ? svg('check') : state === 'now' ? '<span class="dot now"></span>' : '<span class="dot"></span>'}<span>${text}</span></li>`; };
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  const added = (u.titles_added || []).length;
+  const lines = [
+    line('titles', !u.claude ? 'Job titles: not read (Claude isn\'t set up)' : at > 0 || !u.running ? (added ? `${n(added, 'new job title', 'new job titles')} to search for, from the new CV: ${esc(u.titles_added.slice(0, 4).join(', '))}${added > 4 ? '…' : ''}` : 'Job titles and keywords: nothing new to add') : 'Reading the new CV for job titles and keywords'),
+    line('scoring', u.to_score ? `Fits scored again: ${u.scored || 0} of ${u.to_score}${u.held ? ' (Claude reached its limit: the rest are scored when it resets)' : !u.running && u.unscored_left ? ` (${u.unscored_left} set aside earlier are left: Score it anyway on any of them)` : ''}` : 'Fits: none were against this CV'),
+    line('tailoring', u.to_tailor ? `${n(u.to_tailor, 'application waiting for your approval is', 'applications waiting for your approval are')} tailored again${at > 2 || !u.running ? ' (they come back to Approve as each is ready)' : ''}` : 'Applications waiting for approval: none from this CV') + (u.kept ? ` · ${n(u.kept, 'keeps', 'keep')} your own file or edits` : ''),
+    line('career', u.career ? `Career paths rewritten${u.coach ? ', and the coach\'s advice' : ''}: <a href="#cvs/career">see them</a>` : !u.running ? 'Career paths: not rewritten this time (press Think again on Career)' : 'Career paths'),
+  ];
+  return `<section class="card cv-update ${u.running ? 'running' : ''}"><header><h2>${u.running ? `Updating everything for your new ${esc(u.cv)} CV` : u.stopped ? `The update for your new ${esc(u.cv)} CV was cut short` : `Up to date with your new ${esc(u.cv)} CV`}</h2>${u.running ? '<span class="pill">Working</span>' : u.stopped ? '<span class="pill warn">Stopped</span>' : '<span class="pill good">Done</span>'}</header>
+    <ul class="steps-list">${lines.join('')}</ul>
+    <p class="muted small">${u.stopped ? 'Job Hunt was closed part-way. Press Update this CV with the same file to finish it.' : `Applications you approved or sent keep the files they have.${u.running ? ' You can keep using Job Hunt while this runs.' : ''}`}</p></section>`;
+}
+let cvUpdatePoll;
+/** Keep the card current while the update runs, without redrawing the page (you may be typing in it). */
+function watchCvUpdate() {
+  clearTimeout(cvUpdatePoll);
+  cvUpdatePoll = setTimeout(async () => {
+    const box = document.getElementById('cvUpdate');
+    if (!box) return;
+    try {
+      const st = await api('/api/settings');
+      box.innerHTML = cvUpdateHtml(st.cv_update);
+      if (st.cv_update?.running) return watchCvUpdate();
+      refreshOverview();
+    } catch (err) { watchCvUpdate(); }
+  }, 2500);
+}
+
 async function uploadCvs(files, replace) {
   let done = 0;
   for (const f of files) {
@@ -861,10 +894,10 @@ async function uploadCvs(files, replace) {
       const q = `filename=${encodeURIComponent(f.name)}`;
       const r = await api(replace ? `/api/cvs/${encodeURIComponent(replace)}/file?${q}` : `/api/cvs?${q}`, { method: 'POST', raw: await f.arrayBuffer() });
       done++;
-      toast(`${replace ? 'Replaced' : 'Added'} “${r.track.label}”.${cvChangeNote(r.change)}`);
+      toast(replace ? `Updated “${r.track.label}”. Job Hunt is bringing everything else up to date with it: see the top of this page.` : `Added “${r.track.label}”.${cvChangeNote(r.change)}`);
     } catch (err) { toast(`${f.name}: ${err.message}`, true); }
   }
-  if (done) { await refreshOverview(); route(); }
+  if (done) { await refreshOverview(); if (replace) location.hash = '#cvs'; route(); }
 }
 
 let sourcePoll;
@@ -1009,14 +1042,18 @@ async function checkClaude(force) {
   } catch (err) { box.textContent = err.message; }
 }
 
-document.addEventListener('dragover', e => { const d = e.target.closest?.('#drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
-document.addEventListener('dragleave', e => { const d = e.target.closest?.('#drop'); if (d) d.classList.remove('over'); });
+// Files dropped on Add CVs are new CVs; a file dropped on a CV's own card is a newer version of it.
+const dropSpot = e => e.target.closest?.('#drop,[data-drop-cv]');
+document.addEventListener('dragover', e => { const d = dropSpot(e); if (d && [...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); d.classList.add('over'); } });
+document.addEventListener('dragleave', e => { const d = dropSpot(e); if (d && !d.contains(e.relatedTarget)) d.classList.remove('over'); });
 document.addEventListener('drop', e => {
-  const d = e.target.closest?.('#drop');
-  if (!d) return;
+  const d = dropSpot(e);
+  if (!d || !e.dataTransfer?.files?.length) return;
   e.preventDefault();
   d.classList.remove('over');
-  uploadCvs([...e.dataTransfer.files].filter(f => /\.(docx|pdf|txt|doc)$/i.test(f.name)), null);
+  const files = [...e.dataTransfer.files].filter(f => /\.(docx|pdf|txt|doc)$/i.test(f.name));
+  if (!files.length) return toast('Drop a Word, PDF or text file.', true);
+  if (d.dataset.dropCv) uploadCvs(files.slice(0, 1), d.dataset.dropCv); else uploadCvs(files, null);
 });
 
 let settingsPoll;

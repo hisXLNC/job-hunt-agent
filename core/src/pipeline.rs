@@ -720,6 +720,16 @@ impl Agent {
                         self.db().log(None, "tailor:error", &e.0)?;
                     }
                 }
+                // Fits a new CV left to score again (see refresh_after_cv).
+                Some("cv") => {
+                    let (a, ids): (Arc<Self>, Vec<String>) = (self.clone(), serde_json::from_value(w["ids"].clone()).unwrap_or_default());
+                    std::thread::spawn(move || {
+                        let (_, left) = a.rescore_through(&ids, |_| {});
+                        if !left.is_empty() && a.limited().is_some() {
+                            let _ = a.defer(json!({ "kind": "cv", "ids": left }));
+                        }
+                    });
+                }
                 Some("rescore") => {
                     let (a, group) = (self.clone(), w["group"].as_str().unwrap_or("").to_string());
                     std::thread::spawn(move || {

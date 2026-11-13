@@ -1823,6 +1823,42 @@ fn a_new_cv_is_used_for_applications_waiting_for_approval() {
     assert_eq!(s.agent.db().job(&ready[1].id).unwrap().unwrap().cover_letter.as_deref(), Some("Dear team,\n\nMy own words.\n\nJane"));
 }
 
+/// A new file for a CV: fits scored again (every role waiting for you, past the per-search cap),
+/// applications waiting for approval tailored again, career paths rewritten, and it says how far it is.
+#[test]
+fn a_new_cv_updates_everything_worked_out_from_the_old_one() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.max_scored_per_run = 2;
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.search(Some((1..=5).map(|i| Posting { company: format!("Co{i}"), ..posting("Program Manager", &i.to_string()) }).collect())).unwrap();
+    // Score whatever the cap held back, so all five have a fit against the old CV.
+    for _ in 0..4 { let _ = s.agent.score_all_held(); }
+    let waiting: Vec<Job> = s.agent.db().jobs(Some("queued"), 10).unwrap().into_iter().filter(|j| j.score.is_some()).collect();
+    assert!(waiting.len() >= 3, "more waiting than one round scores: {}", waiting.len());
+    let track = waiting[0].track.clone().unwrap();
+    let bytes = std::fs::read(s.agent.cv_path(&track)).unwrap();
+    let (_, change) = s.agent.replace_cv(&track, "new.docx", &bytes, false).unwrap();
+    let mine: Vec<&Job> = waiting.iter().filter(|j| j.track.as_deref() == Some(track.as_str())).collect();
+    assert_eq!(change.unscored.len(), mine.len());
+    s.agent.refresh_after_cv(&track, change);
+    let mut u = Value::Null;
+    for _ in 0..400 {
+        u = s.agent.cv_update().unwrap();
+        if u["step"] == "done" { break; }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    assert_eq!(u["step"], "done", "{u}");
+    assert_eq!(u["running"], false);
+    assert_eq!(u["scored"], mine.len(), "all of them, not only the first round: {u}");
+    assert_eq!(u["career"], true, "{u}");
+    for j in mine {
+        assert!(s.agent.db().job(&j.id).unwrap().unwrap().score.is_some());
+    }
+    assert!(!s.agent.secret("career").is_empty());
+}
+
 #[test]
 fn removing_your_only_cv_redoes_its_work_with_the_next() {
     let s = setup();

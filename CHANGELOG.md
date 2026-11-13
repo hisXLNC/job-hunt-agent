@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.60.0] - 2026-11-13
+
+Update a CV, and everything follows.
+
+### Changes
+
+- Give a CV a newer file (Me, CVs: Update this CV, or drop the file on that CV's card) and Job Hunt brings everything worked out from the old one up to date, in the background.
+- Every job waiting for you to pick, and every saved one, is scored again against the new CV. It used to stop at the per-search cap and leave the rest Not scored. If Claude reaches its limit part-way, the rest are scored when it resets.
+- Applications waiting for your approval are tailored again from the new CV, as before. Ones with your own file or edits, and ones you approved or sent, keep what they have.
+- Your career paths are rewritten from the new CV, and the coach's advice if you have any.
+- Claude reads the new CV for job titles and keywords the old one didn't suggest and adds them to the search. Yours are never removed.
+- A card at the top of the CVs page shows each step and how far it is.
+
 ## [2.59.0] - 2026-11-13
 
 The extension, rebuilt so it can't hang.
@@ -1841,6 +1854,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.60.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.60.0
 [2.59.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.59.0
 [2.58.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.2
 [2.58.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.1
