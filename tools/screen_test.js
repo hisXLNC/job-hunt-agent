@@ -175,7 +175,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await until(async () => (await prefs()).wants?.path === '', 15), 'Career: the path can be cleared');
   if (!await page.$('.paths .path')) { await page.click('#careerCard [data-act="career"]').catch(() => {}); await until(() => page.evaluate(() => !!document.querySelector('.paths .path')), 40); await at('cvs/career'); }
   check(await page.evaluate(() => { const rec = [...document.querySelectorAll('.paths .path.rec')], all = document.querySelectorAll('.paths .path').length;
-    return rec.length >= 1 && rec.length < all && rec.every(p => p.querySelector('.rec-flag') && p.querySelector('.rec-why')?.textContent.length > 40) && document.querySelectorAll('#careerRecs li').length === rec.length && document.querySelectorAll('#t-career tr.rec .rec-pill').length === rec.length; }), 'Career: the recommended paths are marked, each with why, in the summary, the comparison and the cards');
+    return rec.length >= 1 && rec.length < all && rec.every(p => p.querySelector('.rec-flag') && p.querySelector('.rec-why')?.textContent.length > 40) && document.querySelectorAll('#careerRecs li').length === rec.length && document.querySelectorAll('#t-career tr.rec .rec-mark').length === rec.length; }), 'Career: the recommended paths are marked, each with why, in the summary, the comparison and the cards');
   await at('results');
   // Rejections: Claude studies them from Insights, and what it learns is shown (and handed to tailoring).
   check(await page.evaluate(() => !!document.querySelector('[data-act="lessons"]')), 'Insights offers to study your rejections');
