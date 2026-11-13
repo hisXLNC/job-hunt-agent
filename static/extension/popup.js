@@ -17,14 +17,19 @@ async function send() {
   } catch (e) { say("Couldn't send it", String(e.message || e), true); }
 }
 async function fill() {
-  try {
-    // fill.js runs in the page (once), then starts reading the form; answers come back through background.js.
-    const [{ result: loaded }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => !!window.__jobhunt });
-    if (!loaded) await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['fill.js'] });
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => window.__jobhunt && window.__jobhunt.start() });
-    say('Filling it in', 'Job Hunt is reading the form and writing the answers: watch the panel on the page. You press Submit.', false, 'Working');
-    setTimeout(() => window.close(), 2500);
-  } catch (e) { say("Couldn't fill it in", String(e.message || e), true); }
+  // background.js puts fill.js on the page (again, if the copy there is from before an update) and
+  // starts it; the answers come back to the page through background.js.
+  const r = await new Promise(ok => chrome.runtime.sendMessage({ fillTab: tab.id }, ok));
+  if (!r || !r.ok) return say("Couldn't fill it in", (r && r.error) || 'The extension didn\'t answer. Close this and press the button again.', true);
+  say('Filling it in', 'Job Hunt is reading the form and writing the answers: watch the panel on the page. You press Submit.', false, 'Working');
+  setTimeout(() => window.close(), 2500);
+}
+// What the extension did lately (what it asked Job Hunt, what came back, what it put right by
+// itself), to paste to Claude when something isn't working. No answers or form contents in it.
+async function copyLog() {
+  const text = await new Promise(ok => chrome.runtime.sendMessage({ report: 'copied from the popup', page: tab && tab.url ? new URL(tab.url).hostname : '' }, ok));
+  try { await navigator.clipboard.writeText(text || 'No log.'); $('log').textContent = 'Copied: paste it to Claude'; }
+  catch (e) { $('log').textContent = "Couldn't copy it"; }
 }
 // Leads: the hiring posts on this page (LinkedIn's feed or a search of posts), or this one page.
 async function posts(chosen) {
@@ -75,6 +80,7 @@ function submitList(jobs) {
   const onPage = tab && /^https?:/.test(tab.url || '');
   $('send').onclick = send;
   $('fill').onclick = fill;
+  $('log').onclick = e => { e.preventDefault(); copyLog(); };
   $('posts').onclick = () => posts(false);
   $('lead').onclick = e => { e.preventDefault(); posts(true); };
   // The shortcut for Fill this form, as set in the browser (it can be changed there).

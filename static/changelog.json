@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.59.0",
+    "date": "2026-11-13",
+    "title": "The extension, rebuilt so it can't hang",
+    "changes": [
+      "Fill in this form no longer hangs on Reading the questions when Claude is slow. The extension used to wait on one long request to Job Hunt, which a browser can drop without a word; it now hands the form over and checks back every second or two, so nothing is lost if the browser puts the extension to sleep.",
+      "It puts right what it can by itself: a request Job Hunt did not answer is asked again, the form is sent again if Job Hunt restarted meanwhile, the page's script is replaced when it is from before an update, the browser's debugger is turned on again if it came off mid-list, and one box that fails no longer stops the rest.",
+      "The panel says what is happening while you wait (Claude is taking longer than usual, or Job Hunt isn't answering) and gives the button back with the reason when it cannot go on.",
+      "Everything it does is logged, with no answers in it. Copy details on the form now includes that log, the extension's own button has Copy the extension's log, and Job Hunt keeps the latest in extension-log.json beside your data.",
+      "Carries 2.58.2: the All jobs table fits its card, logos in the table, pay figures read as money, and no Closes today on an expired posting."
+    ]
+  },
+  {
     "version": "2.58.2",
     "date": "2026-11-13",
     "title": "All jobs: a table that fits",

@@ -210,12 +210,35 @@ pub fn tailscale_serve() -> crate::R<String> {
     }
 }
 
+/// An answer being written for a form (see /ext/fill/start): when it started, and the result once there.
+struct Fill {
+    started: std::time::Instant,
+    done: Option<Result<Value, String>>,
+}
+fn fills() -> &'static std::sync::Mutex<std::collections::HashMap<String, Fill>> {
+    static FILLS: once_cell::sync::Lazy<std::sync::Mutex<std::collections::HashMap<String, Fill>>> = once_cell::sync::Lazy::new(Default::default);
+    &FILLS
+}
+/// Which application the page is, if answers can be written at all.
+fn fill_job(agent: &Agent, url: &str, title: &str) -> crate::R<crate::db::Job> {
+    let j = crate::fill::job_for_page(agent, url, title)?;
+    if !agent.claude_ready() && crate::fill::bank(agent).is_empty() {
+        return Err(crate::Error("Set up Claude in Job Hunt first (Settings \u{2192} Accounts): it writes the answers.".into()));
+    }
+    Ok(j)
+}
+fn fill_answers(agent: &Agent, j: &crate::db::Job, url: &str, fields: &[Value]) -> crate::R<Value> {
+    let mut a = crate::fill::answers(agent, &j.id, fields)?;
+    a["job"] = page_job(j, url)["job"].clone();
+    Ok(a)
+}
+
 fn json_resp(status: u16, v: Value) -> Resp {
     Resp { status, ctype: "application/json".into(), body: v.to_string().into_bytes(), headers: vec![("Cache-Control".into(), "no-store".into())] }
 }
 
 /// One request from the extension: (method, path, the key it sent, its JSON body).
-pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u8]) -> Resp {
+pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body: &[u8]) -> Resp {
     // Only with the right key: a web page you visit can't reach in and read your answers.
     let want = key(agent);
     if sent_key.len() != want.len() || !sent_key.bytes().zip(want.bytes()).fold(true, |ok, (a, b)| ok & (a == b)) {
@@ -231,14 +254,48 @@ pub fn handle(agent: &Agent, method: &str, path: &str, sent_key: &str, body: &[u
         ("GET", "/ext/ping") => Ok(json!({ "app": "Job Hunt", "version": agent.secret("app.version"), "folder": extension_dir(agent).to_string_lossy() })),
         // Which application a page is, and its company's own posting if this is a job board's copy.
         ("POST", "/ext/which") => crate::fill::job_for_page(agent, url, title).map(|j| page_job(&j, url)),
-        ("POST", "/ext/fill") => crate::fill::job_for_page(agent, url, title).and_then(|j| {
-            if !agent.claude_ready() && crate::fill::bank(agent).is_empty() {
-                return Err(crate::Error("Set up Claude in Job Hunt first (Settings \u{2192} Accounts): it writes the answers.".into()));
-            }
-            let mut a = crate::fill::answers(agent, &j.id, &fields)?;
-            a["job"] = page_job(&j, url)["job"].clone();
-            Ok(a)
+        // The answers in one request, held open until Claude has written them (the phone's bookmark,
+        // and extensions from before 2.58.2).
+        ("POST", "/ext/fill") => fill_job(agent, url, title).and_then(|j| fill_answers(agent, &j, url, &fields)),
+        // The same in two steps, which is what the extension uses: a browser drops a request its
+        // extension has waited on for half a minute, and Claude often takes longer. Start hands back
+        // a ticket at once (or says why it can't start); the page then asks every second or two.
+        ("POST", "/ext/fill/start") => fill_job(agent, url, title).map(|j| {
+            let ticket = crate::fill::new_token();
+            let mut all = fills().lock().unwrap();
+            // Finished ones stay ten minutes (a second ask for the same ticket gets the same answer).
+            all.retain(|_, f| f.started.elapsed().as_secs() < 900);
+            all.insert(ticket.clone(), Fill { started: std::time::Instant::now(), done: None });
+            drop(all);
+            let (agent, url, t) = (agent.clone(), url.to_string(), ticket.clone());
+            std::thread::spawn(move || {
+                // Whatever happens in there, the page hears of it: a panic is an answer too.
+                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| fill_answers(&agent, &j, &url, &fields)))
+                    .unwrap_or_else(|_| Err(crate::Error("Job Hunt hit a problem writing the answers. Try again.".into())));
+                if let Some(f) = fills().lock().unwrap().get_mut(&t) {
+                    f.done = Some(r.map_err(|e| e.0));
+                }
+            });
+            json!({ "ticket": ticket })
         }),
+        ("POST", "/ext/fill/poll") => {
+            let all = fills().lock().unwrap();
+            return match all.get(b["ticket"].as_str().unwrap_or("")) {
+                // Job Hunt was restarted since (an update, say): the page sends the form again.
+                None => json_resp(400, json!({ "error": "Job Hunt was restarted while it was writing the answers.", "gone": true })),
+                Some(Fill { started, done: None }) => json_resp(200, json!({ "waiting": true, "secs": started.elapsed().as_secs() })),
+                Some(Fill { done: Some(Ok(v)), .. }) => json_resp(200, v.clone()),
+                Some(Fill { done: Some(Err(e)), .. }) => json_resp(400, json!({ "error": e })),
+            };
+        }
+        // What the extension did and what went wrong, kept beside your data (extension-log.json) so
+        // a problem can be traced afterwards: no answers in it, only what happened and when.
+        ("POST", "/ext/log") => {
+            let events = b["events"].as_array().cloned().unwrap_or_default();
+            let n = events.len();
+            std::fs::write(agent.data.join("extension-log.json"), serde_json::to_vec_pretty(&json!({ "at": crate::util::now(), "why": b["why"], "health": b["health"], "events": events })).unwrap_or_default())
+                .map(|_| json!({ "kept": n })).map_err(crate::Error::from)
+        }
         // You chose which application this page is (when Job Hunt couldn't tell): it stays chosen for
         // the next two hours, through the form's other pages (see fill::job_for_page).
         ("GET", "/ext/jobs") => Ok(json!({ "jobs": pick_list(agent) })),
@@ -318,6 +375,51 @@ mod tests {
         assert_eq!(phone_add(&s.agent, "nope", "https://www.linkedin.com/jobs/view/123456789").status, 401);
         assert_eq!(phone_add(&s.agent, &k, "Look at this job!").status, 400);
         assert_eq!(handle(&s.agent, "GET", "/nope", &k, b"").status, 404);
+    }
+
+    /// The extension's way to the answers: a ticket at once, then asked after until they're there.
+    #[test]
+    fn answers_come_for_a_ticket() {
+        let s = crate::testkit::setup();
+        let k = key(&s.agent);
+        let body = |r: &Resp| serde_json::from_slice::<Value>(&r.body).unwrap();
+        // A ticket Job Hunt doesn't know (it was restarted since): said so, and the page sends the form again.
+        let r = handle(&s.agent, "POST", "/ext/fill/poll", &k, br#"{"ticket":"nope"}"#);
+        assert_eq!(r.status, 400);
+        assert_eq!(body(&r)["gone"], true);
+        // No application matches the page: the choice comes at once, with no ticket.
+        let r = handle(&s.agent, "POST", "/ext/fill/start", &k, br#"{"url":"https://nowhere.example/apply","title":"Apply","fields":[]}"#);
+        assert_eq!(r.status, 400);
+        assert!(body(&r)["choose"].is_array());
+        // An application the page is: a ticket, and whatever writing the answers comes to (here an
+        // error, with no CV) is what asking after it gets, as often as it's asked.
+        let j = crate::db::Job { id: "t1".into(), title: "Analyst".into(), company: "Maple".into(), url: "https://maple.example/jobs/1".into(), status: "approved".into(), found_at: crate::util::now(), updated_at: crate::util::now(), ..Default::default() };
+        s.agent.db().insert_job(&j).unwrap();
+        handle(&s.agent, "POST", "/ext/pick", &k, br#"{"job_id":"t1","url":"https://maple.example/apply"}"#);
+        s.agent.db().set("claude.key", "test").unwrap();
+        let r = handle(&s.agent, "POST", "/ext/fill/start", &k, br#"{"url":"https://maple.example/apply","title":"Apply","fields":[{"key":"f0","type":"text","label":"Email"}]}"#);
+        let started = body(&r);
+        if r.status == 200 {
+            let ask = json!({ "ticket": started["ticket"] }).to_string();
+            let mut last = Value::Null;
+            for _ in 0..200 {
+                let p = handle(&s.agent, "POST", "/ext/fill/poll", &k, ask.as_bytes());
+                last = body(&p);
+                if last["waiting"] != true { break; }
+                assert!(last["secs"].is_number());
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            assert!(last["waiting"] != true, "an answer or an error, in the end");
+            assert!(last["gone"] != true);
+            let again = body(&handle(&s.agent, "POST", "/ext/fill/poll", &k, ask.as_bytes()));
+            assert_eq!(again, last, "asked twice, answered the same");
+        } else {
+            assert!(started["error"].is_string(), "said plainly why it can't start");
+        }
+        // The extension's log is kept beside the data.
+        let r = handle(&s.agent, "POST", "/ext/log", &k, br#"{"why":"test","events":[{"t":1,"k":"fill","m":"form sent"}]}"#);
+        assert_eq!(body(&r)["kept"], 1);
+        assert!(std::fs::read_to_string(s.agent.data.join("extension-log.json")).unwrap().contains("form sent"));
     }
 
     #[test]

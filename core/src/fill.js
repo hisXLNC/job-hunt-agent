@@ -15,35 +15,109 @@
   // so while one goes, that guard is stopped before it runs (this script runs before the page's own).
   let sending = 0;
   window.addEventListener('beforeunload', e => { if (Date.now() - sending < 2000) e.stopImmediatePropagation(); }, true);
-  async function phoneSend(kind, data) {
-    const R = window.__jobhuntRemote;
-    const call = async (route, body) => {
-      let r;
-      try { r = await fetch(R.base + route, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Job-Hunt-Key': R.key }, body: JSON.stringify(body) }); }
-      catch (e) { throw new Error("Can't reach Job Hunt on your PC. Is it running there, and is Tailscale on on this phone?"); }
-      const v = await r.json().catch(() => ({}));
-      if (!r.ok) { const e = new Error(v.error || `Job Hunt said ${r.status}.`); e.data = v; throw e; }
-      return v;
-    };
-    const J = window.__jobhunt;
-    if (kind === 'fields') {
-      try { J.fill(await call('/ext/fill', data)); }
-      catch (e) { if (e.data && e.data.choose) J.choose(e.message, e.data.choose); else J.failed("Couldn't fill it in: " + e.message); }
-    } else if (kind === 'pick') {
-      try { await call('/ext/pick', data); J.start(); } catch (e) { J.failed("Couldn't choose it: " + e.message); }
-    } else if (['salary', 'dismiss', 'learn', 'applied'].includes(kind)) {
-      call('/ext/' + kind, data).catch(() => {});
+  // --- talking to Job Hunt from a browser (the extension, or the phone's bookmark) ---
+  // What happened on this page, newest last: in Copy details, and (the extension) in its log.
+  const trail = [];
+  let unsent = [];
+  function trace(m, d) {
+    const e = { t: Date.now(), m: String(m).slice(0, 300), d };
+    trail.push(e); if (trail.length > 150) trail.shift();
+    unsent.push(e);
+  }
+  // Hand what happened to the extension's log; with `why`, Job Hunt is given the log too.
+  function flush(why) {
+    if (!EXT || (!unsent.length && !why)) return;
+    const events = unsent; unsent = [];
+    try { chrome.runtime.sendMessage({ jobhunt: 'log', data: { events, why, page: location.hostname } }, () => void chrome.runtime.lastError); } catch (e) { /* the extension was updated */ }
+  }
+  const ORPHAN = 'The extension was updated. Reload this page (F5), then fill again.';
+  // One short question to Job Hunt: { ok, v } or { ok: false, error, why, data }. why: 'http' (Job
+  // Hunt said no), 'offline', 'timeout', 'silent' (the extension didn't answer), 'orphan' (the
+  // extension was updated since this page opened: this copy can't reach it), or the extension's own.
+  const rpc = PHONE ? async (path, body) => {
+    const R = window.__jobhuntRemote, stop = new AbortController(), timer = setTimeout(() => stop.abort(), 20000);
+    let r;
+    try { r = await fetch(R.base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Job-Hunt-Key': R.key }, body: JSON.stringify(body), signal: stop.signal }); }
+    catch (e) { return { ok: false, why: stop.signal.aborted ? 'timeout' : 'offline', error: "Can't reach Job Hunt on your PC. Is it running there, and is Tailscale on on this phone?" }; }
+    finally { clearTimeout(timer); }
+    const v = await r.json().catch(() => ({}));
+    return r.ok ? { ok: true, v } : { ok: false, why: 'http', error: v.error || `Job Hunt said ${r.status}.`, data: v };
+  } : (path, body) => new Promise(res => {
+    const timer = setTimeout(() => res({ ok: false, why: 'silent', error: "The extension didn't answer." }), 70000);
+    try {
+      if (!chrome.runtime || !chrome.runtime.id) throw new Error('Extension context invalidated');
+      chrome.runtime.sendMessage({ jobhunt: 'ask', data: { path, body } }, v => {
+        clearTimeout(timer);
+        const err = chrome.runtime.lastError;
+        res(v || { ok: false, why: /invalidated/i.test((err && err.message) || '') ? 'orphan' : 'silent', error: (err && err.message) || "The extension didn't answer." });
+      });
+    } catch (e) { clearTimeout(timer); res({ ok: false, why: 'orphan', error: String(e && e.message || e) }); }
+  });
+  // The answers for a form. Claude can take a minute or more, and a browser drops a request its
+  // extension has waited on that long, so: the form is handed over for a ticket, then Job Hunt is
+  // asked every second or two whether the answers are there. What can go wrong on the way is put
+  // right here where it can be: Job Hunt not answering for a moment (asked again), Job Hunt
+  // restarted meanwhile (the form is sent again, once). A newer request makes an older one unwanted.
+  let asking = 0, waitNote = '';
+  async function getAnswers(data) {
+    const J = window.__jobhunt, mine = ++asking, t0 = Date.now(), current = () => mine === asking;
+    const fail = (msg, why) => { if (!current()) return; waitNote = ''; trace('failed: ' + msg, { why }); flush(why || 'failed'); J.failed(msg); };
+    let ticket = null, restarts = 0, misses = 0;
+    waitNote = '';
+    for (;;) {
+      if (!ticket) {
+        const r = await rpc('/ext/fill/start', data);
+        if (!current()) return;
+        if (!r.ok) {
+          if (r.data && r.data.choose) { trace('which application? asked'); flush(); return J.choose(r.error, r.data.choose); }
+          if (r.why === 'orphan') return fail(ORPHAN, 'orphan');
+          return fail(['updating', 'stale', 'key', 'offline'].includes(r.why) ? r.error : "Couldn't fill it in: " + r.error, r.why);
+        }
+        // A Job Hunt from before tickets answers in one go.
+        if (!r.v.ticket) { trace('answers (in one request)'); flush(); return J.fill(r.v); }
+        ticket = r.v.ticket;
+        trace('form sent', { boxes: data.fields.length });
+        flush();
+      }
+      await wait(misses ? 2500 : 1200);
+      if (!current()) return;
+      const p = await rpc('/ext/fill/poll', { ticket });
+      if (!current()) return;
+      const secs = Math.round((Date.now() - t0) / 1000);
+      if (p.ok && misses) { trace('Job Hunt is answering again', { secs }); misses = 0; }
+      if (p.ok && p.v.waiting) {
+        if (secs > 720) return fail("Claude hasn't answered in 12 minutes. Check Job Hunt (is Claude signed in, or at its limit?), then press Fill in this form.", 'slow');
+        waitNote = secs > 60 ? ' Claude is taking longer than usual; Job Hunt is still waiting for it.' : '';
+        continue;
+      }
+      if (p.ok) { waitNote = ''; trace('answers arrived', { secs, values: Object.keys(p.v.values || {}).length, files: Object.keys(p.v.files || {}).length }); flush(); return J.fill(p.v); }
+      if (p.data && p.data.gone) {
+        if (restarts++ < 1) { trace('heal: Job Hunt was restarted meanwhile; sending the form again', { secs }); ticket = null; continue; }
+        return fail('Job Hunt was restarted while it was writing the answers. Press Fill in this form again.', 'gone');
+      }
+      if (p.why === 'orphan') return fail(ORPHAN, 'orphan');
+      if (p.why === 'http' || p.why === 'key') return fail("Couldn't fill it in: " + p.error, p.why);
+      // Not answering (closed? busy? the extension asleep?): asked again for about half a minute.
+      misses++;
+      trace('no word from Job Hunt', { why: p.why, misses, secs });
+      waitNote = " Job Hunt isn't answering; still trying.";
+      if (misses >= 12) return fail(p.why === 'offline' ? 'Job Hunt stopped answering (was it closed?). Open it, then press Fill in this form.' : "Couldn't reach Job Hunt: " + p.error, p.why);
     }
   }
-  const send = PHONE ? (kind, data) => phoneSend(kind, { ...data, url: location.href, title: document.title }) : EXT ? (kind, data) => {
-    // The extension was updated (or turned off) since this page opened: this copy can't reach it.
-    const gone = () => { waitingSince = 0; progress(null); if (buttons.fill) buttons.fill.disabled = false; status('The extension was updated. Reload this page (F5), then fill again.'); };
-    try {
-      if (!chrome.runtime || !chrome.runtime.id) return gone();
-      const r = chrome.runtime.sendMessage({ jobhunt: kind, data: { ...data, url: location.href, title: document.title } });
-      if (r && r.catch) r.catch(e => { if (/invalidated|receiving end/i.test(String(e && e.message))) gone(); });
-    } catch (e) { gone(); }
-  } : (kind, data) => {
+  async function remoteSend(kind, data) {
+    const J = window.__jobhunt;
+    if (kind === 'fields') return getAnswers(data);
+    if (kind === 'pick') {
+      const r = await rpc('/ext/pick', data);
+      trace(r.ok ? 'application chosen' : 'choosing failed: ' + r.error);
+      if (r.ok) J.start(); else J.failed(r.why === 'orphan' ? ORPHAN : "Couldn't choose it: " + r.error);
+    } else if (['salary', 'dismiss', 'learn', 'applied'].includes(kind)) {
+      const r = await rpc('/ext/' + kind, data);
+      if (!r.ok) { trace(`${kind} not told to Job Hunt: ${r.error}`, { why: r.why }); flush(); }
+    }
+  }
+  const send = (PHONE || EXT) ? (kind, data) => { remoteSend(kind, { ...data, url: location.href, title: document.title }).catch(e => { trace('error: ' + (e && e.stack || e)); flush('error'); window.__jobhunt.failed('Something went wrong talking to Job Hunt. Press Fill in this form again.'); }); }
+ : (kind, data) => {
     sending = Date.now();
     const json = JSON.stringify({ t: TOKEN, ...data });
     let bin = '';
@@ -122,7 +196,9 @@
     };
     buttons.next.onclick = () => nextAmber();
     buttons.diag.onclick = async () => {
-      const text = 'Job Hunt form details ' + JSON.stringify({ page: location.hostname, ...diag }, null, 1);
+      let text = 'Job Hunt form details ' + JSON.stringify({ page: location.hostname, ...diag, trail: trail.map(e => ({ ...e, t: new Date(e.t).toISOString() })) }, null, 1);
+      // With the extension's own log (what it asked Job Hunt and what came back, no answers in it).
+      if (EXT) { flush(); try { const more = await Promise.race([chrome.runtime.sendMessage({ report: 'copy details', page: location.hostname }), wait(4000)]); if (more) text += '\n\n' + more; } catch (e) { /* the extension was updated */ } }
       try { await navigator.clipboard.writeText(text); }
       catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
       status('Copied. Paste it to Claude and say what went wrong.');
@@ -660,10 +736,11 @@
   // extension can): a real click, real typing, a real key. null when it can't (not the extension,
   // or it didn't answer). Chrome shows "started debugging this browser" while it does; that bar goes
   // again a while after the last one.
+  const extSaid = new Set(); // each kind of failure is written down once
   const ext = (kind, data, ms = 4000) => new Promise(res => {
     if (!EXT) return res(null);
     const t = setTimeout(() => res(null), ms);
-    try { chrome.runtime.sendMessage({ jobhunt: kind, data: data || {} }, v => { clearTimeout(t); void chrome.runtime.lastError; res(v && v.ok ? v : null); }); }
+    try { chrome.runtime.sendMessage({ jobhunt: kind, data: data || {} }, v => { clearTimeout(t); void chrome.runtime.lastError; if (v && !v.ok && !extSaid.has(kind + v.error)) { extSaid.add(kind + v.error); trace(`${kind} failed: ${v.error}`); } res(v && v.ok ? (v.v || v) : null); }); }
     catch (e) { clearTimeout(t); res(null); }
   });
   // The debugger, on and ready. When it has just come on, its bar moves the page down: wait for
@@ -919,9 +996,43 @@
     }
     return added > 0;
   }
+  // One box, kept from stopping the rest: an error in it, or a list that never answers, is written
+  // down and the box left for you (amber).
+  const guarded = (f, work) => {
+    const limit = ['skills', 'prompt'].includes(f.type) ? 300000 : 90000;
+    let timer;
+    return Promise.race([
+      Promise.resolve().then(work).catch(e => { trace(`box "${String(f.label || '').slice(0, 50)}" (${f.type}) failed: ${e && e.message || e}`); return false; }),
+      new Promise(res => { timer = setTimeout(() => { trace(`box "${String(f.label || '').slice(0, 50)}" (${f.type}) took over ${limit / 1000}s: left for you`); res(false); }, limit); }),
+    ]).finally(() => clearTimeout(timer));
+  };
   window.__jobhunt = {
     status,
+    // Which copy this is, and whether it can still reach its extension (after an update it can't,
+    // and a new copy is put on the page).
+    version: EXT ? chrome.runtime.getManifest().version : '',
+    alive: () => !EXT || !!(chrome.runtime && chrome.runtime.id),
+    trail: () => trail,
+    // Fill the form in. Something unexpected on the page part-way (a box that vanished, a site's own
+    // script throwing): the form is read again and filled once more, then it's said plainly.
     async fill(answer) {
+      for (let attempt = 0; ; attempt++) {
+        try { return await this.fillNow(answer); }
+        catch (e) {
+          trace(`error while filling (attempt ${attempt + 1}): ${e && e.stack || e}`);
+          if (attempt >= 1) {
+            flush('fill error');
+            ext('undebug');
+            if (buttons.diag) buttons.diag.hidden = false;
+            return this.failed('Something on this page stopped Job Hunt part-way. Check what was filled, then press Fill in this form again; Copy details has what happened.');
+          }
+          sent = null;
+          status('The page changed under Job Hunt; reading it again…');
+          await wait(700);
+        }
+      }
+    },
+    async fillNow(answer) {
       if (retired) return;
       waitingSince = 0;
       if (answer.job && headEl) headEl.textContent = answer.profile ? `Job Hunt · your profile on ${answer.job.company}` : `Job Hunt · ${answer.job.company}`;
@@ -986,7 +1097,7 @@
         if (f.type === 'add') continue;
         const file = answer.files && answer.files[f.key];
         const v = answer.values && answer.values[f.key];
-        const done = await fillOne(f, v, file);
+        const done = await guarded(f, () => fillOne(f, v, file));
         // For Copy details: what each box got (no values: the labels and whether each was filled).
         // (Now also what Job Hunt meant to put in each box and what the box held afterwards, so a
         // wrong or missing answer can be traced: it's your own details, copied only when you press it.)
@@ -1012,6 +1123,8 @@
         if (appeared) { reveals++; round = Math.max(round, 1); status('Unticked "I currently work here" on past jobs; filling in their end dates…'); start(true, true); return; }
       }
       filled = true;
+      trace('filled', { ok, todo, boxes: fields.length });
+      flush();
       // Done with real clicks and keys: let the browser's debugger go now, not two minutes on.
       ext('undebug');
       progress(100);
@@ -1053,7 +1166,7 @@
     start: () => start(),
     // What Job Hunt saw and did on this page (what Copy details copies).
     details: () => diag,
-    failed(msg) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status(msg); },
+    failed(msg) { waitingSince = 0; waitNote = ''; progress(null); buttons.fill.disabled = false; if (EXT && buttons.diag) buttons.diag.hidden = false; status(msg); },
     // Job Hunt can't tell which application this page is: choose it from your jobs (Submit's first).
     choose(msg, list) {
       waitingSince = 0; progress(null); buttons.fill.disabled = false;
@@ -1105,17 +1218,19 @@
     if (!list.length) { progress(null); status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
     // No answer in six minutes (Job Hunt closed, Claude busy): the button comes back.
     const mine = waitingSince = Date.now();
-    setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status('No answer from Job Hunt. Is it running? Try again.'); } }, 360000);
+    // (In a browser, getAnswers keeps asking and says what it finds: no guessing by the clock.)
+    if (!EXT && !PHONE) setTimeout(() => { if (waitingSince === mine) { waitingSince = 0; progress(null); buttons.fill.disabled = false; status('No answer from Job Hunt. Is it running? Try again.'); } }, 360000);
     buttons.fill.disabled = true;
     // About how long Claude takes: longer with more questions (a form with several jobs on it, say).
     const usual = Math.round(15 + list.length * 0.8);
     const n = list.filter(f => f.type !== 'add').length;
     if (!more) progress(0);
     creep(more ? 93 : 75, usual, s => dates
-      ? `Filling in the end dates of your past jobs… ${s}s (usually about ${usual}s).`
+      ? `Filling in the end dates of your past jobs… ${s}s (usually about ${usual}s).${waitNote}`
       : more
-      ? `Writing answers for all ${n} boxes, now with every job and school on your CV… ${s}s (usually about ${usual}s).`
-      : `Reading ${n} questions and writing answers from your CV… ${s}s (usually about ${usual}s).`);
+      ? `Writing answers for all ${n} boxes, now with every job and school on your CV… ${s}s (usually about ${usual}s).${waitNote}`
+      : `Reading ${n} questions and writing answers from your CV… ${s}s (usually about ${usual}s).${waitNote}`);
+    trace(dates ? 'reading the end dates' : more ? 'reading the form again' : 'reading the form', { boxes: list.length, host: location.hostname });
     send('fields', { url: location.href, fields: list });
   }
 

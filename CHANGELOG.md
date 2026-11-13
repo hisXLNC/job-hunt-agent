@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.59.0] - 2026-11-13
+
+The extension, rebuilt so it can't hang.
+
+### Changes
+
+- Fill in this form no longer hangs on Reading the questions when Claude is slow. The extension used to wait on one long request to Job Hunt, which a browser can drop without a word; it now hands the form over and checks back every second or two, so nothing is lost if the browser puts the extension to sleep.
+- It puts right what it can by itself: a request Job Hunt did not answer is asked again, the form is sent again if Job Hunt restarted meanwhile, the page's script is replaced when it is from before an update, the browser's debugger is turned on again if it came off mid-list, and one box that fails no longer stops the rest.
+- The panel says what is happening while you wait (Claude is taking longer than usual, or Job Hunt isn't answering) and gives the button back with the reason when it cannot go on.
+- Everything it does is logged, with no answers in it. Copy details on the form now includes that log, the extension's own button has Copy the extension's log, and Job Hunt keeps the latest in extension-log.json beside your data.
+- Carries 2.58.2: the All jobs table fits its card, logos in the table, pay figures read as money, and no Closes today on an expired posting.
+
 ## [2.58.2] - 2026-11-13
 
 All jobs: a table that fits.
@@ -1829,6 +1841,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.59.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.59.0
 [2.58.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.2
 [2.58.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.1
 [2.58.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.0

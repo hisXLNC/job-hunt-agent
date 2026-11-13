@@ -56,6 +56,18 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.59.0: the extension's line to Job Hunt, rebuilt** (carries 2.58.2, never published: All jobs table, logos in it).
+  The user's panel sat on "Reading 14 questions… 106s". Not reproduced here (Playwright keeps the service worker
+  awake), but an MV3 worker is stopped when idle and its fetch dropped after ~30 s, and Claude often takes longer.
+  Now: `/ext/fill/start` gives a ticket at once (`bridge.rs` `fills()`, the answers written on a thread),
+  `/ext/fill/poll` is asked every 1.2 s **by the page** (`getAnswers` in `fill.js`, through `rpc`: the extension's
+  `ask` message, or fetch on the phone). `/ext/fill` stays for old copies. background.js was rewritten: every request
+  has a time limit, a log (`log()`, kept in `chrome.storage.session`, 400 events, no answers), `startFill(tabId)`
+  (re-injects a copy from before an update), `command()` (re-attaches the debugger once), `health()`, `report()`
+  (also posted to `/ext/log` -> `extension-log.json` in the data folder). Page: `trace()`/`trail`, `guarded()` per box,
+  `fill` retries `fillNow` once. Messages now answer `{ok, v}`. Test variant `heal` (forgets the ticket once, drops
+  three polls); `ANSWER_DELAY=45000` delays the mock's answers. The form-reading and filling routines were kept.
+  If it hangs again: ask for Copy details (it now has `trail` and the extension's log).
 - **2.58.1: logos for Workday-only companies.** `logos::sites_for` now also tries `KNOWN_SITES`, the `tenant()` code of a
   hosting-site link and the name's initials; "none2" (looked, none) is looked up again, new misses are "none3".
   Not checked against the live sites (no network to them from the build machine).
