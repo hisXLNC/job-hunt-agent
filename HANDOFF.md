@@ -56,6 +56,12 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.62.1.** CV update: `stop_cv_update(forget)` + `POST /api/cv-update` (`cv.stop` flag, read by `cv_update_stopped()`
+  in `rescore_through`, `rescore_jobs` and between the steps; only counts while `cv-update` is running); the card has
+  Stop / close (`cvUpdateStop`, `cvUpdateClose`); a second update waits for the first to stop; `cv_update()` is None
+  when its CV is gone. Top bar: the bar is capped at the page's width whatever the window, so `.dstats` is `flex: none`
+  and the find box and `#dRun` give way (`:has()` rules when an amber chip shows); checked at 780 to 1920 px with every
+  chip showing. (This closes the old "chips overlap at about 1000px" item.)
 - **2.62.0.** CV update: `cv_changed` unscores only queued and saved-above-the-bar on a replace (all four statuses
   only when the CV is removed); `restore_cleared_fits_once` gives set-aside roles back the fit 2.60/2.61 cleared (from
   the `unscored` history line); `cv_update()` adds live `tailored` / `tailoring` from the `retailor` ids; the card's

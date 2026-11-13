@@ -1836,3 +1836,41 @@ details.kit > summary { cursor: pointer; }
 .step-bar.busy i { width: 35%; animation: step-busy 1.4s ease-in-out infinite; }
 @keyframes step-busy { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
 @media (prefers-reduced-motion: reduce) { .step-bar.busy i { animation: none; width: 100%; opacity: .45; } }
+
+/* ---- The top bar: nothing lies over anything else (2.62.1) ----
+   The bar is as wide as the page (about 1180px) however wide the window is, and the status chips
+   sat in a box allowed to be narrower than they are: with an update waiting, the last chip ran
+   under the theme button. Now the chips' box is never narrower than its chips. What gives way,
+   in order: the find box (down to its icon), the search status's words (down to its dot), and in
+   narrower windows the words of the amber chips. */
+@media (min-width: 761px) {
+  .side > .brand, .side > nav.main, .side > .dtheme { flex: none; }
+  nav.main a { padding-inline: 15px; }
+  .side > .side-find { flex: 0 1 190px; min-width: 38px; overflow: hidden; white-space: nowrap; }
+  .dstats { flex: none; }
+  .dstats > * { flex: none; }
+  .dstats > .status-pill { max-width: 220px; overflow: hidden; }
+  .dstats > .status-pill > .dot { flex: none; }
+  .dchip.warn .dchip-t { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+  /* An amber chip is showing: the search status makes room for it; two, and it's down to its dot. */
+  .dstats:has(.dchip.warn:not([hidden])) > .status-pill { max-width: 120px; }
+  .dstats:has(#dWarn:not([hidden])):has(#dUp:not([hidden])) > .status-pill > span:last-child { display: none; }
+  .dstats:has(#dWarn:not([hidden])):has(#dUp:not([hidden])) .dchip.warn .dchip-t { max-width: 84px; }
+}
+@media (min-width: 761px) and (max-width: 1320px) { .dchip.warn .dchip-t { max-width: 64px; } nav.main a { padding-inline: 13px; } .dstats > .status-pill { max-width: 150px; } .dstats:has(.dchip.warn:not([hidden])) > .status-pill > span:last-child { display: none; } }
+@media (min-width: 761px) and (max-width: 1120px) { .dchip.warn .dchip-t { display: none; } .dstats > .status-pill > span:last-child { display: none; } nav.main a { padding-inline: 10px; } .side { gap: 8px; padding-inline: 14px; } }
+
+/* The CV update card, tidied: a finished step is a tick and a line; bars are thin and only on the
+   step being done and the ones to come. */
+.steps-list { gap: 10px; margin: 6px 0 12px; }
+.steps-list li { gap: 12px; }
+.steps-list .tick { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--good-soft); color: var(--good); margin-top: 1px; }
+.steps-list .dot { width: 10px; height: 10px; margin: 6px 5px 0; }
+.steps-list .step-text { gap: 7px; }
+.steps-list .step-n { min-width: 64px; }
+.steps-list li.done .step-n { color: var(--ink-2); font-weight: 600; }
+.step-bar { height: 4px; border-radius: 2px; max-width: 520px; }
+.step-bar i { border-radius: 2px; }
+.cv-update > header { gap: 10px; }
+.cv-update > header h2 { flex: 1; min-width: 0; }
+.cv-update > header .btn.ghost { padding: 4px 6px; }

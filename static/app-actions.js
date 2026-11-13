@@ -686,6 +686,18 @@ async function act(el) {
       await refreshOverview(); setTimeout(route, 300);
     });
   }
+  // The update after a new CV: stop it (it finishes the request it's on), or close its card.
+  if (a === 'cvUpdateStop' || a === 'cvUpdateClose') {
+    el.disabled = true;
+    try {
+      await api('/api/cv-update', { method: 'POST', body: { forget: a === 'cvUpdateClose' } });
+      const st = await api('/api/settings');
+      const box = document.getElementById('cvUpdate');
+      if (box) box.innerHTML = cvUpdateHtml(st.cv_update);
+      if (a === 'cvUpdateStop') { toast('Stopping: it finishes what it is on and starts nothing more.'); watchCvUpdate(); }
+    } catch (err) { el.disabled = false; toast(err.message, true); }
+    return;
+  }
   if (a === 'rescore') {
     const group = el.dataset.group;
     const plan = await api(`/api/rescore?group=${group}`).catch(e => { toast(e.message, true); return null; });
@@ -857,6 +869,7 @@ function cvUpdateHtml(u) {
   if (!u || (!u.running && !u.tailoring && Date.now() - new Date(u.finished || u.at).getTime() > 36 * 3600 * 1000)) return '';
   const order = ['titles', 'scoring', 'tailoring', 'career', 'leads', 'done'], at = order.indexOf(u.step);
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  if (u.cancelled && !u.running) u = { ...u, step: 'done' };
   // One step: its state (done, now, next), what it says, and how far it is: [done, of] when it
   // counts, else a bar that moves while it works. `state` is given for a step that keeps its own time.
   const line = (step, text, count, state) => {
@@ -864,16 +877,19 @@ function cvUpdateHtml(u) {
     state ||= !u.running || at > i ? 'done' : at === i ? 'now' : 'next';
     const [did, of] = count || [];
     const share = state === 'done' ? 100 : of ? Math.round(100 * Math.min(did, of) / of) : 0;
-    const bar = state === 'now' && !of ? '<span class="step-bar busy"><i></i></span>' : `<span class="step-bar"><i style="width:${share}%"></i></span>`;
-    return `<li class="${state}">${state === 'done' ? svg('check') : state === 'now' ? '<span class="dot now"></span>' : '<span class="dot"></span>'}<span class="step-text">${text}${bar}</span><span class="step-n">${of && state !== 'next' ? `${Math.min(did, of)} of ${of}` : state === 'done' ? 'Done' : state === 'now' ? 'Working' : ''}</span></li>`;
+    // A bar only where there is something to watch: the step being done, and the ones to come.
+    // A finished step is a tick and a line.
+    const bar = state === 'done' ? '' : state === 'now' && !of ? '<span class="step-bar busy"><i></i></span>' : `<span class="step-bar"><i style="width:${share}%"></i></span>`;
+    const said = state === 'done' ? (of ? `${Math.min(did, of)}` : '') : state === 'now' ? (of ? `${Math.min(did, of)} of ${of}` : 'Working') : of ? `${of}` : '';
+    return `<li class="${state}">${state === 'done' ? '<span class="tick">✓</span>' : state === 'now' ? '<span class="dot now"></span>' : '<span class="dot"></span>'}<span class="step-text"><span>${text}</span>${bar}</span><span class="step-n">${said}</span></li>`;
   };
   const added = (u.titles_added || []).length;
   const toTailor = (u.retailor || []).length || u.to_tailor || 0, tailored = Math.min(u.tailored ?? (u.running ? 0 : toTailor), toTailor);
   const tailorState = !toTailor ? undefined : tailored >= toTailor ? 'done' : u.tailoring || (u.running && at >= 2) ? 'now' : !u.running ? 'done' : 'next';
   const approvedDone = u.approved_done || 0;
   const lines = [
-    line('titles', !u.claude ? 'Job titles: not read (Claude isn\'t set up)' : at > 0 || !u.running ? (added ? `${n(added, 'new job title', 'new job titles')} to search for, from the new CV: ${esc(u.titles_added.slice(0, 4).join(', '))}${added > 4 ? '…' : ''}` : 'Job titles and keywords: nothing new to add') : 'Reading the new CV for job titles and keywords'),
-    line('scoring', u.to_score ? `Fits scored again (the roles that had cleared your bar)${u.held ? '. Claude reached its limit: the rest are scored when it resets' : ''}` : 'Fits: none to score again', u.to_score ? [u.scored || 0, u.to_score] : null),
+    line('titles', !u.claude ? 'Job titles: not read (Claude isn\'t set up)' : at > 0 || !u.running ? (added ? `${n(added, 'new job title', 'new job titles')} to search for, from the new CV: ${esc(u.titles_added.slice(0, 3).join(', '))}${added > 3 ? ` and ${added - 3} more` : ''}` : 'Job titles and keywords: nothing new to add') : 'Reading the new CV for job titles and keywords'),
+    line('scoring', u.to_score ? `${at > 1 || !u.running ? 'Fits scored again' : 'Scoring fits again'} (the roles that had cleared your bar)${u.held ? '. Claude reached its limit: the rest are scored when it resets' : ''}` : 'Fits: none to score again', u.to_score ? [u.scored || 0, u.to_score] : null),
     ...(u.approved ? [line('tailoring', `Approved and ready to submit, tailored again from the new CV${u.approved_failed && (!u.running || at > 2) ? ` (${u.approved_failed} couldn't be: open ${u.approved_failed === 1 ? 'it' : 'them'} under Submit and press Tailor again before sending)` : approvedDone < u.approved ? '. Wait for these before you submit them' : '. They stay approved: read each over before you submit it'}`, [approvedDone, u.approved], approvedDone >= u.approved ? 'done' : undefined)] : []),
     line('tailoring', toTailor ? `Applications waiting for your approval, tailored again${tailored >= toTailor ? '' : ' (each comes back to Approve when it\'s ready)'}` : 'Applications waiting for approval: none from this CV', toTailor ? [tailored, toTailor] : null, tailorState) ,
     line('career', u.career ? `Career paths rewritten${u.coach ? ', and the coach\'s advice' : ''}: <a href="#cvs/career">see them</a>` : !u.running ? 'Career paths: not rewritten this time (press Think again on Career)' : 'Career paths and the coach\'s advice'),
@@ -881,9 +897,9 @@ function cvUpdateHtml(u) {
   ];
   const working = u.running || u.tailoring;
   const all = lines.length, finished = lines.filter(l => l.startsWith('<li class="done"')).length;
-  return `<section class="card cv-update ${working ? 'running' : ''}"><header><h2>${working ? `Updating everything for your new ${esc(u.cv)} CV` : u.stopped ? `The update for your new ${esc(u.cv)} CV was cut short` : `Up to date with your new ${esc(u.cv)} CV`}</h2>${working ? `<span class="pill">Step ${Math.min(finished + 1, all)} of ${all}</span>` : u.stopped ? '<span class="pill warn">Stopped</span>' : '<span class="pill good">Done</span>'}</header>
+  return `<section class="card cv-update ${working ? 'running' : ''}"><header><h2>${u.stopping ? `Stopping the update for your ${esc(u.cv)} CV…` : working ? `Updating everything for your new ${esc(u.cv)} CV` : u.cancelled ? `You stopped the update for your new ${esc(u.cv)} CV` : u.stopped ? `The update for your new ${esc(u.cv)} CV was cut short` : `Up to date with your new ${esc(u.cv)} CV`}</h2>${working ? `<span class="pill">Step ${Math.min(finished + 1, all)} of ${all}</span>${u.running && !u.stopping ? '<button class="btn sm" type="button" data-act="cvUpdateStop" title="Finishes what it is on and starts nothing more. What it has done stays done.">Stop</button>' : ''}` : `${u.stopped || u.cancelled ? '<span class="pill warn">Stopped</span>' : '<span class="pill good">Done</span>'}<button class="btn ghost sm" type="button" data-act="cvUpdateClose" title="Take this off the page" aria-label="Close">${svg('close')}</button>`}</header>
     <ul class="steps-list">${lines.join('')}</ul>${u.kept ? `<p class="small">${n(u.kept, 'application keeps', 'applications keep')} your own file or edits (tailor ${u.kept === 1 ? 'it' : 'them'} again to use the new CV).</p>` : ''}
-    <p class="muted small">${u.stopped ? 'Job Hunt was closed part-way. Press Update this CV with the same file to finish it.' : `Roles that were set aside keep the fit they had. What you sent stays as it went out, and what you typed yourself (titles, facts, saved answers) is never changed.${working ? ' You can keep using Job Hunt while this runs.' : ''}`}</p></section>`;
+    <p class="muted small">${u.cancelled ? 'What it had done stays done. Roles it had not reached show Not scored: press Score it anyway on one, or Update this CV to run it again.' : u.stopped ? 'Job Hunt was closed part-way. Press Update this CV with the same file to finish it.' : `Roles that were set aside keep the fit they had. What you sent stays as it went out, and what you typed yourself (titles, facts, saved answers) is never changed.${working ? ' You can keep using Job Hunt while this runs.' : ''}`}</p></section>`;
 }
 let cvUpdatePoll;
 /** Keep the card current while the update runs, without redrawing the page (you may be typing in it). */
@@ -895,7 +911,7 @@ function watchCvUpdate() {
     try {
       const st = await api('/api/settings');
       box.innerHTML = cvUpdateHtml(st.cv_update);
-      if (st.cv_update?.running || st.cv_update?.tailoring) return watchCvUpdate();
+      if (st.cv_update?.running || st.cv_update?.tailoring || st.cv_update?.stopping) return watchCvUpdate();
       refreshOverview();
     } catch (err) { watchCvUpdate(); }
   }, 2500);

@@ -1860,6 +1860,12 @@ fn a_new_cv_updates_everything_worked_out_from_the_old_one() {
         assert!(s.agent.db().job(&j.id).unwrap().unwrap().score.is_some());
     }
     assert!(!s.agent.secret("career").is_empty());
+    // Its card can be closed; and it goes by itself when the CV does.
+    s.agent.stop_cv_update(false);
+    assert_eq!(s.agent.cv_update().unwrap()["cancelled"], true);
+    s.agent.stop_cv_update(true);
+    assert!(s.agent.cv_update().is_none());
+    assert!(!s.agent.cv_update_stopped(), "nothing running: nothing held back afterwards");
 }
 
 /// A new file for a CV scores again only what had cleared the bar: a role set aside keeps its fit.

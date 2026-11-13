@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.62.1] - 2026-11-13
+
+CV update: stop it, close it, and a tidier card.
+
+### Changes
+
+- The update after a new CV can be stopped (Stop: it finishes what it is on and starts nothing more) and its card closed once it is done or stopped.
+- Removing a CV stops an update running for it and takes its card away. Giving a CV another file while an update runs stops that one and starts afresh.
+- The card is tidier: a finished step is a tick and one line, bars are thin and only on the step being done and the ones to come, and the link to your career paths stays on its line.
+- Top bar: with an update waiting, the Update ready chip ran under the theme button. Each thing in the bar now keeps its own width; the find box and the search status give way instead.
+
 ## [2.62.0] - 2026-11-13
 
 CV update: only what cleared your bar, with a bar for every step.
@@ -1900,6 +1911,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.62.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.1
 [2.62.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.0
 [2.61.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.2
 [2.61.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.1

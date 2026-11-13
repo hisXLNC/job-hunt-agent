@@ -1350,6 +1350,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.connect();
             ok()
         }
+        // The update after a new CV: stop it, or take its card off the CVs page.
+        ["api", "cv-update"] => {
+            agent.stop_cv_update(b["forget"].as_bool().unwrap_or(false));
+            ok()
+        }
         ["api", "rescore"] => {
             let group = s(&b, "group").to_string();
             agent.rescore_plan(&group)?; // a bad group fails here, not in the background
@@ -1962,6 +1967,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 "suggest" => Ok(Resp::json(&json!({ "track": agent.suggest_for_cv(id)? }))),
                 "convert" => Ok(Resp::json(&json!({ "track": agent.convert_existing_cv(id)? }))),
                 "remove" => {
+                    // An update running for it has nothing left to update: stopped, its card gone.
+                    agent.stop_cv_update(true);
                     let change = agent.remove_cv(id)?;
                     let summary = json!(change);
                     agent.apply_cv_change(change);

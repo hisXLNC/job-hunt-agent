@@ -265,7 +265,7 @@ impl Agent {
         let unscored = |a: &Self, id: &String| a.db().job(id).ok().flatten().filter(|j| j.score.is_none());
         let mut left: Vec<String> = ids.iter().filter(|i| unscored(self, i).is_some()).cloned().collect();
         let mut scored = 0;
-        while !left.is_empty() && self.limited().is_none() {
+        while !left.is_empty() && self.limited().is_none() && !self.cv_update_stopped() {
             let n = self.rescore_jobs(&left).unwrap_or(0);
             scored += n;
             each(scored);
@@ -278,13 +278,47 @@ impl Agent {
         (scored, left)
     }
 
+    /// You pressed Stop on the update after a new CV (or took the CV away, or gave it another file):
+    /// it finishes the request it's on and starts nothing more.
+    pub fn cv_update_stopped(&self) -> bool {
+        self.secret("cv.stop") == "1" && self.is_running("cv-update")
+    }
+
+    /// Stop the update that's running, if one is; `forget` also takes its card off the CVs page.
+    /// What it already did stays done. Fits it hadn't reached stay "Not scored" (Score it anyway
+    /// on any of them, or update the CV again).
+    pub fn stop_cv_update(&self, forget: bool) {
+        if self.is_running("cv-update") {
+            let _ = self.db().set("cv.stop", "1");
+        }
+        // Nothing held for later on its account either.
+        let held: Vec<Value> = self.deferred().into_iter().filter(|w| w["kind"] != "cv").collect();
+        let _ = if held.is_empty() { self.db().delete("deferred") } else { self.db().set("deferred", &Value::Array(held).to_string()) };
+        if forget {
+            let _ = self.db().delete("cv.update");
+        } else if let Ok(mut v) = serde_json::from_str::<Value>(&self.secret("cv.update")) {
+            v["running"] = json!(false);
+            v["cancelled"] = json!(true);
+            v["finished"] = json!(now());
+            let _ = self.db().set("cv.update", &v.to_string());
+        }
+    }
+
     /// How far the update after a new CV has got (see refresh_after_cv), for the CVs page.
     pub fn cv_update(&self) -> Option<Value> {
         let mut v: Value = serde_json::from_str(&self.secret("cv.update")).ok()?;
+        // The CV it was for is gone: nothing to show.
+        if !self.profile().tracks.iter().any(|t| v["cv"] == t.label.as_str()) {
+            return None;
+        }
         // Job Hunt was closed part-way: not running any more, whatever was written down.
         if v["running"] == true && !self.is_running("cv-update") {
             v["running"] = json!(false);
             v["stopped"] = json!(true);
+        }
+        // Still winding down after Stop: said, so the card doesn't offer Stop again.
+        if v["cancelled"] == true && self.is_running("cv-update") {
+            v["stopping"] = json!(true);
         }
         // The applications being tailored again go on after the rest is done: counted as they are now
         // (one has its fit again once it's tailored).
@@ -310,12 +344,34 @@ impl Agent {
         let claude = self.claude_ready();
         let start = json!({ "at": now(), "cv": label, "running": true, "step": "titles", "claude": claude,
             "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept, "approved": c.approved.len(), "approved_done": 0, "retailor": c.retailor });
+        // One at a time: an update already running (for an earlier file) is told to stop, and this
+        // one starts when it has.
+        let waiting = self.is_running("cv-update");
+        if waiting {
+            let _ = self.db().set("cv.stop", "1");
+        }
         let _ = self.db().set("cv.update", &start.to_string());
         let (a, id) = (self.clone(), id.to_string());
         std::thread::spawn(move || {
-            let Ok(_g) = a.claim("cv-update") else { return };
+            let mut tries = 0;
+            let _g = loop {
+                match a.claim("cv-update") {
+                    Ok(g) => break g,
+                    Err(_) if tries < 1200 => { tries += 1; std::thread::sleep(std::time::Duration::from_millis(500)); }
+                    Err(_) => return,
+                }
+            };
+            let _ = a.db().delete("cv.stop");
+            if waiting {
+                let _ = a.db().set("cv.update", &start.to_string());
+            }
             let state = std::cell::RefCell::new(start);
+            // Stopped by you: nothing more is written over what Stop left, and no step starts.
+            let stopped = || a.cv_update_stopped();
             let put = |patch: Value| {
+                if stopped() {
+                    return;
+                }
                 let mut s = state.borrow_mut();
                 for (k, v) in patch.as_object().into_iter().flatten() {
                     s[k.as_str()] = v.clone();
@@ -323,7 +379,7 @@ impl Agent {
                 let _ = a.db().set("cv.update", &s.to_string());
             };
             // (1) Titles and keywords the new CV suggests.
-            if claude {
+            if claude && !stopped() {
                 let had = |a: &Agent| a.profile().tracks.iter().find(|t| t.name == id).map(|t| (t.titles.clone(), t.keywords.len())).unwrap_or_default();
                 let (titles, keywords) = had(&a);
                 match a.suggest_for_cv(&id) {
@@ -350,6 +406,7 @@ impl Agent {
             // done, what's there to submit is from the old CV. They stay approved.
             let (mut redone, mut held) = (0, vec![]);
             for id in &c.approved {
+                if stopped() { break; }
                 let Ok(_t) = a.claim(&format!("tailor:{id}")) else { continue };
                 match a.tailor_anyway(id, None) {
                     Ok(_) => {
@@ -366,6 +423,10 @@ impl Agent {
             if redone < c.approved.len() {
                 put(json!({ "approved_failed": c.approved.len() - redone }));
             }
+            if stopped() {
+                let _ = a.db().delete("cv.stop");
+                return;
+            }
             if !held.is_empty() {
                 let _ = a.defer(json!({ "kind": "tailor", "ids": held }));
             }
@@ -374,7 +435,7 @@ impl Agent {
             }
             // (4) Career paths and the coach.
             put(json!({ "step": "career" }));
-            if claude && a.limited().is_none() {
+            if claude && a.limited().is_none() && !stopped() {
                 if let Ok(_c) = a.claim("career") {
                     match a.write_career_paths() {
                         Ok(_) => put(json!({ "career": true })),
@@ -391,11 +452,15 @@ impl Agent {
             }
             // (5) Leads you haven't written to yet: read against the new CV.
             put(json!({ "step": "leads" }));
-            if claude && a.limited().is_none() {
+            if claude && a.limited().is_none() && !stopped() {
                 match crate::leads::read_again(&a) {
                     Ok(n) => put(json!({ "leads": n })),
                     Err(e) => { let _ = a.db().log(None, "leads:error", &e.0); }
                 }
+            }
+            if stopped() {
+                let _ = a.db().delete("cv.stop");
+                return;
             }
             put(json!({ "step": "done", "running": false, "finished": now() }));
             a.note("Job Hunt is up to date with your new CV", &format!("The {label} CV: fits scored again, applications waiting for you tailored again, and your career paths rewritten. See Me, CVs."));
@@ -461,7 +526,7 @@ impl Agent {
         let mut n = 0;
         for id in ids.iter().take(profile.max_scored_per_run.max(1)) {
             let Some(j) = self.db().job(id)? else { continue };
-            if j.score.is_some() || self.limited().is_some() {
+            if j.score.is_some() || self.limited().is_some() || self.cv_update_stopped() {
                 continue;
             }
             let s = match self.llm().score(&cvs, &guidance, &j) {
