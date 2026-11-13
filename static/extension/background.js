@@ -180,7 +180,27 @@ async function startFill(tabId) {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['fill.js'] });
   }
   await run(tabId, () => window.__jobhunt && window.__jobhunt.start());
+  // The site's next pages get the panel too, for twenty minutes (see below).
+  try { const tab = await chrome.tabs.get(tabId); const site = new URL(tab.url).origin; const { armed = {} } = await stored().get('armed'); armed[tabId] = { site, until: Date.now() + 20 * 60 * 1000 }; await stored().set({ armed }); } catch (e) { /* no address to go by */ }
 }
+// A form that is several pages (a profile's list of jobs, then the page to add one; an application's
+// steps that load afresh): once you've started Job Hunt on a tab, the pages that tab goes to on the
+// same site get its panel by themselves, so there is always something to press. It fills by itself
+// only the page it opened itself (pressing the site's Add for you); elsewhere it waits for you.
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (info.status !== 'complete') return;
+  const { armed = {} } = await stored().get('armed');
+  const a = armed[tabId];
+  if (!a) return;
+  let site = '';
+  try { site = new URL(tab.url).origin; } catch (e) { /* the address isn't ours to see: another site */ }
+  if (Date.now() > a.until || site !== a.site) { delete armed[tabId]; await stored().set({ armed }); return; }
+  try {
+    const [{ result: there }] = await run(tabId, () => !!window.__jobhunt);
+    if (!there) { await chrome.scripting.executeScript({ target: { tabId }, files: ['fill.js'] }); log('inject', 'the next page of the same site', { tabId }); }
+  } catch (e) { log('failed', `the next page: ${e.message}`, { tabId }); }
+});
+chrome.tabs.onRemoved.addListener(async tabId => { const { armed = {} } = await stored().get('armed'); if (armed[tabId]) { delete armed[tabId]; await stored().set({ armed }); } });
 // Fill this form from the keyboard (Alt+Shift+F unless you changed it in the browser's extension
 // shortcuts): the same as the popup's button, on the page you're looking at.
 chrome.commands.onCommand.addListener(async (command, tab) => {

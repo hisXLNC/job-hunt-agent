@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.65.7] - 2026-11-13
+
+Profiles: a page with only an Add button.
+
+### Changes
+
+- On a page that lists your jobs with no boxes to fill, only a button to add one (Job Bank's Manage your work experience and skills), Fill this form now presses that button for you and fills in the form it opens, on the same page or the next. It used to say there was no form.
+- Once you have started Job Hunt on a tab, the pages that tab goes to on the same site get its panel by themselves for twenty minutes, so the next step always has Fill in this form on it.
+
 ## [2.65.6] - 2026-11-13
 
 Update everything now.
@@ -2002,6 +2011,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.65.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.7
 [2.65.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.6
 [2.65.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.5
 [2.65.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.4

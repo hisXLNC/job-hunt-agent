@@ -56,6 +56,12 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.65.7: a profile's list page (Job Bank).** `start()` with no boxes presses the page's own Add button (`opens`),
+  sets `sessionStorage['jobhunt-continue']`, and carries on when the form shows there or on the next page; background.js
+  keeps a tab "armed" for 20 min after `startFill` (`chrome.storage.session` `armed`) and puts fill.js on that site's
+  next pages (`tabs.onUpdated`), which auto-starts only with the continue flag. Mock: `/match/profile/list`. NOT seen on
+  the real Job Bank, nor with the real extension's activeTab-only permission (the test build has all sites): if the
+  panel doesn't follow to the next page there, that permission is why. 2.65.6: Update everything now (`update_for_cvs_now`).
 - **2.65.5: CV work is read from the jobs.** `cv_work_pending()` (queued/saved with no score and reasoning "Not scored: ",
   ready with no score, approved-unsent with no score) + `resume_cv_work()` (runs `refresh_after_cv("", …)`), called by
   `apply_cv_change`, `after_cv_added`, and the `cvwork` task every 30 min (`last.cvwork`). `cv.waiting` no longer decides.

@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.65.7",
+    "date": "2026-11-13",
+    "title": "Profiles: a page with only an Add button",
+    "changes": [
+      "On a page that lists your jobs with no boxes to fill, only a button to add one (Job Bank's Manage your work experience and skills), Fill this form now presses that button for you and fills in the form it opens, on the same page or the next. It used to say there was no form.",
+      "Once you have started Job Hunt on a tab, the pages that tab goes to on the same site get its panel by themselves for twenty minutes, so the next step always has Fill in this form on it."
+    ]
+  },
+  {
     "version": "2.65.6",
     "date": "2026-11-13",
     "title": "Update everything now",

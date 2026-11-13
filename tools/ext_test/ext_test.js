@@ -137,8 +137,10 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   } catch (e) { console.log('skipped: 127.0.0.1:47613 is in use (is Job Hunt running here?)'); process.exit(2); }
   const html = fs.readFileSync(path.join(__dirname, 'workday.html'));
   const profileHtml = fs.readFileSync(path.join(__dirname, 'profile.html'));
+  // The profile's list of jobs, as Job Bank's "Manage your work experience and skills": no boxes, a link to the form.
+  const listHtml = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Job Match - Mock Job Site</title></head><body><h1>Manage your work experience and skills</h1><h2>Experience and skills</h2><p>Add your latest work experience and acquired skills, then list other jobs you\u2019ve held before.</p><p><a class="btn" href="/match/profile/experience">Add a new experience</a></p><table><thead><tr><th>Job title (NOC code)</th><th>Employer Name</th><th>Employment Period</th></tr></thead><tbody><tr><td colspan="3">No experience listed. Click on "Add new experience" to fill in the table.</td></tr></tbody></table><p><button>Previous</button> <button>Continue</button></p></body></html>';
   const postsHtml = fs.readFileSync(path.join(__dirname, 'posts.html'));
-  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
+  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
   const base = `http://127.0.0.1:${site.address().port}/apply`;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
@@ -266,18 +268,23 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   }
   // A job site's own profile (one job at a time, whole dates): Job Hunt can't match it to an
   // application, offers the profile, fills it from the CV, and has nothing to mark as submitted.
-  if (!only.length || only.includes('profile')) {
+  // Twice: started on the form itself; and started on the profile's list of jobs, a page with no
+  // boxes and an "Add a new experience" link to the form (Job Bank's): the link is pressed for you,
+  // and the page it leads to is filled without another press.
+  for (const fromList of [false, true]) if (!only.length || only.includes('profile')) {
+    picked = '';
     const page = await ctx.newPage();
-    const url = `http://127.0.0.1:${site.address().port}/match/profile/experience`;
+    const url = `http://127.0.0.1:${site.address().port}/match/profile/${fromList ? 'list' : 'experience'}`;
     await page.goto(url);
     const t0 = Date.now();
     await sw.evaluate(async url => {
       const [tab] = await chrome.tabs.query({ url: url + '*', active: true });
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['fill.js'] });
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => window.__jobhunt.start() });
+      await startFill(tab.id);
     }, url);
+    if (fromList) { await page.waitForURL('**/match/profile/experience', { timeout: 15000 }).catch(() => {}); await page.waitForTimeout(600); }
     const panel = f => page.evaluate(f);
     const problems = [];
+    if (fromList && !/\/match\/profile\/experience$/.test(page.url())) problems.push(`the list's Add link wasn't pressed (still on ${page.url()})`);
     let chosen = null;
     for (let i = 0; i < 60 && !chosen; i++) { await page.waitForTimeout(500); chosen = await panel(() => { const r = document.querySelector('[data-jobhunt-panel]')?.shadowRoot, c = r?.querySelector('.c'); return c && !c.hidden ? { value: c.querySelector('select').value, button: c.querySelector('[data-k=pick]').textContent, logo: r.querySelectorAll('svg.m path, svg.m circle').length, head: r.querySelector('.t').textContent } : null; }); }
     if (!chosen) problems.push('the panel never offered the choice');
@@ -295,8 +302,8 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     for (const k of Object.keys(want)) if (got[k] !== want[k]) problems.push(`${k} is "${got[k]}", not "${want[k]}"`);
     if (chosen && !/job 1 on your CV/.test(s)) problems.push('the panel doesn\'t say which job it filled in');
     if (got.applied || got.drop) problems.push('I submitted it or Not interested is offered on a profile');
-    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'profile'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  ${got.title || 'no title'} at ${got.employer || 'no employer'}, from ${got.start || 'no date'}`);
-    if (problems.length) { failed.push('profile'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
+    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${(fromList ? 'profile (from its list)' : 'profile').padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  ${got.title || 'no title'} at ${got.employer || 'no employer'}, from ${got.start || 'no date'}`);
+    if (problems.length) { failed.push(fromList ? 'profile from its list' : 'profile'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();
   }
   // Hiring posts: a page of posts (a stand-in for LinkedIn's search) read by the extension and sent

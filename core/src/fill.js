@@ -1274,7 +1274,7 @@
     amber[amberAt % amber.length].scrollIntoView({ behavior: 'smooth', block: 'center' });
     amberAt++;
   }
-  let sent = null;
+  let sent = null, opens = 0;
   async function start(more, dates) {
     if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
@@ -1286,7 +1286,26 @@
     // The end dates that appeared: only the boxes still empty go (with the entries' checkboxes), not
     // the whole form again.
     const list = dates ? all.filter(f => !['add', 'file', 'skills', 'prompt'].includes(f.type) && (!f.value || f.type === 'checkbox')) : all;
-    if (!list.length) { progress(null); status('No form on this page yet. Use the page\'s Apply button, then press Fill in this form.'); return; }
+    // No boxes here, but the page has a button that opens some (a profile's list of jobs with "Add a
+    // new experience"): pressed for you. Its form may open on this page (then it's filled now) or
+    // on the next one (the extension brings the panel there, and it carries on by itself).
+    if (!all.some(f => !['add'].includes(f.type)) && opens < 2) {
+      const opener = Object.values(adders).find(b => b && b.isConnected && shown(b))
+        || [...document.querySelectorAll('a,button,[role=button]')].find(b => { const t = clean(b.textContent || b.getAttribute('aria-label') || ''); return !own(b) && shown(b) && t.length <= 60 && ADD.test(t) && HISTORY.test(t) && !NOT_ADD.test(t); });
+      if (opener) {
+        opens++;
+        const name = clean(opener.textContent || opener.getAttribute('aria-label') || 'Add').slice(0, 50);
+        trace('no boxes here: pressing the page\'s own button', { name });
+        status(`Pressing \u201c${name}\u201d to open its form…`);
+        try { sessionStorage.setItem('jobhunt-continue', String(Date.now())); } catch (e) { /* storage off: you press Fill in this form on the next page */ }
+        ownClick = true; opener.click(); ownClick = false;
+        for (let i = 0; i < 16; i++) { await wait(500); if (collect().some(f => !['add', 'file'].includes(f.type))) break; }
+        if (collect().some(f => !['add', 'file'].includes(f.type))) { try { sessionStorage.removeItem('jobhunt-continue'); } catch (e) { /* as above */ } return start(more, dates); }
+        progress(null); status(`Pressed \u201c${name}\u201d. When its form shows, press Fill in this form.`);
+        return;
+      }
+    }
+    if (!list.length) { progress(null); status('No form on this page yet. Open it with the page\'s own button (Apply, or Add), then press Fill in this form.'); return; }
     // No answer in six minutes (Job Hunt closed, Claude busy): the button comes back.
     const mine = waitingSince = Date.now();
     // (In a browser, getAnswers keeps asking and says what it finds: no guessing by the clock.)
@@ -1406,7 +1425,15 @@
       if (i === 2 && !pressedAt()) status('Use the page\'s Apply button to get to the form. Job Hunt fills it in when it appears.');
     }
   }
-  if (EXT) { panel(); status('Press Fill in this form when the application form is on screen.'); return; }
+  if (EXT) {
+    panel();
+    // The page Job Hunt opened itself a moment ago (it pressed the site's Add button): carried on with.
+    let opened = 0;
+    try { opened = Number(sessionStorage.getItem('jobhunt-continue') || 0); sessionStorage.removeItem('jobhunt-continue'); } catch (e) { /* storage off */ }
+    if (Date.now() - opened < 90000) { status('Filling in the form that opened…'); setTimeout(() => start(), 1200); }
+    else status('Press Fill in this form when the form is on screen.');
+    return;
+  }
   // From the phone's bookmark: tapped with the form on screen, so it starts right away.
   if (PHONE) { panel(); start(); return; }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', look); else look();
