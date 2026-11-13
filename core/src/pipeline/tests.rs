@@ -101,7 +101,7 @@ fn connections_show_their_status_and_test_one_at_a_time() {
     s.agent.db().set("last.search", &(Utc::now() + Duration::minutes(1)).to_rfc3339()).unwrap();
     assert_eq!(indeed(&s)["status"], "problem");
     let h = s.agent.health();
-    assert!(h.iter().any(|h| h["text"] == "Indeed (through your Claude account) isn't working. See why and fix it in Search \u{2192} Set up sources."), "{h:?}");
+    assert!(h.iter().any(|h| h["text"] == "Indeed (through your Claude account) isn't working. See why and fix it in Settings \u{2192} Job search."), "{h:?}");
     // Turned off.
     let mut p = s.agent.profile();
     p.sources.indeed = false;

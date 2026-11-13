@@ -20,7 +20,7 @@ impl Agent {
             return Ok(vec![]);
         }
         if self.engine_name() != "code" {
-            return err("searching Indeed needs Claude Code on this PC. Choose it in Settings → Accounts, or turn Indeed off in Search → Set up sources.");
+            return err("searching Indeed needs Claude Code on this PC. Choose it in Settings → Accounts, or turn Indeed off in Settings → Job search.");
         }
         // Your titles across all your places (each title in every place before the next).
         let mut searches = crate::sources::searches(profile, 8);
@@ -96,7 +96,7 @@ impl Agent {
             None => p.sources.is_off(only),
         };
         if off {
-            return err(format!("{name} is turned off. Turn it on first (Search \u{2192} Sources, or Search \u{2192} Set up sources)."));
+            return err(format!("{name} is turned off. Turn it on first (Settings \u{2192} Job search)."));
         }
         if self.is_running("search") {
             return err("A search is running. Wait for it to finish, or stop it, then search this one.");

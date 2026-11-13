@@ -433,6 +433,8 @@ async function act(el) {
     const here = location.hash;
     return busy(async () => { await api('/api/results/career', { method: 'POST' }); settingsCache = null; route(); watchCareer(here); }, 'Claude is thinking about your career options. This takes a minute or two.');
   }
+  // A setting found by the search: its page opens on it.
+  if (a === 'setGo') { setFlash = el.dataset.find || ''; const to = el.getAttribute('href'); if (location.hash === to) route(); else location.hash = to; return; }
   if (a === 'choosePath') return busy(() => savePath(el.dataset.title || ''));
   // Several paths can be kept open: one is added to the list, or taken off it.
   if (a === 'addPath' || a === 'dropPath') return busy(async () => { const now = pathList((settingsCache || await api('/api/settings')).profile?.wants?.path), t = el.dataset.title || ''; // Kept open: its job titles join the search too, so its roles show up (they can be taken out under Me, CVs).
@@ -654,7 +656,7 @@ async function act(el) {
           <table><thead><tr><th>Company</th><th>Job board</th><th>Matching jobs</th></tr></thead><tbody>${boards.map((b, i) => `<tr><td data-v="${esc(b.company.toLowerCase())}"><label class="check"><input type="checkbox" data-idea="${i}" ${b.matching ? 'checked' : ''}> ${esc(b.company)}</label></td>
             <td class="small muted">${esc(b.board)}</td><td class="small" data-v="${b.matching}">${b.matching} of ${b.jobs} jobs match</td></tr>`).join('')}</tbody></table>
           <div class="row"><button class="btn primary" type="button" data-act="addIdeas">Add ticked and search</button></div></div>`
-          : '<p class="muted">None of the suggested employers had a live job board this time. Try again later, or add companies yourself in Search → Set up sources → Company job boards.</p>';
+          : '<p class="muted">None of the suggested employers had a live job board this time. Try again later, or add companies yourself in Settings → Job search → Company job boards.</p>';
       } catch (e) { box.innerHTML = ''; throw e; }
     });
   }
@@ -675,7 +677,7 @@ async function act(el) {
     return busy(async () => {
       await api('/api/settings/sites-off', { method: 'POST', body: { ids } });
       settingsCache = null; await refreshOverview(); route();
-    }, `Turned off ${ids.length} site${ids.length === 1 ? '' : 's'} that couldn't be read. Turn any back on in Search → Set up sources.`);
+    }, `Turned off ${ids.length} site${ids.length === 1 ? '' : 's'} that couldn't be read. Turn any back on in Settings → Job search.`);
   }
   if (a === 'removeBroken' || a === 'removeBoard') {
     const boards = a === 'removeBoard' ? [{ source: el.dataset.source, name: el.dataset.name }] : JSON.parse(el.dataset.boards || '[]');

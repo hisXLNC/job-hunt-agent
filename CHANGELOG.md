@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.65.0] - 2026-11-13
+
+Settings, regrouped, with a search.
+
+### Changes
+
+- Settings has eight places down the side, each thing in one of them once: Accounts, Job search, Applying, Email & calendar, Notifications, Phone, Sync & backup and This computer. The bigger ones have tabs inside.
+- Search settings (the box above the places, or press /) lists every setting that matches, with where it is; opening one goes to its page and lights it.
+- Google is one card in Accounts, showing Gmail, Calendar and Drive with the way to each one's settings. Sync & backup no longer has a sign-in of its own.
+- Job search, Sources is one list in groups (job sites, employers' own sites, recruiters, sent to you). Each source has its state, what it last found, its buttons, and its set-up folded under it. Where it looks and Set up sources were two pages; Last search is a tab of its own.
+- When Job Hunt searches, how much it scores, and how it tailors moved from Me, Looking for to Settings (Job search, Applying). Looking for keeps what describes the jobs you want.
+- Everything to do with your phone (using Job Hunt there, filling in forms, sending jobs) is under Phone. Older links to a settings page still open the right place.
+
 ## [2.64.0] - 2026-11-13
 
 Every role shows; a warning only for a real setback.
@@ -1937,6 +1950,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.65.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.0
 [2.64.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.64.0
 [2.63.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.63.0
 [2.62.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.2

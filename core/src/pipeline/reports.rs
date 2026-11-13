@@ -40,7 +40,7 @@ impl Agent {
                 .filter(|c| c["group"] == "Job listings" && c["status"] == "problem" && c["id"] != "boards")
                 .filter_map(|c| c["name"].as_str().map(String::from)).collect();
             if !broken.is_empty() {
-                add(&mut out, "warn", format!("{} isn't working. See why and fix it in Search \u{2192} Set up sources.", broken.join(", ")), "#settings/sources");
+                add(&mut out, "warn", format!("{} isn't working. See why and fix it in Settings \u{2192} Job search.", broken.join(", ")), "#settings/sources");
             }
             if r["errors"].as_array().is_some_and(|e| e.iter().any(|x| x.as_str().is_some_and(|t| t.contains("usage limit")))) {
                 add(&mut out, "warn", "The last search hit your Claude usage limit, so some postings wait for the next search.".into(), "#overview");

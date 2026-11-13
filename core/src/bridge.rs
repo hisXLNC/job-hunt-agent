@@ -242,7 +242,7 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
     // Only with the right key: a web page you visit can't reach in and read your answers.
     let want = key(agent);
     if sent_key.len() != want.len() || !sent_key.bytes().zip(want.bytes()).fold(true, |ok, (a, b)| ok & (a == b)) {
-        return json_resp(401, json!({ "error": "The key doesn't match. Copy it again from Job Hunt: Search \u{2192} Set up sources \u{2192} Jobs you find yourself." }));
+        return json_resp(401, json!({ "error": "The key doesn't match. Copy it again from Job Hunt: Settings \u{2192} Applying \u{2192} Filling in forms." }));
     }
     let _ = agent.db().set("ext.last", &crate::util::now());
     let b: Value = serde_json::from_slice(body).unwrap_or(Value::Null);

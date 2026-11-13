@@ -148,8 +148,6 @@ const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['
 const careerSeg = on => `<nav class="mode career-seg" aria-label="Career"><a href="#cvs/career" class="${on === 'paths' ? 'on' : ''}">Paths you could take</a><a href="#cvs/coach" class="${on === 'skills' ? 'on' : ''}">Skills to build</a></nav>`;
 const meHead = (on, about, n) => `<div class="head"><div class="grow"><h1>Me</h1><p class="muted">${about}</p></div><span class="save-state" ${on === 'what' ? '' : 'id="saveState"'} aria-live="polite">${['cvs', 'details'].includes(on) ? 'Changes save by themselves' : ''}</span></div>${meTabs(on, n)}`;
 /** Settings' tabs: what belongs to no one place, and where Job Hunt looks for jobs. */
-const SETTINGS_TABS = [['connections', 'Accounts'], ['sources', 'Job sources'], ['inbox', 'Email'], ['calendar', 'Calendar'], ['notifications', 'Notifications'], ['sync', 'Sync & backup'], ['extension', 'Browser extension'], ['app', 'App']];
-const settingsTabs = on => `<nav class="tabs place-tabs">${SETTINGS_TABS.map(([id, n]) => `<a href="${id === 'sources' ? '#search' : `#settings/${id}`}" class="${id === on ? 'on' : ''}">${n}</a>`).join('')}</nav>`;
 /** The job hunt, step by step: each a view of Pipeline and a kind of decision in the Queue, with how many are in it and what to do there. */
 const FLOW = [
   ['pick', 'Pick', c => c.queued || 0, 'New matches that cleared your fit score. Tick the ones worth applying to: Job Hunt tailors your CV and writes a cover letter for each.', 'new matches'],
@@ -676,8 +674,8 @@ async function showRoute() {
     else if (name === 'inbox') await showInbox();
     else if (name === 'add') showAdd();
     else if (name === 'settings' && ['search', 'preferences', 'sources'].includes(arg)) { location.replace(arg === 'sources' ? '#search/setup' : '#search/what'); return; }
-    else if (name === 'cvs' || (name === 'settings' && arg === 'cvs')) await showSettings('cvs', name === 'cvs' ? arg : '');
-    else if (name === 'settings') await showSettings(arg || 'connections');
+    else if (name === 'cvs' || (name === 'settings' && arg === 'cvs')) await settingsCards('cvs', name === 'cvs' ? arg : '');
+    else if (name === 'settings') await showSettings(arg);
     else location.hash = '#overview';
   } catch (e) {
     page(`<div class="card"><h2>Couldn't load this page</h2><p class="muted">${esc(e.message)}</p></div>`);

@@ -250,7 +250,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       // Older than Job Hunt: update first (the page has the old script; it's reloaded after).
       return answer(reply, 'start', checkVersion().catch(() => ({ ok: true })).then(c => {
         if (c && c.updating) throw Object.assign(new Error(`The extension is updating to ${c.updating} to match Job Hunt. Reload this page (F5) in a moment, then press Fill in this form.`), { why: 'updating' });
-        if (c && c.stale) throw Object.assign(new Error(`This copy of the extension is older than Job Hunt (${c.stale.version}) and can't update itself. In chrome://extensions remove it, then press Load unpacked and choose ${c.stale.folder || 'the folder shown in Job Hunt: Settings → App'}.`), { why: 'stale' });
+        if (c && c.stale) throw Object.assign(new Error(`This copy of the extension is older than Job Hunt (${c.stale.version}) and can't update itself. In chrome://extensions remove it, then press Load unpacked and choose ${c.stale.folder || 'the folder shown in Job Hunt: Settings → Applying → Filling in forms'}.`), { why: 'stale' });
         return askAgain('/ext/fill/start', data.body, 3, 20000);
       })), true;
     }

@@ -136,9 +136,12 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.selectOption('[name=want_work]', 'permanent');
   await page.fill('[name=want_dealbreakers] + .chips-in .chip-add', 'on-site five days');
   await page.keyboard.press('Enter');
-  await page.selectOption('[name=auto_tailor_mode]', 'strong');
   const prefs = async () => page.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => s.profile));
-  check(await until(async () => { const p = await prefs(); return p.wants && p.wants.level === 'senior manager' && p.wants.work === 'permanent' && (p.wants.dealbreakers || []).includes('on-site five days') && p.auto_tailor_min === 85 && p.auto_tailor === false; }, 15), 'What you want and Tailor by itself (strong fits) are saved');
+  check(await until(async () => { const p = await prefs(); return p.wants && p.wants.level === 'senior manager' && p.wants.work === 'permanent' && (p.wants.dealbreakers || []).includes('on-site five days'); }, 15), 'What you want is saved');
+  // Tailor by itself is Settings' now (Applying, Tailoring); saving it leaves what you want as it was.
+  await at('settings/applying');
+  await page.selectOption('[name=auto_tailor_mode]', 'strong');
+  check(await until(async () => { const p = await prefs(); return p.wants && p.wants.level === 'senior manager' && (p.wants.dealbreakers || []).includes('on-site five days') && p.auto_tailor_min === 85 && p.auto_tailor === false; }, 15), 'Tailor by itself (strong fits) is saved from Settings, and what you want is kept');
   await page.selectOption('[name=auto_tailor_mode]', 'off');
   check(await until(async () => (await prefs()).auto_tailor_min === 0, 15), 'Tailor by itself can be turned off again');
 
@@ -225,7 +228,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await page.evaluate(() => location.hash === '#overview/approve'), 'An old link to Review opens the Queue on Approve');
 
   // One search a day unless you choose two: the second time appears, and both are saved.
-  await at('settings/search');
+  await at('settings/jobs/schedule');
   check(await page.evaluate(() => document.querySelector('[data-second-search]').hidden), 'One search a day: no second time shown');
   await page.selectOption('[name=searches_per_day]', '2');
   check(await until(async () => { const p = await prefs(); return p.searches_per_day === 2 && p.search_hour_2 === 17 && !(await page.evaluate(() => document.querySelector('[data-second-search]').hidden)); }, 15), 'Two searches a day: the second time shows and is saved');
@@ -293,7 +296,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
 
   // Every page in the menu draws.
   for (const h of ['overview', 'results', 'applications/files', 'applications/all', 'applications/new', 'applications/applied', 'applications/interviews', 'inbox', 'inbox/recruiters', 'calendar', 'search', 'search/what', 'search/setup',
-    'cvs', 'cvs/documents', 'cvs/career', 'cvs/coach', 'cvs/details', 'results', 'settings', 'settings/inbox', 'settings/calendar', 'settings/notifications', 'settings/sync', 'settings/extension', 'settings/app', 'add', 'welcome']) {
+    'cvs', 'cvs/documents', 'cvs/career', 'cvs/coach', 'cvs/details', 'results', 'settings', 'settings/inbox', 'settings/calendar', 'settings/notifications', 'settings/sync', 'settings/extension', 'settings/app', 'search/last', 'settings/jobs/schedule', 'settings/jobs/limits', 'settings/applying', 'settings/applying/forms', 'settings/applying/followups', 'settings/mail', 'settings/mail/calendar', 'settings/phone', 'settings/computer', 'add', 'welcome']) {
     await at(h);
     const body = await text('#main');
     check(body.length > 40 && !body.includes("Couldn't load"), `#${h} draws`);
@@ -311,8 +314,20 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('applications/files'); check(await on() === 'Me / Tailored files', 'Tailored files are under Me');
   await at('search/what'); check(await on() === 'Me / Looking for', 'What to search for is Me, Looking for');
   await at('cvs'); check((await on()).startsWith('Me / CVs'), 'Your CVs are Me, CVs');
-  await at('settings'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.place-tabs a.on')).trim() === 'Accounts' && !(await page.$('#settingsLink')), 'Settings is the last of the places, not a gear');
-  await at('search'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.place-tabs a.on')).trim() === 'Job sources', 'Where it looks is Settings, Job sources');
+  await at('settings'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.set-nav a.on')).trim() === 'Accounts' && !(await page.$('#settingsLink')), 'Settings is the last of the places, not a gear');
+  // Settings, regrouped: each thing once. Google is one card in Accounts that leads to its three uses;
+  // what used to be Me's (when it searches, how it tailors) saves from its new place; and the search finds a setting and opens on it.
+  check(await page.evaluate(() => document.querySelectorAll('#googleCard .use a').length === 3 && document.querySelectorAll('.set-nav a').length === 8), 'Accounts: Google is one card, with the way to its email, calendar and Drive settings');
+  await at('settings/sync'); check(await page.evaluate(() => !document.querySelector('.set-main [data-act="google"]')), 'Sync & backup has no Google sign-in of its own');
+  await at('settings/applying'); check(await page.evaluate(() => !!document.querySelector('.set-main [name=auto_tailor_mode]') && !!document.querySelector('.set-main [name=score_threshold]') && !document.querySelector('.set-main [name=search_hour]')), 'Applying, Tailoring has the tailoring settings (and not the schedule)');
+  await at('search/what'); check(await page.evaluate(() => !!document.querySelector('[name=min_salary]') && !document.querySelector('[name=search_hour]') && !document.querySelector('[name=max_per_run]')), 'Me, Looking for keeps what describes the jobs; the schedule and tailoring are Settings\'');
+  await at('settings/computer'); await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('/'); await page.keyboard.type('calendar'); await page.waitForTimeout(900);
+  check(await page.evaluate(() => document.activeElement.id === 'setFind' && [...document.querySelectorAll('.set-hit')].some(h => /Which Google calendar/.test(h.textContent) && /Email & calendar/.test(h.querySelector('.set-where').textContent))), 'Searching settings (the / key) lists what matches, each with where it is');
+  await page.click('.set-hit:has-text("Which Google calendar")'); await page.waitForTimeout(900);
+  check(await page.evaluate(() => location.hash === '#settings/mail/calendar' && document.querySelector('[name=calendar_id]').closest('details').open && !!document.querySelector('.set-flash')), 'Opening a found setting goes to its page, unfolds it and lights it');
+  await at('settings');
+  await at('search'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.set-nav a.on')).trim() === 'Job search' && (await text('.set-main .place-tabs a.on')).trim() === 'Sources' && await page.evaluate(() => document.querySelectorAll('.src-card .tile.src').length >= 8 && !!document.querySelector('.src-card .src-group')), 'Where it looks is Settings, Job search, Sources: one list, in groups');
   await page.click('#dRun'); await page.waitForTimeout(400);
   check(await page.evaluate(() => location.hash === '#search') && (await page.getAttribute('#dSync', 'title') || '').length > 3, 'The search chip in the top bar opens what the search found, and each chip says its status');
 

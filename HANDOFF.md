@@ -56,6 +56,16 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.65.0: Settings regrouped** (the user approved the mockups: side list, tabs, search; "keep the design language
+  consistent", so it is built from cards, pills and `placeTabs`, nothing new but the side list). In `app-settings.js`:
+  `settingsCards(group, sub, host, st)` is the old page builder, now returning its cards with a marker before each
+  (`<!--@name-->`, read by `cut()`); `settingsBody(section, tab, st)` puts them where they belong; `SET_NAV`, `SET_TABS`,
+  `SET_ALIAS` (old addresses), `settingsShell`, `showSettings(arg)` for `#settings/<place>/<tab>`. Me's pages (CVs,
+  Looking for) still come from `settingsCards` with a host heading. Job search's Sources and Last search are `showSearch`
+  (`#search`, `#search/last`, `#search/<source>`); the sources are one list (`tile()` rows in groups, filled by
+  `renderConnStatus` and `fillSourceRows`). A split profile form saves fine: `readProfile` only reads the fields present.
+  Search: `settingsIndex()` reads every page's HTML (so a new setting is found without listing it), `settingsFind`,
+  `setGo` + `setFlash`. A new card needs a marker and a line in `settingsBody`. Checked in the preview only.
 - **2.64.0: only a career warning.** The user: "I want the options to show up, I just want to be warned if it will
   SIGNIFICANTLY impact my career"; tax product to AI product is no setback, financial analyst to McDonald's manager is.
   `Wants::for_scoring` always adds one line asking for "Career path: away" only for a real setback (never "toward");

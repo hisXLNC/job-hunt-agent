@@ -108,7 +108,7 @@ function submitList(jobs) {
   if (c && c.updating) { $('acts').hidden = true; conn('on', 'Updating'); return say('Updating the extension…', `Job Hunt is on ${c.updating}; the extension reloads itself to match. Open it again in a moment.`, false, 'One moment'); }
   if (c && c.stale) {
     $('stale').hidden = false;
-    $('stale').textContent = `This copy of the extension is older than Job Hunt (${c.stale.version}) and can't update itself. In ${navigator.userAgent.includes('Edg/') ? 'edge' : 'chrome'}://extensions, remove it, then press Load unpacked and choose ${c.stale.folder || 'the folder shown in Job Hunt: Settings → Browser extension'}. From then on it updates by itself.`;
+    $('stale').textContent = `This copy of the extension is older than Job Hunt (${c.stale.version}) and can't update itself. In ${navigator.userAgent.includes('Edg/') ? 'edge' : 'chrome'}://extensions, remove it, then press Load unpacked and choose ${c.stale.folder || 'the folder shown in Job Hunt: Settings → Applying → Filling in formslying → Filling in forms'}. From then on it updates by itself.`;
   }
   const ping = await ask('/ext/ping');
   if (!ping || !ping.ok) {

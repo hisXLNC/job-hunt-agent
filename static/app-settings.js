@@ -81,17 +81,24 @@ function modelsLine(c) {
   return `Searching, scoring and filling in forms: <b>${esc(pick(c.score_model))}</b> · CVs and cover letters: <b>${esc(pick(c.tailor_model))}</b> · Everything else (email, interview prep): <b>${esc(other)}</b>.`;
 }
 
-/** host: the Search page's top, for its What to search and Set up sources tabs (Settings' Search and Job sources, moved there). */
-async function showSettings(tab, sub, host) {
-  // Older links: Extras went to App; Schedule became Email & calendar.
-  tab = { extras: 'app', schedule: 'calendar', preferences: 'search' }[tab] || tab;
-  const st = settingsCache = await api('/api/settings');
+/** The cards of one group of settings, as HTML, with a marker before each (<!--@name-->) so the
+ *  Settings pages can put them where they belong (see settingsBody and cut). `host`: Me's pages
+ *  (CVs, Looking for) are drawn here whole, under their own heading; SET_RAW gives the HTML back. */
+const SET_RAW = Symbol('raw');
+/** A marked body, cut into its pieces by name. */
+function cut(html) {
+  const out = {};
+  const parts = String(html).split(/<!--@([a-z_]*)-->/);
+  for (let i = 1; i < parts.length; i += 2) if (parts[i] !== '_') out[parts[i]] = (out[parts[i]] || '') + parts[i + 1];
+  return out;
+}
+async function settingsCards(tab, sub, host, given) {
+  const st = given || (settingsCache = await api('/api/settings'));
   const p = st.profile;
-  const tabs = SETTINGS_TABS;
   let body = '';
   if (tab === 'connections') {
-    body = `<section class="card attention" id="connStatus" hidden></section>
-    <section class="card" id="claudeCard"><header><h2>Claude</h2><span id="ccPill">${st.claude.engine === 'api' ? (st.claude.key ? '<span class="pill good">API key saved</span>' : '<span class="pill warn">Needed</span>') : (st.claude.code_found ? '<span class="pill">Checking…</span>' : '<span class="pill warn">Not found</span>')}</span></header>
+    body = `<!--@attention--><section class="card attention" id="connStatus" hidden></section>
+    <!--@claude--><section class="card" id="claudeCard"><header><h2>Claude</h2><span id="ccPill">${st.claude.engine === 'api' ? (st.claude.key ? '<span class="pill good">API key saved</span>' : '<span class="pill warn">Needed</span>') : (st.claude.code_found ? '<span class="pill">Checking…</span>' : '<span class="pill warn">Not found</span>')}</span></header>
       <p class="muted">Claude is the AI that reads job postings, picks the ones that fit you, rewrites your CV and cover letter for each, and sorts your job email.</p>
       <form data-form="claude" class="stack" style="gap:14px">
         <label class="check"><input type="radio" name="engine" value="code" ${st.claude.engine !== 'api' ? 'checked' : ''}> <span><b>Your Claude subscription</b> <span class="muted">(recommended)</span><br><span class="muted small">Your Claude Pro or Max plan, through Claude Code, a free helper from Anthropic that Job Hunt can install for you. Nothing extra to pay; each search uses some of your plan's usage.</span></span></label>
@@ -116,7 +123,7 @@ async function showSettings(tab, sub, host) {
         </div></details>
         <div class="row"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-act="checkClaude">Check again</button>${st.claude.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="claude">Remove API key</button>' : ''}</div>
       </form></section>
-    <section class="card" id="otherCard"><header><h2>Another AI</h2>${st.other.for ? `<span class="pill good">${st.other.for === 'all' ? 'Used for everything' : 'Used for searching'}</span>` : '<span class="pill">Optional</span>'}</header>
+    <!--@other--><section class="card" id="otherCard"><header><h2>Another AI</h2>${st.other.for ? `<span class="pill good">${st.other.for === 'all' ? 'Used for everything' : 'Used for searching'}</span>` : '<span class="pill">Optional</span>'}</header>
       <p class="muted">Grok, ChatGPT, Gemini or a model on your own PC can do some of the work in Claude's place, so a search uses none of your Claude plan. You pay that service for what you use (a model on your PC is free).</p>
       <form data-form="other" class="stack" style="gap:14px">
         <div class="form">
@@ -129,8 +136,13 @@ async function showSettings(tab, sub, host) {
         <p class="small muted">Looking things up on the web stays with Claude through your subscription: Indeed, company ratings, a company's own application page and finding recruiters. Without Claude those are skipped. Scores from another AI can differ from Claude's by a few points, so matches near your fit score may fall on the other side of it.</p>
         <div class="row"><button class="btn primary" type="submit">Save</button>${st.other.url ? '<button class="btn ghost" type="button" data-act="otherForget">Remove it</button>' : ''}</div>
       </form></section>
-    <section class="card" id="googleCard"><header><h2>Gmail, Google Calendar and Drive</h2>${st.google.connected ? `<span class="pill good">Connected${st.google.email ? ` · ${esc(st.google.email)}` : ''}</span>` : '<span class="pill">Optional</span>'}</header>
-      <p class="muted">Job Hunt sorts your job email, drafts replies, books interviews in your calendar and keeps a private copy of your data in your own Drive. Everything stays in your Google account.</p>
+    <!--@google--><section class="card" id="googleCard"><header><h2>Google</h2>${st.google.connected ? `<span class="pill good">Connected${st.google.email ? ` · ${esc(st.google.email)}` : ''}</span>` : '<span class="pill">Optional</span>'}</header>
+      <p class="muted">One sign-in for your Gmail, Google Calendar and Drive. Everything stays in your Google account; each part has its own settings, linked here.</p>
+      <div class="uses">${[
+        ['Gmail', 'Sorts your job email, reads job alerts and drafts replies and follow-ups.', '#settings/mail/email', 'Email settings', st.google.connected],
+        ['Calendar', 'Books interviews and reminders in your calendar.', '#settings/mail/calendar', 'Calendar settings', st.google.connected],
+        ['Drive', 'Keeps your data in step between computers, with backups.', '#settings/sync', 'Sync & backup', st.google.connected && st.sync.on && st.sync.where === 'drive'],
+      ].map(([n, about, href, link, on]) => `<div class="use"><b><span class="dot ${on ? 'on' : ''}"></span>${n}</b><span class="muted small">${about}</span><a class="small" href="${href}">${link} →</a></div>`).join('')}</div>
       ${st.google.connected && !st.sync.on && st.sync.drive_ready ? `<div class="advice"><b>Back up and sync to your Google Drive</b><p>Keeps everything in a private "Job Hunt" folder in your Drive, so you can install Job Hunt on any PC and pick up where you left off.</p><div class="row"><button class="btn primary" data-act="syncOn">Turn on</button></div></div>` : ''}
       ${st.google.connected ? `<div class="row">
           <button class="btn" data-act="google" ${st.google.connecting ? 'disabled' : ''}>${st.google.connecting ? '<span class="spin" data-kind="google" data-secs="90"></span>Waiting for Google…' : 'Reconnect Google'}</button>
@@ -153,20 +165,19 @@ async function showSettings(tab, sub, host) {
         <div class="row"><label class="btn">${st.google.own_client ? 'Replace the connection file' : 'Choose a connection file'}<input type="file" accept=".json" data-upload="google-client" hidden></label>${st.google.own_client ? '<button class="btn ghost" data-act="forget" data-what="google">Remove it</button>' : ''}</div>
       </details>
       <div id="googlePaste" ${st.google.pasting ? '' : 'hidden'}>${googlePasteBox(st.google.paste_url)}</div></section>
-    <section class="card" id="usageCard"><p class="muted small"><span class="spin" data-kind="load" data-secs="3"></span> Loading…</p></section>
-    <p class="muted small">Looking for LinkedIn, Google for Jobs or recruiters? They're in <a href="#search/setup">Search → Set up sources</a>.</p>`;
+    <!--@usage--><section class="card" id="usageCard"><p class="muted small"><span class="spin" data-kind="load" data-secs="3"></span> Loading…</p></section>`;
   } else if (tab === 'sources') {
     const desk = st.kind !== 'server' && !st.remote.here;
-    const tile = (id, name, tag, about, more = '', open = false) => `<article class="tile" data-tile="${id}" id="tile-${id}">
-      <header><b>${name}</b>${tag ? `<span class="tag">${tag}</span>` : ''}<span class="tile-state"></span></header>
+    // One source, as a row of the list: its name and state, what it last found, its buttons (filled
+    // in from what Job Hunt knows: renderConnStatus and fillSourceRows), and its set-up, folded away.
+    const tile = (id, name, tag, about, more = '', open = false) => `<article class="tile src" data-tile="${id}" id="tile-${id}">
+      <header><b>${name}</b>${tag ? `<span class="tag">${tag}</span>` : ''}<span class="tile-state"></span><span class="src-last small muted"></span><span class="row src-acts"></span><span class="row tile-acts"></span></header>
       <p class="small muted">${about}</p><p class="small tile-detail"></p>
-      <div class="row tile-acts"></div>${more ? `<details ${open ? 'open' : ''}>${more}</details>` : ''}</article>`;
+      ${more ? `<details ${open ? 'open' : ''}>${more}</details>` : ''}</article>`;
+    const group = (name, rows) => rows.trim() ? `<h3 class="src-group">${name}</h3>${rows}` : '';
     const keyNote = (site, url) => `<p class="small">Get a key at <a href="#" data-act="link" data-url="${url}">${site}</a>, paste it here and press Save.</p>`;
-    body = `<section class="card"><header><h2>Where Job Hunt looks</h2><button class="btn" data-act="testSources">Check them all</button></header>
-      <p class="muted">Turn on the places you'd like searched. The free ones need nothing else; a few need a free key from their own website, pasted in once. Every search looks for the job titles from your CVs, in your locations. To search one on its own and see what each found, use the <a href="#search">Sources</a> tab.</p>
-      <div id="sourceTest"></div></section>
-    <div class="tiles">
-      ${tile('boards', 'Company job boards', 'Free', 'Job Hunt finds employers near you and searches their own careers pages. Nothing to set up.',
+    const T = {};
+    T.boards = `${tile('boards', 'Company job boards', 'Free', 'Job Hunt finds employers near you and searches their own careers pages. Nothing to set up.',
         `<summary class="small">Choose companies yourself</summary><form data-form="profile" data-part="boards" class="stack" style="gap:10px;margin-top:8px">
           <label class="check"><input type="checkbox" name="auto_boards" ${p.sources.auto_boards !== false ? 'checked' : ''}> <span>Find employers near me by itself<br><span class="muted small">Every week, and when a search finds little that's new.</span></span></label>
           <div class="row"><button class="btn sm" type="button" data-act="suggestBoards">Suggest companies</button></div><div id="boardIdeas" class="ideas"></div>
@@ -182,45 +193,52 @@ async function showSettings(tab, sub, host) {
           <label class="field">Workable<textarea name="workable">${esc(lines(p.sources.workable))}</textarea></label>
           <label class="field">BambooHR<textarea name="bamboohr" placeholder="acme">${esc(lines(p.sources.bamboohr))}</textarea><span class="hint">The name before .bamboohr.com in the careers link.</span></label>
         </div>
-        </form>`)}
-      ${tile('linkedin', 'LinkedIn', 'Free', "LinkedIn's public job search, the one anyone sees without signing in. It never touches your LinkedIn account. A few searches a day.",
+        </form>`)}`;
+    T.linkedin = `${tile('linkedin', 'LinkedIn', 'Free', "LinkedIn's public job search, the one anyone sees without signing in. It never touches your LinkedIn account. A few searches a day.",
         `<summary class="small">Steadier, through Apify (paid per result)</summary><form data-form="apify" class="form tile-form">
             <p class="small">With an Apify token, Job Hunt runs a LinkedIn jobs scraper on <a href="#" data-act="link" data-url="https://apify.com/store?search=linkedin%20jobs">Apify</a> instead, once per search. It gets past LinkedIn's limits and returns full descriptions. Apify's free plan includes a small monthly credit; after that you pay per result (check their prices). Sign up, then copy your token from Settings → API &amp; Integrations.</p>
             <label class="field">Apify token<input type="password" name="apify_key" autocomplete="off" placeholder="${st.apify.key ? 'Saved. Paste a new one to replace it' : 'apify_api_…'}"></label>
             <label class="field">Scraper<input type="text" name="apify_actor" value="${esc(st.apify.actor)}" placeholder="${esc(st.apify.default_actor)}"><span class="hint">Blank uses ${esc(st.apify.default_actor)}. Another LinkedIn jobs scraper from the Apify Store works too, as user/name.</span></label>
             <div class="row"><button class="btn primary" type="submit">Save</button>${st.apify.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="apify">Remove</button>' : ''}</div>
-          </form>`, !!st.apify.key)}
-      ${p.sources.adzuna_country === 'ca' ? tile('jobbank', 'Job Bank', 'Free · Canada', "Canada's national job board, including postings found only there.") : ''}
-      ${tile('freehire', 'FreeHire', 'Free', "A free job search gathered from employers' own careers sites, with each posting's full text.")}
-      ${tile('alerts', 'Job-alert emails', 'Free', 'Set up job alerts on LinkedIn, Indeed, Job Bank, recruiters like Randstad, Adecco, Hays and Robert Half, or your country\'s job sites, sent to your Gmail, and Job Hunt reads them on every email check. Needs Gmail connected.')}
-      ${tile('jsearch', 'Google for Jobs', 'Free key', 'The widest reach: LinkedIn, Indeed, Glassdoor and company sites, with full descriptions. Free for about 6 searches a day.',
+          </form>`, !!st.apify.key)}`;
+    T.jobbank = p.sources.adzuna_country === 'ca' ? tile('jobbank', 'Job Bank', 'Free · Canada', "Canada's national job board, including postings found only there.") : '';
+    T.freehire = tile('freehire', 'FreeHire', 'Free', "A free job search gathered from employers' own careers sites, with each posting's full text.");
+    T.alerts = tile('alerts', 'Job-alert emails', 'Free', 'Set up job alerts on LinkedIn, Indeed, Job Bank, recruiters like Randstad, Adecco, Hays and Robert Half, or your country\'s job sites, sent to your Gmail, and Job Hunt reads them on every email check. Uses your <a href="#settings/accounts">Google account</a>.');
+    T.jsearch = `${tile('jsearch', 'Google for Jobs', 'Free key', 'The widest reach: LinkedIn, Indeed, Glassdoor and company sites, with full descriptions. Free for about 6 searches a day.',
         `<summary class="small">${st.jsearch.key ? 'Change the key' : 'Add a key'}</summary>${keyNote('OpenWeb Ninja', 'https://www.openwebninja.com/api/jsearch')}<form data-form="jsearch" class="form tile-form">
           
           
           <label class="field">Key from<select name="jsearch_provider"><option value="openwebninja" ${st.jsearch.provider !== 'rapidapi' ? 'selected' : ''}>OpenWeb Ninja</option><option value="rapidapi" ${st.jsearch.provider === 'rapidapi' ? 'selected' : ''}>RapidAPI</option></select></label>
           <label class="field">Key<input type="password" name="jsearch_key" autocomplete="off" placeholder="${st.jsearch.key ? 'Saved. Paste a new one to replace it' : ''}"></label>
           <div class="row"><button class="btn primary" type="submit">Save</button>${st.jsearch.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="jsearch">Remove</button>' : ''}</div>
-        </form>`, !st.jsearch.key)}
-      ${tile('jooble', 'Jooble', 'Free key', 'Listings gathered from many job sites. It shows only part of each posting, so its scores are rougher.',
+        </form>`, false)}`;
+    T.jooble = `${tile('jooble', 'Jooble', 'Free key', 'Listings gathered from many job sites. It shows only part of each posting, so its scores are rougher.',
         `<summary class="small">${st.jooble.key ? 'Change the key' : 'Add a key'}</summary>${keyNote('jooble.org/api', 'https://jooble.org/api/about')}<form data-form="jooble" class="form tile-form">
           
           
           <label class="field">Key<input type="password" name="jooble_key" autocomplete="off" placeholder="${st.jooble.key ? 'Saved. Paste a new one to replace it' : ''}"></label>
           <div class="row"><button class="btn primary" type="submit">Save</button>${st.jooble.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="jooble">Remove</button>' : ''}</div>
-        </form>`)}
-      ${tile('adzuna', 'Adzuna', 'Free key', 'A job search engine with listings from many sites.',
+        </form>`)}`;
+    T.adzuna = `${tile('adzuna', 'Adzuna', 'Free key', 'A job search engine with listings from many sites.',
         `<summary class="small">${st.adzuna.key ? 'Change the key' : 'Add a key'}</summary>${keyNote('developer.adzuna.com', 'https://developer.adzuna.com')}<form data-form="adzuna" class="form tile-form">
           
           
           <label class="field">App ID<input type="text" name="adzuna_id" value="${esc(st.adzuna.id)}"></label>
           <label class="field">App key<input type="password" name="adzuna_key" autocomplete="off" placeholder="${st.adzuna.key ? 'Saved' : ''}"></label>
           <div class="row"><button class="btn" type="submit">Save</button>${st.adzuna.key ? '<button class="btn ghost" type="button" data-act="forget" data-what="adzuna">Remove</button>' : ''}</div>
-        </form>`)}
-      ${tile('indeed', 'Indeed', 'Uses your Claude plan', 'Searched through the Indeed connector on your Claude account: connect Indeed once at claude.ai → Settings → Connectors, then turn this on.')}
-      ${tile('agencies', 'Recruiters and job sites', 'Free', (st.sites?.catalog || []).some(x => x.country === p.sources.adzuna_country) ? 'Recruitment agencies and job sites in your country: choose which ones, or add any other site.' : `Add any job site you use in ${esc(st.countries?.find(c => c.code === p.sources.adzuna_country)?.name || 'your country')}: search on it, copy the address, and paste it in.`,
-        `<summary class="small">Choose recruiters and sites</summary>${sitesForm(st)}`)}
-    </div>
-    <section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
+        </form>`)}`;
+    T.indeed = tile('indeed', 'Indeed', 'Uses your Claude plan', 'Searched through the Indeed connector on your Claude account: connect Indeed once at claude.ai → Settings → Connectors, then turn this on.');
+    T.agencies = `${tile('agencies', 'Recruiters and job sites', 'Free', (st.sites?.catalog || []).some(x => x.country === p.sources.adzuna_country) ? 'Recruitment agencies and job sites in your country: choose which ones, or add any other site.' : `Add any job site you use in ${esc(st.countries?.find(c => c.code === p.sources.adzuna_country)?.name || 'your country')}: search on it, copy the address, and paste it in.`,
+        `<summary class="small">Choose recruiters and sites</summary>${sitesForm(st)}`)}`;
+    body = `<!--@list--><section class="card src-card"><header><h2>Where Job Hunt looks</h2><span class="muted small" id="srcCount"></span><button class="btn" data-act="testSources">Check them all</button></header>
+      <p class="muted">Turn on the places you'd like searched. The free ones need nothing else; a few need a free key from their own website, pasted in once. Every search looks for the job titles from your CVs, in your locations.</p>
+      <div id="sourceTest"></div>
+      ${group('Job sites', [T.linkedin, T.jobbank, T.indeed, T.jsearch, T.adzuna, T.jooble, T.freehire].join(''))}
+      ${group("Employers' own sites", T.boards)}
+      ${group('Recruiters', T.agencies)}
+      ${group('Sent to you', T.alerts)}
+    </section>
+    <!--@clip--><section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
       <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and puts it in your Queue to pick. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
       ${desk ? `<div class="row"><button class="btn primary" data-act="bookmarkSetup"><img src="/static/logo.svg" alt="" width="16" height="16">Set up the button</button><span class="muted small">Opens a page in your browser that walks you through it, so the button gets the Job Hunt logo.</span></div>
       <p class="small">Or use the <b>browser extension</b> (Chrome or Edge), which also fills in application forms: <a class="btn sm" href="#settings/extension">Set up the extension</a></p>
@@ -288,15 +306,14 @@ async function showSettings(tab, sub, host) {
     body = `${cvsTabs(view, st.cvs.length)}
       ${view === 'career' ? careerSeg('paths') + career : view === 'details' ? details : body}`;
   } else if (tab === 'search') {
-    body = `<section class="card"><header><h2>Job titles</h2><a class="btn ghost" href="#cvs">Your CVs</a></header>
+    body = `<!--@titles--><section class="card"><header><h2>Job titles</h2><a class="btn ghost" href="#cvs">Your CVs</a></header>
         <p class="muted small">Each CV searches for its own titles. Type one and press Enter to add it. A posting whose title doesn't match is still scored if it mentions one of the keywords.</p>
         ${st.cvs.length ? st.cvs.map(c => `<div class="title-set" data-cv="${esc(c.track)}"><input type="hidden" data-k="label" value="${esc(c.label)}"><input type="hidden" data-k="letter_style" value="${esc(c.letter_style || 'standard')}">
           <div class="form"><label class="field">${st.cvs.length > 1 ? `Titles for your ${esc(c.label)} CV` : 'Job titles to search for'}<textarea data-chips data-add="Add a job title" data-k="titles" style="min-height:120px">${esc(lines(c.titles))}</textarea></label>
           <label class="field">Keywords that also qualify a posting<textarea data-chips data-add="Add a keyword" data-k="keywords" style="min-height:120px">${esc(lines(c.keywords))}</textarea></label></div>
           <div class="row"><button class="btn" data-act="saveCv" data-track="${esc(c.track)}">Save titles</button><button class="btn ghost" data-act="suggestCv" data-track="${esc(c.track)}">Find more titles</button></div></div>`).join('') : '<p class="muted">Add a CV first: Claude reads it and suggests the titles. <a href="#cvs">Add your CV</a></p>'}
       </section>
-      <form data-form="profile" data-part="search">
-      <section class="card"><header><h2>Where</h2></header><div class="form">
+      <!--@where--><section class="card"><header><h2>Where</h2></header><div class="form">
         <div class="field">Cities or areas${placePicker('locations', p.locations, p.sources.adzuna_country)}<span class="hint">Job Hunt also looks about 50 km around each. None: anywhere in the country.</span></div>
         <div class="stack" style="gap:14px">
           <label class="field">Country${countrySelect('adzuna_country', p.sources.adzuna_country, st.countries)}<span class="hint">Where searches look, and which job sites are offered.</span></label>
@@ -304,7 +321,7 @@ async function showSettings(tab, sub, host) {
           <label class="check"><input type="checkbox" name="remote_ok" ${p.remote_ok ? 'checked' : ''}> <span>Include remote roles open across the country<br><span class="muted small">Remote roles based in one of your locations are always included.</span></span></label>
         </div>
       </div></section>
-      <section class="card"><header><h2>What you want</h2></header>
+      <!--@wants--><section class="card"><header><h2>What you want</h2></header>
         <p class="muted small">The things that make you turn a role down, told to Job Hunt up front. Scoring weighs them for every new posting: a role that goes against one scores lower and says why.</p>
         <div class="form">
           <label class="field">The level you're going for<input type="text" name="want_level" value="${esc(p.wants?.level || '')}" placeholder="e.g. senior manager or director"></label>
@@ -314,7 +331,7 @@ async function showSettings(tab, sub, host) {
           <label class="field">Industries you don't want<textarea data-chips data-add="Add an industry" name="want_avoid">${esc(lines(p.wants?.avoid))}</textarea></label>
           <label class="field" style="grid-column:1/-1">Deal-breakers<textarea data-chips data-add="Add a deal-breaker" name="want_dealbreakers">${esc(lines(p.wants?.dealbreakers))}</textarea><span class="hint">For example: on-site five days, more than 25% travel, commission only. A posting that clearly has one is set aside with the reason.</span></label>
         </div></section>
-      <section class="card"><header><h2>Which roles</h2></header><div class="form">
+      <!--@filters--><section class="card"><header><h2>Which roles</h2></header><div class="form">
         <label class="field">Skip these companies<textarea data-chips data-add="Add a company" name="exclude_companies">${esc(lines(p.exclude_companies))}</textarea></label>
         <label class="field">Skip titles containing<textarea data-chips data-add="Add a word" name="exclude_title_keywords">${esc(lines(p.exclude_title_keywords))}</textarea></label>
         <label class="field">Don't score jobs older than<input type="number" name="max_age_days" min="0" step="1" value="${p.max_age_days ?? 30}"><span class="hint">Days since the job was posted (0: any age). Older ones are set aside before scoring, using no Claude. Jobs whose posting date isn't known are scored.</span></label>
@@ -323,31 +340,39 @@ async function showSettings(tab, sub, host) {
       </div>
         <label class="field" style="margin-top:14px">What matters to you<textarea name="guidance" placeholder="e.g. Prefer hybrid roles in fintech or government. Avoid pure sales roles. Open to contract roles.">${esc(p.guidance || '')}</textarea><span class="hint">Claude weighs this when scoring. Job titles and keywords for each CV are set in Me.</span></label>
       </section>
-      <section class="card"><header><h2>Employers</h2></header>
+      <!--@employers--><section class="card"><header><h2>Employer ratings</h2></header>
         <label class="check"><input type="checkbox" data-act="ratingsAuto" ${st.ratings_auto ? 'checked' : ''}> <span>Look up what employees say<br><span class="muted small">Ratings and reviews from Glassdoor, Indeed and the like, for the companies of roles you're considering: shown as a star rating next to the company, and on each job. Each company is looked up once (again after two months), through Claude Code; it uses a little of your Claude plan.</span></span></label>
       </section>
-      <section class="card"><header><h2>When</h2></header><div class="form">
+      <!--@when--><section class="card"><header><h2>When Job Hunt searches</h2></header><div class="form">
         <label class="field">Searches a day<select name="searches_per_day">${[[1, 'One'], [2, 'Two: a second one later in the day']].map(([v, n]) => `<option value="${v}" ${(p.searches_per_day >= 2 ? 2 : 1) === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Two finds new postings hours sooner, when applications are read most. The second scores only what's new since the first, so it uses a little more of your plan, not double.</span></label>
         <label class="field">Search every day at${hourSelect('search_hour', p.search_hour)}<span class="hint">Only at this time. If Job Hunt isn't running then (or is being updated), that search is skipped, not run later: it waits for the next scheduled time. Search now, in the top bar, runs one whenever you like.</span></label>
         <label class="field" data-second-search ${p.searches_per_day >= 2 ? '' : 'hidden'}>And again at${hourSelect('search_hour_2', p.search_hour_2 ?? 17)}<span class="hint">Skipped when you searched by hand in the two hours before.</span></label>
         ${postingHoursHtml(st.posting_hours, p)}
         <div class="field">Daily search<div class="row">${scheduleMenu(overview?.side?.paused, false)}</div><span class="hint">${overview?.side?.paused ? esc(pausedWords(overview.side.paused)) + '.' : 'On. Pause it for a while, or turn it off.'}</span></div>
       </div></section>
-      <section class="card"><header><h2>Tailoring</h2></header>
-        <div class="field" style="margin-bottom:10px">A company you've applied to before<select data-act="repeatMode">${[['light', 'Light touch: the same headline, at most 4 paragraphs changed (recommended)'], ['same', 'The same CV as before, with a new cover letter'], ['usual', 'Tailor as usual']].map(([v, n]) => `<option value="${v}" ${(st.repeat_mode || 'light') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">They keep every CV you send on file, side by side. A different headline or a different story for the same achievement is what stands out.</span></div>
+      <!--@tailoring--><section class="card"><header><h2>Tailoring</h2></header><div class="form">
         <label class="field">Tailor by itself<select name="auto_tailor_mode">${[['off', 'No: I pick which roles to tailor'], ['strong', 'Only strong fits (85 or better), so they\'re ready to approve'], ['all', 'Every role that clears my fit score']].map(([v, n]) => `<option value="${v}" ${(p.auto_tailor ? 'all' : p.auto_tailor_min > 0 ? 'strong' : 'off') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Strong fits: after each search the best new matches from the last two weeks are tailored without waiting for you, at most as many as Most applications tailored per search. They use your Claude plan as any tailoring does.</span></label>
         <label class="field">Most applications tailored per search<input type="number" min="1" max="50" name="max_per_run" value="${p.max_per_run}"><span class="hint">When Job Hunt tailors by itself: the most it does after one search, best fits first.</span></label>
-        <details style="margin-top:10px"><summary class="small muted">Advanced</summary><div class="form" style="margin-top:8px">
         <label class="field">Fit score needed to tailor<span class="range-row"><input type="range" min="0" max="100" step="1" value="${p.score_threshold}" data-range-for="score_threshold" aria-label="Fit score needed to tailor"><input type="number" min="0" max="100" name="score_threshold" value="${p.score_threshold}"></span><span class="hint">0–100. Roles below it are skipped.</span></label>
+        <div class="field">A company you've applied to before<select data-act="repeatMode">${[['light', 'Light touch: the same headline, at most 4 paragraphs changed (recommended)'], ['same', 'The same CV as before, with a new cover letter'], ['usual', 'Tailor as usual']].map(([v, n]) => `<option value="${v}" ${(st.repeat_mode || 'light') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">They keep every CV you send on file, side by side. A different headline or a different story for the same achievement is what stands out.</span></div>
+      </div></section>
+      <!--@limits--><section class="card"><header><h2>Scoring</h2></header><div class="form">
         <label class="field">Most new postings scored per search<input type="number" min="5" max="200" name="max_scored_per_run" value="${p.max_scored_per_run}"><span class="hint">Spares your Claude usage; the rest are scored next time. With more than 40 matches waiting to be picked, a search by itself scores half this many, newest first.</span></label>
-      </div><div class="form" style="margin-top:14px">
-        <label class="field">Remove postings I never acted on<select name="purge_after_days">${[[0, 'Never'], [30, 'After 30 days'], [60, 'After 60 days'], [90, 'After 90 days']].map(([v, n]) => `<option value="${v}" ${(p.purge_after_days || 0) === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Skipped, not-interested and closed ones only; anything tailored, saved or applied to stays. Removed postings aren't brought back as new.</span></label>
         <div class="field">Score skipped postings again<div><button class="btn" type="button" data-act="rescore" data-group="skipped">Score them again</button></div><span class="hint">After you change your CVs, titles, fit score or locations.</span></div>
-      </div></details></section>
-      </form>`;
+      </div></section>
+      <section class="card"><header><h2>Clearing out</h2></header><div class="form">
+        <label class="field">Remove postings I never acted on<select name="purge_after_days">${[[0, 'Never'], [30, 'After 30 days'], [60, 'After 60 days'], [90, 'After 90 days']].map(([v, n]) => `<option value="${v}" ${(p.purge_after_days || 0) === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Skipped, not-interested and closed ones only; anything tailored, saved or applied to stays. Removed postings aren't brought back as new.</span></label>
+      </div></section>`;
+    // Me, Looking for: what describes the jobs you want. When it searches, and how much it scores
+    // and tailors, are Settings' (Job search, Applying).
+    if (host && host !== SET_RAW) {
+      const P = cut(body);
+      body = `${P.titles}<form data-form="profile" data-part="search">${P.where}${P.wants}${P.filters}</form>
+        <p class="muted small">When Job Hunt searches and how many postings it scores are in <a href="#settings/jobs/schedule">Settings → Job search</a>; how applications are tailored is in <a href="#settings/applying">Settings → Applying</a>.</p>`;
+    }
   } else if (tab === 'calendar') {
     const c = p.calendar;
-    body = `<p class="muted">How Job Hunt books interviews and reminds you, in your Google Calendar too.${st.google.connected ? '' : ' <b>Connect Google in <a href="#settings/connections">Accounts</a> first.</b>'}</p>
+    body = `<!--@calendar-->${st.google.connected ? '' : '<p class="muted"><b>Connect Google in <a href="#settings/accounts">Accounts</a></b> to have interviews put in your Google Calendar too.</p>'}
       <form data-form="profile" data-part="calendar">
       <section class="card"><header><h2>Your time</h2></header><div class="form">
         <label class="field">Your time zone${tzSelect('timezone', p.timezone)}<span class="hint">For interview times, the daily search and reminders.</span></label>
@@ -365,17 +390,21 @@ async function showSettings(tab, sub, host) {
       </div></details></section>
       </form>`;
   } else if (tab === 'inbox') {
-    body = `<p class="muted">How Job Hunt reads your job email and follows up on applications.${st.google.connected ? '' : ' <b>Connect Google in <a href="#settings/connections">Accounts</a> first.</b>'}</p>
+    body = `<!--@email-->${st.google.connected ? '' : '<p class="muted"><b>Connect Google in <a href="#settings/accounts">Accounts</a> first:</b> Job Hunt reads your job email through it.</p>'}
       <form data-form="profile" data-part="inbox">
-      <section class="card"><header><h2>Email</h2></header><div class="form">
+      <section class="card"><header><h2>Email</h2>${st.google.connected ? `<span class="pill good">Gmail connected</span>` : '<span class="pill warn">Needs Google</span>'}</header><div class="form">
         <label class="field">Check email every (minutes)<input type="number" min="10" max="240" name="inbox_minutes" value="${p.inbox_minutes}"><span class="hint">Replies, interview invitations and job alerts are read then; replies are drafted in Gmail for you to send.</span></label>
+      </div></section></form>
+      <!--@followups--><form data-form="profile" data-part="inbox">
+      <section class="card"><header><h2>Following up</h2></header><div class="form">
         <label class="field">Follow up on applications after (days)<input type="number" min="0" max="45" name="follow_up_after" value="${p.follow_up_after ?? 8}"><span class="hint">With no reply by then, Job Hunt drafts a short follow-up in Gmail. 0 for never.</span></label>
+      </div></section>
+      <section class="card"><header><h2>Messages to recruiters</h2></header><div class="form">
         <label class="field">LinkedIn notes<select name="linkedin_note">${[[300, 'Up to 300 characters (LinkedIn Premium)'], [200, 'Up to 200 characters (a free account)']].map(([v, n]) => `<option value="${v}" ${(p.linkedin_note === 200 ? 200 : 300) === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">The note that goes with a connection request has a limit that depends on your account. Notes to recruiters and hiring teams are written to fit.</span></label>
       </div></section></form>`;
   } else if (tab === 'notifications') {
     const ph = st.phone;
-    body = `<p class="muted">How Job Hunt lets you know what's happening, here and on your phone.</p>
-      <form data-form="profile" data-part="weekly">
+    body = `<!--@weekly--><form data-form="profile" data-part="weekly">
       <section class="card"><header><h2>Weekly review</h2><button class="btn" type="button" data-act="weeklyNow">Send it now</button></header>
         <p class="muted">Once a week: what you sent against your goal, who replied, what's going quiet, what to do next, and the best new roles of the week to pick.</p>
         <div class="form">
@@ -385,7 +414,7 @@ async function showSettings(tab, sub, host) {
         <label class="check"><input type="checkbox" data-act="weeklyEmail" ${st.weekly.email ? 'checked' : ''}> <span>Email me the whole review${st.weekly.to ? ` at ${esc(st.weekly.to)}` : ''} (needs Gmail connected). Otherwise it's a short notice.</span></label>
       </section>
       </form>
-      <section class="card" id="phoneCard"><header><h2>Notices on your phone</h2>${ph.topic ? '<span class="pill good">On</span>' : '<span class="pill">Optional</span>'}</header>
+      <!--@notices--><section class="card" id="noticesCard"><header><h2>Notices on your phone</h2>${ph.topic ? '<span class="pill good">On</span>' : '<span class="pill">Optional</span>'}</header>
         <p class="muted">Interviews, offers and applications ready, on your phone even when you're away from this computer. Uses the free ntfy app; no account needed.</p>
         <div class="row">${ph.topic ? '<button class="btn" data-act="phoneTest">Send a test</button><button class="btn ghost" data-act="phone" data-on="0">Turn off</button>' : '<button class="btn primary" data-act="phone" data-on="1">Turn on</button>'}</div>
         ${ph.topic ? `<ol class="small steps-list">
@@ -400,16 +429,16 @@ async function showSettings(tab, sub, host) {
   } else if (tab === 'extension') {
     // Set up on the PC Job Hunt runs on (its folder and key are there); from a phone, say so.
     body = st.kind === 'server' || st.remote.here
-      ? `<section class="card"><header><h2>Browser extension</h2></header><p class="muted"><b>Send to Job Hunt</b> for Chrome or Edge sends a posting you're looking at to Job Hunt and fills in application forms in your own browser. It's set up on the computer Job Hunt runs on: open Job Hunt there and go to <b>Settings → Browser extension</b>.</p>
+      ? `<!--@ext--><section class="card"><header><h2>Browser extension</h2></header><p class="muted"><b>Send to Job Hunt</b> for Chrome or Edge sends a posting you're looking at to Job Hunt and fills in application forms in your own browser. It's set up on the computer Job Hunt runs on: open Job Hunt there and go to <b>Settings → Applying → Filling in forms</b>.</p>
           </section>
-        <section class="card"><header><h2>Fill forms on this phone</h2></header>
+        <!--@phonefill--><section class="card"><header><h2>Fill forms on this phone</h2></header>
           <p class="muted">A phone's browser can't run the extension, so on a phone a bookmark does the filling. It carries your private key, so Job Hunt only hands it out on your PC.</p>
           <ol class="small steps-list">
-            <li>On your PC, open Job Hunt: <b>Settings</b> (the gear) → <b>Browser extension</b> → <b>Fill forms on your phone</b>.</li>
+            <li>On your PC, open Job Hunt: <b>Settings</b> → <b>Phone</b> → <b>Fill forms on your phone</b>.</li>
             <li>Press <b>Copy the bookmark</b> and send it to yourself (a note or an email to yourself).</li>
             <li>On this phone, bookmark any page, then edit that bookmark: name it <b>Job Hunt Fill</b> and paste what you copied as its address.</li>
             <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark. The Job Hunt panel appears and fills in the form.</li></ol></section>`
-      : extensionCard(st) + (st.ext_key ? phoneCard(st) : '');
+      : `<!--@ext-->${extensionCard(st)}<!--@phonefill-->${st.ext_key ? phoneCard(st) : `<section class="card"><header><h2>Fill forms on your phone</h2></header><p class="muted">Set up the <a href="#settings/applying/forms">browser extension</a> on this PC first: the phone uses the same key.</p></section>`}`;
   } else if (tab === 'sync') {
     const server = st.kind === 'server', here = st.remote.here;
     const b = st.backup;
@@ -429,7 +458,7 @@ async function showSettings(tab, sub, host) {
         <div class="kpi"><span class="kpi-l">Backup</span><span class="kpi-v">${b.last ? esc(ago(b.last)) : '–'}</span><span class="kpi-s">${y.drive_backup ? `in Google Drive ${esc(ago(y.drive_backup))}` : 'on this computer'}</span></div>
         <div class="kpi"><span class="kpi-l">Automatic sync</span><span class="kpi-v">${y.on ? esc((every.find(e => e[0] === y.every) || [0, `Every ${y.every} min`])[1].replace(' after a change', '')) : 'Off'}</span><span class="kpi-s">${y.on ? 'and when Job Hunt exits' : 'turn on sync below'}</span></div>
       </div>
-      <div class="row">${y.on ? `<button class="btn primary" data-act="syncNow" ${y.running ? 'disabled' : ''}>Sync now</button>` : y.drive_ready ? '<button class="btn primary" data-act="syncOn">Turn on sync to Google Drive</button>' : '<a class="btn primary" href="#settings/connections">Connect Google to sync</a>'}<button class="btn" data-act="backupNow">Back up now</button></div>
+      <div class="row">${y.on ? `<button class="btn primary" data-act="syncNow" ${y.running ? 'disabled' : ''}>Sync now</button>` : y.drive_ready ? '<button class="btn primary" data-act="syncOn">Turn on sync to Google Drive</button>' : '<a class="btn primary" href="#settings/accounts">Connect Google in Accounts</a>'}<button class="btn" data-act="backupNow">Back up now</button></div>
       ${y.on ? '' : '<p class="muted small">One click: your data goes to a private "Job Hunt" folder in your Google Drive and keeps itself up to date, with daily backups. On another PC, install Job Hunt and connect the same Google account to continue there.</p>'}</section>`;
     const sync = `<section class="card"><header><h2>Sync to Google Drive</h2>${y.on ? '<span class="pill good">On</span>' : ''}</header>
       <p class="muted">Pick up where you left off on any computer${server ? ', or move between this server and a PC' : ''}. Job Hunt keeps an up-to-date copy of everything in your own Google Drive; on another computer, install Job Hunt and connect the same Google account, and it finds your data and offers to continue from it. Use one at a time. Only you can see the copy.</p>
@@ -457,7 +486,7 @@ async function showSettings(tab, sub, host) {
       <div class="row" style="margin-top:10px"><label class="btn">Restore from a backup…<input type="file" accept=".zip" data-upload="restore" hidden></label>
         <span class="muted small">Replaces everything here with the backup and restarts Job Hunt. What's here now is kept in a "before-restore" folder.</span></div>
     </section>`;
-    body = `${status}${sync}${server ? '' : filesCard(st, false)}${backups}`;
+    body = `<!--@sync-->${status}${sync}${server ? '' : filesCard(st, false)}${backups}`;
   } else {
     const server = st.kind === 'server', here = st.remote.here;
     const r = st.remote, cd = st.claude_desktop;
@@ -481,19 +510,19 @@ async function showSettings(tab, sub, host) {
         <div class="row">${cd.available ? `<button class="btn ${cd.added ? '' : 'primary'}" data-act="addClaudeDesktop">${cd.added ? 'Add again' : 'Add to Claude'}</button>` : '<span class="muted small">Set this up from the Job Hunt app on your PC.</span>'}</div>
         ${cd.available ? `<p class="muted small">After adding: quit the Claude app fully (right-click its icon by the clock → Quit) and open it again. Job Hunt appears among its tools.${cd.config ? ` Claude's settings file: ${esc(cd.config)}` : ''}</p>` : ''}</section>
 `;
-    body = `<section class="card"><header><h2>Updates</h2><span class="muted small">Version ${esc(shortVersion(st.app.version))}</span></header>
+    body = `<!--@updates--><section class="card"><header><h2>Updates</h2><span class="muted small">Version ${esc(shortVersion(st.app.version))}</span></header>
       <p class="muted small" id="updateStatus">${server ? 'The server version updates with its container image: when a new version is out, update the image in Container Manager.' : 'Job Hunt checks for updates every 30 minutes and lets you know when one is ready.'}</p>
       <div class="row"><button class="btn" data-act="updateCheck">Check for updates</button><button class="btn primary" data-act="updateInstall" id="updateInstallBtn" hidden>Install and restart</button></div>
       ${server ? '' : `<label class="check" style="margin-top:10px"><input type="checkbox" data-act="updateAuto" ${st.app.update_auto ? 'checked' : ''}> <span>Install updates by themselves<br><span class="muted small">When a new version is out, Job Hunt installs it and restarts once it isn't busy (no search, tailoring or form filling running) and you're not using its window, then tells you what changed. Your applications and settings stay as they are.</span></span></label>`}</section>
-      ${remote}
-      <section class="card"><header><h2>Know when your CV links are opened</h2>${st.links?.base ? '<span class="pill good">On</span>' : ''}</header>
+      <!--@remote-->${remote}
+      <!--@links--><section class="card"><header><h2>Know when your CV links are opened</h2>${st.links?.base ? '<span class="pill good">On</span>' : ''}</header>
         <p class="muted">The web links in each tailored CV and cover letter (your LinkedIn, a portfolio) go through Job Hunt first, which notes the click and sends the reader straight on. The text they see doesn't change. Each job then shows whether its links were opened: a sign someone read your application.</p>
         <p class="muted small">Needs Job Hunt reachable from the internet at an https address, such as the server version behind Cloudflare. ${server ? '' : 'On this PC that means a tunnel (Cloudflare Tunnel or Tailscale Funnel) to remote access, which has to be on; links only work while this PC is on.'} Email security scanners and link previews are counted apart from people.</p>
         <form data-form="links" class="form"><label class="field">Job Hunt's public address<input name="base" type="url" placeholder="https://jobhunt.example.com" value="${esc(st.links?.base || '')}"><span class="hint">Leave empty to turn it off.</span></label>
         <div class="row"><button class="btn" type="submit">Save</button></div></form></section>
-      ${extras}
-      <section class="card" id="whatsnew"><header><h2>What's new</h2></header><p class="muted small">Loading…</p></section>
-      ${server || here ? `<section class="card"><header><h2>App</h2></header><p class="muted small">Your data: ${esc(st.app.data)}</p></section>` : `<section class="card"><header><h2>App</h2></header>
+      <!--@extras-->${extras}
+      <!--@whatsnew--><section class="card" id="whatsnew"><header><h2>What's new</h2></header><p class="muted small">Loading…</p></section>
+      <!--@app-->${server || here ? `<section class="card"><header><h2>Starting, sleeping and closing</h2></header><p class="muted small">Your data: ${esc(st.app.data)}</p></section>` : `<section class="card"><header><h2>Starting, sleeping and closing</h2></header>
       <label class="check"><input type="checkbox" data-act="autostart" ${st.app.autostart ? 'checked' : ''}> Start Job Hunt when I sign in to Windows (in the tray, so searches and email checks keep running)</label>
       ${st.app.slept && st.app.keep_awake && Date.now() - new Date(st.app.slept.at) < 14 * 864e5 ? `<div class="card" style="box-shadow:none;border-color:var(--warn);margin:6px 0"><b>Windows put this PC to sleep during Job Hunt's work</b> <span class="muted small">(${esc(ago(st.app.slept.at))}, for ${st.app.slept.minutes} minutes, while ${esc((st.app.slept.during || []).join(', '))} was running)</span>
         <p class="small">Job Hunt asks Windows to stay on while it works, but closing a laptop's lid, the power button, or a power plan that forces sleep still win. To keep it on: plug it in, and in Control Panel → Power Options → Choose what closing the lid does, set it to Do nothing when plugged in.</p></div>` : ''}
@@ -511,18 +540,177 @@ async function showSettings(tab, sub, host) {
     if ($('#bankCard')) renderBank();
     return;
   }
-  if (host) page(`${host}<p class="save-state right-note" id="saveState" aria-live="polite">Changes save by themselves</p>
+  if (host === SET_RAW) return body;
+  page(`${host}<p class="save-state right-note" id="saveState" aria-live="polite">Changes save by themselves</p>
     ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${body}`);
-  else page(`<div class="head"><div class="grow"><h1>Settings</h1></div><span class="save-state" id="saveState" aria-live="polite">${['notifications', 'inbox', 'calendar'].includes(tab) ? 'Changes save by themselves' : ''}</span></div>
-    ${st.problems.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
-    ${settingsTabs(tab)}
-    ${body}`);
-  if (tab === 'connections' && st.claude.engine !== 'api') checkClaude(false);
-  if (tab === 'connections') { renderConnStatus(); renderUsage(); }
-  if (connScrollTo) { const t = document.getElementById(connScrollTo); connScrollTo = null; if (t) { t.scrollIntoView({ block: 'start' }); t.querySelector('details')?.setAttribute('open', ''); } }
-  if (tab === 'sources') { showSourceTest(); renderConnStatus(); }
-  if (tab === 'app') { showWhatsNew(); if (update?.available) showUpdate(update); }
 }
+
+// ---- Settings: eight places down the side, tabs inside the bigger ones, and a search of them all ----
+/** [id, name, icon, what's there]. Each thing Job Hunt signs in to or does is in one of these, once. */
+const SET_NAV = [
+  ['accounts', 'Accounts', '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', 'Everything Job Hunt signs in to: Claude, Google and another AI. Each is here once, with what uses it.'],
+  ['jobs', 'Job search', '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', 'Where Job Hunt looks, when, and how much it scores. What you\'re looking for (titles, places, filters) is in <a href="#search/what">Me → Looking for</a>.'],
+  ['applying', 'Applying', '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', 'How applications are tailored, filled in and followed up.'],
+  ['mail', 'Email & calendar', '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>', 'How Job Hunt reads your job email and books interviews.'],
+  ['notifications', 'Notifications', '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 'How Job Hunt lets you know what\'s happening.'],
+  ['phone', 'Phone', '<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>', 'Job Hunt on your phone: using it there, filling in forms, sending jobs and getting notices.'],
+  ['sync', 'Sync & backup', '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a3.75 3.75 0 0 1-.5 7.5z"/>', 'Your data on more than one computer, and safe copies of it.'],
+  ['computer', 'This computer', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', 'Updates, starting with Windows, sleep, and the app itself.'],
+];
+/** The tabs inside a place: [id, name, address when it isn't #settings/<place>/<id>]. */
+const SET_TABS = {
+  jobs: [['sources', 'Sources', '#search'], ['schedule', 'Schedule'], ['limits', 'Scoring & limits'], ['last', 'Last search', '#search/last']],
+  applying: [['tailoring', 'Tailoring'], ['forms', 'Filling in forms'], ['followups', 'Following up']],
+  mail: [['email', 'Email'], ['calendar', 'Calendar & interviews']],
+};
+/** Addresses from before the places were regrouped (links in old notices, and in the app). */
+const SET_ALIAS = { connections: 'accounts', inbox: 'mail/email', calendar: 'mail/calendar', extension: 'applying/forms', app: 'computer', extras: 'computer', schedule: 'mail/calendar' };
+const setHref = (section, tab) => { const t = (SET_TABS[section] || []).find(x => x[0] === tab) || (SET_TABS[section] || [])[0]; return section === 'jobs' && !tab ? '#search' : t ? (t[2] || `#settings/${section}/${t[0]}`) : `#settings/${section}`; };
+const setWhere = (section, tab) => { const n = (SET_NAV.find(x => x[0] === section) || [])[1] || '', t = (SET_TABS[section] || []).find(x => x[0] === tab); return t ? `${n} › ${t[1]}` : n; };
+
+/** A Settings page: the places down the side (with the search above them), then this place's
+ *  heading, its tabs if it has any, and its cards. */
+function settingsShell(section, tab, body, opts = {}) {
+  const [, name, , about] = SET_NAV.find(x => x[0] === section) || SET_NAV[0];
+  const tabs = SET_TABS[section];
+  const st = settingsCache;
+  const q = $('#setFind')?.value || '';
+  return `<div class="set"><aside class="set-side">
+      <label class="set-find">${svg('search')}<input type="search" id="setFind" placeholder="Search settings" autocomplete="off" aria-label="Search settings" value="${esc(opts.keep ? q : '')}"><kbd>/</kbd></label>
+      <nav class="set-nav" aria-label="Settings">${SET_NAV.map(([id, n, d]) => `<a href="${setHref(id)}" class="${id === section ? 'on' : ''}"><svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg><span>${n}</span></a>`).join('')}</nav></aside>
+    <div class="set-main" id="setMain"><div class="head"><div class="grow"><h1>${name}</h1><p class="muted">${about}</p></div><div class="row">${opts.actions || ''}</div><span class="save-state" id="saveState" aria-live="polite">${opts.note || ''}</span></div>
+      ${st?.problems?.length ? `<div class="card" style="border-color:var(--crit)"><b>Fix these before searching:</b><ul class="flags">${st.problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+      ${tabs ? placeTabs(tabs.map(([id, n, href]) => [href || `#settings/${section}/${id}`, n, id]), tab) : ''}
+      ${body}</div></div>`;
+}
+
+/** The cards of one place (and tab), put together from the groups settingsCards builds. Nothing is
+ *  drawn or fetched but the settings themselves, so the search can read every place this way. */
+async function settingsBody(section, tab, st) {
+  const got = {};
+  const of = async group => got[group] || (got[group] = cut(await settingsCards(group, '', SET_RAW, st)));
+  const form = (part, html) => html ? `<form data-form="profile" data-part="${part}">${html}</form>` : '';
+  const link = (text, href, label) => `<section class="card"><p class="muted" style="margin:0">${text} <a href="${href}">${label} →</a></p></section>`;
+  if (section === 'accounts') { const c = await of('connections'); return `${c.attention}${c.claude}${c.google}${c.other}${c.usage}`; }
+  if (section === 'jobs') {
+    const s = await of('search');
+    if (tab === 'schedule') return form('search', s.when);
+    if (tab === 'limits') return `${form('search', s.limits)}${s.employers}`;
+    const src = await of('sources');
+    return `${src.list}${src.clip}`;
+  }
+  if (section === 'applying') {
+    if (tab === 'forms') { const e = await of('extension'); return `${e.ext}${link('On a phone, a bookmark fills in forms in the extension\'s place.', '#settings/phone', 'Phone')}`; }
+    if (tab === 'followups') { const i = await of('inbox'), a = await of('app'); return `${i.followups}${a.links}`; }
+    return form('search', (await of('search')).tailoring);
+  }
+  if (section === 'mail') return tab === 'calendar' ? (await of('calendar')).calendar : (await of('inbox')).email;
+  if (section === 'notifications') { const n = await of('notifications'); return `${n.weekly}${n.notices}`; }
+  if (section === 'phone') { const a = await of('app'), e = await of('extension'); return `${a.remote}${e.phonefill}${link('Interviews, offers and applications ready, as notices on your phone.', '#settings/notifications', 'Notifications')}`; }
+  if (section === 'sync') return (await of('sync')).sync;
+  const a = await of('app');
+  return `${a.updates}${a.app}${a.extras}${a.whatsnew}`;
+}
+
+/** #settings/<place>/<tab>. */
+async function showSettings(arg) {
+  let [section, tab] = String(SET_ALIAS[(arg || '').split('/')[0]] || arg || 'accounts').split('/');
+  if (!SET_NAV.some(x => x[0] === section)) section = 'accounts';
+  // Job search's Sources and Last search have the search's own page (what each place found).
+  if (section === 'jobs' && (!tab || tab === 'sources' || tab === 'last')) { location.replace(tab === 'last' ? '#search/last' : '#search'); return; }
+  const tabs = SET_TABS[section];
+  if (tabs && !tabs.some(x => x[0] === tab)) tab = tabs[0][0];
+  const st = settingsCache = await api('/api/settings');
+  const autosaves = section === 'notifications' || section === 'mail' || (section === 'jobs') || (section === 'applying' && tab !== 'forms');
+  page(settingsShell(section, tabs ? tab : '', await settingsBody(section, tab, st), { note: autosaves ? 'Changes save by themselves' : '' }));
+  settingsShown();
+}
+
+/** After a Settings page is drawn: the parts that fill themselves in, and the setting a search led to. */
+let setFlash = '';
+function settingsShown() {
+  const st = settingsCache;
+  if ($('#claudeCard') && st?.claude.engine !== 'api') checkClaude(false);
+  if ($('#connStatus')) renderConnStatus();
+  if ($('#usageCard')) renderUsage();
+  if ($('#whatsnew')) { showWhatsNew(); if (update?.available) showUpdate(update); }
+  if (connScrollTo) { const t = document.getElementById(connScrollTo); connScrollTo = null; if (t) { t.scrollIntoView({ block: 'start' }); t.querySelector('details')?.setAttribute('open', ''); } }
+  if (setFlash) {
+    const want = setFlash.toLowerCase(); setFlash = '';
+    const el = [...document.querySelectorAll('#setMain h2, #setMain .tile > header b, #setMain label.field, #setMain div.field, #setMain label.check, #setMain summary')].find(x => setLabel(x).toLowerCase() === want);
+    if (el) {
+      for (let d = el.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+      const box = el.matches('h2, summary') || el.closest('.tile > header') ? (el.closest('.card, .tile') || el) : el;
+      setTimeout(() => { box.scrollIntoView({ block: 'center' }); box.classList.add('set-flash'); setTimeout(() => box.classList.remove('set-flash'), 2400); }, 60);
+    }
+  }
+}
+
+/** A setting's name: the words of its label before its box (or of a card's heading). */
+function setLabel(el) {
+  if (el.matches('h2, b, summary')) return el.textContent.replace(/\s+/g, ' ').trim().slice(0, 90);
+  const c = el.cloneNode(true);
+  c.querySelectorAll('input, select, textarea, .hint, .muted, button, .row, .chips, .range-row, br ~ *').forEach(x => x.remove());
+  return c.textContent.replace(/\s+/g, ' ').trim().slice(0, 90);
+}
+
+/** Every setting, for the search: its name, what its hint says, and where it is. Read from the
+ *  pages themselves (settingsBody), so a setting added to a page can be found without listing it here. */
+let setIndex = null;
+async function settingsIndex() {
+  if (setIndex) return setIndex;
+  const st = settingsCache || (settingsCache = await api('/api/settings'));
+  const out = [];
+  for (const [section] of SET_NAV) {
+    for (const [tab] of SET_TABS[section] || [['']]) {
+      if (section === 'jobs' && tab === 'last') continue;
+      let html = '';
+      try { html = await settingsBody(section, tab, st); } catch (e) { continue; }
+      const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+      const where = setWhere(section, tab), href = setHref(section, tab);
+      const add = (el, kind) => {
+        const title = setLabel(el);
+        if (title.length < 3 || out.some(x => x.title === title && x.href === href)) return;
+        const near = kind === 'card' ? el.closest('.card, .tile') : el;
+        const about = (near?.querySelector(kind === 'card' ? 'p.muted, p.small' : '.hint, .muted')?.textContent || '').replace(/\s+/g, ' ').trim();
+        out.push({ title, about: about.slice(0, 150), text: `${title} ${about}`.toLowerCase(), where, href, card: kind === 'card' });
+      };
+      doc.querySelectorAll('section.card > header h2, details.card > summary b, .tile > header b').forEach(el => add(el, 'card'));
+      doc.querySelectorAll('label.field, div.field, label.check').forEach(el => add(el, 'field'));
+    }
+  }
+  return (setIndex = out);
+}
+
+/** Search the settings as you type: the matches take the page's place, each with where it is and
+ *  a way there. Emptying the box brings the page back. */
+let setFindTimer;
+async function settingsFind(q) {
+  const main = $('#setMain'); if (!main) return;
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) { route(); return; }
+  const all = await settingsIndex();
+  if (($('#setFind')?.value || '').trim() !== q.trim()) return; // typed on meanwhile
+  const hits = all.filter(x => words.every(w => x.text.includes(w)))
+    .sort((a, b) => (words.every(w => b.title.toLowerCase().includes(w)) - words.every(w => a.title.toLowerCase().includes(w))) || (b.card - a.card));
+  const mark = t => { let h = esc(t); for (const w of words) h = h.replace(new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'ig'), '<mark>$1</mark>'); return h; };
+  const places = new Set(hits.map(x => x.where)).size;
+  document.querySelectorAll('.set-nav a.on').forEach(a => a.classList.remove('on'));
+  main.innerHTML = `<div class="head"><div class="grow"><h1>Settings for “${esc(q.trim())}”</h1><p class="muted">${hits.length ? `${hits.length} setting${hits.length === 1 ? '' : 's'} in ${places} place${places === 1 ? '' : 's'}.` : 'Nothing by that name. Try another word, or look through the places on the left.'}</p></div></div>
+    ${hits.length ? `<section class="card set-hits">${hits.slice(0, 40).map(x => `<a class="set-hit" href="${x.href}" data-act="setGo" data-find="${esc(x.title)}"><span class="grow"><b>${mark(x.title)}</b>${x.about ? `<span class="small muted">${mark(x.about)}</span>` : ''}</span><span class="set-where small muted">${esc(x.where)}</span><span class="btn sm">Open</span></a>`).join('')}</section>` : ''}`;
+}
+document.addEventListener('input', e => {
+  if (e.target.id !== 'setFind') return;
+  clearTimeout(setFindTimer);
+  const q = e.target.value;
+  setFindTimer = setTimeout(() => settingsFind(q), 160);
+});
+// "/" goes to the search of settings; Escape empties it.
+document.addEventListener('keydown', e => {
+  const box = $('#setFind'); if (!box) return;
+  if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !e.target.isContentEditable) { e.preventDefault(); box.focus(); box.select(); }
+  else if (e.key === 'Escape' && e.target === box && box.value) { box.value = ''; settingsFind(''); }
+});
 
 /** The bookmark's name. Its icon is the Job Hunt logo, kept from the setup page it was made from. */
 const BOOKMARK_NAME = 'Send to Job Hunt';
@@ -1035,12 +1223,12 @@ async function showSearch(arg) {
   // The ones searched first, then those off or not set up.
   const isOff = id => ['off', 'setup', 'na'].includes(rows[id].status);
   const order = [...SEARCHABLE, 'alerts'].filter(id => rows[id]).sort((a, b) => isOff(a) - isOff(b));
-  const tabs = [['sources', 'Where it looks'], ...SEARCHABLE.filter(id => results[id] && (results[id].postings || results[id].running || results[id].error))
-    .map(id => [id, `${esc(results[id].name || rows[id]?.name || id)}${results[id].counts?.fits ? ` <span class="tab-n">${results[id].counts.fits}</span>` : ''}`]),
-    ['setup', 'Set up sources']];
-  const view = arg === 'what' || tabs.some(([id]) => id === arg) ? arg : 'sources';
+  // Sources: where it looks, with each place's set-up. Last search: what it found, and each
+  // place's own results (#search/<id>). Older links: #search/setup is Sources.
+  const searched = SEARCHABLE.filter(id => results[id] && (results[id].postings || results[id].running || results[id].error));
+  const view = arg === 'what' ? 'what' : arg === 'last' ? 'last' : arg && results[arg] && searched.includes(arg) ? arg : 'sources';
   const next = d.next_search ? new Date(d.next_search) : null;
-  const status = `<p class="muted small search-when">${d.last_search ? `Last full search ${esc(ago(d.last_search))}` : 'No full search yet'}${d.paused ? ` · ${esc(pausedWords(d.paused))}` : next ? ` · next ${esc(next.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}${d.held ? ` · ${d.held} posting${d.held === 1 ? '' : 's'} waiting to be scored <button class="btn sm" data-act="scoreHeld">Score them all now</button>` : ''}</p>`;
+  const status = `<p class="muted small search-when" id="srcStatus">${d.last_search ? `Last full search ${esc(ago(d.last_search))}` : 'No full search yet'}${d.paused ? ` · ${esc(pausedWords(d.paused))}` : next ? ` · next ${esc(next.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))}` : ''}${d.held ? ` · ${d.held} posting${d.held === 1 ? '' : 's'} waiting to be scored <button class="btn sm" data-act="scoreHeld">Score them all now</button>` : ''}</p>`;
   const actions = `${scheduleMenu(d.paused)}${d.running ? `<button class="btn ghost danger" data-act="searchStop">Stop</button>`
     : `<button class="btn primary" data-act="run" data-task="search">${svg('search')}Search everything now</button>`}`;
   const ownCard = own ? `<section class="card progress-card"><header><h2>Searching ${esc(own.searching || own.name)}</h2><b class="pct">${d.progress?.percent ?? 0}%</b></header>
@@ -1048,12 +1236,8 @@ async function showSearch(arg) {
       <p class="muted small">${esc(d.progress?.stage || 'Starting')}${d.progress?.detail ? ` · ${esc(d.progress.detail)}` : ''}</p>
       <div class="facts small"><span><b>${d.progress?.found ?? 0}</b> found</span><span><b>${d.progress?.new ?? 0}</b> new</span><span><b>${d.progress?.scored ?? 0}</b> scored</span></div></section>` : '';
   // What you're looking for is part of Me; where Job Hunt looks, and what each place found, is part of Settings.
-  if (view === 'what') return showSettings('search', '', meHead('what', 'What you\'re looking for: the titles, the places, and how picky to be. Job Hunt searches for these every day.', (settingsCache?.cvs || []).length));
-  const head = `<div class="head"><div class="grow"><h1>Settings</h1></div><div class="row">${actions}</div></div>
-    ${settingsTabs('sources')}
-    <nav class="tabs sub-tabs">${tabs.map(([id, n]) => `<a href="#search/${id}" class="${id === view ? 'on' : ''}">${n}</a>`).join('')}</nav>
-    ${status}${full ? progressHtml(d.progress) : ownCard}`;
-  if (view === 'setup') return showSettings('sources', '', head);
+  if (view === 'what') return settingsCards('search', '', meHead('what', 'What you\'re looking for: the titles, the places, and how picky to be. Job Hunt searches for these every day.', (settingsCache?.cvs || []).length));
+  const top = `${status}<div id="srcProgress">${full ? progressHtml(d.progress) : ownCard}</div>`;
   let body;
   if (view === 'sources') {
     const busy = d.running;
@@ -1065,34 +1249,13 @@ async function showSearch(arg) {
     const looking = st ? `<section class="card looking"><div class="auto-line">${svg('search')}<span class="grow">${titles.length ? `Looking for ${few(titles, 4)}` : '<b>No job titles yet.</b> Add a CV, or add titles yourself.'}
         ${places.length ? ` in ${few(places.map(p => String(p).split(',')[0]), 4)}` : ' anywhere in the country'}${st.profile.remote_ok ? ', and remote roles' : ''}${st.profile.min_salary ? `, paying ${money(st.profile.min_salary)} or more` : ''}.</span>
         <a class="btn sm" href="#search/what">Change</a></div></section>` : '';
-    const btns = (r, res) => {
-      const b = [];
-      const on = !['off', 'setup', 'na'].includes(r.status);
-      if (SEARCHABLE.includes(r.id) && on) b.push(`<button class="btn sm" data-act="srcSearch" data-id="${esc(r.id)}" ${busy ? 'disabled' : ''} title="Search ${esc(r.name)} only, for all your job titles">${svg('search')}Search</button>`);
-      if (res?.postings) b.push(`<a class="btn ghost sm" href="#search/${esc(r.id)}">Results</a>`);
-      if (r.status === 'off' && (r.actions || []).includes('on')) b.push(`<button class="btn primary sm" data-act="connIndeed" data-id="${esc(r.id)}" data-on="1">Turn on</button>`);
-      if (r.status === 'setup' || r.status === 'problem') b.push(`<button class="btn ghost sm" data-act="connGoto" data-to="tile-${esc(r.id)}">${r.status === 'setup' ? 'Set up' : 'Fix'}</button>`);
-      return b.join('');
-    };
-    const sites = d.sites || [];
-    const siteRows = sites.map(x => { const [cls, label] = SITE_STATE[x.state] || ['', x.state];
-      return `<div class="src-site"><span class="grow"><b>${esc(x.name)}</b> <span class="pill ${cls}">${label}</span><br><span class="small muted">${esc(x.detail)}${x.at ? ` · ${esc(ago(x.at))}` : ''}</span></span>
-        ${rows.agencies && !['off', 'setup'].includes(rows.agencies.status) ? `<button class="btn ghost sm" data-act="srcSearch" data-id="site:${esc(x.id)}" ${busy ? 'disabled' : ''}>Search</button>` : ''}</div>`; }).join('');
-    const srcRow = id => {
-      const r = rows[id], res = results[id];
-      const [cls, label] = CONN_PILL[r.status] || ['', r.status];
-      const off = ['off', 'setup', 'na'].includes(r.status);
-      return `<div class="src-row${off ? ' off' : ''}">
-        <div class="src-name"><b>${esc(r.name.replace(' (through your Claude account)', ''))}</b> <span class="pill ${cls}">${label}</span><br><span class="small muted">${esc(r.detail)}</span></div>
-        <div class="src-last small">${id === 'alerts' ? '<span class="muted">Read on every email check</span>' : off ? '' : res?.postings || res?.running || res?.error ? `<a href="#search/${esc(id)}" class="plain">${srcLastLine(res)}</a>` : srcLastLine(res)}</div>
-        <div class="src-acts row">${btns(r, res)}</div>
-        ${id === 'agencies' && sites.length ? `<details class="src-sites"><summary class="small">${sites.length} recruiter${sites.length === 1 ? '' : 's'} and job site${sites.length === 1 ? '' : 's'}</summary>${siteRows}</details>` : ''}
-      </div>`; };
-    const inUse = order.filter(id => !isOff(id)), unused = order.filter(isOff);
-    body = `${looking}${d.running ? '' : reportHtml(overview?.last_report)}
-      <section class="card src-table"><header><h2>Where it looks</h2><span class="muted small">${inUse.length} in use</span></header>${inUse.map(srcRow).join('') || '<p class="muted">No source is on yet. Turn one on below.</p>'}
-        ${unused.length ? `<details class="more src-unused"${inUse.length ? '' : ' open'}><summary><b>${unused.length} more you can turn on or set up</b></summary>${unused.map(srcRow).join('')}</details>` : ''}</section>
-      <p class="muted small">Keys, company boards and which recruiters to search are set, and tested, in <a href="#search/setup">Set up sources</a>; what you're looking for is in <a href="#search/what">Me → Looking for</a>.</p>`;
+    const P = st ? cut(await settingsCards('sources', '', SET_RAW, st)) : {};
+    body = `${looking}${P.list || ''}${P.clip || ''}`;
+  } else if (view === 'last') {
+    if (!overview) await refreshOverview();
+    const line = id => { const r = results[id]; return `<div class="src-row"><div class="src-name"><b>${esc(r.name || rows[id]?.name || id)}</b></div><div class="src-last small">${srcLastLine(r)}</div><div class="src-acts row"><a class="btn sm" href="#search/${esc(id)}">See what it found</a></div></div>`; };
+    body = `${d.running ? '' : reportHtml(overview?.last_report)}
+      <section class="card src-table"><header><h2>What each place found</h2></header>${searched.map(line).join('') || '<p class="muted">Nothing searched yet. Press Search everything now.</p>'}</section>`;
   } else {
     const r = results[view];
     const f = srcFilter[view] || (srcFilter[view] = { outcome: 'all', site: '' });
@@ -1115,7 +1278,7 @@ async function showSearch(arg) {
         <td class="num">${p.url ? `<button class="btn ghost sm icon-only" data-act="link" data-url="${esc(p.url)}" title="Open the posting">${svg('open')}</button>` : ''}</td></tr>`;
     };
     const searchBtn = rows[view] && !['off', 'setup', 'na'].includes(rows[view].status) ? `<button class="btn" data-act="srcSearch" data-id="${esc(view)}" ${d.running ? 'disabled' : ''}>${svg('search')}Search again</button>` : '';
-    body = `<section class="card"><header><h2>${esc(r.name)}</h2><div class="row">${searchBtn}${n('match') ? '<a class="btn primary" href="#applications/pick">Pick the ones to tailor</a>' : ''}</div></header>
+    body = `<p class="small"><a href="#search/last">← Last search</a></p><section class="card"><header><h2>${esc(r.name)}</h2><div class="row">${searchBtn}${n('match') ? '<a class="btn primary" href="#applications/pick">Pick the ones to tailor</a>' : ''}</div></header>
       <p class="small">${r.running ? 'Searching now; the list below is from before.' : r.via === 'search' ? `From the full search ${esc(ago(r.finished))}.` : r.finished ? `Searched on its own ${esc(ago(r.finished))}.` : ''}
         ${list.length ? ` <b>${list.length}</b> posting${list.length === 1 ? '' : 's'}, <b>${n('new')}</b> new, <b>${n('match')}</b> fit${n('match') === 1 ? 's' : ''} you.` : r.finished ? ' Nothing found.' : ''}</p>
       ${r.error ? `<p class="small crit-text">${esc(r.error)}</p>` : ''}
@@ -1126,8 +1289,44 @@ async function showSearch(arg) {
       ${shown.length ? `<div class="src-list"><table><thead><tr><th>Posting</th><th class="num">Fit</th><th>What happened</th><th></th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table></div>` : list.length ? '<p class="empty">None of these.</p>' : ''}
     </section>`;
   }
-  page(head + body);
-  if (d.running) srcPoll = setTimeout(() => { if (location.hash.startsWith('#search')) route(); }, 1500);
+  page(settingsShell('jobs', view === 'sources' ? 'sources' : 'last', top + body, { actions }));
+  if (view === 'sources') { showSourceTest(); renderConnStatus(); fillSourceRows(d); }
+  settingsShown();
+  // While a search runs: the status and what each place found are kept current. The page itself is
+  // drawn again only when nothing on it is being typed in or is open (a key being pasted, say).
+  if (d.running) srcPoll = setTimeout(async () => {
+    if (!location.hash.startsWith('#search')) return;
+    const busyHere = view === 'sources' && (document.activeElement?.closest?.('.set-main form, .set-main details') || document.querySelector('.set-main .tile details[open]'));
+    if (!busyHere) return route();
+    try { const now = await api('/api/sources/search'); fillSourceRows(now); const pr = $('#srcProgress'); if (pr && now.running) pr.innerHTML = progressHtml(now.progress); if (!now.running) return route(); } catch (e) { /* next time */ }
+    srcPoll = setTimeout(() => { if (location.hash.startsWith('#search')) route(); }, 4000);
+  }, 1500);
+}
+
+/** On the list of sources: what each place last found, and its Search button. (Its state and its
+ *  Turn on / Test buttons come from renderConnStatus.) */
+function fillSourceRows(d) {
+  const results = d.results || {}, busy = d.running;
+  const rows = Object.fromEntries((d.sources || []).map(r => [r.id, r]));
+  let on = 0, all = 0;
+  document.querySelectorAll('.tile.src[data-tile]').forEach(t => {
+    const id = t.dataset.tile, r = rows[id], res = results[id];
+    if (!r) return;
+    all++;
+    const off = ['off', 'setup', 'na'].includes(r.status);
+    if (!off) on++;
+    const last = t.querySelector('.src-last'), acts = t.querySelector('.src-acts');
+    if (last) last.innerHTML = id === 'alerts' ? (off ? '' : 'Read on every email check') : off ? '' : res?.postings || res?.running || res?.error ? `<a href="#search/${esc(id)}" class="plain">${srcLastLine(res)}</a>` : srcLastLine(res);
+    if (acts) acts.innerHTML = SEARCHABLE.includes(id) && !off ? `<button class="btn sm" data-act="srcSearch" data-id="${esc(id)}" ${busy ? 'disabled' : ''} title="Search ${esc(r.name)} only, for all your job titles">${svg('search')}Search</button>` : '';
+    // The recruiters and job sites chosen, each with how its last search went.
+    if (id === 'agencies' && (d.sites || []).length && !t.querySelector('.src-sites')) {
+      const siteRows = d.sites.map(x => { const [cls, label] = SITE_STATE[x.state] || ['', x.state];
+        return `<div class="src-site"><span class="grow"><b>${esc(x.name)}</b> <span class="pill ${cls}">${label}</span><br><span class="small muted">${esc(x.detail)}${x.at ? ` · ${esc(ago(x.at))}` : ''}</span></span>
+          ${off ? '' : `<button class="btn ghost sm" data-act="srcSearch" data-id="site:${esc(x.id)}" ${busy ? 'disabled' : ''}>Search</button>`}</div>`; }).join('');
+      t.insertAdjacentHTML('beforeend', `<details class="src-sites"><summary class="small">${d.sites.length} recruiter${d.sites.length === 1 ? '' : 's'} and job site${d.sites.length === 1 ? '' : 's'} chosen</summary>${siteRows}</details>`);
+    }
+  });
+  const n = $('#srcCount'); if (n && all) n.textContent = `${on} on · ${all - on} off`;
 }
 
 const CONN_ACT = {

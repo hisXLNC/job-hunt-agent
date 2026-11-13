@@ -1891,3 +1891,71 @@ details.kit > summary { cursor: pointer; }
 .path-chip button { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; padding: 0; }
 .path-chip button:hover { background: var(--surface); color: var(--ink); }
 .path-chip button svg { width: 13px; height: 13px; }
+
+/* ---- Settings: the places down the side, the search above them, the place's cards beside (2.65.0) ----
+   Built from what the rest of the app uses: cards, pills, the pill tabs of Me and the Queue. The
+   side list reads like the top bar's places (the one you're on is a raised pill). */
+.set { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 30px; align-items: start; }
+.set-side { position: sticky; top: 78px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.set-find { display: flex; align-items: center; gap: 8px; padding: 0 10px 0 12px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); cursor: text; }
+.set-find:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.set-find svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.set-find input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 14px; color: var(--ink); padding: 0; box-shadow: none; }
+.set-find input::-webkit-search-cancel-button { cursor: pointer; }
+.set-find kbd { font: 11px ui-monospace, Consolas, monospace; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--muted); }
+.set-find:focus-within kbd { display: none; }
+.set-nav { display: flex; flex-direction: column; gap: 2px; }
+.set-nav a { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; text-decoration: none; color: var(--ink-2); font-weight: 560; font-size: 14.5px; }
+.set-nav a:hover { color: var(--ink); }
+.set-nav a.on { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: 0 1px 2px rgba(22, 24, 29, .1); }
+.set-nav a svg { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.set-main { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+.set-main > .head { align-items: flex-start; }
+.set-main > .head .save-state:empty { display: none; }
+.set-main > .head p.muted { margin: 4px 0 0; max-width: 70ch; }
+/* A setting the search led to: its card or box is lit for a moment. */
+.set-flash { animation: set-flash 2.4s ease-out 1; border-radius: 10px; }
+@keyframes set-flash { 0%, 35% { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); background-color: var(--accent-soft); } 100% { box-shadow: 0 0 0 3px transparent; } }
+@media (prefers-reduced-motion: reduce) { .set-flash { animation: none; outline: 2px solid var(--accent); } }
+/* What the search found. */
+.set-hits { padding: 4px 20px; }
+.set-hit { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--line-2); text-decoration: none; color: inherit; }
+.set-hit:first-child { border-top: 0; }
+.set-hit .grow { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.set-hit .set-where { white-space: nowrap; }
+.set-hit mark { background: var(--warn-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+.set-hit:hover b { color: var(--accent); }
+/* Google, once: what each part of it is used for, with the way to its settings. */
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0 14px; }
+.use { border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.use b { display: flex; align-items: center; gap: 8px; }
+.use .dot { background: var(--line); }
+.use .dot.on { background: #52C47F; }
+.use a { text-decoration: none; font-weight: 560; margin-top: 2px; }
+/* The sources, as one list in groups: each a row with its state, what it last found and its buttons. */
+.src-card .src-group { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 20px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line-2); }
+.src-card .tile.src { border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; padding: 14px 0; background: none; gap: 5px; }
+.src-card .tile.src:last-child { border-bottom: 0; padding-bottom: 4px; }
+.src-card .tile.src > header { flex-wrap: wrap; gap: 8px 10px; }
+.src-card .tile.src .tile-state { margin-left: 0; }
+.src-card .tile.src .src-last { margin-left: auto; text-align: right; }
+.src-card .tile.src .src-last a.plain { color: inherit; text-decoration: none; }
+.src-card .tile.src .src-last a.plain:hover { text-decoration: underline; }
+.src-card .tile.src .src-acts, .src-card .tile.src .tile-acts { flex-wrap: nowrap; gap: 6px; }
+.src-card .tile.src .src-acts:empty, .src-card .tile.src .tile-acts:empty, .src-card .tile.src .src-last:empty { display: none; }
+.src-card .tile.src .src-last:empty + .src-acts, .src-card .tile.src .src-last:empty + .src-acts:empty + .tile-acts { margin-left: auto; }
+.src-card .tile.src.problem { border-color: var(--line-2); }
+.src-card .tile.src.problem > header b { color: var(--crit); }
+.src-card .tile.src > p { max-width: 78ch; }
+.src-card .tile .tag { font-size: 11.5px; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 1px 8px; }
+/* A phone, or a narrow window: the places are a row to swipe, as the other pages' tabs are. */
+@media (max-width: 900px) {
+  .set { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .set-side { position: static; }
+  .set-nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 999px; }
+  .set-nav a { flex: none; padding: 7px 14px; border-radius: 999px; white-space: nowrap; }
+  .set-nav a svg { display: none; }
+  .set-find kbd { display: none; }
+  .uses { grid-template-columns: minmax(0, 1fr); }
+  .set-hit { flex-wrap: wrap; } .set-hit .btn { display: none; }
+}

@@ -130,7 +130,7 @@ function historyHtml(j, history, notes, mode) {
   if (!(history || []).length && !notes) return '';
   return `<section class="card company-history"><header><h2>Your history with ${esc(j.company)}</h2></header>
     ${(history || []).length ? `<ul class="small">${history.map(x => `<li><a href="#job/${encodeURIComponent(x.id)}">${esc(x.title)}</a> · ${esc(STAGES[x.status] || x.status)}${x.applied_at ? ` · applied ${esc(fmtDate(x.applied_at))}` : ''}</li>`).join('')}</ul>
-      <p class="muted small">${mode === 'same' ? `This role gets the same CV you sent them.` : mode === 'usual' ? 'Tailored as usual (Search → What to search → Tailoring).' : `${esc(j.company)} keeps the CVs you sent on file, so this one stays close to the last: the same headline, at most 4 paragraphs changed.`}</p>` : ''}
+      <p class="muted small">${mode === 'same' ? `This role gets the same CV you sent them.` : mode === 'usual' ? 'Tailored as usual (Settings → Applying).' : `${esc(j.company)} keeps the CVs you sent on file, so this one stays close to the last: the same headline, at most 4 paragraphs changed.`}</p>` : ''}
     <label class="field small">Your notes on ${esc(j.company)}<textarea id="companyNotes" placeholder="e.g. The recruiter said to wait six months before applying again." style="min-height:60px">${esc(notes || '')}</textarea></label>
     <div class="row"><button class="btn sm" data-act="saveCompanyNotes" data-company="${esc(j.company)}">Save notes</button></div></section>`;
 }
