@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.62.2",
+    "date": "2026-11-13",
+    "title": "Career paths: a quieter Recommended",
+    "changes": [
+      "Recommended is a small mark under a path's name (with why, on hover) and a thin line at the row's edge, in place of the large blue pill and the tinted row. On the path's card it is a soft tag."
+    ]
+  },
+  {
     "version": "2.62.1",
     "date": "2026-11-13",
     "title": "CV update: stop it, close it, and a tidier card",

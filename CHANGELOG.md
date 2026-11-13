@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.62.2] - 2026-11-13
+
+Career paths: a quieter Recommended.
+
+### Changes
+
+- Recommended is a small mark under a path's name (with why, on hover) and a thin line at the row's edge, in place of the large blue pill and the tinted row. On the path's card it is a soft tag.
+
 ## [2.62.1] - 2026-11-13
 
 CV update: stop it, close it, and a tidier card.
@@ -1911,6 +1919,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.62.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.2
 [2.62.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.1
 [2.62.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.0
 [2.61.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.2

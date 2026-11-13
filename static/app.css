@@ -1874,3 +1874,13 @@ details.kit > summary { cursor: pointer; }
 .cv-update > header { gap: 10px; }
 .cv-update > header h2 { flex: 1; min-width: 0; }
 .cv-update > header .btn.ghost { padding: 4px 6px; }
+
+/* Career paths: Recommended is a quiet mark under the path's name, not a loud pill beside it. */
+.career-compare td.path-name a { text-decoration: none; font-weight: 600; color: var(--ink); }
+.career-compare td.path-name a:hover { color: var(--accent); text-decoration: underline; }
+.career-compare .path-sub { display: block; margin-top: 3px; }
+.rec-mark { color: var(--accent); font-weight: 650; white-space: nowrap; cursor: help; }
+.career-compare tr.rec td { background: none; }
+.career-compare tr.rec td.path-name { box-shadow: inset 3px 0 0 var(--accent); padding-left: 14px; }
+.path.rec { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: none; }
+.rec-flag { background: var(--accent-soft); color: var(--accent); font-weight: 650; padding: 2px 9px; }
