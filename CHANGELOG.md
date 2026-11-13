@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.65.6] - 2026-11-13
+
+Update everything now.
+
+### Changes
+
+- Me, CVs has Update everything now: what a change of CVs left to score or tailor again starts at once, with its progress at the top of the page (Job Hunt otherwise looks every half hour). With nothing waiting, it offers to redo it all anyway.
+
 ## [2.65.5] - 2026-11-13
 
 Removing and adding CVs leaves nothing undone.
@@ -1994,6 +2002,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.65.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.6
 [2.65.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.5
 [2.65.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.4
 [2.65.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.3

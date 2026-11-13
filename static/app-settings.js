@@ -252,7 +252,7 @@ async function settingsCards(tab, sub, host, given) {
     </section>`;
   } else if (tab === 'cvs') {
     const kindName = { docx: 'Word', pdf: 'Converted from PDF', text: 'Converted from text', 'docx-converted': 'Converted to Job Hunt layout' };
-    body = `<section class="card"><header><h2>Your CVs</h2><button class="btn ghost" data-act="folder" data-which="cv">${svg('folder')}Open folder</button></header>
+    body = `<section class="card"><header><h2>Your CVs</h2>${st.cvs.length ? '<button class="btn" data-act="cvUpdateNow" title="Scores again the roles that lost their fit and tailors again the applications waiting for you, from your CVs as they are now. It starts at once; otherwise Job Hunt looks every half hour.">Update everything now</button>' : ''}<button class="btn ghost" data-act="folder" data-which="cv">${svg('folder')}Open folder</button></header>
       <p class="muted">Add as many CVs as you like, one for each kind of role. Every posting is scored against all of them and tailored from the best match.</p>
       <details class="more"><summary class="small muted">What Job Hunt changes in a CV</summary><p class="muted small">Word files are edited in place, so your formatting stays. PDF and text CVs are converted, word for word, into a clean Word copy first. Only your headline, summary, skills and bullet points are ever reworded, and an edit that adds a figure your CV doesn't state is refused.</p></details>
       <label class="drop" id="drop"><input type="file" accept=".docx,.pdf,.txt" multiple data-upload="cv-add" hidden>

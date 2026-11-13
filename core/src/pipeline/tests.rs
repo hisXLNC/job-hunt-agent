@@ -1964,6 +1964,12 @@ fn removing_and_adding_cvs_leaves_nothing_undone() {
     assert!(after.unscored.is_empty() && after.retailor.is_empty(), "{after:?}");
     for id in &ids { assert!(s.agent.db().job(id).unwrap().unwrap().score.is_some(), "{id} has its fit again"); }
     assert_eq!(s.agent.db().job(&ids[0]).unwrap().unwrap().status, "ready");
+    // Update everything now: nothing owed, so nothing starts; asked for all of it, both are redone.
+    for _ in 0..200 { if !s.agent.is_running("cv-update") { break; } std::thread::sleep(std::time::Duration::from_millis(25)); }
+    let none = s.agent.update_for_cvs_now(false).unwrap();
+    assert!(none.unscored.is_empty() && none.retailor.is_empty());
+    let all = s.agent.update_for_cvs_now(true).unwrap();
+    assert_eq!((all.unscored.len(), all.retailor.len()), (1, 1), "{all:?}");
 }
 
 #[test]

@@ -696,6 +696,23 @@ async function act(el) {
     });
   }
   // The update after a new CV: stop it (it finishes the request it's on), or close its card.
+  // Update everything now: what a change of CVs left to redo starts at once. With nothing owed,
+  // it asks before redoing it all (that uses your Claude plan for every one).
+  if (a === 'cvUpdateNow') {
+    el.disabled = true;
+    try {
+      let r = await api('/api/cv-update/run', { method: 'POST', body: {} });
+      if (!r.scoring && !r.tailoring) {
+        const go = await dialog({ title: 'Everything is up to date with your CVs',
+          text: 'Nothing is waiting to be scored or tailored again. You can redo it all anyway: every role that cleared your fit score is scored again and every application waiting for your approval is tailored again, from your CVs as they are now. That uses your Claude plan for each one.',
+          buttons: [{ label: 'Leave it', value: null, kind: 'ghost' }, { label: 'Redo it all', value: 'go', kind: 'primary' }] });
+        if (go) r = await api('/api/cv-update/run', { method: 'POST', body: { all: true } });
+      }
+      if (r.scoring || r.tailoring) { toast(`Started: ${r.scoring} to score again, ${r.tailoring} to tailor again. Progress is at the top of this page.`); settingsCache = null; route(); }
+    } catch (err) { toast(err.message, true); }
+    el.disabled = false;
+    return;
+  }
   if (a === 'cvUpdateStop' || a === 'cvUpdateClose') {
     el.disabled = true;
     try {

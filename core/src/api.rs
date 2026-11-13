@@ -1355,6 +1355,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.stop_cv_update(b["forget"].as_bool().unwrap_or(false));
             ok()
         }
+        // Update everything now: what's owed after a change of CVs, or (all) everything again.
+        ["api", "cv-update", "run"] => {
+            let c = agent.update_for_cvs_now(b["all"].as_bool().unwrap_or(false))?;
+            Ok(Resp::json(&json!({ "scoring": c.unscored.len(), "tailoring": c.retailor.len() + c.approved.len() })))
+        }
         ["api", "rescore"] => {
             let group = s(&b, "group").to_string();
             agent.rescore_plan(&group)?; // a bad group fails here, not in the background

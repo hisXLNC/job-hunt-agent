@@ -363,6 +363,28 @@ impl Agent {
         c
     }
 
+    /// You asked for everything to be brought up to date with your CVs, now. What a change of CVs
+    /// left undone is done at once (not at the next half-hourly look). `all`: with nothing owed,
+    /// every fit that cleared your bar and every application waiting for approval is redone anyway,
+    /// as if each CV had just been given a new file. Returns what was started.
+    pub fn update_for_cvs_now(self: &Arc<Self>, all: bool) -> R<CvChange> {
+        let profile = self.profile();
+        if self.cv_texts(&profile).is_empty() {
+            return err("Add a CV first.");
+        }
+        if !self.claude_ready() {
+            return err("Connect Claude first (Settings \u{2192} Accounts): it does the scoring and tailoring.");
+        }
+        let owed = self.cv_work_pending();
+        if all && owed.unscored.is_empty() && owed.retailor.is_empty() && owed.approved.is_empty() {
+            for t in &profile.tracks {
+                self.cv_changed(&t.name, &t.label, false)?;
+            }
+        }
+        let _ = self.db().set("last.cvwork", &Utc::now().timestamp().to_string());
+        Ok(self.resume_cv_work())
+    }
+
     /// Your CV `id` has a new file: everything worked out from the old one is redone, in the
     /// background, in this order. (1) Claude reads the new CV for job titles and keywords the old
     /// one didn't suggest (added to yours, never taken away) and the experience in it. (2) Fits
