@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.65.2",
+    "date": "2026-11-13",
+    "title": "Settings: App",
+    "changes": [
+      "The last place in Settings is called App again, not This computer."
+    ]
+  },
+  {
     "version": "2.65.1",
     "date": "2026-11-13",
     "title": "Indeed: the right reason",

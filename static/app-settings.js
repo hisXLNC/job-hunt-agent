@@ -555,7 +555,7 @@ const SET_NAV = [
   ['notifications', 'Notifications', '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 'How Job Hunt lets you know what\'s happening.'],
   ['phone', 'Phone', '<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>', 'Job Hunt on your phone: using it there, filling in forms, sending jobs and getting notices.'],
   ['sync', 'Sync & backup', '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a3.75 3.75 0 0 1-.5 7.5z"/>', 'Your data on more than one computer, and safe copies of it.'],
-  ['computer', 'This computer', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', 'Updates, starting with Windows, sleep, and the app itself.'],
+  ['computer', 'App', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', 'Updates, starting with Windows, sleep, and the app itself.'],
 ];
 /** The tabs inside a place: [id, name, address when it isn't #settings/<place>/<id>]. */
 const SET_TABS = {
