@@ -2,11 +2,16 @@
   {
     "version": "2.61.2",
     "date": "2026-11-13",
-    "title": "Certificates found by their full name; smaller stage tags",
+    "title": "The Workday form: no more crawling, and what it chose is seen",
     "changes": [
-      "Filling a form: a certificate written as PMP was searched for as PMP, which finds nothing in a list that names it in full after who issues it (Project Management Institute - Project Management Professional). Job Hunt now also searches by the full name of common certificates (PMP, CAPM, PMI-ACP, CSM, CBAP, CPA and others) and reads the name after the issuer, so the right one is chosen instead of Not Applicable.",
-      "While it looks through a site's list, the panel says what it is looking for, so a slow list no longer looks stuck; and a list that never says it found nothing is given five seconds a search after the first, not twelve.",
-      "The stage on each row of All jobs (Ready to approve, Approved – submit it) is a small one-line tag again. It had wrapped onto two lines and looked like a large button."
+      "A form took fifteen minutes and looked stuck when its tab was behind another one: browsers slow a hidden page's timers to one a second, then one a minute. The extension now keeps the time itself there, and the panel says so while the tab is hidden.",
+      "Workday chooses an item by itself when a search has one match (Other School, Not Applicable - Not Applicable). Job Hunt did not notice, searched on, and reported the box as not filled. It now sees what was taken and moves on.",
+      "Field of Study and the first skill were not taken: the browser's debugging bar came on at the first click and closed the open list. It now comes on before the list is opened.",
+      "A certificate is also searched for by its full name (PMP as Project Management Professional, and other common ones), and the name after the issuer is read (Project Management Institute - Project Management Professional).",
+      "While it looks through a site's list, the panel says what it is looking for. No Items is no longer read as an option, so an empty search is given up at once.",
+      "No amber on the end date of the job you are in, or on a certificate's optional upload box.",
+      "Copy details lists what each search showed, so a missed item can be traced to the site's own wording.",
+      "All jobs: the stage on each row (Ready to approve, Approved – submit it) is a small one-line tag again."
     ]
   },
   {

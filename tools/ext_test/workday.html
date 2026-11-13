@@ -68,6 +68,9 @@
 <script>
 const Q = new URLSearchParams(location.search);
 const ODD = Q.get('pills') === 'odd', TRUSTED_TYPING = Q.get('typing') === 'trusted', KEYS_ONLY = Q.get('click') === 'keys', ANY_CLICK = Q.get('click') === 'any', SLOW = Number(Q.get('slow') || 1200);
+// The OSC form, as its Copy details showed it (2.61.2): "No Items." is drawn as an option, and a
+// search with a single match chooses it by itself.
+const REAL = Q.get('certs') === 'issuer';
 const LISTS = {
   skills: ['Python', 'Python Programming', 'Project Management', 'Project Management Office (PMO)', 'Program Management', 'SQL', 'SQL Server', 'MySQL', 'Vendor Management', 'Vendor Relations',
     'Agile Methodology', 'Agile Project Management', 'Stakeholder Management', 'Risk Management', 'Data Analysis', 'Microsoft Excel', 'Payments', 'Payment Processing', 'JIRA', 'Budgeting'],
@@ -101,7 +104,10 @@ function wire(input) {
     popup.dataset.q = q;
     popup.innerHTML = hits.length ? `<div role="listbox">${hits.map((n, i) => `<div role="option" data-automation-id="menuItem"${ODD ? '' : ` aria-selected="${i === Math.max(0, active)}"`} class="${i === active ? 'active' : ''}" data-name="${n}">
         <div data-automation-id="promptOption" data-automation-label="${n}"><input type="${single ? 'radio' : 'checkbox'}" data-automation-id="${single ? 'radioBtn' : 'checkboxPanel'}" tabindex="-1" ${chosen.includes(n) ? 'checked' : ''}> ${n}</div></div>`).join('')}</div>`
+      : REAL ? '<div role="listbox"><div role="option" data-automation-id="menuItem"><div data-automation-id="promptOption" data-automation-label="No Items.">No Items.</div></div></div>'
       : '<div data-automation-id="noResults"><p>No Items.</p></div>';
+    // As the real form does: a search with one match takes it and closes the list.
+    if (REAL && single && hits.length === 1 && q && !chosen.includes(hits[0])) toggle(hits[0]);
   };
   const search = q => {
     close();

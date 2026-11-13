@@ -257,6 +257,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     // Asking again is the page's job for the rest (it knows what it's waiting for).
     return answer(reply, data.path, ask(data.path, data.body, data.path === '/ext/fill/poll' ? 8000 : 15000)), true;
   }
+  // A pause for a page the browser has slowed (a tab behind another): timers here aren't.
+  if (kind === 'sleep') { setTimeout(() => reply({ ok: true }), Math.min(Number(data && data.ms) || 0, 20000)); return true; }
   if (kind === 'debug') return answer(reply, 'debugger', debugOn(tabId).then(fresh => ({ fresh }))), true;
   if (kind === 'undebug') {
     // The form is filled: let the tab go at once (other tools can't read a page held by the debugger).

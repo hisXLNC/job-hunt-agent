@@ -56,6 +56,14 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.61.2, from the user's real Copy details (OSC, 15 minutes for one form):** (1) the tab was hidden, so timers were
+  throttled: `wait()` asks the background to keep time (`sleep` message) when `document.hidden`. (2) Workday's Enter
+  takes a single match and closes the list: `tookItself(had)` sees the new pill (accepted if it fits, or as Other /
+  Not Applicable). (3) "No Items." is a `promptOption`: left out of `options()`, seen by `nothing()`. (4) The debugger
+  attaching closed the open list (Field of Study and the first skill "not taken"): `debugReady()` before each search.
+  (5) Each search in `diag.skills` has `top` (the labels shown). STILL UNKNOWN: what OSC's list calls PMP; the search
+  "Project Management Professional (PMP)" found 4 rows and none was chosen. Ask for Copy details again and read `top`.
+  Education From and GPA are not on the user's CV: they go in About me facts. The mock's `issuer` variant has (2), (3).
 - **2.61.2: certificates by full name.** The user's OSC form sat on "Filling in the form…" with Certification set to
   "Not Applicable - Not Applicable": the list names certificates "Issuer - Name", so "PMP" found nothing. `fillSkills`
   now has `FULL` (short form -> full name, also searched), `tail()` (the name after " - "), every bracketed short form,

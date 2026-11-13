@@ -584,7 +584,16 @@
     if (!ok && !amber.includes(box)) amber.push(box);
   };
   const pick = (list, v) => list.findIndex(o => same(o, v)) >= 0 ? list.findIndex(o => same(o, v)) : list.findIndex(o => near(o, v));
-  const wait = ms => new Promise(r => setTimeout(r, ms));
+  // A pause. A tab you aren't looking at has its timers slowed by the browser (to one a second, then
+  // one a minute): a fill that takes two minutes in front took fifteen behind another tab. There,
+  // the extension's background keeps the time instead (it isn't slowed) and answers when it's up.
+  const wait = ms => new Promise(r => {
+    if (!EXT || !document.hidden || ms < 20) return setTimeout(r, ms);
+    let done = false;
+    const go = () => { if (!done) { done = true; r(); } };
+    setTimeout(go, ms + 1500); // whichever comes first
+    try { chrome.runtime.sendMessage({ jobhunt: 'sleep', data: { ms } }, () => { void chrome.runtime.lastError; go(); }); } catch (e) { setTimeout(go, ms); }
+  });
   // An upload box that already has a file (any name: one you or the site attached before, often the
   // CV you gave Workday at the start): the file's name is listed next to it. Looked for up the page
   // from the box, but not past another upload box (the cover letter's).
@@ -745,7 +754,7 @@
   });
   // The debugger, on and ready. When it has just come on, its bar moves the page down: wait for
   // that before aiming a click (a click aimed before it showed lands a row too high).
-  const debugReady = async () => { const v = await ext('debug'); if (v && v.fresh) await wait(900); return !!v; };
+  const debugReady = async () => { const v = await ext('debug'); if (v && v.fresh) await wait(1500); return !!v; };
   // A real click on an element: Workday's lists ignore clicks a page script makes, however
   // mouse-like. Aimed near the element's left (its tick box and the start of its name), or its middle.
   const realClick = async (el, middle) => {
@@ -773,7 +782,8 @@
   // The options of the list that's open. Not the items already chosen: Workday draws each of those
   // with the same markup as an option, inside the box (they were taken for search results).
   const CHOSEN = '[data-automation-id=selectedItem],[data-automation-id=selectedItemList],[data-automation-id=multiselectInputContainer]';
-  const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].filter(o => !own(o) && !o.closest(CHOSEN) && shown(o) && clean(o.textContent));
+  // Nor the line a list shows when a search found nothing: Workday draws "No Items." as an option.
+  const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].filter(o => !own(o) && !o.closest(CHOSEN) && shown(o) && clean(o.textContent) && !/^no (items|results|matches|options)\.?$/i.test(clean(o.textContent)));
   // The site saying a search found nothing ("No Items."), in the box's field or in the list that opened.
   const NOTHING = /\bno (items|results|matches|options)\b/i;
   const LISTS = '[data-automation-id=activeListContainer],[data-automation-id*=noResult],[data-automation-id=popupContent],[role=listbox],[role=dialog]';
@@ -837,7 +847,10 @@
     // never repeated: a second click would untick it.
     const visible = o => !!tick(o) || [o, rowOf(o)].some(x => (x.hasAttribute('aria-selected') && !lit(rowOf(o))) || x.hasAttribute('aria-checked')) || kids() >= 0 || names().length > 0;
     const find = name => { const l = options().filter(o => same(o.getAttribute('data-automation-label') || o.textContent, name)); return l.find(o => o.matches('[data-automation-id=promptOption]')) || l[0] || null; };
-    const nothing = () => !options().length && (NOTHING.test(clean(field === document.body ? '' : field.textContent || '')) || [...document.querySelectorAll(LISTS)].some(x => !own(x) && shown(x) && NOTHING.test(clean(x.textContent).slice(0, 200))));
+    const nothing = () => !options().length && ([...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].some(o => !own(o) && !o.closest(CHOSEN) && shown(o) && NOTHING.test(clean(o.textContent))) || NOTHING.test(clean(field === document.body ? '' : field.textContent || '')) || [...document.querySelectorAll(LISTS)].some(x => !own(x) && shown(x) && NOTHING.test(clean(x.textContent).slice(0, 200))));
+    // The search took an item by itself: with one match, Workday's Enter chooses it and closes the
+    // list (the school's "Other" became "Other School" that way, and was then reported as not found).
+    const tookItself = had => names().find(p => !had.some(h => same(h, p))) || '';
     // Typing the way the page takes it: as a script does (most sites), or as real typing through the
     // extension when the site didn't react to that.
     let trusted = false, scriptWorks = false, silent = false;
@@ -878,7 +891,8 @@
       // Settled: the same list three looks in a row (Workday fills it in a bit at a time).
       if (list.length) { let last = sig(), same3 = 0; for (let i = 0; i < 20 && same3 < 3; i++) { await wait(220); const now = sig(); same3 = now === last ? same3 + 1 : 0; last = now; } }
       list = options();
-      trace.push({ q: query, found: list.length, ms: Date.now() - t0, real: trusted || undefined, reacted: reacted || undefined });
+      trace.push({ q: query, found: list.length, ms: Date.now() - t0, real: trusted || undefined, reacted: reacted || undefined, hidden: document.hidden || undefined,
+        top: [...new Set(list.map(o => clean(o.getAttribute('data-automation-label') || o.textContent).slice(0, 70)))].slice(0, 8) });
       return list;
     };
     // Choosing with real arrow keys and Enter, when clicks didn't take: only when the row the keys
@@ -956,12 +970,33 @@
       let list = [], best = null, score = 0;
       // Said while it looks (a list that answers slowly took a minute a box, and looked stuck).
       const boxName = clean(labelOf(first) || '').slice(0, 40) || 'list';
-      status(`Looking for “${skill.slice(0, 50)}” in the site's ${boxName} list…`);
+      status(`Looking for “${skill.slice(0, 50)}” in the site's ${boxName} list…${document.hidden ? ' (This tab is behind another: the browser slows it there. Keep it in front for a quicker fill.)' : ''}`);
+      // Real clicks need the browser's debugger, whose bar moves the page (and closes an open list)
+      // when it comes on: on before the list is opened, not at the first click. (The first skill
+      // and Field of Study were "not taken" for that.)
+      if (EXT) await debugReady();
       trace.length = 0;
+      const had = names();
+      let itself = '';
       for (const q of queries) {
         list = await search(q);
+        const p = tookItself(had);
+        if (p) {
+          const f = Math.max(fit1(p.toLowerCase(), skill), full(skill) ? fit1(p.toLowerCase(), full(skill)) : 0, tail(p.toLowerCase()) ? fit1(tail(p.toLowerCase()), skill) : 0);
+          if (strict ? f >= 95 : f >= 45) { itself = p; break; }
+          // Not what was meant: taken off again (a box of one is simply chosen over).
+          diag.skills.push({ skill, tookItself: p, q, wrong: true });
+          if (!one) { const pill = [...field.querySelectorAll('[data-automation-id=selectedItem]')].find(x => same(x.textContent, p)), del = pill && pill.querySelector('[data-automation-id=DELETE_charm]'); if (del) { await realClick(del, true); await wait(400); } }
+        }
         for (const o of list) { const f = fit(o, skill); if (f > score && (strict ? f >= 95 : closeEnough(o, skill, f))) { score = f; best = o; } }
         if (score >= 45 || strict) break;
+      }
+      if (itself) {
+        diag.skills.push({ skill, searches: trace.slice(), chose: itself, how: 'enter' });
+        added++; skillMiss = skillMiss.filter(x => !same(x, skill)); chosenNames.push([skill, itself]);
+        if (box().value) typeIn(box(), '');
+        await wait(250);
+        continue;
       }
       // A box that takes one item, and the site's list doesn't have yours: its "Other" (or "Not
       // Applicable"), as such forms ask for, and said in the panel so you can check it.
@@ -969,11 +1004,21 @@
       if (!best && one) {
         for (const alt of ['Other', 'Not Applicable']) {
           list = await search(alt);
+          // Chosen by the search itself ("Other School", "Not Applicable - Not Applicable").
+          const p = tookItself(had);
+          if (p && new RegExp('^' + alt + '\\b', 'i').test(p)) {
+            diag.skills.push({ skill, searches: trace.slice(), chose: p, how: 'enter', other: alt });
+            const what = labelOf(first) || 'a box'; if (!otherChosen.includes(what)) otherChosen.push(what);
+            added++; skillMiss = skillMiss.filter(x => !same(x, skill)); chosenNames.push([skill, p]);
+            itself = p;
+            break;
+          }
           const a = alt.toLowerCase();
           best = list.find(o => label(o) === a) || list.find(o => tail(label(o)) === a) || list.find(o => new RegExp('^' + alt + '\\b', 'i').test(label(o)) && label(o).length < 30) || null;
           if (best) { other = alt; score = 100; break; }
         }
       }
+      if (itself) { if (box().value) typeIn(box(), ''); await wait(250); continue; }
       const log = { skill, searches: trace.slice() };
       diag.skills.push(log);
       if (!best) {
@@ -1130,6 +1175,11 @@
         // Green is what Job Hunt filled; a box the site (or you) had filled already isn't marked.
         const theirs = f.value !== '' && f.type !== 'file' && (v == null || v === '' || same(f.value, v));
         if (theirs && done) continue;
+        // Not yours to fix: the end date of the job you're in ("Present": its box goes when I currently
+        // work here is ticked), and an upload box for a certificate or transcript that isn't asked for.
+        const present = f.type === 'date' && /^(present|current|now|ongoing)$/i.test(String(v || '').trim());
+        const sideFile = f.type === 'file' && !file && !f.required && /certif|licen|transcript|portfolio|reference/i.test(`${f.label} ${f.section}`);
+        if (present || sideFile) continue;
         const matters = f.required || done || v || f.type === 'file';
         if (!matters) continue;
         mark((byKey[f.key] || [])[0], done);
