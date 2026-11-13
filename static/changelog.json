@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.57.0",
+    "date": "2026-11-13",
+    "title": "Recommended career paths, and the Workday form fixes",
+    "changes": [
+      "Me, Career now marks the one to three paths Claude recommends: listed under its advice with the reason for each, starred in the comparison table, and outlined on their cards with why it recommends them and what you give up.",
+      "Think again once to get the picks: paths mapped before this update have none marked.",
+      "Workday forms: a search list that stayed open is no longer read as the next dropdown's options (it left languages unchosen), and choosing by keyboard works when the first row is only marked, not really under the keys."
+    ]
+  },
+  {
     "version": "2.56.1",
     "date": "2026-11-12",
     "title": "Workday forms: skills, school, certifications, languages and the CV upload",

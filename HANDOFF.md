@@ -56,6 +56,11 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.57.0: recommended career paths.** `CareerPath.recommended` / `recommended_why` (prompt in `career_system()`,
+  kept to at most three and never all by `claude::tidy_recommended`). `careerHtml` shows them in `#careerRecs`, the
+  table (`tr.rec`) and the cards (`.path.rec`). Careers stored before this have none: a hint says to press Think again.
+  2.56.1 was never published (verify failed on the `typing` and `keys` form variants); its fixes ship here with two more:
+  `staleOptions` (options of a list that wouldn't close aren't the next dropdown's) and `byKeys(name, nudge)`.
 - **2.56.1: the OSC Workday form (osc.wd3, "My Experience").** From the user's trace and Copy details; each case is now in
   `tools/ext_test/workday.html` and judged in `ext_test.js` (the old fill.js fails there the same way: no clicks in the
   skill list, one skill reported). What was wrong: (1) Workday marks the row the keyboard is on `aria-selected=true`

@@ -473,11 +473,11 @@ form[data-form=profile] [type=submit] { display: none; }
 .path { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
 .path p { margin: 0; }
 .path.rec { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); position: relative; }
-.rec-flag { align-self: flex-start; font-size: 12px; font-weight: 600; color: #fff; background: var(--accent); border-radius: 999px; padding: 2px 10px; }
+.rec-flag { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 2px 10px; }
 .rec-why, .recs { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 8px; padding: 8px 10px; }
 .recs { margin: 10px 0; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .recs ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 6px; }
-.pill.rec-pill { background: var(--accent); color: #fff; white-space: nowrap; }
+.pill.rec-pill { background: var(--accent); color: var(--accent-ink); white-space: nowrap; }
 .career-compare tr.rec td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 
 /* A posting's age: hover for the exact date and time. */

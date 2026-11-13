@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.57.0] - 2026-11-13
+
+Recommended career paths, and the Workday form fixes.
+
+### Changes
+
+- Me, Career now marks the one to three paths Claude recommends: listed under its advice with the reason for each, starred in the comparison table, and outlined on their cards with why it recommends them and what you give up.
+- Think again once to get the picks: paths mapped before this update have none marked.
+- Workday forms: a search list that stayed open is no longer read as the next dropdown's options (it left languages unchosen), and choosing by keyboard works when the first row is only marked, not really under the keys.
+
 ## [2.56.1] - 2026-11-12
 
 Workday forms: skills, school, certifications, languages and the CV upload.
@@ -1788,6 +1798,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.57.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.57.0
 [2.56.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.56.1
 [2.56.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.56.0
 [2.55.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.55.0

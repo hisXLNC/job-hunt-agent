@@ -263,7 +263,10 @@
   const dropOptions = new WeakMap();
   // (Not the items already chosen in a skills or school box: Workday draws those like options, and
   // counted as the open list's they kept a long list from being scrolled.)
-  const openOptions = () => [...document.querySelectorAll('[role=listbox] [role=option], [data-automation-id=promptOption]')].filter(o => !own(o) && shown(o) && !o.closest('[data-automation-id=selectedItem],[data-automation-id=selectedItemList],[data-automation-id=multiselectInputContainer]'));
+  // Options of a list that wouldn't close (a search box's results that only real keys dismiss): they
+  // are not the next dropdown's, and counting them put one list's choices in another.
+  const staleOptions = new WeakSet();
+  const openOptions = () => [...document.querySelectorAll('[role=listbox] [role=option], [data-automation-id=promptOption]')].filter(o => !own(o) && shown(o) && !staleOptions.has(o) && !o.closest('[data-automation-id=selectedItem],[data-automation-id=selectedItemList],[data-automation-id=multiselectInputContainer]'));
   // Close whatever list is open: Escape where the focus is (Workday moves it into the list), then a
   // click outside it. A list left open had its options taken for the next dropdown's, which put one
   // dropdown's answers in another.
@@ -273,7 +276,10 @@
       await wait(120);
       if (!openOptions().length) break;
       for (const t of ['mousedown', 'mouseup', 'click']) document.body.dispatchEvent(new MouseEvent(t, { bubbles: true }));
-      await wait(150);
+      // A search box closes its results when it loses the focus.
+      const at = document.activeElement;
+      if (at && at !== document.body && !own(at) && /^(INPUT|TEXTAREA)$/.test(at.tagName)) at.blur();
+      await wait(260);
       if (i === 2 && b && openOptions().length) { ownClick = true; b.click(); ownClick = false; await wait(150); }
     }
   }
@@ -281,6 +287,7 @@
   // weren't on the page before it opened.
   async function openDrop(b) {
     await closeLists();
+    for (const o of openOptions()) staleOptions.add(o);
     ownClick = true; b.click(); ownClick = false;
     let list = [];
     for (let i = 0; i < 12; i++) {
@@ -783,12 +790,21 @@
     };
     // Choosing with real arrow keys and Enter, when clicks didn't take: only when the row the keys
     // are on can be seen to be the right one (or it's the only one), so a wrong skill is never added.
-    const byKeys = async name => {
+    // `nudge`: the row marked as the keyboard's (aria-selected, on the first row after a search)
+    // wasn't really under the keys, and Enter searched again instead of choosing. Step down onto
+    // the list first, and back up if that went past the row.
+    const byKeys = async (name, nudge) => {
       const rows = () => [...new Set(options().map(rowOf))].filter(shown);
       const mine = r => same(r.querySelector('[data-automation-label]')?.getAttribute('data-automation-label') || r.textContent, name);
       if (!rows().some(mine)) return false;
       const on = () => { const id = box().getAttribute('aria-activedescendant'); const a = (id && document.getElementById(id)) || (document.activeElement && document.activeElement.closest && document.activeElement.closest('[role=option]')) || rows().find(r => /\b(active|focus(ed)?|highlight(ed)?|hover(ed)?)\b/i.test(r.className || '')) || rows().find(r => lit(r) && r.getAttribute('aria-selected') === 'true'); return a ? rowOf(a) : null; };
       box().focus();
+      if (nudge) {
+        if (!(await ext('key', { key: 'ArrowDown' }))) return false;
+        await wait(160);
+        const a = on();
+        if (!(a && mine(a)) && rows().length > 1 && rows().findIndex(mine) < rows().indexOf(a)) { await ext('key', { key: 'ArrowUp' }); await wait(160); }
+      }
       for (let i = 0; i < 8; i++) {
         const a = on();
         if (a && mine(a)) break;
@@ -816,6 +832,9 @@
         if (t && c && !ticked(t) && shown(c) && await realClick(c, true) && await settle(3000)) return 'box';
         t = cur();
         if (t && !ticked(t) && !got() && await byKeys(name) && await settle(3000)) return 'keys';
+        for (let i = 0; i < 15 && !got() && !find(name); i++) await wait(200);
+        t = cur();
+        if (t && find(name) && !ticked(t) && !got() && await byKeys(name, true) && await settle(3000)) return 'keys';
         if (got()) return 'click';
       }
       // Without real clicks (the app's window, or the phone): a mouse-like press on the option, its box, its row.
