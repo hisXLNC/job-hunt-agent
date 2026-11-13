@@ -677,7 +677,10 @@ pub fn kit(agent: &Agent, job_id: &str) -> R<Value> {
 /// A brief for another assistant that can work the page itself (Claude in Chrome): what to fill in
 /// and from what, for a form Job Hunt's own filler can't read. Everything it needs is in the text,
 /// since it can't ask Job Hunt: who you are, your facts, the tailored CV and the cover letter.
-pub fn brief(agent: &Agent, job_id: &str) -> R<String> {
+/// `page` is what the form filler saw when it handed over: `done` (boxes it filled), `left` (boxes
+/// still empty, each {label, want: the answer it had, or ""}) and `missed` (skills the site's list
+/// didn't take).
+pub fn brief(agent: &Agent, job_id: &str, page: &Value) -> R<String> {
     let k = kit(agent, job_id)?;
     let job = if job_id == PROFILE { None } else { agent.db().job(job_id)? };
     let lines = |v: &Value| v.as_array().map(|a| a.iter().filter_map(|x| {
@@ -692,6 +695,25 @@ Rules:\n\
 - Where the form asks for my resume or cover letter as a file, tell me and I will attach them myself.\n");
     if let Some(j) = &job {
         out.push_str(&format!("\nThe job: {} at {}.\n", j.title, j.company));
+    }
+    // Taking over a form that's partly filled: what's there stays, and the boxes left are named.
+    let left: Vec<(String, String)> = page["left"].as_array().map(|a| a.iter().filter_map(|x| {
+        let l: String = x["label"].as_str().unwrap_or("").trim().chars().take(160).collect();
+        (!l.is_empty()).then(|| (l, x["want"].as_str().unwrap_or("").trim().chars().take(400).collect()))
+    }).take(60).collect()).unwrap_or_default();
+    let done = page["done"].as_u64().unwrap_or(0);
+    if done > 0 || !left.is_empty() {
+        out.push_str(&format!("\nAnother tool has already filled {} of this form. Leave what is filled as it is unless it is plainly wrong.\n", if done > 0 { format!("{done} boxes") } else { "part".into() }));
+    }
+    if !left.is_empty() {
+        out.push_str("These boxes are still empty. Where an answer is given, choose or type that (in a list, the closest choice):\n");
+        for (l, want) in &left {
+            out.push_str(&if want.is_empty() { format!("- {l}\n") } else { format!("- {l}: {want}\n") });
+        }
+    }
+    let missed: Vec<&str> = page["missed"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).map(str::trim).filter(|x| !x.is_empty()).take(30).collect()).unwrap_or_default();
+    if !missed.is_empty() {
+        out.push_str(&format!("Skills the form's own list did not take (add the closest match it offers, if any): {}.\n", missed.join(", ")));
     }
     for (head, text) in [("My details", lines(&k["contact"])), ("Facts for forms", lines(&k["facts"]))] {
         if !text.is_empty() { out.push_str(&format!("\n{head}:\n{text}\n")); }

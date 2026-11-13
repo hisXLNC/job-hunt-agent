@@ -53,6 +53,7 @@ function buildExtension(dir) {
 const LANGS = ['English', 'Arabic', 'French'];
 // The variants run side by side, each in its own browser: what belongs to one is kept under its name.
 const fieldsOf = {};
+const briefs = [];
 function answers(fields, name) {
   const values = {}, files = {};
   fieldsOf[name] = fields || [];
@@ -100,6 +101,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
         if (req.url === '/ext/ping') return json(res, { ok: true, version: VERSION });
         if (req.url === '/ext/leads') { leads = JSON.parse(body || '{}'); const hiring = leads.posts.filter(p => /hiring/i.test(p.text)).length; return json(res, { seen: leads.posts.length, hiring, added: hiring, note: '' }); }
         if (req.url === '/ext/pick') { picked = JSON.parse(body || '{}').job_id || ''; return json(res, { ok: true }); }
+        if (req.url === '/ext/brief') { briefs.push(JSON.parse(body || '{}')); return json(res, { text: 'Please fill in the application form on this page for me.' }); }
         if (req.url === '/ext/log') { logs.push(JSON.parse(body || '{}')); return json(res, { kept: 1 }); }
         // The answers: in one request (/ext/fill, the phone), or for a ticket that is then asked
         // after (/ext/fill/start and /ext/fill/poll, the extension). ANSWER_DELAY=45000: Claude is slow.
@@ -152,7 +154,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     + '<div id="docs"><div style="display:flex;justify-content:space-between"><h2>Supporting documents</h2><a href="#" id="addDocs" onclick="document.getElementById(\'up\').style.display=\'block\';this.remove();return false">Add</a></div><div>No cover letter or additional documents added. This is optional to add.</div>'
     + '<div id="up" style="display:none"><label for="doc">Upload a file</label><input id="doc" type="file"></div></div><button type="button">Submit your application</button></body></html>';
   const postsHtml = fs.readFileSync(path.join(__dirname, 'posts.html'));
-  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/letter') ? letterHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
+  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/nothing') ? '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Careers - Mock</title></head><body><h1>Thanks for your interest</h1><p>Nothing to fill in here.</p></body></html>' : req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/letter') ? letterHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
   const base = `http://127.0.0.1:${site.address().port}/apply`;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
@@ -333,6 +335,18 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (!got.open) problems.push('Expand all sections was not pressed');
     if (got.email !== 'sam@example.com' || got.phone !== '416-555-0100') problems.push(`the boxes it showed weren't filled (email "${got.email}", phone "${got.phone}")`);
     if (!got.brief) problems.push('the panel has no Copy a brief for Claude');
+    // A page Job Hunt can't fill: the hand-over to the Claude extension is offered, and pressing it says what to do next.
+    await page.goto(`http://127.0.0.1:${site.address().port}/nothing/here`);
+    await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, `http://127.0.0.1:${site.address().port}/nothing/here`);
+    let hand = { shown: false, said: '' };
+    for (let i = 0; i < 40 && !hand.shown; i++) { await page.waitForTimeout(500); hand = await page.evaluate(() => { const r = document.querySelector('[data-jobhunt-panel]')?.shadowRoot; return { shown: !!r && !r.querySelector('[data-k=hand]').hidden, said: r?.querySelector('.s')?.textContent || '' }; }); }
+    if (!hand.shown) problems.push(`Let Claude finish it isn't offered on a page Job Hunt can't fill (panel: ${hand.said.slice(0, 120)})`);
+    else {
+      await page.evaluate(() => document.querySelector('[data-jobhunt-panel]').shadowRoot.querySelector('[data-k=hand]').click());
+      await page.waitForTimeout(1500);
+      const said = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]').shadowRoot.querySelector('.s').textContent);
+      if (!/Copied for Claude|Choose which application/.test(said)) problems.push(`pressing Let Claude finish it said "${said.slice(0, 160)}"`);
+    }
     console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'folded'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  email ${got.email || 'empty'}`);
     if (problems.length) { failed.push('folded'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();

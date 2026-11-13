@@ -167,7 +167,7 @@
     </style><div class="p"><div class="h"><svg class="m" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="jhg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3A5BD9"/><stop offset="1" stop-color="#22389A"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#jhg)"/><path d="M25 19.5v-2.5a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v2.5" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/><rect x="12" y="19.5" width="40" height="28" rx="5" fill="#fff"/><path d="M12 31h40" stroke="#22389A" stroke-width="2.4"/><rect x="28.5" y="28" width="7" height="6" rx="1.5" fill="#22389A"/><circle cx="48" cy="46" r="10" fill="#E9B949" stroke="#22389A" stroke-width="2.4"/><path d="m43.6 46.2 3 3 5.6-6" fill="none" stroke="#22389A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="t">Job Hunt${JOB.company ? ` · ${JOB.company.replace(/[<>&]/g, '')}` : ''}${JOB.queue ? ` · ${JOB.queue}` : ''}</span><button class="x" title="Smaller">–</button></div>
       <p class="s"></p><div class="q" hidden><p class="qt"></p><div class="r"><button class="b pr" data-k="replace">Replace with Job Hunt's</button><button class="b" data-k="keep">Keep it</button></div></div><div class="c" hidden><select></select><button class="b pr" data-k="pick">Fill it in for this job</button></div><div class="bar" hidden><i></i></div><div class="r">
         <button class="b pr" data-k="fill">Fill in this form</button><button class="b" data-k="open" hidden>Open the form</button>
-        <button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
+        <button class="b pr" data-k="hand" hidden title="Hands the form to the Claude extension for Chrome: copies what it needs (your details, this job's CV and letter, what Job Hunt already filled and what is left, and to stop before Submit). Open Claude on this page and paste it.">Let Claude finish it</button><button class="b" data-k="next" hidden>Next to check</button><button class="b" data-k="applied">I submitted it</button>
         <button class="b" data-k="stop" hidden>Stop: I'll submit it</button></div>
       <div class="f">
         <button class="b" data-k="diag" ${EXT ? '' : 'hidden'} title="Copies what Job Hunt saw and did on this page (each box, what it meant to put there and what the box holds now), to paste to Claude when something was filled in wrongly or not at all">Copy details</button>
@@ -205,16 +205,26 @@
       catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
       status('Copied. Paste it to Claude and say what went wrong.');
     };
-    buttons.brief.onclick = async () => {
-      buttons.brief.disabled = true;
-      const r = await rpc('/ext/brief', { url: location.href, title: document.title });
-      buttons.brief.disabled = false;
-      if (!r.ok) { status(r.data && r.data.choose ? 'Choose which application this is first (press Fill in this form), then copy the brief.' : `Couldn't write the brief: ${r.error}`); return; }
+    // Handing the form to another assistant (the Claude extension for Chrome), which reads and
+    // clicks the page its own way: everything it needs goes on the clipboard, with what Job Hunt
+    // already filled and what it couldn't. One extension can't open or type into another, so the
+    // last step is yours: open Claude on this page and paste.
+    const handOver = async b => {
+      b.disabled = true;
+      const boxes = diag.fields || [];
+      const left = boxes.filter(f => !f.filled && (f.want != null && f.want !== '' || f.required)).map(f => ({ label: String(f.label || '').replace(/^\*\s*/, ''), want: f.want == null ? '' : String(f.want) })).slice(0, 60);
+      const r = await rpc('/ext/brief', { url: location.href, title: document.title, left, done: boxes.filter(f => f.filled).length, missed: [...skillMiss, ...skillUnsure].slice(0, 30) });
+      b.disabled = false;
+      if (!r.ok) { status(r.data && r.data.choose ? 'Choose which application this is first (press Fill in this form), then hand it to Claude.' : `Couldn't write the brief for Claude: ${r.error}`); return; }
       try { await navigator.clipboard.writeText(r.v.text); }
       catch (e) { const t = document.createElement('textarea'); t.value = r.v.text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
-      trace('brief copied');
-      status('Copied. Open the Claude extension on this page and paste it: it has your details, this job\'s CV and letter, and says to stop before Submit.');
+      trace('handed to Claude', { left: left.length });
+      flush();
+      const mac = /mac/i.test(navigator.platform || '');
+      status(`Copied for Claude${left.length ? ` (${left.length} ${left.length === 1 ? 'box' : 'boxes'} left to fill)` : ''}. Now: 1. Open the Claude extension on this page (its icon in the toolbar, or ${mac ? 'Cmd' : 'Ctrl'}+E). 2. Paste (${mac ? 'Cmd' : 'Ctrl'}+V) and press Enter. Claude fills in what's left and stops before Submit.`);
     };
+    buttons.brief.onclick = () => handOver(buttons.brief);
+    buttons.hand.onclick = () => handOver(buttons.hand);
     buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
     buttons.stop.onclick = () => { clearTimeout(autoTimer); autoTimer = null; buttons.stop.hidden = true; status('Stopped. Read the form over, then press its Submit button yourself.'); };
@@ -223,7 +233,8 @@
     (document.body || document.documentElement).appendChild(host);
     ui = host;
   }
-  const status = t => { panel(); statusEl.textContent = t; };
+  // What the panel says. When it says Job Hunt couldn't do it, the hand-over to Claude is offered.
+  const status = t => { panel(); statusEl.textContent = t; if (EXT && buttons.hand && /can't find a form|tripped on this page|^Couldn't|No answers|didn't take/i.test(t) && !/brief for Claude:/.test(t)) buttons.hand.hidden = false; };
   // The progress bar: while Claude writes the answers it creeps towards `to` (most of the way by
   // the time it usually takes), then filling in takes it to the end. null hides it.
   const barAt = () => (barEl && !barEl.hidden && parseFloat(barEl.firstChild.style.width)) || 0;
@@ -1264,8 +1275,12 @@
       buttons.diag.hidden = false; // what Job Hunt saw and did, to paste to Claude when something's off
       const saved = ((answer.banked || []).length ? ` ${answer.banked.length} from your saved answers.` : '') + (addNote ? ' ' + addNote : '') + (answer.note ? ' ' + answer.note : '') + (skillMiss.length ? ` Not in the site's list, or not taken (add these yourself): ${skillMiss.join(', ')}.` : '') + (skillUnsure.length ? ` Chosen, but the site didn't show it: check ${skillUnsure.join(', ')}.` : '') + (otherChosen.length ? ` Not in the site's list, so "Other" was chosen for: ${otherChosen.join(', ')}.` : '')
         + (EXT && answer.app_version && /^\d/.test(answer.app_version) && answer.app_version.replace(/-.*/, '') !== chrome.runtime.getManifest().version ? ` (This extension is ${chrome.runtime.getManifest().version}, Job Hunt is ${answer.app_version}: open the extension's button once so it updates, then reload this page.)` : '');
+      // Boxes Job Hunt had an answer for that didn't take it: those can go to Claude.
+      const refused = (diag.fields || []).filter(f => !f.filled && f.want != null && f.want !== '').length;
+      if (buttons.hand) buttons.hand.hidden = !EXT || !refused;
+      const hand = refused && EXT ? ` ${refused} ${refused === 1 ? 'box' : 'boxes'} didn't take ${refused === 1 ? 'its' : 'their'} answer: press Let Claude finish it to hand ${refused === 1 ? 'it' : 'them'} to the Claude extension.` : '';
       status(todo
-        ? `Filled ${ok}.${saved} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
+        ? `Filled ${ok}.${saved}${hand} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
         : `Filled ${ok}.${saved} Read the form over (green is what Job Hunt filled), then press its Submit button.`);
       if (todo) nextAmber();
       // A file was there already: replace it with Job Hunt's, or keep it?
@@ -1384,6 +1399,7 @@
     if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
     if (retired) return;
+    if (!more && buttons.hand) buttons.hand.hidden = true;
     checkPay();
     // A form whose parts are folded away (SuccessFactors: "Expand all sections", then Profile
     // Information and the rest as closed bars) shows no boxes to read: its parts are opened first.

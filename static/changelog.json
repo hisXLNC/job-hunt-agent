@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.67.1",
+    "date": "2026-11-13",
+    "title": "Hand a form over to the Claude extension",
+    "changes": [
+      "When Job Hunt cannot fill a form, or some boxes will not take their answers, the panel offers Let Claude finish it. It copies what the Claude extension for Chrome needs: your details, this job's CV and letter, what is already filled and exactly which boxes are left with their answers, and to stop before Submit. Open Claude on the page, paste, and it carries on from there."
+    ]
+  },
+  {
     "version": "2.67.0",
     "date": "2026-11-13",
     "title": "Ask Claude from anywhere, certifications, and more forms filled",

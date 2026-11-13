@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.67.1] - 2026-11-13
+
+Hand a form over to the Claude extension.
+
+### Changes
+
+- When Job Hunt cannot fill a form, or some boxes will not take their answers, the panel offers Let Claude finish it. It copies what the Claude extension for Chrome needs: your details, this job's CV and letter, what is already filled and exactly which boxes are left with their answers, and to stop before Submit. Open Claude on the page, paste, and it carries on from there.
+
 ## [2.67.0] - 2026-11-13
 
 Ask Claude from anywhere, certifications, and more forms filled.
@@ -2035,6 +2043,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.67.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.1
 [2.67.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.0
 [2.66.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.66.0
 [2.65.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.7

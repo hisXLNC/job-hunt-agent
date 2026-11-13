@@ -324,7 +324,7 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
         ("GET", "/ext/leads/searches") => Ok(json!({ "searches": crate::leads::linkedin_searches(agent).into_iter().map(|(t, u)| json!({ "title": t, "url": u })).collect::<Vec<_>>() })),
         // A brief for Claude in Chrome (or any assistant that works the page itself), for a form Job
         // Hunt's own filler can't read: copied from the panel, pasted to it.
-        ("POST", "/ext/brief") => crate::fill::job_for_page(agent, url, title).and_then(|j| crate::fill::brief(agent, &j.id)).map(|t| json!({ "text": t })),
+        ("POST", "/ext/brief") => crate::fill::job_for_page(agent, url, title).and_then(|j| crate::fill::brief(agent, &j.id, &b)).map(|t| json!({ "text": t })),
         ("POST", "/ext/learn") => crate::fill::learn(agent, &fields).map(|n| json!({ "kept": n })),
         ("POST", "/ext/applied") => crate::fill::job_for_page(agent, url, title)
             .and_then(|j| crate::fill::submitted_with(agent, &j.id, url, b["auto"].as_bool().unwrap_or(false), &fields).map(|_| json!({ "ok": true }))),

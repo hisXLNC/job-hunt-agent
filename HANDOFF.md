@@ -56,6 +56,14 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.67.1: hand-over to the Claude extension.** 2.67.0 never published (its new test needed Claude reachable on
+  the build machine; the test now sets `claude.engine=api`). One extension can't open, message or type into another
+  (Claude in Chrome has no external hook; searched), so the hand-over is the clipboard: panel button `hand` ("Let
+  Claude finish it", shown by `status()` when it says can't find a form / tripped / Couldn't / No answers, and at the
+  end of a fill when boxes with an answer didn't take it) and the footer's brief button both call `handOver`, which
+  posts `/ext/brief` with `left` (unfilled boxes with the answer Job Hunt had, or required ones), `done`, `missed`
+  (skills); `fill::brief(agent, job, page)` adds "already filled N boxes… these are still empty" to the brief. The
+  panel then says: open Claude (toolbar icon or Ctrl/Cmd+E), paste, Enter.
 - **2.67.0: the assistant; the letter's place; certifications; dropdowns with their own list; after scores.**
   - *Ask Claude floats over every screen* (`static/app-ask.js`, last script in `index.html`; styles at the end of
     `app.css` under "Ask Claude"). The job page's Ask Claude tab, `chat*` actions, `/api/jobs/<id>/chat`, `Llm::chat`

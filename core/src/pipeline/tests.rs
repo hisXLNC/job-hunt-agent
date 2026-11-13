@@ -810,9 +810,25 @@ fn a_tailored_cv_left_without_its_fit_gets_one_later() {
     // Claude was at its limit when the tailored CV would have been scored: only the fit before shows.
     s.agent.db().update_job("test:1", &[("score_after", Value::Null)]).unwrap();
     assert_eq!(s.agent.without_after_score().len(), 1);
+    // (Claude counts as connected wherever the tests run.)
+    s.agent.db().set("claude.engine", "api").unwrap();
+    s.agent.db().set("claude.key", "test").unwrap();
     assert_eq!(s.agent.score_tailored_missing(5), 1);
     let one = s.agent.db().job("test:1").unwrap().unwrap();
     assert!(one.score_after.is_some() && s.agent.without_after_score().is_empty());
+}
+
+#[test]
+fn the_brief_for_another_assistant_says_what_is_left() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    s.agent.tailor("test:1", None).unwrap();
+    // Asked for with nothing filled yet: the whole form is the other assistant's.
+    let whole = crate::fill::brief(&s.agent, "test:1", &json!({})).unwrap();
+    assert!(whole.contains("do not press Submit") && whole.contains("Technical Program Manager") && !whole.contains("already filled"), "{whole}");
+    // Handed over part-way: what is filled stays, and each box left is named with the answer Job Hunt had.
+    let part = crate::fill::brief(&s.agent, "test:1", &json!({ "done": 4, "left": [{ "label": "Province/Territory/State", "want": "Ontario" }, { "label": "Address", "want": "" }], "missed": ["Jira"] })).unwrap();
+    assert!(part.contains("already filled 4 boxes") && part.contains("- Province/Territory/State: Ontario\n") && part.contains("- Address\n") && part.contains("Jira"), "{part}");
 }
 
 #[test]
