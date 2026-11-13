@@ -6,7 +6,7 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.58.0] - 2026-11-13
 
-Searches only at their scheduled time.
+Searches only at their scheduled time, and the PC wakes for them.
 
 ### Changes
 
@@ -14,6 +14,7 @@ Searches only at their scheduled time.
 - Adding employers by itself no longer starts a search: their jobs come with the next scheduled one.
 - The search times every install began with (7 AM, and 4 PM for a second) move once to noon and 5 PM, just after the two times of day most postings go up. Times you chose yourself are kept.
 - Settings, Job sources, When shows the hours your own postings went up, and offers the two search times that follow from them once 40 postings say when they were posted.
+- Job Hunt now wakes this PC from sleep for its scheduled tasks unless you turn that off (Settings, App), and turns on Windows' "Allow wake timers" for when the PC is plugged in. It already keeps the PC awake until the work is done.
 
 ## [2.57.0] - 2026-11-13
 
