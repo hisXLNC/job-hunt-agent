@@ -263,8 +263,8 @@ pub struct CvChange {
     pub retailor: Vec<String>,
     /// Applications with your own file or your edits: kept as they are, with a note.
     pub kept: usize,
-    /// Applications you approved and haven't sent yet, tailored from the old CV: they keep the files
-    /// you approved unless you ask for them to be tailored again.
+    /// Applications you approved and haven't sent yet, tailored from the old CV: tailored again too
+    /// (so a stale CV isn't what you submit), and still approved afterwards.
     pub approved: Vec<String>,
 }
 

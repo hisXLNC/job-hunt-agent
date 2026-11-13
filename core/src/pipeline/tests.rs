@@ -1862,9 +1862,9 @@ fn a_new_cv_updates_everything_worked_out_from_the_old_one() {
     assert!(!s.agent.secret("career").is_empty());
 }
 
-/// Approved, not sent, when the CV changes: kept as approved, listed, and tailored again on request.
+/// Approved, not sent, when the CV changes: tailored again, so a stale CV isn't what gets submitted.
 #[test]
-fn an_approved_application_keeps_its_files_until_you_ask() {
+fn an_approved_application_is_tailored_again_and_stays_approved() {
     let s = setup();
     s.agent.search(Some(vec![posting("Program Manager", "1")])).unwrap();
     let j = s.agent.db().jobs(Some("ready"), 10).unwrap().remove(0);
@@ -1873,11 +1873,21 @@ fn an_approved_application_keeps_its_files_until_you_ask() {
     let bytes = std::fs::read(s.agent.cv_path(&track)).unwrap();
     let (_, change) = s.agent.replace_cv(&track, "new.docx", &bytes, false).unwrap();
     assert_eq!((change.approved.clone(), change.retailor.len()), (vec![j.id.clone()], 0));
-    let kept = s.agent.db().job(&j.id).unwrap().unwrap();
-    assert_eq!((kept.status.as_str(), kept.cv_path), ("approved", j.cv_path.clone()));
-    // Asked for: tailored again, and back to you to approve.
-    let again = s.agent.tailor_anyway(&j.id, None).unwrap();
-    assert_eq!(again.status, "ready");
+    s.agent.refresh_after_cv(&track, change);
+    let mut u = Value::Null;
+    for _ in 0..400 {
+        u = s.agent.cv_update().unwrap();
+        if u["step"] == "done" { break; }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    assert_eq!((u["step"].as_str(), u["approved"].as_u64(), u["approved_done"].as_u64()), (Some("done"), Some(1), Some(1)), "{u}");
+    // Tailored again after the change, and still approved: nothing stale left to submit.
+    let now = s.agent.db().job(&j.id).unwrap().unwrap();
+    assert_eq!(now.status, "approved");
+    assert!(now.score.is_some() && now.cover_letter.is_some());
+    let h = s.agent.db().history(&j.id).unwrap();
+    assert!(h.iter().position(|e| e.kind == "tailored") < h.iter().position(|e| e.kind == "cv-changed"), "tailored after the change");
+    assert!(s.agent.can_undo(&j.id, "cv"), "what you approved can be put back");
 }
 
 #[test]

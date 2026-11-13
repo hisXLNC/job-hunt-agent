@@ -63,6 +63,9 @@ and `DEVELOPING.md`.
   is the JSON under `cv.update` (`Agent::cv_update`, `cv_update` in `/api/settings`), drawn by `cvUpdateHtml` and kept
   current by `watchCvUpdate` (app-actions.js). A usage limit part-way defers `{kind: "cv", ids}` (`run_deferred`).
   Removing a CV still goes through `apply_cv_change`. Seen in the preview with the demo Claude only.
+  Also: approved-not-sent applications on that CV are tailored again one by one inside the update and set back to
+  `approved` (`CvChange.approved`; the user asked: never submit a stale CV); with several CVs, queued/saved jobs on the
+  other tracks are unscored and scored again; `answers:<job>` is dropped for what's re-tailored; `leads::read_again`.
 - **2.59.0: the extension's line to Job Hunt, rebuilt** (carries 2.58.2, never published: All jobs table, logos in it).
   The user's panel sat on "Reading 14 questions… 106s". Not reproduced here (Playwright keeps the service worker
   awake), but an MV3 worker is stopped when idle and its fetch dropped after ~30 s, and Claude often takes longer.

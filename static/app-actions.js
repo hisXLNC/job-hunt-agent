@@ -686,17 +686,6 @@ async function act(el) {
       await refreshOverview(); setTimeout(route, 300);
     });
   }
-  // Approved before the CV changed, not sent yet: tailored again from the new CV (they come back to Approve).
-  if (a === 'retailorApproved') {
-    const ids = JSON.parse(el.dataset.ids || '[]');
-    el.disabled = true;
-    try {
-      const r = await api('/api/tailor', { method: 'POST', body: { ids, later: true } });
-      toast(r.deferred ? `Held for later: ${r.deferred}` : `Tailoring ${r.started} again from your new CV. Each comes back to Approve when it's ready.`);
-      await refreshOverview();
-    } catch (err) { el.disabled = false; toast(err.message, true); }
-    return;
-  }
   if (a === 'rescore') {
     const group = el.dataset.group;
     const plan = await api(`/api/rescore?group=${group}`).catch(e => { toast(e.message, true); return null; });
@@ -874,12 +863,12 @@ function cvUpdateHtml(u) {
     line('titles', !u.claude ? 'Job titles: not read (Claude isn\'t set up)' : at > 0 || !u.running ? (added ? `${n(added, 'new job title', 'new job titles')} to search for, from the new CV: ${esc(u.titles_added.slice(0, 4).join(', '))}${added > 4 ? '…' : ''}` : 'Job titles and keywords: nothing new to add') : 'Reading the new CV for job titles and keywords'),
     line('scoring', u.to_score ? `Fits scored again: ${u.scored || 0} of ${u.to_score}${u.held ? ' (Claude reached its limit: the rest are scored when it resets)' : !u.running && u.unscored_left ? ` (${u.unscored_left} set aside earlier are left: Score it anyway on any of them)` : ''}` : 'Fits: none were against this CV'),
     line('tailoring', u.to_tailor ? `${n(u.to_tailor, 'application waiting for your approval is', 'applications waiting for your approval are')} tailored again${at > 2 || !u.running ? ' (they come back to Approve as each is ready)' : ''}` : 'Applications waiting for approval: none from this CV') + (u.kept ? ` · ${n(u.kept, 'keeps', 'keep')} your own file or edits` : ''),
+    ...(u.approved ? [line('tailoring', `Approved and ready to submit: ${u.approved_done || 0} of ${u.approved} tailored again from the new CV${u.approved_failed && (!u.running || at > 2) ? ` (${u.approved_failed} couldn't be: open ${u.approved_failed === 1 ? 'it' : 'them'} under Submit and press Tailor again before sending)` : (u.approved_done || 0) < u.approved ? '. Wait for these before you submit them' : '. They stay approved: read each over before you submit it'}`)] : []),
     line('career', u.career ? `Career paths rewritten${u.coach ? ', and the coach\'s advice' : ''}: <a href="#cvs/career">see them</a>` : !u.running ? 'Career paths: not rewritten this time (press Think again on Career)' : 'Career paths'),
     line('leads', u.leads ? `${n(u.leads, 'open lead', 'open leads')} read against it again` : 'Leads: none waiting to be read again'),
   ];
-  const approved = (u.approved || []).length, left = !u.running && !u.held && u.unscored_left;
+  const left = !u.running && !u.held && u.unscored_left;
   const more = [
-    approved ? `<div class="row"><span>${n(approved, 'application you approved but haven\'t sent keeps', 'applications you approved but haven\'t sent keep')} the files you approved.</span><button class="btn sm" type="button" data-act="retailorApproved" data-ids="${esc(JSON.stringify(u.approved))}">Tailor ${approved === 1 ? 'it' : 'them'} again from the new CV</button></div>` : '',
     left ? `<div class="row"><span>${n(left, 'role set aside earlier still has', 'roles set aside earlier still have')} no new fit.</span><button class="btn sm" type="button" data-act="rescore" data-group="skipped">Score them again</button></div>` : '',
   ].join('');
   return `<section class="card cv-update ${u.running ? 'running' : ''}"><header><h2>${u.running ? `Updating everything for your new ${esc(u.cv)} CV` : u.stopped ? `The update for your new ${esc(u.cv)} CV was cut short` : `Up to date with your new ${esc(u.cv)} CV`}</h2>${u.running ? '<span class="pill">Working</span>' : u.stopped ? '<span class="pill warn">Stopped</span>' : '<span class="pill good">Done</span>'}</header>

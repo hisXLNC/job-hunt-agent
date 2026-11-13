@@ -166,10 +166,23 @@ impl Agent {
             c.retailor.push(j.id);
         }
         if !removed {
-            // Approved, not sent yet: yours to decide (you approved those files).
+            // Approved, not sent yet: what you'd submit would be from the old CV, so these are
+            // tailored again as well and stay approved (see refresh_after_cv). Your own file or
+            // edits are kept, as for the ones waiting for approval.
             let approved = self.db().jobs(Some("approved"), 100_000)?;
             for j in approved.into_iter().filter(|j| j.track.as_deref() == Some(id) && j.applied_at.is_none()) {
-                self.db().log(Some(&j.id), "cv-changed", &format!("the {label} CV {what} after you approved this; it keeps the files you approved. Tailor it again to use the new CV"))?;
+                let own = self.own_file(&j.id, "cv") || self.own_file(&j.id, "letter");
+                let edited = self.db().history(&j.id)?.iter().take_while(|e| e.kind != "tailored").any(|e| e.kind == "revised");
+                if own || edited {
+                    self.db().log(Some(&j.id), "cv-changed", &format!("the {label} CV {what} after you approved this; it keeps {}. Tailor it again to use your CVs as they are now",
+                        if own { "your own file" } else { "your changes" }))?;
+                    c.kept += 1;
+                    continue;
+                }
+                self.keep_for_undo(&j)?;
+                self.db().update_job(&j.id, &[("score", Value::Null), ("score_potential", Value::Null)])?;
+                self.db().log(Some(&j.id), "cv-changed", &format!("the {label} CV {what} after you approved this: tailoring it again, so what you submit is from the new CV"))?;
+                let _ = self.db().delete(&format!("answers:{}", j.id));
                 c.approved.push(j.id);
             }
             // With other CVs too: a role waiting for you that another CV scored best may now be a
@@ -280,7 +293,7 @@ impl Agent {
         let label = self.profile().tracks.iter().find(|t| t.name == id).map(|t| t.label.clone()).unwrap_or_else(|| id.to_string());
         let claude = self.claude_ready();
         let start = json!({ "at": now(), "cv": label, "running": true, "step": "titles", "claude": claude,
-            "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept, "approved": c.approved });
+            "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept, "approved": c.approved.len(), "approved_done": 0 });
         let _ = self.db().set("cv.update", &start.to_string());
         let (a, id) = (self.clone(), id.to_string());
         std::thread::spawn(move || {
@@ -317,6 +330,29 @@ impl Agent {
             }
             // (3) Applications waiting for your approval.
             put(json!({ "step": "tailoring" }));
+            // The ones you approved and haven't sent come first and are waited for: until each is
+            // done, what's there to submit is from the old CV. They stay approved.
+            let (mut redone, mut held) = (0, vec![]);
+            for id in &c.approved {
+                let Ok(_t) = a.claim(&format!("tailor:{id}")) else { continue };
+                match a.tailor_anyway(id, None) {
+                    Ok(_) => {
+                        let _ = a.db().set_status(id, "approved", "tailored again from your new CV; still approved, to submit on the company site");
+                        redone += 1;
+                        put(json!({ "approved_done": redone }));
+                    }
+                    Err(e) => {
+                        let _ = a.db().log(Some(id), "tailor:error", &e.0);
+                        if e.0.contains("usage limit") { held.push(id.clone()) }
+                    }
+                }
+            }
+            if redone < c.approved.len() {
+                put(json!({ "approved_failed": c.approved.len() - redone }));
+            }
+            if !held.is_empty() {
+                let _ = a.defer(json!({ "kind": "tailor", "ids": held }));
+            }
             if !c.retailor.is_empty() {
                 let _ = a.tailor_picked(&c.retailor);
             }
