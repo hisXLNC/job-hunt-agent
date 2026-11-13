@@ -205,14 +205,18 @@ impl Wants {
         if !list(&self.dealbreakers).is_empty() {
             lines.push(format!("- Deal-breakers: {}. A posting that clearly has one scores below 50, with it named in red_flags; when the posting doesn't say, don't assume.", list(&self.dealbreakers)));
         }
-        // One path, or several kept open (written one a line or with ";" between): a role is on
-        // the way when it moves along any of them, and off it only when it leads to none.
+        // Every role is shown; the only thing said about a career is a warning, and only when taking
+        // the role would set it back badly. (The user: "I want the options to show up, I just want to
+        // be warned if it will SIGNIFICANTLY impact my career"; and a move between industries or
+        // product areas in the same kind of work, tax to AI say, is no setback.) With paths kept
+        // open (one a line, or with ";" between), "back" is measured against them as well.
         let paths: Vec<&str> = self.path.split([';', '\n']).map(|p| p.trim()).filter(|p| !p.is_empty()).collect();
-        if paths.len() == 1 {
-            lines.push(format!("- The career path they're building: {}. Read every role against it and say so in red_flags with one entry, worded exactly \"Career path: toward. <why, under 14 words>\" when the role clearly moves them along it (the industry, the kind of work or the next step up), or \"Career path: away. <why, under 14 words>\" when taking it would pull them off it (another industry or kind of work that doesn't lead there, or a step back). Add neither when it's in between or the posting doesn't say. This entry doesn't change the score, which stays about how well their experience fits.", paths[0]));
-        } else if paths.len() > 1 {
-            lines.push(format!("- The career paths they're keeping open (they haven't settled on one, and any of these is welcome): {}. Read every role against them and say so in red_flags with one entry, worded exactly \"Career path: toward. <which path, and why, under 14 words>\" when the role clearly moves them along one of them (the industry, the kind of work or the next step up), or \"Career path: away. <why, under 14 words>\" only when taking it would lead to none of them (another kind of work that doesn't lead to any, or a step back). Add neither when it's in between or the posting doesn't say. This entry doesn't change the score, which stays about how well their experience fits.", paths.join("; ")));
-        }
+        let against = match paths.len() {
+            0 => String::new(),
+            1 => format!(" They are heading towards: {}.", paths[0]),
+            _ => format!(" They are keeping these paths open, and any of them is welcome: {}.", paths.join("; ")),
+        };
+        lines.push(format!("- Career warning.{against} Only when taking this role would SIGNIFICANTLY set their career back, add one entry to red_flags worded exactly \"Career path: away. <why, under 14 words>\". That means a clear step down in seniority or scope from where their CV shows they are, a role with no way up, or a move out of their profession altogether into unrelated work that coming back from would be hard (a financial analyst or product manager taking a restaurant or shop manager's job, say). It does NOT mean a different industry, product area or specialism in the same kind of work (a product role in tax and one in AI are the same career), a sideways move, a contract, or a role that is merely not ideal: say nothing for those. Most roles get no such entry. Never write \"Career path: toward\". This entry doesn't change the score, which stays about how well their experience fits."));
         if lines.is_empty() {
             return String::new();
         }
@@ -801,8 +805,9 @@ mod tests {
         assert_eq!(Profile::hours_after_peaks(&[1; 24]), None, "too few to say");
         two.search_hour_2 = 12;
         assert_eq!(two.search_hours(), (12, None), "the same hour twice is one search");
-        // Nothing set: nothing said to the scorer. Set: one line each.
-        assert_eq!(p.wants.for_scoring(), "");
+        // Nothing set: only the career warning (for a real setback, never for a change of industry).
+        let bare = p.wants.for_scoring();
+        assert!(bare.lines().count() == 2 && bare.contains("Career path: away.") && bare.contains("SIGNIFICANTLY") && bare.contains("does NOT mean a different industry"), "{bare}");
         let w = Wants { level: "senior manager".into(), work: "permanent".into(), industries: vec!["fintech".into()], avoid: vec!["gambling".into(), " ".into()], dealbreakers: vec!["on-site five days".into()], path: String::new() };
         // A career path adds its own line, and the scorer's read of a posting is told from its flags.
         let with_path = Wants { path: "product leadership in fintech".into(), ..Wants::default() }.for_scoring();
@@ -811,7 +816,9 @@ mod tests {
         assert_eq!(path_read(&["Career path: toward. Payments product work.".into()]).map(|p| p.0), Some(true));
         assert_eq!(path_read(&["Location mismatch".into()]), None);
         let text = w.for_scoring();
-        assert!(text.starts_with("What the candidate wants from a role:") && text.lines().count() == 6, "{text}");
+        assert!(text.starts_with("What the candidate wants from a role:") && text.lines().count() == 7, "{text}");
+        let several = Wants { path: "product in tax software; AI product".into(), ..Wants::default() }.for_scoring();
+        assert!(several.contains("keeping these paths open") && several.contains("product in tax software; AI product"), "{several}");
         assert!(text.contains("senior manager") && text.contains("Permanent roles only") && text.contains("fintech") && text.contains("don't want: gambling.") && text.contains("on-site five days"));
         assert_eq!(p.tracks[0].label, "Main CV");
         assert_eq!(p.tracks[0].kind, "docx");

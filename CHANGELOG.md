@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.64.0] - 2026-11-13
+
+Every role shows; a warning only for a real setback.
+
+### Changes
+
+- Job Hunt no longer marks roles On or Off your path. Every role shows up, and you are warned (Could set you back, with the reason) only when taking one would significantly set your career back: a clear step down, a dead end, or a move out of your profession into unrelated work, such as a financial analyst taking a restaurant manager's job. A different industry or product area in the same kind of work, tax to AI say, is never a warning. This works with or without paths kept open.
+- Keeping a path open also adds its job titles to your search, so its roles show up from the next search. Take titles out under Me, CVs.
+
 ## [2.63.0] - 2026-11-13
 
 Keep several career paths open.
@@ -1928,6 +1937,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.64.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.64.0
 [2.63.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.63.0
 [2.62.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.2
 [2.62.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.1

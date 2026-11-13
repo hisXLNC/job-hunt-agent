@@ -48,7 +48,7 @@ function whyBox(j, flags, note = '') {
     <div class="grow">
       ${match ? `<p><span class="why-label good-text">Why it fits</span> ${esc(match)}</p>` : ''}
       ${gap ? `<p><span class="why-label warn-text">Biggest gap</span> ${esc(gap)}</p>` : ''}
-      ${j.career ? `<p><span class="why-label ${j.career.toward ? 'good-text' : 'bad-text'}">${j.career.toward ? 'On your career path' : 'Off your career path'}</span> ${esc(j.career.why || '')}${j.career.toward ? '' : ` Taking it wouldn't be ideal for the path you chose${j.status === 'offer' ? '; weigh that before you accept' : ''}. <a href="#cvs/career">Your path</a>`}</p>` : ''}
+      ${j.career && !j.career.toward ? `<p><span class="why-label bad-text">Could set your career back</span> ${esc(j.career.why || '')}${` Taking it could set you back significantly${j.status === 'offer' ? '; weigh that before you accept' : ''}. <a href="#cvs/career">Your path</a>`}</p>` : ''}
       ${must.length ? `<p><span class="why-label warn-text">Required, not on your CV</span> ${esc(must.join('; '))}</p>` : ''}
       ${other.length ? `<p><span class="why-label bad-text">Check</span> ${esc(other.join('; '))}</p>` : ''}
       ${note ? `<p class="muted small">${note}</p>` : ''}

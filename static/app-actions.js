@@ -435,7 +435,12 @@ async function act(el) {
   }
   if (a === 'choosePath') return busy(() => savePath(el.dataset.title || ''));
   // Several paths can be kept open: one is added to the list, or taken off it.
-  if (a === 'addPath' || a === 'dropPath') return busy(async () => { const now = pathList((settingsCache || await api('/api/settings')).profile?.wants?.path), t = el.dataset.title || ''; return savePath(a === 'addPath' ? [...now, t] : now.filter(x => x.toLowerCase() !== t.toLowerCase())); });
+  if (a === 'addPath' || a === 'dropPath') return busy(async () => { const now = pathList((settingsCache || await api('/api/settings')).profile?.wants?.path), t = el.dataset.title || ''; // Kept open: its job titles join the search too, so its roles show up (they can be taken out under Me, CVs).
+      const st = settingsCache || await api('/api/settings'), titles = JSON.parse(el.dataset.titles || '[]'), track = st.profile.tracks?.[0]?.name;
+      let added = 0;
+      if (a === 'addPath' && titles.length && track) { try { added = (await api('/api/results/add-titles', { method: 'POST', body: { track, titles } })).added || 0; } catch (err) { /* the path is still kept */ } settingsCache = null; }
+      await savePath(a === 'addPath' ? [...now, t] : now.filter(x => x.toLowerCase() !== t.toLowerCase()));
+      if (added) toast(`Kept open, and ${added} job title${added === 1 ? '' : 's'} for it added to your search: its roles show up from the next search. (Take titles out under Me, CVs.)`); });
   if (a === 'addTitles') {
     const titles = JSON.parse(el.dataset.titles || '[]');
     const sel = document.querySelector(`[data-path-track="${el.dataset.i}"]`);
@@ -970,13 +975,13 @@ async function savePath(paths) {
   p.wants = { ...(p.wants || {}), path: list.join('; ') };
   await api('/api/settings/profile', { method: 'POST', body: { ...p, seen_sources: st.profile.sources } });
   settingsCache = null; route();
-  toast(!list.length ? 'Cleared. Postings are no longer read against a path.' : list.length === 1 ? `Your path: ${list[0]}. New postings are read against it.` : `${list.length} paths kept open. A posting is on your path when it moves you along any of them.`);
+  toast(!list.length ? 'Cleared. You are still warned about a role that would be a clear step back.' : `${list.length === 1 ? 'One path' : `${list.length} paths`} kept open. Every role still shows; you are only warned about one that would set you back.`);
 }
 function careerHtml(career, thinking, tracks, chosen = '') {
   const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
   const mine = pathList(chosen), onList = t => mine.some(x => same(x, t));
   const chosenCard = `<section class="card" id="pathCard"><header><h2>Your career paths</h2>${mine.length ? `<span class="pill good">${mine.length === 1 ? 'One chosen' : `${mine.length} kept open`}</span>` : ''}</header>
-    <p class="muted small">Where you're heading: one path, or several you want to keep open while you decide. Job Hunt reads each new posting against them: one that moves you along any of them is marked <b>On your path</b>, one that leads to none is marked <b>Off your path</b> with the reason, and when you weigh an offer it says plainly if accepting would set you back.</p>
+    <p class="muted small">Where you're heading: one path, or several you want to keep open while you decide. Every role still shows up, whatever you keep here. Job Hunt only warns you, with <b>Could set you back</b> and the reason, when taking a role would significantly set your career back: a clear step down, a dead end, or work it would be hard to come back from. A different industry or product area in the same kind of work is never a warning.</p>
     ${mine.length ? `<div class="path-chips">${mine.map(x => `<span class="path-chip">${esc(x)}<button type="button" data-act="dropPath" data-title="${esc(x)}" title="Take it off your list" aria-label="Remove ${esc(x)}">${svg('close')}</button></span>`).join('')}</div>` : ''}
     <form data-form="careerPath" class="row" style="align-items:flex-end;flex-wrap:wrap"><label class="field grow" style="min-width:240px;margin:0">${mine.length ? 'Add another, in your own words' : 'A path, in your own words'}<input type="text" name="path" value="" placeholder="e.g. product management, in any industry"></label><button class="btn primary" type="submit">Add</button>${mine.length ? '<button class="btn" type="button" data-act="choosePath" data-title="">Clear them all</button>' : ''}</form>
     ${mine.length ? '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-act="rescore" data-group="waiting">Read my waiting matches against ' + (mine.length === 1 ? 'it' : 'them') + '</button><span class="muted small">Matches found before aren\'t marked until they\'re scored again.</span></div>' : (career?.paths || []).length ? '<p class="muted small" style="margin-top:8px">Or press Keep this path open on any of the paths below: as many as you like.</p>' : ''}</section>`;
@@ -1019,7 +1024,7 @@ function careerHtml(career, thinking, tracks, chosen = '') {
         ${(c.gaps || []).length ? `<p class="small"><b>What it takes:</b> ${c.gaps.map(esc).join('; ')}</p>` : ''}
         ${c.first_step ? `<p class="small"><b>First step this month:</b> ${esc(c.first_step)}</p>` : ''}
         ${searchFor(c, i)}
-        <div class="row" style="margin-top:8px">${onList(c.title) ? `<span class="pill good">On your list</span><button class="btn ghost sm" data-act="dropPath" data-title="${esc(c.title)}">Take it off</button>` : `<button class="btn sm" data-act="addPath" data-title="${esc(c.title)}">${mine.length ? 'Keep this path open too' : 'Keep this path open'}</button>`}</div>
+        <div class="row" style="margin-top:8px">${onList(c.title) ? `<span class="pill good">On your list</span><button class="btn ghost sm" data-act="dropPath" data-title="${esc(c.title)}">Take it off</button>` : `<button class="btn sm" data-act="addPath" data-title="${esc(c.title)}" data-titles="${esc(JSON.stringify(c.titles || []))}" title="Keeps it on your list and adds its job titles to your search, so its roles show up">${mine.length ? 'Keep this path open too' : 'Keep this path open'}</button>`}</div>
       </div>`).join('')}</div>`
     : `<p class="muted">Claude reads your whole CV and maps every direction it supports: where each leads in 3, 5 and 10 years, the pay at each step and the most the path can pay, the usual hours and work-life balance, with pros and cons and its advice on which to choose.${thinking ? '' : ' It does this by itself when you add a CV.'}</p>`}
   </section>`;

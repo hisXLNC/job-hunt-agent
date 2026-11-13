@@ -37,7 +37,7 @@ async function openPanel(id) {
   j.effort = d.effort;
   const tailoring = (overview?.running || []).includes(`tailor:${id}`);
   const w = fitWords(j), must = mustHaves(j), flags = (j.red_flags || []).filter(x => !/^must have:/i.test(x));
-  const lacks = [w.gap, ...must.map(m => `Required, not on your CV: ${m}`), ...flags, j.career && !j.career.toward ? `Off your career path: ${j.career.why || 'it leads away from the path you chose'}` : ''].filter(Boolean);
+  const lacks = [w.gap, ...must.map(m => `Required, not on your CV: ${m}`), ...flags, j.career && !j.career.toward ? `Could set your career back: ${j.career.why || 'a step down, or work it would be hard to come back from'}` : ''].filter(Boolean);
   const facts = [`<b>${coCell(j)}</b>`, j.location ? placeHtml(j) : '', payFact(j), j.employment ? esc(j.employment) : '', ageTag(j)].filter(Boolean).map(x => `<span>${x}</span>`).join('');
   el.innerHTML = `<div class="jp-top"><span class="kicker">${esc(STAGES[j.status] || j.status)}</span><span class="grow"></span><a class="btn ghost sm" href="#job/${encodeURIComponent(id)}">Open the full page</a><button class="x" data-act="panelClose" title="Close (Esc)">×</button></div>
     <div class="jp-scroll">
@@ -117,7 +117,7 @@ function decisionHtml(x, at, of) {
     const w = fitWords(j), gaps = new Set((j.keyword_gaps || []).map(k => k.toLowerCase()));
     const have = (j.keywords || []).filter(k => !gaps.has(k.toLowerCase())).slice(0, 7);
     const must = mustHaves(j), flags = (j.red_flags || []).filter(f => !/^must have:/i.test(f));
-    const lacks = [w.gap, ...must.map(m => `Required, not on your CV: ${m}`), ...flags, j.career && !j.career.toward ? `Off your career path: ${j.career.why || 'it leads away from the path you chose'}` : ''].filter(Boolean);
+    const lacks = [w.gap, ...must.map(m => `Required, not on your CV: ${m}`), ...flags, j.career && !j.career.toward ? `Could set your career back: ${j.career.why || 'a step down, or work it would be hard to come back from'}` : ''].filter(Boolean);
     const reach = j.score_after ?? canReach(j);
     return `<article class="card decision" data-kind="pick">${decisionTop(j, where, fitRing(j.score))}
       <div class="dbody">

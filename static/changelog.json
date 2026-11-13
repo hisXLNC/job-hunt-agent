@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.64.0",
+    "date": "2026-11-13",
+    "title": "Every role shows; a warning only for a real setback",
+    "changes": [
+      "Job Hunt no longer marks roles On or Off your path. Every role shows up, and you are warned (Could set you back, with the reason) only when taking one would significantly set your career back: a clear step down, a dead end, or a move out of your profession into unrelated work, such as a financial analyst taking a restaurant manager's job. A different industry or product area in the same kind of work, tax to AI say, is never a warning. This works with or without paths kept open.",
+      "Keeping a path open also adds its job titles to your search, so its roles show up from the next search. Take titles out under Me, CVs."
+    ]
+  },
+  {
     "version": "2.63.0",
     "date": "2026-11-13",
     "title": "Keep several career paths open",
