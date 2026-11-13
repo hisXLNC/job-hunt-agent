@@ -56,6 +56,10 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.63.0: several career paths.** `Wants.path` is still one string; several are kept with "; " between
+  (`pathList` in app-actions.js, split in `Wants::for_scoring`, whose prompt says toward any / away from all). Cards have
+  `addPath` / `dropPath`, the path card shows chips. The user likes product work and is undecided between tax, AI and
+  product in general: don't push them to one. 2.62.2: Recommended is `.rec-mark` under the path's name.
 - **2.62.1.** CV update: `stop_cv_update(forget)` + `POST /api/cv-update` (`cv.stop` flag, read by `cv_update_stopped()`
   in `rescore_through`, `rescore_jobs` and between the steps; only counts while `cv-update` is running); the card has
   Stop / close (`cvUpdateStop`, `cvUpdateClose`); a second update waits for the first to stop; `cv_update()` is None
