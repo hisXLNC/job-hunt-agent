@@ -56,6 +56,9 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.58.1: logos for Workday-only companies.** `logos::sites_for` now also tries `KNOWN_SITES`, the `tenant()` code of a
+  hosting-site link and the name's initials; "none2" (looked, none) is looked up again, new misses are "none3".
+  Not checked against the live sites (no network to them from the build machine).
 - **2.58.0: searches only in their scheduled hour.** `Profile::search_due` is true only while the clock is in a
   scheduled hour (no catch-up after a late start or an update; tests changed on purpose). `run_due`'s "discover" no
   longer searches. Defaults are noon and 5 PM (`search_hours_once` moves installs still on 7/16, once).

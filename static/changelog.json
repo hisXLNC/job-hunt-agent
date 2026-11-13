@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.58.1",
+    "date": "2026-11-13",
+    "title": "Logos for companies that apply through Workday",
+    "changes": [
+      "Companies whose jobs are only on a hosting site such as Workday (Royal Bank of Canada, MUFG) had no logo: Job Hunt had no company site to take it from. It now tries the site of well-known employers, the company's code on the hosting site (rbc gives rbc.com) and its initials, and looks again for every company it found no logo for."
+    ]
+  },
+  {
     "version": "2.58.0",
     "date": "2026-11-13",
     "title": "Searches only at their scheduled time, and the PC wakes for them",
