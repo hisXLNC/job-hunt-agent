@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.61.2",
+    "date": "2026-11-13",
+    "title": "All jobs: smaller stage tags",
+    "changes": [
+      "The stage on each row of All jobs (Ready to approve, Approved – submit it) is a small one-line tag again. It had wrapped onto two lines and looked like a large button."
+    ]
+  },
+  {
     "version": "2.61.1",
     "date": "2026-11-13",
     "title": "All jobs: buttons one size",
