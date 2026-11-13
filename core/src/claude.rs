@@ -2389,7 +2389,13 @@ note says; no company name, no filler. Return them in the same order, one for ea
             })?;
             serde_json::from_value(v).map_err(|e| Error(format!("Claude's answer wasn't in the expected shape ({e}).")))
         };
-        let mut found = run()?;
+        // A connector that needs signing in to again answers with words about signing in, which read
+        // as Claude Code itself being signed out (it said so under Needs attention while everything
+        // else Claude does was working). Claude Code is asked; if it is signed in, it's the connector.
+        let mut found = match run() {
+            Err(e) if e.0.contains("isn't signed in") && crate::claude_code::signed_in(cc) => return Err(Error(crate::claude_code::connector_diagnosis(cc, "Indeed"))),
+            r => r?,
+        };
         // Connectors sometimes aren't ready on the first try: once more before saying why.
         if !found.tools_available {
             found = run()?;

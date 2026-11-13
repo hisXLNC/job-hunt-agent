@@ -159,7 +159,7 @@ pub fn status(custom: &str) -> Status {
             st.method = v.get("authMethod").and_then(|m| m.as_str()).unwrap_or("").to_string();
             st.signed_in = ok && st.method != "none";
             if !st.signed_in {
-                st.problem = "Claude Code isn't signed in. Open a terminal, run claude, and sign in with your Claude account.".into();
+                st.problem = "Claude Code isn't signed in. In Job Hunt, open Settings \u{2192} Accounts and press Sign in to Claude.".into();
             }
         }
         Err(e) => st.problem = e.0,
@@ -190,6 +190,16 @@ pub fn setup_script(install: bool, custom: &str) -> String {
     s += &format!("  {run}\n}}\nWrite-Host ''\n");
     s += &say("All done. Close this window and go back to Job Hunt.", "Green");
     s
+}
+
+/// Whether Claude Code is signed in at all (asked of Claude Code itself: `claude auth status`).
+pub fn signed_in(cc: &ClaudeCode) -> bool {
+    let mut a = command(cc);
+    a.args(["auth", "status"]);
+    run_capture(a, "", Duration::from_secs(30)).ok().is_some_and(|(ok, out, _)| {
+        let method = serde_json::from_str::<Value>(out.trim()).ok().and_then(|v| v.get("authMethod").and_then(|m| m.as_str()).map(String::from)).unwrap_or_default();
+        ok && !method.is_empty() && method != "none"
+    })
 }
 
 /// Why a claude.ai connector (like Indeed) isn't reaching Claude Code here, in plain words, from how
@@ -324,7 +334,7 @@ pub fn parse_output(ok: bool, stdout: &str, stderr: &str) -> R<Value> {
             crate::usage::report_limit(at);
             "Your Claude usage limit is reached for now. Job Hunt will try again once it resets.".to_string()
         } else if low.contains("login") || low.contains("log in") || low.contains("not logged") || low.contains("authenticat") {
-            "Claude Code isn't signed in. Open a terminal, run claude, and sign in with your Claude account.".to_string()
+            "Claude Code isn't signed in. In Job Hunt, open Settings \u{2192} Accounts and press Sign in to Claude.".to_string()
         } else if subtype == "error_max_turns" {
             "Claude Code ran out of steps before answering.".to_string()
         } else {

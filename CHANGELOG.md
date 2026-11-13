@@ -16,6 +16,7 @@ Settings, regrouped, with a search.
 - Job search, Sources is one list in groups (job sites, employers' own sites, recruiters, sent to you). Each source has its state, what it last found, its buttons, and its set-up folded under it. Where it looks and Set up sources were two pages; Last search is a tab of its own.
 - When Job Hunt searches, how much it scores, and how it tailors moved from Me, Looking for to Settings (Job search, Applying). Looking for keeps what describes the jobs you want.
 - Everything to do with your phone (using Job Hunt there, filling in forms, sending jobs) is under Phone. Older links to a settings page still open the right place.
+- Indeed said Claude Code isn't signed in while everything else Claude does was working. When the Indeed connector itself needs signing in to again, Job Hunt now says that, with where to reconnect it (claude.ai, Settings, Connectors). And when Claude Code really is signed out, the notice points to Sign in to Claude in Settings, Accounts, not to a terminal.
 
 ## [2.64.0] - 2026-11-13
 
