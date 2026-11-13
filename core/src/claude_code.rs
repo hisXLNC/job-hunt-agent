@@ -198,7 +198,10 @@ pub fn signed_in(cc: &ClaudeCode) -> bool {
     a.args(["auth", "status"]);
     run_capture(a, "", Duration::from_secs(30)).ok().is_some_and(|(ok, out, _)| {
         let method = serde_json::from_str::<Value>(out.trim()).ok().and_then(|v| v.get("authMethod").and_then(|m| m.as_str()).map(String::from)).unwrap_or_default();
-        ok && !method.is_empty() && method != "none"
+        // As status() reads it: signed in unless Claude Code says "none". (An answer that isn't the
+        // usual JSON, from a newer or older Claude Code, counted as signed out here in 2.65.0, so a
+        // connector's trouble was still reported as Claude Code's.)
+        ok && method != "none"
     })
 }
 

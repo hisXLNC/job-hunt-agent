@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.65.1] - 2026-11-13
+
+Indeed: the right reason.
+
+### Changes
+
+- Indeed still said Claude Code isn't signed in when it is: the check that tells the two apart was stricter than the one Accounts uses. They now agree, so a connector that needs reconnecting is said to be that.
+
 ## [2.65.0] - 2026-11-13
 
 Settings, regrouped, with a search.
@@ -1951,6 +1959,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.65.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.1
 [2.65.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.0
 [2.64.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.64.0
 [2.63.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.63.0

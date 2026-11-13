@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.65.1",
+    "date": "2026-11-13",
+    "title": "Indeed: the right reason",
+    "changes": [
+      "Indeed still said Claude Code isn't signed in when it is: the check that tells the two apart was stricter than the one Accounts uses. They now agree, so a connector that needs reconnecting is said to be that."
+    ]
+  },
+  {
     "version": "2.65.0",
     "date": "2026-11-13",
     "title": "Settings, regrouped, with a search",
