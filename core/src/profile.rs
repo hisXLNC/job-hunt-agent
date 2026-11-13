@@ -298,10 +298,10 @@ impl Default for Profile {
             tracks: vec![],
             sources: Sources::default(),
             calendar: CalendarPrefs::default(),
-            search_hour: 7,
+            search_hour: 12,
             linkedin_note: 300,
             searches_per_day: 1,
-            search_hour_2: 16,
+            search_hour_2: 17,
             inbox_minutes: 30,
             guidance: String::new(),
             stories: String::new(),
@@ -367,20 +367,37 @@ impl Profile {
         if self.searches_per_day >= 2 && a != b { (a.min(b), Some(a.max(b))) } else { (a, None) }
     }
 
-    /// Whether a scheduled search is due at `local`, given when the last one ran: the first when
-    /// none has run today and its hour has come; the second when its hour has come and nothing
-    /// has run in the two hours before it or since.
+    /// Whether a scheduled search is due at `local`, given when the last one ran. Only during a
+    /// scheduled hour: the first when none has run today, the second when nothing has run in the
+    /// two hours before it or since. A search missed (Job Hunt closed, the computer off, an update
+    /// being installed) is not made up for later: opening the app at another time, or restarting
+    /// after an update, starts nothing until the next scheduled hour.
     pub fn search_due(&self, local: chrono::NaiveDateTime, last: Option<chrono::NaiveDateTime>) -> bool {
         use chrono::Timelike;
         let (first, second) = self.search_hours();
         let today = local.date();
-        if last.is_none_or(|t| t.date() != today) && local.hour() >= first {
-            return true;
+        if local.hour() == first {
+            return last.is_none_or(|t| t.date() != today);
         }
         match second {
-            Some(h) if local.hour() >= h => last.is_none_or(|t| Some(t) < today.and_hms_opt(h.saturating_sub(2), 0, 0)),
+            Some(h) if local.hour() == h => last.is_none_or(|t| Some(t) < today.and_hms_opt(h.saturating_sub(2), 0, 0)),
             _ => false,
         }
+    }
+
+    /// The two hours to search at, given how many postings went up in each hour of the day
+    /// (`by_hour`, 24 counts): the hour after the busiest one, and the hour after the busiest one
+    /// at least three hours from it. None with too little to go on.
+    pub fn hours_after_peaks(by_hour: &[u32]) -> Option<(u32, u32)> {
+        if by_hour.len() != 24 || by_hour.iter().sum::<u32>() < 40 {
+            return None;
+        }
+        let top = |skip: Option<usize>| (0..24usize).filter(|&h| skip.is_none_or(|s| (h as i64 - s as i64).abs() >= 3)).max_by_key(|&h| (by_hour[h], std::cmp::Reverse(h)));
+        let a = top(None)?;
+        let b = top(Some(a))?;
+        let after = |h: usize| ((h + 1) as u32).clamp(6, 22);
+        let (x, y) = (after(a), after(b));
+        if by_hour[b] == 0 || x == y { None } else { Some((x.min(y), x.max(y))) }
     }
 
     /// When the next scheduled search is, after `local`; None when one is due now.
@@ -755,20 +772,30 @@ mod tests {
         assert_eq!(p.score_threshold, 70);
         // One search a day unless two are chosen.
         let at = |d: u32, h: u32, m: u32| chrono::NaiveDate::from_ymd_opt(2026, 3, d).unwrap().and_hms_opt(h, m, 0).unwrap();
-        assert_eq!(p.search_hours(), (7, None));
-        assert!(p.search_due(at(2, 7, 5), Some(at(1, 7, 1))) && !p.search_due(at(2, 6, 0), Some(at(1, 7, 1))));
-        assert!(!p.search_due(at(2, 17, 0), Some(at(2, 7, 1))), "one a day: nothing in the afternoon");
-        assert_eq!(p.next_search(at(2, 9, 0), Some(at(2, 7, 1))), Some(at(3, 7, 0)));
+        assert_eq!(p.search_hours(), (12, None));
+        assert!(p.search_due(at(2, 12, 5), Some(at(1, 12, 1))) && !p.search_due(at(2, 11, 0), Some(at(1, 12, 1))));
+        assert!(!p.search_due(at(2, 17, 0), Some(at(2, 12, 1))), "one a day: nothing in the afternoon");
+        // Only in its own hour: a search missed in the morning is not run when the app opens (or
+        // restarts after an update) later in the day.
+        assert!(!p.search_due(at(2, 13, 0), Some(at(1, 12, 1))) && !p.search_due(at(2, 22, 30), None), "a missed search is not made up for");
+        assert_eq!(p.next_search(at(2, 15, 0), Some(at(1, 12, 1))), Some(at(3, 12, 0)), "missed: the next is tomorrow's");
+        assert_eq!(p.next_search(at(2, 14, 0), Some(at(2, 12, 1))), Some(at(3, 12, 0)));
         let mut two = p.clone();
         two.searches_per_day = 2;
-        assert_eq!(two.search_hours(), (7, Some(16)));
-        assert_eq!(two.next_search(at(2, 9, 0), Some(at(2, 7, 1))), Some(at(2, 16, 0)));
-        assert!(two.search_due(at(2, 16, 1), Some(at(2, 7, 1))), "the second, at its hour");
-        assert!(!two.search_due(at(2, 16, 30), Some(at(2, 16, 2))), "not again once it has run");
-        assert!(!two.search_due(at(2, 16, 1), Some(at(2, 15, 0))), "not when you searched in the two hours before");
-        assert_eq!(two.next_search(at(2, 18, 0), Some(at(2, 16, 2))), Some(at(3, 7, 0)));
-        two.search_hour_2 = 7;
-        assert_eq!(two.search_hours(), (7, None), "the same hour twice is one search");
+        assert_eq!(two.search_hours(), (12, Some(17)));
+        assert_eq!(two.next_search(at(2, 14, 0), Some(at(2, 12, 1))), Some(at(2, 17, 0)));
+        assert!(two.search_due(at(2, 17, 1), Some(at(2, 12, 1))), "the second, at its hour");
+        assert!(!two.search_due(at(2, 17, 30), Some(at(2, 17, 2))), "not again once it has run");
+        assert!(!two.search_due(at(2, 17, 1), Some(at(2, 16, 0))), "not when you searched in the two hours before");
+        assert!(!two.search_due(at(2, 19, 0), Some(at(2, 12, 1))), "the second isn't made up for either");
+        assert_eq!(two.next_search(at(2, 19, 0), Some(at(2, 17, 2))), Some(at(3, 12, 0)));
+        // Search times from when postings go up: the hour after each of the two busiest times.
+        let mut hours = [1u32; 24];
+        hours[10] = 30; hours[11] = 28; hours[15] = 20;
+        assert_eq!(Profile::hours_after_peaks(&hours), Some((11, 16)));
+        assert_eq!(Profile::hours_after_peaks(&[1; 24]), None, "too few to say");
+        two.search_hour_2 = 12;
+        assert_eq!(two.search_hours(), (12, None), "the same hour twice is one search");
         // Nothing set: nothing said to the scorer. Set: one line each.
         assert_eq!(p.wants.for_scoring(), "");
         let w = Wants { level: "senior manager".into(), work: "permanent".into(), industries: vec!["fintech".into()], avoid: vec!["gambling".into(), " ".into()], dealbreakers: vec!["on-site five days".into()], path: String::new() };

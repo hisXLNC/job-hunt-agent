@@ -317,6 +317,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
     let site_status = agent.site_status();
     let builtin_google = google::builtin_client().is_some();
     let site_catalog: Vec<Value> = crate::sites::SITES.iter().map(|x| json!({ "id": x.id, "name": x.name, "kind": x.kind, "about": x.about, "country": x.country })).collect();
+    let posting_hours = agent.posting_hours();
     let db = agent.db();
     let get = |k: &str| db.get(k).ok().flatten().unwrap_or_default();
     let token: google::Token = serde_json::from_str(&get("google.token")).unwrap_or_default();
@@ -388,6 +389,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
         "sites": { "catalog": site_catalog, "status": site_status },
         "career": serde_json::from_str::<Value>(&get("career")).ok(),
         "career_thinking": agent.is_running("career"),
+        "posting_hours": posting_hours,
         "countries": crate::profile::COUNTRIES.iter().map(|c| json!({ "code": c.0, "name": c.1, "tz": c.3,
             "cities": crate::profile::CITIES.iter().find(|x| x.0 == c.0).map(|x| x.1).unwrap_or(&[]) })).collect::<Vec<_>>(),
         "weekly": { "day": if get("weekly.day") == "mon" { "mon" } else { "sun" }, "email": get("weekly.email") != "0", "to": weekly_to },

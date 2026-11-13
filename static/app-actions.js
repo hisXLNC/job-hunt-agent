@@ -427,6 +427,7 @@ async function act(el) {
       toast(add ? `Added “${el.dataset.title}”. The next search looks for it.` : 'Dropped.');
     });
   }
+  if (a === 'useHours') { const f = el.closest('form') || document; const h1 = f.querySelector('[name=search_hour]'), h2 = f.querySelector('[name=search_hour_2]'); if (h2) h2.value = el.dataset.b; if (h1) { h1.value = el.dataset.a; h1.dispatchEvent(new Event('change', { bubbles: true })); } return; }
   if (a === 'careerJump') { document.getElementById(`path-${el.dataset.i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (a === 'career') {
     const here = location.hash;

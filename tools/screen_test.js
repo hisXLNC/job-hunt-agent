@@ -218,7 +218,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await at('settings/search');
   check(await page.evaluate(() => document.querySelector('[data-second-search]').hidden), 'One search a day: no second time shown');
   await page.selectOption('[name=searches_per_day]', '2');
-  check(await until(async () => { const p = await prefs(); return p.searches_per_day === 2 && p.search_hour_2 === 16 && !(await page.evaluate(() => document.querySelector('[data-second-search]').hidden)); }, 15), 'Two searches a day: the second time shows and is saved');
+  check(await until(async () => { const p = await prefs(); return p.searches_per_day === 2 && p.search_hour_2 === 17 && !(await page.evaluate(() => document.querySelector('[data-second-search]').hidden)); }, 15), 'Two searches a day: the second time shows and is saved');
   await page.selectOption('[name=searches_per_day]', '1');
   check(await until(async () => (await prefs()).searches_per_day === 1, 15), 'Back to one search a day');
   // Another AI beside Claude: offered in Accounts, off until you set it up.

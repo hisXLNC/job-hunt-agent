@@ -2787,6 +2787,41 @@ replies and interviews, and a little lower for kinds that got none from several 
         let _ = self.db().set("jobbank.defaulted", "1");
     }
 
+    /// The search times every install began with (7 AM, and 4 PM for a second) moved once to
+    /// noon and 5 PM, after the two times of day most postings go up. Times you chose are kept.
+    pub fn search_hours_once(&self) {
+        if !self.secret("searchhours.defaulted").is_empty() {
+            return;
+        }
+        let mut p = self.profile();
+        if p.search_hour == 7 && p.search_hour_2 == 16 && !p.tracks.is_empty() {
+            p.search_hour = 12;
+            p.search_hour_2 = 17;
+            if self.save_profile(&p).is_ok() {
+                let _ = self.db().log(None, "search", "Search times moved to noon and 5 PM, just after most postings go up. Change them in Settings, Job sources.");
+            }
+        }
+        let _ = self.db().set("searchhours.defaulted", "1");
+    }
+
+    /// When the postings Job Hunt has found went up, by hour of your day, from the ones whose
+    /// source gave a real time (not just a date), and the two search times that follow from it.
+    pub fn posting_hours(&self) -> Value {
+        use chrono::Timelike;
+        let tz = self.profile().tz();
+        let mut by = [0u32; 24];
+        let stamps: Vec<String> = { let db = self.db(); db.posted_stamps().unwrap_or_default() };
+        for t in stamps.iter().filter_map(|t| chrono::DateTime::parse_from_rfc3339(t).ok()) {
+            // A time on the dot of an hour is a date with a time added, or rounded: it says nothing.
+            if t.minute() == 0 && t.second() == 0 {
+                continue;
+            }
+            by[t.with_timezone(&tz).hour() as usize] += 1;
+        }
+        let best = Profile::hours_after_peaks(&by);
+        json!({ "counted": by.iter().sum::<u32>(), "by_hour": by, "suggest": best.map(|(a, b)| json!([a, b])) })
+    }
+
     /// In Canada, the careers sites of the big pension funds, banks and insurers, added once: the
     /// steadiest employers, posting first on their own sites. Ones you remove stay removed.
     pub fn canada_employers_once(&self) {
@@ -2940,6 +2975,7 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     agent.jobbank_on_once();
     crate::logos::name_hosts_once(agent);
     agent.canada_employers_once();
+    agent.search_hours_once();
     let p = agent.profile();
     let tz = p.tz();
     let now = Utc::now();
@@ -3129,16 +3165,9 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
             "leads" => crate::leads::find_in_background(agent),
             "discover" => {
                 let a = agent.clone();
-                std::thread::spawn(move || match a.discover_boards() {
-                    Ok(added) if !added.is_empty() => {
-                        if let Err(e) = a.search(None) {
-                            if !e.0.contains("already running") {
-                                let _ = a.db().log(None, "search:error", &e.0);
-                            }
-                        }
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
+                // Their jobs come with the next scheduled search: nothing searches outside its hour.
+                std::thread::spawn(move || {
+                    if let Err(e) = a.discover_boards() {
                         if !e.0.contains("already running") {
                             let _ = a.db().log(None, "discover:error", &e.0);
                         }

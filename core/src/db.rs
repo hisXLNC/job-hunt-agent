@@ -728,6 +728,13 @@ impl Db {
         Ok(rows.filter_map(Result::ok).collect())
     }
 
+    /// When each posting found went up, for those whose source said (newest 5,000).
+    pub fn posted_stamps(&self) -> R<Vec<String>> {
+        let mut q = self.con.prepare("SELECT posted_at FROM jobs WHERE posted_at LIKE '%T%' ORDER BY found_at DESC LIMIT 5000")?;
+        let rows = q.query_map([], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     pub fn jobs(&self, status: Option<&str>, limit: usize) -> R<Vec<Job>> {
         let mut out = vec![];
         if let Some(s) = status {

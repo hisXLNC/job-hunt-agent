@@ -327,8 +327,9 @@ async function showSettings(tab, sub, host) {
       </section>
       <section class="card"><header><h2>When</h2></header><div class="form">
         <label class="field">Searches a day<select name="searches_per_day">${[[1, 'One'], [2, 'Two: a second one later in the day']].map(([v, n]) => `<option value="${v}" ${(p.searches_per_day >= 2 ? 2 : 1) === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Two finds new postings hours sooner, when applications are read most. The second scores only what's new since the first, so it uses a little more of your plan, not double.</span></label>
-        <label class="field">Search every day at${hourSelect('search_hour', p.search_hour)}<span class="hint">If Job Hunt isn't running then, it searches when it next opens.</span></label>
-        <label class="field" data-second-search ${p.searches_per_day >= 2 ? '' : 'hidden'}>And again at${hourSelect('search_hour_2', p.search_hour_2 ?? 16)}<span class="hint">Skipped when you searched by hand in the two hours before.</span></label>
+        <label class="field">Search every day at${hourSelect('search_hour', p.search_hour)}<span class="hint">Only at this time. If Job Hunt isn't running then (or is being updated), that search is skipped, not run later: it waits for the next scheduled time. Search now, in the top bar, runs one whenever you like.</span></label>
+        <label class="field" data-second-search ${p.searches_per_day >= 2 ? '' : 'hidden'}>And again at${hourSelect('search_hour_2', p.search_hour_2 ?? 17)}<span class="hint">Skipped when you searched by hand in the two hours before.</span></label>
+        ${postingHoursHtml(st.posting_hours, p)}
         <div class="field">Daily search<div class="row">${scheduleMenu(overview?.side?.paused, false)}</div><span class="hint">${overview?.side?.paused ? esc(pausedWords(overview.side.paused)) + '.' : 'On. Pause it for a while, or turn it off.'}</span></div>
       </div></section>
       <section class="card"><header><h2>Tailoring</h2></header>
@@ -1370,3 +1371,16 @@ document.addEventListener('keydown', e => {
     else toast(e.key === 'j' ? 'That was the last one in the list.' : 'That was the first one in the list.');
   }
 });
+
+/** When the postings you've found went up, and the search times that follow from it. */
+function postingHoursHtml(ph, p) {
+  const label = h => h === 0 ? 'midnight' : h === 12 ? 'noon' : `${h % 12} ${h < 12 ? 'AM' : 'PM'}`;
+  if (!ph || !ph.suggest) return `<div class="field" id="postHours">When postings go up<span class="hint">Employers post most around 11 AM, dip over lunch and post again from mid to late afternoon (studies of posting times), so Job Hunt searches at noon and 5 PM unless you choose otherwise. Once it has found ${ph?.counted ? `more postings that say when they went up (${ph.counted} so far)` : '40 postings that say when they went up'}, it suggests times from your own.</span></div>`;
+  const [a, b] = ph.suggest, max = Math.max(1, ...ph.by_hour);
+  const same = p.search_hour === a && (p.searches_per_day < 2 || p.search_hour_2 === b);
+  return `<div class="field" id="postHours">When your postings go up
+    <div class="hourbars" title="Postings by the hour they went up, your time">${ph.by_hour.map((n, h) => `<span class="${h + 1 === a || h + 1 === b ? 'peak' : ''}" style="height:${Math.max(4, n / max * 100)}%" title="${label(h)}: ${n}"></span>`).join('')}</div>
+    <div class="hourticks"><span>midnight</span><span>6 AM</span><span>noon</span><span>6 PM</span><span></span></div>
+    <span class="hint">Of the ${ph.counted} postings that say when they went up, most did just before ${label(a)} and ${label(b)} (your time).${same ? ' Your searches already run then.' : ''}</span>
+    ${same ? '' : `<div class="row"><button class="btn sm" type="button" data-act="useHours" data-a="${a}" data-b="${b}">Search at ${label(a)}${p.searches_per_day >= 2 ? ` and ${label(b)}` : ''}</button><span class="muted small">Sets the times above.</span></div>`}</div>`;
+}

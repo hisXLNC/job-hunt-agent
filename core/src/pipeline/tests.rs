@@ -1673,9 +1673,17 @@ fn searches_can_be_stopped_paused_and_turned_off() {
     s.agent.db().set("claude.engine", "api").unwrap();
     s.agent.db().set("claude.key", "sk-test").unwrap();
     let mut p = s.agent.profile();
-    p.search_hour = 0;
+    // A scheduled search runs only in its own hour: make that hour now.
+    use chrono::Timelike;
+    p.search_hour = Utc::now().with_timezone(&p.tz()).hour();
     s.agent.save_profile(&p).unwrap();
     assert!(due_tasks(&s.agent).contains(&"search"));
+    // An hour that has passed today is not made up for (the app opened late, or restarted after an update).
+    let mut late = s.agent.profile();
+    late.search_hour = (p.search_hour + 23) % 24;
+    s.agent.save_profile(&late).unwrap();
+    assert!(!due_tasks(&s.agent).contains(&"search"), "a missed search waits for its next hour");
+    s.agent.save_profile(&p).unwrap();
     s.agent.pause_searches(Some(7)).unwrap();
     assert!(!s.agent.search_paused().is_empty() && !due_tasks(&s.agent).contains(&"search"), "paused for a week");
     assert!(s.agent.side_status()["next_search"].is_null());
