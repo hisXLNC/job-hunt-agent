@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.62.0",
+    "date": "2026-11-13",
+    "title": "CV update: only what cleared your bar, with a bar for every step",
+    "changes": [
+      "Updating a CV scores again only the roles that had cleared your fit threshold (the ones waiting for you to pick, and saved ones above it). Roles that were set aside or dismissed keep the fit they had. It was scoring again every role that CV had ever scored, some 1,800 of them.",
+      "The fits that the last two versions cleared from set-aside roles are put back, once, when Job Hunt starts.",
+      "Every step of the update has its own progress bar with a count (47 of 128), or a moving bar where there is nothing to count, and the card says which step it is on. The applications being tailored again are counted off as each is ready."
+    ]
+  },
+  {
     "version": "2.61.2",
     "date": "2026-11-13",
     "title": "The Workday form: no more crawling, and what it chose is seen",

@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.62.0] - 2026-11-13
+
+CV update: only what cleared your bar, with a bar for every step.
+
+### Changes
+
+- Updating a CV scores again only the roles that had cleared your fit threshold (the ones waiting for you to pick, and saved ones above it). Roles that were set aside or dismissed keep the fit they had. It was scoring again every role that CV had ever scored, some 1,800 of them.
+- The fits that the last two versions cleared from set-aside roles are put back, once, when Job Hunt starts.
+- Every step of the update has its own progress bar with a count (47 of 128), or a moving bar where there is nothing to count, and the card says which step it is on. The applications being tailored again are counted off as each is ready.
+
 ## [2.61.2] - 2026-11-13
 
 The Workday form: no more crawling, and what it chose is seen.
@@ -1890,6 +1900,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.62.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.0
 [2.61.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.2
 [2.61.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.1
 [2.61.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.0

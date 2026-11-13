@@ -56,6 +56,13 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.62.0.** CV update: `cv_changed` unscores only queued and saved-above-the-bar on a replace (all four statuses
+  only when the CV is removed); `restore_cleared_fits_once` gives set-aside roles back the fit 2.60/2.61 cleared (from
+  the `unscored` history line); `cv_update()` adds live `tailored` / `tailoring` from the `retailor` ids; the card's
+  steps have bars (`cvUpdateHtml`, `.step-bar`). **The checks are faster, none left out** (the user said: functionality
+  first, don't skip): `verify` runs three lines side by side (core tests, server, screens | the extension | the Windows
+  app) and prints each step's seconds; `ext_test.js` runs each variant in its own browser, three at a time (`JOBS=1`
+  for one after another), state per variant by `v=` in the page's address. About 11 min of extension tests became 4.
 - **2.61.2, from the user's real Copy details (OSC, 15 minutes for one form):** (1) the tab was hidden, so timers were
   throttled: `wait()` asks the background to keep time (`sleep` message) when `document.hidden`. (2) Workday's Enter
   takes a single match and closes the list: `tookItself(had)` sees the new pill (accepted if it fits, or as Other /
