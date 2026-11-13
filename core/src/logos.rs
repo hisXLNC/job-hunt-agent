@@ -54,6 +54,18 @@ pub fn name_from_site(link: &str) -> Option<String> {
 /// Companies that were named by a site's address ("jobs.scotiabank.com") get the name read from
 /// it ("Scotiabank"), once: so they group, and share a logo, with the same company's other jobs.
 pub fn name_hosts_once(agent: &Agent) {
+    // Once, since employers with several names share one key (2.61.0): every job's key again, and
+    // a company kept under a hosting site's code gets its name.
+    if agent.secret("companies.rekeyed").is_empty() {
+        let jobs = agent.db().jobs(None, 100_000).unwrap_or_default();
+        for j in jobs {
+            if let Some((_, name)) = CODE_NAMES.iter().find(|(code, _)| j.company.trim().eq_ignore_ascii_case(code)) {
+                let _ = agent.db().rename_company(&j.id, &j.title, name);
+            }
+        }
+        let _ = agent.db().rekey_jobs();
+        let _ = agent.db().set("companies.rekeyed", &crate::util::now());
+    }
     if !agent.secret("companies.named").is_empty() {
         return;
     }
@@ -68,6 +80,9 @@ pub fn name_hosts_once(agent: &Agent) {
     }
     let _ = agent.db().set("companies.named", &crate::util::now());
 }
+
+/// Codes a hosting site keeps a company under, when a posting came with no better name.
+const CODE_NAMES: &[(&str, &str)] = &[("mufgub", "MUFG"), ("mufg-ub", "MUFG")];
 
 /// Where a company's logo is kept. Two steps, so two spellings of one company ("Scotiabank" and
 /// "jobs.scotiabank.com") share one logo: the company's site, then that site's image.
@@ -90,6 +105,9 @@ pub fn kept(agent: &Agent, company: &str) -> Option<Option<(String, Vec<u8>)>> {
         return None; // looked before Job Hunt knew more places to look: look again
     }
     if kind == "none3" {
+        return None; // from before the second index and shared names (2.61.0): look again
+    }
+    if kind == "none4" {
         // Looked and found none: look again after two weeks (its own site may be known by then).
         let fresh = chrono::DateTime::parse_from_rfc3339(rest).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_days() < 14);
         return fresh.then_some(None);
@@ -114,7 +132,7 @@ pub fn want(agent: &Arc<Agent>, company: &str) {
     std::thread::spawn(move || {
         let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
         let http = client();
-        let mut value = format!("none3|{}", crate::util::now());
+        let mut value = format!("none4|{}", crate::util::now());
         for (site, sure) in sites_for(&a, &company) {
             // A site another spelling of the company already led to: its image is here.
             if !a.secret(&site_key(&site)).is_empty() {
@@ -125,7 +143,7 @@ pub fn want(agent: &Arc<Agent>, company: &str) {
             // its icon in a public index of site icons, asked only when the address is surely theirs.
             let found = fetch_checked(&http, &format!("https://{site}"), &company, sure)
                 .or_else(|| fetch_checked(&http, &format!("https://www.{site}"), &company, sure))
-                .or_else(|| (sure || whole_name_site(&site, &company)).then(|| fetch_indexed(&http, INDEX, &site)).flatten());
+                .or_else(|| (sure || whole_name_site(&site, &company)).then(|| fetch_indexed(&http, INDEX, &site).or_else(|| fetch_listed(&http, INDEX_2, &site))).flatten());
             if let Some((ctype, bytes)) = found {
                 let _ = a.db().set(&site_key(&site), &format!("{ctype}|{}", base64::engine::general_purpose::STANDARD.encode(bytes)));
                 value = format!("site|{site}");
@@ -140,6 +158,21 @@ pub fn want(agent: &Arc<Agent>, company: &str) {
 /// A public index of sites' icons, for a company's site that won't answer a program: only the
 /// site's address is sent.
 const INDEX: &str = "https://icons.duckduckgo.com/ip3";
+
+/// A second index, asked when the first has nothing (again only the site's address is sent).
+const INDEX_2: &str = "https://www.google.com/s2/favicons";
+
+/// An icon from the second index: (type, bytes). It answers 404 with a plain globe when it has
+/// none, so only a success counts.
+pub fn fetch_listed(http: &reqwest::blocking::Client, index: &str, site: &str) -> Option<(String, Vec<u8>)> {
+    let r = http.get(format!("{index}?domain={site}&sz=128")).send().ok()?;
+    if !r.status().is_success() {
+        return None;
+    }
+    let header = r.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").split(';').next().unwrap_or("").trim().to_lowercase();
+    let bytes = r.bytes().ok()?;
+    (header.starts_with("image/") && ICON_BYTES.contains(&bytes.len())).then(|| (header, bytes.to_vec()))
+}
 
 /// An icon from the index: (type, bytes). None when it has none for the site.
 pub fn fetch_indexed(http: &reqwest::blocking::Client, index: &str, site: &str) -> Option<(String, Vec<u8>)> {
@@ -369,6 +402,25 @@ pub fn fetch_from(http: &reqwest::blocking::Client, base: &str) -> Option<(Strin
 mod tests {
     use super::*;
 
+    /// One employer under several names shares a key, so its logo, "Applied here before" and the
+    /// rest are shared; a different company with a like-sounding name isn't caught.
+    #[test]
+    fn one_employer_under_several_names() {
+        use crate::db::company_key as k;
+        for n in ["BMO", "Bank of Montreal", "BMO Financial Group", "The Bank of Montreal", "BMO Capital Markets"] {
+            assert_eq!(k(n), "bmo", "{n}");
+        }
+        assert_eq!(k("Royal Bank of Canada"), k("RBC"));
+        assert_eq!(k("mufgub"), k("MUFG Bank, Ltd."));
+        assert_eq!(k("Ernst & Young LLP"), k("EY"));
+        assert_eq!(k("TD Bank Group"), k("Toronto-Dominion Bank"));
+        assert_ne!(k("TD SYNNEX"), k("TD"));
+        assert_ne!(k("Montreal Bagel Co"), k("BMO"));
+        assert_eq!(k("Thomson Reuters Holdings Inc."), "thomsonreuters", "others as before");
+        // The logo's place is the same for every spelling.
+        assert_eq!(key("Bank of Montreal"), key("BMO"));
+    }
+
     #[test]
     fn a_companys_own_site() {
         assert_eq!(own_site("https://careers.bmo.com/jobs/1").as_deref(), Some("bmo.com"));
@@ -419,7 +471,7 @@ mod tests {
     fn kept_once_looked_for() {
         let s = crate::testkit::setup();
         assert_eq!(kept(&s.agent, "Acme Inc."), None, "not looked for yet");
-        s.agent.db().set(&key("Acme Inc."), &format!("none3|{}", crate::util::now())).unwrap();
+        s.agent.db().set(&key("Acme Inc."), &format!("none4|{}", crate::util::now())).unwrap();
         assert_eq!(kept(&s.agent, "ACME"), Some(None), "looked lately, none: the same company however it's written");
         // Its site, and that site's image: shared by every spelling that leads to the site.
         s.agent.db().set(&site_key("acme.com"), &format!("image/png|{}", base64::engine::general_purpose::STANDARD.encode([1u8, 2, 3]))).unwrap();

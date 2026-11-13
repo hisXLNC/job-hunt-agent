@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.61.0",
+    "date": "2026-11-13",
+    "title": "One company, whatever it's called",
+    "changes": [
+      "Bank of Montreal and BMO were two companies to Job Hunt, so one had a logo and the other did not. Well-known employers that go by several names (BMO, RBC, TD, CIBC, Scotiabank, National Bank, EY, PwC, MUFG, JPMorgan, Sun Life and more) are now one company each: one logo, Applied here before and the count of roles across every spelling, and the same posting from two sources kept once.",
+      "The company shown as mufgub (its code on Workday) is now MUFG.",
+      "Logos: a second public index of site icons is asked when a company's own site and the first index have none, and every company without a logo is looked up again."
+    ]
+  },
+  {
     "version": "2.60.0",
     "date": "2026-11-13",
     "title": "Update a CV, and everything follows",

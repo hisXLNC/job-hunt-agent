@@ -56,6 +56,11 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.61.0: one employer, several names.** `db::SAME_COMPANY` + `same_company()` inside `dupe_key` (so `company_key`,
+  logos, "Applied here before", dedupe all follow); add a row when the user reports two spellings. Existing jobs are
+  rekeyed once (`Db::rekey_jobs`, flag `companies.rekeyed`, in `logos::name_hosts_once`), where `CODE_NAMES` also renames
+  "mufgub" to MUFG. Logos: `fetch_listed` (Google's favicon index) after DuckDuckGo's; misses are now `none4`, and
+  `none3` is looked up again. No network to real sites from the build machine: none of the fetching is verified live.
 - **2.60.0: a new file for a CV updates everything.** `Agent::refresh_after_cv(id, change)` (tailoring.rs) runs after
   `replace_cv` in the background under the claim `cv-update`: `suggest_for_cv` (titles/keywords added), `rescore_through`
   (rounds of `rescore_jobs` past the cap while the next unscored job is queued or saved; `cv_changed` now lists queued,

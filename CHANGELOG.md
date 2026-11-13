@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.61.0] - 2026-11-13
+
+One company, whatever it's called.
+
+### Changes
+
+- Bank of Montreal and BMO were two companies to Job Hunt, so one had a logo and the other did not. Well-known employers that go by several names (BMO, RBC, TD, CIBC, Scotiabank, National Bank, EY, PwC, MUFG, JPMorgan, Sun Life and more) are now one company each: one logo, Applied here before and the count of roles across every spelling, and the same posting from two sources kept once.
+- The company shown as mufgub (its code on Workday) is now MUFG.
+- Logos: a second public index of site icons is asked when a company's own site and the first index have none, and every company without a logo is looked up again.
+
 ## [2.60.0] - 2026-11-13
 
 Update a CV, and everything follows.
@@ -1856,6 +1866,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.61.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.0
 [2.60.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.60.0
 [2.59.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.59.0
 [2.58.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.58.2

@@ -194,6 +194,37 @@ impl Job {
     }
 }
 
+/// Employers that go by more than one name: (the key they share, names that are exactly them, names
+/// that start with one of these). Sources spell them differently ("Bank of Montreal" on one board,
+/// "BMO" on another, "mufgub" as Workday's code), and each spelling was its own company: no shared
+/// logo, no "Applied here before", the same posting kept twice. Names are lower-case words, without
+/// the legal endings dupe_key drops. Only exact names where a start would catch someone else
+/// ("TD SYNNEX" isn't the bank).
+const SAME_COMPANY: &[(&str, &[&str], &[&str])] = &[
+    ("bmo", &["bank of montreal"], &["bmo"]),
+    ("rbc", &["royal bank of canada", "royal bank"], &["rbc"]),
+    ("td", &["td", "td bank", "td securities", "td insurance", "td canada trust", "td wealth", "td asset management", "toronto dominion bank", "toronto dominion"], &[]),
+    ("cibc", &["canadian imperial bank of commerce"], &["cibc"]),
+    ("scotiabank", &["bank of nova scotia"], &["scotiabank"]),
+    ("nationalbank", &["national bank of canada", "national bank", "banque nationale du canada", "banque nationale"], &[]),
+    ("ey", &["ey", "ernst young", "ernst and young"], &[]),
+    ("pwc", &["pricewaterhousecoopers"], &["pwc"]),
+    ("mufg", &["mufgub"], &["mufg"]),
+    ("jpmorgan", &["jpmorgan", "jpmorgan chase", "jpmorganchase", "jp morgan", "jp morgan chase", "j p morgan"], &[]),
+    ("sunlife", &["sun life", "sun life financial", "sunlife"], &[]),
+    ("manulife", &[], &["manulife"]),
+    ("deloitte", &[], &["deloitte"]),
+    ("kpmg", &[], &["kpmg"]),
+    ("hsbc", &[], &["hsbc"]),
+    ("cppinvestments", &["cpp investments", "cpp investment board", "canada pension plan investment board"], &[]),
+    ("otpp", &["otpp", "ontario teachers pension plan", "ontario teachers"], &[]),
+];
+
+/// The key an employer's names share (see SAME_COMPANY), from its name as lower-case words.
+fn same_company(name: &str) -> Option<&'static str> {
+    SAME_COMPANY.iter().find(|(_, exact, starts)| exact.contains(&name) || starts.iter().any(|s| name == *s || name.starts_with(&format!("{s} ")))).map(|(k, _, _)| *k)
+}
+
 /// The same role, however a source spells the company: "USA018 Thomson Reuters Holdings Inc." and
 /// "Thomson Reuters" are one employer, and "Product Owner I (US)" is "Product Owner I".
 pub fn dupe_key(company: &str, title: &str) -> String {
@@ -217,7 +248,9 @@ pub fn dupe_key(company: &str, title: &str) -> String {
     if c.len() > 1 && is_company_code(&c[0]) {
         c.remove(0);
     }
-    let c: String = c.into_iter().filter(|w| !LEGAL.contains(&w.as_str())).collect();
+    let c: Vec<String> = c.into_iter().filter(|w| !LEGAL.contains(&w.as_str())).collect();
+    // One employer under several names ("Bank of Montreal", "BMO Financial Group"): one key.
+    let c: String = same_company(&c.join(" ")).map(String::from).unwrap_or_else(|| c.concat());
     format!("{c}|{}", words(title).join(" "))
 }
 
@@ -663,6 +696,24 @@ impl Db {
     }
 
     /// Give a job's company its proper name (and the key that groups it with the same role elsewhere).
+    /// Work out every job's dupe_key again (the way it's made changed). Returns how many changed.
+    pub fn rekey_jobs(&self) -> R<usize> {
+        let rows: Vec<(String, String, String, String)> = {
+            let mut st = self.con.prepare("SELECT id, company, title, COALESCE(dupe_key, '') FROM jobs")?;
+            let r = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.filter_map(|x| x.ok()).collect();
+            r
+        };
+        let mut n = 0;
+        for (id, company, title, old) in rows {
+            let new = dupe_key(&company, &title);
+            if new != old {
+                self.con.execute("UPDATE jobs SET dupe_key = ?2 WHERE id = ?1", params![id, new])?;
+                n += 1;
+            }
+        }
+        Ok(n)
+    }
+
     pub fn rename_company(&self, id: &str, title: &str, company: &str) -> R<()> {
         self.con.execute("UPDATE jobs SET company = ?2, dupe_key = ?3 WHERE id = ?1", params![id, company, dupe_key(company, title)])?;
         Ok(())
