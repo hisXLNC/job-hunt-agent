@@ -6,10 +6,12 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.61.2] - 2026-11-13
 
-All jobs: smaller stage tags.
+Certificates found by their full name; smaller stage tags.
 
 ### Changes
 
+- Filling a form: a certificate written as PMP was searched for as PMP, which finds nothing in a list that names it in full after who issues it (Project Management Institute - Project Management Professional). Job Hunt now also searches by the full name of common certificates (PMP, CAPM, PMI-ACP, CSM, CBAP, CPA and others) and reads the name after the issuer, so the right one is chosen instead of Not Applicable.
+- While it looks through a site's list, the panel says what it is looking for, so a slow list no longer looks stuck; and a list that never says it found nothing is given five seconds a search after the first, not twelve.
 - The stage on each row of All jobs (Ready to approve, Approved – submit it) is a small one-line tag again. It had wrapped onto two lines and looked like a large button.
 
 ## [2.61.1] - 2026-11-13

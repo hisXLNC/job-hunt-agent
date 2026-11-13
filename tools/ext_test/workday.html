@@ -23,6 +23,7 @@
 <!-- A stand-in for a Workday application page, for tools/ext_test/ext_test.js. Its skill and
      field-of-study boxes behave like Workday's as far as the filler can tell: type, press Enter, a
      list of matches comes up after a pause, and an option is taken by a real click (or real keys).
+     ?certs=issuer   certificates are listed as "Issuer - Name", with no short forms and no "Other" (the OSC form)
      ?pills=odd      chosen items are drawn with no recognisable markup, and rows carry no aria-selected
      ?typing=trusted typing and Enter count only when they're real (the browser's own events)
      ?click=keys     the mouse does nothing in the list: only real arrow keys and Enter choose
@@ -72,7 +73,8 @@ const LISTS = {
     'Agile Methodology', 'Agile Project Management', 'Stakeholder Management', 'Risk Management', 'Data Analysis', 'Microsoft Excel', 'Payments', 'Payment Processing', 'JIRA', 'Budgeting'],
   // Not every school or certificate is in a site's list: those forms say to choose "Other".
   schools: ['American University', 'American University of Beirut', 'University of Toronto', 'Other'],
-  certs: ['Project Management Professional (PMP)', 'Certified Public Accountant (CPA)', 'Other'],
+  certs: Q.get('certs') === 'issuer' ? ['Project Management Institute - Project Management Professional', 'Project Management Institute - Program Management Professional', 'Scrum Alliance - Certified ScrumMaster', 'CPA Canada - Chartered Professional Accountant', 'Not Applicable - Not Applicable']
+    : ['Project Management Professional (PMP)', 'Certified Public Accountant (CPA)', 'Other'],
   study: ['Computer Science', 'Computer Engineering', 'Computer and Information Sciences', 'Data Science', 'Business Administration', 'Economics'],
 };
 window.mock = { clicks: [], searches: [] };

@@ -27,6 +27,7 @@ const VARIANTS = {
   keys: 'click=keys',            // the mouse does nothing in the list: real keys only
   slow: 'slow=4000',             // a search takes four seconds
   zoom: '',                      // the browser zoomed to 80%
+  issuer: 'certs=issuer',        // certificates listed as "Issuer - Name" without short forms: PMP is still found
   heal: '',                      // Job Hunt forgets the form once (a restart) and drops three requests: the extension recovers by itself
 };
 
@@ -144,6 +145,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   await sw.evaluate(() => chrome.storage.local.set({ key: 'jh-test' }));
 
   const failed = [];
+  let running = '';
   // What a run must have done, whoever filled it in.
   const judge = (got, s) => {
     const problems = [];
@@ -157,7 +159,8 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     // What the OSC Workday form got wrong (2.57.0).
     const st = got.state || {}, eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     if (!eq(st.school, ['Other'])) problems.push(`School or University is ${JSON.stringify(st.school)}, not Other (the list doesn't have the school; "American University" is a different one)`);
-    if (!eq(st.certs, ['Project Management Professional (PMP)', 'Other'])) problems.push(`the certifications are ${JSON.stringify(st.certs)}, not PMP and Other in two entries`);
+    const certs = running === 'issuer' ? ['Project Management Institute - Project Management Professional', 'Not Applicable - Not Applicable'] : ['Project Management Professional (PMP)', 'Other'];
+    if (!eq(st.certs, certs)) problems.push(`the certifications are ${JSON.stringify(st.certs)}, not ${JSON.stringify(certs)}`);
     if (!eq(st.languages, LANGS)) problems.push(`the languages are ${JSON.stringify(st.languages)}, not ${LANGS.join(', ')}`);
     if (!eq(st.levels, ['5 - Fluent', '5 - Fluent', '1 - Beginner'])) problems.push(`the language levels are ${JSON.stringify(st.levels)}`);
     if (!eq(st.fluent, [true, true, false])) problems.push(`"I am fluent" is ${JSON.stringify(st.fluent)}`);
@@ -177,6 +180,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   for (const name of names) {
     const page = await ctx.newPage();
     const url = `${base}?${VARIANTS[name]}`;
+    running = name;
     fault = name === 'heal' ? { forget: 1, drop: 3, delay: 3000 } : {};
     const before = { starts, polls };
     await page.goto(url);

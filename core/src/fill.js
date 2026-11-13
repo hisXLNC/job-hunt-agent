@@ -792,13 +792,26 @@
     // How well an option fits a skill: the same name best, then one that starts with it or holds it,
     // then the share of their words they have in common (both ways, so "Management" alone doesn't
     // pass for "Vendor Management").
-    const fit = (o, skill) => {
-      const x = label(o), s = skill.toLowerCase();
+    // A certificate's short form, spelled out: lists name them in full, often after who issues them
+    // ("Project Management Institute - Project Management Professional"), where "PMP" finds nothing.
+    const FULL = { pmp: 'Project Management Professional', capm: 'Certified Associate in Project Management', pgmp: 'Program Management Professional', pfmp: 'Portfolio Management Professional',
+      'pmi-acp': 'Agile Certified Practitioner', 'pmi-pba': 'Professional in Business Analysis', 'pmi-rmp': 'Risk Management Professional', 'pmi-sp': 'Scheduling Professional',
+      csm: 'Certified ScrumMaster', cspo: 'Certified Scrum Product Owner', psm: 'Professional Scrum Master', pspo: 'Professional Scrum Product Owner', safe: 'Scaled Agile',
+      cbap: 'Certified Business Analysis Professional', ccba: 'Certification of Capability in Business Analysis', cpa: 'Chartered Professional Accountant', cfa: 'Chartered Financial Analyst',
+      cissp: 'Certified Information Systems Security Professional', cisa: 'Certified Information Systems Auditor', cism: 'Certified Information Security Manager',
+      prince2: 'PRINCE2', lssgb: 'Lean Six Sigma Green Belt', lssbb: 'Lean Six Sigma Black Belt', mba: 'Master of Business Administration' };
+    const full = skill => FULL[skill.toLowerCase().replace(/[®™.]/g, '').replace(/\s+/g, ' ').trim()] || '';
+    // The name after who issues it: "Project Management Professional" of "Project Management Institute - Project Management Professional".
+    const tail = x => x.includes(' - ') ? x.slice(x.lastIndexOf(' - ') + 3).trim() : '';
+    const fit = (o, skill) => Math.max(fit1(label(o), skill), tail(label(o)) ? fit1(tail(label(o)), skill) : 0, full(skill) ? Math.max(fit1(label(o), full(skill)), tail(label(o)) ? fit1(tail(label(o)), full(skill)) : 0) : 0);
+    const fit1 = (x, skill) => {
+      const s = skill.toLowerCase();
       if (!x || /^(search results|no (items|results|matches)|searching|loading)/.test(x)) return 0;
       if (x === s || bare(x) === bare(s)) return 100;
       // Its short form in brackets, either way round: "PMP" is "Project Management Professional (PMP)".
-      const abbr = t => ((/\(([^)]{2,12})\)/.exec(t) || [])[1] || '').trim();
-      if ((abbr(x) && (abbr(x) === s || abbr(x) === abbr(s))) || (abbr(s) && abbr(s) === x)) return 95;
+      const abbrs = t => [...t.matchAll(/\(([^)]{2,12})\)/g)].map(m => m[1].trim());
+      const abbr = t => abbrs(t)[0] || '';
+      if (abbrs(x).some(a => a === s || (abbr(s) && a === abbr(s))) || (abbr(s) && abbr(s) === x)) return 95;
       const a = words(s), b = words(x);
       const common = a.filter(w => b.includes(w)).length;
       let n = a.length && b.length ? 60 * common / Math.max(a.length, b.length) : 0;
@@ -827,7 +840,7 @@
     const nothing = () => !options().length && (NOTHING.test(clean(field === document.body ? '' : field.textContent || '')) || [...document.querySelectorAll(LISTS)].some(x => !own(x) && shown(x) && NOTHING.test(clean(x.textContent).slice(0, 200))));
     // Typing the way the page takes it: as a script does (most sites), or as real typing through the
     // extension when the site didn't react to that.
-    let trusted = false, scriptWorks = false;
+    let trusted = false, scriptWorks = false, silent = false;
     const trace = [];
     const search = async query => {
       if (options().length || nothing()) { pressKey(box(), 'Escape'); await wait(350); }
@@ -845,7 +858,9 @@
       const key = words(query);
       const ours = l => l.some(o => key.some(w => label(o).includes(w)));
       let list = [], none = 0, reacted = true;
-      for (let i = 0; i < 70; i++) {
+      // A list that never says "No items" is waited on in full once; after that, five seconds.
+      const looks = silent ? 30 : 70;
+      for (let i = 0; i < looks; i++) {
         await wait(170);
         list = options();
         const busy = !list.length || /^(searching|loading)/i.test(clean(list[0].textContent));
@@ -857,6 +872,7 @@
         if (i === 18 && !added && !list.length) { reacted = false; break; }
       }
       seen.disconnect();
+      if (reacted && !list.length && none < 2) silent = true;
       if (!reacted && EXT && !trusted && !scriptWorks) { trusted = true; return search(query); }
       if (reacted && !trusted) scriptWorks = true;
       // Settled: the same list three looks in a row (Workday fills it in a bit at a time).
@@ -935,8 +951,12 @@
       // nothing, "Payments" does).
       const plain = skill.replace(/\s*\([^)]*\)/g, ''), parts = plain.split(/\s+/);
       const queries = [skill, plain.replace(/(\w{3,})s\b/g, '$1'), parts.length > 2 ? parts.slice(0, 2).join(' ') : '', parts.length > 2 ? parts.slice(-2).join(' ') : '', parts.length > 1 && parts[0].length > 3 ? parts[0] : '']
+        .concat(full(skill) ? [full(skill)] : [])
         .filter((q, i, a) => q && a.findIndex(x => x.toLowerCase() === q.toLowerCase()) === i);
       let list = [], best = null, score = 0;
+      // Said while it looks (a list that answers slowly took a minute a box, and looked stuck).
+      const boxName = clean(labelOf(first) || '').slice(0, 40) || 'list';
+      status(`Looking for “${skill.slice(0, 50)}” in the site's ${boxName} list…`);
       trace.length = 0;
       for (const q of queries) {
         list = await search(q);
@@ -949,7 +969,8 @@
       if (!best && one) {
         for (const alt of ['Other', 'Not Applicable']) {
           list = await search(alt);
-          best = list.find(o => label(o) === alt.toLowerCase()) || list.find(o => new RegExp('^' + alt + '\\b', 'i').test(label(o)) && label(o).length < 30) || null;
+          const a = alt.toLowerCase();
+          best = list.find(o => label(o) === a) || list.find(o => tail(label(o)) === a) || list.find(o => new RegExp('^' + alt + '\\b', 'i').test(label(o)) && label(o).length < 30) || null;
           if (best) { other = alt; score = 100; break; }
         }
       }

@@ -56,6 +56,12 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.61.2: certificates by full name.** The user's OSC form sat on "Filling in the form…" with Certification set to
+  "Not Applicable - Not Applicable": the list names certificates "Issuer - Name", so "PMP" found nothing. `fillSkills`
+  now has `FULL` (short form -> full name, also searched), `tail()` (the name after " - "), every bracketed short form,
+  and a status line per search; `silent` shortens waits on a list that never says "No items". Mock variant `issuer`
+  (`?certs=issuer`). Not seen on the real form: what OSC's list calls PMP is a guess. If it still misses, ask for Copy
+  details (its `skills` list has every search and what came back). Also 2.61.1/2: row buttons one size, stage tags one line.
 - **2.61.0: one employer, several names.** `db::SAME_COMPANY` + `same_company()` inside `dupe_key` (so `company_key`,
   logos, "Applied here before", dedupe all follow); add a row when the user reports two spellings. Existing jobs are
   rekeyed once (`Db::rekey_jobs`, flag `companies.rekeyed`, in `logos::name_hosts_once`), where `CODE_NAMES` also renames
