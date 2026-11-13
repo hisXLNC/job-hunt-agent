@@ -13,6 +13,7 @@ One company, whatever it's called.
 - Bank of Montreal and BMO were two companies to Job Hunt, so one had a logo and the other did not. Well-known employers that go by several names (BMO, RBC, TD, CIBC, Scotiabank, National Bank, EY, PwC, MUFG, JPMorgan, Sun Life and more) are now one company each: one logo, Applied here before and the count of roles across every spelling, and the same posting from two sources kept once.
 - The company shown as mufgub (its code on Workday) is now MUFG.
 - Logos: a second public index of site icons is asked when a company's own site and the first index have none, and every company without a logo is looked up again.
+- All jobs: the table is always exactly as wide as its card. With long names, both fit scores and two buttons in a row it grew wider than the card, which then scrolled sideways and left the Company column out of sight. Every column now has a set width and long text wraps; in a narrower window the least needed columns step out (Type, then Location, Salary, Age) rather than being cut off.
 
 ## [2.60.0] - 2026-11-13
 

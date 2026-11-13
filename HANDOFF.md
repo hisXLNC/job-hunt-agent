@@ -61,6 +61,9 @@ and `DEVELOPING.md`.
   rekeyed once (`Db::rekey_jobs`, flag `companies.rekeyed`, in `logos::name_hosts_once`), where `CODE_NAMES` also renames
   "mufgub" to MUFG. Logos: `fetch_listed` (Google's favicon index) after DuckDuckGo's; misses are now `none4`, and
   `none3` is looked up again. No network to real sites from the build machine: none of the fetching is verified live.
+  All jobs table: the last block of `app.css` makes `#t-all` `table-layout: fixed` with a px width per column (Role
+  takes the rest) inside a container (`alljobs`); `@container` rules drop columns as the card narrows. A new column
+  needs a width there. Checked with worst-case rows injected in the preview at 800 to 1920 px (card never scrolls).
 - **2.60.0: a new file for a CV updates everything.** `Agent::refresh_after_cv(id, change)` (tailoring.rs) runs after
   `replace_cv` in the background under the claim `cv-update`: `suggest_for_cv` (titles/keywords added), `rescore_through`
   (rounds of `rescore_jobs` past the cap while the next unscored job is queued or saved; `cv_changed` now lists queued,
