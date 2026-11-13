@@ -686,6 +686,17 @@ async function act(el) {
       await refreshOverview(); setTimeout(route, 300);
     });
   }
+  // Approved before the CV changed, not sent yet: tailored again from the new CV (they come back to Approve).
+  if (a === 'retailorApproved') {
+    const ids = JSON.parse(el.dataset.ids || '[]');
+    el.disabled = true;
+    try {
+      const r = await api('/api/tailor', { method: 'POST', body: { ids, later: true } });
+      toast(r.deferred ? `Held for later: ${r.deferred}` : `Tailoring ${r.started} again from your new CV. Each comes back to Approve when it's ready.`);
+      await refreshOverview();
+    } catch (err) { el.disabled = false; toast(err.message, true); }
+    return;
+  }
   if (a === 'rescore') {
     const group = el.dataset.group;
     const plan = await api(`/api/rescore?group=${group}`).catch(e => { toast(e.message, true); return null; });
@@ -855,7 +866,7 @@ function cvChangeNote(c) {
 /** What Job Hunt is redoing after a CV got a new file, and how far it is (the CVs page). */
 function cvUpdateHtml(u) {
   if (!u || (!u.running && Date.now() - new Date(u.finished || u.at).getTime() > 36 * 3600 * 1000)) return '';
-  const order = ['titles', 'scoring', 'tailoring', 'career', 'done'], at = order.indexOf(u.step);
+  const order = ['titles', 'scoring', 'tailoring', 'career', 'leads', 'done'], at = order.indexOf(u.step);
   const line = (step, text) => { const i = order.indexOf(step), state = !u.running || at > i ? 'done' : at === i ? 'now' : 'next'; return `<li class="${state}">${state === 'done' ? svg('check') : state === 'now' ? '<span class="dot now"></span>' : '<span class="dot"></span>'}<span>${text}</span></li>`; };
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   const added = (u.titles_added || []).length;
@@ -864,10 +875,16 @@ function cvUpdateHtml(u) {
     line('scoring', u.to_score ? `Fits scored again: ${u.scored || 0} of ${u.to_score}${u.held ? ' (Claude reached its limit: the rest are scored when it resets)' : !u.running && u.unscored_left ? ` (${u.unscored_left} set aside earlier are left: Score it anyway on any of them)` : ''}` : 'Fits: none were against this CV'),
     line('tailoring', u.to_tailor ? `${n(u.to_tailor, 'application waiting for your approval is', 'applications waiting for your approval are')} tailored again${at > 2 || !u.running ? ' (they come back to Approve as each is ready)' : ''}` : 'Applications waiting for approval: none from this CV') + (u.kept ? ` · ${n(u.kept, 'keeps', 'keep')} your own file or edits` : ''),
     line('career', u.career ? `Career paths rewritten${u.coach ? ', and the coach\'s advice' : ''}: <a href="#cvs/career">see them</a>` : !u.running ? 'Career paths: not rewritten this time (press Think again on Career)' : 'Career paths'),
+    line('leads', u.leads ? `${n(u.leads, 'open lead', 'open leads')} read against it again` : 'Leads: none waiting to be read again'),
   ];
+  const approved = (u.approved || []).length, left = !u.running && !u.held && u.unscored_left;
+  const more = [
+    approved ? `<div class="row"><span>${n(approved, 'application you approved but haven\'t sent keeps', 'applications you approved but haven\'t sent keep')} the files you approved.</span><button class="btn sm" type="button" data-act="retailorApproved" data-ids="${esc(JSON.stringify(u.approved))}">Tailor ${approved === 1 ? 'it' : 'them'} again from the new CV</button></div>` : '',
+    left ? `<div class="row"><span>${n(left, 'role set aside earlier still has', 'roles set aside earlier still have')} no new fit.</span><button class="btn sm" type="button" data-act="rescore" data-group="skipped">Score them again</button></div>` : '',
+  ].join('');
   return `<section class="card cv-update ${u.running ? 'running' : ''}"><header><h2>${u.running ? `Updating everything for your new ${esc(u.cv)} CV` : u.stopped ? `The update for your new ${esc(u.cv)} CV was cut short` : `Up to date with your new ${esc(u.cv)} CV`}</h2>${u.running ? '<span class="pill">Working</span>' : u.stopped ? '<span class="pill warn">Stopped</span>' : '<span class="pill good">Done</span>'}</header>
-    <ul class="steps-list">${lines.join('')}</ul>
-    <p class="muted small">${u.stopped ? 'Job Hunt was closed part-way. Press Update this CV with the same file to finish it.' : `Applications you approved or sent keep the files they have.${u.running ? ' You can keep using Job Hunt while this runs.' : ''}`}</p></section>`;
+    <ul class="steps-list">${lines.join('')}</ul>${more}
+    <p class="muted small">${u.stopped ? 'Job Hunt was closed part-way. Press Update this CV with the same file to finish it.' : `What you sent stays as it went out, and what you typed yourself (titles, facts, saved answers) is never changed.${u.running ? ' You can keep using Job Hunt while this runs.' : ''}`}</p></section>`;
 }
 let cvUpdatePoll;
 /** Keep the card current while the update runs, without redrawing the page (you may be typing in it). */

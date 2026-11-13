@@ -6,9 +6,11 @@
     "changes": [
       "Give a CV a newer file (Me, CVs: Update this CV, or drop the file on that CV's card) and Job Hunt brings everything worked out from the old one up to date, in the background.",
       "Every job waiting for you to pick, and every saved one, is scored again against the new CV. It used to stop at the per-search cap and leave the rest Not scored. If Claude reaches its limit part-way, the rest are scored when it resets.",
-      "Applications waiting for your approval are tailored again from the new CV, as before. Ones with your own file or edits, and ones you approved or sent, keep what they have.",
+      "With more than one CV, waiting jobs that another CV scored best are scored again too, since the new CV may now be the better match.",
+      "Applications waiting for your approval are tailored again from the new CV, and the form answers written for them are written again. Ones with your own file or edits keep what they have. Ones you approved but have not sent keep the files you approved, and the card offers to tailor them again; what you sent stays as it went out.",
       "Your career paths are rewritten from the new CV, and the coach's advice if you have any.",
       "Claude reads the new CV for job titles and keywords the old one didn't suggest and adds them to the search. Yours are never removed.",
+      "Open leads you have not written to are read against the new CV again.",
       "A card at the top of the CVs page shows each step and how far it is."
     ]
   },

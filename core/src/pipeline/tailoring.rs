@@ -161,7 +161,31 @@ impl Agent {
             // Its fit was against the old CV too: scored again before it's tailored again.
             self.db().update_job(&j.id, &[("score", Value::Null), ("score_potential", Value::Null), ("track", if removed { Value::Null } else { id.into() })])?;
             self.db().log(Some(&j.id), "cv-changed", &format!("the {label} CV {what}: tailoring it again"))?;
+            // Answers written for its form were from the old CV: written again when next asked for.
+            let _ = self.db().delete(&format!("answers:{}", j.id));
             c.retailor.push(j.id);
+        }
+        if !removed {
+            // Approved, not sent yet: yours to decide (you approved those files).
+            let approved = self.db().jobs(Some("approved"), 100_000)?;
+            for j in approved.into_iter().filter(|j| j.track.as_deref() == Some(id) && j.applied_at.is_none()) {
+                self.db().log(Some(&j.id), "cv-changed", &format!("the {label} CV {what} after you approved this; it keeps the files you approved. Tailor it again to use the new CV"))?;
+                c.approved.push(j.id);
+            }
+            // With other CVs too: a role waiting for you that another CV scored best may now be a
+            // better match for this one. Scored again against them all (it keeps its CV until then).
+            if self.profile().tracks.len() > 1 {
+                for st in ["queued", "saved"] {
+                    let jobs = self.db().jobs(Some(st), 100_000)?;
+                    for j in jobs.into_iter().filter(|j| j.score.is_some() && j.track.as_deref().is_some_and(|t| t != id)) {
+                        let db = self.db();
+                        db.update_job(&j.id, &[("score", Value::Null), ("score_potential", Value::Null), ("score_after", Value::Null),
+                            ("reasoning", format!("Not scored: your {label} CV changed and may now be the better match for this.").into())])?;
+                        db.log(Some(&j.id), "unscored", &format!("its fit of {} was from before the {label} CV changed", j.score.unwrap_or(0)))?;
+                        c.unscored.push(j.id);
+                    }
+                }
+            }
         }
         Ok(c)
     }
@@ -249,12 +273,14 @@ impl Agent {
     /// one didn't suggest (added to yours, never taken away) and the experience in it. (2) Fits
     /// against the old CV are scored again: all of the roles waiting for you, a round of the ones
     /// set aside. (3) Applications waiting for your approval are tailored again. (4) Your career
-    /// paths, and the coach's advice if you have any, are written again. How far it is: cv_update.
+    /// paths, and the coach's advice if you have any, are written again. (5) Open leads are read
+    /// against it again. How far it is: cv_update. Not redone, on purpose: what you approved or sent
+    /// (offered for the approved ones), and what you typed yourself (titles, facts, saved answers).
     pub fn refresh_after_cv(self: &Arc<Self>, id: &str, c: CvChange) {
         let label = self.profile().tracks.iter().find(|t| t.name == id).map(|t| t.label.clone()).unwrap_or_else(|| id.to_string());
         let claude = self.claude_ready();
         let start = json!({ "at": now(), "cv": label, "running": true, "step": "titles", "claude": claude,
-            "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept });
+            "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept, "approved": c.approved });
         let _ = self.db().set("cv.update", &start.to_string());
         let (a, id) = (self.clone(), id.to_string());
         std::thread::spawn(move || {
@@ -311,6 +337,14 @@ impl Agent {
                     }
                 }
             }
+            // (5) Leads you haven't written to yet: read against the new CV.
+            put(json!({ "step": "leads" }));
+            if claude && a.limited().is_none() {
+                match crate::leads::read_again(&a) {
+                    Ok(n) => put(json!({ "leads": n })),
+                    Err(e) => { let _ = a.db().log(None, "leads:error", &e.0); }
+                }
+            }
             put(json!({ "step": "done", "running": false, "finished": now() }));
             a.note("Job Hunt is up to date with your new CV", &format!("The {label} CV: fits scored again, applications waiting for you tailored again, and your career paths rewritten. See Me, CVs."));
         });
@@ -330,6 +364,7 @@ impl Agent {
             unscored: waiting.unscored.iter().filter(|id| still(id, &["queued", "skipped", "saved", "dismissed"])).cloned().collect(),
             retailor: waiting.retailor.iter().filter(|id| still(id, &["ready"])).cloned().collect(),
             kept: 0,
+            approved: vec![],
         };
         self.apply_cv_change(c.clone());
         c

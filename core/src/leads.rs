@@ -259,6 +259,26 @@ fn size_up(agent: &Agent, leads: &mut [Lead]) -> R<()> {
     Ok(())
 }
 
+/// Your CV changed: the open leads you haven't written to are read against it again (the fit,
+/// where you'd help, what's worth saying). One the reading no longer takes for hiring keeps what
+/// it had. Returns how many were read.
+pub fn read_again(agent: &Agent) -> R<usize> {
+    let mut list = all(agent);
+    let mut open: Vec<Lead> = list.iter().filter(|l| l.status.is_empty() && l.fit.is_some() && l.people.iter().all(|p| p.sent_at.is_empty())).cloned().collect();
+    if open.is_empty() {
+        return Ok(0);
+    }
+    size_up(agent, &mut open)?;
+    let n = open.len();
+    for w in open.into_iter().filter(|w| w.status != "not") {
+        if let Some(l) = list.iter_mut().find(|l| l.id == w.id) {
+            *l = w;
+        }
+    }
+    save(agent, &list)?;
+    Ok(n)
+}
+
 /// Read the leads that haven't been yet (the AI wasn't set up, or was busy, when they came in).
 pub fn size_up_waiting(agent: &Agent) -> R<usize> {
     let mut list = all(agent);

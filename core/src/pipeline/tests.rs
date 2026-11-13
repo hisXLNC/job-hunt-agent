@@ -1832,6 +1832,9 @@ fn a_new_cv_updates_everything_worked_out_from_the_old_one() {
     p.max_scored_per_run = 2;
     p.auto_tailor = false;
     s.agent.save_profile(&p).unwrap();
+    // Claude counts as set up whatever is installed on the machine running this.
+    s.agent.db().set("claude.engine", "api").unwrap();
+    s.agent.db().set("claude.key", "test").unwrap();
     s.agent.search(Some((1..=5).map(|i| Posting { company: format!("Co{i}"), ..posting("Program Manager", &i.to_string()) }).collect())).unwrap();
     // Score whatever the cap held back, so all five have a fit against the old CV.
     for _ in 0..4 { let _ = s.agent.score_all_held(); }
@@ -1857,6 +1860,24 @@ fn a_new_cv_updates_everything_worked_out_from_the_old_one() {
         assert!(s.agent.db().job(&j.id).unwrap().unwrap().score.is_some());
     }
     assert!(!s.agent.secret("career").is_empty());
+}
+
+/// Approved, not sent, when the CV changes: kept as approved, listed, and tailored again on request.
+#[test]
+fn an_approved_application_keeps_its_files_until_you_ask() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Program Manager", "1")])).unwrap();
+    let j = s.agent.db().jobs(Some("ready"), 10).unwrap().remove(0);
+    s.agent.db().set_status(&j.id, "approved", "approved").unwrap();
+    let track = j.track.clone().unwrap();
+    let bytes = std::fs::read(s.agent.cv_path(&track)).unwrap();
+    let (_, change) = s.agent.replace_cv(&track, "new.docx", &bytes, false).unwrap();
+    assert_eq!((change.approved.clone(), change.retailor.len()), (vec![j.id.clone()], 0));
+    let kept = s.agent.db().job(&j.id).unwrap().unwrap();
+    assert_eq!((kept.status.as_str(), kept.cv_path), ("approved", j.cv_path.clone()));
+    // Asked for: tailored again, and back to you to approve.
+    let again = s.agent.tailor_anyway(&j.id, None).unwrap();
+    assert_eq!(again.status, "ready");
 }
 
 #[test]
