@@ -1815,3 +1815,8 @@ details.kit > summary { cursor: pointer; }
 }
 @container alljobs (max-width: 470px) { #t-all th:nth-child(7), #t-all td:nth-child(7) { display: none; } }
 #t-all td.next .btn { white-space: normal; text-align: center; min-width: 0; flex: 0 1 auto; }
+/* All jobs: the row's button is one size whatever it says (Apply, Approve, Tailor), with the
+   Not interested cross in the same place beside it. */
+#t-all td.next .row-act { flex-wrap: nowrap; gap: 4px; }
+#t-all td.next .row-act > .btn:first-child { width: 84px; flex: none; justify-content: center; text-align: center; padding-left: 0; padding-right: 0; white-space: nowrap; }
+#t-all td.next .row-act > .btn.ghost { width: 28px; flex: none; padding: 0; justify-content: center; }

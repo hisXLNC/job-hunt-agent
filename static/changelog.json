@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.61.1",
+    "date": "2026-11-13",
+    "title": "All jobs: buttons one size",
+    "changes": [
+      "The button on each row of All jobs (Apply, Approve, Tailor) is the same size whatever it says, with the Not interested cross in the same place beside it. On a role that was set aside it now reads Tailor, like the others."
+    ]
+  },
+  {
     "version": "2.61.0",
     "date": "2026-11-13",
     "title": "One company, whatever it's called",

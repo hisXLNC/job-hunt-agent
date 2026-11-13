@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.61.1] - 2026-11-13
+
+All jobs: buttons one size.
+
+### Changes
+
+- The button on each row of All jobs (Apply, Approve, Tailor) is the same size whatever it says, with the Not interested cross in the same place beside it. On a role that was set aside it now reads Tailor, like the others.
+
 ## [2.61.0] - 2026-11-13
 
 One company, whatever it's called.
@@ -1867,6 +1875,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.61.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.1
 [2.61.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.61.0
 [2.60.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.60.0
 [2.59.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.59.0
