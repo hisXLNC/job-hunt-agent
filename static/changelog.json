@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.65.4",
+    "date": "2026-11-13",
+    "title": "Indeed's notice: Claude Code's own words",
+    "changes": [
+      "A source's notice about signing in now includes what Claude Code itself said, so a connector that needs reconnecting can be told from Claude Code being signed out, and it says when it was last tested.",
+      "After Sign in to Claude from a source's notice, that source is tested again by itself, so the notice is not left showing an old result."
+    ]
+  },
+  {
     "version": "2.65.3",
     "date": "2026-11-13",
     "title": "Sign in to Claude opens its window",

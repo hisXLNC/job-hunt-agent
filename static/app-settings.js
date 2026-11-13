@@ -1392,7 +1392,9 @@ let connWasTesting = false;
 function connFix(r) {
   const signedOut = /Claude Code isn't signed in/.test(r.detail || '');
   if (!signedOut) return [r.detail || '', ''];
-  return ["Claude Code isn't signed in on this PC. Sign it in here, then press Test.", '<button class="btn primary sm" data-act="claudeSetup" data-install="">Sign in to Claude</button>'];
+  // What Claude Code itself said stays with it (it tells a signed-out Claude Code from anything else).
+  const said = (/ Claude Code said: .*$/.exec(r.detail) || [''])[0];
+  return [`Claude Code isn't signed in on this PC. Sign it in here: Job Hunt tests this again by itself once you have.${said}`, `<button class="btn primary sm" data-act="claudeSetup" data-install="" data-id="${esc(r.id)}">Sign in to Claude</button>`];
 }
 async function renderConnStatus() {
   clearTimeout(connPoll);
@@ -1417,7 +1419,7 @@ async function renderConnStatus() {
     const probs = d.rows.filter(r => ['problem', 'partial'].includes(r.status));
     box.hidden = !probs.length;
     box.innerHTML = `<header><h2>Needs attention</h2></header>${probs.map(r => { const [said, fix] = connFix(r); return `<div class="conn-row problem">
-      <span class="conn-name"><b>${esc(r.name)}</b></span><span class="grow small">${esc(said)}</span>
+      <span class="conn-name"><b>${esc(r.name)}</b></span><span class="grow small">${esc(said)}${r.at ? ` <span class="muted">· tested ${esc(ago(r.at))}</span>` : ''}</span>
       <span class="row todo-act">${fix}${(r.actions || []).filter(a => !(fix && a.startsWith('link:'))).map(a => connBtn(r, a, d.testing)).join('')}</span></div>`; }).join('')}`;
   }
   // Done testing: the sources page shows each site's result.

@@ -859,6 +859,7 @@ async function act(el) {
     // no window opened, while the toast said one had.)
     el.disabled = true;
     try {
+      claudeRetest = el.dataset.id || '';
       await api('/api/claude/setup', { method: 'POST', body: { install: el.dataset.install === '1' } });
       toast('A window opened for signing in (look on the taskbar if it is behind this one). Follow its steps; Job Hunt checks by itself.');
       watchClaude();
@@ -1070,13 +1071,20 @@ function watchCareer(hash) {
 
 let claudeWatch;
 /** After the setup window opens: check every few seconds until Claude Code is signed in. */
+let claudeRetest = '';
 function watchClaude() {
   clearTimeout(claudeWatch);
   const until = Date.now() + 15 * 60 * 1000;
   const tick = async () => {
     try {
       const st = await api('/api/settings/claude-code');
-      if (st.found && st.signed_in) { toast('Claude is ready.'); await refreshOverview(); route(); return; }
+      if (st.found && st.signed_in) {
+        // Signed in from a source's notice: that source is tested again, so the notice is today's.
+        const again = claudeRetest; claudeRetest = '';
+        if (again) { try { await api('/api/connections/test', { method: 'POST', body: { id: again } }); } catch (e) { /* its Test button is there */ } }
+        toast(again ? 'Claude is signed in. Testing again now; the result shows here in a minute.' : 'Claude is ready.');
+        await refreshOverview(); route(); return;
+      }
     } catch {}
     if (Date.now() < until) claudeWatch = setTimeout(tick, 5000);
   };

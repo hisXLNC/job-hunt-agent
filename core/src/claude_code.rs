@@ -337,7 +337,10 @@ pub fn parse_output(ok: bool, stdout: &str, stderr: &str) -> R<Value> {
             crate::usage::report_limit(at);
             "Your Claude usage limit is reached for now. Job Hunt will try again once it resets.".to_string()
         } else if low.contains("login") || low.contains("log in") || low.contains("not logged") || low.contains("authenticat") {
-            "Claude Code isn't signed in. In Job Hunt, open Settings \u{2192} Accounts and press Sign in to Claude.".to_string()
+            // With what Claude Code itself said: "sign in" is also what a connector that needs
+            // reconnecting says, and only the words tell which it was.
+            let said: String = result.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(220).collect();
+            format!("Claude Code isn't signed in. In Job Hunt, open Settings \u{2192} Accounts and press Sign in to Claude. Claude Code said: \u{201c}{said}\u{201d}")
         } else if subtype == "error_max_turns" {
             "Claude Code ran out of steps before answering.".to_string()
         } else {

@@ -2392,13 +2392,19 @@ note says; no company name, no filler. Return them in the same order, one for ea
         // A connector that needs signing in to again answers with words about signing in, which read
         // as Claude Code itself being signed out (it said so under Needs attention while everything
         // else Claude does was working). Claude Code is asked; if it is signed in, it's the connector.
-        let mut found = match run() {
-            Err(e) if e.0.contains("isn't signed in") && crate::claude_code::signed_in(cc) => return Err(Error(crate::claude_code::connector_diagnosis(cc, "Indeed"))),
-            r => r?,
+        let told_apart = |r: R<FoundJobs>| -> R<FoundJobs> {
+            match r {
+                Err(e) if e.0.contains("isn't signed in") && crate::claude_code::signed_in(cc) => {
+                    let said = e.0.split_once(" Claude Code said: ").map(|x| format!(" Claude Code said: {}", x.1)).unwrap_or_default();
+                    Err(Error(format!("{}{said}", crate::claude_code::connector_diagnosis(cc, "Indeed"))))
+                }
+                r => r,
+            }
         };
+        let mut found = told_apart(run())?;
         // Connectors sometimes aren't ready on the first try: once more before saying why.
         if !found.tools_available {
-            found = run()?;
+            found = told_apart(run())?;
         }
         if !found.tools_available {
             return Err(Error(crate::claude_code::connector_diagnosis(cc, "Indeed")));
