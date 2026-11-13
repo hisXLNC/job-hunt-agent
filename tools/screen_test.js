@@ -176,6 +176,16 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   if (!await page.$('.paths .path')) { await page.click('#careerCard [data-act="career"]').catch(() => {}); await until(() => page.evaluate(() => !!document.querySelector('.paths .path')), 40); await at('cvs/career'); }
   check(await page.evaluate(() => { const rec = [...document.querySelectorAll('.paths .path.rec')], all = document.querySelectorAll('.paths .path').length;
     return rec.length >= 1 && rec.length < all && rec.every(p => p.querySelector('.rec-flag') && p.querySelector('.rec-why')?.textContent.length > 40) && document.querySelectorAll('#careerRecs li').length === rec.length && document.querySelectorAll('#t-career tr.rec .rec-mark').length === rec.length; }), 'Career: the recommended paths are marked, each with why, in the summary, the comparison and the cards');
+  // Several paths kept open: two added from the cards, one taken off again.
+  await page.click('.paths .path [data-act="addPath"]');
+  await until(async () => !!(await prefs()).wants?.path, 15);
+  await until(() => page.evaluate(() => document.querySelectorAll('#pathCard .path-chip').length === 1), 10);
+  await page.click('.paths .path [data-act="addPath"]');
+  check(await until(async () => ((await prefs()).wants?.path || '').split('; ').length === 2, 15) && await until(() => page.evaluate(() => document.querySelectorAll('#pathCard .path-chip').length === 2 && document.querySelectorAll('.paths .path [data-act="dropPath"]').length === 2), 10), 'Career: two paths can be kept open at once');
+  await page.click('#pathCard .path-chip [data-act="dropPath"]');
+  check(await until(async () => { const v = (await prefs()).wants?.path || ''; return !!v && !v.includes(';'); }, 15), 'Career: one of them can be taken off the list');
+  await page.click('#pathCard [data-act="choosePath"]');
+  await until(async () => (await prefs()).wants?.path === '', 15);
   await at('results');
   // Rejections: Claude studies them from Insights, and what it learns is shown (and handed to tailoring).
   check(await page.evaluate(() => !!document.querySelector('[data-act="lessons"]')), 'Insights offers to study your rejections');

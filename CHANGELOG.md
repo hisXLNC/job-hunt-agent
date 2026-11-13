@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.63.0] - 2026-11-13
+
+Keep several career paths open.
+
+### Changes
+
+- You no longer have to settle on one career path. Keep as many open as you like (Me, Career: Keep this path open on any path, or add one in your own words, such as product management in any industry). A posting is marked On your path when it moves you along any of them, and Off your path only when it leads to none.
+- Your paths are shown as chips you can take off one at a time.
+
 ## [2.62.2] - 2026-11-13
 
 Career paths: a quieter Recommended.
@@ -1919,6 +1928,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.63.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.63.0
 [2.62.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.2
 [2.62.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.1
 [2.62.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.62.0

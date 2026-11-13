@@ -205,8 +205,13 @@ impl Wants {
         if !list(&self.dealbreakers).is_empty() {
             lines.push(format!("- Deal-breakers: {}. A posting that clearly has one scores below 50, with it named in red_flags; when the posting doesn't say, don't assume.", list(&self.dealbreakers)));
         }
-        if !self.path.trim().is_empty() {
-            lines.push(format!("- The career path they're building: {}. Read every role against it and say so in red_flags with one entry, worded exactly \"Career path: toward. <why, under 14 words>\" when the role clearly moves them along it (the industry, the kind of work or the next step up), or \"Career path: away. <why, under 14 words>\" when taking it would pull them off it (another industry or kind of work that doesn't lead there, or a step back). Add neither when it's in between or the posting doesn't say. This entry doesn't change the score, which stays about how well their experience fits.", self.path.trim()));
+        // One path, or several kept open (written one a line or with ";" between): a role is on
+        // the way when it moves along any of them, and off it only when it leads to none.
+        let paths: Vec<&str> = self.path.split([';', '\n']).map(|p| p.trim()).filter(|p| !p.is_empty()).collect();
+        if paths.len() == 1 {
+            lines.push(format!("- The career path they're building: {}. Read every role against it and say so in red_flags with one entry, worded exactly \"Career path: toward. <why, under 14 words>\" when the role clearly moves them along it (the industry, the kind of work or the next step up), or \"Career path: away. <why, under 14 words>\" when taking it would pull them off it (another industry or kind of work that doesn't lead there, or a step back). Add neither when it's in between or the posting doesn't say. This entry doesn't change the score, which stays about how well their experience fits.", paths[0]));
+        } else if paths.len() > 1 {
+            lines.push(format!("- The career paths they're keeping open (they haven't settled on one, and any of these is welcome): {}. Read every role against them and say so in red_flags with one entry, worded exactly \"Career path: toward. <which path, and why, under 14 words>\" when the role clearly moves them along one of them (the industry, the kind of work or the next step up), or \"Career path: away. <why, under 14 words>\" only when taking it would lead to none of them (another kind of work that doesn't lead to any, or a step back). Add neither when it's in between or the posting doesn't say. This entry doesn't change the score, which stays about how well their experience fits.", paths.join("; ")));
         }
         if lines.is_empty() {
             return String::new();

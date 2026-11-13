@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.63.0",
+    "date": "2026-11-13",
+    "title": "Keep several career paths open",
+    "changes": [
+      "You no longer have to settle on one career path. Keep as many open as you like (Me, Career: Keep this path open on any path, or add one in your own words, such as product management in any industry). A posting is marked On your path when it moves you along any of them, and Off your path only when it leads to none.",
+      "Your paths are shown as chips you can take off one at a time."
+    ]
+  },
+  {
     "version": "2.62.2",
     "date": "2026-11-13",
     "title": "Career paths: a quieter Recommended",

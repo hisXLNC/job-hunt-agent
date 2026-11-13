@@ -434,6 +434,8 @@ async function act(el) {
     return busy(async () => { await api('/api/results/career', { method: 'POST' }); settingsCache = null; route(); watchCareer(here); }, 'Claude is thinking about your career options. This takes a minute or two.');
   }
   if (a === 'choosePath') return busy(() => savePath(el.dataset.title || ''));
+  // Several paths can be kept open: one is added to the list, or taken off it.
+  if (a === 'addPath' || a === 'dropPath') return busy(async () => { const now = pathList((settingsCache || await api('/api/settings')).profile?.wants?.path), t = el.dataset.title || ''; return savePath(a === 'addPath' ? [...now, t] : now.filter(x => x.toLowerCase() !== t.toLowerCase())); });
   if (a === 'addTitles') {
     const titles = JSON.parse(el.dataset.titles || '[]');
     const sel = document.querySelector(`[data-path-track="${el.dataset.i}"]`);
@@ -958,21 +960,26 @@ async function showSourceTest(start) {
 
 /** Your career paths, for choosing a direction: Claude's advice, a comparison of where each path leads
  *  (now, 5 and 10 years, and its pay ceiling), then each path's ladder, pros and cons, and what it takes. */
-/** Save the career path you chose (empty clears it); every posting scored from now on is read against it. */
-async function savePath(path) {
+/** The paths you keep open, as a list: kept as one line with ";" between (one path is just itself). */
+const pathList = text => String(text || '').split(/[;\n]/).map(x => x.trim()).filter(Boolean);
+/** Save the career paths you keep open (none clears them); every posting scored from now on is read against them. */
+async function savePath(paths) {
+  const list = (Array.isArray(paths) ? paths : pathList(paths)).filter((x, i, a) => a.findIndex(y => y.toLowerCase() === x.toLowerCase()) === i);
   const st = settingsCache || await api('/api/settings');
   const p = JSON.parse(JSON.stringify(st.profile));
-  p.wants = { ...(p.wants || {}), path: path.trim() };
+  p.wants = { ...(p.wants || {}), path: list.join('; ') };
   await api('/api/settings/profile', { method: 'POST', body: { ...p, seen_sources: st.profile.sources } });
   settingsCache = null; route();
-  toast(path.trim() ? `Your path: ${path.trim()}. New postings are read against it.` : 'Cleared. Postings are no longer read against a path.');
+  toast(!list.length ? 'Cleared. Postings are no longer read against a path.' : list.length === 1 ? `Your path: ${list[0]}. New postings are read against it.` : `${list.length} paths kept open. A posting is on your path when it moves you along any of them.`);
 }
 function careerHtml(career, thinking, tracks, chosen = '') {
   const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
-  const chosenCard = `<section class="card" id="pathCard"><header><h2>Your career path</h2>${chosen ? '<span class="pill good">Chosen</span>' : ''}</header>
-    <p class="muted small">Choose where you're heading. Job Hunt reads each new posting against it: one that moves you along it is marked <b>On your path</b>, one that would pull you off it is marked <b>Off your path</b> with the reason, and when you weigh an offer it says plainly if accepting would set your goal back.</p>
-    <form data-form="careerPath" class="row" style="align-items:flex-end;flex-wrap:wrap"><label class="field grow" style="min-width:240px;margin:0">The path you're building<input type="text" name="path" value="${esc(chosen)}" placeholder="e.g. product leadership in fintech"></label><button class="btn primary" type="submit">Save</button>${chosen ? '<button class="btn" type="button" data-act="choosePath" data-title="">Clear it</button>' : ''}</form>
-    ${chosen ? '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-act="rescore" data-group="waiting">Read my waiting matches against it</button><span class="muted small">Matches found before you chose it aren\'t marked until they\'re scored again.</span></div>' : (career?.paths || []).length ? '<p class="muted small" style="margin-top:8px">Or press Make this my path on one of the paths below.</p>' : ''}</section>`;
+  const mine = pathList(chosen), onList = t => mine.some(x => same(x, t));
+  const chosenCard = `<section class="card" id="pathCard"><header><h2>Your career paths</h2>${mine.length ? `<span class="pill good">${mine.length === 1 ? 'One chosen' : `${mine.length} kept open`}</span>` : ''}</header>
+    <p class="muted small">Where you're heading: one path, or several you want to keep open while you decide. Job Hunt reads each new posting against them: one that moves you along any of them is marked <b>On your path</b>, one that leads to none is marked <b>Off your path</b> with the reason, and when you weigh an offer it says plainly if accepting would set you back.</p>
+    ${mine.length ? `<div class="path-chips">${mine.map(x => `<span class="path-chip">${esc(x)}<button type="button" data-act="dropPath" data-title="${esc(x)}" title="Take it off your list" aria-label="Remove ${esc(x)}">${svg('close')}</button></span>`).join('')}</div>` : ''}
+    <form data-form="careerPath" class="row" style="align-items:flex-end;flex-wrap:wrap"><label class="field grow" style="min-width:240px;margin:0">${mine.length ? 'Add another, in your own words' : 'A path, in your own words'}<input type="text" name="path" value="" placeholder="e.g. product management, in any industry"></label><button class="btn primary" type="submit">Add</button>${mine.length ? '<button class="btn" type="button" data-act="choosePath" data-title="">Clear them all</button>' : ''}</form>
+    ${mine.length ? '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-act="rescore" data-group="waiting">Read my waiting matches against ' + (mine.length === 1 ? 'it' : 'them') + '</button><span class="muted small">Matches found before aren\'t marked until they\'re scored again.</span></div>' : (career?.paths || []).length ? '<p class="muted small" style="margin-top:8px">Or press Keep this path open on any of the paths below: as many as you like.</p>' : ''}</section>`;
   const kindName = { now: 'Open to you now', stretch: 'A step up or sideways', switch: 'A change of direction' };
   const paths = career?.paths || [];
   const recs = paths.filter(c => c.recommended);
@@ -1012,7 +1019,7 @@ function careerHtml(career, thinking, tracks, chosen = '') {
         ${(c.gaps || []).length ? `<p class="small"><b>What it takes:</b> ${c.gaps.map(esc).join('; ')}</p>` : ''}
         ${c.first_step ? `<p class="small"><b>First step this month:</b> ${esc(c.first_step)}</p>` : ''}
         ${searchFor(c, i)}
-        <div class="row" style="margin-top:8px">${same(chosen, c.title) ? '<span class="pill good">Your chosen path</span>' : `<button class="btn sm" data-act="choosePath" data-title="${esc(c.title)}">Make this my path</button>`}</div>
+        <div class="row" style="margin-top:8px">${onList(c.title) ? `<span class="pill good">On your list</span><button class="btn ghost sm" data-act="dropPath" data-title="${esc(c.title)}">Take it off</button>` : `<button class="btn sm" data-act="addPath" data-title="${esc(c.title)}">${mine.length ? 'Keep this path open too' : 'Keep this path open'}</button>`}</div>
       </div>`).join('')}</div>`
     : `<p class="muted">Claude reads your whole CV and maps every direction it supports: where each leads in 3, 5 and 10 years, the pay at each step and the most the path can pay, the usual hours and work-life balance, with pros and cons and its advice on which to choose.${thinking ? '' : ' It does this by itself when you add a CV.'}</p>`}
   </section>`;
@@ -1251,7 +1258,7 @@ document.addEventListener('submit', async e => {
       await api(`/api/jobs/${encodeURIComponent(form.dataset.job)}/decline`, { method: 'POST', body: { change: f.change.value } });
       toast('Rewriting the reply…'); setTimeout(route, 300); return;
     }
-    if (kind === 'careerPath') { await savePath(f.path.value); return; }
+    if (kind === 'careerPath') { if (f.path.value.trim()) await savePath([...pathList((settingsCache || await api('/api/settings')).profile?.wants?.path), ...pathList(f.path.value)]); return; }
     if (kind === 'add') {
       const claude = form.querySelector('[name=claude]:checked')?.value === '1';
       await api('/api/add', { method: 'POST', body: { company: f.company.value, title: f.title.value, url: f.url.value, location: f.location.value, description: f.description.value, claude } });
