@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.66.0] - 2026-11-13
+
+Folded forms, and a brief for Claude.
+
+### Changes
+
+- A form whose parts are folded away (Rogers' application: Expand all sections, then closed bars) showed Job Hunt no boxes, so it said there was no form. It now opens the sections first, then reads and fills them.
+- Copy a brief for Claude, at the foot of the panel: for a form Job Hunt cannot fill, it copies everything another assistant needs to fill it in on the page (the Claude extension for Chrome, say): your details and facts, this job's tailored CV and cover letter, answers already written, and the rule to stop before Submit. Paste it to that assistant.
+- When Job Hunt finds no form, the panel says so and points to the brief, and no longer only to the page's Apply button.
+
 ## [2.65.7] - 2026-11-13
 
 Profiles: a page with only an Add button.
@@ -2011,6 +2021,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.66.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.66.0
 [2.65.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.7
 [2.65.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.6
 [2.65.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.65.5

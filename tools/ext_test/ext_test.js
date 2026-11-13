@@ -80,7 +80,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
 (async () => {
   const only = process.argv.slice(2);
   const names = Object.keys(VARIANTS).filter(n => !only.length || only.includes(n));
-  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
+  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
   // Job Hunt's side: says its version, and answers a form's questions.
   let picked = '';
   let leads = null;
@@ -137,10 +137,12 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   } catch (e) { console.log('skipped: 127.0.0.1:47613 is in use (is Job Hunt running here?)'); process.exit(2); }
   const html = fs.readFileSync(path.join(__dirname, 'workday.html'));
   const profileHtml = fs.readFileSync(path.join(__dirname, 'profile.html'));
+  // An application with its parts folded away, as SuccessFactors draws it (Rogers).
+  const foldedHtml = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Solution Delivery Manager - Mock Careers</title></head><body><h1>Solution Delivery Manager (343472)</h1><p><a href="#" onclick="document.getElementById(\'profile\').style.display=\'block\';return false">Expand all sections</a> <a href="#" onclick="return false">Collapse all sections</a></p><h2>My Documents</h2><p>Accepted file types: DOCX, PDF</p><h2>Profile Information</h2><div id="profile" style="display:none"><label for="email">Email</label><input id="email" type="email"><label for="phone">Phone</label><input id="phone" type="tel"><label for="city">City</label><input id="city" type="text"><label for="note">Anything else</label><input id="note" type="text"></div></body></html>';
   // The profile's list of jobs, as Job Bank's "Manage your work experience and skills": no boxes, a link to the form.
   const listHtml = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Job Match - Mock Job Site</title></head><body><h1>Manage your work experience and skills</h1><h2>Experience and skills</h2><p>Add your latest work experience and acquired skills, then list other jobs you\u2019ve held before.</p><p><a class="btn" href="/match/profile/experience">Add a new experience</a></p><table><thead><tr><th>Job title (NOC code)</th><th>Employer Name</th><th>Employment Period</th></tr></thead><tbody><tr><td colspan="3">No experience listed. Click on "Add new experience" to fill in the table.</td></tr></tbody></table><p><button>Previous</button> <button>Continue</button></p></body></html>';
   const postsHtml = fs.readFileSync(path.join(__dirname, 'posts.html'));
-  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
+  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
   const base = `http://127.0.0.1:${site.address().port}/apply`;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
@@ -306,6 +308,25 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (problems.length) { failed.push(fromList ? 'profile from its list' : 'profile'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();
   }
+  // A form whose parts are folded away (SuccessFactors, as Rogers uses it): "Expand all sections"
+  // is pressed first, and what it shows is filled. And the brief for another assistant can be copied.
+  if (!only.length || only.includes('folded')) {
+    const page = await ctx.newPage();
+    const url = `http://127.0.0.1:${site.address().port}/folded/apply`;
+    await page.goto(url);
+    const t0 = Date.now();
+    await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, url);
+    let s = '';
+    for (let i = 0; i < 80; i++) { await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s) || /Couldn't|can't find|No answers/.test(s)) break; }
+    const got = await page.evaluate(() => ({ open: document.getElementById('profile').style.display !== 'none', email: document.getElementById('email').value, phone: document.getElementById('phone').value, brief: !document.querySelector('[data-jobhunt-panel]').shadowRoot.querySelector('[data-k=brief]').hidden }));
+    const problems = [];
+    if (!got.open) problems.push('Expand all sections was not pressed');
+    if (got.email !== 'sam@example.com' || got.phone !== '416-555-0100') problems.push(`the boxes it showed weren't filled (email "${got.email}", phone "${got.phone}")`);
+    if (!got.brief) problems.push('the panel has no Copy a brief for Claude');
+    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'folded'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  email ${got.email || 'empty'}`);
+    if (problems.length) { failed.push('folded'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
+    await page.close();
+  }
   // Hiring posts: a page of posts (a stand-in for LinkedIn's search) read by the extension and sent
   // to Job Hunt, each with who wrote it and its own link; and one ordinary page, sent as chosen.
   if (!only.length || only.includes('posts')) {
@@ -346,7 +367,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   };
   // Three browsers at a time (JOBS=1 for one after another, when reading a failure).
   const jobs = names.map(n => () => runVariant(n));
-  if (!only.length || ['app', 'profile', 'posts'].some(n => only.includes(n))) jobs.push(rest);
+  if (!only.length || ['app', 'profile', 'posts', 'folded'].some(n => only.includes(n))) jobs.push(rest);
   const t0 = Date.now();
   await Promise.all(Array.from({ length: Math.max(1, Number(process.env.JOBS) || 3) }, async () => { while (jobs.length) await jobs.shift()(); }));
   console.log(`      (${Math.round((Date.now() - t0) / 1000)}s in all)`);

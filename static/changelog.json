@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.66.0",
+    "date": "2026-11-13",
+    "title": "Folded forms, and a brief for Claude",
+    "changes": [
+      "A form whose parts are folded away (Rogers' application: Expand all sections, then closed bars) showed Job Hunt no boxes, so it said there was no form. It now opens the sections first, then reads and fills them.",
+      "Copy a brief for Claude, at the foot of the panel: for a form Job Hunt cannot fill, it copies everything another assistant needs to fill it in on the page (the Claude extension for Chrome, say): your details and facts, this job's tailored CV and cover letter, answers already written, and the rule to stop before Submit. Paste it to that assistant.",
+      "When Job Hunt finds no form, the panel says so and points to the brief, and no longer only to the page's Apply button."
+    ]
+  },
+  {
     "version": "2.65.7",
     "date": "2026-11-13",
     "title": "Profiles: a page with only an Add button",

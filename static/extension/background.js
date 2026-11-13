@@ -243,7 +243,7 @@ async function report(why, page) {
 }
 
 // What the page may ask Job Hunt for.
-const PAGE_ASKS = ['/ext/fill/start', '/ext/fill/poll', '/ext/pick', '/ext/salary', '/ext/dismiss', '/ext/learn', '/ext/applied'];
+const PAGE_ASKS = ['/ext/fill/start', '/ext/fill/poll', '/ext/pick', '/ext/salary', '/ext/dismiss', '/ext/learn', '/ext/applied', '/ext/brief'];
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   // --- from the popup ---
   if (msg.posts) return answer(reply, 'posts', sendPosts(msg.posts, msg.chosen)), true;

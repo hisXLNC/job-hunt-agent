@@ -172,6 +172,7 @@
       <div class="f">
         <button class="b" data-k="diag" hidden title="Copies what Job Hunt saw and did on this page (each box, what it meant to put there and what the box holds now), to paste to Claude when something was filled in wrongly or not at all">Copy details</button>
         <button class="b" data-k="skip" ${JOB.queue ? '' : 'hidden'} title="Leave this one for later and open the next application">Skip to the next</button>
+        <button class="b" data-k="brief" ${EXT ? '' : 'hidden'} title="For a form Job Hunt can't fill: copies everything another assistant needs to fill it in (the Claude extension for Chrome, say): who you are, your facts, this job's tailored CV and cover letter, and to stop before Submit. Paste it to that assistant on this page.">Copy a brief for Claude</button>
         <button class="b" data-k="drop" title="Not for you after all (the pay, say): Job Hunt sets it aside${JOB.queue ? ' and opens the next one' : ''}">Not interested</button></div></div>`;
     statusEl = root.querySelector('.s');
     barEl = root.querySelector('.bar');
@@ -202,6 +203,16 @@
       try { await navigator.clipboard.writeText(text); }
       catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
       status('Copied. Paste it to Claude and say what went wrong.');
+    };
+    buttons.brief.onclick = async () => {
+      buttons.brief.disabled = true;
+      const r = await rpc('/ext/brief', { url: location.href, title: document.title });
+      buttons.brief.disabled = false;
+      if (!r.ok) { status(r.data && r.data.choose ? 'Choose which application this is first (press Fill in this form), then copy the brief.' : `Couldn't write the brief: ${r.error}`); return; }
+      try { await navigator.clipboard.writeText(r.v.text); }
+      catch (e) { const t = document.createElement('textarea'); t.value = r.v.text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+      trace('brief copied');
+      status('Copied. Open the Claude extension on this page and paste it: it has your details, this job\'s CV and letter, and says to stop before Submit.');
     };
     buttons.skip.onclick = () => { buttons.skip.disabled = true; status('Opening the next application…'); send('skip', {}); };
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
@@ -1274,12 +1285,31 @@
     amber[amberAt % amber.length].scrollIntoView({ behavior: 'smooth', block: 'center' });
     amberAt++;
   }
-  let sent = null, opens = 0;
+  let sent = null, opens = 0, unfolded = false;
   async function start(more, dates) {
     if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
     if (retired) return;
     checkPay();
+    // A form whose parts are folded away (SuccessFactors: "Expand all sections", then Profile
+    // Information and the rest as closed bars) shows no boxes to read: its parts are opened first.
+    if (!more && !unfolded) {
+      unfolded = true;
+      const said = b => clean(b.textContent || b.getAttribute('aria-label') || '');
+      const all = [...document.querySelectorAll('a,button,[role=button]')].find(b => !own(b) && shown(b) && /^\W*expand all( sections)?\W*$/i.test(said(b)));
+      // (Closed bars are opened one by one only on a page that shows next to nothing to fill: on a
+      // form that's already open, something closed is as likely a menu as a part of the form.)
+      const few = collect().filter(f => f.type !== 'add').length < 3;
+      const shut = all || !few ? [] : [...document.querySelectorAll('[aria-expanded=false]')].filter(b => !own(b) && shown(b) && b.matches('button,[role=button],a,h2,h3,h4,summary,[role=tab],[class*=accordion i],[class*=section i]') && said(b).length > 2 && said(b).length < 60 && !b.closest('nav,header,[role=navigation],[role=menu],[role=menubar],[role=listbox],[role=combobox]') && !b.hasAttribute('aria-haspopup')).slice(0, 12);
+      if (all || shut.length) {
+        status('Opening the form\'s sections…');
+        trace('opening folded sections', { all: !!all, n: shut.length });
+        ownClick = true;
+        if (all) all.click(); else for (const b of shut) { b.click(); await wait(150); }
+        ownClick = false;
+        await wait(1200);
+      }
+    }
     if (document.querySelector(DROPS)) { status('Reading the form…'); await readDrops(); }
     const all = collect();
     sent = { fields, byKey, adders };
@@ -1305,7 +1335,7 @@
         return;
       }
     }
-    if (!list.length) { progress(null); status('No form on this page yet. Open it with the page\'s own button (Apply, or Add), then press Fill in this form.'); return; }
+    if (!list.length) { progress(null); unfolded = false; status('Job Hunt can\'t find a form to fill on this page. If the form is here, press Copy a brief for Claude below and give it to the Claude extension; if it isn\'t yet, open it with the page\'s own button (Apply, or Add), then press Fill in this form.'); return; }
     // No answer in six minutes (Job Hunt closed, Claude busy): the button comes back.
     const mine = waitingSince = Date.now();
     // (In a browser, getAnswers keeps asking and says what it finds: no guessing by the clock.)

@@ -56,6 +56,13 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.66.0: folded forms; a brief for Claude.** `start()` first presses "Expand all (sections)" (or, on a page with
+  under three boxes, each `aria-expanded=false` bar that isn't a menu): Rogers is SuccessFactors and showed no boxes.
+  `fill::brief` + `POST /ext/brief` + the panel's `brief` button: the user asked for Job Hunt to work with the Claude
+  extension; nothing can drive that extension from outside, so Job Hunt hands it a brief to paste. Mock: `/folded/apply`
+  (test `folded`). SuccessFactors' upload tiles (Upload a Resume) and its real boxes are NOT seen: ask for Copy details.
+  A GitHub build of 2.65.7 failed once on `sync::tests::two_computers_through_google_drive` (not reproduced in 26 local
+  runs; the test now says why if it fails again, and `verify` prints a panic's own line).
 - **2.65.7: a profile's list page (Job Bank).** `start()` with no boxes presses the page's own Add button (`opens`),
   sets `sessionStorage['jobhunt-continue']`, and carries on when the form shows there or on the next page; background.js
   keeps a tab "armed" for 20 min after `startFill` (`chrome.storage.session` `armed`) and puts fill.js on that site's

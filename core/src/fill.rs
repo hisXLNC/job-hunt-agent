@@ -657,6 +657,41 @@ pub fn kit(agent: &Agent, job_id: &str) -> R<Value> {
     }))
 }
 
+/// A brief for another assistant that can work the page itself (Claude in Chrome): what to fill in
+/// and from what, for a form Job Hunt's own filler can't read. Everything it needs is in the text,
+/// since it can't ask Job Hunt: who you are, your facts, the tailored CV and the cover letter.
+pub fn brief(agent: &Agent, job_id: &str) -> R<String> {
+    let k = kit(agent, job_id)?;
+    let job = if job_id == PROFILE { None } else { agent.db().job(job_id)? };
+    let lines = |v: &Value| v.as_array().map(|a| a.iter().filter_map(|x| {
+        let (l, val) = (x["label"].as_str().unwrap_or(""), x["value"].as_str().unwrap_or(""));
+        (!val.is_empty()).then(|| if l.is_empty() { format!("- {val}") } else { format!("- {l}: {val}") })
+    }).collect::<Vec<_>>().join("\n")).unwrap_or_default();
+    let mut out = String::from("Please fill in the application form on this page for me.\n\n\
+Rules:\n\
+- Use only what is below. Where it doesn't answer a question, leave the box empty and list those for me when you finish.\n\
+- Open any collapsed sections first, and add an entry for each job and school listed in my CV where the form has an Add button.\n\
+- Do not tick boxes that agree to terms or declare something on my behalf, and do not press Submit: stop when the form is filled so I can read it over.\n\
+- Where the form asks for my resume or cover letter as a file, tell me and I will attach them myself.\n");
+    if let Some(j) = &job {
+        out.push_str(&format!("\nThe job: {} at {}.\n", j.title, j.company));
+    }
+    for (head, text) in [("My details", lines(&k["contact"])), ("Facts for forms", lines(&k["facts"]))] {
+        if !text.is_empty() { out.push_str(&format!("\n{head}:\n{text}\n")); }
+    }
+    if let Some(a) = k["answers"].as_array().filter(|a| !a.is_empty()) {
+        out.push_str("\nAnswers already written for this application (use these words):\n");
+        for x in a {
+            if let (Some(q), Some(ans)) = (x["question"].as_str(), x["answer"].as_str()) { out.push_str(&format!("- {q}\n  {ans}\n")); }
+        }
+    }
+    let cv: String = k["cv"].as_str().unwrap_or("").chars().take(9000).collect();
+    if !cv.trim().is_empty() { out.push_str(&format!("\nMy CV, as tailored for this job:\n{}\n", cv.trim())); }
+    let letter: String = k["letter"].as_str().unwrap_or("").chars().take(4000).collect();
+    if !letter.trim().is_empty() { out.push_str(&format!("\nMy cover letter:\n{}\n", letter.trim())); }
+    Ok(out)
+}
+
 /// The CV's jobs and schools as entries (each starts at a line with a date range; the short line just
 /// before it, a title or employer, goes with it), and its skills section.
 fn cv_sections(cv: &str) -> (Vec<Value>, Vec<Value>, String) {
