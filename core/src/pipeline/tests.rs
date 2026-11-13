@@ -1947,7 +1947,10 @@ fn removing_and_adding_cvs_leaves_nothing_undone() {
         s.agent.apply_cv_change(c);
     }
     // Let anything the first removal started wind down, then see what's owed: both jobs.
-    for _ in 0..200 { if !s.agent.is_running("cv-update") { break; } std::thread::sleep(std::time::Duration::from_millis(25)); }
+    // (The tailoring it may have begun as well: left running, it would hold the application's place
+    // when the new CV's update comes to tailor it, and the test would be about that race.)
+    let busy = |s: &crate::testkit::Setup| s.agent.is_running("cv-update") || ids.iter().any(|id| s.agent.is_running(&format!("tailor:{id}")));
+    for _ in 0..800 { if !busy(&s) { break; } std::thread::sleep(std::time::Duration::from_millis(25)); }
     s.agent.stop_cv_update(true);
     for id in &ids { s.agent.db().update_job(id, &[("score", Value::Null), ("reasoning", "Not scored: the Main CV it was scored against was removed.".into())]).unwrap(); }
     let owed = s.agent.cv_work_pending();
@@ -1955,9 +1958,9 @@ fn removing_and_adding_cvs_leaves_nothing_undone() {
     // A new CV: all of it is done.
     s.agent.add_cv("new.txt", "Alex Morgan\nProgram manager\n".repeat(20).as_bytes(), false).unwrap();
     s.agent.after_cv_added();
-    for _ in 0..600 {
+    for _ in 0..2400 {
         let c = s.agent.cv_work_pending();
-        if c.unscored.is_empty() && c.retailor.is_empty() && !s.agent.is_running("cv-update") && !s.agent.is_running(&format!("tailor:{}", ids[0])) { break; }
+        if c.unscored.is_empty() && c.retailor.is_empty() && !busy(&s) { break; }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
     let after = s.agent.cv_work_pending();

@@ -257,7 +257,7 @@ def verify(quick=False):
             if not ok:
                 lines = [l for l in out.splitlines() if l.strip()]
                 # The useful part: failing tests and errors, else the end.
-                keep = [l for l in lines if re.search(r"panicked|FAILED|^FAIL|^error|^---- |assertion|left:|right:|SyntaxError", l)] or lines[-25:]
+                keep = [l for i, l in enumerate(lines) if re.search(r"panicked|FAILED|^FAIL|^error|^---- |assertion|left:|right:|SyntaxError", l) or (i and "panicked at" in lines[i - 1])] or lines[-25:]
                 print("\n".join("      " + l for l in keep[:40]), flush=True)
         return ok
 

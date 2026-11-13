@@ -769,7 +769,9 @@ mod tests {
         a.agent.db().set("sync.where", "drive").unwrap();
         a.agent.db().set("sync.on", "1").unwrap();
         a.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
-        assert!(due(&a.agent) && push(&a.agent, false).unwrap());
+        assert!(due(&a.agent), "changed and never synced: due");
+        // (Said with why, when it fails: this one failed once on GitHub's machine with nothing to go on.)
+        match push(&a.agent, false) { Ok(sent) => assert!(sent, "nothing was sent"), Err(e) => panic!("the first sync to Drive failed: {}", e.0) }
         assert!(drive.read(ZIP).unwrap().is_some() && drive.read(CSV).unwrap().is_some());
         beat(&a.agent);
         assert!(drive.read(IN_USE).unwrap().is_some(), "says it's in use, in Drive");
