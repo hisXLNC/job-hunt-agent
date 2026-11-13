@@ -131,7 +131,17 @@ impl Agent {
         // keeps its fit: scoring those again cost a request each for some 1,800 roles nobody was
         // waiting on. A CV that's gone leaves nothing to keep, so there everything it scored goes.
         let bar = self.profile().score_threshold;
-        let statuses: &[&str] = if removed { &["queued", "saved", "skipped", "dismissed"] } else { &["queued", "saved"] };
+        // (Removed, too: the roles set aside keep the fit they had, and only forget which CV gave it.
+        // Clearing them all meant some 1,800 fits to score again each time a CV was taken away.)
+        if removed {
+            for st in ["skipped", "dismissed"] {
+                let jobs = self.db().jobs(Some(st), 100_000)?;
+                for j in jobs.into_iter().filter(|j| j.track.as_deref() == Some(id)) {
+                    self.db().update_job(&j.id, &[("track", Value::Null)])?;
+                }
+            }
+        }
+        let statuses: &[&str] = &["queued", "saved"];
         for st in statuses {
             // Read first: the lock would otherwise be held through the loop, which takes it again.
             let jobs = self.db().jobs(Some(st), 100_000)?;
@@ -245,17 +255,8 @@ impl Agent {
             let _ = self.db().set("cv.waiting", &serde_json::to_string(&waiting).unwrap_or_default());
             return;
         }
-        let a = self.clone();
-        std::thread::spawn(move || {
-            if let Ok(n) = a.rescore_jobs(&c.unscored) {
-                if n > 0 {
-                    a.note("Scored again", &format!("{n} job{} now {} a fit against your CVs as they are now.", if n == 1 { "" } else { "s" }, if n == 1 { "has" } else { "have" }));
-                }
-            }
-            if !c.retailor.is_empty() && !a.profile().tracks.is_empty() {
-                let _ = a.tailor_picked(&c.retailor);
-            }
-        });
+        // With a CV to do it with: everything that's waiting is done, this change's and any left from before.
+        self.resume_cv_work();
     }
 
     /// Score these again until none is left without a fit. A round is the per-search cap; rounds go
@@ -331,6 +332,37 @@ impl Agent {
         Some(v)
     }
 
+    /// What a change of CVs has left to redo, read from the jobs themselves and not from a list kept
+    /// at the time: roles waiting for you with no fit because their CV changed or went, applications
+    /// waiting for approval that lost their fit (to tailor again), and approved ones not yet sent.
+    /// A list was lost whenever its work couldn't be done there and then (the CV it was to use was
+    /// removed in turn, Job Hunt was closed, Claude was at its limit), and those jobs stayed without
+    /// a fit, and those applications stale, for good. This is always true to what's there.
+    pub fn cv_work_pending(&self) -> CvChange {
+        let mut c = CvChange::default();
+        let jobs = |st: &str| self.db().jobs(Some(st), 100_000).unwrap_or_default();
+        for st in ["queued", "saved"] {
+            c.unscored.extend(jobs(st).into_iter().filter(|j| j.score.is_none() && j.reasoning.as_deref().is_some_and(|r| r.starts_with("Not scored: "))).map(|j| j.id));
+        }
+        c.retailor = jobs("ready").into_iter().filter(|j| j.score.is_none()).map(|j| j.id).collect();
+        c.approved = jobs("approved").into_iter().filter(|j| j.score.is_none() && j.applied_at.is_none()).map(|j| j.id).collect();
+        c
+    }
+
+    /// Do what a change of CVs left to redo (see cv_work_pending), if there is any and a CV to do
+    /// it with: the same update a new file for a CV starts, with its card on the CVs page. Called
+    /// when a CV is added or removed, and every so often by itself, so nothing stays undone.
+    pub fn resume_cv_work(self: &Arc<Self>) -> CvChange {
+        if self.cv_texts(&self.profile()).is_empty() {
+            return CvChange::default();
+        }
+        let c = self.cv_work_pending();
+        if !(c.unscored.is_empty() && c.retailor.is_empty() && c.approved.is_empty()) {
+            self.refresh_after_cv("", c.clone());
+        }
+        c
+    }
+
     /// Your CV `id` has a new file: everything worked out from the old one is redone, in the
     /// background, in this order. (1) Claude reads the new CV for job titles and keywords the old
     /// one didn't suggest (added to yours, never taken away) and the experience in it. (2) Fits
@@ -340,7 +372,9 @@ impl Agent {
     /// against it again. How far it is: cv_update. Not redone, on purpose: what you approved or sent
     /// (offered for the approved ones), and what you typed yourself (titles, facts, saved answers).
     pub fn refresh_after_cv(self: &Arc<Self>, id: &str, c: CvChange) {
-        let label = self.profile().tracks.iter().find(|t| t.name == id).map(|t| t.label.clone()).unwrap_or_else(|| id.to_string());
+        // No one CV (work a removed CV left, picked up again): the card is headed by the first you have.
+        let tracks = self.profile().tracks;
+        let label = tracks.iter().find(|t| t.name == id).or(tracks.first()).map(|t| t.label.clone()).unwrap_or_else(|| id.to_string());
         let claude = self.claude_ready();
         let start = json!({ "at": now(), "cv": label, "running": true, "step": "titles", "claude": claude,
             "to_score": c.unscored.len(), "scored": 0, "to_tailor": c.retailor.len(), "kept": c.kept, "approved": c.approved.len(), "approved_done": 0, "retailor": c.retailor });
@@ -379,7 +413,7 @@ impl Agent {
                 let _ = a.db().set("cv.update", &s.to_string());
             };
             // (1) Titles and keywords the new CV suggests.
-            if claude && !stopped() {
+            if claude && !stopped() && !id.is_empty() {
                 let had = |a: &Agent| a.profile().tracks.iter().find(|t| t.name == id).map(|t| (t.titles.clone(), t.keywords.len())).unwrap_or_default();
                 let (titles, keywords) = had(&a);
                 match a.suggest_for_cv(&id) {
@@ -495,21 +529,9 @@ impl Agent {
     /// A CV was added: what a removed CV left waiting (your only one, so nothing to redo it with)
     /// is scored and tailored now, from the new one. Returns what was started.
     pub fn after_cv_added(self: &Arc<Self>) -> CvChange {
-        let waiting: CvChange = serde_json::from_str(&self.secret("cv.waiting")).unwrap_or_default();
-        if waiting.unscored.is_empty() && waiting.retailor.is_empty() {
-            return waiting;
-        }
+        // (The list kept under cv.waiting is no longer what decides: the jobs themselves are read.)
         let _ = self.db().delete("cv.waiting");
-        // Only what's still waiting: you may have tailored, sent or removed some meanwhile.
-        let still = |id: &String, statuses: &[&str]| self.db().job(id).ok().flatten().is_some_and(|j| j.score.is_none() && statuses.contains(&j.status.as_str()));
-        let c = CvChange {
-            unscored: waiting.unscored.iter().filter(|id| still(id, &["queued", "skipped", "saved", "dismissed"])).cloned().collect(),
-            retailor: waiting.retailor.iter().filter(|id| still(id, &["ready"])).cloned().collect(),
-            kept: 0,
-            approved: vec![],
-        };
-        self.apply_cv_change(c.clone());
-        c
+        self.resume_cv_work()
     }
 
     /// Score these jobs against your CVs as they are now, up to the per-search cap (the rest can

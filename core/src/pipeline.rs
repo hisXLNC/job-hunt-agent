@@ -3077,6 +3077,14 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     if ready && !agent.budget_wait() && !agent.deferred().is_empty() && !agent.is_running("rescore") {
         out.push("deferred");
     }
+    // Work a change of CVs left undone (see Agent::cv_work_pending): picked up again, every half hour.
+    if agent.claude_ready() && agent.limited().is_none() && !agent.is_running("cv-update") && !agent.profile().tracks.is_empty()
+        && agent.secret("last.cvwork").parse::<i64>().map_or(true, |t| Utc::now().timestamp() - t > 30 * 60) {
+        let c = agent.cv_work_pending();
+        if !(c.unscored.is_empty() && c.retailor.is_empty() && c.approved.is_empty()) {
+            out.push("cvwork");
+        }
+    }
     // Recruiters in your Gmail: once Gmail is connected, then monthly.
     let recruiters_due = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.recruiters"))
         .map(|t| (now - t.with_timezone(&Utc)).num_days() >= 30)
@@ -3175,6 +3183,10 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
     for task in due_tasks(agent) {
         match task {
             "backup" => backup_in_background(agent),
+            "cvwork" => {
+                let _ = agent.db().set("last.cvwork", &Utc::now().timestamp().to_string());
+                agent.resume_cv_work();
+            }
             "sync" => sync_in_background(agent),
             "check-postings" => check_in_background(agent),
             "leads" => crate::leads::find_in_background(agent),

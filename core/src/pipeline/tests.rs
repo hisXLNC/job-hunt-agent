@@ -1925,6 +1925,47 @@ fn an_approved_application_is_tailored_again_and_stays_approved() {
     assert!(s.agent.can_undo(&j.id, "cv"), "what you approved can be put back");
 }
 
+/// Take every CV away, one after another, then add one: every fit that was lost is scored again and
+/// the application waiting for approval is tailored again. (The work one removal left used to be
+/// lost when the CV it was to be redone with was removed in turn.)
+#[test]
+fn removing_and_adding_cvs_leaves_nothing_undone() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.db().set("claude.engine", "api").unwrap();
+    s.agent.db().set("claude.key", "test").unwrap();
+    s.agent.search(Some(vec![posting("Program Manager", "1"), Posting { company: "Globex".into(), ..posting("Program Manager", "2") }])).unwrap();
+    let ids: Vec<String> = s.agent.db().jobs(Some("queued"), 10).unwrap().into_iter().map(|j| j.id).collect();
+    assert_eq!(ids.len(), 2);
+    s.agent.tailor(&ids[0], None).unwrap();
+    // A second CV, so the first removal has one left to redo its work with; then that one goes too.
+    s.agent.add_cv("other.txt", "Alex Morgan\nProgram manager\n".repeat(20).as_bytes(), false).unwrap();
+    for t in s.agent.profile().tracks {
+        let c = s.agent.remove_cv(&t.name).unwrap();
+        s.agent.apply_cv_change(c);
+    }
+    // Let anything the first removal started wind down, then see what's owed: both jobs.
+    for _ in 0..200 { if !s.agent.is_running("cv-update") { break; } std::thread::sleep(std::time::Duration::from_millis(25)); }
+    s.agent.stop_cv_update(true);
+    for id in &ids { s.agent.db().update_job(id, &[("score", Value::Null), ("reasoning", "Not scored: the Main CV it was scored against was removed.".into())]).unwrap(); }
+    let owed = s.agent.cv_work_pending();
+    assert_eq!((owed.unscored.len(), owed.retailor.len()), (1, 1), "{owed:?}");
+    // A new CV: all of it is done.
+    s.agent.add_cv("new.txt", "Alex Morgan\nProgram manager\n".repeat(20).as_bytes(), false).unwrap();
+    s.agent.after_cv_added();
+    for _ in 0..600 {
+        let c = s.agent.cv_work_pending();
+        if c.unscored.is_empty() && c.retailor.is_empty() && !s.agent.is_running("cv-update") && !s.agent.is_running(&format!("tailor:{}", ids[0])) { break; }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let after = s.agent.cv_work_pending();
+    assert!(after.unscored.is_empty() && after.retailor.is_empty(), "{after:?}");
+    for id in &ids { assert!(s.agent.db().job(id).unwrap().unwrap().score.is_some(), "{id} has its fit again"); }
+    assert_eq!(s.agent.db().job(&ids[0]).unwrap().unwrap().status, "ready");
+}
+
 #[test]
 fn removing_your_only_cv_redoes_its_work_with_the_next() {
     let s = setup();

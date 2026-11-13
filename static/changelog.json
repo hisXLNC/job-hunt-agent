@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.65.5",
+    "date": "2026-11-13",
+    "title": "Removing and adding CVs leaves nothing undone",
+    "changes": [
+      "After CVs were removed and added, roles stayed without a fit and applications waiting for approval were not tailored again. The work to redo was kept as a list at the moment of removal, and lost whenever it could not be done right then (the CV it was to use was removed in turn, Job Hunt was closed, Claude was at its limit). Job Hunt now reads what is owed from the jobs themselves, does it when a CV is added or removed, and looks again every half hour, so the ones stuck now are picked up too.",
+      "Removing a CV no longer clears the fit of roles that were set aside; they keep it, as when a CV is updated."
+    ]
+  },
+  {
     "version": "2.65.4",
     "date": "2026-11-13",
     "title": "Indeed's notice: Claude Code's own words",

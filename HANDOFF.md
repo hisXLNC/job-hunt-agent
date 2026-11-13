@@ -56,6 +56,12 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.65.5: CV work is read from the jobs.** `cv_work_pending()` (queued/saved with no score and reasoning "Not scored: ",
+  ready with no score, approved-unsent with no score) + `resume_cv_work()` (runs `refresh_after_cv("", …)`), called by
+  `apply_cv_change`, `after_cv_added`, and the `cvwork` task every 30 min (`last.cvwork`). `cv.waiting` no longer decides.
+  Removal only unscores queued/saved; skipped/dismissed keep their fit and lose the track. 2.65.1 to 2.65.4: Indeed's
+  notice (see `told_apart` in `claude.rs`, `connFix` in app-settings.js); the Sign in to Claude button never sent its
+  request (`busy(el, …)`), fixed in 2.65.3. Waiting on the user for what "Claude Code said" on the Indeed notice.
 - **2.65.0: Settings regrouped** (the user approved the mockups: side list, tabs, search; "keep the design language
   consistent", so it is built from cards, pills and `placeTabs`, nothing new but the side list). In `app-settings.js`:
   `settingsCards(group, sub, host, st)` is the old page builder, now returning its cards with a marker before each
