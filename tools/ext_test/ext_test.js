@@ -337,7 +337,10 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (!got.brief) problems.push('the panel has no Copy a brief for Claude');
     // A page Job Hunt can't fill: the hand-over to the Claude extension is offered, and pressing it says what to do next.
     await page.goto(`http://127.0.0.1:${site.address().port}/nothing/here`);
-    await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, `http://127.0.0.1:${site.address().port}/nothing/here`);
+    // (The panel follows to the site's next page by itself; its own button starts the fill there.)
+    for (let i = 0; i < 30; i++) { await page.waitForTimeout(500); if (await page.evaluate(() => !!document.querySelector('[data-jobhunt-panel]')?.shadowRoot?.querySelector('[data-k=fill]'))) break; if (i === 12) await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, `http://127.0.0.1:${site.address().port}/nothing/here`); }
+    await page.waitForTimeout(800);
+    await page.evaluate(() => document.querySelector('[data-jobhunt-panel]').shadowRoot.querySelector('[data-k=fill]').click());
     let hand = { shown: false, said: '' };
     for (let i = 0; i < 40 && !hand.shown; i++) { await page.waitForTimeout(500); hand = await page.evaluate(() => { const r = document.querySelector('[data-jobhunt-panel]')?.shadowRoot; return { shown: !!r && !r.querySelector('[data-k=hand]').hidden, said: r?.querySelector('.s')?.textContent || '' }; }); }
     if (!hand.shown) problems.push(`Let Claude finish it isn't offered on a page Job Hunt can't fill (panel: ${hand.said.slice(0, 120)})`);
