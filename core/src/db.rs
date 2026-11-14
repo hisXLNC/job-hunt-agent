@@ -1260,6 +1260,44 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// Every job, the newest found first (at most `limit`), without the long text: the posting, the
+    /// cover letter and the CV changes come back empty. For counting and listing; reading 14,000
+    /// postings whole took tens of MB each time. With `tailored_text`, the posting's text is kept for
+    /// the jobs that have a tailored CV.
+    pub fn jobs_light(&self, limit: usize, tailored_text: bool) -> R<Vec<Job>> {
+        let cols: Vec<String> = {
+            let mut st = self.con.prepare("SELECT name FROM pragma_table_info('jobs')")?;
+            let names = st.query_map([], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<String>>>()?;
+            names.into_iter().map(|c| match c.as_str() {
+                "description" if tailored_text => "CASE WHEN cv_path IS NOT NULL THEN description ELSE '' END AS description".to_string(),
+                "description" => "'' AS description".to_string(),
+                "cover_letter" => "NULL AS cover_letter".to_string(),
+                "cv_changes" => "'[]' AS cv_changes".to_string(),
+                _ => c,
+            }).collect()
+        };
+        let mut st = self.con.prepare(&format!("SELECT {} FROM jobs ORDER BY found_at DESC LIMIT ?1", cols.join(", ")))?;
+        let rows = st.query_map([limit as i64], Job::from_row)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The jobs a certification could change the fit of: waiting or saved, or set aside with a fit
+    /// of at least `floor`; still open.
+    pub fn jobs_near_bar(&self, floor: i64) -> R<Vec<Job>> {
+        let mut st = self.con.prepare("SELECT * FROM jobs WHERE closed_at IS NULL AND score IS NOT NULL AND (status IN ('queued', 'saved') OR (status = 'skipped' AND score >= ?1))")?;
+        let rows = st.query_map([floor], Job::from_row)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The job whose posting has this link (by its url_key), if any.
+    pub fn job_by_url(&self, url: &str) -> Option<Job> {
+        let key = url_key(url);
+        if key.is_empty() {
+            return None;
+        }
+        self.con.query_row("SELECT * FROM jobs WHERE url_key = ?1 LIMIT 1", [key], Job::from_row).optional().ok().flatten()
+    }
+
     /// Jobs applied to since `since` (RFC 3339).
     pub fn applied_since(&self, since: &str) -> R<Vec<Job>> {
         let mut st = self.con.prepare("SELECT * FROM jobs WHERE applied_at IS NOT NULL AND applied_at >= ?1")?;
@@ -1527,6 +1565,29 @@ mod backend_tests {
             let p = plan(sql);
             assert!(p.contains("USING") && !p.contains("SCAN jobs\n") && p != "SCAN jobs", "{sql}: {p}");
         }
+    }
+
+    /// The light list leaves the long text out (kept, when asked, for jobs with a tailored CV), and
+    /// reads every other column as the full list does.
+    #[test]
+    fn the_light_list_leaves_out_the_long_text() {
+        let db = Db::memory().unwrap();
+        for (id, cv) in [("1", None), ("2", Some("cv/2.docx"))] {
+            let mut j = Job::default();
+            (j.id, j.company, j.title, j.status, j.description) = (id.into(), "Acme".into(), format!("Role {id}"), "queued".into(), "A long posting".into());
+            j.url = format!("https://acme.com/jobs/{id}");
+            db.insert_job(&j).unwrap();
+            if let Some(p) = cv {
+                db.update_job(id, &[("cv_path", p.into()), ("cover_letter", "Dear Acme".into())]).unwrap();
+            }
+        }
+        let light = db.jobs_light(10, false).unwrap();
+        assert_eq!(light.len(), 2);
+        assert!(light.iter().all(|j| j.description.is_empty() && j.cover_letter.is_none() && j.title.starts_with("Role") && j.status == "queued"));
+        let some = db.jobs_light(10, true).unwrap();
+        let text = |id: &str| some.iter().find(|j| j.id == id).unwrap().description.clone();
+        assert_eq!((text("1").as_str(), text("2").as_str()), ("", "A long posting"));
+        assert_eq!(db.job_by_url("https://www.acme.com/jobs/2/").map(|j| j.id).as_deref(), Some("2"));
     }
 
     #[test]

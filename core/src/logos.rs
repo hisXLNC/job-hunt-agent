@@ -57,7 +57,7 @@ pub fn name_hosts_once(agent: &Agent) {
     // Once, since employers with several names share one key (2.61.0): every job's key again, and
     // a company kept under a hosting site's code gets its name.
     if agent.secret("companies.rekeyed").is_empty() {
-        let jobs = agent.db().jobs(None, 100_000).unwrap_or_default();
+        let jobs = agent.db().jobs_light(100_000, false).unwrap_or_default();
         for j in jobs {
             if let Some((_, name)) = CODE_NAMES.iter().find(|(code, _)| j.company.trim().eq_ignore_ascii_case(code)) {
                 let _ = agent.db().rename_company(&j.id, &j.title, name);
@@ -69,7 +69,7 @@ pub fn name_hosts_once(agent: &Agent) {
     if !agent.secret("companies.named").is_empty() {
         return;
     }
-    let jobs = agent.db().jobs(None, 5000).unwrap_or_default();
+    let jobs = agent.db().jobs_light(5000, false).unwrap_or_default();
     for j in jobs {
         let c = j.company.trim();
         if c.contains('.') && !c.contains(' ') && own_site(&format!("https://{c}")).is_some() {

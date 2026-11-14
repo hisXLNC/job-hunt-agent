@@ -225,7 +225,7 @@ publish your Google project (Settings \u{2192} Accounts explains how).", what.to
         let (week, before) = ((now - Duration::days(7)).to_rfc3339(), (now - Duration::days(14)).to_rfc3339());
         let (jobs, emails) = {
             let db = self.db();
-            (db.jobs(None, 1_000_000)?, db.job_emails()?)
+            (db.jobs_light(1_000_000, false)?, db.job_emails()?)
         };
         let plural = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
         let sent = |from: &str, to: &str| jobs.iter().filter(|j| j.applied_at.as_deref().is_some_and(|a| a >= from && a < to)).count();
@@ -358,7 +358,7 @@ publish your Google project (Settings \u{2192} Accounts explains how).", what.to
         let profile = self.profile();
         let (mut jobs, emails, stages) = {
             let db = self.db();
-            (db.jobs(None, 1_000_000)?, db.job_emails()?, db.stages_reached()?)
+            (db.jobs_light(1_000_000, true)?, db.job_emails()?, db.stages_reached()?)
         };
         // Applications a day over the period (the last 90 days for everything).
         let span = days.unwrap_or(90).clamp(1, 365);

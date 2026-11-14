@@ -1086,8 +1086,7 @@ impl Agent {
             return vec![];
         }
         let bar = profile.score_threshold;
-        let mut jobs: Vec<Job> = ["queued", "saved", "skipped"].iter().flat_map(|st| self.db().jobs(Some(st), 100_000).unwrap_or_default())
-            .filter(|j| j.closed_at.is_none() && j.score.is_some_and(|s| j.status != "skipped" || s >= bar - 20))
+        let mut jobs: Vec<Job> = self.db().jobs_near_bar(bar as i64 - 20).unwrap_or_default().into_iter()
             .filter(|j| { let text = format!("{} {}", j.title, j.description).to_lowercase(); terms.iter().any(|t| has_word(&text, t)) })
             .collect();
         jobs.sort_by(|a, b| b.found_at.cmp(&a.found_at));

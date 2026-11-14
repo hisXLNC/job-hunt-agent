@@ -516,6 +516,18 @@ impl Agent {
         self.db.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// A number that moves whenever anything in the database is saved, read without waiting for the
+    /// app's own connection when there's a second one (SQLite's data_version, as that one sees it).
+    pub fn data_stamp(&self) -> u64 {
+        if let Some(reader) = &self.reader {
+            let r = reader.lock().unwrap_or_else(|e| e.into_inner());
+            if let Ok(v) = r.con.query_row("PRAGMA data_version", [], |row| row.get::<_, i64>(0)) {
+                return v as u64;
+            }
+        }
+        self.db.lock().unwrap_or_else(|e| e.into_inner()).con.total_changes()
+    }
+
     /// Until the guard is dropped, `db()` on this thread hands out the read-only connection: for a
     /// request from the page that only reads (the Queue, the job list, a job). The search, tailoring
     /// and everything else that writes keep the app's own connection, so neither waits for the other.
@@ -2654,7 +2666,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let profile = self.profile();
         let (jobs, emails) = {
             let db = self.db();
-            (db.jobs(None, 1_000_000)?, db.job_emails()?)
+            (db.jobs_light(1_000_000, false)?, db.job_emails()?)
         };
         let lines: Vec<String> = jobs.iter().filter(|j| j.applied_at.is_some() || ["applied", "interviewing", "offer", "rejected"].contains(&j.status.as_str())).take(150).map(|j| {
             let replies = emails.iter().filter(|(id, c, _, _)| *id == j.id && !["application_received", "job_alert", "not_job"].contains(&c.as_str())).count();
@@ -2701,7 +2713,7 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// those postings had that you didn't meet.
     pub fn skill_gaps(&self) -> R<Value> {
         let p = self.profile();
-        let jobs = self.db().jobs(None, 1_000_000)?;
+        let jobs = self.db().jobs_light(1_000_000, false)?;
         let since = (Utc::now() - Duration::days(90)).to_rfc3339();
         let floor = (p.score_threshold - 15).max(40);
         let mut cvs: BTreeMap<String, String> = BTreeMap::new();
@@ -2972,7 +2984,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         if let (Some(min), Some(got), true) = (self.profile().min_rating, r.rating, r.found) {
             if got < min {
                 let key = crate::db::company_key(company);
-                let waiting: Vec<Job> = self.db().jobs(None, 5000)?.into_iter()
+                let waiting: Vec<Job> = self.db().jobs_light(5000, false)?.into_iter()
                     .filter(|j| ["queued", "ready"].contains(&j.status.as_str()) && crate::db::company_key(&j.company) == key).collect();
                 for j in waiting {
                     self.db().set_status(&j.id, "skipped", &format!("{company} is rated {got:.1} by employees, below your minimum of {min:.1}"))?;
@@ -2992,7 +3004,7 @@ replies and interviews, and a little lower for kinds that got none from several 
     pub fn companies_to_rate(&self) -> Vec<(String, String)> {
         const CONSIDERING: [&str; 7] = ["queued", "ready", "approved", "applied", "interviewing", "offer", "saved"];
         let db = self.db();
-        let mut jobs: Vec<Job> = db.jobs(None, 2000).unwrap_or_default().into_iter().filter(|j| CONSIDERING.contains(&j.status.as_str())).collect();
+        let mut jobs: Vec<Job> = db.jobs_light(2000, false).unwrap_or_default().into_iter().filter(|j| CONSIDERING.contains(&j.status.as_str())).collect();
         jobs.sort_by_key(|j| std::cmp::Reverse(j.score.unwrap_or(0)));
         let mut seen = std::collections::HashSet::new();
         let now = Utc::now();

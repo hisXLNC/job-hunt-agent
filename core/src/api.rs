@@ -419,7 +419,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
 }
 
 /// The Overview as last put together during a search, per agent (see the overview route).
-static OVERVIEW_KEPT: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<usize, (std::time::Instant, Value)>>> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+static OVERVIEW_KEPT: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<usize, (std::time::Instant, u64, Value)>>> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
 
 /// What the page reads most (the Queue, the job list, a job) is answered on the read-only
 /// connection (see Agent::reading), so it neither waits for a search nor makes one wait. Should one
@@ -464,21 +464,29 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         match parts.as_slice() {
             ["api", "overview"] => {
-                // While a search runs, the page asks for this every second or two, and putting it together
-                // reads thousands of rows with the database held: the search waited behind it at every
-                // step (17 minutes to sort 1,664 postings on one PC). So during a search it's put together
-                // at most every few seconds; anything you do (any change sent) has it made afresh.
+                // The page asks for this every second or two, and putting it together reads thousands of
+                // rows. It's put together again only when something was saved since (or half a minute has
+                // passed: follow-ups fall due by the clock), and anything you do has it made afresh. While
+                // a search runs everything changes all the time: then every few seconds is enough. What
+                // is running, and how far, is always as of now.
                 let me = Arc::as_ptr(agent) as usize;
-                let searching = !cfg!(test) && (agent.is_running("search") || agent.search_ending());
-                let kept = if searching { OVERVIEW_KEPT.lock().unwrap_or_else(|e| e.into_inner()).get(&me).filter(|(at, _)| at.elapsed().as_secs() < 6).map(|(_, o)| o.clone()) } else { None };
+                let searching = agent.is_running("search") || agent.search_ending();
+                let stamp = agent.data_stamp();
+                let kept = if cfg!(test) { None } else {
+                    OVERVIEW_KEPT.lock().unwrap_or_else(|e| e.into_inner()).get(&me)
+                        .filter(|(at, was, _)| if searching { at.elapsed().as_secs() < 6 } else { *was == stamp && at.elapsed().as_secs() < 30 })
+                        .map(|(_, _, o)| o.clone())
+                };
                 let mut o = match kept {
-                    Some(o) => o,
+                    Some(mut o) => {
+                        o["running"] = json!(agent.running());
+                        o["progress"] = json!(agent.progress());
+                        o
+                    }
                     None => {
                         let (newer, in_use) = crate::sync::overview_view(agent);
                         let o = agent.overview_with(newer, in_use)?;
-                        if searching {
-                            OVERVIEW_KEPT.lock().unwrap_or_else(|e| e.into_inner()).insert(me, (std::time::Instant::now(), o.clone()));
-                        }
+                        OVERVIEW_KEPT.lock().unwrap_or_else(|e| e.into_inner()).insert(me, (std::time::Instant::now(), stamp, o.clone()));
                         o
                     }
                 };
@@ -567,7 +575,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 list.sort_by(|a, b| b.last_at.cmp(&a.last_at));
                 let mail = agent.mail.read().unwrap().is_some();
                 // How many postings at each one's company, in your lists.
-                let jobs = agent.db().jobs(None, 5000)?;
+                let jobs = agent.db().jobs_light(5000, false)?;
                 let rows: Vec<Value> = list.iter().map(|r| {
                     let open: Vec<Value> = jobs.iter().filter(|j| ["queued", "ready", "approved", "applied", "saved"].contains(&j.status.as_str())
                         && crate::recruiters::for_company(std::slice::from_ref(r), &j.company).is_some()).take(5)

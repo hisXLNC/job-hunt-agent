@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.78.0",
+    "date": "2026-11-14",
+    "title": "A lighter backend",
+    "changes": [
+      "The Queue's data is put together again only when something was saved, not every second or two.",
+      "Insights, This week, skill gaps, recruiters and company ratings no longer read every posting's full text.",
+      "Over Remote access, a large upload is read only from someone signed in."
+    ]
+  },
+  {
     "version": "2.77.0",
     "date": "2026-11-14",
     "title": "A faster backend",

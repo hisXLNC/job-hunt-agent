@@ -733,3 +733,23 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   login): selectors are the usual typeahead.js / jQuery UI ones. Mock: `letter` variant, `#occ`.
 - The `submit` listener ignores a form sent by a NOT_SEND button (Add, Save, Next…; `notSendAt`,
   `e.submitter`): Job Bank's Add set the panel to "Waiting for the site to confirm".
+
+## 2.78.0 (backend, second pass)
+
+- **Overview rebuilt only on change.** `Agent::data_stamp()` = the reader's `PRAGMA data_version`
+  (moves when the main connection commits; `total_changes` for in-memory DBs). The overview route
+  keeps its last answer per agent (`OVERVIEW_KEPT`: time, stamp, value) and reuses it while the
+  stamp is the same and it's under 30 s old (6 s, whatever the stamp, during a search); `running`
+  and `progress` are always patched in fresh; any non-GET request clears it. Off under `cfg!(test)`.
+  State kept only in memory and shown in the overview can lag up to 30 s if nothing is saved.
+- **`Db::jobs_light(limit, tailored_text)`**: every column but description ('' or only for jobs with
+  a CV), cover_letter (NULL), cv_changes ('[]'). Used where only counts/titles/links are read:
+  `results_for` (tailored_text: pay needs the text of tailored jobs), `week_in_words`,
+  `write_insights`, `skill_gaps`, `outreach_stats`, `messaged_at`, `rate_company`,
+  `companies_to_rate`, logos `name_hosts_once`, `/api/recruiters`, `job_for_clip` (one read, was
+  two). Don't use it for a function that RETURNS jobs to callers that read the text.
+  `cert_postings` filters in SQL (`Db::jobs_near_bar`). Still whole rows: `/api/jobs` (salary,
+  deadline and employment type are read from the text), `rescore_pool`, `rescan_salaries`.
+- **Remote access:** `read_request_if`: a body over 64 KB (`UNSIGNED_BODY`) is read only when the
+  cookie in the headers is a signed-in session (and Remote access is on); otherwise the connection
+  is dropped unread. The bridge (127.0.0.1) keeps `read_request`.

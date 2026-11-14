@@ -1005,16 +1005,17 @@ impl Agent {
     pub(super) fn job_for_clip(&self, clip: &Value) -> Option<String> {
         let f = |k: &str| clip[k].as_str().unwrap_or("").trim().to_string();
         let db = self.db();
+        // (Read once, without the postings' text: only their links are looked at.)
+        let all = db.jobs_light(5000, false).ok()?;
         if let Some(n) = crate::sources::linkedin_job_id(&f("url")) {
-            let found = db.jobs(None, 5000).ok()?.into_iter().find(|j| crate::sources::linkedin_job_id(&j.url).as_deref() == Some(n.as_str()));
-            if let Some(j) = found {
-                return Some(j.id);
+            if let Some(j) = all.iter().find(|j| crate::sources::linkedin_job_id(&j.url).as_deref() == Some(n.as_str())) {
+                return Some(j.id.clone());
             }
         }
         let url = f("url");
         let same_link = |j: &Job| !url.is_empty() && j.url.trim_end_matches('/') == url.trim_end_matches('/');
-        if let Some(j) = db.jobs(None, 5000).ok()?.into_iter().find(same_link) {
-            return Some(j.id);
+        if let Some(j) = all.iter().find(|j| same_link(j)) {
+            return Some(j.id.clone());
         }
         if f("company").is_empty() || f("title").is_empty() { None } else { db.existing_job("", &f("company"), &f("title")) }
     }

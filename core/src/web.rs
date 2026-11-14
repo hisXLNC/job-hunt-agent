@@ -123,6 +123,16 @@ pub(crate) struct Request {
 }
 
 pub(crate) fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request>> {
+    read_request_if(stream, &|_| true)
+}
+
+/// A request body larger than this is read only from someone signed in (see `connection`).
+const UNSIGNED_BODY: usize = 64 * 1024;
+
+/// read_request; `big_ok` is asked, with the headers, before a body over UNSIGNED_BODY is read:
+/// when it says no, nothing more is read and the connection is dropped. Over Remote access, a
+/// stranger could otherwise send up to 200 MB a connection before being asked for the password.
+pub(crate) fn read_request_if(stream: &TcpStream, big_ok: &dyn Fn(&HashMap<String, String>) -> bool) -> std::io::Result<Option<Request>> {
     let mut r = BufReader::new(stream);
     let mut line = String::new();
     if r.read_line(&mut line)? == 0 {
@@ -141,7 +151,7 @@ pub(crate) fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request
         }
     }
     let len: usize = headers.get("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
-    if len > MAX_BODY {
+    if len > MAX_BODY || (len > UNSIGNED_BODY && !big_ok(&headers)) {
         return Ok(None);
     }
     // Read as it arrives (memory isn't set aside on the header's word alone: over Remote access,
@@ -162,7 +172,11 @@ fn percent_decode(s: &str) -> String {
 }
 
 fn cookie<'a>(req: &'a Request, name: &str) -> Option<&'a str> {
-    req.headers.get("cookie")?.split(';').filter_map(|c| c.trim().split_once('=')).find(|(k, _)| *k == name).map(|(_, v)| v)
+    cookie_in(&req.headers, name)
+}
+
+fn cookie_in<'a>(headers: &'a HashMap<String, String>, name: &str) -> Option<&'a str> {
+    headers.get("cookie")?.split(';').filter_map(|c| c.trim().split_once('=')).find(|(k, _)| *k == name).map(|(_, v)| v)
 }
 
 pub(crate) fn write(mut stream: TcpStream, r: Resp) -> std::io::Result<()> {
@@ -216,7 +230,7 @@ fn is_local(ip: &str) -> bool {
 
 fn connection(stream: TcpStream, agent: &Arc<Agent>, host: &Arc<dyn Host>, enabled: &(dyn Fn() -> bool + Send + Sync)) -> std::io::Result<()> {
     let peer = stream.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
-    let Some(req) = read_request(&stream)? else { return Ok(()) };
+    let Some(req) = read_request_if(&stream, &|headers| enabled() && signed_in(agent, cookie_in(headers, COOKIE)))? else { return Ok(()) };
     if !enabled() {
         return write(stream, html(403, "<p>Remote access to Job Hunt is turned off on this computer.</p>".into()));
     }
@@ -357,5 +371,35 @@ mod tests {
         // Signing out ends the session.
         send(port, &format!("POST /logout HTTP/1.1\r\nHost: x\r\nCookie: {cookie}\r\nContent-Length: 0\r\n\r\n"));
         assert!(send(port, &format!("GET /api/overview HTTP/1.1\r\nHost: x\r\nCookie: {cookie}\r\n\r\n")).starts_with("HTTP/1.1 401"));
+    }
+}
+
+#[cfg(test)]
+mod body_tests {
+    use super::*;
+    use std::io::Write;
+
+    /// A large body is read only when the caller vouches for the sender (signed in); a small one
+    /// (the password form) always is.
+    #[test]
+    fn a_big_body_is_read_only_from_someone_signed_in() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let send = move |len: usize| {
+            std::thread::spawn(move || {
+                let mut s = TcpStream::connect(addr).unwrap();
+                let _ = s.write_all(format!("POST /api/x HTTP/1.1\r\nContent-Length: {len}\r\n\r\n").as_bytes());
+                let _ = s.write_all(&vec![b'a'; len]);
+            })
+        };
+        let big = UNSIGNED_BODY + 1;
+        for (len, ok, read) in [(big, false, false), (big, true, true), (100, false, true)] {
+            let t = send(len);
+            let (stream, _) = listener.accept().unwrap();
+            let got = read_request_if(&stream, &|_| ok).unwrap();
+            assert_eq!(got.map(|r| r.body.len()), read.then_some(len), "{len} bytes, signed in: {ok}");
+            drop(stream);
+            let _ = t.join();
+        }
     }
 }

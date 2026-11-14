@@ -135,7 +135,7 @@ impl Agent {
     /// each {sent, replied}. A reply is one you marked, or (for the job) a real email back.
     pub fn outreach_stats(&self) -> R<Value> {
         let emails = self.db().job_emails()?;
-        let jobs = self.db().jobs(None, 5000)?;
+        let jobs = self.db().jobs_light(5000, false)?;
         let mut by: BTreeMap<&str, (u32, u32)> = BTreeMap::new();
         for j in jobs {
             let wrote_back = emails.iter().any(|(id, cat, _, _)| *id == j.id && ["recruiter_outreach", "interview_request", "interview_confirmed", "assessment", "offer"].contains(&cat.as_str()));
@@ -160,7 +160,7 @@ impl Agent {
     /// recruiter at a company at a time.
     pub fn messaged_at(&self, company: &str) -> Vec<(String, String, String)> {
         let key = crate::db::dupe_key(company, "");
-        let jobs: Vec<Job> = self.db().jobs(None, 5000).unwrap_or_default().into_iter().filter(|j| crate::db::dupe_key(&j.company, "") == key).collect();
+        let jobs: Vec<Job> = self.db().jobs_light(5000, false).unwrap_or_default().into_iter().filter(|j| crate::db::dupe_key(&j.company, "") == key).collect();
         let mut out = vec![];
         for j in jobs {
             for c in self.contacts(&j.id) {
