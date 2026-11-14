@@ -13,7 +13,7 @@ function jobActions(j, tailoring, progress) {
   let next = '', main = [];
   if (tailoring) next = 'Job Hunt is tailoring your CV and cover letter. This page updates by itself.';
   else if (j.status === 'queued') { next = 'Read the posting and why it fits. Worth applying to? Job Hunt tailors your CV and writes a cover letter.'; main = [`<button class="btn primary" data-act="tailorPicked" data-job="${id}">Tailor my CV for this role</button>`]; }
-  else if (j.status === 'ready') { next = 'Read your tailored CV and cover letter below, change what you like, then approve.'; main = [`<button class="btn primary" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">${svg('check')}${j.apply_email ? `Approve and email to ${esc(j.apply_email)}` : 'Approve and apply'}</button>`]; }
+  else if (j.status === 'ready') { next = 'Read your tailored CV and cover letter below, change what you like, then approve.'; main = [`<button class="btn primary" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">${svg('check')}${j.apply_email ? 'Approve and send' : 'Approve and apply'}</button>${j.apply_email ? `<span class="muted small approve-to">by email to ${esc(j.apply_email)}</span>` : ''}`]; }
   else if (j.status === 'approved') { next = 'Submit it on the company\'s site. Job Hunt fills in the form in your browser; you check it and press Submit.';
     const fills = overview?.can_fill && j.url;
     if (!fills) next = 'Submit it on the company\'s site. Your files are under CV & letter, and every detail a form asks for, ready to copy, is under Questions & contacts.';
@@ -95,13 +95,6 @@ async function showJob(id) {
       </div>
     </div>
     ${jobActions(j, tailoring, progress)}
-    ${!sys && (j.cv_path || review) ? `<details class="card ats-tips"${review || reviewing ? ' open' : ''}><summary><b>How an AI screen would read your CV.</b> <span class="muted">Many employers now check CVs requirement by requirement</span></summary>${reviewBox}</details>` : ''}
-    ${sys ? `<details class="card ats-tips"${review || reviewing ? ' open' : ''}><summary><b>${esc(j.company)} takes applications through ${esc(sys.name)}.</b> <span class="muted">What that means for this one</span></summary>
-      ${(sys.here || []).length ? `<p style="color:var(--warn)">You've applied to ${sys.here.length} other role${sys.here.length === 1 ? '' : 's'} here in the last 90 days (${sys.here.slice(0, 3).map(h => esc(h.title) + (h.status === 'rejected' ? ', turned down' : '')).join('; ')}). ${esc(sys.name)} lets employers block repeat applications, so check this one is worth it.</p>` : ''}
-      ${reviewBox}
-      <h3>What else to know</h3>
-      <ul>${sys.tips.map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join('')}</ul>
-      <p class="muted small">From ${esc(sys.name)}'s own published help pages. Employers choose which of these they switch on, so not all of it applies to every company.</p></details>` : ''}
     ${decline || declining || j.status === 'rejected' ? `<section class="card">
       <header><h2>Reply to the rejection</h2>${declining ? '<span class="muted small"><span class="spin" data-kind="decline"></span>Writing…</span>' : `<button class="btn" data-act="decline">${decline ? 'Write again' : 'Draft a reply'}</button>`}</header>
       ${decline ? `<p class="small muted">${decline.draft ? `Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>${decline.in_thread ? ', as a reply to their email' : ''}` : 'Written'} ${esc(ago(decline.at))}${decline.to ? ` · to ${esc(decline.to)}` : ' · add the address of the person you dealt with before sending'}</p>
@@ -119,14 +112,22 @@ async function showJob(id) {
     ${revising ? `<div class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this page updates by itself.</p></div>` : ''}
     <nav class="tabs job-tabs" id="jobTabs">${tabs.map(([k, n]) => `<a href="#" data-jtab="${k}" class="${k === tab ? 'on' : ''}">${n}${badge[k] ? `<span class="tab-dot" title="${esc(badge[k])}"></span>` : ''}</a>`).join('')}</nav>
     <div class="jpane" data-pane="overview" ${tab === 'overview' ? '' : 'hidden'}>
+    ${!sys && (j.cv_path || review) ? `<details class="card ats-tips"${review || reviewing ? ' open' : ''}><summary><b>How an AI screen would read your CV.</b> <span class="muted">Many employers now check CVs requirement by requirement</span></summary>${reviewBox}</details>` : ''}
+    ${sys ? `<details class="card ats-tips"${review || reviewing ? ' open' : ''}><summary><b>${esc(j.company)} takes applications through ${esc(sys.name)}.</b> <span class="muted">What that means for this one</span></summary>
+      ${(sys.here || []).length ? `<p style="color:var(--warn)">You've applied to ${sys.here.length} other role${sys.here.length === 1 ? '' : 's'} here in the last 90 days (${sys.here.slice(0, 3).map(h => esc(h.title) + (h.status === 'rejected' ? ', turned down' : '')).join('; ')}). ${esc(sys.name)} lets employers block repeat applications, so check this one is worth it.</p>` : ''}
+      ${reviewBox}
+      <h3>What else to know</h3>
+      <ul>${sys.tips.map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join('')}</ul>
+      <p class="muted small">From ${esc(sys.name)}'s own published help pages. Employers choose which of these they switch on, so not all of it applies to every company.</p></details>` : ''}
       <section class="card progress-main">
         <header><h2>${progress ? 'Progress' : 'Stage'}</h2>${progress ? `<span class="who ${esc(progress.who)}">${{ you: 'Your move', them: 'Waiting on them', later: 'Saved', done: 'Done' }[progress.who] || ''}</span>` : ''}</header>
         ${progress ? stepsHtml(progress) : ''}
         <div class="progress-foot">
-          ${progress ? `<div class="grow"><p style="margin:0"><b>Next:</b> ${nextText(progress)}</p>
+          ${progress ? `<div class="grow">
             <p class="muted small timeline-inline">${progress.steps.filter(x => x.at).map(x => `<b>${esc(x.step)}</b> ${esc(fmtDate(x.at))}`).join(' · ')}</p></div>` : '<div class="grow"></div>'}
+          <details class="stage-change"><summary class="btn ghost sm">Change stage</summary>
           <div class="row stage-set"><select id="stage" style="width:auto" aria-label="Stage">${Object.entries(STAGES).map(([k, v]) => `<option value="${k}" ${k === j.status ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>
-            <input type="text" id="stageNote" placeholder="Note (optional)"><button class="btn" data-act="setStage">Save</button></div>
+            <input type="text" id="stageNote" placeholder="Note (optional)"><button class="btn" data-act="setStage">Save</button></div></details>
         </div>
       </section>
       <div class="job-grid">

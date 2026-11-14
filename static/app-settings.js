@@ -29,7 +29,7 @@ function extensionCard(st) {
   return `<section class="card" id="extCard"><header><h2>Browser extension</h2>${st.ext_last ? `<span class="pill good" title="Last reached Job Hunt ${esc(ago(st.ext_last))}">Connected</span>` : '<span class="pill">Not connected yet</span>'}</header>
     <p class="muted"><b>Send to Job Hunt</b> in ${browser}: send a posting you're looking at to Job Hunt, and fill in application forms in your own browser, with your sign-ins and password manager, from your tailored CV and letter.</p>
     <label class="field" style="max-width:420px">Open links in<select data-act="browserPick">${[['', "Windows' default browser"], ['edge', 'Microsoft Edge'], ['chrome', 'Google Chrome']].map(([v, n]) => `<option value="${v}" ${(st.app.browser || '') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Postings, company sites, and Fill it in my own browser open there.</span></label>
-    <ol class="small steps-list">
+    <ol class="small setup-steps">
       <li>Job Hunt keeps the extension in this folder, and updates it with each new version: <span class="copy-row" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap"><code id="extDir">${esc(st.ext_folder || '')}</code><button class="btn ghost sm" data-act="copy" data-from="extDir">Copy</button><button class="btn ghost sm" data-act="folder" data-which="extension">Open the folder</button></span></li>
       <li>In ${browser}, open <code>${page}</code>, turn on <b>Developer mode</b>${browser === 'Edge' ? ' (at the bottom of the left side)' : ' (top right)'}, press <b>Load unpacked</b> and choose that folder (paste it into the folder box). Had it from a download before? Remove that copy first, so there's only one.</li>
       <li>Pin it: the puzzle-piece icon by the address bar → the eye or pin next to <b>Send to Job Hunt</b>.</li>
@@ -283,13 +283,14 @@ async function settingsCards(tab, sub, host, given) {
       </div></section>`).join('')}
     ${st.cvs.length ? '' : '<p class="empty">No CVs yet. Add one above to start.</p>'}`;
     const career = st.cvs.length ? careerHtml(st.career, st.career_thinking, st.profile.tracks || [], st.profile.wants?.path || '') : '<section class="card"><p>Add a CV first: Claude maps your career paths from it.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>';
-    const details = `<form data-form="profile" data-part="about"><section class="card"><header><h2>About you</h2></header>
+    const details = `<nav class="jump" aria-label="On this page">${[['aboutCard', 'About you'], ['sigCard', 'Signature'], ['certsCard', 'Certifications'], ['storiesCard', 'Stories and facts'], ['bankCard', 'Saved answers']].map(([id, n]) => `<a href="#cvs/details" data-act="jumpTo" data-to="${id}">${n}</a>`).join('')}</nav>
+    <form data-form="profile" data-part="about"><section class="card" id="aboutCard"><header><h2>About you</h2></header>
       <p class="muted">Your name goes on your CVs' file names and cover letters; your email is where the weekly review goes.</p>
       <div class="form">
         <label class="field">Your name<input type="text" name="name" value="${esc(p.name)}"></label>
         <label class="field">Your email<input type="email" name="email" value="${esc(p.email)}"></label>
       </div></section></form>
-    <section class="card"><header><h2>Signature</h2>${st.signature ? '<span class="pill good">Added</span>' : ''}</header>
+    <section class="card" id="sigCard"><header><h2>Signature</h2>${st.signature ? '<span class="pill good">Added</span>' : ''}</header>
       <p class="muted">Goes on every cover letter, between the sign-off and your name. Sign a white sheet of paper, take a photo or scan, and crop it close. PNG or JPEG.</p>
       ${st.signature ? `<p><img src="${st.signature}" alt="Your signature" style="max-height:60px;max-width:260px;background:#fff;padding:6px;border-radius:6px"></p>` : ''}
       <div class="row">
@@ -302,7 +303,7 @@ async function settingsCards(tab, sub, host, given) {
       <div class="cert-list" id="certList">${(p.certifications || []).map(certRow).join('')}</div>
       <div class="row"><button class="btn" type="button" data-act="certAdd">${svg('add')}Add a certification</button></div>
       <p class="muted small" id="certRescore" hidden></p></section></form>
-    <form data-form="profile" data-part="stories"><section class="card"><header><h2>Your stories</h2></header>
+    <form data-form="profile" data-part="stories"><section class="card" id="storiesCard"><header><h2>Your stories</h2></header>
       <p class="muted">True achievements and stories that aren't in your CV, for cover letters to draw on, like a hard delivery you pulled off or a problem only you solved. Cover letters may use them; your CV is never changed with them.</p>
       <label class="field">Stories<textarea name="stories" style="min-height:160px" placeholder="e.g. Managed a key shipment for a \$2B oil project in Iran.\nCoordinated urgent delivery of medical supplies to Iraq.">${esc(st.profile.stories || '')}</textarea><span class="hint">One per line or paragraph. Keep the real numbers.</span></label>
       <label class="field">Facts for application forms<textarea name="application_facts" placeholder="e.g. Citizen, no visa sponsorship needed.\nNotice period: one month.\nSalary expectation: (your range and currency).\nOpen to hybrid; not relocating.\nAddress: 123 Main St, Toronto, ON M5P 3M1\nPhone: (416) 555-0100">${esc(st.profile.application_facts || '')}</textarea><span class="hint">Used to answer application questions. Anything not here is left as “[Fill in]”.</span></label>
@@ -839,8 +840,10 @@ let update = null;
 let updateBarLater = null;
 /** A bar across the top of every page while an update waits: the sidebar note is easy to miss. */
 function updateBarHtml() {
-  return updatedBarHtml() + readyBarHtml();
+  return updatedBarHtml() + (updateBarHere() ? readyBarHtml() : '');
 }
+/** The update bar shows on the Queue and on Settings → App; everywhere else the chip in the top bar says it. */
+const updateBarHere = () => { const h = location.hash; return h === '' || h.startsWith('#overview') || /^#settings\/(computer|app)\b/.test(h); };
 /** Just updated (installed and restarted onto a newer version): what changed, until you press Got it. */
 let updated = null;
 function updatedBarHtml() {
@@ -870,7 +873,7 @@ function readyBarHtml() {
 function showUpdate(u) {
   const bar = $('#updateBar');
   if (!u?.available || updateBarLater === u.version) bar?.remove();
-  else if (!bar) main().querySelector('.page')?.insertAdjacentHTML('afterbegin', readyBarHtml());
+  else if (!bar && updateBarHere()) main().querySelector('.page')?.insertAdjacentHTML('afterbegin', readyBarHtml());
   const note = $('#updateNote');
   if (u?.available) {
     note.innerHTML = `<b>Job Hunt ${esc(shortVersion(u.version))} is ready</b>
@@ -1110,7 +1113,7 @@ function approveChanged(box) {
 }
 function pickChanged(box) {
   const n = box.querySelectorAll('[data-pick]:checked').length;
-  const btn = box.querySelector('button[data-act=tailorPicked]');
+  const btn = box.querySelector('.select-bar button[data-act=tailorPicked]');
   if (btn) { btn.disabled = !n; btn.textContent = n ? `Tailor ${n}` : 'Tailor selected'; }
   selectBar(box, n);
   const all = box.querySelector('[data-act=pickAll]');

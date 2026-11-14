@@ -2116,3 +2116,28 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 .ask-pic span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
 .ask-pic button { flex: none; border: 0; background: none; color: var(--muted); font-size: 16px; cursor: pointer; }
 .ask-thumb { display: block; max-width: 180px; max-height: 140px; border-radius: 8px; margin-bottom: 6px; }
+
+/* ---- Tidy-ups from the screen-by-screen review ---- */
+/* The extension's setup: a plain numbered list (the CV update's step styles were reaching it and breaking each step into columns). */
+.setup-steps { margin: 10px 0 12px; padding-left: 22px; display: block; list-style: decimal; }
+.setup-steps li { display: list-item; margin: 0 0 10px; padding-left: 4px; line-height: 1.6; }
+.setup-steps li::marker { font-weight: 700; color: var(--accent); }
+.setup-steps code { overflow-wrap: anywhere; }
+/* All jobs: a column with nothing in it for any row is left out. */
+#t-all.no-pay th:nth-child(4), #t-all.no-pay td:nth-child(4), #t-all.no-type th:nth-child(9), #t-all.no-type td:nth-child(9) { display: none; }
+/* A job: the stage is changed behind a link; the approve button says who it goes to underneath. */
+.stage-change > summary { list-style: none; cursor: pointer; }
+.stage-change > summary::-webkit-details-marker { display: none; }
+.stage-change[open] > summary { margin-bottom: 8px; }
+.approve-to { display: block; margin-top: 4px; overflow-wrap: anywhere; text-align: right; }
+.next-main .btn.primary { max-width: 100%; white-space: normal; }
+/* About me: a row of links to the page's parts. */
+.jump { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.jump a { padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-2); font-size: 13px; text-decoration: none; }
+.jump a:hover { border-color: var(--accent); color: var(--accent); }
+/* The calendar's past days: a tint, not a block. */
+.cal-d.past { background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
+/* The Queue's steps on a phone: a fade where more scroll out of sight. */
+@media (max-width: 760px) { .tabs.qsteps { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 24px; } }
+/* The top bar's status says what it says: room for the words. */
+.status-pill > span:last-child { max-width: 190px; }

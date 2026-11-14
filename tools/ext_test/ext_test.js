@@ -67,6 +67,8 @@ function answers(fields, name) {
     else if (/comprehension/i.test(f.label)) values[f.key] = nth === 3 ? 'Beginner' : 'Fluent';
     else if (/fluent/i.test(f.label)) values[f.key] = nth === 3 ? 'no' : 'yes';
     else if (f.type === 'date' && /^from/i.test(f.label)) { if (/education/i.test(sec)) values[f.key] = '2005'; else if (/work experience/i.test(sec)) values[f.key] = '03/2019'; }
+    else if (f.key === 'pick0') values[f.key] = (f.options || []).find(o => /full/i.test(o)) || '';
+    else if (/proficiency/i.test(f.label)) values[f.key] = 'Native';
     else if (/province/i.test(f.label)) values[f.key] = 'Ontario';
     else if (/email/i.test(f.label)) values[f.key] = 'sam@example.com';
     else if (/phone/i.test(f.label)) values[f.key] = '416-555-0100';
@@ -154,6 +156,9 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     // A choice as SuccessFactors draws it: a box that says "No Selection", and a list of its own that a click opens.
     + '<div><div id="p:_selectContainer"><input aria-label="Province/Territory/State" autocomplete="off" type="text" placeholder="No Selection" aria-owns="p:_listSelect" role="combobox" aria-required="true" aria-expanded="false" id="prov" onclick="document.getElementById(\'p:_listSelect\').style.display=\'block\'" readonly><button type="button" tabindex="-1" aria-label="Province/Territory/State"><span></span></button></div>'
     + '<ul id="p:_listSelect" style="display:none">' + ['Alberta', 'British Columbia', 'Ontario', 'Quebec'].map(n => `<li><a href="javascript:void(0)" onclick="document.getElementById(\'prov\').value=\'${n}\';document.getElementById(\'p:_listSelect\').style.display=\'none\'">${n}</a></li>`).join('') + '</ul></div>'
+    // And one whose list has no "Native": Job Hunt chooses from what the list does offer.
+    + '<div><div><input aria-label="Proficiency level in spoken and written English" autocomplete="off" type="text" placeholder="No Selection" aria-owns="e:_listSelect" role="combobox" aria-required="true" id="eng" onclick="document.getElementById(\'e:_listSelect\').style.display=\'block\'" readonly></div>'
+    + '<ul id="e:_listSelect" style="display:none">' + ['No Selection', 'Basic Proficiency', 'Full proficiency', 'No Proficiency', 'Professional proficiency'].map(n => `<li><a href="javascript:void(0)" onclick="document.getElementById(\'eng\').value=\'${n}\';document.getElementById(\'e:_listSelect\').style.display=\'none\'">${n}</a></li>`).join('') + '</ul></div>'
     + '<div id="docs"><div style="display:flex;justify-content:space-between"><h2>Supporting documents</h2><a href="#" id="addDocs" onclick="document.getElementById(\'up\').style.display=\'block\';this.remove();return false">Add</a></div><div>No cover letter or additional documents added. This is optional to add.</div>'
     + '<div id="up" style="display:none"><label for="doc">Upload a file</label><input id="doc" type="file"></div></div><button type="button">Submit your application</button></body></html>';
   const postsHtml = fs.readFileSync(path.join(__dirname, 'posts.html'));
@@ -368,8 +373,9 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, url);
     let s = '';
     for (let i = 0; i < 80; i++) { await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s) || /Couldn't|can't find|No answers|tripped/.test(s)) break; }
-    const got = await page.evaluate(() => ({ open: document.getElementById('up').style.display !== 'none', file: document.getElementById('doc').files[0]?.name || '', email: document.getElementById('email').value, prov: document.getElementById('prov').value }));
+    const got = await page.evaluate(() => ({ open: document.getElementById('up').style.display !== 'none', file: document.getElementById('doc').files[0]?.name || '', email: document.getElementById('email').value, prov: document.getElementById('prov').value, eng: document.getElementById('eng').value }));
     const problems = [];
+    if (got.eng !== 'Full proficiency') problems.push(`the list with no "Native" holds "${got.eng}", not the closest choice it has`);
     if (got.prov !== 'Ontario') problems.push(`the box with a list of its own holds "${got.prov}", not Ontario`);
     if (!got.open) problems.push('the Add beside Supporting documents was not pressed');
     if (got.file !== 'Sam Lee - Cover letter.pdf') problems.push(`the box it opened holds "${got.file || 'nothing'}", not the cover letter`);

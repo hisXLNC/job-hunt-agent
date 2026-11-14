@@ -72,11 +72,11 @@ async function showCalendar() {
         <div class="row" style="align-self:end"><button class="btn primary" type="submit">Add it</button><button class="btn ghost" type="button" data-act="calAdd">Cancel</button></div>
       </form>
       <p class="muted small">Adds prep time before it and thank-you and follow-up reminders after (Settings → Schedule)${google ? ', in your Google Calendar too' : ''}, and moves the application to Interviewing.</p></section>
+    <section class="card"><header><h2>Coming up</h2><span class="muted small">the next 30 days</span></header>${soon.length ? group(soon) : `<p class="muted">Nothing coming up.${google ? '' : ' Interviews you add here, or that Job Hunt books from your email once Google is connected, show up here.'}</p>`}</section>
     <section class="card"><header><h2>${esc(calMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}</h2>
       <div class="row"><button class="btn ghost" data-act="calMonth" data-d="-1" title="Previous month" aria-label="Previous month">‹</button><button class="btn ghost" data-act="calMonth" data-d="0">Today</button><button class="btn ghost" data-act="calMonth" data-d="1" title="Next month" aria-label="Next month">›</button></div></header>
       ${grid}
       <div class="row small muted" style="margin-top:8px;gap:14px">${Object.entries(CAL_KIND).map(([k, [n]]) => `<span><i class="cal-key ${k}"></i>${n}</span>`).join('')}</div></section>
-    <section class="card"><header><h2>Next 30 days</h2></header>${soon.length ? group(soon) : `<p class="muted">Nothing coming up.${google ? '' : ' Interviews you add here, or that Job Hunt books from your email once Google is connected, show up here.'}</p>`}</section>
     ${recent.length ? `<details class="card"><summary><b>Last 2 weeks</b> <span class="muted small">${recent.length}</span></summary>${group(recent)}</details>` : ''}`);
 }
 

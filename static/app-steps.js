@@ -150,7 +150,7 @@ const payFact = j => j.salary
 const THIN_COVER = 0.6;
 /** How much of a posting's keywords the tailored CV covers, as a fact for its row: marked when thin. */
 const coverFact = j => j.coverage_after == null ? '' : j.coverage_after < THIN_COVER
-  ? `<span class="warn-text" title="Under ${pct(THIN_COVER)}: screening software may rank it low. Open it to add the keywords you do have.">only ${pct(j.coverage_after)} of the posting's keywords</span>${flatTailor(j) ? ` · <span class="warn-text" title="${FLAT_WHY}">tailoring didn't lift the fit</span>` : ''}`
+  ? `<span class="warn-text" title="Under ${pct(THIN_COVER)}: screening software may rank it low. Open it to add the keywords you do have.">only ${pct(j.coverage_after)} of the posting's keywords${flatTailor(j) ? ', and tailoring didn\'t lift the fit' : ''}</span>`
   : `${pct(j.coverage_after)} of the posting's keywords`;
 /** Tailored, and no better for it: the fit didn't move and most of the posting's keywords are still
  *  missing, because nothing in your CV backs them. A gap in experience, not in wording. */
@@ -207,7 +207,7 @@ function stepHtml(o, step, tracked) {
     const rows = [...picking].sort((a, b) => applyRank(b) - applyRank(a)).map(j => jobRow(j, {
       cls: 'pick', tick: `<input type="checkbox" data-pick="${esc(j.id)}" aria-label="Pick ${esc(j.title)}">`, tags: `${oneTag(j)}${appliedBeforeTag(j)}`, facts: ageTag(j), sub: whyFits(j),
       attrs: `data-expired="${expiredWhy(j) ? 1 : 0}" data-now="${applyRank(j)}" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}" data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}" data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"`,
-      actions: `${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button>` })).join('');
+      actions: `${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}${j.score != null ? `<button class="btn sm primary" type="button" data-act="tailorPicked" data-job="${id(j)}" title="Tailor a CV and cover letter for this one now">Tailor</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button>` })).join('');
     groups.push([`Pick from <span data-pickhead>${picking.length} new match${picking.length === 1 ? '' : 'es'}</span>`, `<div data-pickbox>
     <div class="row" style="margin:2px 0 8px">${picking.length > 5 ? '<button class="btn sm" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost sm" type="button" data-act="pickAll">Select all</button>${(() => { const old = picking.filter(j => daysUp(j) > 21 || expiredWhy(j)); return old.length ? `<button class="btn ghost sm" type="button" data-act="pickStale" data-ids="${esc(JSON.stringify(old.map(j => j.id)))}" title="Postings up for more than three weeks, or expired: an application now is rarely read. It doesn't change how Job Hunt scores.">Set aside ${old.length} older than 3 weeks</button>` : ''; })()}${inWork ? `<span class="muted small"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork}…</span>` : ''}</div>
     ${foldFilters(`<div class="pick-filters">
@@ -231,7 +231,7 @@ function stepHtml(o, step, tracked) {
   const many = o.ready?.length > 1;
   if (o.ready?.length) ready.push(['Ready to approve', `<div data-approvebox>
     ${many ? `<div class="row" style="margin:2px 0 8px"><button class="btn ghost sm" type="button" data-act="approveAll">Select all</button></div>` : ''}
-    ${[...o.ready].sort((a, b) => applyRank(b) - applyRank(a)).map(j => row(j, [coverFact(j), j.apply_email ? 'applies by email' : '', onCompanySite(j)].filter(Boolean).join(' · '),
+    ${[...o.ready].sort((a, b) => applyRank(b) - applyRank(a)).map(j => row(j, [coverFact(j), j.apply_email ? 'applies by email' : onCompanySite(j)].filter(Boolean).join(' · '),
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`,
     o.ready.length > 1 ? `<input type="checkbox" data-appr="${id(j)}" data-email="${esc(j.apply_email || '')}" aria-label="Select ${esc(j.company)}">` : '')).join('')}

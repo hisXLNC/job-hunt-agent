@@ -277,10 +277,12 @@ async function showOverview(arg) {
   const n = k => all.filter(x => x.step === k).length;
   const delta = o.this_week - o.last_week;
   const picks = n('pick');
+  // The same number as the Queue's badge: what needs you. New matches to pick from are their own count.
+  const needsYou = queueCount(all.filter(x => x.step !== 'pick'));
   page(`<div class="head">
       <div class="grow">
         <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${first ? ` · ${greeting()}, ${esc(first)}` : ''}</div>
-        <h1>${queueCount(all) ? `${queueCount(all)} waiting for you` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
+        <h1>${needsYou ? `${needsYou} waiting for you` : queueCount(all) ? `${queueCount(all)} new match${queueCount(all) === 1 ? '' : 'es'} to pick from` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
         ${neededDone ? `<p class="week-line"><span class="week-label">This week</span>
           <a href="#results" title="Applications sent this week${o.weekly_goal ? `, against your goal of ${o.weekly_goal}` : ''}${delta ? ` (${delta > 0 ? delta + ' more' : -delta + ' fewer'} than last week)` : ''}"><b>${o.this_week}</b>${o.weekly_goal ? ` of ${o.weekly_goal}` : ''} applied${delta ? ` <span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span>` : ''}</a>
           <a href="#calendar" title="Interviews coming up"><b>${o.interviews.length}</b> interview${o.interviews.length === 1 ? '' : 's'}</a>
@@ -317,12 +319,12 @@ async function showOverview(arg) {
         ${!listing && cur && cur.kind === 'pick' && picks > 3 ? `<p class="muted small deck-note">${picks} to pick from. Rather tick several at once? <a href="#" data-act="queueView" data-view="list">See them as a list</a>.</p>` : ''}
         ${tailoring ? `<p class="muted small deck-note"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(tailoring / 3)}"></span>Tailoring ${tailoring} application${tailoring === 1 ? '' : 's'}… they come back here to approve.</p>` : ''}
         ${titleIdeasHtml(o.title_ideas)}
-        ${showSteps && neededDone && steps.some(st => st[4] && st[4] !== 'google' && !st[0]) ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && st[4] !== 'google' && !st[0]).map(([, t, d, href, key]) =>
+        ${showSteps && neededDone && !all.some(x => x.j) && steps.some(st => st[4] && st[4] !== 'google' && !st[0]) ? `<section class="card optional-steps"><b>Optional:</b> ${steps.filter(st => st[4] && st[4] !== 'google' && !st[0]).map(([, t, d, href, key]) =>
           `<span class="opt"><a href="${href}" title="${esc(d)}">${esc(t.replace(' (optional)', ''))}</a><button class="btn ghost sm" data-act="setupSkip" data-what="${key}" title="Hide this">Not now</button></span>`).join('')}</section>` : ''}
       </div>
       ${!listing && rest.length ? `<aside class="deck-side"><h3>Up next</h3><div class="upnext">${rest.slice(0, 5).map(queueMini).join('')}${rest.length > 5 ? `<p class="muted small" style="margin:2px 4px">and ${rest.length - 5} more</p>` : ''}</div></aside>` : ''}
     </div>
-    <details class="card activity" ${localStorage.getItem('jh.activityShut') === '1' ? '' : 'open'} data-keep="jh.activityShut"><summary><b>What Job Hunt did lately</b></summary>
+    <details class="card activity" ${localStorage.getItem('jh.activityShut') === '0' ? 'open' : ''} data-keep="jh.activityShut"><summary><b>What Job Hunt did lately</b></summary>
       ${o.events.length ? `<div class="feed" style="margin-top:10px">${o.events.slice(0, 12).map(e => `<div><time title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</time><span>${jobLink(e)}${eventText(e)}</span></div>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
     </details>`);
   if (listing) { restorePickViews(); listHeads(); }

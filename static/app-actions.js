@@ -375,6 +375,7 @@ async function act(el) {
   }
   // A mock interview with the assistant: Claude asks, you answer, it says how the answer landed.
   if (a === 'practise') return askSend(PRACTISE);
+  if (a === 'jumpTo') { document.getElementById(el.dataset.to)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (a === 'chromeTest') return busy(async () => { await api('/api/claude-chrome/test', { method: 'POST' }); setTimeout(renderChrome, 500); }, 'Testing: watch your browser.');
   if (a === 'chromeSetup') return busy(async () => { await api('/api/claude-chrome/setup', { method: 'POST' }); }, 'A window opened: follow its steps, then press Test the connection.');
   if (a === 'claudeFill') {
@@ -1057,7 +1058,7 @@ function careerHtml(career, thinking, tracks, chosen = '') {
   const searchFor = (c, i) => (c.titles || []).length ? `<details class="small"><summary class="muted">Look for this role now</summary>
       <p style="margin:6px 0">Job titles for it: ${c.titles.map(esc).join(', ')}</p>
       ${tracks.length ? `<div class="row">${tracks.length > 1 ? `<label class="small">Add them to the search for your<select data-path-track="${i}" style="margin-left:6px">${tracks.map(t => `<option value="${esc(t.name)}">${esc(t.label)}</option>`).join('')}</select> CV</label>` : ''}<button class="btn sm" data-act="addTitles" data-i="${i}" data-titles="${esc(JSON.stringify(c.titles))}" ${c.titles.every(t => tracks.some(x => x.titles.some(y => y.toLowerCase() === t.toLowerCase()))) ? 'disabled title="Already in your search"' : ''}>${tracks.length > 1 ? 'Add' : 'Add them to my search'}</button></div>` : ''}</details>` : '';
-  return `${chosenCard}<section class="card" id="careerCard"><header><h2>Your career paths</h2>
+  return `${chosenCard}<section class="card" id="careerCard"><header><h2>Where each path leads</h2>
     ${thinking ? '<span class="muted small"><span class="spin" data-kind="career"></span>Claude is thinking… (a minute or two)</span>' : `<button class="btn" data-act="career">${career ? 'Think again' : 'Map my career paths'}</button>`}</header>
     ${career ? `${career.advice ? `<div class="advice"><b>Claude's advice</b><p>${esc(career.advice)}</p></div>` : ''}
       ${recs.length ? `<div class="recs" id="careerRecs"><b>★ ${recs.length === 1 ? 'The path Claude recommends' : `The ${recs.length} paths Claude recommends`}</b><ul>${recs.map(c => `<li><a href="#path-${esc(c.title)}" data-act="careerJump" data-i="${paths.indexOf(c)}"><b>${esc(c.title)}</b></a> <span class="muted small">${esc(kindName[c.kind] || c.kind)}</span>${c.recommended_why ? `<br><span class="small">${esc(c.recommended_why)}</span>` : ''}</li>`).join('')}</ul></div>`

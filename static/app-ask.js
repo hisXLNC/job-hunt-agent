@@ -278,7 +278,7 @@ function askDraw(toEnd) {
   if (askSt.earlier.length) rows.unshift(`<details class="ask-earlier"><summary>Earlier conversation about this job (${askSt.earlier.length} message${askSt.earlier.length === 1 ? '' : 's'})</summary>
     ${askSt.earlier.map(m => `<div class="ask-msg ${m.who === 'you' ? 'me' : 'them'}">${m.who === 'you' ? esc(m.text) : mdHtml(m.text)}</div>`).join('')}</details>`);
   if (!askSt.chat.length && !askSt.busy && !askSt.earlier.length) rows.push(`<div class="ask-hello"><span class="ask-mark big">${SPARK}</span><b>Ask about anything you see</b>
-    <p class="muted small">Claude can see the screen you're on, your CV and what Job Hunt knows about each job. Ask what a word means, why a role scored as it did, or for a draft answer. It can also offer to do things for you, here or anywhere in Job Hunt: change a letter, set jobs aside, start a search, change a setting, or fill in a form in your browser. Nothing happens until you press its button. Select words on a page to ask about just those, or attach a screenshot with the paperclip (or paste one).</p></div>`);
+    <p class="muted small">Claude sees this screen, your CV and your jobs, and can offer to do things for you. Select words or attach a screenshot to ask about just those.</p></div>`);
   if (askSt.busy) rows.push('<div class="ask-msg them wait"><span class="spin" data-kind="chat"></span>Thinking…</div>');
   if (askSt.error) rows.push(`<div class="ask-err small"><b>Claude couldn't answer.</b> ${esc(askSt.error)} Your message is back in the box to send again.</div>`);
   log.innerHTML = rows.join('');

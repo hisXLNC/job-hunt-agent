@@ -56,6 +56,23 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.75.0: tidy-ups from a screen-by-screen review, and two form-filling fixes from a Copy details.**
+  - Review (screens photographed with the dev server; the user said "do them all"): the update bar only on the Queue
+    and Settings → App (`updateBarHere`; the chip stays everywhere); the Queue's heading counts what the badge
+    counts (`needsYou`), steps with nothing in them are hidden, each Pick row has Tailor, the approve row's note no
+    longer says "by email" and "on the company's site" together, "What Job Hunt did lately" starts folded and the
+    Optional card shows only when the Queue is empty; All jobs leaves out Salary/Type when no row has one
+    (`no-pay`/`no-type`); a job's AI-screen card moved inside Overview so the tabs sit under the header, "Next:" is
+    said once, the stage picker is behind Change stage, the button is "Approve and send" with the address beside it;
+    the Calendar leads with Coming up; Career's second card is "Where each path leads"; About me has a jump row;
+    Ask Claude's empty state is one sentence. **The extension's setup list was broken by `.steps-list li {display:
+    flex}` added for the CV update: it's `.setup-steps` now.** Left alone on purpose: the Queue's sortable column
+    headers (a tested feature; removing them was tried and put back) and the top bar's chips.
+  - From the OSC Workday details (4 m 44 s): the certification box is a fixed list of four, and five searches each
+    waited out ~13 s before Other. `fillSkills` now stops as soon as two searches show the same choices. From the
+    SuccessFactors log: "no such choice in its list" for "Native" (choices: Basic / Professional / Full proficiency)
+    and for a university not in a Canadian list. `fillOwned` now asks Job Hunt once more with the list's real choices
+    (`chooseFrom`: a one-field `/ext/fill/start` with `options`) and takes its pick.
 - **2.74.0: a batch of small reports** (2.73.0 was never pushed to main on its own; it ships in this).
   - *A picture in Ask Claude*: the paperclip, a pasted screenshot or a drop (`askAttach` in `app-ask.js`: resized to
     ≤1600 px, a 220 px thumbnail kept with the message). `page.image {mime, b64}` → `people::ask_image` (PNG/JPEG/

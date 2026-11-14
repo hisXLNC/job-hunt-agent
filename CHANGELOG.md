@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.75.0] - 2026-11-14
+
+A tidier Queue, job page and setup, and two form-filling fixes.
+
+### Changes
+
+- From a screen-by-screen review: each match in the Queue has its own Tailor button, steps with nothing in them are hidden, and the heading counts the same thing as the badge. The update notice shows on the Queue and in Settings, not on every screen.
+- A job's page has its tabs directly under the header, says Next once, keeps Change stage behind a link, and the button reads Approve and send with the address beside it.
+- The extension's setup steps in Settings read as a numbered list again (they had broken into columns). The Calendar opens with what is coming up. About me has links to its parts. All jobs leaves out columns with nothing in them.
+- Forms: a list that shows the same few choices whatever is typed (certifications on some Workday sites) is no longer searched five times before Other, which was costing about a minute. A dropdown with no choice matching the answer (Native where the choices are Basic, Professional, Full proficiency) now has Job Hunt choose from the choices it does have.
+
 ## [2.74.0] - 2026-11-14
 
 A picture in Ask Claude, an honest Marked as applied, and list fixes.
@@ -2150,6 +2161,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.75.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.75.0
 [2.74.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.74.0
 [2.73.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.73.0
 [2.72.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.72.0

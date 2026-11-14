@@ -801,6 +801,21 @@
     }
     return true;
   }
+  // One question to Job Hunt: which of these choices is the answer `want` (or, failing that, right
+  // for you)? Returns the choice, or '' when there's no answer in half a minute.
+  async function chooseFrom(label, names, want) {
+    if (!EXT || names.length < 2) return '';
+    const field = { key: 'pick0', type: 'select', label: `${String(label).slice(0, 160)} (the answer meant: ${String(want).slice(0, 80)}; choose the closest of the options, or Other / Not listed when none fits)`, required: true, options: names };
+    const r = await rpc('/ext/fill/start', { url: location.href, title: document.title, fields: [field] });
+    if (!r.ok || !r.v || !r.v.ticket) return '';
+    for (let i = 0; i < 25; i++) {
+      await wait(1200);
+      const p = await rpc('/ext/fill/poll', { ticket: r.v.ticket });
+      if (!p.ok) return '';
+      if (p.v && !p.v.waiting) return String((p.v.values || {}).pick0 || '');
+    }
+    return '';
+  }
   async function fillOwned(el, v) {
     const id = el.getAttribute('aria-owns') || el.getAttribute('aria-controls');
     if (!id) return false;
@@ -823,6 +838,15 @@
     }
     if (!list.length) { trace('a list of its own never opened', { label: labelOf(el).slice(0, 60), id }); if (el.value !== was) setter(el, was); return false; }
     let opt = choose(list);
+    if (!opt) {
+      // The answer was written without seeing this list ("Native" where the choices are Basic,
+      // Professional, Full proficiency; a university where only some are listed, with Other).
+      // Job Hunt is asked once more, with the list's real choices, and picks one of them.
+      const names = list.map(o => clean(o.textContent)).filter(n => !/^no selection$/i.test(n)).slice(0, 80);
+      const picked = await chooseFrom(labelOf(el), names, v);
+      if (picked) opt = list.find(o => same(clean(o.textContent), picked)) || list.find(o => near(clean(o.textContent), picked)) || null;
+      if (opt) trace('chosen from its list by Job Hunt', { label: labelOf(el).slice(0, 60), wanted: String(v).slice(0, 40), chose: clean(opt.textContent).slice(0, 40) });
+    }
     if (!opt) {
       trace('no such choice in its list', { label: labelOf(el).slice(0, 60), want: String(v).slice(0, 40), has: list.slice(0, 12).map(o => clean(o.textContent).slice(0, 30)) });
       if (el.value !== was) setter(el, was);
@@ -1086,9 +1110,15 @@
       if (EXT) await debugReady();
       trace.length = 0;
       const had = names();
-      let itself = '';
+      let itself = '', shownBefore = '';
       for (const q of queries) {
         list = await search(q);
+        // The same choices whatever is typed (a short fixed list: OSC's certifications are four
+        // items and Other): searching it in other words finds nothing new, and each try waited
+        // out its time. What's there is all there is.
+        const shownNow = list.map(label).join('|');
+        if (shownNow && shownNow === shownBefore) { trace.push({ q, same: true }); break; }
+        shownBefore = shownNow;
         const p = tookItself(had);
         if (p) {
           const f = Math.max(fit1(p.toLowerCase(), skill), full(skill) ? fit1(p.toLowerCase(), full(skill)) : 0, tail(p.toLowerCase()) ? fit1(tail(p.toLowerCase()), skill) : 0);
