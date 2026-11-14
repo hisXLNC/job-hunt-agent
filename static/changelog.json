@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.79.1",
+    "date": "2026-11-14",
+    "title": "Sorting and filters are back",
+    "changes": [
+      "The row of headers that sorts the Queue's lists (Role, Company, Location, Pay, Found, Fit) is back, and on a phone so are Shows pay and No red flags above the list."
+    ]
+  },
+  {
     "version": "2.79.0",
     "date": "2026-11-14",
     "title": "A tidier Queue, and Job Bank's job title",

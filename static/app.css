@@ -2165,7 +2165,7 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 /* A phone's Queue: the sort menu and "Sort and filter" are enough above the list (Shows pay and No
    red flags are inside Sort and filter too), so the first job isn't two-thirds down the screen. */
 @media (max-width: 640px) {
-  .queue-filters label.check, .pick-keys { display: none; }
+  .pick-keys { display: none; }
   .queue-filters.inline { margin-top: 2px; }
   .mbtn.mask svg { width: 20px; height: 20px; }
 }

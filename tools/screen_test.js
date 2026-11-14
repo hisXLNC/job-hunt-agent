@@ -43,14 +43,29 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await until(async () => page.evaluate(() => [...document.querySelectorAll('.modal .btn')].some(b => /^Never show /.test(b.textContent))), 15), 'Queue: Not interested offers never to show the company again');
   await page.click('.modal .btn.ghost');
 
-  // One way to sort the Queue's lists: the Sort by menu, by company A to Z too (the row of headers
+  await page.evaluate(() => localStorage.removeItem('jh.listSort'));
+  await at('overview');
+  // Headers over the Queue's lists sort them: by company A to Z, then turned round; and a table
+  // that was built without sorting (the usage table in Settings) sorts by its headers too.
+  const headCos = () => page.evaluate(() => { const h = document.querySelector('.list-head'); return h ? [...h.parentElement.children].filter(c => c.matches('.jrow[data-job-row]')).map(r => r.dataset.lco) : null; });
+  const hcos = await headCos();
+  if (hcos && hcos.length > 1) {
+    const haz = [...hcos].sort();
+    await page.click('.list-head [data-lsort=co]');
+    check(JSON.stringify(await headCos()) === JSON.stringify(haz) && await page.evaluate(() => /▲/.test(document.querySelector('.list-head button.on')?.textContent || '')), 'Queue: the Company header sorts the list A to Z');
+    await page.click('.list-head [data-lsort=co]');
+    check(JSON.stringify(await headCos()) === JSON.stringify([...haz].reverse()), 'Queue: pressed again, Z to A');
+    await page.click('.list-head [data-lsort=co]');
+    check(await until(async () => page.evaluate(() => !!document.querySelector('.list-head') && !document.querySelector('.list-head button.on')), 15), 'Queue: a third press goes back to the list\'s own order');
+  } else check(false, 'Queue: a list of two or more jobs has headers to sort by');
+  // The Sort by menu sorts by company A to Z too, by company A to Z too (the row of headers
   // that also sorted them is gone); another choice lets go of it.
   const listCos = () => page.evaluate(() => { const first = document.querySelector('.page .jrow[data-job-row]'); return first ? [...first.parentElement.children].filter(c => c.matches('.jrow[data-job-row]')).map(r => r.dataset.lco) : null; });
   const cos = await listCos();
   if (cos && cos.length > 1) {
     const az = [...cos].sort();
     await page.selectOption('[data-queuef=sort]', 'co');
-    check(await until(async () => JSON.stringify(await listCos()) === JSON.stringify(az), 10) && !(await page.$('.list-head [data-lsort]')), 'Queue: Sort by, Company (A to Z) sorts the list, and there is no second row of sort headers');
+    check(await until(async () => JSON.stringify(await listCos()) === JSON.stringify(az), 10), 'Queue: Sort by, Company (A to Z) sorts the list');
     await page.reload(); await page.waitForTimeout(900);
     check(JSON.stringify(await listCos()) === JSON.stringify(az) && await page.evaluate(() => document.querySelector('[data-queuef=sort]').value === 'co'), 'Queue: the order by company is kept, and the menu says so');
     await page.selectOption('[data-queuef=sort]', '');

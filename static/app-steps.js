@@ -502,22 +502,19 @@ const LIST_COLS = [['role', 'Role'], ['co', 'Company'], ['loc', 'Location'], ['p
 const TEXT_SORTS = ['co', 'role', 'loc'];
 let listSort = null;
 try { listSort = JSON.parse(localStorage.getItem('jh.listSort') || 'null'); } catch (e) {}
-// (Kept from the headers there used to be: only the orders the menu offers.)
-if (listSort && !(TEXT_SORTS.includes(listSort.key) && listSort.dir === 'asc')) listSort = null;
 const jobLists = () => [...new Set([...document.querySelectorAll('.page .jrow[data-job-row]')].map(r => r.parentElement))];
 /** A row of headers over each list of jobs (two or more): press one to sort by it, again to turn it round. */
 function listHeads() {
   for (const p of jobLists()) {
     const rows = [...p.children].filter(c => c.matches('.jrow[data-job-row]'));
     if (rows.length < 2 || p.querySelector(':scope > .list-head')) continue;
-    // (The row of headers to sort by is gone: the Sort by menu does it, company and role included.)
+    rows[0].insertAdjacentHTML('beforebegin', `<div class="list-head" role="group" aria-label="Sort this list"><span>Sort by</span>${LIST_COLS.map(([k, name]) => `<button type="button" data-lsort="${k}" title="Sort by ${name.toLowerCase()}">${name}<span class="arrow"></span></button>`).join('')}</div>`);
     const at = {};
     rows.forEach(r => { if (r.dataset.lco) at[r.dataset.lco] = (at[r.dataset.lco] || 0) + 1; });
     rows.forEach(r => { const n = at[r.dataset.lco]; if (n > 1 && !r.querySelector('.co-more')) r.querySelector('.jtitle')?.insertAdjacentHTML('beforeend', ` <button type="button" class="pill co-more" data-lsort="co" data-together="1" title="This company has ${n} roles in this list. Press to put them side by side.">${n} roles here</button>`); });
     // Select all sits at the start of the headers, and the row it had to itself goes.
     const all = p.closest('[data-pickbox], [data-approvebox]')?.querySelector('[data-act=approveAll], [data-act=pickAll]'), was = all?.parentElement;
     if (all && !was.classList.contains('list-head')) {
-      rows[0].insertAdjacentHTML('beforebegin', '<div class="list-head"></div>');
       p.querySelector(':scope > .list-head').prepend(all);
       if (!was.children.length) was.hidden = true;
     }
@@ -528,7 +525,7 @@ function applyListSort() {
   const col = listSort && LIST_COLS.find(c => c[0] === listSort.key);
   // The Sort by menu shows it (a company's roles put together by its tag count as "Company").
   const menu = document.querySelector('[data-queuef=sort]');
-  if (menu && col && TEXT_SORTS.includes(col[0])) menu.value = col[0];
+  if (menu && col && TEXT_SORTS.includes(col[0]) && listSort.dir === 'asc') menu.value = col[0];
   document.querySelectorAll('.list-head [data-lsort]').forEach(b => { const on = col && b.dataset.lsort === col[0]; b.classList.toggle('on', !!on); b.querySelector('.arrow').textContent = on ? (listSort.dir === 'asc' ? ' ▲' : ' ▼') : ''; });
   if (!col) return;
   const val = r => col[2] ? Number(r.dataset['q' + col[0]]) || 0 : r.dataset['l' + col[0]] || '';

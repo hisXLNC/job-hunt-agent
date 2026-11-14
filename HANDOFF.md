@@ -780,3 +780,10 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
 - All jobs: set-aside rows say "Tailor anyway" (ghost). Settings → Applying: the two long fields
   take the full row; `.field > .hint` matches `label.field .hint`. The notice card's first row has
   no top border.
+
+## 2.79.1
+
+- The user wanted the Queue's sorting and filters back: the `.list-head` sort buttons (Role, Company,
+  Location, Pay, Found, Fit) are restored, and Shows pay / No red flags show above the list on a
+  phone again. The Sort by menu keeps its Company / Role / Place options. Both screen tests (headers
+  and menu) run. Don't remove these again.
