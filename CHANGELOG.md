@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.72.0] - 2026-11-14
+
+Force stop asks what to stop; Job Bank finds postings again.
+
+### Changes
+
+- Force stop now asks what to stop: the search only, CV updating and tailoring only, or everything Claude is doing. It is on the search card, in the search menu and in the status menu at the top right.
+- Job Bank was returning nothing. It ignores a city typed in as the place and only matches plain job titles, so Job Hunt now asks it for your titles in plain form (Program Manager for Senior Technical Program Manager), once each, in your province. The same titles that found nothing now find about 70 postings.
+- A company board on Workday no longer fails as a whole when one answer is cut off: that request is tried again, and the other titles are searched regardless.
+- Jobs.ca blocks automated reading. Job Hunt now gives up on it after the first refusal in a search instead of waiting 45 seconds three times, and says so.
+
 ## [2.71.3] - 2026-11-14
 
 Force stop for a search.
@@ -2117,6 +2128,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.72.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.72.0
 [2.71.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.3
 [2.71.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.2
 [2.71.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.1

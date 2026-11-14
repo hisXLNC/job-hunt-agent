@@ -56,6 +56,29 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.72.0: Force stop asks what to stop; Job Bank, Jobs.ca and a dropped Workday answer.** (This session's cloud
+  environment "job-hunt-agent" now allows www.jobbank.gc.ca, www.jobs.ca and mastercard.wd1.myworkdayjobs.com, so
+  those were looked at live.)
+  - *Force stop*: `forceStopChoose()` (a dialog: The search / CV updating and tailoring / Everything), from the search
+    card, the search menu and the status menu. `POST /api/search/stop {force: "search"|"work"|"all"}` →
+    `force_stop_search` / `force_stop_work` / `force_stop_all`. Claude Code requests are tagged by thread:
+    `claude_code::Scope::enter(SCOPE_SEARCH | SCOPE_WORK)` in `search_with`, the CV-update thread, `tailor`, `rescore`,
+    `cert_rescore`, `revise` (an outer mark wins: tailoring inside a search is the search's). `cancel(Some(scope) |
+    None)` kills the matching children and refuses new ones of that kind for 8 s, so a loop over jobs runs out.
+  - *Job Bank* returned 0 for every search because (1) it ignores `locationstring` unless picked from its own list
+    (the page title says "in various locations"), so the 3 places were 3 identical country-wide requests, and (2) it
+    matches its own plain titles: "Program Manager" 79, "Senior Technical Program Manager" / "Delivery Lead" /
+    "Tax Technology Program Manager" 0. Now `jobbank_titles(p, 6)` (level words dropped, long titles cut to their
+    last two words, commonest first), once each, with `fprov=<province>` from `jobbank_province(p)` when all places
+    share one. Live: 74 postings for the user's titles where there were none. Titles ending in "Lead" still find
+    nothing there.
+  - *Jobs.ca* answers with Cloudflare's "Just a moment…" check, to a plain request and to the app's browser: it can't
+    be read. Each attempt cost 45 s; now the first block in a search skips that site's other searches
+    (`sites::is_blocked`), and the problem line says to turn it off if it keeps happening. Not fixed, only cheaper.
+  - *Mastercard's Workday board* works from here with the user's titles (231 postings, twice). Their failure
+    ("error decoding response body" after 4 s) was one answer cut off; `workday()` used `?` on every request, so one
+    lost the whole board. Now each request is retried once, a title that still fails is skipped, and the board fails
+    only when it's not found or nothing answered.
 - **2.71.3: Force stop.** `Agent::force_stop_search`: swaps the `search` claim for `search-ending` (`SEARCH_ENDING`;
   so nothing shows as running), sets `stop`, calls `claude_code::cancel_running()` (a counter `run_capture` watches:
   every Claude Code child running now is killed, whatever it was for), and logs it. A thread can't be killed, so the

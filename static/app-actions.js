@@ -63,10 +63,13 @@ async function act(el) {
     return;
   }
   if (a === 'searchForceStop') {
-    if (!await ask('Force stop the search? It ends now, without finishing the step it\'s on. Anything Claude is writing this moment is cancelled too (a CV being tailored, an answer): ask for it again after. What the search found and scored so far is kept.', 'Force stop')) return;
+    const what = await forceStopChoose();
+    if (!what) return;
     return busy(async () => {
-      const r = await api('/api/search/stop', { method: 'POST', body: { force: true } });
-      toast(r.stopping ? 'Stopped. A new search can start in a moment, once the last request to a job site has run out.' : 'No search is running.');
+      const r = await api('/api/search/stop', { method: 'POST', body: { force: what } });
+      toast(what === 'search' ? (r.stopping ? 'Search stopped. A new one can start in a moment, once its last request to a job site has run out.' : 'No search is running.')
+        : what === 'work' ? ((r.was || []).length ? 'Stopped. What was being worked on can be asked for again.' : 'Nothing of that was running.')
+        : 'Everything stopped. What was being worked on can be asked for again.');
       await refreshOverview();
       route();
     });
@@ -1462,3 +1465,24 @@ window.addEventListener('focus', onShown);
 
 // A card you fold shut stays shut next time (What Job Hunt did lately on the Queue).
 document.addEventListener('toggle', e => { const k = e.target?.dataset?.keep; if (k) { try { localStorage.setItem(k, e.target.open ? '0' : '1'); } catch (err) {} } }, true);
+
+/** Force stop: what to stop. Resolves to "search", "work", "all", or null when you change your mind. */
+function forceStopChoose() {
+  return new Promise(done => {
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    const searching = !!overview?.progress;
+    back.innerHTML = `<div class="modal force-stop" role="dialog" aria-modal="true" aria-label="Force stop"><h2>Force stop</h2>
+      <p class="muted small">Ends it now, without finishing the step it's on. What was found, scored and tailored so far is kept; whatever is cut off can be asked for again.</p>
+      <button class="btn force-pick" type="button" data-pick="search" ${searching ? '' : 'disabled'}><b>The search</b><span class="muted small">${searching ? 'Only the search. A CV update or tailoring that\'s running carries on.' : 'No search is running.'}</span></button>
+      <button class="btn force-pick" type="button" data-pick="work"><b>CV updating and tailoring</b><span class="muted small">The update after a new CV, tailoring, rescoring, and changes to a CV or letter. The search carries on.</span></button>
+      <button class="btn force-pick danger" type="button" data-pick="all"><b>Everything</b><span class="muted small">The search, all of the above, and anything else Claude is writing now (answers, replies, Ask Claude).</span></button>
+      <div class="row" style="justify-content:flex-end"><button class="btn ghost" type="button" data-pick="">Cancel</button></div></div>`;
+    const end = v => { back.remove(); document.removeEventListener('keydown', key, true); done(v || null); };
+    const key = e => { if (e.key === 'Escape') { e.stopPropagation(); end(null); } };
+    back.addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (b) end(b.dataset.pick); else if (e.target === back) end(null); });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(back);
+    back.querySelector('[data-pick]:not([disabled])').focus();
+  });
+}

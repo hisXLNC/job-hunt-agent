@@ -99,18 +99,68 @@ fn command(cc: &ClaudeCode) -> Command {
     c
 }
 
-/// Raised to cancel every Claude Code request running now (a force-stopped search): each request
-/// notes it when it starts, and ends itself when it has moved on.
-static CANCELLED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// What a Claude Code request is for, by the thread that makes it: a search, other work in the
+/// background (updating for a new CV, tailoring, rescoring, revising), or anything else. So a
+/// force stop can cancel one kind and leave the rest. See `Scope` and `cancel`.
+pub const SCOPE_SEARCH: usize = 1;
+pub const SCOPE_WORK: usize = 2;
+thread_local! { static SCOPE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+
+/// Marks this thread's requests as `scope` until it's dropped (then as they were before). Work
+/// already marked keeps its mark: tailoring started by a search stays part of the search.
+pub struct Scope(usize);
+impl Scope {
+    pub fn enter(scope: usize) -> Scope {
+        let was = SCOPE.with(|s| s.get());
+        if was == 0 {
+            SCOPE.with(|s| s.set(scope));
+        }
+        Scope(was)
+    }
+}
+impl Drop for Scope {
+    fn drop(&mut self) {
+        SCOPE.with(|s| s.set(self.0));
+    }
+}
+
+/// Raised to cancel requests: [everything, a search's, background work's]. Each request notes its
+/// counters when it starts and ends itself when one has moved on. For a few seconds after, new
+/// requests of that kind are refused at once, so a loop over many jobs runs out instead of starting
+/// the next one.
+static CANCELLED: [std::sync::atomic::AtomicU64; 3] = [std::sync::atomic::AtomicU64::new(0), std::sync::atomic::AtomicU64::new(0), std::sync::atomic::AtomicU64::new(0)];
+static REFUSE_UNTIL: [std::sync::atomic::AtomicI64; 3] = [std::sync::atomic::AtomicI64::new(0), std::sync::atomic::AtomicI64::new(0), std::sync::atomic::AtomicI64::new(0)];
+const STOPPED: &str = "Stopped: you force-stopped it, which cancels what Claude was doing. Ask for it again.";
+
+/// Cancel what Claude Code is doing right now: everything (None), or one kind (SCOPE_SEARCH, SCOPE_WORK).
+pub fn cancel(scope: Option<usize>) {
+    let i = scope.unwrap_or(0).min(2);
+    CANCELLED[i].fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    REFUSE_UNTIL[i].store(chrono::Utc::now().timestamp() + 8, std::sync::atomic::Ordering::SeqCst);
+}
 
 /// Cancel whatever Claude Code is doing right now, for everything in Job Hunt.
 pub fn cancel_running() {
-    CANCELLED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    cancel(None);
+}
+
+fn cancel_marks() -> (usize, u64, u64) {
+    let scope = SCOPE.with(|s| s.get()).min(2);
+    (scope, CANCELLED[0].load(std::sync::atomic::Ordering::SeqCst), CANCELLED[scope].load(std::sync::atomic::Ordering::SeqCst))
+}
+
+fn cancelled_since(m: (usize, u64, u64)) -> bool {
+    CANCELLED[0].load(std::sync::atomic::Ordering::SeqCst) != m.1 || (m.0 > 0 && CANCELLED[m.0].load(std::sync::atomic::Ordering::SeqCst) != m.2)
 }
 
 /// Run to completion with a time limit; returns (exit ok, stdout, stderr).
 fn run_capture(mut c: Command, stdin: &str, limit: Duration) -> R<(bool, String, String)> {
-    let cancelled = CANCELLED.load(std::sync::atomic::Ordering::SeqCst);
+    let marks = cancel_marks();
+    let now = chrono::Utc::now().timestamp();
+    // (Not in the tests, which run side by side: a force stop in one would cancel another's request.)
+    if !cfg!(test) && (now < REFUSE_UNTIL[0].load(std::sync::atomic::Ordering::SeqCst) || (marks.0 > 0 && now < REFUSE_UNTIL[marks.0].load(std::sync::atomic::Ordering::SeqCst))) {
+        return Err(Error(STOPPED.into()));
+    }
     let mut child = c
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -145,10 +195,10 @@ fn run_capture(mut c: Command, stdin: &str, limit: Duration) -> R<(bool, String,
             let _ = child.wait();
             return Err(Error("Claude Code took too long to answer and was stopped.".into()));
         }
-        if CANCELLED.load(std::sync::atomic::Ordering::SeqCst) != cancelled {
+        if !cfg!(test) && cancelled_since(marks) {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(Error("Stopped: you force-stopped the search, which cancels what Claude was doing. Ask for it again.".into()));
+            return Err(Error(STOPPED.into()));
         }
         std::thread::sleep(Duration::from_millis(100));
     };
@@ -576,6 +626,24 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn a_force_stop_cancels_one_kind_of_request_or_all() {
+        // (On threads of their own: the marks belong to the thread that makes the request.)
+        std::thread::spawn(|| {
+            let other = cancel_marks();
+            let search = { let _s = Scope::enter(SCOPE_SEARCH); cancel_marks() };
+            let work = { let _s = Scope::enter(SCOPE_WORK); let inner = Scope::enter(SCOPE_SEARCH); let m = cancel_marks(); drop(inner); m };
+            assert_eq!((other.0, search.0, work.0), (0, SCOPE_SEARCH, SCOPE_WORK), "work already marked keeps its mark");
+            assert_eq!(cancel_marks().0, 0, "and the mark goes when the work ends");
+            cancel(Some(SCOPE_SEARCH));
+            assert!(cancelled_since(search) && !cancelled_since(work) && !cancelled_since(other), "only the search's");
+            cancel(Some(SCOPE_WORK));
+            assert!(cancelled_since(work) && !cancelled_since(other));
+            cancel(None);
+            assert!(cancelled_since(other), "everything");
+        }).join().unwrap();
+    }
+
     #[test]
     fn a_browser_task_may_only_use_the_browser_and_read_its_files() {
         let a = browser_args();

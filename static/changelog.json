@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.72.0",
+    "date": "2026-11-14",
+    "title": "Force stop asks what to stop; Job Bank finds postings again",
+    "changes": [
+      "Force stop now asks what to stop: the search only, CV updating and tailoring only, or everything Claude is doing. It is on the search card, in the search menu and in the status menu at the top right.",
+      "Job Bank was returning nothing. It ignores a city typed in as the place and only matches plain job titles, so Job Hunt now asks it for your titles in plain form (Program Manager for Senior Technical Program Manager), once each, in your province. The same titles that found nothing now find about 70 postings.",
+      "A company board on Workday no longer fails as a whole when one answer is cut off: that request is tried again, and the other titles are searched regardless.",
+      "Jobs.ca blocks automated reading. Job Hunt now gives up on it after the first refusal in a search instead of waiting 45 seconds three times, and says so."
+    ]
+  },
+  {
     "version": "2.71.3",
     "date": "2026-11-14",
     "title": "Force stop for a search",

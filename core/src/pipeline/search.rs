@@ -264,6 +264,7 @@ impl Agent {
         if self.search_ending() {
             return err("The search you force-stopped is still letting go of its last request (a minute at most). Try again in a moment.");
         }
+        let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_SEARCH);
         let _guard = self.claim("search")?;
         self.stop.store(false, std::sync::atomic::Ordering::SeqCst);
         // A pause belongs to this search only: cleared when it ends, however it ends.

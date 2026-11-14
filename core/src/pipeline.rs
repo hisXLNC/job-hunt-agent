@@ -805,9 +805,8 @@ impl Agent {
     }
 
     /// Stop the running search now, without waiting for the step it's on. It's taken off the screen
-    /// at once; whatever Claude is doing this moment is cancelled (for everything, not only the
-    /// search: a CV being tailored or an answer being written fails and can be asked for again);
-    /// the search's own loops end at their next look. A request to a job site already under way
+    /// at once; what Claude is doing for the search this moment is cancelled (other work goes on:
+    /// see force_stop_work and force_stop_all); the search's own loops end at their next look. A request to a job site already under way
     /// can't be cancelled and runs out by itself (a minute at most): until it has, a new search
     /// waits. What was found and scored so far is kept.
     pub fn force_stop_search(&self) -> bool {
@@ -822,10 +821,33 @@ impl Agent {
         if was {
             self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
             self.hold.store(false, std::sync::atomic::Ordering::SeqCst);
-            crate::claude_code::cancel_running();
+            crate::claude_code::cancel(Some(crate::claude_code::SCOPE_SEARCH));
             self.trace("force-stopped by you");
             let _ = self.db().log(None, "search", "Force-stopped: what it had found and scored is kept");
         }
+        was
+    }
+
+    /// Stop the other work Claude is doing in the background now: updating for a new CV, tailoring,
+    /// rescoring, a change to a CV or letter. The search goes on. Each job being worked on fails and
+    /// can be asked for again; a list of jobs runs out instead of starting the next. Returns what
+    /// was running.
+    pub fn force_stop_work(&self) -> Vec<String> {
+        let was: Vec<String> = self.running().into_iter().filter(|n| n == "cv-update" || n == "rescore" || n.starts_with("tailor") || n.starts_with("revise")).collect();
+        self.stop_cv_update(false);
+        crate::claude_code::cancel(Some(crate::claude_code::SCOPE_WORK));
+        self.trace(&format!("background work force-stopped by you ({})", if was.is_empty() { "nothing was running".to_string() } else { was.join(", ") }));
+        was
+    }
+
+    /// Stop everything Claude is doing now: the search, the background work, and anything else (an
+    /// answer being written, a reply, the assistant). Returns what was running.
+    pub fn force_stop_all(&self) -> Vec<String> {
+        let was = self.running();
+        self.force_stop_search();
+        self.stop_cv_update(false);
+        crate::claude_code::cancel(None);
+        self.trace(&format!("everything force-stopped by you ({})", if was.is_empty() { "nothing was running".to_string() } else { was.join(", ") }));
         was
     }
 
@@ -1659,6 +1681,7 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Change a tailored CV ("cv") or cover letter ("letter") the way you ask. The version before
     /// is kept, so one revision can be undone.
     pub fn revise(&self, job_id: &str, what: &str, note: &str) -> R<Job> {
+        let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_WORK);
         let note = note.trim();
         if note.chars().count() < 3 {
             return err("Say what to change, for example \u{201c}Make the summary shorter\u{201d}.");

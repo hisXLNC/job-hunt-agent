@@ -409,6 +409,7 @@ impl Agent {
         let _ = self.db().set("cv.update", &start.to_string());
         let (a, id) = (self.clone(), id.to_string());
         std::thread::spawn(move || {
+            let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_WORK);
             let mut tries = 0;
             let _g = loop {
                 match a.claim("cv-update") {
@@ -643,6 +644,7 @@ impl Agent {
     }
 
     pub fn tailor(&self, job_id: &str, track: Option<&str>) -> R<Job> {
+        let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_WORK);
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let profile = self.profile();
         let t = profile.track(track.or(job.track.as_deref())).cloned().ok_or_else(|| Error("No CV uploaded yet. Add one in CV & Career.".into()))?;
@@ -1095,6 +1097,7 @@ impl Agent {
     /// Score those again, now that the scorer is told your certifications, up to the per-search cap.
     /// One found by a search goes on the Queue or is set aside by its new fit; a saved one stays saved.
     pub fn cert_rescore(&self, ids: &[String]) -> R<usize> {
+        let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_WORK);
         let _g = self.claim("rescore")?;
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
@@ -1143,6 +1146,7 @@ impl Agent {
     /// Score postings found before again, against your CVs and settings as they are now, up to
     /// the per-search cap (newest first). Returns how it went.
     pub fn rescore(&self, group: &str) -> R<Value> {
+        let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_WORK);
         let _g = self.claim("rescore")?;
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);

@@ -2076,3 +2076,9 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 /* ---- A search that has gone quiet ---- */
 .quiet-row { justify-content: flex-end; margin: 2px 0 8px; gap: 10px; }
 .quiet-row.warn { justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 10px; background: var(--warn-soft); }
+
+/* ---- Force stop: what to stop ---- */
+.force-stop .force-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 10px 14px; text-align: left; white-space: normal; min-height: 0; }
+.force-stop .force-pick.danger b { color: var(--crit); }
+.force-stop .force-pick:disabled span { opacity: .8; }
+.status-btn { width: 100%; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }

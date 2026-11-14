@@ -755,10 +755,27 @@ pub fn workday(c: &reqwest::blocking::Client, link: &str, titles: &[String], wan
     let b = workday_board(link).ok_or("isn't a Workday careers link like https://company.wd3.myworkdayjobs.com/Careers")?;
     let mut found: Vec<(String, String, String)> = vec![];
     let searches: Vec<&str> = if titles.is_empty() { vec![""] } else { titles.iter().map(|t| t.as_str()).collect() };
+    let (mut asked_ok, mut failed_last) = (0usize, None::<String>);
     for q in searches {
         for page in 0..2u64 {
             let body = serde_json::json!({ "appliedFacets": {}, "limit": 20, "offset": page * 20, "searchText": q });
-            let (list, total) = parse_workday_list(&post_json(c, &format!("{}/jobs", b.api()), &body)?);
+            // An answer cut off part-way ("error decoding response body") or a dropped connection
+            // is tried once more; if that title still fails, the other titles are searched all the
+            // same. Only a board that is wrong (not found) or fails every time is reported.
+            let url = format!("{}/jobs", b.api());
+            let answer = post_json(c, &url, &body).or_else(|e| {
+                if e.starts_with("not found") {
+                    return Err(e);
+                }
+                std::thread::sleep(Duration::from_millis(1200));
+                post_json(c, &url, &body)
+            });
+            let v = match answer {
+                Ok(v) => { asked_ok += 1; v }
+                Err(e) if e.starts_with("not found") => return Err(e),
+                Err(e) => { failed_last = Some(e); break; }
+            };
+            let (list, total) = parse_workday_list(&v);
             let n = list.len();
             for item in list {
                 if !found.iter().any(|f| f.1 == item.1) {
@@ -769,6 +786,9 @@ pub fn workday(c: &reqwest::blocking::Client, link: &str, titles: &[String], wan
                 break;
             }
         }
+    }
+    if let Some(e) = failed_last.filter(|_| asked_ok == 0) {
+        return Err(e);
     }
     // Read the likeliest ones in full first.
     found.sort_by_key(|(t, _, _)| !wanted(t));
@@ -1206,10 +1226,64 @@ pub fn linkedin_details(c: &reqwest::blocking::Client, postings: &mut [&mut Post
 // 5 seconds between requests, so every request here does.
 
 /// The address of a Job Bank search: postings from the last 30 days, newest first.
-pub fn jobbank_search_url(title: &str, place: &str) -> String {
+/// A Job Bank search: a job title in a province ("ON"; empty for all of Canada). Job Bank ignores a
+/// city or "Toronto, ON" typed as the place (it wants one picked from its own list) and answers for
+/// the whole country, so the province filter is what narrows it; Job Hunt's own filter does the rest.
+pub fn jobbank_search_url(title: &str, province: &str) -> String {
     let mut u = url::Url::parse("https://www.jobbank.gc.ca/jobsearch/jobsearch").unwrap();
-    u.query_pairs_mut().append_pair("searchstring", title).append_pair("locationstring", place).append_pair("sort", "D").append_pair("fage", "30");
+    u.query_pairs_mut().append_pair("searchstring", title).append_pair("sort", "D").append_pair("fage", "30");
+    if province.len() == 2 {
+        u.query_pairs_mut().append_pair("fprov", &province.to_uppercase());
+    }
     u.to_string()
+}
+
+/// The province your places are in, when they're all in one ("Toronto, ON", "Ontario"): its two letters.
+pub fn jobbank_province(p: &Profile) -> String {
+    const NAMES: [(&str, &str); 13] = [("ontario", "ON"), ("quebec", "QC"), ("british columbia", "BC"), ("alberta", "AB"), ("manitoba", "MB"), ("saskatchewan", "SK"),
+        ("nova scotia", "NS"), ("new brunswick", "NB"), ("newfoundland", "NL"), ("prince edward island", "PE"), ("yukon", "YT"), ("northwest territories", "NT"), ("nunavut", "NU")];
+    let of = |place: &str| -> Option<&'static str> {
+        let l = place.trim().to_lowercase();
+        let tail = l.rsplit(',').next().unwrap_or("").trim().to_string();
+        NAMES.iter().find(|(name, code)| l == *name || tail == *name || tail == code.to_lowercase()).map(|(_, c)| *c)
+            // A city given alone, in one of Job Hunt's areas ("Toronto" is in the GTA, in Ontario).
+            .or_else(|| p.region(place).and_then(|r| { let c = r.centre.rsplit(' ').next().unwrap_or("").to_uppercase(); NAMES.iter().find(|(_, code)| *code == c).map(|(_, c)| *c) }))
+    };
+    let mut all = p.locations.iter().map(|l| of(l));
+    match all.next().flatten() {
+        Some(first) if all.all(|x| x == Some(first)) => first.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Your job titles as Job Bank can answer them. It matches its own plain wording: "Program Manager"
+/// finds 79 postings where "Senior Technical Program Manager" or "Delivery Lead" find none. So the
+/// level is dropped and a long title is cut to its last two words; the commonest come first, at most
+/// `max`. What comes back is checked against your real titles like any other posting.
+pub fn jobbank_titles(p: &Profile, max: usize) -> Vec<String> {
+    const LEVEL: [&str; 9] = ["senior", "sr", "sr.", "junior", "jr", "principal", "staff", "lead", "associate"];
+    let mut counted: Vec<(String, usize)> = vec![];
+    for t in search_titles(p) {
+        let mut w: Vec<&str> = t.split_whitespace().collect();
+        while w.len() > 2 && LEVEL.contains(&w[0].to_lowercase().as_str()) {
+            w.remove(0);
+        }
+        if w.len() > 2 {
+            w = w[w.len() - 2..].to_vec();
+        }
+        let core = w.join(" ");
+        if core.len() < 3 {
+            continue;
+        }
+        match counted.iter_mut().find(|(c, _)| c.eq_ignore_ascii_case(&core)) {
+            Some(c) => c.1 += 1,
+            None => counted.push((core, 1)),
+        }
+    }
+    // Commonest first; among equals, as your titles are ordered.
+    let mut order: Vec<usize> = (0..counted.len()).collect();
+    order.sort_by_key(|&i| (std::cmp::Reverse(counted[i].1), i));
+    order.into_iter().take(max).map(|i| counted[i].0.clone()).collect()
 }
 
 fn jobbank_get(c: &reqwest::blocking::Client, url: &str) -> Result<String, String> {
@@ -1297,8 +1371,8 @@ pub fn parse_jobbank_posting(html: &str) -> Option<String> {
 }
 
 /// One Job Bank search: the newest 25 postings for a title near a place.
-pub fn jobbank(c: &reqwest::blocking::Client, title: &str, place: &str) -> Result<Vec<Posting>, String> {
-    let html = jobbank_get(c, &jobbank_search_url(title, place))?;
+pub fn jobbank(c: &reqwest::blocking::Client, title: &str, province: &str) -> Result<Vec<Posting>, String> {
+    let html = jobbank_get(c, &jobbank_search_url(title, province))?;
     let list = parse_jobbank_list(&html);
     if list.is_empty() && !html.contains("results-count") && !html.contains("noresult") {
         return Err("Job Bank's page didn't look like search results. It may have changed; the next search tries again".into());
@@ -1946,8 +2020,9 @@ pub fn fetch_noting(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn 
     // Job Bank: a few searches, 5 seconds apart; once it turns one away, the rest wait.
     if !off("jobbank") {
         let refused = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        for (title, w) in searches(p, 10) {
-            let (c, refused) = (c.clone(), refused.clone());
+        let prov = jobbank_province(p);
+        for title in jobbank_titles(p, 6) {
+            let (c, refused, w) = (c.clone(), refused.clone(), prov.clone());
             let name = if w.is_empty() { format!("Job Bank “{title}”") } else { format!("Job Bank “{title}” in {w}") };
             calls.push((name, "Job Bank".into(), None, Box::new(move || {
                 use std::sync::atomic::Ordering::SeqCst;
@@ -1976,10 +2051,24 @@ pub fn fetch_noting(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn 
         let foreign = |id: &str| crate::sites::SITES.iter().any(|s| s.id == id && !s.country.eq_ignore_ascii_case(&p.sources.adzuna_country));
         for t in crate::sites::targets(&p.sources.sites, &p.sources.custom_sites).into_iter().filter(|t| !foreign(&t.id) && site.is_none_or(|s| s == t.id)) {
             let t = std::sync::Arc::new(t);
+            // A site whose bot check stops one search stops them all (Jobs.ca took 45 seconds to
+            // refuse each of three): after the first, the rest of this search's are skipped.
+            let blocked = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             for (title, w) in crate::sites::searches_for(&t, &tp) {
-                let (c, t2) = (c.clone(), t.clone());
+                let (c, t2, blocked) = (c.clone(), t.clone(), blocked.clone());
                 let name = if title.is_empty() { format!("{} (all jobs)", t.name) } else { format!("{} “{title}”", t.name) };
-                calls.push((name, t.name.clone(), None, Box::new(move || crate::sites::search(&c, &t2, &title, &w).map(|l| (l, false)))));
+                calls.push((name, t.name.clone(), None, Box::new(move || {
+                    use std::sync::atomic::Ordering::SeqCst;
+                    if blocked.load(SeqCst) {
+                        return Ok((vec![], false));
+                    }
+                    let r = crate::sites::search(&c, &t2, &title, &w);
+                    if r.as_ref().is_err_and(|e| crate::sites::is_blocked(e)) {
+                        blocked.store(true, SeqCst);
+                        return r.map(|l| (l, false)).map_err(|e| format!("{e}. Its other searches were skipped this time; if it keeps happening, turn {} off in Settings → Job search → Sources", t2.name));
+                    }
+                    r.map(|l| (l, false))
+                })));
             }
         }
     }
@@ -2273,7 +2362,19 @@ mod tests {
         let partner = r#"<p>This job posting has been provided by a partner site</p><span class="hidden" property="description">We are hiring a Senior Tax Analyst to own indirect tax filings across Canada and the US.</span>"#;
         assert!(parse_jobbank_posting(partner).unwrap().starts_with("We are hiring"));
         assert!(parse_jobbank_posting("<html>Not found</html>").is_none());
-        assert!(jobbank_search_url("Tax Manager", "Toronto, ON").contains("searchstring=Tax+Manager&locationstring=Toronto%2C+ON&sort=D&fage=30"));
+        // A province narrows it (a city doesn't: Job Bank ignores one typed in).
+        assert!(jobbank_search_url("Tax Manager", "ON").ends_with("searchstring=Tax+Manager&sort=D&fage=30&fprov=ON"));
+        assert!(!jobbank_search_url("Tax Manager", "").contains("fprov") && !jobbank_search_url("Tax Manager", "Toronto, ON").contains("Toronto"));
+        // Your titles in Job Bank's plain wording: the level dropped, long ones cut to their last two words, the commonest first.
+        let mut p = crate::profile::Profile { locations: vec!["Toronto, ON".into(), "Mississauga, ON".into(), "Ontario".into()], ..Default::default() };
+        p.tracks = vec![crate::profile::Track { name: "a".into(), titles: vec!["Delivery Lead".into(), "Senior Technical Program Manager".into(), "Tax Technology Program Manager".into(), "Senior Fintech Product Manager".into(), "Programme Manager".into()], ..Default::default() }];
+        let t = jobbank_titles(&p, 6);
+        assert_eq!(t[0], "Program Manager", "{t:?}");
+        assert!(t.contains(&"Delivery Lead".to_string()) && t.contains(&"Product Manager".to_string()) && !t.iter().any(|x| x.contains("Senior") || x.contains("Technical")), "{t:?}");
+        assert_eq!(jobbank_titles(&p, 2).len(), 2);
+        assert_eq!(jobbank_province(&p), "ON");
+        p.locations.push("Vancouver, BC".into());
+        assert_eq!(jobbank_province(&p), "", "places in two provinces: all of Canada, and Job Hunt's own filter");
     }
 
     #[test]

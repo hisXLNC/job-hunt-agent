@@ -431,7 +431,13 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   // A search that seems stuck: its log can be read (and copied from the progress card).
   check(await page.evaluate(async () => { const l = await api('/api/search-log'); return Array.isArray(l.trail) && l.trail.some(x => /search (started|finished)/.test(x.m)) && 'quiet_seconds' in l; }), 'The search keeps a log of its steps');
   check(await page.evaluate(() => /data-act="searchForceStop"/.test(progressHtml({ stage: 'x', percent: 1, moved: Date.now() / 1000 })) && /data-act="searchForceStop"/.test(searchCtl({ stage: 'x', percent: 1 }))), 'A running search offers Force stop, on its card and in its menu');
-  check(await page.evaluate(async () => (await api('/api/search/stop', { method: 'POST', body: { force: true } })).stopping === false), 'Force stop with no search running does nothing');
+  check(await page.evaluate(async () => (await api('/api/search/stop', { method: 'POST', body: { force: 'search' } })).stopping === false), 'Force stop with no search running does nothing');
+  // Force stop asks what to stop: the search, CV updating and tailoring, or everything.
+  const picking = page.evaluate(() => forceStopChoose());
+  await page.waitForSelector('.force-stop');
+  check(await page.locator('.force-stop [data-pick=search]').isDisabled() && await page.locator('.force-stop .force-pick').count() === 3, 'Force stop offers the search (when one runs), CV updating and tailoring, or everything');
+  await page.click('.force-stop [data-pick=work]');
+  check(await picking === 'work' && await page.evaluate(async () => (await api('/api/search/stop', { method: 'POST', body: { force: 'work' } })).forced === 'work'), 'Choosing one stops only that');
   check(await page.evaluate(() => /Copy search log/.test(progressHtml({ stage: 'Searching job sites', done: 119, total: 120, percent: 69, detail: 'Adzuna', found: 1, new: 0, scored: 0, tailored: 0, moved: Date.now() / 1000 - 400 })) && /Nothing has moved for 7 minutes/.test(progressHtml({ stage: 'x', percent: 1, moved: Date.now() / 1000 - 400 }))), 'A search that has gone quiet says so and offers its log');
   // Insights opens with what to fix first.
   await page.goto(`${base}/#results`);

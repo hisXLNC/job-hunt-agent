@@ -385,7 +385,7 @@ impl Agent {
         save(&results, false);
         if want("jobbank") || (only == Some("jobbank")) { results.push(if !p.sources.jobbank {
             json!({ "name": "Job Bank", "kind": "search", "ok": false, "skipped": true, "error": "Turned off.", "hint": "Turn Job Bank on in Settings \u{2192} Job search to include it." })
-        } else if let Some((t, w)) = crate::sources::searches(&p, 1).into_iter().next() {
+        } else if let Some((t, w)) = crate::sources::jobbank_titles(&p, 1).into_iter().next().map(|t| (t, crate::sources::jobbank_province(&p))) {
             timed(format!("Job Bank \u{201c}{t}\u{201d}{}", if w.is_empty() { String::new() } else { format!(" in {w}") }), "search", &|| crate::sources::jobbank(&c, &t, &w),
                 "Job Bank may be limiting searches from this connection for now; it usually passes in a day.")
         } else {

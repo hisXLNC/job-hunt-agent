@@ -158,6 +158,13 @@ fn challenged(html: &str) -> bool {
     head.contains("<title>just a moment") || head.contains("cf-chl") || head.contains("awswaf") && html.len() < 30_000
 }
 
+/// Whether a search failed because the site wouldn't let a reader in (its bot check, or a refusal):
+/// asking it again in the same search gets the same answer.
+pub fn is_blocked(e: &str) -> bool {
+    let l = e.to_lowercase();
+    l.contains("bot check") || l.contains("turned the request away") || l.contains("checks for a real web browser")
+}
+
 const NEEDS_BROWSER: &str = "the site checks for a real web browser; the Job Hunt app on Windows can read it, this server can't";
 
 /// A page and whether the browser read it: in the browser for sites that need one, else a plain

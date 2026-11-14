@@ -895,6 +895,17 @@ fn a_search_can_be_force_stopped() {
     assert!(!s.agent.search_ending());
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
     assert!(s.agent.search_log()["trail"].as_array().unwrap().iter().any(|l| l["m"] == "force-stopped by you"));
+    // The other work only: the search isn't touched, and what was running is named.
+    let search = s.agent.claim("search").unwrap();
+    let tailoring = s.agent.claim("tailor:test:1").unwrap();
+    assert_eq!(s.agent.force_stop_work(), vec!["tailor:test:1".to_string()]);
+    assert!(s.agent.is_running("search") && !s.agent.search_ending());
+    // Everything: the search too.
+    let was = s.agent.force_stop_all();
+    assert!(was.contains(&"search".to_string()) && was.contains(&"tailor:test:1".to_string()), "{was:?}");
+    assert!(!s.agent.is_running("search") && s.agent.search_ending());
+    drop((search, tailoring));
+    assert!(!s.agent.search_ending());
 }
 
 #[test]
