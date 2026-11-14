@@ -442,15 +442,15 @@ pub struct OwnedRunning {
 
 impl Drop for OwnedRunning {
     fn drop(&mut self) {
-        STARTED.lock().unwrap().remove(&self.name);
-        self.agent.running.lock().unwrap().remove(&self.name);
+        STARTED.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.name);
+        self.agent.running.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.name);
     }
 }
 
 impl Drop for Running<'_> {
     fn drop(&mut self) {
-        STARTED.lock().unwrap().remove(&self.name);
-        let mut r = self.agent.running.lock().unwrap();
+        STARTED.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.name);
+        let mut r = self.agent.running.lock().unwrap_or_else(|e| e.into_inner());
         r.remove(&self.name);
         // A search that was force-stopped has now really ended: the next one may start.
         if self.name == "search" {
@@ -816,24 +816,24 @@ impl Agent {
     }
 
     pub fn claim(&self, name: &str) -> R<Running<'_>> {
-        let mut r = self.running.lock().unwrap();
+        let mut r = self.running.lock().unwrap_or_else(|e| e.into_inner());
         if !r.insert(name.to_string()) {
             return err(format!("{name} is already running"));
         }
-        STARTED.lock().unwrap().insert(name.to_string(), Utc::now().timestamp());
+        STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
         Ok(Running { agent: self, name: name.to_string(), _task: crate::claude_code::Task::enter(name) })
     }
 
     /// claim, for work handed to another thread.
     fn claim_owned(self: &Arc<Self>, name: &str) -> Option<OwnedRunning> {
-        self.running.lock().unwrap().insert(name.to_string()).then(|| {
-            STARTED.lock().unwrap().insert(name.to_string(), Utc::now().timestamp());
+        self.running.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string()).then(|| {
+            STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
             OwnedRunning { agent: self.clone(), name: name.to_string() }
         })
     }
 
     pub fn is_running(&self, name: &str) -> bool {
-        self.running.lock().unwrap().contains(name)
+        self.running.lock().unwrap_or_else(|e| e.into_inner()).contains(name)
     }
 
     /// Stop the running search: it ends at its next step and keeps what it found and scored.
@@ -854,7 +854,7 @@ impl Agent {
     /// waits. What was found and scored so far is kept.
     pub fn force_stop_search(&self) -> bool {
         let was = {
-            let mut r = self.running.lock().unwrap();
+            let mut r = self.running.lock().unwrap_or_else(|e| e.into_inner());
             let was = r.remove("search");
             if was {
                 r.insert(SEARCH_ENDING.to_string());
@@ -890,7 +890,7 @@ impl Agent {
             ("add", "Adding a job", 40), ("inbox", "Reading your job email", 60),
         ];
         let now = Utc::now().timestamp();
-        let started = STARTED.lock().unwrap().clone();
+        let started = STARTED.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let mut names = self.running();
         names.sort_by_key(|n| (started.get(n).copied().unwrap_or(now), n.clone()));
         let mut out = vec![];
@@ -906,7 +906,7 @@ impl Agent {
             }
             match name.as_str() {
                 "search" => {
-                    let p = self.progress.lock().unwrap().clone();
+                    let p = self.progress.lock().unwrap_or_else(|e| e.into_inner()).clone();
                     percent = p.percent;
                     estimated = false;
                     detail = [if p.paused { "Paused".to_string() } else { p.stage.clone() }, if p.also.is_empty() { p.detail.clone() } else { p.also.clone() }].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(": ");
@@ -982,7 +982,7 @@ impl Agent {
         let running = self.is_running("search");
         if running {
             self.hold.store(on, std::sync::atomic::Ordering::SeqCst);
-            self.progress.lock().unwrap().paused = on;
+            self.progress.lock().unwrap_or_else(|e| e.into_inner()).paused = on;
         }
         running
     }
@@ -1019,7 +1019,7 @@ impl Agent {
 
     /// The running search's progress, or None when no search is running.
     pub fn progress(&self) -> Option<Progress> {
-        let mut p = self.is_running("search").then(|| self.progress.lock().unwrap().clone())?;
+        let mut p = self.is_running("search").then(|| self.progress.lock().unwrap_or_else(|e| e.into_inner()).clone())?;
         // Scoring what's waiting, not searching: say so, with how far through them it is.
         if let Some((done, total)) = *self.scoring_all.lock().unwrap() {
             let now = done + p.scored;
@@ -1035,7 +1035,7 @@ impl Agent {
     /// What the search is doing alongside its stage (scoring a posting while the sources are still
     /// being searched): shown with the stage.
     fn also(&self, what: &str) {
-        let changed = { let mut p = self.progress.lock().unwrap(); let c = p.also != what; p.also = what.to_string(); if c { p.moved = chrono::Utc::now().timestamp(); } c };
+        let changed = { let mut p = self.progress.lock().unwrap_or_else(|e| e.into_inner()); let c = p.also != what; p.also = what.to_string(); if c { p.moved = chrono::Utc::now().timestamp(); } c };
         if changed && !what.is_empty() {
             self.trace(&format!("meanwhile: {what}"));
         }
@@ -1044,7 +1044,7 @@ impl Agent {
     /// Paused by you: wait here until you resume or stop the search.
     fn wait_while_held(&self) {
         while self.hold.load(std::sync::atomic::Ordering::SeqCst) && !self.stopping() {
-            self.progress.lock().unwrap().paused = true;
+            self.progress.lock().unwrap_or_else(|e| e.into_inner()).paused = true;
             std::thread::sleep(std::time::Duration::from_millis(if cfg!(test) { 5 } else { 400 }));
         }
     }
@@ -1052,7 +1052,7 @@ impl Agent {
     /// Write a line in the search log (see TRAIL).
     pub(crate) fn trace(&self, what: &str) {
         let lines: Vec<Value> = {
-            let mut t = TRAIL.lock().unwrap();
+            let mut t = TRAIL.lock().unwrap_or_else(|e| e.into_inner());
             t.push_back((chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true), what.chars().take(300).collect()));
             while t.len() > 400 {
                 t.pop_front();
@@ -1082,9 +1082,9 @@ impl Agent {
     /// The search as it stands, for when it seems stuck: what the page shows, what's running, how
     /// long since anything moved, and the log of its steps.
     pub fn search_log(&self) -> Value {
-        let p = self.progress.lock().unwrap().clone();
+        let p = self.progress.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let quiet = if p.moved > 0 { chrono::Utc::now().timestamp() - p.moved } else { 0 };
-        let trail: Vec<Value> = TRAIL.lock().unwrap().iter().map(|(at, what)| json!({ "t": at, "m": what })).collect();
+        let trail: Vec<Value> = TRAIL.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(at, what)| json!({ "t": at, "m": what })).collect();
         json!({ "at": crate::util::now(), "version": env!("CARGO_PKG_VERSION"), "running": self.running(), "quiet_seconds": quiet, "progress": p,
             "database": self.db_facts(),
             "paused": self.hold.load(std::sync::atomic::Ordering::SeqCst), "stopping": self.stopping(), "limited": self.limited(), "trail": trail })
@@ -1093,10 +1093,10 @@ impl Agent {
     pub(crate) fn step(&self, stage: &str, done: usize, total: usize, detail: &str) {
         let (from, to) = STAGES.iter().find(|s| s.0 == stage).map(|s| (s.1, s.2)).unwrap_or((0, 100));
         let share = if total > 0 { done.min(total) as f64 / total as f64 } else { 0.0 };
-        if { let p = self.progress.lock().unwrap(); p.stage != stage || p.detail != detail } {
+        if { let p = self.progress.lock().unwrap_or_else(|e| e.into_inner()); p.stage != stage || p.detail != detail } {
             self.trace(&if total > 0 { format!("{stage} {} of {total}: {detail}", (done + 1).min(total)) } else { format!("{stage}: {detail}") });
         }
-        let mut p = self.progress.lock().unwrap();
+        let mut p = self.progress.lock().unwrap_or_else(|e| e.into_inner());
         p.moved = chrono::Utc::now().timestamp();
         p.stage = stage.into();
         p.done = done;
@@ -1106,14 +1106,14 @@ impl Agent {
         drop(p);
         // Paused: wait here, with everything found so far, until you resume or stop it.
         while self.hold.load(std::sync::atomic::Ordering::SeqCst) && !self.stopping() {
-            self.progress.lock().unwrap().paused = true;
+            self.progress.lock().unwrap_or_else(|e| e.into_inner()).paused = true;
             std::thread::sleep(std::time::Duration::from_millis(if cfg!(test) { 5 } else { 400 }));
         }
-        self.progress.lock().unwrap().paused = false;
+        self.progress.lock().unwrap_or_else(|e| e.into_inner()).paused = false;
     }
 
     fn tally(&self, r: &Report) {
-        let mut p = self.progress.lock().unwrap();
+        let mut p = self.progress.lock().unwrap_or_else(|e| e.into_inner());
         if (p.found, p.new, p.scored, p.tailored) != (r.found, r.new, r.scored, r.tailored) {
             p.moved = chrono::Utc::now().timestamp();
         }
@@ -1126,7 +1126,7 @@ impl Agent {
     }
 
     pub fn running(&self) -> Vec<String> {
-        self.running.lock().unwrap().iter().cloned().collect()
+        self.running.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect()
     }
 
     /// A Windows notification (or whatever the host shows).
@@ -1318,13 +1318,18 @@ replies and interviews, and a little lower for kinds that got none from several 
             }
         }
         let keep = held.len().saturating_sub(HELD_MAX); // the newest
-        let _ = db.set("search.held", &serde_json::to_string(&held[keep..]).unwrap_or_default());
+        if let Err(e) = db.set("search.held", &serde_json::to_string(&held[keep..]).unwrap_or_default()) {
+            let _ = db.log(None, "search:error", &format!("couldn't keep {} postings for the next search: {e}", held.len() - keep));
+            return;
+        }
+        let _ = db.set("search.held.count", &(held.len() - keep).to_string());
     }
 
     fn take_held(&self) -> Vec<Posting> {
         let db = self.db();
         let list: Vec<Posting> = db.get("search.held").ok().flatten().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
         let _ = db.delete("search.held");
+        let _ = db.delete("search.held.count");
         list
     }
 
@@ -2115,7 +2120,8 @@ replies and interviews, and a little lower for kinds that got none from several 
     pub fn applied_here(&self, job: &Job) -> Vec<Value> {
         let key = crate::db::company_key(&job.company);
         let since = (Utc::now() - chrono::Duration::days(90)).to_rfc3339();
-        self.db().jobs(None, 1_000_000).unwrap_or_default().into_iter()
+        let recent = self.db().applied_since(&since).unwrap_or_default();
+        recent.into_iter()
             .filter(|j| j.id != job.id && crate::db::company_key(&j.company) == key && j.applied_at.as_deref().is_some_and(|a| a >= since.as_str()))
             .map(|j| json!({ "title": j.title, "status": j.status, "applied": j.applied_at }))
             .collect()
@@ -3807,7 +3813,7 @@ impl Agent {
             b
         };
         // Applications at a company where you know a recruiter, and haven't asked them yet: ask.
-        let asks: Vec<Value> = db.jobs(None, 400)?.iter().filter(|j| ["approved", "applied"].contains(&j.status.as_str()))
+        let asks: Vec<Value> = db.jobs_in(&["approved", "applied"], false)?.iter()
             .filter_map(|j| crate::recruiters::for_company(&recruiters, &j.company).filter(|r| !r.asked.iter().any(|a| a.job_id == j.id)).map(|r| {
                 let mut b = j.brief();
                 b["recruiter"] = json!(r.name);

@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.77.0",
+    "date": "2026-11-14",
+    "title": "A faster backend",
+    "changes": [
+      "The page now reads the database on its own connection, so a search and the page no longer wait for each other: lists and clicks stay quick while a search runs.",
+      "Syncing no longer copies the whole database every few minutes when nothing changed.",
+      "The Queue's refresh, opening a job, company logos and the spreadsheet export read far less of the database.",
+      "Saving is faster (fewer waits for the disk)."
+    ]
+  },
+  {
     "version": "2.76.0",
     "date": "2026-11-14",
     "title": "Faster search, a force stop that stops, and posting ages",

@@ -273,6 +273,11 @@ pub fn dupe_key(company: &str, title: &str) -> String {
 
 /// One employer however a source spells it ("Thomson Reuters Holdings Inc." is "thomsonreuters"),
 /// for what's kept per company, like its employee rating.
+/// Settings that only note when something last ran or was tried: not a change worth a sync.
+fn bookkeeping(key: &str) -> bool {
+    (key.starts_with("last.") && key != "last.report") || key == "sync.tried" || key == "sync.error" || key == "search.held.count"
+}
+
 pub fn company_key(company: &str) -> String {
     dupe_key(company, "").trim_end_matches('|').to_string()
 }
@@ -426,6 +431,8 @@ pub struct CalEvent {
 
 pub struct Db {
     pub con: Connection,
+    /// Changes that were only bookkeeping (when something last ran): see `changes`.
+    quiet: std::sync::atomic::AtomicU64,
 }
 
 impl Db {
@@ -442,7 +449,8 @@ impl Db {
     pub fn open_reader(path: &Path) -> R<Db> {
         let con = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
         con.busy_timeout(std::time::Duration::from_secs(5))?;
-        Ok(Db { con })
+        con.execute_batch("PRAGMA cache_size=-32000;")?;
+        Ok(Db { con, quiet: Default::default() })
     }
 
     pub fn memory() -> R<Db> {
@@ -450,7 +458,10 @@ impl Db {
     }
 
     fn init(con: Connection) -> R<Db> {
-        con.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
+        // synchronous=NORMAL: with WAL, a save no longer waits for the disk each time (it did, once
+        // per row in some loops); a power cut can lose the last moments' saves but can't damage the
+        // file. cache_size: 32 MB kept in memory, not the default 2 (the file is tens of MB).
+        con.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-32000;")?;
         con.execute_batch(SCHEMA)?;
         // Columns added after the first release.
         let has = |col: &str| -> R<bool> {
@@ -463,6 +474,16 @@ impl Db {
             }
         }
         con.execute_batch("CREATE INDEX IF NOT EXISTS jobs_dupe ON jobs(dupe_key); CREATE INDEX IF NOT EXISTS jobs_url ON jobs(url_key)")?;
+        // What the Queue asks for every second or two (applications a week, the newest found, recent
+        // errors) read the whole table without these: every row, long posting text included.
+        con.execute_batch(
+            "CREATE INDEX IF NOT EXISTS jobs_applied ON jobs(applied_at) WHERE applied_at IS NOT NULL;
+             CREATE INDEX IF NOT EXISTS jobs_found ON jobs(found_at);
+             CREATE INDEX IF NOT EXISTS events_created ON events(created_at);",
+        )?;
+        // Which sources listed which roles is only read for the last 90 days: older rows go.
+        let old = (chrono::Utc::now() - chrono::Duration::days(120)).to_rfc3339();
+        let _ = con.execute("DELETE FROM sightings WHERE last_at < ?1", [&old]);
         let no_url: Vec<(String, String)> = {
             let mut st = con.prepare("SELECT id, url FROM jobs WHERE url_key IS NULL")?;
             let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
@@ -480,7 +501,7 @@ impl Db {
         for (id, company, title) in missing {
             con.execute("UPDATE jobs SET dupe_key = ?1 WHERE id = ?2", params![dupe_key(&company, &title), id])?;
         }
-        Ok(Db { con })
+        Ok(Db { con, quiet: Default::default() })
     }
 
     // --- jobs ----------------------------------------------------------------------------
@@ -1195,10 +1216,13 @@ impl Db {
     }
 
     pub fn set(&self, key: &str, value: &str) -> R<()> {
-        self.con.execute(
+        let n = self.con.execute(
             "INSERT INTO kv (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![key, value],
         )?;
+        if bookkeeping(key) {
+            self.quiet.fetch_add(n as u64, std::sync::atomic::Ordering::SeqCst);
+        }
         Ok(())
     }
 
@@ -1221,13 +1245,46 @@ impl Db {
     }
 
     pub fn delete(&self, key: &str) -> R<()> {
-        self.con.execute("DELETE FROM kv WHERE key = ?1", [key])?;
+        let n = self.con.execute("DELETE FROM kv WHERE key = ?1", [key])?;
+        if bookkeeping(key) {
+            self.quiet.fetch_add(n as u64, std::sync::atomic::Ordering::SeqCst);
+        }
         Ok(())
+    }
+
+    /// Jobs in these stages (or, with `not`, in none of them), the newest found first.
+    pub fn jobs_in(&self, stages: &[&str], not: bool) -> R<Vec<Job>> {
+        let marks = vec!["?"; stages.len()].join(", ");
+        let mut st = self.con.prepare(&format!("SELECT * FROM jobs WHERE status {} ({marks}) ORDER BY found_at DESC", if not { "NOT IN" } else { "IN" }))?;
+        let rows = st.query_map(rusqlite::params_from_iter(stages.iter()), Job::from_row)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Jobs applied to since `since` (RFC 3339).
+    pub fn applied_since(&self, since: &str) -> R<Vec<Job>> {
+        let mut st = self.con.prepare("SELECT * FROM jobs WHERE applied_at IS NOT NULL AND applied_at >= ?1")?;
+        let rows = st.query_map([since], Job::from_row)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The links (posting, where to apply) of a company's jobs, by its company_key.
+    pub fn company_links(&self, key: &str) -> Vec<(String, Option<String>)> {
+        if key.is_empty() {
+            return vec![];
+        }
+        let run = || -> R<Vec<(String, Option<String>)>> {
+            let mut st = self.con.prepare("SELECT url, apply_url FROM jobs WHERE dupe_key >= ?1 AND dupe_key < ?2 LIMIT 200")?;
+            let rows = st.query_map(params![format!("{key}|"), format!("{key}}}")], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        };
+        run().unwrap_or_default()
     }
 
     /// Changes made through this connection since it opened; goes up whenever anything is saved.
     pub fn changes(&self) -> u64 {
-        self.con.total_changes()
+        // Not the bookkeeping (see `bookkeeping`): syncing wrote down when it last tried, which
+        // counted as a change, so the next sync was always due and copied the whole file again.
+        self.con.total_changes().saturating_sub(self.quiet.load(std::sync::atomic::Ordering::SeqCst))
     }
 
     /// A consistent copy of the whole database at `path` (which must not exist yet).
@@ -1430,5 +1487,58 @@ mod tests {
         p.score_threshold = 80;
         db.save_profile(&p).unwrap();
         assert_eq!(db.profile().unwrap().score_threshold, 80);
+    }
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use super::*;
+
+    /// Noting when something last ran isn't a change worth a sync (it used to make every sync due
+    /// again); a real change is.
+    #[test]
+    fn bookkeeping_is_not_a_change() {
+        let db = Db::memory().unwrap();
+        let before = db.changes();
+        db.set("sync.tried", "now").unwrap();
+        db.set("last.check", "now").unwrap();
+        db.delete("sync.error").unwrap();
+        assert_eq!(db.changes(), before);
+        db.set("profile", "{}").unwrap();
+        assert!(db.changes() > before);
+    }
+
+    /// What the Queue asks for every second or two uses the indexes, not the whole table.
+    #[test]
+    fn the_queues_lookups_use_indexes() {
+        let db = Db::memory().unwrap();
+        let plan = |sql: &str| -> String {
+            let mut st = db.con.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+            let rows: Vec<String> = st.query_map([], |r| r.get::<_, String>(3)).unwrap().map(|r| r.unwrap()).collect();
+            rows.join("; ")
+        };
+        for sql in [
+            "SELECT applied_at FROM jobs WHERE applied_at IS NOT NULL",
+            "SELECT * FROM jobs WHERE applied_at IS NOT NULL AND applied_at >= 'x'",
+            "SELECT * FROM jobs ORDER BY found_at DESC LIMIT 400",
+            "SELECT url, apply_url FROM jobs WHERE dupe_key >= 'a|' AND dupe_key < 'a}' LIMIT 200",
+            "SELECT * FROM jobs WHERE status IN ('approved', 'applied') ORDER BY found_at DESC",
+        ] {
+            let p = plan(sql);
+            assert!(p.contains("USING") && !p.contains("SCAN jobs\n") && p != "SCAN jobs", "{sql}: {p}");
+        }
+    }
+
+    #[test]
+    fn a_companys_links_come_by_its_key() {
+        let db = Db::memory().unwrap();
+        for (id, co, url) in [("1", "Acme Inc", "https://acme.com/jobs/1"), ("2", "Acme", "https://acme.com/jobs/2"), ("3", "Acmeworks", "https://acmeworks.com/j/3")] {
+            let mut j = Job::default();
+            (j.id, j.company, j.title, j.url, j.status) = (id.into(), co.into(), format!("Role {id}"), url.into(), "queued".into());
+            db.insert_job(&j).unwrap();
+        }
+        let mut got: Vec<String> = db.company_links(&company_key("Acme")).into_iter().map(|l| l.0).collect();
+        got.sort();
+        assert_eq!(got, ["https://acme.com/jobs/1", "https://acme.com/jobs/2"]);
     }
 }

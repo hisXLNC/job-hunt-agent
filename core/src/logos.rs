@@ -272,9 +272,9 @@ fn sites_for(agent: &Agent, company: &str) -> Vec<(String, bool)> {
         add(site.to_string(), true);
     }
     let want = crate::db::company_key(company);
-    let jobs = agent.db().jobs(None, 5000).unwrap_or_default();
-    let mut from_jobs: Vec<String> = jobs.iter().filter(|j| crate::db::company_key(&j.company) == want)
-        .flat_map(|j| [j.apply_url.as_deref().and_then(own_site), own_site(&j.url)]).flatten().collect();
+    // Only this company's jobs, by their key (every logo used to read the newest 5,000 jobs whole).
+    let links = agent.db().company_links(&want);
+    let mut from_jobs: Vec<String> = links.iter().flat_map(|(url, apply)| [apply.as_deref().and_then(own_site), own_site(url)]).flatten().collect();
     // A lead's company has no job, but its own site is often known.
     from_jobs.extend(crate::leads::all(agent).into_iter().filter(|l| crate::db::company_key(&l.company) == want && !l.site.is_empty()).map(|l| l.site));
     from_jobs.sort_by_key(|s| !site_is_named_for(s, company));
@@ -284,8 +284,7 @@ fn sites_for(agent: &Agent, company: &str) -> Vec<(String, bool)> {
     }
     // Applications on a hosting site: the company's code there, as an address ("rbc" gives rbc.com),
     // then the name's initials. Theirs for sure only when the name says so; else the home page must.
-    let mut codes: Vec<String> = jobs.iter().filter(|j| crate::db::company_key(&j.company) == want)
-        .flat_map(|j| [j.apply_url.as_deref().and_then(tenant), tenant(&j.url)]).flatten().collect();
+    let mut codes: Vec<String> = links.iter().flat_map(|(url, apply)| [apply.as_deref().and_then(tenant), tenant(url)]).flatten().collect();
     codes.dedup();
     let initials: String = company.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty() && !["of", "the", "and"].contains(w)).filter_map(|w| w.chars().next()).collect();
     for code in codes {

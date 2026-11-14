@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.77.0] - 2026-11-14
+
+A faster backend.
+
+### Changes
+
+- The page now reads the database on its own connection, so a search and the page no longer wait for each other: lists and clicks stay quick while a search runs.
+- Syncing no longer copies the whole database every few minutes when nothing changed.
+- The Queue's refresh, opening a job, company logos and the spreadsheet export read far less of the database.
+- Saving is faster (fewer waits for the disk).
+
 ## [2.76.0] - 2026-11-14
 
 Faster search, a force stop that stops, and posting ages.
@@ -2190,6 +2201,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.77.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.77.0
 [2.76.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.76.0
 [2.75.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.75.2
 [2.75.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.75.1

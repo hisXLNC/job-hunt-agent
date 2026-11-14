@@ -144,8 +144,13 @@ pub(crate) fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request
     if len > MAX_BODY {
         return Ok(None);
     }
-    let mut body = vec![0u8; len];
-    r.read_exact(&mut body)?;
+    // Read as it arrives (memory isn't set aside on the header's word alone: over Remote access,
+    // anyone could have claimed 200 MB a connection without sending it).
+    let mut body = Vec::with_capacity(len.min(1 << 20));
+    (&mut r).take(len as u64).read_to_end(&mut body)?;
+    if body.len() < len {
+        return Ok(None);
+    }
     let (path, q) = target.split_once('?').unwrap_or((target, ""));
     let path = percent_decode(path);
     let query = url::form_urlencoded::parse(q.as_bytes()).into_owned().collect();

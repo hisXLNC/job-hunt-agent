@@ -698,3 +698,31 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
 - Posting age (`ageTag`, exact date/time in its title) on every `row()` list (approve, submit…).
 - "Applied here before" tag is a button: modal of earlier roles at that company (`company_history`
   in the job JSON now carries location, fit, cv, letter, last).
+
+## 2.77.0 (backend)
+
+- **Read-only second connection.** `Agent.reader` (`Db::open_reader`, none for in-memory test DBs).
+  `agent.reading()` returns a guard; while it lives, `agent.db()` on that thread hands out the reader
+  (thread-local `READING`). `api::route` wraps GET `/api/overview`, `/api/jobs`, `/api/jobs/<id>` in
+  it; an error containing "readonly" (a helper tried to write) is answered again on the main
+  connection. Helpers of those three routes were checked for writes (none). Don't add writes to them
+  that are swallowed with `let _ =`: under reading they'd be silently skipped.
+- **Sync was always due.** `sync.tried` / `last.*` writes moved `total_changes`, so each interval did
+  a full VACUUM INTO + zip (+ Drive upload). `Db::changes()` now leaves out bookkeeping keys
+  (`bookkeeping()` in db.rs: `last.*` except `last.report`, `sync.tried`, `sync.error`,
+  `search.held.count`).
+- Indexes `jobs_applied` (partial), `jobs_found`, `events_created`; `PRAGMA synchronous=NORMAL`,
+  `cache_size` 32 MB. Sightings older than 120 days deleted at open (only 90 are read).
+- Whole-table loads replaced: `applied_here` (`Db::applied_since`), logos `sites_for`
+  (`Db::company_links`, dupe_key range), `export_csv` and overview recruiter asks (`Db::jobs_in`;
+  asks used to look only at the newest 400 found). `/api/jobs` rating map built in one pass.
+- `search.held.count` kept beside `search.held` (held_count parsed the whole blob on each poll);
+  a failed `hold` write is logged as `search:error`.
+- `running`/`progress`/`STARTED`/`TRAIL`/`OVERVIEW_KEPT` locks survive a poisoned mutex.
+- web.rs reads a request body as it arrives rather than allocating Content-Length up front.
+- **Left from the review (not done):** overview rebuilt on every poll with repeated list loads (cache
+  keyed on `db.changes()`); skipped jobs keep full descriptions forever (most of the file size;
+  `purge_after_days` defaults to 0); long text mid-row (side table); `results_for`, `rescore_pool`,
+  `cert_postings`, `/api/jobs` full-row loads; `posting_outcomes` per-posting lookups; per-row
+  commits in `score_these`/`merge_duplicates`; one thread per connection and per logo; body read
+  before sign-in on Remote access; docx parsed under the DB guard in Settings.

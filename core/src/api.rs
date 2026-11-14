@@ -449,7 +449,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
     }
 
     if m != "GET" {
-        OVERVIEW_KEPT.lock().unwrap().clear();
+        OVERVIEW_KEPT.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
     if m == "GET" {
         if p == "/" || p == "/index.html" {
@@ -470,14 +470,14 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 // at most every few seconds; anything you do (any change sent) has it made afresh.
                 let me = Arc::as_ptr(agent) as usize;
                 let searching = !cfg!(test) && (agent.is_running("search") || agent.search_ending());
-                let kept = if searching { OVERVIEW_KEPT.lock().unwrap().get(&me).filter(|(at, _)| at.elapsed().as_secs() < 6).map(|(_, o)| o.clone()) } else { None };
+                let kept = if searching { OVERVIEW_KEPT.lock().unwrap_or_else(|e| e.into_inner()).get(&me).filter(|(at, _)| at.elapsed().as_secs() < 6).map(|(_, o)| o.clone()) } else { None };
                 let mut o = match kept {
                     Some(o) => o,
                     None => {
                         let (newer, in_use) = crate::sync::overview_view(agent);
                         let o = agent.overview_with(newer, in_use)?;
                         if searching {
-                            OVERVIEW_KEPT.lock().unwrap().insert(me, (std::time::Instant::now(), o.clone()));
+                            OVERVIEW_KEPT.lock().unwrap_or_else(|e| e.into_inner()).insert(me, (std::time::Instant::now(), o.clone()));
                         }
                         o
                     }
@@ -650,9 +650,14 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 // Each company's rating, read once.
                 let rated: std::collections::HashMap<String, Value> = {
                     let db = agent.db();
-                    list.iter().map(|j| crate::db::company_key(&j.company)).collect::<std::collections::HashSet<_>>().into_iter()
-                        .filter_map(|k| list.iter().find(|j| crate::db::company_key(&j.company) == k).and_then(|j| db.rating(&j.company)).map(|r| (k, crate::pipeline::rating_brief(&r))))
-                        .collect()
+                    let mut seen = std::collections::HashSet::new();
+                    list.iter().filter_map(|j| {
+                        let k = crate::db::company_key(&j.company);
+                        if !seen.insert(k.clone()) {
+                            return None;
+                        }
+                        db.rating(&j.company).map(|r| (k, crate::pipeline::rating_brief(&r)))
+                    }).collect()
                 };
                 let jobs: Vec<Value> = list.iter().map(|j| {
                     let mut b = j.brief();

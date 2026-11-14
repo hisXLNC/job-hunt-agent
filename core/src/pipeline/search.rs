@@ -44,7 +44,12 @@ impl Agent {
 
     /// Postings a search found but couldn't score yet (see hold), waiting for the next one.
     pub fn held_count(&self) -> usize {
-        serde_json::from_str::<Vec<Value>>(&self.secret("search.held")).map(|l| l.len()).unwrap_or(0)
+        // The count kept beside them (the Queue asks every second or two; the postings themselves are
+        // hundreds, with their text). From before the count was kept: counted.
+        match self.secret("search.held.count").parse() {
+            Ok(n) => n,
+            Err(_) => serde_json::from_str::<Vec<Value>>(&self.secret("search.held")).map(|l| l.len()).unwrap_or(0),
+        }
     }
 
     /// Score a small batch of the postings the last search couldn't get to: a quarter of your
@@ -276,7 +281,7 @@ impl Agent {
         }
         let _unhold = Unhold(&self.hold);
         let held = self.hold.load(std::sync::atomic::Ordering::SeqCst);
-        *self.progress.lock().unwrap() = Progress { paused: held, moved: chrono::Utc::now().timestamp(), ..Progress::default() };
+        *self.progress.lock().unwrap_or_else(|e| e.into_inner()) = Progress { paused: held, moved: chrono::Utc::now().timestamp(), ..Progress::default() };
         self.trace(&format!("database: {}", self.db_facts()));
         self.trace(&format!("search started{}{}", only.map(|o| format!(" ({o} only)")).unwrap_or_default(), if postings.is_some() { " (postings handed in)" } else { "" }));
         let profile = self.profile();

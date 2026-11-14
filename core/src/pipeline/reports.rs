@@ -317,7 +317,7 @@ publish your Google project (Settings \u{2192} Accounts explains how).", what.to
     pub fn export_csv(&self) -> R<String> {
         let profile = self.profile();
         let tz = profile.tz();
-        let jobs = self.db().jobs(None, 1_000_000)?;
+        let jobs = self.db().jobs_in(&["skipped", "dismissed"], true)?;
         let day = |iso: &Option<String>| iso.as_deref().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| t.with_timezone(&tz).format("%Y-%m-%d").to_string()).unwrap_or_default();
         let mut out = String::from("\u{feff}");
         out.push_str("Company,Job title,Stage,Fit,Salary,Location,Source,Found,Applied,Closed,Posting,CV,Notes\r\n");
