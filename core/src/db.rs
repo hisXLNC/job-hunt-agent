@@ -125,6 +125,23 @@ CREATE TABLE IF NOT EXISTS clicks (token TEXT NOT NULL, at TEXT NOT NULL, bot IN
 CREATE TABLE IF NOT EXISTS sightings (dupe_key TEXT NOT NULL, source TEXT NOT NULL, first_at TEXT NOT NULL, last_at TEXT NOT NULL, PRIMARY KEY (dupe_key, source));
 ";
 
+/// The job a posting found again is a copy of, by role and by link (see Db::record_repost).
+const REPOST_BY_ROLE: &str = "SELECT id, found_at FROM jobs WHERE dupe_key = ?2 AND id != ?1 ORDER BY found_at LIMIT 1";
+const REPOST_BY_LINK: &str = "SELECT id, found_at FROM jobs WHERE url_key = ?2 AND id != ?1 ORDER BY found_at LIMIT 1";
+/// Every lookup a search makes for each posting it finds. None may read the whole jobs table: a
+/// search finds thousands of postings, and the table holds every posting's text.
+#[cfg(test)]
+const PER_POSTING: &[&str] = &[
+    "SELECT (SELECT COUNT(*) FROM jobs WHERE id = ?1 OR dupe_key = ?2) + (SELECT COUNT(*) FROM purged WHERE id = ?1 OR dupe_key = ?2)",
+    "SELECT id FROM jobs WHERE id = ?1 OR dupe_key = ?2 LIMIT 1",
+    "SELECT COUNT(*) FROM jobs WHERE url_key = ?1",
+    REPOST_BY_ROLE,
+    REPOST_BY_LINK,
+    "SELECT url FROM jobs WHERE id = ?1 AND apply_url IS NULL",
+    "SELECT id FROM jobs WHERE (id = ?1 OR dupe_key = ?2)
+             AND status = 'skipped' AND score IS NULL AND reasoning LIKE 'Filtered out:%' LIMIT 1",
+];
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Change {
     pub before: String,
@@ -491,11 +508,19 @@ impl Db {
     /// remembered as a repost when the role was first found weeks before, or the new listing is
     /// dated well after that.
     pub fn record_repost(&self, posting_id: &str, company: &str, title: &str, url: &str, posted: Option<chrono::DateTime<chrono::Utc>>) -> R<()> {
-        let found: Option<(String, String)> = self.con.query_row(
-            "SELECT id, found_at FROM jobs WHERE id != ?1 AND (dupe_key = ?2 OR (?3 != '' AND url_key = ?3)) ORDER BY found_at LIMIT 1",
-            params![posting_id, dupe_key(company, title), url_key(url)],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        ).optional()?;
+        // Two lookups, each by its own index, and the earlier of the two.
+        let by = |sql: &str, key: &str| -> R<Option<(String, String)>> {
+            Ok(self.con.query_row(sql, params![posting_id, key], |r| Ok((r.get(0)?, r.get(1)?))).optional()?)
+        };
+        let link = url_key(url);
+        let mut found = by(REPOST_BY_ROLE, &dupe_key(company, title))?;
+        if !link.is_empty() {
+            if let Some(b) = by(REPOST_BY_LINK, &link)? {
+                if found.as_ref().is_none_or(|a| b.1 < a.1) {
+                    found = Some(b);
+                }
+            }
+        }
         let Some((job, found_at)) = found else { return Ok(()) };
         let Ok(first) = chrono::DateTime::parse_from_rfc3339(&found_at).map(|t| t.with_timezone(&chrono::Utc)) else { return Ok(()) };
         let now = chrono::Utc::now();
@@ -1204,6 +1229,17 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_lookup_a_search_makes_for_each_posting_reads_the_whole_table() {
+        let db = Db::memory().unwrap();
+        for sql in PER_POSTING {
+            let n = if sql.contains("?2") { 2 } else { 1 };
+            let mut st = db.con.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+            let plan: Vec<String> = st.query_map(rusqlite::params_from_iter(vec!["x"; n]), |r| r.get::<_, String>(3)).unwrap().map(|r| r.unwrap()).collect();
+            assert!(!plan.iter().any(|l| l.starts_with("SCAN jobs") || l.starts_with("SCAN purged")), "{sql}\nreads every row: {plan:?}");
+        }
+    }
 
     fn job(id: &str, company: &str, title: &str) -> Job {
         Job { id: id.into(), source: "t".into(), company: company.into(), title: title.into(), status: "ready".into(), ..Job::default() }

@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.71.2] - 2026-11-14
+
+Faster sorting of what a search finds.
+
+### Changes
+
+- Your search log showed the search was not stuck on Adzuna: sorting what the sites returned against what you had already seen took over eight minutes for 786 postings. The search now takes its turn at the database once for every few hundred postings, not several times for each one, and the count on screen moves as it goes.
+- The search log now says how long the search waited for the database, how big the database is and how long one lookup takes, so a slow search can be pinned down.
+
 ## [2.71.1] - 2026-11-14
 
 A log for searches that seem stuck.
@@ -2100,6 +2109,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.71.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.2
 [2.71.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.1
 [2.71.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.0
 [2.70.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.70.0

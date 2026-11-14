@@ -888,6 +888,9 @@ fn a_search_leaves_a_log_of_its_steps() {
     assert!(lines.iter().any(|l| l.starts_with("search started")) && lines.iter().any(|l| l.starts_with("sorted 1 postings in")) && lines.iter().any(|l| l.starts_with("search finished: 1 found")), "{lines:?}");
     assert!(log["trail"][0]["t"].as_str().unwrap().contains('T'), "each line has its time");
     assert!(log["progress"]["moved"].as_i64().unwrap() > 0 && log["quiet_seconds"].as_i64().unwrap() < 60);
+    // How long the search waited for the database, and what the database is like, are in it.
+    assert!(lines.iter().any(|l| l.contains("waiting for the database")) && lines.iter().any(|l| l.starts_with("database: ")), "{lines:?}");
+    assert!(log["database"]["jobs"].as_i64().unwrap() >= 1 && log["database"]["lookup_ms"].is_number());
 }
 
 #[test]
@@ -2502,3 +2505,4 @@ fn the_inbox_counts_new_mail_and_replies_from_it() {
     // Nobody reads a no-reply address.
     assert!(s.agent.reply_to_email("q3").is_err());
 }
+

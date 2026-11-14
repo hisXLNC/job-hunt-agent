@@ -56,6 +56,17 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.71.2: the slow step is sorting, not Adzuna (cause still unconfirmed).** The user's log: "sorted 786 postings
+  in 501.6s", then 3,370 more under way 11 min later, `running: [search, sync]`. Not reproduced: the same sort takes
+  0.2–0.3 s here on 3,000 stored jobs, with or without a thread calling `overview()` alongside; every per-posting
+  lookup uses an index (`db::tests::no_lookup_a_search_makes_for_each_posting_reads_the_whole_table`, EXPLAIN QUERY
+  PLAN over `PER_POSTING`); `record_repost` was suspected and wasn't it (now two indexed lookups anyway). So the time
+  is either waiting for the `Agent.db` mutex or slow lookups in their file (WAL size? disk?). Changed: `take_in`
+  takes the database once per 250 postings instead of ~8 times a posting, tallies per chunk, and logs "sorted N in Xs
+  (Ys of it waiting for the database)", "still sorting…" every 20 s, and at search start `database: {file_mb,
+  wal_mb, jobs, wait_ms, lookup_ms}` (`Agent::db_facts`, also in `/api/search-log`). **Next log decides**: wait ≈
+  total → find who holds the mutex (sync? an API route?); wait small and lookup_ms large → the file (checkpoint the
+  WAL, look at where the data folder lives).
 - **2.71.1: a log for searches that seem stuck.** Report: the Queue sat at "Searching job sites 120 of 120 · Adzuna
   …" (69%) with 16 new, 3 scored. `on_step(i, n)` is called *before* search i, so that label means either the last
   request is in flight (30 s timeout a page) or, more likely, the sources are done and the main thread is in

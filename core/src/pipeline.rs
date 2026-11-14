@@ -883,6 +883,21 @@ impl Agent {
         }
     }
 
+    /// The database, for the search log: how big its file and its write-ahead log are (a log that has
+    /// grown large slows every lookup), how many jobs it holds, and how long one lookup takes now.
+    pub fn db_facts(&self) -> Value {
+        let size = |name: &str| std::fs::metadata(self.data.join(name)).map(|m| (m.len() as f64 / 1_048_576.0 * 10.0).round() / 10.0).unwrap_or(0.0);
+        let asked = std::time::Instant::now();
+        let db = self.db();
+        let waited = asked.elapsed();
+        let began = std::time::Instant::now();
+        let known = db.job_exists("search-log:probe", "Search Log Probe", "A role that isn't there").unwrap_or(false);
+        let lookup = began.elapsed();
+        let jobs: i64 = db.counts().map(|c| c.values().filter_map(|v| v.as_i64()).sum()).unwrap_or(0);
+        drop(db);
+        json!({ "file_mb": size("jobhunt.db"), "wal_mb": size("jobhunt.db-wal"), "jobs": jobs, "wait_ms": waited.as_millis() as u64, "lookup_ms": (lookup.as_micros() as f64 / 100.0).round() / 10.0, "probe_found": known })
+    }
+
     /// The search as it stands, for when it seems stuck: what the page shows, what's running, how
     /// long since anything moved, and the log of its steps.
     pub fn search_log(&self) -> Value {
@@ -890,6 +905,7 @@ impl Agent {
         let quiet = if p.moved > 0 { chrono::Utc::now().timestamp() - p.moved } else { 0 };
         let trail: Vec<Value> = TRAIL.lock().unwrap().iter().map(|(at, what)| json!({ "t": at, "m": what })).collect();
         json!({ "at": crate::util::now(), "version": env!("CARGO_PKG_VERSION"), "running": self.running(), "quiet_seconds": quiet, "progress": p,
+            "database": self.db_facts(),
             "paused": self.hold.load(std::sync::atomic::Ordering::SeqCst), "stopping": self.stopping(), "limited": self.limited(), "trail": trail })
     }
 

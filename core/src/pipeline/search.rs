@@ -273,6 +273,7 @@ impl Agent {
         let _unhold = Unhold(&self.hold);
         let held = self.hold.load(std::sync::atomic::Ordering::SeqCst);
         *self.progress.lock().unwrap() = Progress { paused: held, moved: chrono::Utc::now().timestamp(), ..Progress::default() };
+        self.trace(&format!("database: {}", self.db_facts()));
         self.trace(&format!("search started{}{}", only.map(|o| format!(" ({o} only)")).unwrap_or_default(), if postings.is_some() { " (postings handed in)" } else { "" }));
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
@@ -612,14 +613,22 @@ impl Agent {
             self.trace(&format!("taking in {size} postings"));
         }
         run.all_ids.extend(postings.iter().map(|p| p.id()));
+        // The database is shared with the page (which reads the Queue every second or two while a
+        // search runs) and with sync. On one PC, sorting 786 postings took 501 s (0.2 s here, also
+        // with a reader alongside): not reproduced, and the cause is unconfirmed. The search used to
+        // take the database about eight times a posting; it's now taken once for every few hundred,
+        // and how long the search waited for it goes in the log, to tell waiting from slow lookups.
+        const CHUNK: usize = 250;
+        let mut waited = std::time::Duration::ZERO;
         if ctx.keep_found {
-            for p in &postings {
-                let known = {
-                    let db = self.db();
-                    db.job_exists(&p.id(), &p.company, &p.title).unwrap_or(false) || db.url_exists(&p.url).unwrap_or(false)
-                };
-                if known {
-                    run.known_before.insert(p.id());
+            for chunk in postings.chunks(CHUNK) {
+                let asked = std::time::Instant::now();
+                let db = self.db();
+                waited += asked.elapsed();
+                for p in chunk {
+                    if db.job_exists(&p.id(), &p.company, &p.title).unwrap_or(false) || db.url_exists(&p.url).unwrap_or(false) {
+                        run.known_before.insert(p.id());
+                    }
                 }
             }
             run.found_here.extend(postings.iter().cloned());
@@ -632,6 +641,9 @@ impl Agent {
         // Copies on the company's own site first, so a job board's copy of the same role is the one dropped.
         let mut postings = postings;
         postings.sort_by_key(|p| crate::sources::is_job_board(&p.url));
+        // First, with no need of the database: pay from the text, and the same role listed twice in
+        // one search (two sources, or twice on one board).
+        let mut once: Vec<Posting> = vec![];
         for mut p in postings {
             if p.salary.is_none() {
                 if let Some((text, max)) = crate::sources::salary_from_text(&p.description) {
@@ -639,47 +651,74 @@ impl Agent {
                     p.salary_max = p.salary_max.or(max);
                 }
             }
-            // The same role listed twice in one search (two sources, or twice on one board).
             let link = crate::db::url_key(&p.url);
             if !run.seen.insert(crate::db::dupe_key(&p.company, &p.title)) || (!link.is_empty() && !run.seen.insert(format!("url:{link}"))) {
                 continue;
             }
-            if ctx.force {
-                let filtered = self.db().filtered_out(&p.id(), &p.company, &p.title)?;
-                if let Some(old) = filtered {
-                    self.db().delete_job(&old)?;
-                    report.rechecked += 1;
-                }
+            once.push(p);
+        }
+        let mut once = once.into_iter();
+        let mut slow_said = std::time::Instant::now();
+        loop {
+            let chunk: Vec<Posting> = once.by_ref().take(CHUNK).collect();
+            if chunk.is_empty() {
+                break;
             }
-            let known = self.db().job_exists(&p.id(), &p.company, &p.title)? || self.db().url_exists(&p.url)?;
-            if known {
-                // Found on the company's site this time: apply there rather than on the job board.
-                let existing = self.db().existing_job(&p.id(), &p.company, &p.title);
-                if let Some(id) = existing {
-                    if self.db().prefer_company_link(&id, &p.url)? {
-                        self.db().log(Some(&id), "company-site", &format!("found on the company's site: {}", p.url))?;
+            // Known already or new: every lookup for these postings in one turn at the database.
+            let mut fresh: Vec<Posting> = vec![];
+            {
+                let asked = std::time::Instant::now();
+                let db = self.db();
+                waited += asked.elapsed();
+                for p in chunk {
+                    if ctx.force {
+                        if let Some(old) = db.filtered_out(&p.id(), &p.company, &p.title)? {
+                            db.delete_job(&old)?;
+                            report.rechecked += 1;
+                        }
+                    }
+                    if db.job_exists(&p.id(), &p.company, &p.title)? || db.url_exists(&p.url)? {
+                        // Found on the company's site this time: apply there rather than on the job board.
+                        if let Some(id) = db.existing_job(&p.id(), &p.company, &p.title) {
+                            if db.prefer_company_link(&id, &p.url)? {
+                                db.log(Some(&id), "company-site", &format!("found on the company's site: {}", p.url))?;
+                            }
+                        }
+                        let posted = p.posted_at.as_deref().and_then(posted_date);
+                        db.record_repost(&p.id(), &p.company, &p.title, &p.url, posted)?;
+                        report.known += 1;
+                    } else {
+                        fresh.push(p);
                     }
                 }
-                let posted = p.posted_at.as_deref().and_then(posted_date);
-                self.db().record_repost(&p.id(), &p.company, &p.title, &p.url, posted)?;
-                report.known += 1;
-                continue;
             }
-            report.new += 1;
-            // A company you've set a minimum employee rating for, already rated below it.
-            let low = profile.min_rating.and_then(|min| {
-                let r = self.db().rating(&p.company)?;
-                let got = r["rating"].as_f64().filter(|_| r["found"] == true)?;
-                (got < min).then(|| format!("rated {got:.1} by employees, below your minimum of {min:.1}"))
-            });
-            match low.or_else(|| prefilter(&p, profile)) {
-                None => candidates.push(p),
-                Some(why) if why == NO_TITLE_MATCH => run.near.push(p),
-                Some(why) => self.skip(&p, &why, report)?,
+            for p in fresh {
+                report.new += 1;
+                // A company you've set a minimum employee rating for, already rated below it.
+                let low = profile.min_rating.and_then(|min| {
+                    let r = self.db().rating(&p.company)?;
+                    let got = r["rating"].as_f64().filter(|_| r["found"] == true)?;
+                    (got < min).then(|| format!("rated {got:.1} by employees, below your minimum of {min:.1}"))
+                });
+                match low.or_else(|| prefilter(&p, profile)) {
+                    None => candidates.push(p),
+                    Some(why) if why == NO_TITLE_MATCH => run.near.push(p),
+                    Some(why) => self.skip(&p, &why, report)?,
+                }
+            }
+            self.tally(report);
+            // A slow stretch is written down as it happens, not only at the end of the batch.
+            if began.elapsed().as_secs() >= 20 && slow_said.elapsed().as_secs() >= 20 {
+                slow_said = std::time::Instant::now();
+                self.trace(&format!("still sorting: {} known and {} new of {size} after {:.0}s ({:.0}s waiting for the database)", report.known, report.new, began.elapsed().as_secs_f64(), waited.as_secs_f64()));
+            }
+            if self.stopping() {
+                // Stopped part-way: what's left of this batch is found again by the next search.
+                break;
             }
         }
         self.tally(report);
-        self.trace(&format!("sorted {size} postings in {:.1}s: {} to score, {} new so far, {} near-miss titles waiting", began.elapsed().as_secs_f64(), candidates.len(), report.new, run.near.len()));
+        self.trace(&format!("sorted {size} postings in {:.1}s ({:.1}s of it waiting for the database): {} to score, {} new so far, {} near-miss titles waiting", began.elapsed().as_secs_f64(), waited.as_secs_f64(), candidates.len(), report.new, run.near.len()));
         if size >= 40 {
             self.also("");
         }
