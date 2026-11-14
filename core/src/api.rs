@@ -1166,7 +1166,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             });
             Ok(Resp::json(&json!({ "started": true })))
         }
-        ["api", "search", "stop"] => Ok(Resp::json(&json!({ "stopping": agent.stop_search() }))),
+        ["api", "search", "stop"] => Ok(Resp::json(&if b["force"].as_bool() == Some(true) { json!({ "stopping": agent.force_stop_search(), "forced": true }) } else { json!({ "stopping": agent.stop_search() }) })),
         // Pause the running search where it is, or carry on from there.
         ["api", "search", "hold"] => Ok(Resp::json(&json!({ "running": agent.hold_search(b["on"].as_bool().unwrap_or(true)) }))),
         ["api", "search", "pause"] => {

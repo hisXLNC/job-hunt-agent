@@ -62,6 +62,15 @@ async function act(el) {
     } catch (e) { toast(e.message, true); }
     return;
   }
+  if (a === 'searchForceStop') {
+    if (!await ask('Force stop the search? It ends now, without finishing the step it\'s on. Anything Claude is writing this moment is cancelled too (a CV being tailored, an answer): ask for it again after. What the search found and scored so far is kept.', 'Force stop')) return;
+    return busy(async () => {
+      const r = await api('/api/search/stop', { method: 'POST', body: { force: true } });
+      toast(r.stopping ? 'Stopped. A new search can start in a moment, once the last request to a job site has run out.' : 'No search is running.');
+      await refreshOverview();
+      route();
+    });
+  }
   if (a === 'searchStop') {
     return busy(async () => {
       const r = await api('/api/search/stop', { method: 'POST' });

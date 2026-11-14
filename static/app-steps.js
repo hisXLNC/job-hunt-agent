@@ -329,6 +329,7 @@ function searchCtl(pr) {
         <button class="btn sm${pr.paused ? ' primary' : ''}" data-act="searchHold" data-sv="hold" data-on="${pr.paused ? '0' : '1'}">${pr.paused ? 'Resume' : 'Pause'}</button>
         <button class="btn ghost danger sm" data-act="searchStop" title="Ends it after the step it's on; what it found or scored so far is kept">Stop</button>
         <button class="btn ghost sm" type="button" data-act="searchLog" title="Copies what this search did, step by step with the time each took, to paste to Claude when it seems stuck">Copy log</button>
+        <button class="btn ghost danger sm" type="button" data-act="searchForceStop" title="Ends it now, without finishing the step it's on, when Stop doesn't. What it found so far is kept.">Force stop</button>
       </div>
     </div></details>`;
 }
@@ -362,8 +363,8 @@ function updateSearchCtl() {
 function quietNote(pr) {
   const quiet = pr.moved && !pr.paused ? Math.round(Date.now() / 1000 - pr.moved) : 0;
   const log = '<button class="btn ghost sm" type="button" data-act="searchLog" title="Copies what this search did, step by step with the time each took, to paste to Claude when it seems stuck">Copy search log</button>';
-  if (quiet < 90) return `<div class="row quiet-row">${log}</div>`;
-  return `<div class="row quiet-row warn"><span class="warn-text small"><b>Nothing has moved for ${quiet < 120 ? `${quiet} seconds` : `${Math.round(quiet / 60)} minutes`}.</b> ${pr.also ? 'It may still be working on the step above.' : 'A site may be slow to answer, or the search may be stuck.'} You can wait, press Stop (what it found is kept), or copy the log and send it to Claude.</span>${log}</div>`;
+  if (quiet < 90) return `<div class="row quiet-row">${log}<button class="btn ghost danger sm" type="button" data-act="searchForceStop" title="Ends it now, without finishing the step it's on, when Stop doesn't. What it found so far is kept.">Force stop</button></div>`;
+  return `<div class="row quiet-row warn"><span class="warn-text small"><b>Nothing has moved for ${quiet < 120 ? `${quiet} seconds` : `${Math.round(quiet / 60)} minutes`}.</b> ${pr.also ? 'It may still be working on the step above.' : 'A site may be slow to answer, or the search may be stuck.'} You can wait, press Stop (what it found is kept), or copy the log and send it to Claude.</span>${log}<button class="btn danger sm" type="button" data-act="searchForceStop" title="Ends it now, without finishing the step it's on. What it found so far is kept.">Force stop</button></div>`;
 }
 function progressHtml(pr) {
   if (!pr) return '';

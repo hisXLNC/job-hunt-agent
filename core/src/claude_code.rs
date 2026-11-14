@@ -99,8 +99,18 @@ fn command(cc: &ClaudeCode) -> Command {
     c
 }
 
+/// Raised to cancel every Claude Code request running now (a force-stopped search): each request
+/// notes it when it starts, and ends itself when it has moved on.
+static CANCELLED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Cancel whatever Claude Code is doing right now, for everything in Job Hunt.
+pub fn cancel_running() {
+    CANCELLED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+}
+
 /// Run to completion with a time limit; returns (exit ok, stdout, stderr).
 fn run_capture(mut c: Command, stdin: &str, limit: Duration) -> R<(bool, String, String)> {
+    let cancelled = CANCELLED.load(std::sync::atomic::Ordering::SeqCst);
     let mut child = c
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -134,6 +144,11 @@ fn run_capture(mut c: Command, stdin: &str, limit: Duration) -> R<(bool, String,
             let _ = child.kill();
             let _ = child.wait();
             return Err(Error("Claude Code took too long to answer and was stopped.".into()));
+        }
+        if CANCELLED.load(std::sync::atomic::Ordering::SeqCst) != cancelled {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Error("Stopped: you force-stopped the search, which cancels what Claude was doing. Ask for it again.".into()));
         }
         std::thread::sleep(Duration::from_millis(100));
     };

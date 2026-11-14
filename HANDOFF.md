@@ -56,6 +56,13 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.71.3: Force stop.** `Agent::force_stop_search`: swaps the `search` claim for `search-ending` (`SEARCH_ENDING`;
+  so nothing shows as running), sets `stop`, calls `claude_code::cancel_running()` (a counter `run_capture` watches:
+  every Claude Code child running now is killed, whatever it was for), and logs it. A thread can't be killed, so the
+  old search ends at its next `stopping()` look or when its in-flight site request times out; `Running::drop` for
+  "search" clears `search-ending`, and until then `search_with` refuses and `due_tasks` doesn't start one. `POST
+  /api/search/stop {force:true}`; buttons on the progress card and in the search menu (`searchForceStop`). The API
+  engine's requests in flight aren't cancelled (only Claude Code's).
 - **2.71.2: the slow step is sorting, not Adzuna (cause still unconfirmed).** The user's log: "sorted 786 postings
   in 501.6s", then 3,370 more under way 11 min later, `running: [search, sync]`. Not reproduced: the same sort takes
   0.2–0.3 s here on 3,000 stored jobs, with or without a thread calling `overview()` alongside; every per-posting

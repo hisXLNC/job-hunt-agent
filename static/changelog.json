@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.71.3",
+    "date": "2026-11-14",
+    "title": "Force stop for a search",
+    "changes": [
+      "A running search has a Force stop button, on its card and in the search menu. It ends the search now, without finishing the step it is on, and cancels what Claude is doing at that moment. What the search found and scored so far is kept. A new search can start a moment later, once the last request to a job site has run out."
+    ]
+  },
+  {
     "version": "2.71.2",
     "date": "2026-11-14",
     "title": "Faster sorting of what a search finds",

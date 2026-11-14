@@ -880,6 +880,24 @@ fn how_filling_went_is_tallied_by_site() {
 }
 
 #[test]
+fn a_search_can_be_force_stopped() {
+    let s = setup();
+    assert!(!s.agent.force_stop_search(), "nothing to stop");
+    // A search under way (its claim held, as a search holds it).
+    let guard = s.agent.claim("search").unwrap();
+    assert!(s.agent.force_stop_search());
+    // Off the screen at once, and told to end; a new one waits until the old one has let go.
+    assert!(!s.agent.is_running("search") && s.agent.progress().is_none() && s.agent.stopping() && s.agent.search_ending());
+    let e = s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap_err();
+    assert!(e.0.contains("letting go"), "{e}");
+    assert!(!s.agent.force_stop_search(), "not twice");
+    drop(guard); // the old search ends
+    assert!(!s.agent.search_ending());
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    assert!(s.agent.search_log()["trail"].as_array().unwrap().iter().any(|l| l["m"] == "force-stopped by you"));
+}
+
+#[test]
 fn a_search_leaves_a_log_of_its_steps() {
     let s = setup();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();

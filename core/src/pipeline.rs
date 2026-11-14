@@ -441,9 +441,18 @@ impl Drop for OwnedRunning {
 
 impl Drop for Running<'_> {
     fn drop(&mut self) {
-        self.agent.running.lock().unwrap().remove(&self.name);
+        let mut r = self.agent.running.lock().unwrap();
+        r.remove(&self.name);
+        // A search that was force-stopped has now really ended: the next one may start.
+        if self.name == "search" {
+            r.remove(SEARCH_ENDING);
+        }
     }
 }
+
+/// A force-stopped search that hasn't let go yet (a request to a site still in flight): no search
+/// shows as running, and a new one waits for this to clear. See Agent::force_stop_search.
+pub const SEARCH_ENDING: &str = "search-ending";
 
 impl Agent {
     pub fn new(data: &Path, db: Db, notify: Notify) -> Agent {
@@ -793,6 +802,36 @@ impl Agent {
             self.hold.store(false, std::sync::atomic::Ordering::SeqCst);
         }
         running
+    }
+
+    /// Stop the running search now, without waiting for the step it's on. It's taken off the screen
+    /// at once; whatever Claude is doing this moment is cancelled (for everything, not only the
+    /// search: a CV being tailored or an answer being written fails and can be asked for again);
+    /// the search's own loops end at their next look. A request to a job site already under way
+    /// can't be cancelled and runs out by itself (a minute at most): until it has, a new search
+    /// waits. What was found and scored so far is kept.
+    pub fn force_stop_search(&self) -> bool {
+        let was = {
+            let mut r = self.running.lock().unwrap();
+            let was = r.remove("search");
+            if was {
+                r.insert(SEARCH_ENDING.to_string());
+            }
+            was
+        };
+        if was {
+            self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.hold.store(false, std::sync::atomic::Ordering::SeqCst);
+            crate::claude_code::cancel_running();
+            self.trace("force-stopped by you");
+            let _ = self.db().log(None, "search", "Force-stopped: what it had found and scored is kept");
+        }
+        was
+    }
+
+    /// Whether a force-stopped search is still letting go.
+    pub fn search_ending(&self) -> bool {
+        self.is_running(SEARCH_ENDING)
     }
 
     /// Pause the running search at its next step, keeping everything it has found so far, or
@@ -3064,7 +3103,7 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     // Paused or off: only a search you ask for runs.
     let last = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.search")).ok().map(|t| t.with_timezone(&tz).naive_local());
     let scheduled = agent.search_paused().is_empty() && p.search_due(local.naive_local(), last);
-    if ready && (requested || scheduled) && !agent.is_running("search") {
+    if ready && (requested || scheduled) && !agent.is_running("search") && !agent.search_ending() {
         out.push("search");
     }
     if ready && agent.mail.read().map(|m| m.is_some()).unwrap_or(false) && !agent.is_running("inbox") {
@@ -3082,7 +3121,7 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     let held_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.held"))
         .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 45)
         .unwrap_or(false);
-    if ready && !held_lately && !agent.budget_wait() && !agent.is_running("search") && !out.contains(&"search") && agent.held_count() > 0 {
+    if ready && !held_lately && !agent.budget_wait() && !agent.is_running("search") && !agent.search_ending() && !out.contains(&"search") && agent.held_count() > 0 {
         out.push("held");
     }
     // Fit forecasts for postings scored before they existed: a few every 15 minutes.
