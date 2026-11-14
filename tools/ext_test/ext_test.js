@@ -53,7 +53,7 @@ function buildExtension(dir) {
 const LANGS = ['English', 'Arabic', 'French'];
 // The variants run side by side, each in its own browser: what belongs to one is kept under its name.
 const fieldsOf = {};
-const briefs = [], reports = [];
+const briefs = [], reports = [], handovers = [];
 function answers(fields, name) {
   const values = {}, files = {};
   fieldsOf[name] = fields || [];
@@ -101,6 +101,8 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
         if (req.url === '/ext/ping') return json(res, { ok: true, version: VERSION });
         if (req.url === '/ext/leads') { leads = JSON.parse(body || '{}'); const hiring = leads.posts.filter(p => /hiring/i.test(p.text)).length; return json(res, { seen: leads.posts.length, hiring, added: hiring, note: '' }); }
         if (req.url === '/ext/pick') { picked = JSON.parse(body || '{}').job_id || ''; return json(res, { ok: true }); }
+        // Claude isn't set up on the test machine: the direct hand-over says so, and the panel falls back to the brief.
+        if (req.url === '/ext/handover') { handovers.push(JSON.parse(body || '{}')); res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); return res.end(JSON.stringify({ error: "Claude Code isn't installed on this PC." })); }
         if (req.url === '/ext/report') { reports.push(JSON.parse(body || '{}')); return json(res, { ok: true }); }
         if (req.url === '/ext/brief') { briefs.push(JSON.parse(body || '{}')); return json(res, { text: 'Please fill in the application form on this page for me.' }); }
         if (req.url === '/ext/log') { logs.push(JSON.parse(body || '{}')); return json(res, { kept: 1 }); }
@@ -350,6 +352,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
       await page.waitForTimeout(1500);
       const said = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]').shadowRoot.querySelector('.s').textContent);
       if (!/Copied for Claude|Choose which application/.test(said)) problems.push(`pressing Let Claude finish it said "${said.slice(0, 160)}"`);
+      if (/Copied for Claude/.test(said) && (!handovers.length || !/Couldn't start Claude directly/.test(said))) problems.push(`Claude wasn't asked to take over directly first (${handovers.length} asked; panel: ${said.slice(0, 120)})`);
     }
     console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'folded'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  email ${got.email || 'empty'}`);
     if (problems.length) { failed.push('folded'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }

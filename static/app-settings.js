@@ -606,7 +606,7 @@ async function settingsBody(section, tab, st) {
     return `${src.list}${src.clip}`;
   }
   if (section === 'applying') {
-    if (tab === 'forms') { const e = await of('extension'); return `${e.ext}<section class="card" id="fillSites"><header><h2>How forms go, site by site</h2></header><p class="muted small">Loading…</p></section>${link('On a phone, a bookmark fills in forms in the extension\'s place.', '#settings/phone', 'Phone')}`; }
+    if (tab === 'forms') { const e = await of('extension'); return `${e.ext}<section class="card" id="chromeCard"><header><h2>Claude fills in what Job Hunt can't</h2></header><p class="muted small">Loading…</p></section><section class="card" id="fillSites"><header><h2>How forms go, site by site</h2></header><p class="muted small">Loading…</p></section>${link('On a phone, a bookmark fills in forms in the extension\'s place.', '#settings/phone', 'Phone')}`; }
     if (tab === 'followups') { const i = await of('inbox'), a = await of('app'); return `${i.followups}${a.links}`; }
     return form('search', (await of('search')).tailoring);
   }
@@ -639,6 +639,7 @@ function settingsShown() {
   if ($('#claudeCard') && st?.claude.engine !== 'api') checkClaude(false);
   if ($('#connStatus')) renderConnStatus();
   if ($('#fillSites')) renderFillSites();
+  if ($('#chromeCard')) renderChrome();
   if ($('#usageCard')) renderUsage();
   if ($('#whatsnew')) { showWhatsNew(); if (update?.available) showUpdate(update); }
   if (connScrollTo) { const t = document.getElementById(connScrollTo); connScrollTo = null; if (t) { t.scrollIntoView({ block: 'start' }); t.querySelector('details')?.setAttribute('open', ''); } }
@@ -899,6 +900,25 @@ async function renderCertRescore() {
   el.hidden = !r.postings && !r.running;
   el.innerHTML = r.running ? '<span class="spin" data-kind="score"></span>Scoring postings again…'
     : `${r.postings} open posting${r.postings === 1 ? '' : 's'} mention${r.postings === 1 ? 's' : ''} a certification listed here. New scores count it; scores given before you listed it don't. <button class="btn sm" type="button" data-act="certRescore">Score ${r.postings === 1 ? 'it' : 'them'} again</button>`;
+}
+
+/** Settings, Applying, Filling in forms: Claude in your browser, through its own extension. */
+let chromeWatch = 0;
+async function renderChrome() {
+  const box = $('#chromeCard'); if (!box) return;
+  let r;
+  try { r = await api('/api/claude-chrome'); } catch (e) { box.querySelector('p').textContent = e.message; return; }
+  const last = r.last, when = last?.at ? fmtDate(last.at) : '';
+  box.innerHTML = `<header><h2>Claude fills in what Job Hunt can't</h2>${last ? `<span class="pill ${last.ok ? 'good' : 'warn'}">${last.ok ? 'Connected' : 'Not connected'}</span>` : ''}</header>
+    <p class="muted">When Job Hunt's own filler can't finish a form, Claude can: Job Hunt starts Claude with a connection to the <b>Claude extension</b> in your browser, and Claude opens the form in a new tab, fills it in from your details, CV and cover letter, attaches your files, and stops before Submit. Use <b>Let Claude finish it</b> in the panel on a form, <b>Have Claude fill it in</b> on an approved application, or ask Ask Claude to fill in a job.</p>
+    <ul class="flags small"><li>The <a href="https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn" target="_blank" rel="noopener">Claude extension</a> is installed in Chrome or Edge and signed in to your Claude account.</li>
+      <li>Claude Code on this PC is signed in with the same account and your Claude plan (an API key can't do this).</li>
+      <li>The first time, press Set it up: a window opens where Claude Code introduces its browser connection.</li></ul>
+    ${r.installed ? '' : '<p class="warn-text small">Claude Code isn\'t installed on this PC yet: set it up in <a href="#settings/accounts">Settings → Accounts</a> first.</p>'}
+    <div class="row">${r.console ? '<button class="btn" type="button" data-act="chromeSetup">Set it up</button>' : ''}<button class="btn primary" type="button" data-act="chromeTest" ${r.testing || !r.installed ? 'disabled' : ''}>${r.testing ? '<span class="spin" data-kind="chat"></span>Testing…' : 'Test the connection'}</button></div>
+    ${r.testing ? '<p class="muted small">Claude is opening a test page (example.com) in a new tab. This takes up to two minutes.</p>' : last ? `<p class="small ${last.ok ? 'muted' : 'warn-text'}"><b>${last.ok ? 'It works.' : 'Not yet.'}</b> ${when ? `${esc(when)}: ` : ''}${esc(last.said || '')}</p>` : '<p class="muted small">Not tested yet.</p>'}`;
+  clearTimeout(chromeWatch);
+  if (r.testing) chromeWatch = setTimeout(renderChrome, 3000);
 }
 
 /** Settings, Applying, Filling in forms: how the extension did on each site, worst first. */

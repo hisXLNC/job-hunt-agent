@@ -394,6 +394,21 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(/Save those \d for later/.test(await page.textContent('#askLog')), 'Ask Claude can offer to act on several jobs at once');
   await page.fill('#askMsg', '');
   await page.keyboard.press('Escape');
+  // Across the app: an offer that changes a setting is done by Job Hunt when pressed.
+  await page.keyboard.press('c');
+  await page.fill('#askMsg', 'Raise my bar a little');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#askLog .ask-act:has-text("Set the bar to 85")', { timeout: 20000 }).catch(() => {});
+  await page.click('#askLog .ask-act:has-text("Set the bar to 85")').catch(() => {});
+  await page.waitForFunction(() => /✓ Set the bar to 85/.test(document.querySelector('#askLog')?.textContent || ''), null, { timeout: 10000 }).catch(() => {});
+  check(await page.evaluate(async () => (await api('/api/settings')).profile.score_threshold === 85), 'Ask Claude can change a setting from any screen, when its button is pressed');
+  await page.fill('#askMsg', '');
+  await page.keyboard.press('Escape');
+  // Settings, Applying, Filling in forms: Claude in the browser, with its test.
+  await page.goto(`${base}/#settings/applying/forms`);
+  await page.waitForSelector('#chromeCard');
+  await page.waitForFunction(() => !/Loading/.test(document.querySelector('#chromeCard').textContent), null, { timeout: 8000 }).catch(() => {});
+  check(/Claude extension/.test(await page.textContent('#chromeCard')) && await page.locator('#chromeCard [data-act=chromeTest]').count() === 1, 'Settings explains Claude in the browser and offers a test');
   // Insights opens with what to fix first.
   await page.goto(`${base}/#results`);
   await page.waitForSelector('#fixesCard .fixes', { timeout: 10000 }).catch(() => {});

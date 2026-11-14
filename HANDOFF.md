@@ -56,6 +56,27 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.70.0: Claude in the browser; the assistant across the app.**
+  - *The connection to the Claude extension is through Claude Code*: `claude --chrome -p …` gives Claude Code the
+    Claude in Chrome tools (docs: code.claude.com/docs/en/chrome; needs the extension ≥ 1.0.36 signed in to the same
+    claude.ai account, Claude Code signed in with /login and a paid plan, not an API key; Windows is supported, WSL
+    isn't; Claude works in NEW tabs it opens, not the tab you're on). `claude_code::browser_args()` (only
+    `mcp__claude-in-chrome`, `Read`, `ToolSearch` allowed; the rest refused), `browse(cc, task, files, limit)` (files
+    copied beside it to attach; answer through the same `parse_output`), `browser_help`, `chrome_setup_script`.
+    `fill::claude_fill_start(agent, job, url, page)` builds `claude_fill_task` (the brief + where to go + file names +
+    never Submit), runs under claim `claude-fill` for up to 15 min, keeps `claudefill:<job>` ({running, at, said |
+    error}) and notifies. Entry points: the panel's Let Claude finish it (`/ext/handover`, polled with
+    `/ext/handover/state`; falls back to the clipboard brief with the reason when it can't start), the Queue's
+    "Have Claude fill it in" (`POST /api/jobs/<id>/claude-fill`), and the assistant's `fill_with_claude` offer.
+    Settings → Applying → Filling in forms has the card (`renderChrome`): `GET /api/claude-chrome`, `POST
+    …/test` (opens example.com; result kept in `chrome.test`), `POST …/setup` (console running `claude --chrome`).
+    **None of this could be run here** (no Chrome extension, no sign-in): whether `-p` accepts `--chrome` without the
+    first-run dialog, and whether the extension's own site-permission prompt blocks a headless run, are unknown. The
+    Test button's words are what to ask the user for.
+  - *Assistant across the app*: offers `approve`, `mark_applied`, `fill_with_claude` (job on screen) and, from any
+    screen, `search_now`, `set_bar`, `add_titles`, `add_certification`, `add_fact`, `skip_company`, `auto_tailor`
+    (`OFFERS_APP`). The app ones are done by `Agent::ask_do(at, which)` from the stored offer (`POST /api/ask {do}`),
+    never from what the page sends. Closing the panel now blurs its box (page keys were dead after Esc).
 - **2.69.0: the assistant across jobs; what to fix first; a check before a form.**
   - `ask_facts` now lists the applications in play (approved, ready, queued; best first; `[id] title at company |
     stage | fit | keywords | closes`) and `fixes()`. Offers `set_aside_many`, `save_many`, `tailor_many`

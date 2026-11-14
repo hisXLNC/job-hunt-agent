@@ -32,6 +32,9 @@ impl Llm for DemoLlm {
         let actions = if a.job.is_some() && a.message.to_lowercase().contains("shorter") {
             vec![jobhunt_core::claude::Offer { kind: "revise_letter".into(), label: "Shorten the cover letter".into(), note: "Cut the cover letter to about 150 words.".into(), ..Default::default() },
                 jobhunt_core::claude::Offer { kind: "save_later".into(), label: "Save for later".into(), ..Default::default() }]
+        } else if a.message.to_lowercase().contains("bar") {
+            vec![jobhunt_core::claude::Offer { kind: "set_bar".into(), label: "Set the bar to 85".into(), note: "85".into(), ..Default::default() },
+                jobhunt_core::claude::Offer { kind: "search_now".into(), label: "Search for jobs now".into(), ..Default::default() }]
         } else if a.message.to_lowercase().contains("weakest") {
             // The ids of the first two applications it was told about.
             let ids: Vec<String> = a.facts.lines().filter_map(|l| l.strip_prefix('[')).filter_map(|l| l.split_once(']')).map(|(id, _)| id.to_string()).take(2).collect();

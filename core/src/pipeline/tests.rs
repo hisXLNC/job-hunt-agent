@@ -888,6 +888,11 @@ fn the_brief_for_another_assistant_says_what_is_left() {
     let whole = crate::fill::brief(&s.agent, "test:1", &json!({})).unwrap();
     assert!(whole.contains("do not press Submit") && whole.contains("Technical Program Manager") && !whole.contains("already filled"), "{whole}");
     // Handed over part-way: what is filled stays, and each box left is named with the answer Job Hunt had.
+    // Handed to Claude in the browser: where to go, the files to attach by name, and never Submit.
+    let task = crate::fill::claude_fill_task(&whole, "https://acme.example/jobs/1", &["Sam - CV.pdf".to_string()]);
+    assert!(task.contains("https://acme.example/jobs/1") && task.contains("\"Sam - CV.pdf\"") && task.contains("Never press the final Submit") && !task.contains("I will attach them myself"), "{task}");
+    assert!(crate::fill::claude_fill_task(&whole, "https://x.example", &[]).contains("I will attach them myself"));
+    assert_eq!(crate::fill::claude_fill_state(&s.agent, "test:1"), json!({}));
     let part = crate::fill::brief(&s.agent, "test:1", &json!({ "done": 4, "left": [{ "label": "Province/Territory/State", "want": "Ontario" }, { "label": "Address", "want": "" }], "missed": ["Jira"] })).unwrap();
     assert!(part.contains("already filled 4 boxes") && part.contains("- Province/Territory/State: Ontario\n") && part.contains("- Address\n") && part.contains("Jira"), "{part}");
 }
@@ -947,6 +952,19 @@ fn the_assistant_answers_from_any_screen_and_keeps_the_conversation() {
     let last = s.agent.ask_log().pop().unwrap();
     assert!(last["text"].as_str().unwrap().contains("knows [test:1]"), "{last}");
     assert_eq!((last["actions"][0]["kind"].as_str(), last["actions"][0]["jobs"].as_array().unwrap().len()), (Some("set_aside_many"), 1), "{last}");
+    // Across the app: an offer that changes Job Hunt is done from the offer as it was kept (one out of
+    // range is dropped when the answer arrives), once.
+    s.agent.ask_start("raise my bar", &json!({ "where": "Settings" })).unwrap();
+    wait();
+    let at = s.agent.ask_log().len() - 1;
+    let acts = s.agent.ask_log()[at]["actions"].clone();
+    assert_eq!(acts.as_array().unwrap().len(), 2, "{acts}");
+    assert!(s.agent.ask_do(at, 0).unwrap().contains("90"));
+    assert_eq!(s.agent.profile().score_threshold, 90);
+    assert!(s.agent.ask_do(at, 0).is_err(), "not twice");
+    s.agent.ask_do(at, 1).unwrap();
+    assert!(s.agent.profile().certifications.iter().any(|c| c.name == "CPMAI"));
+    assert!(s.agent.ask_do(at, 7).is_err());
     // What was said in the tab a job used to have is still there to read.
     s.agent.db().set("chat:test:1", &json!([{ "who": "you", "text": "Salary?" }, { "who": "claude", "text": "Ask for the range." }]).to_string()).unwrap();
     assert_eq!(s.agent.ask_earlier("test:1").len(), 2);

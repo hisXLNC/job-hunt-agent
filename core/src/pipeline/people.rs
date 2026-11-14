@@ -300,12 +300,17 @@ impl Agent {
         };
         let said = self.llm().assist(&asked)?;
         // Offers go with the answer only for a job that's on screen, and only the kinds Job Hunt does.
-        let many = |k: &str| crate::claude::OFFERS_MANY.contains(&k);
+        let many = |k: &str| crate::claude::OFFERS_MANY.contains(&k) || crate::claude::OFFERS_APP.contains(&k);
         let offers: Vec<crate::claude::Offer> = said.actions.iter().cloned()
             .filter(|o| crate::claude::OFFERS.contains(&o.kind.as_str()) && !o.label.trim().is_empty() && (job.is_some() || many(&o.kind)))
             // An offer for several jobs keeps only jobs that exist (an id Claude got wrong is dropped).
-            .map(|mut o| { if many(&o.kind) { o.jobs.retain(|id| self.db().job(id).ok().flatten().is_some()); o.jobs.dedup(); o.jobs.truncate(40); } else { o.jobs.clear(); } o })
-            .filter(|o| match o.kind.as_str() { "add_keywords" => !o.keywords.is_empty(), "revise_cv" | "revise_letter" => o.note.trim().chars().count() >= 3, k if many(k) => !o.jobs.is_empty(), _ => true })
+            .map(|mut o| { if crate::claude::OFFERS_MANY.contains(&o.kind.as_str()) { o.jobs.retain(|id| self.db().job(id).ok().flatten().is_some()); o.jobs.dedup(); o.jobs.truncate(40); } else { o.jobs.clear(); } o })
+            .filter(|o| match o.kind.as_str() { "add_keywords" => !o.keywords.is_empty(), "revise_cv" | "revise_letter" => o.note.trim().chars().count() >= 3,
+                "set_bar" => o.note.trim().parse::<i64>().is_ok_and(|n| (40..=100).contains(&n)),
+                "add_titles" => o.keywords.iter().any(|k| k.trim().len() > 2),
+                "add_certification" | "add_fact" | "skip_company" => o.note.trim().chars().count() >= 2,
+                "auto_tailor" => ["all", "strong", "off"].contains(&o.note.trim()),
+                k if crate::claude::OFFERS_MANY.contains(&k) => !o.jobs.is_empty(), _ => true })
             .take(3).collect();
         let mut list = self.ask_log();
         list.push(json!({ "who": "claude", "text": said.reply, "at": now(), "job": job.as_ref().map(|j| j.id.clone()), "actions": offers }));
@@ -411,6 +416,64 @@ impl Agent {
             o["done"] = json!(true);
         }
         self.db().set("ask:chat", &json!(list).to_string())
+    }
+
+    /// You pressed an offer that changes Job Hunt itself (see claude::OFFERS_APP): done here, from
+    /// the offer as it was kept with the answer, never from what the page sends. Returns what to say.
+    pub fn ask_do(self: &Arc<Self>, at: usize, which: usize) -> R<String> {
+        let list = self.ask_log();
+        let o: crate::claude::Offer = list.get(at).and_then(|m| m["actions"].get(which)).cloned().and_then(|v| serde_json::from_value(v).ok())
+            .ok_or_else(|| Error("That offer is no longer there.".into()))?;
+        if list[at]["actions"][which]["done"] == true {
+            return err("That's done already.");
+        }
+        let note = o.note.trim();
+        let mut p = self.profile();
+        let said = match o.kind.as_str() {
+            "set_bar" => {
+                let n: i64 = note.parse().ok().filter(|n| (40..=100).contains(n)).ok_or_else(|| Error("The bar has to be a number from 40 to 100.".into()))?;
+                let was = p.score_threshold;
+                p.score_threshold = n;
+                self.save_profile(&p)?;
+                format!("Your fit bar is {n} now (it was {was}). It applies to postings scored from here on.")
+            }
+            "add_titles" => {
+                let track = p.tracks.first().map(|t| t.name.clone()).ok_or_else(|| Error("Add a CV first.".into()))?;
+                let titles: Vec<String> = o.keywords.iter().map(|t| t.trim().to_string()).filter(|t| t.len() > 2).collect();
+                let n = self.add_titles(&track, &titles)?;
+                format!("Added {n} job title{} to search for.", if n == 1 { "" } else { "s" })
+            }
+            "add_certification" => {
+                if !p.certifications.iter().any(|c| c.name.trim().eq_ignore_ascii_case(note)) {
+                    p.certifications.push(crate::profile::Certification { name: note.to_string(), ..Default::default() });
+                    self.save_profile(&p)?;
+                }
+                format!("{note} is in your certifications now.")
+            }
+            "add_fact" => {
+                if !p.application_facts.lines().any(|l| l.trim().eq_ignore_ascii_case(note)) {
+                    p.application_facts = format!("{}\n{note}", p.application_facts.trim_end()).trim().to_string();
+                    self.save_profile(&p)?;
+                }
+                "Added to your facts for application forms.".into()
+            }
+            "skip_company" => {
+                if !p.exclude_companies.iter().any(|c| c.trim().eq_ignore_ascii_case(note)) {
+                    p.exclude_companies.push(note.to_string());
+                    self.save_profile(&p)?;
+                }
+                format!("Postings from {note} won't be shown from now on.")
+            }
+            "auto_tailor" => {
+                p.auto_tailor = note == "all";
+                p.auto_tailor_min = if note == "strong" { 85 } else { 0 };
+                self.save_profile(&p)?;
+                match note { "all" => "Every match at or above your bar is tailored by itself now.", "strong" => "Only strong matches (85 or more) are tailored by themselves now; you pick the rest.", _ => "Nothing is tailored until you pick it now." }.into()
+            }
+            _ => return err("Job Hunt doesn't do that from here."),
+        };
+        self.ask_did(at, which)?;
+        Ok(said)
     }
 
     /// What you and Claude said about one job in the tab each job used to have, oldest first.

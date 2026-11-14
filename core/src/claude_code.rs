@@ -408,6 +408,72 @@ fn reset_in<Z: chrono::TimeZone>(when: &str, tz: &Z, now: chrono::DateTime<chron
     Some(at.timestamp())
 }
 
+/// The arguments for a task in your own browser, through the Claude extension for Chrome ("Claude
+/// in Chrome"): Claude Code connects to it with --chrome and gets tools to open tabs, read pages,
+/// click, type and attach files. Only those tools and reading the files given may run; the built-in
+/// tools that could change or reach anything else are refused by name. Separate so tests can check.
+pub fn browser_args() -> Vec<String> {
+    ["--chrome", "-p", "--output-format", "json", "--json-schema", r#"{"type":"object","properties":{"reply":{"type":"string"}},"required":["reply"],"additionalProperties":false}"#,
+        "--disable-slash-commands", "--no-session-persistence", "--max-turns", "150",
+        "--disallowedTools", &CONNECTOR_DENIED.join(","), "--allowedTools", "mcp__claude-in-chrome,Read,ToolSearch"].iter().map(|s| s.to_string()).collect()
+}
+
+/// Have Claude do `task` in your browser. `files` (name, path) are copied beside it, for it to
+/// attach. Returns what Claude said when it finished. Needs the Claude extension installed in the
+/// browser and signed in to the same Claude account as Claude Code (an API key won't do).
+pub fn browse(cc: &ClaudeCode, task: &str, files: &[(String, std::path::PathBuf)], limit: Duration) -> R<String> {
+    let dir = std::env::temp_dir().join("JobHunt").join(format!("browser-{}", crate::util::short_hash(&format!("{:?}{}", Instant::now(), rand::random::<u64>()))));
+    std::fs::create_dir_all(&dir)?;
+    let result = (|| {
+        for (name, path) in files {
+            std::fs::copy(path, dir.join(name))?;
+        }
+        let mut c = command(cc);
+        c.args(browser_args()).current_dir(&dir).env("MCP_TIMEOUT", "60000");
+        let (ok, out, err) = run_capture(c, task, limit)?;
+        let v = parse_output(ok, &out, &err).map_err(|e| Error(browser_help(&e.0)))?;
+        let reply = v["reply"].as_str().unwrap_or("").trim().to_string();
+        if reply.is_empty() {
+            return Err(Error("Claude finished without saying what it did. Look at the form in your browser.".into()));
+        }
+        Ok(reply)
+    })();
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+/// A browser task's error, with what to do about the ones the Claude extension is known to give.
+pub fn browser_help(e: &str) -> String {
+    let low = e.to_lowercase();
+    if low.contains("not connected") || low.contains("no browsers are connected") || low.contains("receiving end does not exist") {
+        format!("Claude couldn't reach its extension in your browser. Check that Chrome (or Edge) is open, the Claude extension is installed and signed in to the same Claude account as Job Hunt, then restart the browser and try again. ({e})")
+    } else if low.contains("took too long") {
+        "Claude didn't finish in time. If it never opened a tab, press Set it up in Settings → Applying → Filling in forms once; otherwise look at the form: it may be waiting for you (a sign-in, a CAPTCHA, or a permission prompt in the extension).".into()
+    } else {
+        e.to_string()
+    }
+}
+
+/// A PowerShell script that starts Claude Code with the browser connection once, in a window of its
+/// own: the first time, Claude Code shows a short introduction to accept and installs what the
+/// browser needs to find it.
+pub fn chrome_setup_script(custom: &str) -> String {
+    let say = |t: &str, colour: &str| format!("Write-Host '{}' -ForegroundColor {colour}\n", t.replace('\'', "''"));
+    let run = match find(custom) {
+        Some(cc) => format!("& {}", std::iter::once(cc.program.to_string_lossy().to_string()).chain(cc.prefix.iter().cloned())
+            .map(|a| format!("'{}'", a.replace('\'', "''"))).collect::<Vec<_>>().join(" ")),
+        None => "& (Join-Path $env:USERPROFILE '.local\\bin\\claude.exe')".to_string(),
+    };
+    let mut s = String::from("$ErrorActionPreference = 'Continue'\n$Host.UI.RawUI.WindowTitle = 'Job Hunt: connecting Claude to your browser'\n");
+    s += &say("Claude Code starts with its browser connection. If it shows an introduction, press Enter to accept it.", "Cyan");
+    s += &say("Then type /chrome and press Enter: it should say Status: Enabled and Extension: Installed.", "Cyan");
+    s += &say("If the extension isn't installed, it offers to install it: say yes, and sign in to it with the same Claude account.", "Cyan");
+    s += &say("When that's done, type /exit and press Enter, restart your browser once, and press Test in Job Hunt.", "Yellow");
+    s += &format!("Write-Host ''\n{run} --chrome\nWrite-Host ''\n");
+    s += &say("Close this window and go back to Job Hunt.", "Green");
+    s
+}
+
 /// One request through Claude Code.
 pub fn ask(cc: &ClaudeCode, ask: &Ask) -> R<Value> {
     // A fresh, empty folder per request: no project settings, hooks or MCP servers apply.
@@ -495,6 +561,19 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn a_browser_task_may_only_use_the_browser_and_read_its_files() {
+        let a = browser_args();
+        let after = |flag: &str| a[a.iter().position(|x| x == flag).unwrap() + 1].clone();
+        assert!(a.contains(&"--chrome".to_string()) && a.contains(&"-p".to_string()));
+        assert_eq!(after("--allowedTools"), "mcp__claude-in-chrome,Read,ToolSearch");
+        for t in ["Bash", "Write", "Edit", "WebFetch"] {
+            assert!(after("--disallowedTools").split(',').any(|x| x == t), "{t} is refused");
+        }
+        assert!(browser_help("Browser extension is not connected").contains("same Claude account"));
+        assert!(chrome_setup_script("").contains("--chrome"));
+    }
+
     #[test]
     fn runs_a_fake_claude_code() {
         use std::os::unix::fs::PermissionsExt;

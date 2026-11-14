@@ -939,7 +939,10 @@ pub struct Offer {
     pub jobs: Vec<String>,
 }
 
-pub const OFFERS: &[&str] = &["add_keywords", "revise_cv", "revise_letter", "tailor", "save_later", "set_aside", "set_aside_many", "save_many", "tailor_many"];
+pub const OFFERS: &[&str] = &["add_keywords", "revise_cv", "revise_letter", "tailor", "save_later", "set_aside", "approve", "mark_applied", "fill_with_claude",
+    "set_aside_many", "save_many", "tailor_many", "search_now", "set_bar", "add_titles", "add_certification", "add_fact", "skip_company", "auto_tailor"];
+/// The offers about Job Hunt itself, not a job: they work from any screen.
+pub const OFFERS_APP: &[&str] = &["search_now", "set_bar", "add_titles", "add_certification", "add_fact", "skip_company", "auto_tailor"];
 /// The offers that name their own jobs, so need none on screen.
 pub const OFFERS_MANY: &[&str] = &["set_aside_many", "save_many", "tailor_many"];
 
@@ -1006,7 +1009,17 @@ Across their jobs: \"What Job Hunt knows\" may list their applications in play, 
 brackets. Use the list to compare them (which are weakest, which to send first, which are about to close). Never show \
 an id in your reply: name jobs by title and company. When they ask to act on several at once, offer set_aside_many, \
 save_many or tailor_many with jobs: the ids of exactly the jobs you named, and say in the reply which jobs those are; \
-these three work from any screen."
+these three work from any screen.\n\n\
+More kinds for the job on screen: approve (approve the tailored application), mark_applied (they already submitted it), \
+fill_with_claude (you, through the Claude extension in their browser, open the job's form and fill it in from their \
+details, CV and letter, stopping before Submit; offer it when they ask you to fill in or apply to this job).\n\n\
+Across the app, from any screen: search_now (start a job search now), set_bar (note: the new fit bar, a number from 40 \
+to 100), add_titles (keywords: job titles to search for as well), add_certification (note: its name, e.g. \"Project \
+Management Professional (PMP)\"), add_fact (note: one line for application forms, as \"Label: value\", e.g. \"Notice \
+period: two weeks\"; only what they told you), skip_company (note: a company never to show again), auto_tailor (note: \
+all, strong or off: which matches are tailored without asking). For anything else in Job Hunt, say where it is and \
+link the screen: also [Looking for](#search/what), [About me](#cvs/details), [Career](#cvs/career), \
+[Accounts](#settings/accounts), [Job search settings](#settings/jobs), [Applying settings](#settings/applying)."
     )
 }
 

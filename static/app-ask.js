@@ -120,6 +120,8 @@ function askOpen(quote) {
   setTimeout(() => $('#askMsg')?.focus(), 30);
 }
 function askClose() {
+  // The keys work again on the page behind (they don't while the typing box, now hidden, holds them).
+  if ($('#askPanel')?.contains(document.activeElement)) document.activeElement.blur();
   askSt.open = false;
   askKeep('ask.open', '');
   $('#askPanel').hidden = true;
@@ -170,15 +172,34 @@ const ASK_DOES = {
   tailor: () => [['tailor', {}], 'Tailoring your CV and a cover letter for it.'],
   save_later: () => [['status', { status: 'saved', note: 'saved from Ask Claude' }], 'Saved for later.'],
   set_aside: () => [['status', { status: 'dismissed', note: 'set aside from Ask Claude' }], 'Set aside as Not interested.'],
+  approve: () => [['status', { status: 'approved', note: 'approved from Ask Claude' }], 'Approved. It\'s under Submit in your Queue.'],
+  mark_applied: () => [['status', { status: 'applied', note: 'marked applied from Ask Claude' }], 'Marked as applied.'],
+  fill_with_claude: () => [['claude-fill', {}], 'Claude is opening the form in your browser and filling it in. You get a notice when it\'s done; it stops before Submit.'],
   // The same for several jobs at once: the jobs are the offer's own.
   set_aside_many: o => [['status', { status: 'dismissed', note: 'set aside from Ask Claude', learn: false }], `Set aside ${o.jobs.length} job${o.jobs.length === 1 ? '' : 's'} as Not interested.`],
   save_many: o => [['status', { status: 'saved', note: 'saved from Ask Claude' }], `Saved ${o.jobs.length} job${o.jobs.length === 1 ? '' : 's'} for later.`],
   tailor_many: o => [['tailor', {}], `Tailoring ${o.jobs.length} application${o.jobs.length === 1 ? '' : 's'}.`],
 };
+/** Offers about Job Hunt itself: done by Job Hunt from the offer it kept, whatever screen you're on. */
+const ASK_APP = ['set_bar', 'add_titles', 'add_certification', 'add_fact', 'skip_company', 'auto_tailor'];
+const askKnows = k => !!ASK_DOES[k] || ASK_APP.includes(k) || k === 'search_now';
 const ASK_MANY = { set_aside_many: n => `Set ${n} job${n === 1 ? '' : 's'} aside as Not interested?`, save_many: null, tailor_many: n => `Tailor a CV and cover letter for ${n} job${n === 1 ? '' : 's'}? This uses your Claude plan.` };
 /** You pressed one of Claude's offers: Job Hunt does it, to the job the answer was about. */
 async function askDo(at, which, btn) {
   const m = askSt.chat[at], o = m?.actions?.[which];
+  if (o && !o.done && (ASK_APP.includes(o.kind) || o.kind === 'search_now')) {
+    btn.disabled = true;
+    try {
+      let said = 'Searching for jobs. Matches come to your Queue.';
+      if (o.kind === 'search_now') { await api('/api/run/search', { method: 'POST' }); askTake(await api('/api/ask', { method: 'POST', body: { did: [at, which] } })); }
+      else { const r = await api('/api/ask', { method: 'POST', body: { do: [at, which] } }); said = r.said; askTake(r); }
+      toast(said);
+      settingsCache = null;
+      await refreshOverview();
+      setTimeout(route, 400);
+    } catch (e) { btn.disabled = false; toast(e.message, true); }
+    return;
+  }
   const many = o && o.kind in ASK_MANY;
   const jobs = many ? (o.jobs || []) : [m?.job].filter(Boolean);
   if (!o || o.done || !jobs.length || !ASK_DOES[o.kind]) return;
@@ -216,7 +237,7 @@ function askDraw(toEnd) {
       last = m.about || last;
       return `${on}<div class="ask-msg me">${m.quote ? `<div class="ask-q">“${esc(m.quote.slice(0, 160))}${m.quote.length > 160 ? '…' : ''}”</div>` : ''}${esc(m.text)}</div>`;
     }
-    const offers = (m.actions || []).filter(o => ASK_DOES[o.kind]).map((o, k) => o.done
+    const offers = (m.actions || []).filter(o => askKnows(o.kind)).map((o, k) => o.done
       ? `<span class="ask-done">✓ ${esc(o.label)}</span>`
       : `<button class="btn sm ask-act" type="button" data-at="${i}" data-ask-act="${(m.actions || []).indexOf(o)}" title="Job Hunt does this when you press it">${esc(o.label)}</button>`).join('');
     return `<div class="ask-msg them">${mdHtml(m.text)}${offers ? `<div class="ask-acts">${offers}</div>` : ''}<button class="ask-copy" type="button" data-ask-copy="${i}" title="Copy this answer">Copy</button></div>`;
@@ -225,7 +246,7 @@ function askDraw(toEnd) {
   if (askSt.earlier.length) rows.unshift(`<details class="ask-earlier"><summary>Earlier conversation about this job (${askSt.earlier.length} message${askSt.earlier.length === 1 ? '' : 's'})</summary>
     ${askSt.earlier.map(m => `<div class="ask-msg ${m.who === 'you' ? 'me' : 'them'}">${m.who === 'you' ? esc(m.text) : mdHtml(m.text)}</div>`).join('')}</details>`);
   if (!askSt.chat.length && !askSt.busy && !askSt.earlier.length) rows.push(`<div class="ask-hello"><span class="ask-mark big">${SPARK}</span><b>Ask about anything you see</b>
-    <p class="muted small">Claude can see the screen you're on, your CV and what Job Hunt knows about each job. Ask what a word means, why a role scored as it did, or for a draft answer. On a job it can also offer to make a change, like a shorter cover letter: nothing happens until you press its button. Select words on a page to ask about just those.</p></div>`);
+    <p class="muted small">Claude can see the screen you're on, your CV and what Job Hunt knows about each job. Ask what a word means, why a role scored as it did, or for a draft answer. It can also offer to do things for you, here or anywhere in Job Hunt: change a letter, set jobs aside, start a search, change a setting, or fill in a form in your browser. Nothing happens until you press its button. Select words on a page to ask about just those.</p></div>`);
   if (askSt.busy) rows.push('<div class="ask-msg them wait"><span class="spin" data-kind="chat"></span>Thinking…</div>');
   if (askSt.error) rows.push(`<div class="ask-err small"><b>Claude couldn't answer.</b> ${esc(askSt.error)} Your message is back in the box to send again.</div>`);
   log.innerHTML = rows.join('');

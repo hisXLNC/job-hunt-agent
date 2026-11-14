@@ -213,7 +213,38 @@
       b.disabled = true;
       const boxes = diag.fields || [];
       const left = boxes.filter(f => !f.filled && (f.want != null && f.want !== '' || f.required)).map(f => ({ label: String(f.label || '').replace(/^\*\s*/, ''), want: f.want == null ? '' : String(f.want) })).slice(0, 60);
-      const r = await rpc('/ext/brief', { url: location.href, title: document.title, left, done: boxes.filter(f => f.filled).length, missed: [...skillMiss, ...skillUnsure].slice(0, 30) });
+      const about = { url: location.href, title: document.title, left, done: boxes.filter(f => f.filled).length, missed: [...skillMiss, ...skillUnsure].slice(0, 30) };
+      // First, straight to Claude: Job Hunt starts Claude with its browser connection, and Claude (through
+      // its own extension) opens this form in a new tab and fills it in. The brief on the clipboard is
+      // the way when that isn't set up.
+      let direct = '';
+      if (b === buttons.hand) {
+        status('Asking Claude to take over…');
+        const h = await rpc('/ext/handover', about);
+        if (h.ok) {
+          b.disabled = false; b.hidden = true;
+          trace('handed to Claude directly');
+          report({ handed: true });
+          flush();
+          const began = Date.now();
+          status('Claude is taking over: it opens this form in a new tab and fills it in there. Watch that tab; if its extension asks for permission on this site, allow it. It stops before Submit.');
+          for (;;) {
+            await wait(4000);
+            const st = await rpc('/ext/handover/state', { url: location.href, title: document.title });
+            if (st.ok && st.v && st.v.running === false) {
+              trace('Claude finished', { error: !!st.v.error });
+              flush();
+              status(st.v.error ? `Claude couldn't finish: ${String(st.v.error).slice(0, 400)}` : `Claude: ${String(st.v.said || 'done.').slice(0, 500)} Read the form over in its tab, then press Submit yourself.`);
+              if (st.v.error) { b.hidden = false; buttons.brief.hidden = false; }
+              return;
+            }
+            if (Date.now() - began > 17 * 60000) { status('Claude is taking a long time. Look at its tab: it may be waiting for you.'); return; }
+          }
+        }
+        direct = h.data && h.data.choose ? '' : String(h.error || '').slice(0, 220);
+        trace('direct hand-over not started', { why: direct });
+      }
+      const r = await rpc('/ext/brief', about);
       b.disabled = false;
       if (!r.ok) { status(r.data && r.data.choose ? 'Choose which application this is first (press Fill in this form), then hand it to Claude.' : `Couldn't write the brief for Claude: ${r.error}`); return; }
       try { await navigator.clipboard.writeText(r.v.text); }
@@ -222,7 +253,7 @@
       report({ handed: true });
       flush();
       const mac = /mac/i.test(navigator.platform || '');
-      status(`Copied for Claude${left.length ? ` (${left.length} ${left.length === 1 ? 'box' : 'boxes'} left to fill)` : ''}. Now: 1. Open the Claude extension on this page (its icon in the toolbar, or ${mac ? 'Cmd' : 'Ctrl'}+E). 2. Paste (${mac ? 'Cmd' : 'Ctrl'}+V) and press Enter. Claude fills in what's left and stops before Submit.`);
+      status(`${direct ? `Couldn't start Claude directly (${direct}) ` : ''}Copied for Claude${left.length ? ` (${left.length} ${left.length === 1 ? 'box' : 'boxes'} left to fill)` : ''}. Now: 1. Open the Claude extension on this page (its icon in the toolbar, or ${mac ? 'Cmd' : 'Ctrl'}+E). 2. Paste (${mac ? 'Cmd' : 'Ctrl'}+V) and press Enter. Claude fills in what's left and stops before Submit.`);
     };
     buttons.brief.onclick = () => handOver(buttons.brief);
     buttons.hand.onclick = () => handOver(buttons.hand);

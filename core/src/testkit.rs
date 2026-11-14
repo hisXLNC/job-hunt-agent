@@ -126,6 +126,10 @@ impl Llm for FakeLlm {
         let actions = if a.message.contains("work in") {
             vec![crate::claude::Offer { kind: "add_keywords".into(), label: "Work in Snowflake".into(), keywords: vec!["Snowflake".into()], ..Default::default() },
                 crate::claude::Offer { kind: "delete_everything".into(), label: "No".into(), ..Default::default() }]
+        } else if a.message.contains("raise my bar") {
+            vec![crate::claude::Offer { kind: "set_bar".into(), label: "Set the bar to 90".into(), note: "90".into(), ..Default::default() },
+                crate::claude::Offer { kind: "set_bar".into(), label: "Set the bar to 500".into(), note: "500".into(), ..Default::default() },
+                crate::claude::Offer { kind: "add_certification".into(), label: "Add CPMAI".into(), note: "CPMAI".into(), ..Default::default() }]
         } else if a.message.contains("set aside many") {
             vec![crate::claude::Offer { kind: "set_aside_many".into(), label: "Set aside the weakest".into(), jobs: vec!["test:1".into(), "test:nope".into()], ..Default::default() }]
         } else { vec![] };

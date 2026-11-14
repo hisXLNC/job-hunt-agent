@@ -1262,3 +1262,90 @@ pub fn keep_answers(agent: &Agent, given: &[Value]) -> R<usize> {
     save_bank(agent, &list)?;
     Ok(n)
 }
+
+// --- Claude in your browser: the Claude extension fills in what Job Hunt's own filler can't --------
+
+/// Where a hand-over to Claude stands for a job: {running, at, said, error}; empty when never asked.
+pub fn claude_fill_state(agent: &Agent, job_id: &str) -> Value {
+    let mut v: Value = serde_json::from_str(&agent.secret(&format!("claudefill:{job_id}"))).unwrap_or(json!({}));
+    if v.get("at").is_some() {
+        v["running"] = json!(agent.is_running("claude-fill") && v["running"] == true);
+    }
+    v
+}
+
+/// What Claude is told when it takes a form over: the page to open, the brief (see `brief`), the
+/// files beside it to attach, and to stop before Submit.
+pub fn claude_fill_task(brief: &str, url: &str, files: &[String]) -> String {
+    let attach = if files.is_empty() {
+        "Where the form asks for my resume or cover letter as a file, leave it and tell me: I will attach them myself.".to_string()
+    } else {
+        format!("My files are in the current folder: {}. Where the form asks for a resume/CV or a cover letter as a file, attach the matching one.", files.iter().map(|f| format!("\"{f}\"")).collect::<Vec<_>>().join(" and "))
+    };
+    let brief = brief.replace("- Where the form asks for my resume or cover letter as a file, tell me and I will attach them myself.\n", "");
+    format!("Do this in my browser with the Claude in Chrome browser tools. Open a new tab at {url} and fill in the job application form there. If the page shows the posting first, use its Apply button to reach the form.\n\n\
+{attach}\n\
+If a sign-in page, a CAPTCHA or a question only I can answer stops you, stop there and say so. Never press the final Submit or Send application button, and never tick a box that agrees to terms or declares something for me.\n\
+When you finish, reply with a short plain summary: what you filled in, what is left for me, and that nothing was submitted. If the browser tools are not available to you, reply with exactly what went wrong.\n\n\
+{brief}")
+}
+
+/// Hand a job's form to Claude in your browser, in the background. `page` is what the form filler
+/// saw, when it's the one handing over (see `brief`). One at a time.
+pub fn claude_fill_start(agent: &std::sync::Arc<Agent>, job_id: &str, url: &str, page: &Value) -> R<()> {
+    let cc = crate::claude_code::find(&agent.secret("claude.path")).ok_or_else(|| Error("Claude Code isn't installed on this PC. Set it up in Settings → Accounts first.".into()))?;
+    if agent.is_running("claude-fill") {
+        return Err(Error("Claude is already filling in a form in your browser. Wait for it to finish.".into()));
+    }
+    if !url.starts_with("http") {
+        return Err(Error("This job has no page to open.".into()));
+    }
+    let text = brief(agent, job_id, page)?;
+    // Its files, as PDFs, under the names an employer sees.
+    let job = if job_id == PROFILE { None } else { agent.db().job(job_id)? };
+    let who = agent.profile().name.trim().to_string();
+    let stem = |what: &str| if who.is_empty() { what.to_string() } else { format!("{who} - {what}") };
+    let mut files: Vec<(String, PathBuf)> = vec![];
+    if let Some(j) = &job {
+        for (path, what) in [(j.cv_path.as_deref(), "CV"), (j.letter_path.as_deref(), "Cover letter")] {
+            if let Some(p) = path.map(|p| as_pdf(Path::new(p))).filter(|p| p.is_file()) {
+                let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("pdf").to_lowercase();
+                files.push((format!("{}.{ext}", stem(what)), p));
+            }
+        }
+    }
+    let task = claude_fill_task(&text, url, &files.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>());
+    let key = format!("claudefill:{job_id}");
+    agent.db().set(&key, &json!({ "running": true, "at": now() }).to_string())?;
+    let (a, id, title) = (agent.clone(), job_id.to_string(), job.as_ref().map(|j| format!("{} at {}", j.title, j.company)).unwrap_or_else(|| "your profile".into()));
+    std::thread::spawn(move || {
+        let Ok(_g) = a.claim("claude-fill") else { return };
+        let r = crate::claude_code::browse(&cc, &task, &files, std::time::Duration::from_secs(15 * 60));
+        let at = a.secret(&key).parse::<Value>().ok().and_then(|v| v["at"].as_str().map(String::from)).unwrap_or_default();
+        let state = match &r {
+            Ok(said) => json!({ "running": false, "at": at, "done": now(), "said": said }),
+            Err(e) => json!({ "running": false, "at": at, "done": now(), "error": e.0 }),
+        };
+        let _ = a.db().set(&key, &state.to_string());
+        let _ = a.db().log((id != PROFILE).then_some(id.as_str()), if r.is_ok() { "claude-fill" } else { "claude-fill:error" }, &match &r { Ok(s) => s.chars().take(600).collect::<String>(), Err(e) => e.0.clone() });
+        match r {
+            Ok(_) => a.note("Claude filled in the form", &format!("{title}: read it over in your browser, then press Submit yourself.")),
+            Err(e) => a.note("Claude couldn't fill in the form", &format!("{title}: {}", e.0)),
+        }
+    });
+    Ok(())
+}
+
+/// Is Claude reachable in your browser? Asked the only way there is: a small task. Returns what Claude said.
+pub fn claude_chrome_test(agent: &Agent) -> R<String> {
+    let cc = crate::claude_code::find(&agent.secret("claude.path")).ok_or_else(|| Error("Claude Code isn't installed on this PC. Set it up in Settings → Accounts first.".into()))?;
+    let _g = agent.claim("chrome-test")?;
+    let r = crate::claude_code::browse(&cc, "Use the Claude in Chrome browser tools: open a new tab at https://example.com and tell me the page's main heading in one short sentence. If no browser tool is available to you, reply with exactly: NO BROWSER TOOLS, then what you see instead.", &[], std::time::Duration::from_secs(150));
+    let state = match &r {
+        Ok(s) if s.to_uppercase().contains("NO BROWSER TOOLS") => json!({ "ok": false, "at": now(), "said": "Claude Code started without its browser tools. Press Set it up and follow the window; the Claude extension must be installed and signed in to the same Claude account, and Claude Code signed in with your Claude plan (not an API key)." }),
+        Ok(s) => json!({ "ok": true, "at": now(), "said": s }),
+        Err(e) => json!({ "ok": false, "at": now(), "said": e.0 }),
+    };
+    agent.db().set("chrome.test", &state.to_string())?;
+    r
+}

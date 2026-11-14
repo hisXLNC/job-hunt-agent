@@ -355,6 +355,12 @@ async function act(el) {
   }
   // A mock interview with the assistant: Claude asks, you answer, it says how the answer landed.
   if (a === 'practise') return askSend(PRACTISE);
+  if (a === 'chromeTest') return busy(async () => { await api('/api/claude-chrome/test', { method: 'POST' }); setTimeout(renderChrome, 500); }, 'Testing: watch your browser.');
+  if (a === 'chromeSetup') return busy(async () => { await api('/api/claude-chrome/setup', { method: 'POST' }); }, 'A window opened: follow its steps, then press Test the connection.');
+  if (a === 'claudeFill') {
+    if (!await ask('Have Claude open this form in your browser and fill it in? It uses your Claude plan, takes a few minutes, and stops before Submit.', 'Have Claude fill it in')) return;
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/claude-fill`, { method: 'POST' }); }, 'Claude is opening the form in your browser. You get a notice when it\'s done.');
+  }
   if (a === 'precheckSave') {
     const box = el.closest('[data-precheck]');
     const answers = [...box.querySelectorAll('[data-pre-q]')].map(i => ({ q: i.dataset.preQ, a: i.value.trim() })).filter(x => x.a);

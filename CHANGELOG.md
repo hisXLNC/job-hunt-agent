@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.70.0] - 2026-11-14
+
+Claude fills forms in your browser, and Ask Claude works across the app.
+
+### Changes
+
+- Job Hunt can now connect to the Claude extension in your browser, through Claude Code. When Job Hunt's own filler can't finish a form, Let Claude finish it hands it straight to Claude: it opens the form in a new tab, fills it in from your details, CV and cover letter, attaches your files, and stops before Submit. Approved applications in the Queue have Have Claude fill it in. Set it up and test it in Settings, Applying, Filling in forms.
+- Ask Claude can act across the whole app when you press its button: start a search, change your fit bar, add job titles, add a certification or a fact for forms, stop showing a company, choose what is tailored by itself, approve an application, mark one applied, or fill in a job's form in your browser.
+- After closing Ask Claude with Esc, the page's keyboard shortcuts work again.
+
 ## [2.69.0] - 2026-11-14
 
 Ask Claude across your jobs, what to fix first, and a check before each form.
@@ -2074,6 +2084,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.70.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.70.0
 [2.69.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.69.0
 [2.68.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.68.0
 [2.67.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.2

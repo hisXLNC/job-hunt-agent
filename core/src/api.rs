@@ -714,6 +714,7 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "offer": agent.offer(id), "advising": agent.is_running(&format!("offer:{id}")),
                     "know": crate::network::at_company(&crate::network::list(agent), &job.company),
                     "links": crate::links::for_job(agent, id),
+                    "claude_fill": crate::fill::claude_fill_state(agent, id),
                     "contacts": agent.contacts(id), "writing_to": agent.is_running(&format!("contact:{id}")),
                     "playbook": agent.playbook(&job),
                     "ats": job.cv_path.as_deref().and_then(|p| crate::cv::open(Path::new(p)).ok()).map(|d| crate::cv::ats_check(&d)),
@@ -765,6 +766,10 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             // Postings that mention a certification you listed, to score again now that Job Hunt knows.
             ["api", "certs", "rescore"] => return Ok(Resp::json(&json!({ "postings": agent.cert_postings().len(), "running": agent.is_running("rescore") }))),
+            // Claude in your browser: is Claude Code here, is a test running, and how the last one went.
+            ["api", "claude-chrome"] => return Ok(Resp::json(&json!({
+                "installed": crate::claude_code::find(&agent.secret("claude.path")).is_some(), "testing": agent.is_running("chrome-test"),
+                "filling": agent.is_running("claude-fill"), "last": agent.secret("chrome.test").parse::<Value>().unwrap_or(Value::Null), "console": host.can_console() }))),
             // What's costing the most applications right now.
             ["api", "fixes"] => return Ok(Resp::json(&json!({ "fixes": agent.fixes() }))),
             // Before a job's form is opened: what it will ask for that Job Hunt can't answer.
@@ -833,6 +838,13 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         agent.find_company_apply_later(id);
                     }
                     Ok(Resp::json(&json!({ "outcome": outcome })))
+                }
+                // Have Claude fill this job's form in your browser.
+                "claude-fill" => {
+                    let job = agent.db().job(id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+                    let url = job.apply_url.clone().filter(|u| !u.is_empty()).unwrap_or(job.url.clone());
+                    crate::fill::claude_fill_start(agent, id, &url, &Value::Null)?;
+                    Ok(Resp::json(&json!({ "started": true })))
                 }
                 "status" => {
                     let status = s(&b, "status");
@@ -1347,6 +1359,21 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.connect();
             ok()
         }
+        ["api", "claude-chrome", "test"] => {
+            if agent.is_running("chrome-test") {
+                return Err(Error("The test is still running.".into()));
+            }
+            let a = agent.clone();
+            std::thread::spawn(move || { let _ = crate::fill::claude_chrome_test(&a); });
+            Ok(Resp::json(&json!({ "started": true })))
+        }
+        ["api", "claude-chrome", "setup"] => {
+            if req.remote {
+                return Err(Error("Do this on the PC itself, in the Job Hunt app.".into()));
+            }
+            host.open_console(&crate::claude_code::chrome_setup_script(&agent.secret("claude.path")))?;
+            ok()
+        }
         // Details given before opening a form: kept with the saved answers.
         ["api", "precheck"] => {
             let n = crate::fill::keep_answers(agent, b["answers"].as_array().map(|a| a.as_slice()).unwrap_or(&[]))?;
@@ -1370,6 +1397,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         ["api", "ask"] => {
             if b["clear"].as_bool() == Some(true) {
                 agent.ask_clear()?;
+            } else if let (Some(at), Some(which)) = (b["do"][0].as_u64(), b["do"][1].as_u64()) {
+                let said = agent.ask_do(at as usize, which as usize)?;
+                let mut st = agent.ask_state();
+                st["said"] = json!(said);
+                return Ok(Resp::json(&st));
             } else if let (Some(at), Some(which)) = (b["did"][0].as_u64(), b["did"][1].as_u64()) {
                 agent.ask_did(at as usize, which as usize)?;
             } else {

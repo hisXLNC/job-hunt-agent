@@ -325,6 +325,10 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
         // A brief for Claude in Chrome (or any assistant that works the page itself), for a form Job
         // Hunt's own filler can't read: copied from the panel, pasted to it.
         ("POST", "/ext/brief") => crate::fill::job_for_page(agent, url, title).and_then(|j| crate::fill::brief(agent, &j.id, &b)).map(|t| json!({ "text": t })),
+        // The panel hands the form to Claude in your browser (the Claude extension, through Claude
+        // Code), and asks after how it's going.
+        ("POST", "/ext/handover") => crate::fill::job_for_page(agent, url, title).and_then(|j| crate::fill::claude_fill_start(agent, &j.id, url, &b).map(|_| json!({ "started": true, "job": j.id }))),
+        ("POST", "/ext/handover/state") => crate::fill::job_for_page(agent, url, title).map(|j| crate::fill::claude_fill_state(agent, &j.id)),
         // How a fill went on this site, for the tally in Settings (no answers in it, only counts and labels).
         ("POST", "/ext/report") => crate::fill::site_report(agent, url, &b).map(|_| json!({ "ok": true })),
         ("POST", "/ext/learn") => crate::fill::learn(agent, &fields).map(|n| json!({ "kept": n })),
