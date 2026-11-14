@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.80.1",
+    "date": "2026-11-14",
+    "title": "Finding the real posting",
+    "changes": [
+      "2.80.0 was not published (a check failed on the build machine); this is the same update: job-board links followed to the company's page, a visible status for Find it on the company's site, and Search the web for it."
+    ]
+  },
+  {
     "version": "2.80.0",
     "date": "2026-11-14",
     "title": "Finding the real posting",

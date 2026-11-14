@@ -801,3 +801,12 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   JSON has `finding`; the page shows "Looking…" and polls; a miss is logged as an `apply-link`
   event ("not found: …") and shown under the actions. New button "Search the web for it"
   (Google: "title" company careers) whenever a job has no company link.
+
+## 2.80.1
+
+- 2.80.0 failed on GitHub (never published): `find_company_apply`'s new guard asked
+  `claude_ready()`, which is false on GitHub's machine (no Claude Code) and true on the dev box, so
+  two tests passed here and failed there. Under `cfg!(test)` the guard is skipped and no job-board
+  link is followed (tests never go to the network). Before pushing anything that touches
+  `claude_ready()` / `engine_name()`, run the core tests with Claude off the PATH:
+  `env PATH="$(dirname $(which cargo)):/usr/bin:/bin" cargo test --lib` in `core`.

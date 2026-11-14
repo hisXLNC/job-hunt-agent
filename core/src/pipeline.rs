@@ -2840,10 +2840,13 @@ replies and interviews, and a little lower for kinds that got none from several 
         }
         // First where the job board's own link leads (Adzuna's often goes on to the employer's page,
         // sometimes to another job board that doesn't work): no Claude needed. Then Claude's search.
-        let followed = Some(job.url.as_str()).filter(|u| crate::sources::is_job_board(u)).and_then(crate::sources::follow_to_company);
+        // (The tests never go out to a job board, and ask their stand-in for Claude whatever is
+        // installed on the machine: on GitHub's there's no Claude Code, and two tests failed there.)
+        let followed = Some(job.url.as_str()).filter(|u| !cfg!(test) && crate::sources::is_job_board(u)).and_then(crate::sources::follow_to_company);
+        let can_ask = cfg!(test) || (self.engine_name() == "code" && self.claude_ready());
         let found = match followed {
             Some(u) => Some(u),
-            None if self.engine_name() == "code" && self.claude_ready() => self.llm().company_apply(&job)?,
+            None if can_ask => self.llm().company_apply(&job)?,
             None => return err("The posting's own link doesn't lead to the company's site, and looking for it there needs your Claude subscription (Settings, Accounts, Claude). Search for it on the web with the button beside this one."),
         };
         match &found {
