@@ -53,7 +53,7 @@ function buildExtension(dir) {
 const LANGS = ['English', 'Arabic', 'French'];
 // The variants run side by side, each in its own browser: what belongs to one is kept under its name.
 const fieldsOf = {};
-const briefs = [];
+const briefs = [], reports = [];
 function answers(fields, name) {
   const values = {}, files = {};
   fieldsOf[name] = fields || [];
@@ -101,6 +101,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
         if (req.url === '/ext/ping') return json(res, { ok: true, version: VERSION });
         if (req.url === '/ext/leads') { leads = JSON.parse(body || '{}'); const hiring = leads.posts.filter(p => /hiring/i.test(p.text)).length; return json(res, { seen: leads.posts.length, hiring, added: hiring, note: '' }); }
         if (req.url === '/ext/pick') { picked = JSON.parse(body || '{}').job_id || ''; return json(res, { ok: true }); }
+        if (req.url === '/ext/report') { reports.push(JSON.parse(body || '{}')); return json(res, { ok: true }); }
         if (req.url === '/ext/brief') { briefs.push(JSON.parse(body || '{}')); return json(res, { text: 'Please fill in the application form on this page for me.' }); }
         if (req.url === '/ext/log') { logs.push(JSON.parse(body || '{}')); return json(res, { kept: 1 }); }
         // The answers: in one request (/ext/fill, the phone), or for a ticket that is then asked
@@ -370,6 +371,10 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (!got.open) problems.push('the Add beside Supporting documents was not pressed');
     if (got.file !== 'Sam Lee - Cover letter.pdf') problems.push(`the box it opened holds "${got.file || 'nothing'}", not the cover letter`);
     if (got.email !== 'sam@example.com') problems.push(`the rest of the page wasn't filled (email "${got.email}")`);
+    // How it went is reported for the site's tally: counts, no answers.
+    await page.waitForTimeout(600);
+    const rep = reports.find(r => /\/letter\/review/.test(r.url || '') && !r.handed && !r.failed);
+    if (!rep || !(rep.filled > 0) || JSON.stringify(rep).includes('sam@example.com')) problems.push(`no tally of this fill was sent, or it holds an answer (${JSON.stringify(rep || null).slice(0, 160)})`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'letter'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  ${got.file || 'no file'}`);
     if (problems.length) { failed.push('letter'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();

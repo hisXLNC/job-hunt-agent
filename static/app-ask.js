@@ -5,7 +5,7 @@
 
 const SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1-5.1-1.9 5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>';
 const PRACTISE = "Let's practise my interview for this role. You play the interviewer. Ask one question at a time, the kind this company would really ask for this role, and wait for my answer. After each answer, say in two or three plain sentences what worked and what to change, then ask the next question. Start with the first question now.";
-const askSt = { open: false, chat: [], busy: false, error: '', quote: '', timer: 0, sent: 0, loaded: false };
+const askSt = { open: false, chat: [], busy: false, error: '', quote: '', timer: 0, sent: 0, loaded: false, earlier: [], earlierFor: '' };
 const askKeep = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } };
 
 /** The screen you're on, as the assistant is told: its name, the job on it, and its text. */
@@ -72,6 +72,8 @@ function askBuild() {
   $('#askQuote').addEventListener('click', e => { if (e.target.closest('button')) { askSt.quote = ''; askDrawFoot(); } });
   // A link in an answer goes to that screen; the conversation stays open beside it.
   $('#askLog').addEventListener('click', async e => {
+    const act = e.target.closest('[data-ask-act]');
+    if (act) return askDo(+act.dataset.at, +act.dataset.askAct, act);
     const c = e.target.closest('[data-ask-copy]');
     if (!c) return;
     const text = askSt.chat[+c.dataset.askCopy]?.text || '';
@@ -100,7 +102,7 @@ function askBuild() {
   document.addEventListener('scroll', () => { sel.hidden = true; }, true);
   sel.addEventListener('mousedown', e => e.preventDefault()); // keep the selection until the click lands
   sel.addEventListener('click', () => { const p = picked(); sel.hidden = true; askOpen(p?.text); });
-  window.addEventListener('hashchange', () => setTimeout(askDrawFoot, 400));
+  window.addEventListener('hashchange', () => setTimeout(() => { askDrawFoot(); if (askSt.open && askPage().job !== askSt.earlierFor) askLoad(); }, 400));
 }
 
 /** Open the assistant; with `quote`, about those words. */
@@ -129,6 +131,7 @@ function askClose() {
 function askTake(st) {
   const was = askSt.chat.length, wasBusy = askSt.busy;
   Object.assign(askSt, { chat: st.chat || [], busy: !!st.busy, error: st.error || '', loaded: true });
+  if (st.earlier) askSt.earlier = st.earlier;
   if (st.draft && !$('#askMsg').value) { $('#askMsg').value = st.draft; $('#askMsg').dispatchEvent(new Event('input')); }
   askDraw(was !== askSt.chat.length || wasBusy !== askSt.busy);
   clearTimeout(askSt.timer);
@@ -137,7 +140,10 @@ function askTake(st) {
   $('#askFab')?.classList.toggle('new', !askSt.open && wasBusy && !askSt.busy && !askSt.error);
 }
 async function askLoad() {
-  try { askTake(await api('/api/ask')); } catch (e) { clearTimeout(askSt.timer); if (askSt.busy) askSt.timer = setTimeout(askLoad, 3000); }
+  // With the job on screen, so what was said in the tab it used to have comes along.
+  const job = askPage().job;
+  if (job !== askSt.earlierFor) { askSt.earlierFor = job; askSt.earlier = []; }
+  try { askTake(await api(`/api/ask${job ? `?job=${encodeURIComponent(job)}` : ''}`)); } catch (e) { clearTimeout(askSt.timer); if (askSt.busy) askSt.timer = setTimeout(askLoad, 3000); }
 }
 async function askSend(text) {
   text = String(text || '').trim();
@@ -154,6 +160,31 @@ async function askSend(text) {
   askDraw(true);
   try { askTake(await api('/api/ask', { method: 'POST', body: { message: text, page } })); }
   catch (e) { askSt.chat.pop(); askSt.busy = false; askSt.error = e.message; box.value = text; askDraw(true); }
+}
+
+/** What each of Claude's offers does when its button is pressed: [the request, what to say after]. */
+const ASK_DOES = {
+  add_keywords: o => [['revise', { what: 'cv', note: `I do have real experience with each of these, though my CV doesn't say so: ${o.keywords.join(', ')}. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.` }], 'Working them into your CV. The job updates when it\'s done.'],
+  revise_cv: o => [['revise', { what: 'cv', note: o.note }], 'Changing your CV. The job updates when it\'s done.'],
+  revise_letter: o => [['revise', { what: 'letter', note: o.note }], 'Changing the cover letter. The job updates when it\'s done.'],
+  tailor: () => [['tailor', {}], 'Tailoring your CV and a cover letter for it.'],
+  save_later: () => [['status', { status: 'saved', note: 'saved from Ask Claude' }], 'Saved for later.'],
+  set_aside: () => [['status', { status: 'dismissed', note: 'set aside from Ask Claude' }], 'Set aside as Not interested.'],
+};
+/** You pressed one of Claude's offers: Job Hunt does it, to the job the answer was about. */
+async function askDo(at, which, btn) {
+  const m = askSt.chat[at], o = m?.actions?.[which];
+  if (!o || o.done || !m.job || !ASK_DOES[o.kind]) return;
+  if (o.kind === 'set_aside' && !await ask('Set this job aside as Not interested?', 'Set it aside')) return;
+  const [[path, body], said] = ASK_DOES[o.kind](o);
+  btn.disabled = true;
+  try {
+    await api(`/api/jobs/${encodeURIComponent(m.job)}/${path}`, { method: 'POST', body });
+    askTake(await api('/api/ask', { method: 'POST', body: { did: [at, which] } }));
+    toast(said);
+    await refreshOverview();
+    setTimeout(route, 400);
+  } catch (e) { btn.disabled = false; toast(e.message, true); }
 }
 
 function askDrawFoot() {
@@ -177,10 +208,16 @@ function askDraw(toEnd) {
       last = m.about || last;
       return `${on}<div class="ask-msg me">${m.quote ? `<div class="ask-q">“${esc(m.quote.slice(0, 160))}${m.quote.length > 160 ? '…' : ''}”</div>` : ''}${esc(m.text)}</div>`;
     }
-    return `<div class="ask-msg them">${mdHtml(m.text)}<button class="ask-copy" type="button" data-ask-copy="${i}" title="Copy this answer">Copy</button></div>`;
+    const offers = (m.actions || []).filter(o => ASK_DOES[o.kind]).map((o, k) => o.done
+      ? `<span class="ask-done">✓ ${esc(o.label)}</span>`
+      : `<button class="btn sm ask-act" type="button" data-at="${i}" data-ask-act="${(m.actions || []).indexOf(o)}" title="Job Hunt does this when you press it">${esc(o.label)}</button>`).join('');
+    return `<div class="ask-msg them">${mdHtml(m.text)}${offers ? `<div class="ask-acts">${offers}</div>` : ''}<button class="ask-copy" type="button" data-ask-copy="${i}" title="Copy this answer">Copy</button></div>`;
   });
-  if (!askSt.chat.length && !askSt.busy) rows.push(`<div class="ask-hello"><span class="ask-mark big">${SPARK}</span><b>Ask about anything you see</b>
-    <p class="muted small">Claude can see the screen you're on, your CV and what Job Hunt knows about each job. Ask what a word means, why a role scored as it did, or for a draft answer. Select words on a page to ask about just those.</p></div>`);
+  // What was said about this job in the tab it used to have, folded away above the conversation.
+  if (askSt.earlier.length) rows.unshift(`<details class="ask-earlier"><summary>Earlier conversation about this job (${askSt.earlier.length} message${askSt.earlier.length === 1 ? '' : 's'})</summary>
+    ${askSt.earlier.map(m => `<div class="ask-msg ${m.who === 'you' ? 'me' : 'them'}">${m.who === 'you' ? esc(m.text) : mdHtml(m.text)}</div>`).join('')}</details>`);
+  if (!askSt.chat.length && !askSt.busy && !askSt.earlier.length) rows.push(`<div class="ask-hello"><span class="ask-mark big">${SPARK}</span><b>Ask about anything you see</b>
+    <p class="muted small">Claude can see the screen you're on, your CV and what Job Hunt knows about each job. Ask what a word means, why a role scored as it did, or for a draft answer. On a job it can also offer to make a change, like a shorter cover letter: nothing happens until you press its button. Select words on a page to ask about just those.</p></div>`);
   if (askSt.busy) rows.push('<div class="ask-msg them wait"><span class="spin" data-kind="chat"></span>Thinking…</div>');
   if (askSt.error) rows.push(`<div class="ask-err small"><b>Claude couldn't answer.</b> ${esc(askSt.error)} Your message is back in the box to send again.</div>`);
   log.innerHTML = rows.join('');

@@ -530,7 +530,7 @@ pub trait Llm: Send + Sync {
     }
     /// One reply from the assistant: what you asked, with the screen you were on and what Job
     /// Hunt knows about it (see Asked).
-    fn assist(&self, _asked: &Asked) -> R<String> {
+    fn assist(&self, _asked: &Asked) -> R<Assisted> {
         Err(Error("The assistant isn't available.".into()))
     }
     /// The CV checked the way an employer's AI application review checks it: the criteria the posting
@@ -913,6 +913,31 @@ name."
     )
 }
 
+/// What the assistant says back: its answer, and things it offers to do to the job on screen. Each
+/// is only offered: the person presses its button, and Job Hunt does it.
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Assisted {
+    pub reply: String,
+    #[serde(default)]
+    pub actions: Vec<Offer>,
+}
+
+/// One thing the assistant offers to do. `kind`: "add_keywords" (work `keywords` into the tailored
+/// CV), "revise_cv" or "revise_letter" (change it as `note` says), "tailor" (tailor a CV and letter),
+/// "save_later" or "set_aside" (move the job). Anything else is dropped.
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Offer {
+    pub kind: String,
+    /// The button's words, a few of them: "Work in Snowflake and dbt".
+    pub label: String,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+}
+
+pub const OFFERS: &[&str] = &["add_keywords", "revise_cv", "revise_letter", "tailor", "save_later", "set_aside"];
+
 /// A message for the assistant, with everything an answer may need.
 pub struct Asked<'a> {
     pub candidate: &'a str,
@@ -964,7 +989,14 @@ guessing. To point at a screen you may link it in Markdown, with only these targ
 [Settings](#settings).\n\n\
 Anything you write for them to send (answers to application questions, letters, messages) follows this:\n{HUMAN}\n\n\
 Use only facts from their CV, notes and what Job Hunt knows; when something isn't there, ask or leave a [placeholder] \
-rather than inventing it. Light Markdown only: short paragraphs, - bullets, **bold**."
+rather than inventing it. Light Markdown only: short paragraphs, - bullets, **bold**.\n\n\
+Offering to do something: when a job is on screen and what they ask for is one of these, add it to \"actions\" and say \
+in your reply that the button below does it. They press the button; nothing happens until they do, so never say it is \
+done. Kinds: add_keywords (keywords: the ones they said they really have; Job Hunt works them into the tailored CV), \
+revise_cv and revise_letter (note: the change, as an instruction, e.g. \"Cut the letter to 150 words and open with the \
+payments migration\"), tailor (tailor a CV and letter for this job), save_later (keep the job for later), set_aside \
+(not interested). label: a few words for the button. Offer only what they asked for or plainly agreed to, at most \
+three, and none when no job is on screen; otherwise leave actions empty."
     )
 }
 
@@ -2196,7 +2228,7 @@ exactly as if it were the only posting, never against the others. Answer with on
         Ok(self.call::<Reply>(&outreach_system(), &user, reply_schema(), "low")?.body)
     }
 
-    fn assist(&self, a: &Asked) -> R<String> {
+    fn assist(&self, a: &Asked) -> R<Assisted> {
         let talk: String = a.history.iter().map(|(who, text)| format!("<{who}>\n{text}\n</{who}>\n")).collect();
         let mut user = format!("Job seeker: {}\n\nThe screen they are on: {}\n<screen>\n{}\n</screen>\n", a.candidate, a.place, a.screen);
         if !a.quote.is_empty() {
@@ -2209,12 +2241,9 @@ exactly as if it were the only posting, never against the others. Answer with on
         }
         let cv: String = a.cv.chars().take(12000).collect();
         user.push_str(&format!("\n<cv>\n{cv}\n</cv>\n\nThe conversation so far, oldest first (<you> is the job seeker, <claude> is you):\n{talk}\nTheir new message:\n<you>\n{}\n</you>", a.message));
-        #[derive(Deserialize)]
-        struct T {
-            reply: String,
-        }
-        let r = self.call::<T>(&assist_system(), &user, obj(json!({"reply": {"type": "string"}})), "low")?.reply;
-        if r.trim().is_empty() {
+        let offer = obj(json!({"kind": {"type": "string", "enum": OFFERS}, "label": {"type": "string"}, "note": {"type": "string"}, "keywords": strings()}));
+        let r = self.call::<Assisted>(&assist_system(), &user, obj(json!({"reply": {"type": "string"}, "actions": {"type": "array", "items": offer}})), "low")?;
+        if r.reply.trim().is_empty() {
             return Err(Error("Claude's reply came back empty; try again.".into()));
         }
         Ok(r)

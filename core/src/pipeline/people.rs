@@ -298,11 +298,16 @@ impl Agent {
             history: &history,
             message,
         };
-        let reply = self.llm().assist(&asked)?;
+        let said = self.llm().assist(&asked)?;
+        // Offers go with the answer only for a job that's on screen, and only the kinds Job Hunt does.
+        let offers: Vec<&crate::claude::Offer> = said.actions.iter()
+            .filter(|o| job.is_some() && crate::claude::OFFERS.contains(&o.kind.as_str()) && !o.label.trim().is_empty())
+            .filter(|o| match o.kind.as_str() { "add_keywords" => !o.keywords.is_empty(), "revise_cv" | "revise_letter" => o.note.trim().chars().count() >= 3, _ => true })
+            .take(3).collect();
         let mut list = self.ask_log();
-        list.push(json!({ "who": "claude", "text": reply, "at": now() }));
+        list.push(json!({ "who": "claude", "text": said.reply, "at": now(), "job": job.as_ref().map(|j| j.id.clone()), "actions": offers }));
         self.db().set("ask:chat", &json!(list).to_string())?;
-        Ok(reply)
+        Ok(said.reply)
     }
 
     /// What Job Hunt knows that an answer may need: how it's set up, and where the job on screen stands.
@@ -372,6 +377,21 @@ impl Agent {
             }
         }
         l.join("\n")
+    }
+
+    /// You pressed one of the assistant's offers (message `at`, offer `which`): it's marked done, so
+    /// its button doesn't offer it twice.
+    pub fn ask_did(&self, at: usize, which: usize) -> R<()> {
+        let mut list = self.ask_log();
+        if let Some(o) = list.get_mut(at).and_then(|m| m["actions"].get_mut(which)) {
+            o["done"] = json!(true);
+        }
+        self.db().set("ask:chat", &json!(list).to_string())
+    }
+
+    /// What you and Claude said about one job in the tab each job used to have, oldest first.
+    pub fn ask_earlier(&self, job_id: &str) -> Vec<Value> {
+        serde_json::from_str(&self.secret(&format!("chat:{job_id}"))).unwrap_or_default()
     }
 
     pub fn ask_clear(&self) -> R<()> {

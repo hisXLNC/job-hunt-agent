@@ -299,7 +299,8 @@ async function settingsCards(tab, sub, host, given) {
     <form data-form="profile" data-part="certs"><section class="card" id="certsCard"><header><h2>Certifications</h2></header>
       <p class="muted">The certifications and licences you hold, like PMP or CPMAI. Job Hunt counts them as yours when it scores a posting, writes a cover letter and fills in an application form, whether or not your CV lists them. Only the name is needed; forms sometimes ask for the rest.</p>
       <div class="cert-list" id="certList">${(p.certifications || []).map(certRow).join('')}</div>
-      <div class="row"><button class="btn" type="button" data-act="certAdd">${svg('add')}Add a certification</button></div></section></form>
+      <div class="row"><button class="btn" type="button" data-act="certAdd">${svg('add')}Add a certification</button></div>
+      <p class="muted small" id="certRescore" hidden></p></section></form>
     <form data-form="profile" data-part="stories"><section class="card"><header><h2>Your stories</h2></header>
       <p class="muted">True achievements and stories that aren't in your CV, for cover letters to draw on, like a hard delivery you pulled off or a problem only you solved. Cover letters may use them; your CV is never changed with them.</p>
       <label class="field">Stories<textarea name="stories" style="min-height:160px" placeholder="e.g. Managed a key shipment for a \$2B oil project in Iran.\nCoordinated urgent delivery of medical supplies to Iraq.">${esc(st.profile.stories || '')}</textarea><span class="hint">One per line or paragraph. Keep the real numbers.</span></label>
@@ -542,6 +543,7 @@ async function settingsCards(tab, sub, host, given) {
     if (st.career_thinking) watchCareer(location.hash);
     if (st.cv_update?.running || st.cv_update?.tailoring) watchCvUpdate();
     if ($('#bankCard')) renderBank();
+    if ($('#certRescore')) renderCertRescore();
     return;
   }
   if (host === SET_RAW) return body;
@@ -604,7 +606,7 @@ async function settingsBody(section, tab, st) {
     return `${src.list}${src.clip}`;
   }
   if (section === 'applying') {
-    if (tab === 'forms') { const e = await of('extension'); return `${e.ext}${link('On a phone, a bookmark fills in forms in the extension\'s place.', '#settings/phone', 'Phone')}`; }
+    if (tab === 'forms') { const e = await of('extension'); return `${e.ext}<section class="card" id="fillSites"><header><h2>How forms go, site by site</h2></header><p class="muted small">Loading…</p></section>${link('On a phone, a bookmark fills in forms in the extension\'s place.', '#settings/phone', 'Phone')}`; }
     if (tab === 'followups') { const i = await of('inbox'), a = await of('app'); return `${i.followups}${a.links}`; }
     return form('search', (await of('search')).tailoring);
   }
@@ -636,6 +638,7 @@ function settingsShown() {
   const st = settingsCache;
   if ($('#claudeCard') && st?.claude.engine !== 'api') checkClaude(false);
   if ($('#connStatus')) renderConnStatus();
+  if ($('#fillSites')) renderFillSites();
   if ($('#usageCard')) renderUsage();
   if ($('#whatsnew')) { showWhatsNew(); if (update?.available) showUpdate(update); }
   if (connScrollTo) { const t = document.getElementById(connScrollTo); connScrollTo = null; if (t) { t.scrollIntoView({ block: 'start' }); t.querySelector('details')?.setAttribute('open', ''); } }
@@ -886,6 +889,33 @@ async function checkUpdate() {
   try { update = await api('/api/update/check'); } catch (e) { update = { error: e.message }; }
   showUpdate(update);
   return update;
+}
+
+/** Under the certifications: open postings that mention one, scored before Job Hunt knew you hold it. */
+async function renderCertRescore() {
+  const el = $('#certRescore'); if (!el) return;
+  let r;
+  try { r = await api('/api/certs/rescore'); } catch (e) { el.hidden = true; return; }
+  el.hidden = !r.postings && !r.running;
+  el.innerHTML = r.running ? '<span class="spin" data-kind="score"></span>Scoring postings again…'
+    : `${r.postings} open posting${r.postings === 1 ? '' : 's'} mention${r.postings === 1 ? 's' : ''} a certification listed here. New scores count it; scores given before you listed it don't. <button class="btn sm" type="button" data-act="certRescore">Score ${r.postings === 1 ? 'it' : 'them'} again</button>`;
+}
+
+/** Settings, Applying, Filling in forms: how the extension did on each site, worst first. */
+async function renderFillSites() {
+  const box = $('#fillSites'); if (!box) return;
+  let rows;
+  try { rows = (await api('/api/fill-sites')).sites; } catch (e) { box.querySelector('p').textContent = e.message; return; }
+  const head = '<header><h2>How forms go, site by site</h2></header>';
+  if (!rows.length) { box.innerHTML = `${head}<p class="muted">Nothing yet. Each time the extension fills a form, Job Hunt notes how many boxes it filled and how many wouldn't take their answer, so you can see which sites work and which need fixing.</p>`; return; }
+  const state = r => r.failed && !r.filled ? ['crit', 'Can\'t read it'] : (r.refused || 0) > Math.max(1, (r.filled || 0) / 4) ? ['warn', 'Partly'] : r.refused ? ['info', 'Mostly'] : ['good', 'Works'];
+  box.innerHTML = `${head}<p class="muted small">Counted by the extension each time it fills a form: boxes that hold an answer afterwards, and boxes Job Hunt had an answer for that wouldn't take it. No answers are kept here, only counts and the names of the boxes that got stuck.</p>
+    <div class="table-wrap"><table class="site-fills"><thead><tr><th>Site</th><th>How it goes</th><th>Forms</th><th>Boxes filled</th><th>Wouldn't take</th><th>Handed to Claude</th><th>Last time</th></tr></thead><tbody>
+    ${rows.map(r => { const [cls, word] = state(r), stuck = (r.last?.stuck || []).join(', ');
+      return `<tr><td><b>${esc(r.site)}</b></td><td><span class="pill ${cls}">${word}</span></td><td>${r.fills || 0}</td><td>${r.filled || 0} of ${r.boxes || 0}</td><td>${r.refused || 0}</td><td>${r.handed || 0}</td>
+        <td class="small muted">${r.last ? `${esc(fmtDate(r.last.at))}: ${r.last.failed ? 'couldn\'t read the page' : `${r.last.filled} of ${r.last.boxes}`}${stuck ? `<br>Stuck: ${esc(stuck)}` : ''}` : ''}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <p class="muted small">A site that says Partly or Can't read it: press Copy details in the panel there and send it to Claude to get it fixed.</p>`;
 }
 
 /** One certification, as a row of boxes on Me, About me. */

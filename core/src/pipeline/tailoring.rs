@@ -1074,6 +1074,62 @@ impl Agent {
         Ok(jobs)
     }
 
+    /// Postings still open that mention a certification you listed under Me (by its name or its short
+    /// form, "PMP"), among those waiting, saved, or set aside within 20 points of your bar: the ones
+    /// whose fit the certification could change. Newest first.
+    pub fn cert_postings(&self) -> Vec<Job> {
+        let profile = self.profile();
+        let terms = cert_terms(&profile.certifications);
+        if terms.is_empty() {
+            return vec![];
+        }
+        let bar = profile.score_threshold;
+        let mut jobs: Vec<Job> = ["queued", "saved", "skipped"].iter().flat_map(|st| self.db().jobs(Some(st), 100_000).unwrap_or_default())
+            .filter(|j| j.closed_at.is_none() && j.score.is_some_and(|s| j.status != "skipped" || s >= bar - 20))
+            .filter(|j| { let text = format!("{} {}", j.title, j.description).to_lowercase(); terms.iter().any(|t| has_word(&text, t)) })
+            .collect();
+        jobs.sort_by(|a, b| b.found_at.cmp(&a.found_at));
+        jobs
+    }
+
+    /// Score those again, now that the scorer is told your certifications, up to the per-search cap.
+    /// One found by a search goes on the Queue or is set aside by its new fit; a saved one stays saved.
+    pub fn cert_rescore(&self, ids: &[String]) -> R<usize> {
+        let _g = self.claim("rescore")?;
+        let profile = self.profile();
+        let cvs = self.cv_texts(&profile);
+        if cvs.is_empty() {
+            return err("No CV uploaded yet. Add one in CV & Career.");
+        }
+        let guidance = self.scoring_guidance(&profile);
+        let (mut n, mut cleared) = (0, 0);
+        for id in ids.iter().take(profile.max_scored_per_run.max(1)) {
+            let Some(j) = self.db().job(id)? else { continue };
+            if self.limited().is_some() {
+                break;
+            }
+            let s = match self.llm().score(&cvs, &guidance, &j) {
+                Ok(s) => s,
+                Err(e) if e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("API key") => return Err(e),
+                Err(_) => continue,
+            };
+            let status = if j.status == "saved" { "saved" } else if s.score >= profile.score_threshold { "queued" } else { "skipped" };
+            cleared += (status == "queued" && j.status == "skipped") as usize;
+            let db = self.db();
+            db.update_job(&j.id, &[
+                ("status", status.into()), ("score", s.score.into()), ("score_potential", json!(s.potential)), ("track", s.track.clone().into()),
+                ("reasoning", s.reasoning.into()), ("red_flags", json!(s.red_flags)), ("keywords", json!(s.keywords)),
+            ])?;
+            db.log(Some(&j.id), "scored", &format!("{} on the {} track (scored again with your certifications; was {})", s.score, s.track, j.score.unwrap_or(0)))?;
+            n += 1;
+        }
+        self.db().log(None, "rescore", &format!("{n} scored again with your certifications, {cleared} now worth tailoring"))?;
+        if n > 0 {
+            self.note("Scored again with your certifications", &format!("{n} posting{} scored again{}.", if n == 1 { "" } else { "s" }, if cleared > 0 { format!("; {cleared} now clear your bar") } else { String::new() }));
+        }
+        Ok(n)
+    }
+
     /// How a rescore would go, without running it: postings in the group, how many the filters
     /// now leave out (no Claude needed), how many Claude would score, and this run's cap.
     pub fn rescore_plan(&self, group: &str) -> R<Value> {
@@ -1243,4 +1299,39 @@ impl Agent {
         }
         Ok(())
     }
+}
+
+/// What to look for in a posting for each certification: its name without the bracket, and the short
+/// form in the bracket ("Project Management Professional (PMP)" gives both), lower case.
+pub fn cert_terms(certs: &[crate::profile::Certification]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for c in certs {
+        let name = c.name.trim();
+        let (main, short) = match (name.find('('), name.rfind(')')) {
+            (Some(a), Some(b)) if b > a => (name[..a].trim(), name[a + 1..b].trim()),
+            _ => (name, ""),
+        };
+        for t in [main, short] {
+            let t = t.to_lowercase();
+            if t.chars().filter(|c| c.is_alphanumeric()).count() >= 3 && !out.contains(&t) {
+                out.push(t);
+            }
+        }
+    }
+    out
+}
+
+/// Whether `text` (lower case) has `term` as words of its own: "pmp" isn't in "pumps" or "xpmp".
+pub fn has_word(text: &str, term: &str) -> bool {
+    let mut from = 0;
+    while let Some(i) = text[from..].find(term) {
+        let (a, b) = (from + i, from + i + term.len());
+        let before = text[..a].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
+        let after = text[b..].chars().next().is_none_or(|c| !c.is_alphanumeric());
+        if before && after {
+            return true;
+        }
+        from = b;
+    }
+    false
 }

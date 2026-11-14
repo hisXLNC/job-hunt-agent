@@ -355,6 +355,9 @@ async function act(el) {
   }
   // A mock interview with the assistant: Claude asks, you answer, it says how the answer landed.
   if (a === 'practise') return askSend(PRACTISE);
+  if (a === 'certRescore') {
+    return busy(async () => { const r = await api('/api/certs/rescore', { method: 'POST' }); toast(`Scoring ${r.started} posting${r.started === 1 ? '' : 's'} again. You get a notice when it's done.`); setTimeout(renderCertRescore, 600); }, 'Starting…');
+  }
   if (a === 'certAdd') { $('#certList').insertAdjacentHTML('beforeend', certRow()); $('#certList').lastElementChild.querySelector('input').focus(); return; }
   if (a === 'certRemove') { const f = el.closest('form'); el.closest('[data-cert]').remove(); f.dispatchEvent(new Event('change', { bubbles: true })); return; }
   if (a === 'forgetNetwork') {

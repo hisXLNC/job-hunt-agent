@@ -819,6 +819,46 @@ fn a_tailored_cv_left_without_its_fit_gets_one_later() {
 }
 
 #[test]
+fn postings_that_mention_a_certification_can_be_scored_again() {
+    use crate::profile::Certification;
+    let terms = super::tailoring::cert_terms(&[Certification { name: "Project Management Professional (PMP)".into(), ..Default::default() }, Certification { name: "CPMAI".into(), ..Default::default() }, Certification { name: "X".into(), ..Default::default() }]);
+    assert_eq!(terms, vec!["project management professional", "pmp", "cpmai"]);
+    assert!(super::tailoring::has_word("a pmp is required", "pmp") && super::tailoring::has_word("(pmp)", "pmp"));
+    assert!(!super::tailoring::has_word("water pumps and xpmp", "pmp"));
+    let s = setup();
+    let mut with = posting("Technical Program Manager", "1");
+    with.description.push_str(" PMP certification is an asset.");
+    s.agent.search(Some(vec![with, posting("Program Manager, Payments", "2")])).unwrap();
+    // Nothing listed: nothing to score again.
+    assert!(s.agent.cert_postings().is_empty());
+    let mut p = s.agent.profile();
+    p.certifications = vec![Certification { name: "Project Management Professional (PMP)".into(), ..Default::default() }];
+    s.agent.save_profile(&p).unwrap();
+    // (Here both were tailored at once; the ones this is for are still waiting to be picked.)
+    for id in ["test:1", "test:2"] {
+        s.agent.db().update_job(id, &[("status", "queued".into())]).unwrap();
+    }
+    let found: Vec<String> = s.agent.cert_postings().into_iter().map(|j| j.id).collect();
+    assert_eq!(found, vec!["test:1".to_string()], "only the posting that names it");
+    assert_eq!(s.agent.cert_rescore(&found).unwrap(), 1);
+    assert!(s.agent.db().history("test:1").unwrap().iter().any(|e| e.detail.contains("with your certifications")));
+}
+
+#[test]
+fn how_filling_went_is_tallied_by_site() {
+    let s = setup();
+    crate::fill::site_report(&s.agent, "https://career4.successfactors.com/career?x=1", &json!({ "boxes": 31, "filled": 4, "refused": 9, "stuck": ["Province/Territory/State"] })).unwrap();
+    crate::fill::site_report(&s.agent, "https://career4.successfactors.com/apply", &json!({ "handed": true })).unwrap();
+    crate::fill::site_report(&s.agent, "https://www.maple.example/apply", &json!({ "boxes": 10, "filled": 10, "refused": 0 })).unwrap();
+    crate::fill::site_report(&s.agent, "not a url", &json!({ "boxes": 1 })).unwrap();
+    let rows = crate::fill::sites(&s.agent);
+    assert_eq!(rows.len(), 2);
+    assert_eq!((rows[0]["site"].as_str(), rows[0]["fills"].as_u64(), rows[0]["refused"].as_u64(), rows[0]["handed"].as_u64()), (Some("career4.successfactors.com"), Some(1), Some(9), Some(1)), "the site that goes worst is first");
+    assert_eq!(rows[0]["last"]["stuck"][0], "Province/Territory/State");
+    assert_eq!(rows[1]["site"], "maple.example");
+}
+
+#[test]
 fn the_brief_for_another_assistant_says_what_is_left() {
     let s = setup();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
@@ -866,6 +906,23 @@ fn the_assistant_answers_from_any_screen_and_keeps_the_conversation() {
     assert_eq!(st["draft"], "please fail");
     assert!(st["error"].as_str().unwrap().contains("busy"));
     assert_eq!(st["busy"], false);
+    // Asked to do something on a job: Claude's offer comes as a button (one of a kind Job Hunt doesn't
+    // do is dropped), and pressing it marks it done. With no job on screen there is nothing to offer.
+    s.agent.ask_start("work in Snowflake please", &json!({ "where": "Technical Program Manager", "job": "test:1" })).unwrap();
+    wait();
+    let last = s.agent.ask_log().pop().unwrap();
+    assert_eq!((last["job"].as_str(), last["actions"].as_array().unwrap().len()), (Some("test:1"), 1), "{last}");
+    assert_eq!((last["actions"][0]["kind"].as_str(), last["actions"][0]["keywords"][0].as_str()), (Some("add_keywords"), Some("Snowflake")));
+    let at = s.agent.ask_log().len() - 1;
+    s.agent.ask_did(at, 0).unwrap();
+    assert_eq!(s.agent.ask_log()[at]["actions"][0]["done"], true);
+    s.agent.ask_start("work in Snowflake please", &json!({ "where": "Settings" })).unwrap();
+    wait();
+    assert!(s.agent.ask_log().pop().unwrap()["actions"].as_array().unwrap().is_empty());
+    // What was said in the tab a job used to have is still there to read.
+    s.agent.db().set("chat:test:1", &json!([{ "who": "you", "text": "Salary?" }, { "who": "claude", "text": "Ask for the range." }]).to_string()).unwrap();
+    assert_eq!(s.agent.ask_earlier("test:1").len(), 2);
+    assert!(s.agent.ask_earlier("test:9").is_empty());
     s.agent.ask_clear().unwrap();
     assert!(s.agent.ask_log().is_empty() && s.agent.ask_state()["error"] == "");
 }

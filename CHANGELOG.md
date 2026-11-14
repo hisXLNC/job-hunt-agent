@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.68.0] - 2026-11-14
+
+Ask Claude can make changes, and a tally of which sites fill.
+
+### Changes
+
+- On a job, Ask Claude can now offer to do what you ask: work in keywords you really have, change the CV or cover letter, tailor, save for later or set aside. Each offer is a button under its answer, and nothing happens until you press it.
+- Settings, Applying, Filling in forms has a tally of how the extension does on each site: forms filled, boxes filled, boxes that would not take their answer, and the ones that got stuck last time.
+- An application whose tailored CV scores no better and still lacks most of the posting's keywords now says so, on its row and on its page: the gap is experience, not wording.
+- Under your certifications, Job Hunt counts the open postings that mention one and offers to score them again, since scores given before you listed it did not count it.
+- When a form has required boxes Job Hunt has no answer for, the panel names them. What you type is kept for next time.
+- What you and Claude said in a job's old Ask Claude tab shows again, folded at the top of the conversation when that job is on screen.
+
 ## [2.67.2] - 2026-11-14
 
 A smaller Ask Claude button.
@@ -2051,6 +2064,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.68.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.68.0
 [2.67.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.2
 [2.67.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.1
 [2.67.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.0

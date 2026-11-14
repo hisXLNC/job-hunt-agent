@@ -219,6 +219,7 @@
       try { await navigator.clipboard.writeText(r.v.text); }
       catch (e) { const t = document.createElement('textarea'); t.value = r.v.text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
       trace('handed to Claude', { left: left.length });
+      report({ handed: true });
       flush();
       const mac = /mac/i.test(navigator.platform || '');
       status(`Copied for Claude${left.length ? ` (${left.length} ${left.length === 1 ? 'box' : 'boxes'} left to fill)` : ''}. Now: 1. Open the Claude extension on this page (its icon in the toolbar, or ${mac ? 'Cmd' : 'Ctrl'}+E). 2. Paste (${mac ? 'Cmd' : 'Ctrl'}+V) and press Enter. Claude fills in what's left and stops before Submit.`);
@@ -234,7 +235,12 @@
     ui = host;
   }
   // What the panel says. When it says Job Hunt couldn't do it, the hand-over to Claude is offered.
-  const status = t => { panel(); statusEl.textContent = t; if (EXT && buttons.hand && /can't find a form|tripped on this page|^Couldn't|No answers|didn't take/i.test(t) && !/brief for Claude:/.test(t)) buttons.hand.hidden = false; };
+  // How a fill went on this site, for the tally in Job Hunt's settings: counts and the names of the
+  // boxes that got stuck, never an answer.
+  const report = r => { if (EXT) rpc('/ext/report', { url: location.href, title: document.title, ...r }).catch(() => {}); };
+  let failSaid = 0;
+  const status = t => { panel(); statusEl.textContent = t; if (EXT && buttons.hand && /can't find a form|tripped on this page|^Couldn't|No answers|didn't take/i.test(t) && !/brief for Claude:/.test(t)) buttons.hand.hidden = false;
+    if (/can't find a form|tripped on this page/i.test(t) && Date.now() - failSaid > 60000) { failSaid = Date.now(); report({ failed: true, boxes: 0, filled: 0, refused: 0 }); } };
   // The progress bar: while Claude writes the answers it creeps towards `to` (most of the way by
   // the time it usually takes), then filling in takes it to the end. null hides it.
   const barAt = () => (barEl && !barEl.hidden && parseFloat(barEl.firstChild.style.width)) || 0;
@@ -1278,9 +1284,14 @@
       // Boxes Job Hunt had an answer for that didn't take it: those can go to Claude.
       const refused = (diag.fields || []).filter(f => !f.filled && f.want != null && f.want !== '').length;
       if (buttons.hand) buttons.hand.hidden = !EXT || !refused;
+      { const boxes = (diag.fields || []).filter(f => f.type !== 'file');
+        report({ boxes: boxes.length, filled: boxes.filter(f => f.filled).length, refused, stuck: boxes.filter(f => !f.filled && f.want != null && f.want !== '').map(f => String(f.label || '').replace(/^\*\s*/, '').slice(0, 60)).slice(0, 8) }); }
+      // Required boxes Job Hunt has nothing for: named, so you know what to type (it's kept for next time).
+      const blank = [...new Set((diag.fields || []).filter(f => f.required && !f.filled && (f.want == null || f.want === '') && !['checkbox', 'file'].includes(f.type)).map(f => String(f.label || '').replace(/^\*\s*/, '').slice(0, 40)))];
+      const ask1 = blank.length ? ` Job Hunt has no answer for ${blank.slice(0, 4).map(b => `\u201c${b}\u201d`).join(', ')}${blank.length > 4 ? ` and ${blank.length - 4} more` : ''}: type ${blank.length === 1 ? 'it' : 'them'} in and Job Hunt keeps ${blank.length === 1 ? 'it' : 'them'} for next time.` : '';
       const hand = refused && EXT ? ` ${refused} ${refused === 1 ? 'box' : 'boxes'} didn't take ${refused === 1 ? 'its' : 'their'} answer: press Let Claude finish it to hand ${refused === 1 ? 'it' : 'them'} to the Claude extension.` : '';
       status(todo
-        ? `Filled ${ok}.${saved}${hand} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
+        ? `Filled ${ok}.${saved}${hand}${ask1} ${todo} for you, in amber: boxes that agree to terms are yours to tick, and Job Hunt leaves anything your CV and facts don't answer. Read the form over, then press its Submit button.`
         : `Filled ${ok}.${saved} Read the form over (green is what Job Hunt filled), then press its Submit button.`);
       if (todo) nextAmber();
       // A file was there already: replace it with Job Hunt's, or keep it?

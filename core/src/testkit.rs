@@ -118,11 +118,16 @@ impl Llm for FakeLlm {
     fn find_recruiters(&self, job: &Job) -> R<Vec<crate::claude::FoundPerson>> {
         Ok(vec![crate::claude::FoundPerson { name: "Priya Shah".into(), title: format!("Talent Acquisition Partner at {}", job.company), linkedin: "https://www.linkedin.com/in/priya-shah-ta".into(), why: "hires for PMO roles in Toronto".into() }])
     }
-    fn assist(&self, a: &crate::claude::Asked) -> R<String> {
+    fn assist(&self, a: &crate::claude::Asked) -> R<crate::claude::Assisted> {
         if a.message.contains("fail") {
             return Err(crate::Error("Claude is busy.".into()));
         }
-        Ok(format!("On {} about {} ({} before, quote: {}): {}\n\nSee [All jobs](#applications).", a.place, a.job.map_or("no job", |j| j.title.as_str()), a.history.len(), a.quote, a.message))
+        // Asked to do something: it offers, with one offer Job Hunt doesn't know (dropped).
+        let actions = if a.message.contains("work in") {
+            vec![crate::claude::Offer { kind: "add_keywords".into(), label: "Work in Snowflake".into(), keywords: vec!["Snowflake".into()], ..Default::default() },
+                crate::claude::Offer { kind: "delete_everything".into(), label: "No".into(), ..Default::default() }]
+        } else { vec![] };
+        Ok(crate::claude::Assisted { reply: format!("On {} about {} ({} before, quote: {}): {}\n\nSee [All jobs](#applications).", a.place, a.job.map_or("no job", |j| j.title.as_str()), a.history.len(), a.quote, a.message), actions })
     }
     fn insights(&self, _c: &str, results: &str, _apps: &str) -> R<String> {
         Ok(format!("## What's working\n{}", results.len()))

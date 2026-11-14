@@ -222,7 +222,7 @@ impl Llm for Metered {
     fn outreach(&self, candidate: &str, cv: &str, job: &Job, contact: &str, brief: &str) -> R<String> {
         self.run("outreach", |l| l.outreach(candidate, cv, job, contact, brief))
     }
-    fn assist(&self, asked: &crate::claude::Asked) -> R<String> {
+    fn assist(&self, asked: &crate::claude::Asked) -> R<crate::claude::Assisted> {
         self.run("chat", |l| l.assist(asked))
     }
     fn insights(&self, candidate: &str, results: &str, applications: &str) -> R<String> {

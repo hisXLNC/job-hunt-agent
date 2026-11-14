@@ -150,12 +150,17 @@ const payFact = j => j.salary
 const THIN_COVER = 0.6;
 /** How much of a posting's keywords the tailored CV covers, as a fact for its row: marked when thin. */
 const coverFact = j => j.coverage_after == null ? '' : j.coverage_after < THIN_COVER
-  ? `<span class="warn-text" title="Under ${pct(THIN_COVER)}: screening software may rank it low. Open it to add the keywords you do have.">only ${pct(j.coverage_after)} of the posting's keywords</span>`
+  ? `<span class="warn-text" title="Under ${pct(THIN_COVER)}: screening software may rank it low. Open it to add the keywords you do have.">only ${pct(j.coverage_after)} of the posting's keywords</span>${flatTailor(j) ? ` · <span class="warn-text" title="${FLAT_WHY}">tailoring didn't lift the fit</span>` : ''}`
   : `${pct(j.coverage_after)} of the posting's keywords`;
+/** Tailored, and no better for it: the fit didn't move and most of the posting's keywords are still
+ *  missing, because nothing in your CV backs them. A gap in experience, not in wording. */
+const flatTailor = j => j.score != null && j.score_after != null && j.score_after - j.score <= 2 && j.coverage_after != null && j.coverage_after < THIN_COVER && !j.applied_at;
+const FLAT_WHY = 'The tailored CV scores about the same as yours and still lacks most of what the posting asks for. Job Hunt only adds what your CV backs, so the gap is experience, not wording. If you do have some of the missing keywords, open it and tick them; if not, this one may not be worth an application.';
 /** For a thin CV: the posting's keywords it lacks, to tick the ones you really have. Job Hunt left
  *  them out because nothing in your CV backs them; ticking one is you saying it's true. */
 const gapsHtml = j => j.coverage_after != null && j.coverage_after < THIN_COVER && (j.keyword_gaps || []).length ? `<div class="advice warn gaps" data-gaps="${esc(j.id)}">
     <b>This CV covers ${pct(j.coverage_after)} of the posting's keywords.</b>
+    ${flatTailor(j) ? `<p class="small flat-tailor"><b>Tailoring didn't lift the fit${j.score_after === j.score ? ` (still ${j.score})` : ` (${j.score} to ${j.score_after})`}.</b> ${FLAT_WHY}</p>` : ''}
     <p class="small">Job Hunt left these out because nothing in your CV backs them. Tick the ones you really have and it works them in; leave the rest.</p>
     <div class="gap-list">${j.keyword_gaps.slice(0, 14).map(k => `<label class="check small"><input type="checkbox" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div>
     <div class="row"><button class="btn sm" type="button" data-act="gapsAdd" data-job="${esc(j.id)}">Work in the ticked ones</button></div></div>` : '';

@@ -1106,3 +1106,40 @@ mod tests {
         assert!(job_for_page(&s.agent, "https://bmo.wd3.myworkdayjobs.com/apply", "Careers at BMO").is_err(), "BMO's site isn't the job chosen on Thomson Reuters'");
     }
 }
+
+/// How filling went on one site, added to that site's tally ("fill:sites": host -> counts). `r` is
+/// what the page reports when a fill ends: boxes it read, how many hold an answer now, how many had
+/// an answer and didn't take it, and whether it couldn't read the page at all or handed over.
+pub fn site_report(agent: &Agent, url: &str, r: &Value) -> R<()> {
+    let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_lowercase())).unwrap_or_default();
+    if host.is_empty() {
+        return Ok(());
+    }
+    let mut all: serde_json::Map<String, Value> = serde_json::from_str(&agent.secret("fill:sites")).unwrap_or_default();
+    let mut e = all.remove(&host).unwrap_or(json!({}));
+    let n = |k: &str| r[k].as_u64().unwrap_or(0).min(500);
+    let add = |e: &mut Value, k: &str, by: u64| { e[k] = json!(e[k].as_u64().unwrap_or(0) + by); };
+    if r["handed"].as_bool() == Some(true) {
+        add(&mut e, "handed", 1);
+    } else {
+        add(&mut e, "fills", 1);
+        add(&mut e, "boxes", n("boxes"));
+        add(&mut e, "filled", n("filled"));
+        add(&mut e, "refused", n("refused"));
+        add(&mut e, "failed", (r["failed"].as_bool() == Some(true)) as u64);
+        e["last"] = json!({ "at": crate::util::now(), "boxes": n("boxes"), "filled": n("filled"), "refused": n("refused"), "failed": r["failed"].as_bool() == Some(true),
+            "stuck": r["stuck"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).map(|x| x.chars().take(60).collect::<String>()).take(8).collect::<Vec<_>>()).unwrap_or_default() });
+    }
+    all.insert(host, e);
+    agent.db().set("fill:sites", &Value::Object(all).to_string())
+}
+
+/// The tally, one row a site, the ones that go worst first: [{site, fills, boxes, filled, refused,
+/// failed, handed, last}].
+pub fn sites(agent: &Agent) -> Vec<Value> {
+    let all: serde_json::Map<String, Value> = serde_json::from_str(&agent.secret("fill:sites")).unwrap_or_default();
+    let mut rows: Vec<Value> = all.into_iter().map(|(site, mut e)| { e["site"] = json!(site); e }).collect();
+    let trouble = |e: &Value| e["refused"].as_u64().unwrap_or(0) + 20 * e["failed"].as_u64().unwrap_or(0);
+    rows.sort_by(|a, b| trouble(b).cmp(&trouble(a)).then(b["fills"].as_u64().cmp(&a["fills"].as_u64())));
+    rows
+}

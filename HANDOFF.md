@@ -56,6 +56,28 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.68.0: the assistant offers to act; a tally of forms by site; and four smaller things.** (2.67.2 before it only
+  shrank the Ask Claude button to a 36px round icon that names itself on hover.)
+  - *Offers.* `Llm::assist` returns `Assisted { reply, actions: Vec<Offer> }` (`claude.rs`; kinds in `OFFERS`:
+    add_keywords, revise_cv, revise_letter, tailor, save_later, set_aside). `ask_answer` keeps only known kinds, only
+    with a job on screen, at most 3, on the message as `actions` with `job`. The page (`ASK_DOES`/`askDo` in
+    `app-ask.js`) turns a pressed offer into the existing job routes (`/revise`, `/tailor`, `/status`), then
+    `POST /api/ask {did:[message, offer]}` marks it done. Claude never does anything itself.
+  - *Earlier per-job chats*: `GET /api/ask?job=<id>` adds `earlier` (the old `chat:<id>`), shown folded at the top of
+    the conversation while that job is on screen.
+  - *Sites tally*: the page posts `/ext/report` (in `PAGE_ASKS`) when a fill ends ({boxes, filled, refused, stuck
+    labels}), when it can't read a page ({failed}) and on a hand-over ({handed}); `fill::site_report` adds it to
+    `fill:sites` by host; `fill::sites` (worst first) → `GET /api/fill-sites` → Settings → Applying → Filling in forms
+    (`renderFillSites`). Counts and labels only.
+  - *Tailoring that didn't help*: `flatTailor(j)` in `app-steps.js` (after − before ≤ 2 and coverage under
+    `THIN_COVER`): said on the row and in the job's keyword box.
+  - *Certifications and old scores*: `cert_postings()` (queued, saved, or skipped within 20 of the bar, open, naming a
+    certification: `cert_terms`, `has_word`), `cert_rescore(ids)` under the `rescore` claim, capped by
+    `max_scored_per_run`; `GET/POST /api/certs/rescore`; the line under the certifications list (`renderCertRescore`).
+  - *Required boxes with no answer* are named in the panel's closing words (they're kept by `learn` when you move on
+    or submit, as before).
+  - Still waiting on the user for: Copy details from Rogers, Indeed's cover letter step, Job Bank's Add form and PMP on
+    OSC (all changed since they last tried), and the Indeed notice's "Claude Code said".
 - **2.67.1: hand-over to the Claude extension.** 2.67.0 never published (its new test needed Claude reachable on
   the build machine; the test now sets `claude.engine=api`). One extension can't open, message or type into another
   (Claude in Chrome has no external hook; searched), so the hand-over is the clipboard: panel button `hand` ("Let

@@ -371,9 +371,24 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.keyboard.press('Enter');
   await page.waitForSelector('#askLog .ask-err');
   check(await page.inputValue('#askMsg') === 'please fail' && await page.locator('#askLog .ask-msg').count() === 4, 'When Claude cannot answer, it says why and the message is back in the box');
+  // Asked for a change on a job: Claude offers it as a button, and nothing happens until it's pressed.
+  await page.goto(`${base}/#job/${encodeURIComponent(jobId)}`);
+  await page.waitForSelector('#main h1');
+  await page.fill('#askMsg', 'Make the letter shorter');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#askLog .ask-act', { timeout: 20000 });
+  check(await page.locator('#askLog .ask-act').count() === 2 && /Shorten the cover letter/.test(await page.textContent('#askLog .ask-acts')), 'Asked for a change on a job, Claude offers it as a button');
+  await page.click('#askLog .ask-act:has-text("Save for later")');
+  await page.waitForSelector('#askLog .ask-done', { timeout: 10000 });
+  check(/Save for later/.test(await page.textContent('#askLog .ask-done')) && await page.evaluate(async id => (await api(`/api/jobs/${encodeURIComponent(id)}`)).job.status === 'saved', jobId), 'Pressing the offer does it, and marks it done');
   await page.fill('#askMsg', '');
   await page.keyboard.press('Escape');
   check(await page.isVisible('#askFab') && !(await page.isVisible('#askPanel')), 'Esc closes the conversation back to the button');
+  // Settings, Applying, Filling in forms: the tally of how forms go on each site.
+  await page.goto(`${base}/#settings/applying/forms`);
+  await page.waitForSelector('#fillSites');
+  await page.waitForFunction(() => !/Loading/.test(document.querySelector('#fillSites').textContent), null, { timeout: 8000 }).catch(() => {});
+  check(/Nothing yet|Boxes filled/.test(await page.textContent('#fillSites')), 'Settings shows how forms go, site by site');
   await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('c');
   check(await page.isVisible('#askPanel'), 'The C key opens Ask Claude from any screen');

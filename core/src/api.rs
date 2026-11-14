@@ -755,7 +755,18 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&u));
             }
             // The assistant: the conversation, and whether an answer is on its way.
-            ["api", "ask"] => return Ok(Resp::json(&agent.ask_state())),
+            ["api", "ask"] => {
+                let mut st = agent.ask_state();
+                // With the job on screen: the conversation its own tab used to hold, if there was one.
+                if let Some(job) = req.query.get("job").filter(|j| !j.is_empty()) {
+                    st["earlier"] = json!(agent.ask_earlier(job));
+                }
+                return Ok(Resp::json(&st));
+            }
+            // Postings that mention a certification you listed, to score again now that Job Hunt knows.
+            ["api", "certs", "rescore"] => return Ok(Resp::json(&json!({ "postings": agent.cert_postings().len(), "running": agent.is_running("rescore") }))),
+            // How the extension's form filling went, site by site.
+            ["api", "fill-sites"] => return Ok(Resp::json(&json!({ "sites": crate::fill::sites(agent) }))),
             ["api", "changelog"] => {
                 let log = host.asset("changelog.json").and_then(|b| serde_json::from_slice::<Value>(&b).ok()).unwrap_or(json!([]));
                 return Ok(Resp::json(&json!({ "current": host.version(), "log": log })));
@@ -1329,10 +1340,26 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.connect();
             ok()
         }
+        ["api", "certs", "rescore"] => {
+            if agent.is_running("rescore") {
+                return Err(Error("Postings are being scored again already.".into()));
+            }
+            let ids: Vec<String> = agent.cert_postings().into_iter().map(|j| j.id).collect();
+            let n = ids.len();
+            let a = agent.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = a.cert_rescore(&ids) {
+                    a.note("Couldn't score them again", &e.0);
+                }
+            });
+            Ok(Resp::json(&json!({ "started": n })))
+        }
         // Ask the assistant ({message, page}), or start the conversation over ({clear}).
         ["api", "ask"] => {
             if b["clear"].as_bool() == Some(true) {
                 agent.ask_clear()?;
+            } else if let (Some(at), Some(which)) = (b["did"][0].as_u64(), b["did"][1].as_u64()) {
+                agent.ask_did(at as usize, which as usize)?;
             } else {
                 agent.ask_start(s(&b, "message"), &b["page"])?;
             }

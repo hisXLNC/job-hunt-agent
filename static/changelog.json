@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.68.0",
+    "date": "2026-11-14",
+    "title": "Ask Claude can make changes, and a tally of which sites fill",
+    "changes": [
+      "On a job, Ask Claude can now offer to do what you ask: work in keywords you really have, change the CV or cover letter, tailor, save for later or set aside. Each offer is a button under its answer, and nothing happens until you press it.",
+      "Settings, Applying, Filling in forms has a tally of how the extension does on each site: forms filled, boxes filled, boxes that would not take their answer, and the ones that got stuck last time.",
+      "An application whose tailored CV scores no better and still lacks most of the posting's keywords now says so, on its row and on its page: the gap is experience, not wording.",
+      "Under your certifications, Job Hunt counts the open postings that mention one and offers to score them again, since scores given before you listed it did not count it.",
+      "When a form has required boxes Job Hunt has no answer for, the panel names them. What you type is kept for next time.",
+      "What you and Claude said in a job's old Ask Claude tab shows again, folded at the top of the conversation when that job is on screen."
+    ]
+  },
+  {
     "version": "2.67.2",
     "date": "2026-11-14",
     "title": "A smaller Ask Claude button",

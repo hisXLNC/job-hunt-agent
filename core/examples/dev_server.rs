@@ -19,7 +19,7 @@ use std::sync::Arc;
 struct DemoLlm;
 
 impl Llm for DemoLlm {
-    fn assist(&self, a: &jobhunt_core::claude::Asked) -> R<String> {
+    fn assist(&self, a: &jobhunt_core::claude::Asked) -> R<jobhunt_core::claude::Assisted> {
         if a.message.contains("fail") {
             return Err(jobhunt_core::Error("Claude is busy just now.".into()));
         }
@@ -29,7 +29,11 @@ impl Llm for DemoLlm {
             (true, Some(j)) => format!("**{}** at {} scored {} because your CV shows most of what it asks for.", j.title, j.company, j.score.unwrap_or(0)),
             (true, None) => format!("You're on **{}**.", a.place),
         };
-        Ok(format!("{about}\n\n- Your CV covers the delivery side well.\n- It says little about the data tooling.\n\nYou can compare it with your other roles in [All jobs](#applications). ({} earlier turns.)", a.history.len()))
+        let actions = if a.job.is_some() && a.message.to_lowercase().contains("shorter") {
+            vec![jobhunt_core::claude::Offer { kind: "revise_letter".into(), label: "Shorten the cover letter".into(), note: "Cut the cover letter to about 150 words.".into(), ..Default::default() },
+                jobhunt_core::claude::Offer { kind: "save_later".into(), label: "Save for later".into(), ..Default::default() }]
+        } else { vec![] };
+        Ok(jobhunt_core::claude::Assisted { reply: format!("{about}\n\n- Your CV covers the delivery side well.\n- It says little about the data tooling.\n\nYou can compare it with your other roles in [All jobs](#applications). ({} earlier turns.)", a.history.len()), actions })
     }
     fn size_up_leads(&self, _c: &str, _cv: &str, _wants: &str, leads: &str) -> R<Vec<jobhunt_core::claude::LeadView>> {
         // Each "### n" block: hiring unless it says NOT-HIRING; the company from its Company line.
