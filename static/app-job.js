@@ -6,6 +6,11 @@ let jobPoll;
 const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions &amp; contacts'], ['interview', 'Interview']];
 const jobTabs = {};
 /** The job's buttons: its next step first, as the main one, then the rest, all in view. */
+/** A web search for a job on its company's own careers site. */
+const webSearchFor = j => `https://www.google.com/search?q=${encodeURIComponent(`"${j.title}" ${j.company} careers`)}`;
+// The job whose real posting you asked for: when the look on the company's site ends with
+// nothing, the web search opens by itself (see renderJob).
+let findAsked = '';
 function jobActions(j, tailoring, progress, finding = false, looked = null) {
   const id = esc(j.id), on = `data-job="${id}" data-from="${esc(j.status)}"`;
   const enc = encodeURIComponent(j.id);
@@ -30,14 +35,12 @@ function jobActions(j, tailoring, progress, finding = false, looked = null) {
   if (j.url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="posting">${svg('open')}Open posting</button>`);
   // Applying: the other ways to get to the form.
   if (finding) b.push('<span class="muted small"><span class="spin" data-kind="rating"></span>Looking for it on the company\'s site… (also under what Job Hunt is doing, bottom left, where you can stop it)</span>');
-  else if (['ready', 'approved'].includes(j.status) && !j.apply_url && j.url) b.push(`<button class="btn ghost sm" data-act="findApply" data-job="${id}" title="Claude searches the company's careers site for this job, so you apply to them and not through a job board">${svg('search')}Find it on the company's site</button>`);
-  // A job board's link can lead nowhere (Adzuna's sometimes goes on to another board): the web finds the employer's own posting.
-  if (!j.apply_url && j.url && !['applied', 'interviewing', 'offer', 'rejected', 'no_response'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="link" data-url="https://www.google.com/search?q=${encodeURIComponent(`"${j.title}" ${j.company} careers`)}" title="Searches the web for this job on ${esc(j.company)}'s own careers site, for when the job board's link doesn't work">${svg('search')}Search the web for it</button>`);
+  else if (!j.apply_url && j.url && !['applied', 'interviewing', 'offer', 'rejected', 'no_response'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="findApply" data-job="${id}" data-web="${esc(webSearchFor(j))}" title="Looks for this job on ${esc(j.company)}'s own site (following the job board's link, then Claude's search). If it isn't found there, a web search for it opens.">${svg('search')}Find the real posting</button>`);
   if (['ready', 'approved', 'queued'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="stage" ${on} data-status="saved">Save for later</button>`, `<button class="btn ghost sm danger" data-act="stage" ${on} data-status="dismissed">Not interested</button>`);
   return `<section class="card next-step actions">
       <div class="next-main">${next ? `<p class="grow"><b>Next:</b> ${next}</p>` : '<span class="grow"></span>'}<div class="row">${main.filter(Boolean).join('')}</div></div>
       ${b.length ? `<div class="row next-more">${b.join('')}</div>` : ''}
-      ${looked && !finding && !j.apply_url ? `<p class="small" style="margin:8px 0 0;color:var(--warn)">Looked on the company's site ${esc(ago(looked.created_at))}: ${esc(looked.detail.replace(/^not found: /, ''))}${/[.!?]$/.test(looked.detail) ? '' : '.'} Try Search the web for it.</p>` : ''}</section>`;
+      ${looked && !finding && !j.apply_url ? `<p class="small" style="margin:8px 0 0;color:var(--warn)">Looked on the company's site ${esc(ago(looked.created_at))}: ${esc(looked.detail.replace(/^not found: /, ''))}${/[.!?]$/.test(looked.detail) ? '' : '.'} <a href="#" data-act="link" data-url="${esc(webSearchFor(j))}">Search the web for it</a>.</p>` : ''}</section>`;
 }
 /** "Why it fits", up top: the strongest match, the biggest gap, and anything to check. */
 function whyBox(j, flags, note = '') {
@@ -303,6 +306,12 @@ async function showJob(id) {
   // Opened for one part of the page (Write a note → People at the company): go there.
   if (scrollToAfter) { const at = document.getElementById(scrollToAfter); scrollToAfter = ''; if (at) setTimeout(() => at.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
   loadKit();
+  // Find the real posting, step two: not on the company's site, so the web is searched.
+  if (findAsked === id && !finding) {
+    findAsked = '';
+    if (j.apply_url) toast('Found it on the company\'s site: Apply goes there now.');
+    else { toast('Not found on the company\'s site. Opening a web search for it.'); api('/api/open-url', { method: 'POST', body: { url: webSearchFor(j) } }).then(follow).catch(e => toast(e.message, true)); }
+  }
   if (tailoring || finding || preparing || revising || following_up || answering || advising || writing_to || thanking) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
 }
 

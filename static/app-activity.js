@@ -2,15 +2,22 @@
 // A small panel, bottom left, whenever Job Hunt is doing something you might want to watch or stop:
 // the search, Claude filling in a form in your browser, tailoring, a CV update, an answer being
 // written. Each has a progress bar (real where the work counts its steps, a guess from how long it
-// usually takes elsewhere) and its own Stop. Nothing running: nothing shown.
+// usually takes elsewhere) and its own Stop. Nothing running: a small "Idle" chip stays there, so
+// you can always see whether Job Hunt is doing anything; press it for the last things it did.
 
-const running = { list: [], timer: 0, shut: false, stopping: new Set() };
+const running = { list: [], recent: [], lastSearch: '', idleOpen: false, timer: 0, shut: false, stopping: new Set() };
 try { running.shut = localStorage.getItem('running.shut') === '1'; } catch (e) {}
 
 const actTime = s => s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
+function actIdleHtml() {
+  const rows = running.recent.map(e => `<li class="act-row"><div class="act-top"><span>${jobLink(e)}${eventText(e)}</span><span class="muted small nowrap" title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</span></div></li>`).join('');
+  return `<button class="act-head" type="button" data-act-idle aria-expanded="${running.idleOpen}" title="Job Hunt isn't doing anything in the background right now. Press for what it did last."><span class="act-dot idle"></span><b>Idle</b><span class="caret">${running.idleOpen ? '▾' : '▴'}</span></button>
+    ${running.idleOpen ? `<div class="act-idle"><p class="small"><b>Nothing is running right now.</b> ${running.lastSearch ? `Last search ${esc(ago(running.lastSearch))}.` : ''} When Job Hunt works on something (a search, tailoring, checking postings, syncing), it shows here with a Stop.</p>
+      ${rows ? `<p class="small muted" style="margin:6px 0 2px">The last things it did</p><ul class="act-list">${rows}</ul>` : ''}</div>` : ''}`;
+}
 function actHtml(list) {
-  if (!list.length) return '';
+  if (!list.length) return actIdleHtml();
   const rows = list.map(a => `<li class="act-row" data-act-id="${esc(a.id)}">
       <div class="act-top"><b>${esc(a.label)}</b><span class="muted small">${actTime(a.secs)}</span></div>
       ${a.detail ? `<div class="muted small act-detail">${esc(a.detail)}</div>` : ''}
@@ -25,8 +32,9 @@ function actDraw(list) {
   running.list = list || [];
   let box = document.getElementById('actBar');
   if (!box) { box = document.createElement('section'); box.id = 'actBar'; box.className = 'act-bar'; box.setAttribute('aria-label', 'What Job Hunt is doing'); document.body.appendChild(box); }
-  box.hidden = !running.list.length;
-  box.classList.toggle('shut', running.shut);
+  box.hidden = false;
+  box.classList.toggle('shut', running.list.length ? running.shut : !running.idleOpen);
+  box.classList.toggle('idle', !running.list.length);
   box.innerHTML = actHtml(running.list);
   // What stopped is no longer "stopping".
   for (const id of [...running.stopping]) if (!running.list.some(a => a.id === id)) running.stopping.delete(id);
@@ -35,13 +43,14 @@ function actDraw(list) {
 async function actLoad() {
   clearTimeout(running.timer);
   let list = running.list;
-  try { list = (await api('/api/activity')).running; } catch (e) { /* the app is busy or restarting: try again */ }
+  try { const r = await api('/api/activity'); list = r.running; running.recent = r.recent || []; running.lastSearch = r.last_search || ''; } catch (e) { /* the app is busy or restarting: try again */ }
   actDraw(list);
   // Often while something runs; now and then when idle, to notice work that starts by itself.
   running.timer = setTimeout(actLoad, list.length ? 2000 : 7000);
 }
 
 document.addEventListener('click', async e => {
+  if (e.target.closest?.('[data-act-idle]')) { running.idleOpen = !running.idleOpen; return actDraw(running.list); }
   if (e.target.closest?.('[data-act-toggle]')) {
     running.shut = !running.shut;
     try { localStorage.setItem('running.shut', running.shut ? '1' : ''); } catch (x) {}

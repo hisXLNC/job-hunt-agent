@@ -228,6 +228,95 @@ pub fn entry_details(fields: &[Value]) -> Vec<(String, String)> {
     out
 }
 
+/// Which detail of an entry a box asks for, whatever the form calls it: "Overall Result (GPA)" and
+/// "Grade average" are the same thing; so are "From (YYYY)" and "Start year".
+fn detail_kind(kind: &str, label: &str) -> String {
+    let l = label.to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| l.contains(w));
+    match kind {
+        "Education" if has(&["gpa", "grade", "result"]) => "gpa".into(),
+        "Education" if has(&["from", "start", "first year"]) => "from".into(),
+        "Education" if l.starts_with("to ") || l.starts_with("to(") || has(&["end", "last year", "graduat"]) => "to".into(),
+        "Certification" if has(&["number", "credential"]) => "number".into(),
+        "Certification" if has(&["expir", "valid"]) => "expires".into(),
+        "Certification" if has(&["issue", "date"]) => "issued".into(),
+        _ => question_key(label.trim_start_matches('*')),
+    }
+}
+
+/// Fill a form's school, certificate and language boxes from the details kept from earlier forms
+/// (see entry_details), by what each entry is about: the school named in the entry (as answered
+/// now, or already in the box), else its place ("entry 1"). A list of choices takes the kept
+/// answer only when it's one of the choices; a language's level asked under another name
+/// ("Proficiency") takes that language's commonest kept level when the list has it.
+fn apply_entry_details(bank: &[Value], fields: &[Value], values: &mut serde_json::Map<String, Value>) -> usize {
+    // (kind, who or "entry N", which detail, the answer), newest first as the bank is.
+    let kept: Vec<(String, String, String, String)> = bank.iter().filter_map(|x| {
+        let (q, a) = (x["q"].as_str()?, x["a"].as_str()?.trim());
+        let (kind, _, _) = ENTRY_KINDS.iter().find(|(k, _, _)| q.starts_with(&format!("{k} (")) || q.starts_with(&format!("{k} entry ")))?;
+        let rest = &q[kind.len()..];
+        let (who, label) = if let Some(r) = rest.strip_prefix(" (") { let (w, l) = r.split_once("): ")?; (question_key(w), l) } else { let (w, l) = rest.trim().split_once(": ")?; (w.to_string(), l) };
+        (!a.is_empty()).then(|| (kind.to_string(), who, detail_kind(kind, label), a.to_string()))
+    }).collect();
+    if kept.is_empty() {
+        return 0;
+    }
+    let text = |f: &Value, k: &str| f[k].as_str().unwrap_or("").trim().to_string();
+    let mut sections: Vec<String> = vec![];
+    for f in fields {
+        let s = text(f, "section");
+        if !s.is_empty() && !sections.contains(&s) {
+            sections.push(s);
+        }
+    }
+    let mut n = 0;
+    for section in sections {
+        let low = section.to_lowercase();
+        let Some((kind, _, names)) = ENTRY_KINDS.iter().find(|(_, heads, _)| heads.iter().any(|h| low.contains(h))) else { continue };
+        let mine: Vec<&Value> = fields.iter().filter(|f| text(f, "section") == section).collect();
+        let is_name = |f: &Value| { let l = text(f, "label").to_lowercase(); let l = l.trim_start_matches('*').trim(); names.iter().any(|n| l == *n || l.starts_with(&format!("{n} ")) || l.ends_with(&format!(" {n}")) || (*kind == "Education" && l.contains(n))) && !l.contains("number") && !l.contains("date") };
+        let answered = |f: &Value| f["key"].as_str().and_then(|k| values.get(k)).and_then(|v| v.as_str()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).unwrap_or_else(|| text(f, "value"));
+        let who = mine.iter().find(|f| is_name(f)).map(|f| question_key(&answered(f))).filter(|w| !w.is_empty());
+        let place: String = section.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>().chars().rev().collect();
+        let place = format!("entry {}", if place.is_empty() { "1" } else { &place });
+        // This entry's kept details: by its name (either may be the longer form of the other), else by its place.
+        let about = |w: &str| who.as_deref().is_some_and(|me| w == me || (w.len() > 5 && me.contains(w)) || (me.len() > 5 && w.contains(me)));
+        let theirs: Vec<&(String, String, String, String)> = kept.iter().filter(|k| k.0 == *kind && (about(&k.1) || (who.is_none() && k.1 == place))).collect();
+        if theirs.is_empty() {
+            continue;
+        }
+        for f in mine {
+            let (Some(key), label, typ) = (f["key"].as_str(), text(f, "label"), text(f, "type")) else { continue };
+            // Never over what's in the box already, and not the entry's own name or its tick boxes.
+            let placeholder = ["month", "year", "day", "mm", "yyyy", "dd", "select one"].contains(&text(f, "value").to_lowercase().as_str());
+            if is_name(f) || (!text(f, "value").is_empty() && !placeholder) || ["file", "password", "checkbox", "checkboxes", "add", "skills", "prompt"].contains(&typ.as_str()) {
+                continue;
+            }
+            let options: Vec<&str> = f["options"].as_array().map(|a| a.iter().filter_map(|o| o.as_str()).collect()).unwrap_or_default();
+            let listed = typ == "select" || typ == "radio";
+            let fits = |a: &str| !listed || options.iter().any(|o| o.trim().eq_ignore_ascii_case(a));
+            let want = detail_kind(kind, &label);
+            let mut found = theirs.iter().find(|k| k.2 == want && fits(&k.3)).map(|k| k.3.clone());
+            // A language's level under a name not seen before: the level you gave it most often.
+            if found.is_none() && *kind == "Language" && listed {
+                let mut tally: Vec<(&str, usize)> = vec![];
+                for k in theirs.iter().filter(|k| fits(&k.3)) {
+                    match tally.iter_mut().find(|t| t.0 == k.3) { Some(t) => t.1 += 1, None => tally.push((k.3.as_str(), 1)) }
+                }
+                found = tally.iter().max_by_key(|t| t.1).map(|t| t.0.to_string());
+            }
+            if let Some(a) = found {
+                let a = options.iter().find(|o| o.trim().eq_ignore_ascii_case(&a)).map(|o| o.to_string()).unwrap_or(a);
+                if values.get(key).and_then(|v| v.as_str()) != Some(a.as_str()) {
+                    values.insert(key.to_string(), json!(a));
+                    n += 1;
+                }
+            }
+        }
+    }
+    n
+}
+
 /// Those details as lines for Claude, from your saved answers (where you can change or remove them).
 pub fn entry_lines(agent: &Agent) -> String {
     let lines: Vec<String> = bank(agent).iter().filter_map(|x| {
@@ -577,6 +666,13 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     }
     let certs = cv_listed(&cv_text, "cert").max(profile.certifications.iter().filter(|c| !c.name.trim().is_empty()).count());
     tidy_answers(fields, &mut values, &cv_text, &profile.application_facts, roles_listed, certs);
+    if !is_profile {
+        usual_answers(fields, &mut values, &job.source, &job.company, &cv_text);
+    }
+    // What you put on earlier forms about a school, certificate or language wins over what Claude
+    // made of the CV and your notes (it kept answering French "Beginner" from a note, and leaving the
+    // GPA and a degree's first year out, however often you'd corrected them).
+    apply_entry_details(&bank(agent), fields, &mut values);
     let n = values.len() + files.len();
     if is_profile {
         agent.db().log(None, "fill", &format!("{n} of {} fields filled in on your profile at {}", fields.len(), job.company))?;
@@ -677,6 +773,50 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
             .map(|l| l.trim().to_lowercase()).filter(|l| l.len() > 2);
         if let Some(fluent) = lang.and_then(|l| language_fluent(&text, &l)) {
             values.insert(key.to_string(), json!(if fluent { "yes" } else { "no" }));
+        }
+    }
+}
+
+/// Two questions nearly every form asks, answered when Claude left them out (it's told to answer
+/// only from the facts, and these aren't on a CV): how you heard of the job (where it was found; a
+/// box that searches the site's own list gets the words to look for, and the extension picks the
+/// closest the list has), and whether you've worked for the company before (No, unless its name is
+/// on your CV: then it's left for you).
+fn usual_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, source: &str, company: &str, cv_text: &str) {
+    let heard = match source {
+        "linkedin" => "LinkedIn",
+        "indeed" => "Indeed",
+        "glassdoor" => "Glassdoor",
+        "jobbank" => "Job Bank",
+        "manual" | "email" => "Other",
+        s if crate::sites::is_site_source(s) || ["greenhouse", "lever", "ashby", "workday", "smartrecruiters"].contains(&s) => "Company Website",
+        _ => "Job Board",
+    };
+    let company = company.trim().to_lowercase();
+    let was_there = company.len() > 2 && cv_text.to_lowercase().contains(&company);
+    for f in fields {
+        let (Some(key), label) = (f["key"].as_str(), f["label"].as_str().unwrap_or("").to_lowercase()) else { continue };
+        if values.get(key).and_then(|v| v.as_str()).is_some_and(|v| !v.trim().is_empty()) || f["value"].as_str().is_some_and(|v| !v.trim().is_empty() && f["type"] != "radio") {
+            continue;
+        }
+        let options: Vec<&str> = f["options"].as_array().map(|a| a.iter().filter_map(|o| o.as_str()).collect()).unwrap_or_default();
+        let pick = |wanted: &[&str]| wanted.iter().find_map(|w| options.iter().find(|o| o.to_lowercase().contains(&w.to_lowercase())).map(|o| o.to_string()));
+        if label.contains("how did you hear") || label.contains("where did you hear") || label.contains("how did you find") || label.contains("how did you learn about") {
+            let answer = match f["type"].as_str().unwrap_or("") {
+                "select" | "radio" => pick(&[heard, "job board", "job site", "online", "internet", "website", "other"]),
+                "prompt" | "text" | "combobox" | "skills" => Some(heard.to_string()),
+                _ => None,
+            };
+            if let Some(a) = answer {
+                values.insert(key.to_string(), json!(a));
+            }
+        } else if !was_there && f["type"] == "radio" && options.len() == 2
+            && (label.contains("worked with us before") || label.contains("worked for us before") || label.contains("previously worked") || label.contains("previously employed")
+                || label.contains("current or former employee") || label.contains("former employee") || label.contains("ever been employed by") || label.contains("worked here before"))
+        {
+            if let Some(no) = pick(&["no"]) {
+                values.insert(key.to_string(), json!(no));
+            }
         }
     }
 }
@@ -1050,6 +1190,24 @@ mod tests {
     }
 
     #[test]
+    fn the_two_questions_every_form_asks_get_an_answer() {
+        let fields: Vec<Value> = serde_json::from_value(json!([
+            {"key": "f0", "label": "How Did You Hear About Us?", "type": "prompt", "required": true},
+            {"key": "g1", "label": "Have you worked with us before?", "type": "radio", "options": ["Yes", "No"]},
+            {"key": "s2", "label": "How did you hear about this job?", "type": "select", "options": ["Employee referral", "Online job board", "Other"]},
+            {"key": "t3", "label": "City", "type": "text"},
+        ])).unwrap();
+        let mut v = serde_json::Map::new();
+        usual_answers(&fields, &mut v, "adzuna", "CIBC", "Jane\nEXPERIENCE\nLead, Maple Bank | 2019 - Present");
+        assert_eq!((v["f0"].as_str(), v["g1"].as_str(), v["s2"].as_str(), v.get("t3")), (Some("Job Board"), Some("No"), Some("Online job board"), None));
+        // Someone who did work there answers that one themselves; an answer Claude gave is kept.
+        let mut v = serde_json::Map::new();
+        v.insert("f0".into(), json!("LinkedIn"));
+        usual_answers(&fields, &mut v, "adzuna", "Maple Bank", "Jane\nEXPERIENCE\nLead, Maple Bank | 2019 - Present");
+        assert_eq!((v["f0"].as_str(), v.get("g1")), (Some("LinkedIn"), None));
+    }
+
+    #[test]
     fn messages_need_the_token_and_files_go_by_label() {
         let tok = new_token();
         let b64 = |v: &Value| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(v.to_string());
@@ -1080,6 +1238,26 @@ mod tests {
             ("Certification entry 2: Certification Number".to_string(), "PMP-123".to_string()),
             ("Language (French): Reading".to_string(), "2 - Classroom Study".to_string()),
         ], "the degree, an empty date's placeholder, a tick box and a job's title aren't details to keep");
+        // And on the next form they're put back, whatever Claude answered and whatever the boxes are called.
+        let bank: Vec<Value> = kept.iter().map(|(q, a)| json!({"q": q, "a": a})).collect();
+        let levels = json!(["1 - Beginner", "2 - Classroom Study", "3 - Intermediate"]);
+        let next = vec![
+            json!({"key": "s", "label": "School or University", "type": "text", "section": "Education 1", "value": ""}),
+            json!({"key": "g", "label": "Grade average", "type": "text", "section": "Education 1", "value": ""}),
+            json!({"key": "y", "label": "From (YYYY)", "type": "date", "section": "Education 1", "value": "Year"}),
+            json!({"key": "l", "label": "Language", "type": "select", "section": "Languages 3", "value": "", "options": ["English", "French"]}),
+            json!({"key": "r", "label": "Reading", "type": "select", "section": "Languages 3", "value": "", "options": levels}),
+            json!({"key": "w", "label": "Writing", "type": "select", "section": "Languages 3", "value": "", "options": levels}),
+            json!({"key": "o", "label": "Level", "type": "select", "section": "Languages 3", "value": "", "options": ["Basic", "Fluent"]}),
+            json!({"key": "e", "label": "Reading", "type": "select", "section": "Languages 1", "value": "", "options": levels}),
+        ];
+        let mut v = serde_json::Map::new();
+        for (k, a) in [("s", "American University of Kuwait"), ("l", "French"), ("r", "1 - Beginner"), ("w", "1 - Beginner"), ("o", "Basic"), ("e", "3 - Intermediate")] {
+            v.insert(k.into(), json!(a));
+        }
+        assert_eq!(apply_entry_details(&bank, &next, &mut v), 4);
+        assert_eq!((v["g"].as_str(), v["y"].as_str(), v["r"].as_str(), v["w"].as_str()), (Some("3.4"), Some("2005"), Some("2 - Classroom Study"), Some("2 - Classroom Study")));
+        assert_eq!((v["o"].as_str(), v["e"].as_str()), (Some("Basic"), Some("3 - Intermediate")), "a list without the kept level, and another language's entry, stay as answered");
         assert_eq!(file_for("Cover Letter", false), Some("letter"));
         // A box to paste the letter into is the letter's; a question that mentions one is not.
         assert!(is_letter_box(&json!({"type": "textarea", "label": "Cover letter", "value": ""})));

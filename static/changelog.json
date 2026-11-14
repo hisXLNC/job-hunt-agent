@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.81.0",
+    "date": "2026-11-14",
+    "title": "See what Job Hunt is doing",
+    "changes": [
+      "A small chip in the bottom-left corner always shows whether Job Hunt is doing anything: Idle, or what is running with a progress bar and a Stop. Press Idle for the last things it did.",
+      "Background work that ran unseen (syncing, backups, checking postings, company ratings, finding pay) is now listed there too.",
+      "Forms: How did you hear about us and Have you worked with us before now get an answer when Claude leaves them blank.",
+      "Forms: what you put on earlier forms for a school, certificate or language (a GPA, the year a degree started, French as Classroom Study) is now filled in by Job Hunt itself on the next form, whatever Claude answers.",
+      "Find it on the company's site and Search the web for it are one button, Find the real posting: it looks on the company's site, and if the job isn't there it opens a web search for it.",
+      "Company logos: more site endings are tried (.io, .co, .ai, .net), and companies that had no logo are looked up again."
+    ]
+  },
+  {
     "version": "2.80.1",
     "date": "2026-11-14",
     "title": "Finding the real posting",

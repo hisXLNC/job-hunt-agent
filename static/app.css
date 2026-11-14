@@ -2169,3 +2169,14 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
   .queue-filters.inline { margin-top: 2px; }
   .mbtn.mask svg { width: 20px; height: 20px; }
 }
+
+/* Nothing running: a small, quiet chip in the same corner, so there's always somewhere to look. */
+.act-bar.idle.shut { width: auto; box-shadow: none; opacity: .8; }
+.act-bar.idle.shut:hover { opacity: 1; }
+.act-bar.idle .act-head { padding: 6px 10px; font-size: 12.5px; }
+.act-bar.idle .act-head b { font-weight: 600; color: var(--muted); }
+.act-dot.idle { background: var(--muted); opacity: .55; animation: none; }
+.act-idle { padding: 4px 12px 10px; border-top: 1px solid var(--line-2); }
+.act-idle .act-list { border-top: 0; }
+.act-idle .act-row { padding: 6px 0; }
+.act-idle .act-top { font-size: 12.5px; align-items: baseline; }

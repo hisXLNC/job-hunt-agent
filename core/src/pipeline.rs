@@ -890,7 +890,7 @@ impl Agent {
     /// long that kind of work usually takes (`estimated`), and stops short of the end.
     pub fn activity(&self) -> Vec<Value> {
         // (prefix or name, what it's called, seconds it usually takes; 0: not shown)
-        const KINDS: [(&str, &str, i64); 27] = [
+        const KINDS: &[(&str, &str, i64)] = &[
             ("search", "Searching for jobs", 0), ("search-ending", "The stopped search is finishing what it was in the middle of", 30),
             ("cv-update", "Updating everything for your CV", 0), ("claude-fill", "Claude is filling in a form in your browser", 300),
             ("chrome-test", "Testing Claude's connection to your browser", 60), ("tailor:", "Tailoring a CV and cover letter", 100),
@@ -900,6 +900,12 @@ impl Agent {
             ("ask", "Ask Claude is answering", 25), ("cvchat", "Claude is working on your CV with you", 20), ("career", "Working out your career options", 90), ("coach", "Looking at what would help your applications", 90),
             ("insights", "Reading your results", 60), ("lessons", "Learning from your results", 45), ("weekly", "Writing your weekly review", 60), ("leads", "Looking for hiring posts", 120),
             ("add", "Adding a job", 40), ("inbox", "Reading your job email", 60), ("apply-link:", "Looking for a job on the company's own site", 90),
+            // What Job Hunt does by itself, between searches.
+            ("applylinks", "Looking for approved jobs on the companies' own sites", 180), ("check-postings", "Checking which postings are still open", 120),
+            ("ratings", "Looking up what employees say about companies", 120), ("salaries", "Finding the pay in postings that don't state it", 120),
+            ("reasons", "Shortening long fit reasons", 60), ("discover", "Looking for companies whose job pages to add", 120), ("recruiters", "Reading email from recruiters", 60),
+            ("sync", "Saving a copy to your sync folder", 40), ("backup", "Saving a backup", 20), ("calsync", "Updating your calendar", 20), ("test-sources", "Testing your job sources", 90),
+            ("update", "Getting an update of Job Hunt", 60), ("files-move", "Moving your files", 30), ("google", "Connecting to Google", 30), ("care", "Tidying up", 60),
         ];
         let now = Utc::now().timestamp();
         let started = STARTED.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -907,10 +913,15 @@ impl Agent {
         names.sort_by_key(|n| (started.get(n).copied().unwrap_or(now), n.clone()));
         let mut out = vec![];
         for name in names {
-            let Some((key, label, usual)) = KINDS.iter().find(|(k, _, _)| if k.ends_with(':') { name.starts_with(k) } else { name == *k }) else { continue };
+            // Anything not named above still shows: nothing runs unseen.
+            let other = (name.as_str(), "Working in the background", 60);
+            let (key, label, usual) = KINDS.iter().find(|(k, _, _)| if k.ends_with(':') { name.starts_with(k) } else { name == *k }).unwrap_or(&other);
             let secs = (now - started.get(&name).copied().unwrap_or(now)).max(0);
             let mut detail = String::new();
             let (mut percent, mut estimated) = (((secs as f64 / (*usual).max(1) as f64) * 100.0).min(95.0) as u32, true);
+            if std::ptr::eq(label.as_ptr(), other.1.as_ptr()) {
+                detail = name.clone();
+            }
             if let Some(id) = key.ends_with(':').then(|| &name[key.len()..]) {
                 if let Ok(Some(j)) = self.db().job(id) {
                     detail = format!("{} at {}", j.title, j.company);

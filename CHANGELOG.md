@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.81.0] - 2026-11-14
+
+See what Job Hunt is doing.
+
+### Changes
+
+- A small chip in the bottom-left corner always shows whether Job Hunt is doing anything: Idle, or what is running with a progress bar and a Stop. Press Idle for the last things it did.
+- Background work that ran unseen (syncing, backups, checking postings, company ratings, finding pay) is now listed there too.
+- Forms: How did you hear about us and Have you worked with us before now get an answer when Claude leaves them blank.
+- Forms: what you put on earlier forms for a school, certificate or language (a GPA, the year a degree started, French as Classroom Study) is now filled in by Job Hunt itself on the next form, whatever Claude answers.
+- Find it on the company's site and Search the web for it are one button, Find the real posting: it looks on the company's site, and if the job isn't there it opens a web search for it.
+- Company logos: more site endings are tried (.io, .co, .ai, .net), and companies that had no logo are looked up again.
+
 ## [2.80.1] - 2026-11-14
 
 Finding the real posting.
@@ -2253,6 +2266,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.81.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.81.0
 [2.80.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.80.1
 [2.80.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.80.0
 [2.79.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.79.1

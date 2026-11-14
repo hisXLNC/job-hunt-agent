@@ -108,6 +108,9 @@ pub fn kept(agent: &Agent, company: &str) -> Option<Option<(String, Vec<u8>)>> {
         return None; // from before the second index and shared names (2.61.0): look again
     }
     if kind == "none4" {
+        return None; // from before more endings were tried (.io, .co, .ai, .net; 2.81.0): look again
+    }
+    if kind == "none5" {
         // Looked and found none: look again after two weeks (its own site may be known by then).
         let fresh = chrono::DateTime::parse_from_rfc3339(rest).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_days() < 14);
         return fresh.then_some(None);
@@ -132,7 +135,7 @@ pub fn want(agent: &Arc<Agent>, company: &str) {
     std::thread::spawn(move || {
         let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
         let http = client();
-        let mut value = format!("none4|{}", crate::util::now());
+        let mut value = format!("none5|{}", crate::util::now());
         for (site, sure) in sites_for(&a, &company) {
             // A site another spelling of the company already led to: its image is here.
             if !a.secret(&site_key(&site)).is_empty() {
@@ -312,7 +315,15 @@ fn sites_for(agent: &Agent, company: &str) -> Vec<(String, bool)> {
             add(format!("{slug}.{tld}"), false);
         }
     }
-    out.truncate(12);
+    // A newer company's site often ends otherwise ("softiq.io"): the whole name with those endings,
+    // last, and theirs only if the home page says so.
+    let whole = whole_name(company);
+    if whole.len() >= 4 && whole.is_ascii() {
+        for tld in ["io", "co", "ai", "net"] {
+            add(format!("{whole}.{tld}"), false);
+        }
+    }
+    out.truncate(14);
     out
 }
 
@@ -470,7 +481,7 @@ mod tests {
     fn kept_once_looked_for() {
         let s = crate::testkit::setup();
         assert_eq!(kept(&s.agent, "Acme Inc."), None, "not looked for yet");
-        s.agent.db().set(&key("Acme Inc."), &format!("none4|{}", crate::util::now())).unwrap();
+        s.agent.db().set(&key("Acme Inc."), &format!("none5|{}", crate::util::now())).unwrap();
         assert_eq!(kept(&s.agent, "ACME"), Some(None), "looked lately, none: the same company however it's written");
         // Its site, and that site's image: shared by every spelling that leads to the site.
         s.agent.db().set(&site_key("acme.com"), &format!("image/png|{}", base64::engine::general_purpose::STANDARD.encode([1u8, 2, 3]))).unwrap();
@@ -499,7 +510,7 @@ mod tests {
         // A site's address kept as the company's name: that site, and no checking needed.
         assert_eq!(sites_for(&s.agent, "jobs.scotiabank.com")[0], ("scotiabank.com".to_string(), true));
         // Seen only on a job board: likely addresses from its name, each to be checked.
-        assert_eq!(sites_for(&s.agent, "Scotiabank"), vec![("scotiabank.com".to_string(), false), ("scotiabank.ca".to_string(), false)]);
+        assert_eq!(sites_for(&s.agent, "Scotiabank").into_iter().map(|x| x.0).collect::<Vec<_>>(), ["scotiabank.com", "scotiabank.ca", "scotiabank.io", "scotiabank.co", "scotiabank.ai", "scotiabank.net"], ".com and .ca first, then the endings newer companies use");
         let rogers = sites_for(&s.agent, "Rogers Communications Inc.");
         assert!(rogers.contains(&("rogers.com".to_string(), false)), "{rogers:?}");
         // Where its jobs apply comes first; a site named for the company before one that isn't.

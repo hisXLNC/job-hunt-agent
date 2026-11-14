@@ -426,7 +426,7 @@ static OVERVIEW_KEPT: std::sync::LazyLock<std::sync::Mutex<std::collections::Has
 /// of these ever try to write there, it's answered again on the app's own connection.
 fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
     let parts: Vec<&str> = req.path.trim_matches('/').split('/').collect();
-    if req.method == "GET" && matches!(parts.as_slice(), ["api", "overview"] | ["api", "jobs"] | ["api", "jobs", _]) {
+    if req.method == "GET" && matches!(parts.as_slice(), ["api", "overview"] | ["api", "jobs"] | ["api", "jobs", _] | ["api", "activity"]) {
         let got = {
             let _reading = agent.reading();
             route_on(agent, host, req)
@@ -823,7 +823,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             // Postings that mention a certification you listed, to score again now that Job Hunt knows.
             ["api", "certs", "rescore"] => return Ok(Resp::json(&json!({ "postings": agent.cert_postings().len(), "running": agent.is_running("rescore") }))),
             // What's running now, for the activity panel.
-            ["api", "activity"] => return Ok(Resp::json(&json!({ "running": agent.activity() }))),
+            // What's running now, and (for when nothing is) the last things Job Hunt did.
+            ["api", "activity"] => return Ok(Resp::json(&json!({ "running": agent.activity(), "recent": agent.db().recent_events(6)?, "last_search": agent.secret("last.search") }))),
             // The search, when it seems stuck: where it is, how long it's been quiet, and its log.
             ["api", "search-log"] => return Ok(Resp::json(&agent.search_log())),
             // The interview that builds a CV from a conversation.

@@ -864,6 +864,7 @@ async function act(el) {
   if (a === 'findApply') {
     // Started in the background: the job's page says it's looking and shows the result, and it has
     // a line (with Stop) under what Job Hunt is doing.
+    findAsked = el.dataset.job || jobId;
     try { await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/apply-link`, { method: 'POST' }); } catch (e) { toast(e.message, true); }
     if (typeof actLoad === 'function') actLoad();
     return route();

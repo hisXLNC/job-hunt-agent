@@ -889,9 +889,10 @@ fn what_is_running_is_listed_and_each_can_be_stopped() {
     let fill = s.agent.claim("claude-fill").unwrap();
     s.agent.db().set("claudefill:current", "Analyst at Maple").unwrap();
     let list = s.agent.activity();
-    // Housekeeping (sync) isn't shown; the job's name comes with its work.
-    assert_eq!(list.iter().map(|a| a["id"].as_str().unwrap()).collect::<Vec<_>>(), vec!["claude-fill", "tailor:test:1"], "{list:?}");
-    let (fill_row, tailor_row) = (&list[0], &list[1]);
+    // Housekeeping (sync) is shown too: nothing runs in the background unseen. The job's name comes with its work.
+    assert_eq!(list.iter().map(|a| a["id"].as_str().unwrap()).collect::<Vec<_>>(), vec!["claude-fill", "sync", "tailor:test:1"], "{list:?}");
+    assert_eq!(list[1]["label"], "Saving a copy to your sync folder");
+    let (fill_row, tailor_row) = (&list[0], &list[2]);
     assert_eq!((tailor_row["label"].as_str(), tailor_row["detail"].as_str(), tailor_row["estimated"].as_bool(), tailor_row["stoppable"].as_bool()),
         (Some("Tailoring a CV and cover letter"), Some("Technical Program Manager at Acme"), Some(true), Some(true)));
     assert_eq!(fill_row["detail"], "Analyst at Maple");

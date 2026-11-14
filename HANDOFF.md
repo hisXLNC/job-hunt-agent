@@ -810,3 +810,29 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   link is followed (tests never go to the network). Before pushing anything that touches
   `claude_ready()` / `engine_name()`, run the core tests with Claude off the PATH:
   `env PATH="$(dirname $(which cargo)):/usr/bin:/bin" cargo test --lib` in `core`.
+
+## 2.81.0
+
+- **Always somewhere to see background work.** `#actBar` is never hidden: with nothing running it's
+  a small "Idle" chip (bottom left) that opens to "Nothing is running right now", the last search
+  and the last six events (`/api/activity` now also returns `recent`, `last_search`; it's read on
+  the reading connection). `activity()` lists every claim: housekeeping has names now (sync, backup,
+  check-postings, ratings, salaries, applylinks…) and anything unnamed shows as "Working in the
+  background" with its claim name. The test that sync was NOT listed is changed on purpose.
+- **Forms: the two usual questions.** `fill::usual_answers` (after `tidy_answers`, not for
+  profiles): "How did you hear about us" gets the job's source ("LinkedIn", "Indeed", "Company
+  Website", else "Job Board"; for select/radio the closest option), and "Have you worked with us
+  before?" (two-option radio) gets No unless the company's name is on the CV. From a CIBC Workday
+  report where both were left blank. Workday's source box is a two-level list: whether the extension
+  gets through the second level is untested.
+- **Entry details are applied, not just told.** `fill::apply_entry_details(bank, fields, values)`
+  runs after Claude's answers: for each Education / Certification / Language entry it finds the kept
+  details (bank questions "Education (school): …", "Language (French): …", or "… entry N") by the
+  entry's name as answered now, maps labels through `detail_kind` (GPA / from / to; a language level
+  by its label, else that language's commonest kept level that the list offers) and overrides
+  Claude's value. Never over a box that already has a value. Cause: the user's notes say "French:
+  beginner", so Claude kept choosing "1 - Beginner" and left GPA / From (YYYY) out although the
+  details were in the facts. Whether the user's bank actually holds those details couldn't be seen
+  from here (they're listed under saved answers in the app).
+- One button, **Find the real posting** (`findApply`): the page remembers the job (`findAsked`), and when `finding` ends without an `apply_url` it opens the web search itself (`webSearchFor`). Shown for any job not yet sent that has no company link.
+- Logos: the whole name is also tried as .io/.co/.ai/.net (home page must name the company); the miss marker is `none5` so earlier misses (`none4`) are looked up again. Test of tried addresses updated on purpose. SOFTIQ's own site couldn't be reached from the dev box, so whether it now gets a logo is unknown.
