@@ -851,9 +851,30 @@ fn how_filling_went_is_tallied_by_site() {
     crate::fill::site_report(&s.agent, "https://career4.successfactors.com/apply", &json!({ "handed": true })).unwrap();
     crate::fill::site_report(&s.agent, "https://www.maple.example/apply", &json!({ "boxes": 10, "filled": 10, "refused": 0 })).unwrap();
     crate::fill::site_report(&s.agent, "not a url", &json!({ "boxes": 1 })).unwrap();
+    // What the first form there required and Job Hunt couldn't answer is asked for before the next
+    // one, with the basics; once answered, it isn't asked again. Elsewhere only the basics are.
+    crate::fill::site_report(&s.agent, "https://career4.successfactors.com/career", &json!({ "boxes": 5, "filled": 5, "refused": 0, "blank": ["* Address", "Are you a Ted Rogers Scholarship Fund recipient?"], "stuck": ["Province/Territory/State"] })).unwrap();
+    let mut j = s.agent.db().job("test:1").unwrap();
+    assert!(j.is_none());
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    s.agent.db().update_job("test:1", &[("apply_url", "https://career4.successfactors.com/career?job=1".into())]).unwrap();
+    j = s.agent.db().job("test:1").unwrap();
+    let pre = crate::fill::precheck(&s.agent, j.as_ref().unwrap());
+    let missing: Vec<&str> = pre["missing"].as_array().unwrap().iter().filter_map(|x| x.as_str()).collect();
+    assert_eq!((pre["site"].as_str(), pre["seen"].as_bool()), (Some("career4.successfactors.com"), Some(true)));
+    assert!(missing.contains(&"Address") && missing.iter().any(|m| m.contains("Ted Rogers")) && missing.contains(&"Postal code"), "{missing:?}");
+    assert_eq!(crate::fill::keep_answers(&s.agent, &[json!({ "q": "Address", "a": "1 Main St" }), json!({ "q": "Postal code", "a": "M5V 1A1" }), json!({ "q": "City", "a": "" })]).unwrap(), 2);
+    let pre = crate::fill::precheck(&s.agent, j.as_ref().unwrap());
+    let missing: Vec<&str> = pre["missing"].as_array().unwrap().iter().filter_map(|x| x.as_str()).collect();
+    // (City isn't asked for: the profile says where they look.)
+    assert!(!missing.contains(&"Address") && !missing.contains(&"Postal code") && !missing.contains(&"City") && missing.iter().any(|m| m.contains("Ted Rogers")), "{missing:?}");
+    // What to fix first names the site that only partly fills, and the details still missing.
+    let fixes = s.agent.fixes();
+    assert!(fixes.len() <= 3 && fixes.iter().any(|f| f["title"].as_str().unwrap().contains("career4.successfactors.com")), "{fixes:?}");
+    assert!(fixes.iter().any(|f| f["title"].as_str().unwrap().starts_with("Forms ask for")), "{fixes:?}");
     let rows = crate::fill::sites(&s.agent);
     assert_eq!(rows.len(), 2);
-    assert_eq!((rows[0]["site"].as_str(), rows[0]["fills"].as_u64(), rows[0]["refused"].as_u64(), rows[0]["handed"].as_u64()), (Some("career4.successfactors.com"), Some(1), Some(9), Some(1)), "the site that goes worst is first");
+    assert_eq!((rows[0]["site"].as_str(), rows[0]["fills"].as_u64(), rows[0]["refused"].as_u64(), rows[0]["handed"].as_u64()), (Some("career4.successfactors.com"), Some(2), Some(9), Some(1)), "the site that goes worst is first");
     assert_eq!(rows[0]["last"]["stuck"][0], "Province/Territory/State");
     assert_eq!(rows[1]["site"], "maple.example");
 }
@@ -919,6 +940,13 @@ fn the_assistant_answers_from_any_screen_and_keeps_the_conversation() {
     s.agent.ask_start("work in Snowflake please", &json!({ "where": "Settings" })).unwrap();
     wait();
     assert!(s.agent.ask_log().pop().unwrap()["actions"].as_array().unwrap().is_empty());
+    // Across jobs: the assistant is given the applications in play, and an offer for several keeps
+    // only jobs that exist.
+    s.agent.ask_start("which are weakest? set aside many", &json!({ "where": "Queue" })).unwrap();
+    wait();
+    let last = s.agent.ask_log().pop().unwrap();
+    assert!(last["text"].as_str().unwrap().contains("knows [test:1]"), "{last}");
+    assert_eq!((last["actions"][0]["kind"].as_str(), last["actions"][0]["jobs"].as_array().unwrap().len()), (Some("set_aside_many"), 1), "{last}");
     // What was said in the tab a job used to have is still there to read.
     s.agent.db().set("chat:test:1", &json!([{ "who": "you", "text": "Salary?" }, { "who": "claude", "text": "Ask for the range." }]).to_string()).unwrap();
     assert_eq!(s.agent.ask_earlier("test:1").len(), 2);

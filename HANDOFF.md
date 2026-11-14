@@ -56,6 +56,21 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.69.0: the assistant across jobs; what to fix first; a check before a form.**
+  - `ask_facts` now lists the applications in play (approved, ready, queued; best first; `[id] title at company |
+    stage | fit | keywords | closes`) and `fixes()`. Offers `set_aside_many`, `save_many`, `tailor_many`
+    (`OFFERS_MANY`) carry `jobs` (ids Claude copies from that list; unknown ids dropped in `ask_answer`) and need no
+    job on screen; `askDo` asks once, then calls the job route for each.
+  - `Agent::fixes()` (`pipeline/people.rs`; no Claude): at most three of: a site Job Hunt can't read or that only
+    partly fills (from `fill::sites`), details forms ask for that it can't answer (`fill::missing_details(None)`),
+    ready applications tailoring didn't help (≥2), approved ones not sent, ready ones waiting over a week (≥3).
+    `GET /api/fixes` → `#fixesCard` at the top of Insights (`loadFixes` in `app-steps.js`).
+  - *Before a form*: the page's report carries `blank` (required boxes with no answer), kept per site in
+    `fill:sites[host].blank`. `fill::precheck(job)` = that site's blanks plus `BASICS` (Phone, Address, City, Postal
+    code) minus what `answer_keys` covers (saved answers and labelled facts match loosely; contact details exactly,
+    marked `=`; a postal code, street or `locations` found anywhere count). `GET /api/jobs/<id>/precheck`, `POST
+    /api/precheck {answers}` → `keep_answers` (the bank). Shown by `loadPrecheck` in any `[data-precheck]` (the
+    Queue's submit card and the job's Questions tab); a MutationObserver on `#main` fills them and `#fixesCard`.
 - **2.68.0: the assistant offers to act; a tally of forms by site; and four smaller things.** (2.67.2 before it only
   shrank the Ask Claude button to a 36px round icon that names itself on hover.)
   - *Offers.* `Llm::assist` returns `Assisted { reply, actions: Vec<Offer> }` (`claude.rs`; kinds in `OFFERS`:

@@ -213,6 +213,7 @@ async function showJob(id) {
       </div>
     </div>
     <div class="jpane" data-pane="apply" ${tab === 'apply' ? '' : 'hidden'}>
+    ${['ready', 'approved'].includes(j.status) ? `<div class="precheck card" data-precheck="${esc(j.id)}" hidden></div>` : ''}
     ${['ready', 'approved', 'applied', 'interviewing', 'offer'].includes(j.status) || answers ? `<section class="card">
       <header><h2>What the form asks</h2>${answering ? '<span class="muted small"><span class="spin" data-kind="answers"></span>Writing…</span>' : ''}</header>
       <p class="muted small">Paste the form's questions, one per line, or leave it empty for the usual ones (why this role, salary expectations, notice period…). Answers use your CV, this posting and your <a href="#cvs/details">facts for forms</a>.</p>

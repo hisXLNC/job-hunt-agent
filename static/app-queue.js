@@ -142,7 +142,7 @@ function decisionHtml(x, at, of) {
     const can = overview?.can_fill && j.url && j.effort?.kind !== 'email';
     return `<article class="card decision" data-kind="submit">${decisionTop(j, where)}
       <div class="dbody"><div class="why blue"><b>Approved: submit it</b>${can ? 'It opens in your own browser, where your sign-ins work. On the form, click the Job Hunt extension and press Fill this form; check it over and press Submit.' : 'Open the Apply page: the posting, your files and your answers are there in one place.'}</div>
-        <p class="small muted">${onCompanySite(j)}</p></div>
+        <p class="small muted">${onCompanySite(j)}</p><div class="precheck" data-precheck="${id}" hidden></div></div>
       ${dbar(`<button class="btn quiet" data-act="stage" data-status="dismissed" data-job="${id}" data-from="approved">Not interested${key('X')}</button><button class="btn" data-act="stage" data-status="applied" data-job="${id}" data-from="approved" title="Already submitted it">Mark applied</button>${can ? `<a class="btn ghost" href="#job/${enc}" data-tab-to="apply">Files and answers</a>` : ''}`,
         can ? `<button class="btn primary big" data-primary data-act="fillBrowser" data-job="${id}">Fill it in my browser${key('Enter')}</button>` : `<a class="btn primary big" data-primary href="#job/${enc}" data-tab-to="apply">Apply${key('Enter')}</a>`)}</article>`;
   }

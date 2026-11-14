@@ -32,6 +32,10 @@ impl Llm for DemoLlm {
         let actions = if a.job.is_some() && a.message.to_lowercase().contains("shorter") {
             vec![jobhunt_core::claude::Offer { kind: "revise_letter".into(), label: "Shorten the cover letter".into(), note: "Cut the cover letter to about 150 words.".into(), ..Default::default() },
                 jobhunt_core::claude::Offer { kind: "save_later".into(), label: "Save for later".into(), ..Default::default() }]
+        } else if a.message.to_lowercase().contains("weakest") {
+            // The ids of the first two applications it was told about.
+            let ids: Vec<String> = a.facts.lines().filter_map(|l| l.strip_prefix('[')).filter_map(|l| l.split_once(']')).map(|(id, _)| id.to_string()).take(2).collect();
+            if ids.is_empty() { vec![] } else { vec![jobhunt_core::claude::Offer { kind: "save_many".into(), label: format!("Save those {} for later", ids.len()), jobs: ids, ..Default::default() }] }
         } else { vec![] };
         Ok(jobhunt_core::claude::Assisted { reply: format!("{about}\n\n- Your CV covers the delivery side well.\n- It says little about the data tooling.\n\nYou can compare it with your other roles in [All jobs](#applications). ({} earlier turns.)", a.history.len()), actions })
     }

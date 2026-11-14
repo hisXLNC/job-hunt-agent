@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.69.0",
+    "date": "2026-11-14",
+    "title": "Ask Claude across your jobs, what to fix first, and a check before each form",
+    "changes": [
+      "Ask Claude now sees your applications in play, so you can ask which are weakest, which to send first or which close soon. It can offer to set several aside, save them or tailor them at once; nothing happens until you press the button and confirm.",
+      "Insights opens with What to fix first: up to three things costing you the most applications, such as a site whose forms only partly fill, details forms keep asking for, weak fits waiting for approval, or approved applications not sent.",
+      "Before you open a form, Job Hunt lists what it will ask for that it has no answer to (what that site's forms asked before, and basics like your address), with a box for each. What you give is kept for every form after."
+    ]
+  },
+  {
     "version": "2.68.0",
     "date": "2026-11-14",
     "title": "Ask Claude can make changes, and a tally of which sites fill",

@@ -765,6 +765,13 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             // Postings that mention a certification you listed, to score again now that Job Hunt knows.
             ["api", "certs", "rescore"] => return Ok(Resp::json(&json!({ "postings": agent.cert_postings().len(), "running": agent.is_running("rescore") }))),
+            // What's costing the most applications right now.
+            ["api", "fixes"] => return Ok(Resp::json(&json!({ "fixes": agent.fixes() }))),
+            // Before a job's form is opened: what it will ask for that Job Hunt can't answer.
+            ["api", "jobs", id, "precheck"] => {
+                let job = agent.db().job(id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+                return Ok(Resp::json(&crate::fill::precheck(agent, &job)));
+            }
             // How the extension's form filling went, site by site.
             ["api", "fill-sites"] => return Ok(Resp::json(&json!({ "sites": crate::fill::sites(agent) }))),
             ["api", "changelog"] => {
@@ -1339,6 +1346,11 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             agent.connect();
             ok()
+        }
+        // Details given before opening a form: kept with the saved answers.
+        ["api", "precheck"] => {
+            let n = crate::fill::keep_answers(agent, b["answers"].as_array().map(|a| a.as_slice()).unwrap_or(&[]))?;
+            Ok(Resp::json(&json!({ "kept": n })))
         }
         ["api", "certs", "rescore"] => {
             if agent.is_running("rescore") {

@@ -540,3 +540,38 @@ document.addEventListener('change', e => {
   try { localStorage.removeItem('jh.listSort'); } catch (err) {}
   applyListSort();
 }, true);
+
+// ---- Before you open a form, and what to fix first ----
+/** Before a job's form is opened: what it will ask for that Job Hunt has no answer to (what that
+ *  site's forms asked before, and the basics every form wants), with a box for each, kept once. */
+async function loadPrecheck(box) {
+  box.dataset.done = '1';
+  let r;
+  try { r = await api(`/api/jobs/${encodeURIComponent(box.dataset.precheck)}/precheck`); } catch (e) { return; }
+  if (!(r.missing || []).length) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = `<b>Before you open the form</b>
+    <p class="small muted">${r.seen ? `Forms on ${esc(r.site)} asked for ${r.missing.length === 1 ? 'this' : 'these'} and Job Hunt had no answer.` : `Nearly every form asks for ${r.missing.length === 1 ? 'this' : 'these'}, and Job Hunt has no answer yet.`} Fill in what you can: it goes into this form and every one after, and you can change it under <a href="#cvs/details">Me → About me</a>.</p>
+    <div class="precheck-rows">${r.missing.map(m => `<label class="field">${esc(m)}<input type="text" data-pre-q="${esc(m)}" autocomplete="off"></label>`).join('')}</div>
+    <div class="row"><button class="btn" type="button" data-act="precheckSave">Keep these</button></div>`;
+}
+/** Insights: the two or three things costing the most applications right now. */
+async function loadFixes(box) {
+  box.dataset.done = '1';
+  let f;
+  try { f = (await api('/api/fixes')).fixes; } catch (e) { return; }
+  box.innerHTML = `<section class="card fixes"><header><h2>What to fix first</h2></header>
+    ${f.length ? `<p class="muted small">What is costing you the most applications right now, worked out from your forms, your queue and your results.</p>
+      <ol class="fix-list">${f.map(x => `<li><div><b>${esc(x.title)}</b><span class="small muted">${esc(x.why)}</span></div><a class="btn sm" href="${esc(x.href)}">${esc(x.go)}</a></li>`).join('')}</ol>`
+      : '<p class="muted">Nothing stands out. Forms are filling, nothing is stuck waiting, and Job Hunt has the details forms ask for.</p>'}</section>`;
+}
+// Both fill themselves in wherever a page puts their place.
+{
+  let t = 0;
+  const look = () => {
+    document.querySelectorAll('[data-precheck]:not([data-done])').forEach(loadPrecheck);
+    const f = document.querySelector('#fixesCard:not([data-done])'); if (f) loadFixes(f);
+  };
+  new MutationObserver(() => { clearTimeout(t); t = setTimeout(look, 120); }).observe(document.getElementById('main'), { childList: true, subtree: true });
+  const side = document.getElementById('jobPanel'); if (side) new MutationObserver(() => { clearTimeout(t); t = setTimeout(look, 120); }).observe(side, { childList: true, subtree: true });
+}

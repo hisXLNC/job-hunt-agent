@@ -29,7 +29,7 @@ function askIdeas() {
   if (p.job) return ['Why this fit score?', 'What do the missing keywords mean?', 'Is this role worth applying to?', 'What should I say about salary?'];
   if (location.hash.startsWith('#settings') || location.hash.startsWith('#search')) return ['What does this screen do?', 'What should I set here?'];
   if (location.hash.startsWith('#cvs')) return ['What should I improve in my CV?', 'Explain this screen'];
-  return ['What should I do next?', 'Explain this screen'];
+  return ['What should I do next?', 'Which of my applications are weakest?', 'Explain this screen'];
 }
 
 function askBuild() {
@@ -170,16 +170,24 @@ const ASK_DOES = {
   tailor: () => [['tailor', {}], 'Tailoring your CV and a cover letter for it.'],
   save_later: () => [['status', { status: 'saved', note: 'saved from Ask Claude' }], 'Saved for later.'],
   set_aside: () => [['status', { status: 'dismissed', note: 'set aside from Ask Claude' }], 'Set aside as Not interested.'],
+  // The same for several jobs at once: the jobs are the offer's own.
+  set_aside_many: o => [['status', { status: 'dismissed', note: 'set aside from Ask Claude', learn: false }], `Set aside ${o.jobs.length} job${o.jobs.length === 1 ? '' : 's'} as Not interested.`],
+  save_many: o => [['status', { status: 'saved', note: 'saved from Ask Claude' }], `Saved ${o.jobs.length} job${o.jobs.length === 1 ? '' : 's'} for later.`],
+  tailor_many: o => [['tailor', {}], `Tailoring ${o.jobs.length} application${o.jobs.length === 1 ? '' : 's'}.`],
 };
+const ASK_MANY = { set_aside_many: n => `Set ${n} job${n === 1 ? '' : 's'} aside as Not interested?`, save_many: null, tailor_many: n => `Tailor a CV and cover letter for ${n} job${n === 1 ? '' : 's'}? This uses your Claude plan.` };
 /** You pressed one of Claude's offers: Job Hunt does it, to the job the answer was about. */
 async function askDo(at, which, btn) {
   const m = askSt.chat[at], o = m?.actions?.[which];
-  if (!o || o.done || !m.job || !ASK_DOES[o.kind]) return;
+  const many = o && o.kind in ASK_MANY;
+  const jobs = many ? (o.jobs || []) : [m?.job].filter(Boolean);
+  if (!o || o.done || !jobs.length || !ASK_DOES[o.kind]) return;
   if (o.kind === 'set_aside' && !await ask('Set this job aside as Not interested?', 'Set it aside')) return;
+  if (many && ASK_MANY[o.kind] && !await ask(ASK_MANY[o.kind](jobs.length), 'Do it')) return;
   const [[path, body], said] = ASK_DOES[o.kind](o);
   btn.disabled = true;
   try {
-    await api(`/api/jobs/${encodeURIComponent(m.job)}/${path}`, { method: 'POST', body });
+    for (const id of jobs) await api(`/api/jobs/${encodeURIComponent(id)}/${path}`, { method: 'POST', body });
     askTake(await api('/api/ask', { method: 'POST', body: { did: [at, which] } }));
     toast(said);
     await refreshOverview();

@@ -384,6 +384,26 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.fill('#askMsg', '');
   await page.keyboard.press('Escape');
   check(await page.isVisible('#askFab') && !(await page.isVisible('#askPanel')), 'Esc closes the conversation back to the button');
+  // Across jobs, from a screen with no job on it: an offer for several is a button too.
+  await page.goto(`${base}/#calendar`);
+  await page.waitForTimeout(600);
+  await page.keyboard.press('c');
+  await page.fill('#askMsg', 'Which of my applications are weakest?');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /Save those \d for later/.test(document.querySelector('#askLog')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+  check(/Save those \d for later/.test(await page.textContent('#askLog')), 'Ask Claude can offer to act on several jobs at once');
+  await page.fill('#askMsg', '');
+  await page.keyboard.press('Escape');
+  // Insights opens with what to fix first.
+  await page.goto(`${base}/#results`);
+  await page.waitForSelector('#fixesCard .fixes', { timeout: 10000 }).catch(() => {});
+  check(/What to fix first/.test(await page.textContent('#fixesCard')), 'Insights says what to fix first');
+  // Before a form is opened: the details it will ask for that Job Hunt has no answer to; kept once given.
+  await page.goto(`${base}/#job/${encodeURIComponent(jobId)}`);
+  await page.waitForSelector('#main h1');
+  const pre = await page.evaluate(async id => (await api(`/api/jobs/${encodeURIComponent(id)}/precheck`)).missing, jobId);
+  check(Array.isArray(pre) && pre.includes('Address'), `Before a form is opened, Job Hunt knows what it has no answer for (${(pre || []).join(', ')})`);
+  check(await page.evaluate(async id => { await api('/api/precheck', { method: 'POST', body: { answers: [{ q: 'Address', a: '1 Main St' }] } }); return !(await api(`/api/jobs/${encodeURIComponent(id)}/precheck`)).missing.includes('Address'); }, jobId), 'A detail given before the form is kept, and not asked for again');
   // Settings, Applying, Filling in forms: the tally of how forms go on each site.
   await page.goto(`${base}/#settings/applying/forms`);
   await page.waitForSelector('#fillSites');

@@ -934,9 +934,14 @@ pub struct Offer {
     pub note: String,
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// For the kinds that take several jobs at once: their ids, from the list the assistant was given.
+    #[serde(default)]
+    pub jobs: Vec<String>,
 }
 
-pub const OFFERS: &[&str] = &["add_keywords", "revise_cv", "revise_letter", "tailor", "save_later", "set_aside"];
+pub const OFFERS: &[&str] = &["add_keywords", "revise_cv", "revise_letter", "tailor", "save_later", "set_aside", "set_aside_many", "save_many", "tailor_many"];
+/// The offers that name their own jobs, so need none on screen.
+pub const OFFERS_MANY: &[&str] = &["set_aside_many", "save_many", "tailor_many"];
 
 /// A message for the assistant, with everything an answer may need.
 pub struct Asked<'a> {
@@ -996,7 +1001,12 @@ done. Kinds: add_keywords (keywords: the ones they said they really have; Job Hu
 revise_cv and revise_letter (note: the change, as an instruction, e.g. \"Cut the letter to 150 words and open with the \
 payments migration\"), tailor (tailor a CV and letter for this job), save_later (keep the job for later), set_aside \
 (not interested). label: a few words for the button. Offer only what they asked for or plainly agreed to, at most \
-three, and none when no job is on screen; otherwise leave actions empty."
+three; otherwise leave actions empty. Those kinds need a job on screen.\n\n\
+Across their jobs: \"What Job Hunt knows\" may list their applications in play, each starting with its id in square \
+brackets. Use the list to compare them (which are weakest, which to send first, which are about to close). Never show \
+an id in your reply: name jobs by title and company. When they ask to act on several at once, offer set_aside_many, \
+save_many or tailor_many with jobs: the ids of exactly the jobs you named, and say in the reply which jobs those are; \
+these three work from any screen."
     )
 }
 
@@ -2241,7 +2251,7 @@ exactly as if it were the only posting, never against the others. Answer with on
         }
         let cv: String = a.cv.chars().take(12000).collect();
         user.push_str(&format!("\n<cv>\n{cv}\n</cv>\n\nThe conversation so far, oldest first (<you> is the job seeker, <claude> is you):\n{talk}\nTheir new message:\n<you>\n{}\n</you>", a.message));
-        let offer = obj(json!({"kind": {"type": "string", "enum": OFFERS}, "label": {"type": "string"}, "note": {"type": "string"}, "keywords": strings()}));
+        let offer = obj(json!({"kind": {"type": "string", "enum": OFFERS}, "label": {"type": "string"}, "note": {"type": "string"}, "keywords": strings(), "jobs": strings()}));
         let r = self.call::<Assisted>(&assist_system(), &user, obj(json!({"reply": {"type": "string"}, "actions": {"type": "array", "items": offer}})), "low")?;
         if r.reply.trim().is_empty() {
             return Err(Error("Claude's reply came back empty; try again.".into()));

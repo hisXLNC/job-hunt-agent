@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.69.0] - 2026-11-14
+
+Ask Claude across your jobs, what to fix first, and a check before each form.
+
+### Changes
+
+- Ask Claude now sees your applications in play, so you can ask which are weakest, which to send first or which close soon. It can offer to set several aside, save them or tailor them at once; nothing happens until you press the button and confirm.
+- Insights opens with What to fix first: up to three things costing you the most applications, such as a site whose forms only partly fill, details forms keep asking for, weak fits waiting for approval, or approved applications not sent.
+- Before you open a form, Job Hunt lists what it will ask for that it has no answer to (what that site's forms asked before, and basics like your address), with a box for each. What you give is kept for every form after.
+
 ## [2.68.0] - 2026-11-14
 
 Ask Claude can make changes, and a tally of which sites fill.
@@ -2064,6 +2074,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.69.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.69.0
 [2.68.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.68.0
 [2.67.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.2
 [2.67.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.67.1

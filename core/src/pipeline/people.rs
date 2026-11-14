@@ -300,9 +300,12 @@ impl Agent {
         };
         let said = self.llm().assist(&asked)?;
         // Offers go with the answer only for a job that's on screen, and only the kinds Job Hunt does.
-        let offers: Vec<&crate::claude::Offer> = said.actions.iter()
-            .filter(|o| job.is_some() && crate::claude::OFFERS.contains(&o.kind.as_str()) && !o.label.trim().is_empty())
-            .filter(|o| match o.kind.as_str() { "add_keywords" => !o.keywords.is_empty(), "revise_cv" | "revise_letter" => o.note.trim().chars().count() >= 3, _ => true })
+        let many = |k: &str| crate::claude::OFFERS_MANY.contains(&k);
+        let offers: Vec<crate::claude::Offer> = said.actions.iter().cloned()
+            .filter(|o| crate::claude::OFFERS.contains(&o.kind.as_str()) && !o.label.trim().is_empty() && (job.is_some() || many(&o.kind)))
+            // An offer for several jobs keeps only jobs that exist (an id Claude got wrong is dropped).
+            .map(|mut o| { if many(&o.kind) { o.jobs.retain(|id| self.db().job(id).ok().flatten().is_some()); o.jobs.dedup(); o.jobs.truncate(40); } else { o.jobs.clear(); } o })
+            .filter(|o| match o.kind.as_str() { "add_keywords" => !o.keywords.is_empty(), "revise_cv" | "revise_letter" => o.note.trim().chars().count() >= 3, k if many(k) => !o.jobs.is_empty(), _ => true })
             .take(3).collect();
         let mut list = self.ask_log();
         list.push(json!({ "who": "claude", "text": said.reply, "at": now(), "job": job.as_ref().map(|j| j.id.clone()), "actions": offers }));
@@ -334,6 +337,27 @@ impl Agent {
         }
         if !p.guidance.trim().is_empty() {
             l.push(format!("Their own guidance for scoring: {}", p.guidance.trim()));
+        }
+        // Their applications in play, to compare and to act on several at once.
+        let mut rows = vec![];
+        for (st, max) in [("approved", 12), ("ready", 20), ("queued", 12)] {
+            let mut jobs = self.db().jobs(Some(st), 500).unwrap_or_default();
+            jobs.retain(|j| j.closed_at.is_none() && j.applied_at.is_none());
+            jobs.sort_by_key(|j| std::cmp::Reverse(j.score_after.or(j.score).unwrap_or(0)));
+            for j in jobs.into_iter().take(max) {
+                let fit = match (j.score, j.score_after) { (Some(a), Some(b)) => format!("fit {a}, {b} tailored"), (Some(a), None) => format!("fit {a}"), _ => "not scored".into() };
+                let cover = j.coverage_after.map(|c| format!(", {:.0}% of keywords", c * 100.0)).unwrap_or_default();
+                let closes = j.deadline.as_deref().map(|d| format!(", closes {d}")).unwrap_or_default();
+                rows.push(format!("[{}] {} at {} | {} | {fit}{cover}{closes} | found {}", j.id, j.title, j.company,
+                    match st { "approved" => "approved, not sent yet", "ready" => "tailored, waiting for approval", _ => "scored, waiting to be picked for tailoring" }, j.found_at.get(..10).unwrap_or("")));
+            }
+        }
+        if !rows.is_empty() {
+            l.push(format!("\nTheir applications in play (id in brackets, never shown to them):\n{}", rows.join("\n")));
+        }
+        let fixes = self.fixes();
+        if !fixes.is_empty() {
+            l.push(format!("\nWhat Job Hunt thinks is worth fixing first:\n{}", fixes.iter().map(|f| format!("- {} {}", f["title"].as_str().unwrap_or(""), f["why"].as_str().unwrap_or(""))).collect::<Vec<_>>().join("\n")));
         }
         if let Some(j) = job {
             l.push(format!("\nThe job on screen: {} at {}. Stage: {}.", j.title, j.company, j.status));
@@ -394,9 +418,60 @@ impl Agent {
         serde_json::from_str(&self.secret(&format!("chat:{job_id}"))).unwrap_or_default()
     }
 
+    /// What's costing the most applications right now, at most three, worst first: forms that
+    /// don't fill on a site, details forms keep asking for that Job Hunt doesn't have, applications
+    /// that tailoring didn't help, and ones left waiting. Each {title, why, href, go}. Worked out
+    /// from what Job Hunt has; no Claude.
+    pub fn fixes(&self) -> Vec<Value> {
+        let mut out: Vec<(u64, Value)> = vec![];
+        // A site where forms don't fill.
+        for r in crate::fill::sites(self).iter().take(2) {
+            let (fills, filled, refused, failed) = (r["fills"].as_u64().unwrap_or(0), r["filled"].as_u64().unwrap_or(0), r["refused"].as_u64().unwrap_or(0), r["failed"].as_u64().unwrap_or(0));
+            let site = r["site"].as_str().unwrap_or("");
+            if failed > 0 && filled == 0 {
+                out.push((60 + failed * 5, json!({ "title": format!("Job Hunt can't read the form on {site}."), "why": format!("It found nothing to fill there {failed} time{}. Press Copy details in the panel on that page and send it to Claude, or use Let Claude finish it.", if failed == 1 { "" } else { "s" }), "href": "#settings/applying/forms", "go": "See the sites" })));
+            } else if refused > (filled / 4).max(1) {
+                let stuck = r["last"]["stuck"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).take(3).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+                out.push((40 + refused, json!({ "title": format!("Forms on {site} only partly fill."), "why": format!("{refused} boxes wouldn't take their answer over {fills} form{}{}. Press Copy details there and send it to Claude to get it fixed.", if fills == 1 { "" } else { "s" }, if stuck.is_empty() { String::new() } else { format!(" (last time: {stuck})") }), "href": "#settings/applying/forms", "go": "See the sites" })));
+            }
+        }
+        // Details forms keep asking for.
+        let missing = crate::fill::missing_details(self, None);
+        if !missing.is_empty() {
+            out.push((55 + missing.len() as u64 * 3, json!({ "title": format!("Forms ask for {} and Job Hunt has no answer.", list_words(&missing.iter().take(4).cloned().collect::<Vec<_>>())), "why": "Add them once and every form after gets them.", "href": "#cvs/details", "go": "Add them" })));
+        }
+        // Tailored, and no better for it.
+        let waiting: Vec<Job> = self.db().jobs(Some("ready"), 2000).unwrap_or_default().into_iter().filter(|j| j.closed_at.is_none()).collect();
+        let flat = waiting.iter().filter(|j| matches!((j.score, j.score_after, j.coverage_after), (Some(a), Some(b), Some(c)) if b - a <= 2 && c < 0.6)).count();
+        if flat >= 2 {
+            out.push((30 + flat as u64, json!({ "title": format!("{flat} applications waiting for approval are weak fits."), "why": "Tailoring didn't lift their fit and they lack most of the posting's keywords: tick the keywords you really have, or set them aside and spend the time on stronger ones.", "href": "#overview", "go": "Open the Queue" })));
+        }
+        // Left waiting.
+        let week_ago = (chrono::Utc::now() - chrono::Duration::days(7)).to_rfc3339();
+        let stale = waiting.iter().filter(|j| j.updated_at.as_str() < week_ago.as_str()).count();
+        let unsent = self.db().jobs(Some("approved"), 2000).unwrap_or_default().into_iter().filter(|j| j.applied_at.is_none() && j.closed_at.is_none()).count();
+        if unsent >= 1 {
+            out.push((35 + unsent as u64 * 2, json!({ "title": format!("{unsent} approved application{} not sent yet.", if unsent == 1 { " is" } else { "s are" }), "why": "Postings close and fill; these are ready to submit now.", "href": "#overview", "go": "Open the Queue" })));
+        }
+        if stale >= 3 {
+            out.push((20 + stale as u64, json!({ "title": format!("{stale} tailored applications have waited over a week."), "why": "Approve the ones worth sending and set the rest aside, so the Queue shows what matters.", "href": "#overview", "go": "Open the Queue" })));
+        }
+        out.sort_by_key(|(w, _)| std::cmp::Reverse(*w));
+        out.into_iter().take(3).map(|(_, v)| v).collect()
+    }
+
     pub fn ask_clear(&self) -> R<()> {
         self.db().set("ask:chat", "")?;
         self.db().set("ask:error", "")?;
         self.db().set("ask:draft", "")
+    }
+}
+
+/// "a", "a and b", "a, b and c".
+fn list_words(w: &[String]) -> String {
+    match w.len() {
+        0 => String::new(),
+        1 => w[0].clone(),
+        n => format!("{} and {}", w[..n - 1].join(", "), w[n - 1]),
     }
 }

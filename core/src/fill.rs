@@ -1127,6 +1127,14 @@ pub fn site_report(agent: &Agent, url: &str, r: &Value) -> R<()> {
         add(&mut e, "filled", n("filled"));
         add(&mut e, "refused", n("refused"));
         add(&mut e, "failed", (r["failed"].as_bool() == Some(true)) as u64);
+        // Required boxes Job Hunt had no answer for: remembered for this site, to ask you before the next form there.
+        for label in r["blank"].as_array().into_iter().flatten().filter_map(|x| x.as_str()).take(12) {
+            let label: String = label.trim().trim_start_matches('*').trim().chars().take(60).collect();
+            let key = question_key(&label);
+            if key.len() >= 3 && !personal_in(&label, "", "") {
+                e["blank"][&key] = json!(label);
+            }
+        }
         e["last"] = json!({ "at": crate::util::now(), "boxes": n("boxes"), "filled": n("filled"), "refused": n("refused"), "failed": r["failed"].as_bool() == Some(true),
             "stuck": r["stuck"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).map(|x| x.chars().take(60).collect::<String>()).take(8).collect::<Vec<_>>()).unwrap_or_default() });
     }
@@ -1142,4 +1150,115 @@ pub fn sites(agent: &Agent) -> Vec<Value> {
     let trouble = |e: &Value| e["refused"].as_u64().unwrap_or(0) + 20 * e["failed"].as_u64().unwrap_or(0);
     rows.sort_by(|a, b| trouble(b).cmp(&trouble(a)).then(b["fills"].as_u64().cmp(&a["fills"].as_u64())));
     rows
+}
+
+/// Whether Job Hunt has an answer for a form's box named `label`: a saved answer, a line of your
+/// facts ("Address: …"), or a contact detail it reads from your CV.
+fn answerable(agent: &Agent, label: &str, have: &[String]) -> bool {
+    let key = question_key(label);
+    let words: Vec<&str> = key.split(' ').filter(|w| w.len() > 2).collect();
+    let _ = agent;
+    // Contact details ("email address") answer only the box they name; a saved answer or a fact
+    // answers any box whose words it has ("Home address" answers "Address").
+    have.iter().any(|h| match h.strip_prefix('=') {
+        Some(exact) => exact == key,
+        None => h == &key || (!words.is_empty() && words.iter().all(|w| h.split(' ').any(|x| x == *w))),
+    })
+}
+
+/// The question keys Job Hunt can answer already: saved answers, labelled facts, and contact details.
+fn answer_keys(agent: &Agent) -> Vec<String> {
+    let profile = agent.profile();
+    let mut have: Vec<String> = bank(agent).iter().filter_map(|x| x["key"].as_str().map(String::from)).collect();
+    have.extend(profile.application_facts.lines().filter_map(|l| l.split_once(':')).filter(|(k, v)| k.len() < 60 && !v.trim().is_empty()).map(|(k, _)| question_key(k)));
+    for k in ["first name", "last name", "full name", "name", "email", "email address"] {
+        have.push(format!("={k}"));
+    }
+    let cv = profile.tracks.first().and_then(|t| cv::open(&agent.cv_path(&t.name)).ok()).map(|d| d.plain_text()).unwrap_or_default();
+    let head: String = cv.lines().take(10).collect::<Vec<_>>().join("\n");
+    // The basics, however your facts word them: a postal or ZIP code or a street address anywhere in
+    // them or at the top of your CV, and a city when you've said where you look.
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+    static POSTAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b[a-z]\d[a-z][ -]?\d[a-z]\d\b|\b\d{5}(?:-\d{4})?\b").unwrap());
+    static STREET: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b\d{1,6}\s+[\w.' -]{2,40}\b(street|st|avenue|ave|road|rd|drive|dr|boulevard|blvd|lane|ln|crescent|cres|court|ct|way|place|pl)\b").unwrap());
+    let about = format!("{}\n{head}", profile.application_facts);
+    if POSTAL.is_match(&about) {
+        have.extend(["postal code", "zip code"].map(String::from));
+    }
+    if STREET.is_match(&about) || profile.application_facts.to_lowercase().contains("address:") {
+        have.push("address".into());
+    }
+    if !profile.locations.is_empty() || profile.application_facts.to_lowercase().contains("city") {
+        have.extend(["city", "town"].map(String::from));
+    }
+    if head.chars().filter(|c| c.is_ascii_digit()).count() >= 9 {
+        have.extend(["phone", "primary phone", "phone number", "mobile", "mobile phone"].map(|k| format!("={k}")));
+    }
+    have
+}
+
+/// The basics nearly every form requires, checked even for a site not seen before.
+const BASICS: &[&str] = &["Phone", "Address", "City", "Postal code"];
+
+/// Details forms need that Job Hunt has no answer for: on `site` (what its forms asked for before, and
+/// the basics), or with no site, what any site asked for. Labels as the forms wrote them.
+pub fn missing_details(agent: &Agent, site: Option<&str>) -> Vec<String> {
+    let have = answer_keys(agent);
+    let all: serde_json::Map<String, Value> = serde_json::from_str(&agent.secret("fill:sites")).unwrap_or_default();
+    let mut out: Vec<String> = vec![];
+    let mut seen: Vec<String> = vec![];
+    let mut take = |label: &str, out: &mut Vec<String>| {
+        let key = question_key(label);
+        if !seen.contains(&key) && !answerable(agent, label, &have) {
+            seen.push(key);
+            out.push(label.to_string());
+        }
+    };
+    for (host, e) in &all {
+        if site.is_some_and(|s| s != host) {
+            continue;
+        }
+        for label in e["blank"].as_object().into_iter().flat_map(|m| m.values()).filter_map(|v| v.as_str()) {
+            take(label, &mut out);
+        }
+    }
+    if site.is_some() {
+        // A postal code is a ZIP code elsewhere, a city a town: either counts.
+        let alt = |l: &str| match l { "Postal code" => "zip code", "City" => "town", _ => "" };
+        for b in BASICS {
+            if alt(b).is_empty() || !answerable(agent, alt(b), &have) {
+                take(b, &mut out);
+            }
+        }
+    }
+    out.truncate(10);
+    out
+}
+
+/// Before you open a job's form: the site it's on, whether Job Hunt has filled a form there before,
+/// and what that form will ask for that Job Hunt has no answer to.
+pub fn precheck(agent: &Agent, job: &crate::db::Job) -> Value {
+    let link = job.apply_url.as_deref().filter(|u| !u.is_empty()).unwrap_or(&job.url);
+    let site = url::Url::parse(link).ok().and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_lowercase())).unwrap_or_default();
+    let all: serde_json::Map<String, Value> = serde_json::from_str(&agent.secret("fill:sites")).unwrap_or_default();
+    json!({ "site": site, "seen": all.contains_key(&site), "missing": missing_details(agent, Some(&site)) })
+}
+
+/// Answers you gave before opening a form ([{q, a}]): kept with your saved answers, newest first.
+pub fn keep_answers(agent: &Agent, given: &[Value]) -> R<usize> {
+    let mut list = bank(agent);
+    let mut n = 0;
+    for x in given {
+        let (q, a) = (x["q"].as_str().unwrap_or("").trim(), x["a"].as_str().unwrap_or("").trim());
+        if q.len() < 3 || a.is_empty() || a.chars().count() > 200 {
+            continue;
+        }
+        let key = question_key(q);
+        list.retain(|y| y["key"] != key.as_str());
+        list.insert(0, json!({ "q": q, "key": key, "a": a, "at": now(), "uses": 0 }));
+        n += 1;
+    }
+    save_bank(agent, &list)?;
+    Ok(n)
 }

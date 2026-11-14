@@ -355,6 +355,12 @@ async function act(el) {
   }
   // A mock interview with the assistant: Claude asks, you answer, it says how the answer landed.
   if (a === 'practise') return askSend(PRACTISE);
+  if (a === 'precheckSave') {
+    const box = el.closest('[data-precheck]');
+    const answers = [...box.querySelectorAll('[data-pre-q]')].map(i => ({ q: i.dataset.preQ, a: i.value.trim() })).filter(x => x.a);
+    if (!answers.length) return toast('Fill in at least one first.', true);
+    return busy(async () => { const r = await api('/api/precheck', { method: 'POST', body: { answers } }); toast(`Kept ${r.kept}. Forms get ${r.kept === 1 ? 'it' : 'them'} from now on.`); delete box.dataset.done; loadPrecheck(box); }, 'Saving…');
+  }
   if (a === 'certRescore') {
     return busy(async () => { const r = await api('/api/certs/rescore', { method: 'POST' }); toast(`Scoring ${r.started} posting${r.started === 1 ? '' : 's'} again. You get a notice when it's done.`); setTimeout(renderCertRescore, 600); }, 'Starting…');
   }

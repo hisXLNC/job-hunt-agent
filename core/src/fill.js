@@ -1284,10 +1284,10 @@
       // Boxes Job Hunt had an answer for that didn't take it: those can go to Claude.
       const refused = (diag.fields || []).filter(f => !f.filled && f.want != null && f.want !== '').length;
       if (buttons.hand) buttons.hand.hidden = !EXT || !refused;
-      { const boxes = (diag.fields || []).filter(f => f.type !== 'file');
-        report({ boxes: boxes.length, filled: boxes.filter(f => f.filled).length, refused, stuck: boxes.filter(f => !f.filled && f.want != null && f.want !== '').map(f => String(f.label || '').replace(/^\*\s*/, '').slice(0, 60)).slice(0, 8) }); }
       // Required boxes Job Hunt has nothing for: named, so you know what to type (it's kept for next time).
       const blank = [...new Set((diag.fields || []).filter(f => f.required && !f.filled && (f.want == null || f.want === '') && !['checkbox', 'file'].includes(f.type)).map(f => String(f.label || '').replace(/^\*\s*/, '').slice(0, 40)))];
+      { const boxes = (diag.fields || []).filter(f => f.type !== 'file');
+        report({ boxes: boxes.length, filled: boxes.filter(f => f.filled).length, refused, stuck: boxes.filter(f => !f.filled && f.want != null && f.want !== '').map(f => String(f.label || '').replace(/^\*\s*/, '').slice(0, 60)).slice(0, 8), blank }); }
       const ask1 = blank.length ? ` Job Hunt has no answer for ${blank.slice(0, 4).map(b => `\u201c${b}\u201d`).join(', ')}${blank.length > 4 ? ` and ${blank.length - 4} more` : ''}: type ${blank.length === 1 ? 'it' : 'them'} in and Job Hunt keeps ${blank.length === 1 ? 'it' : 'them'} for next time.` : '';
       const hand = refused && EXT ? ` ${refused} ${refused === 1 ? 'box' : 'boxes'} didn't take ${refused === 1 ? 'its' : 'their'} answer: press Let Claude finish it to hand ${refused === 1 ? 'it' : 'them'} to the Claude extension.` : '';
       status(todo
