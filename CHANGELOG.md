@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.75.2] - 2026-11-14
+
+Sync no longer freezes Job Hunt while it copies your data.
+
+### Changes
+
+- Every sync and backup copied the whole database while holding it, so nothing else could use it until the copy ended. That happened every few minutes whenever something had changed: the extension's requests timed out (Job Hunt took too long to answer) and a search could crawl. The copy is now made alongside, without holding anything up.
+- The Queue's sort menu says Recommended order where it said Each step's own order, and explains it when you point at it.
+
 ## [2.75.1] - 2026-11-14
 
 Job Hunt learns your GPA, start dates and language levels.
@@ -2169,6 +2178,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.75.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.75.2
 [2.75.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.75.1
 [2.75.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.75.0
 [2.74.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.74.0

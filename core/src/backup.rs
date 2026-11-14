@@ -51,7 +51,13 @@ pub fn write_snapshot(agent: &Agent, out: &Path, secrets: bool) -> R<()> {
     let tmp_db = agent.data.join(format!("snapshot-{stamp}.db"));
     let tmp_zip = out.with_extension("zip.part");
     let _ = std::fs::remove_file(&tmp_db);
-    agent.db().snapshot(&tmp_db)?;
+    // Copied on a connection of its own, so nothing else in Job Hunt waits while it's made (only
+    // the in-memory database of the tests has no file to open a second time).
+    let file = agent.db().file();
+    match file {
+        Some(f) => crate::db::Db::snapshot_file(&f, &tmp_db)?,
+        None => agent.db().snapshot(&tmp_db)?,
+    }
     let result = (|| {
         if !secrets {
             let snap = crate::db::Db::open(&tmp_db)?;

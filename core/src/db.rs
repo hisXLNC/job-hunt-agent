@@ -1214,6 +1214,22 @@ impl Db {
         Ok(())
     }
 
+    /// The file this database is, when it is one (not the in-memory database of the tests).
+    pub fn file(&self) -> Option<std::path::PathBuf> {
+        self.con.path().filter(|p| !p.is_empty()).map(std::path::PathBuf::from).filter(|p| p.is_file())
+    }
+
+    /// A copy of the database file `from`, made on a connection of its own. Copying takes as long
+    /// as the database is big; on the app's own connection (see `snapshot`) everything else in Job
+    /// Hunt waited for it, every few minutes when a sync was due: a search crawled and the browser
+    /// extension's requests timed out. A second connection reads beside the first.
+    pub fn snapshot_file(from: &Path, to: &Path) -> R<()> {
+        let con = Connection::open_with_flags(from, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        con.busy_timeout(std::time::Duration::from_secs(20))?;
+        con.execute("VACUUM INTO ?1", [to.to_string_lossy().to_string()])?;
+        Ok(())
+    }
+
     pub fn profile(&self) -> R<crate::profile::Profile> {
         match self.get("profile")? {
             Some(s) => Ok(serde_json::from_str(&s)?),
@@ -1229,6 +1245,23 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copy_is_made_without_the_apps_own_connection() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("jobhunt.db");
+        let db = Db::open(&path).unwrap();
+        db.set("k", "v").unwrap();
+        assert_eq!(db.file().as_deref(), Some(path.as_path()));
+        assert!(Db::memory().unwrap().file().is_none());
+        // While the app's connection is in the middle of something of its own.
+        let out = dir.path().join("copy.db");
+        Db::snapshot_file(&path, &out).unwrap();
+        db.set("later", "1").unwrap();
+        let copy = Db::open(&out).unwrap();
+        assert_eq!(copy.get("k").unwrap().as_deref(), Some("v"));
+        assert!(copy.get("later").unwrap().is_none());
+    }
 
     #[test]
     fn no_lookup_a_search_makes_for_each_posting_reads_the_whole_table() {

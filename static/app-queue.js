@@ -262,7 +262,7 @@ async function showOverview(arg) {
     const order = step ? [step] : ['interviews', 'approve', 'submit', 'pick', 'waiting'].filter(s => all.some(x => x.step === s));
     const qopt = (v, n) => `<option value="${v}">${n}</option>`;
     const qbar = all.filter(x => x.j).length > 1 ? `<div class="queue-filters" data-queuebox>
-        <label class="small">Sort by <select data-queuef="sort">${qopt('', 'Each step\'s own order')}${qopt('now', 'Best to apply to now')}${qopt('fit', 'Best fit')}${qopt('new', 'Newest')}${qopt('pay', 'Highest pay')}</select></label>
+        <label class="small" title="Recommended: each list in the order that suits it. Pick and Ready to approve: the best to apply to now first (fit, less for each day the posting has been up, for red flags and for pay under your minimum). Submit: the quickest to send first.">Sort by <select data-queuef="sort">${qopt('', 'Recommended order')}${qopt('now', 'Best to apply to now')}${qopt('fit', 'Best fit')}${qopt('new', 'Newest')}${qopt('pay', 'Highest pay')}</select></label>
         <label class="check small"><input type="checkbox" data-queuef="pay"> Shows pay</label>
         <label class="check small"><input type="checkbox" data-queuef="flags"> No red flags</label>
         <span class="muted small" data-queuecount></span></div>` : '';

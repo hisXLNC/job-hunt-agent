@@ -56,6 +56,15 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.75.2: sync and backup no longer hold the database while they copy it.** A Job Bank fill failed with "Job
+  Hunt took too long to answer": `/ext/fill/start` (which only reads a few jobs and returns a ticket) timed out
+  three times at 20 s, so the `Agent.db` mutex was held for over 20 s. `backup::write_snapshot` ran `VACUUM INTO`
+  on the app's own connection inside `agent.db()`, for every sync (every 5–10 min when anything changed, so all
+  through a search) and backup: everything waited for the whole copy. It now copies on a second, read-only
+  connection (`Db::snapshot_file`, `Db::file`); the in-memory test database keeps the old path. This is the likeliest
+  cause of the slow search sort in 2.71.2's notes too (sync was running in that log), but not proven: the search
+  log's `database` line and "waiting for the database" seconds will show. Also: the Queue's "Each step's own order"
+  is "Recommended order", with what it means on its tooltip.
 - **2.75.1: details typed into entries are learned.** `personal_in` refuses anything in a numbered entry
   ("Education 1", "Languages 3") so one school isn't copied into every entry; that also threw away a GPA, a degree's
   start year and a language's level, however often they were typed. `fill::entry_details(fields)` now keeps those

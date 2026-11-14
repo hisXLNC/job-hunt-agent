@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.75.2",
+    "date": "2026-11-14",
+    "title": "Sync no longer freezes Job Hunt while it copies your data",
+    "changes": [
+      "Every sync and backup copied the whole database while holding it, so nothing else could use it until the copy ended. That happened every few minutes whenever something had changed: the extension's requests timed out (Job Hunt took too long to answer) and a search could crawl. The copy is now made alongside, without holding anything up.",
+      "The Queue's sort menu says Recommended order where it said Each step's own order, and explains it when you point at it."
+    ]
+  },
+  {
     "version": "2.75.1",
     "date": "2026-11-14",
     "title": "Job Hunt learns your GPA, start dates and language levels",
