@@ -147,6 +147,15 @@ pub fn save_bank(agent: &Agent, list: &[Value]) -> R<()> {
 pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
     let mut list = bank(agent);
     let mut n = 0;
+    // What you typed into an entry about a school, a certificate or a language that your CV doesn't
+    // say (a GPA, the year a degree started, a certificate's number, "2 - Classroom Study" for
+    // French): kept by the thing it's about, and told to Claude as a fact for the next form.
+    for (q, a) in entry_details(fields) {
+        let key = question_key(&q);
+        list.retain(|x| x["key"] != key.as_str());
+        list.insert(0, json!({ "q": q, "key": key, "a": a, "at": now(), "uses": 0 }));
+        n += 1;
+    }
     for f in fields {
         let (label, value, kind) = (f["label"].as_str().unwrap_or(""), f["value"].as_str().unwrap_or("").trim(), f["type"].as_str().unwrap_or(""));
         if label.trim().len() < 3 || value.is_empty() || value.chars().count() > 200 || ["file", "password", "checkbox", "add", "skills", "prompt"].contains(&kind) || personal_in(label, f["section"].as_str().unwrap_or(""), kind) {
@@ -159,6 +168,76 @@ pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
     }
     save_bank(agent, &list)?;
     Ok(n)
+}
+
+/// The kinds of entry whose details are kept (see entry_details): what it's called in a saved
+/// answer, the words its part of a form is headed with, and the words that name the entry itself.
+const ENTRY_KINDS: [(&str, &[&str], &[&str]); 3] = [
+    ("Education", &["education", "school", "degree", "academic"], &["school", "university", "college", "institution"]),
+    ("Certification", &["certific", "licen"], &["certification", "certificate", "licence", "license"]),
+    ("Language", &["language"], &["language"]),
+];
+
+/// From a form as you left it: the details of each school, certificate and language that are worth
+/// keeping, as (what it's about and which detail, what you put). "Education (American University
+/// of Kuwait): Overall Result (GPA)" → "3.4"; "Language (French): Reading" → "2 - Classroom Study".
+/// When the form doesn't say which school it is, the entry's place is used ("Education entry 1").
+pub fn entry_details(fields: &[Value]) -> Vec<(String, String)> {
+    let text = |f: &Value, k: &str| f[k].as_str().unwrap_or("").trim().to_string();
+    let mut out: Vec<(String, String)> = vec![];
+    let mut sections: Vec<String> = vec![];
+    for f in fields {
+        let s = text(f, "section");
+        if !s.is_empty() && !sections.contains(&s) {
+            sections.push(s);
+        }
+    }
+    for section in sections {
+        let low = section.to_lowercase();
+        let Some((kind, _, names)) = ENTRY_KINDS.iter().find(|(_, heads, _)| heads.iter().any(|h| low.contains(h))) else { continue };
+        let mine: Vec<&Value> = fields.iter().filter(|f| text(f, "section") == section).collect();
+        let is_name = |f: &Value| { let l = text(f, "label").to_lowercase(); let l = l.trim_start_matches('*').trim(); names.iter().any(|n| l == *n || l.starts_with(&format!("{n} ")) || l.ends_with(&format!(" {n}")) || (*kind == "Education" && l.contains(n))) && !l.contains("number") && !l.contains("date") };
+        let who = mine.iter().find(|f| is_name(f)).map(|f| text(f, "value")).filter(|v| !v.is_empty() && v.len() < 90);
+        let place: String = section.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>().chars().rev().collect();
+        let about = match &who {
+            Some(w) => format!("{kind} ({w})"),
+            None => format!("{kind} entry {}", if place.is_empty() { "1" } else { &place }),
+        };
+        for f in mine {
+            let (label, value, typ) = (text(f, "label"), text(f, "value"), text(f, "type"));
+            let l = label.to_lowercase();
+            if is_name(f) || value.is_empty() || value.chars().count() > 80 || label.len() < 2 || ["file", "password", "checkbox", "add", "skills", "prompt"].contains(&typ.as_str()) {
+                continue;
+            }
+            // A placeholder left in a date's boxes isn't an answer.
+            if ["month", "year", "day", "mm", "yyyy", "dd", "select one"].contains(&value.to_lowercase().as_str()) {
+                continue;
+            }
+            let wanted = match *kind {
+                // What CVs leave out. (The degree and the field of study are on the CV.)
+                "Education" => ["gpa", "grade", "result", "from", "start", "first year", "to ", "end", "last year", "graduat", "honours", "honors"].iter().any(|w| l.contains(w)),
+                "Certification" => ["number", "issued", "issue", "expir", "valid", "credential", "date"].iter().any(|w| l.contains(w)),
+                // A language's levels: every choice in its entry.
+                _ => true,
+            };
+            if wanted {
+                out.push((format!("{about}: {}", label.trim_start_matches('*').trim()), value));
+            }
+        }
+    }
+    out
+}
+
+/// Those details as lines for Claude, from your saved answers (where you can change or remove them).
+pub fn entry_lines(agent: &Agent) -> String {
+    let lines: Vec<String> = bank(agent).iter().filter_map(|x| {
+        let (q, a) = (x["q"].as_str()?, x["a"].as_str()?);
+        ENTRY_KINDS.iter().any(|(k, _, _)| q.starts_with(&format!("{k} (")) || q.starts_with(&format!("{k} entry "))).then(|| format!("- {q}: {a}"))
+    }).take(60).collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!("\nDetails they gave on earlier forms, which the CV doesn't state. Use them for the same school, certificate or language, whatever this form calls the box (\"entry 1\" is the first, most recent one on the CV); for a list of choices, pick the choice that says the same:\n{}", lines.join("\n"))
 }
 
 /// The bank's answer to a field, if it has one that fits (for a list of options, one of them).
@@ -433,6 +512,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
         facts.push_str(&format!("\n{}", crate::ats::answers(a)));
     }
     facts.push_str(&profile.cert_lines());
+    facts.push_str(&entry_lines(agent));
     if !profile.email.trim().is_empty() {
         facts.push_str(&format!("\nEmail: {}", profile.email.trim()));
     }
@@ -980,6 +1060,26 @@ mod tests {
         assert!(message(&forged, &tok).is_none());
         assert!(message(&url::Url::parse("https://boards.greenhouse.io/acme/jobs/1").unwrap(), &tok).is_none());
         assert_eq!(file_for("Resume/CV", false), Some("cv"));
+        // What you typed about a school, a certificate or a language is kept by what it's about.
+        let form = vec![
+            json!({"label": "School or University", "type": "text", "section": "Education 1", "value": "American University of Kuwait"}),
+            json!({"label": "Degree", "type": "select", "section": "Education 1", "value": "Bachelor Degree"}),
+            json!({"label": "Overall Result (GPA)", "type": "text", "section": "Education 1", "value": "3.4"}),
+            json!({"label": "From (YYYY)", "type": "date", "section": "Education 1", "value": "2005"}),
+            json!({"label": "To (Actual or Expected) (YYYY)", "type": "date", "section": "Education 1", "value": "Year"}),
+            json!({"label": "Certification Number", "type": "text", "section": "Certifications 2", "value": "PMP-123"}),
+            json!({"label": "Language", "type": "select", "section": "Languages 3", "value": "French"}),
+            json!({"label": "Reading", "type": "select", "section": "Languages 3", "value": "2 - Classroom Study"}),
+            json!({"label": "I am fluent in this language.", "type": "checkbox", "section": "Languages 3", "value": "false"}),
+            json!({"label": "Job Title", "type": "text", "section": "Work Experience 1", "value": "Analyst"}),
+        ];
+        let kept = entry_details(&form);
+        assert_eq!(kept, vec![
+            ("Education (American University of Kuwait): Overall Result (GPA)".to_string(), "3.4".to_string()),
+            ("Education (American University of Kuwait): From (YYYY)".to_string(), "2005".to_string()),
+            ("Certification entry 2: Certification Number".to_string(), "PMP-123".to_string()),
+            ("Language (French): Reading".to_string(), "2 - Classroom Study".to_string()),
+        ], "the degree, an empty date's placeholder, a tick box and a job's title aren't details to keep");
         assert_eq!(file_for("Cover Letter", false), Some("letter"));
         // A box to paste the letter into is the letter's; a question that mentions one is not.
         assert!(is_letter_box(&json!({"type": "textarea", "label": "Cover letter", "value": ""})));

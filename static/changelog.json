@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.75.1",
+    "date": "2026-11-14",
+    "title": "Job Hunt learns your GPA, start dates and language levels",
+    "changes": [
+      "Details you type into a form about a school, a certificate or a language are now kept and used on the next form: a GPA, the year a degree started, a certificate's number and dates, a language's level (Classroom Study for French). Job Hunt used to discard anything typed inside a numbered entry such as Education 1 or Languages 3. They show under Me, About me, Your saved answers, where you can change them."
+    ]
+  },
+  {
     "version": "2.75.0",
     "date": "2026-11-14",
     "title": "A tidier Queue, job page and setup, and two form-filling fixes",

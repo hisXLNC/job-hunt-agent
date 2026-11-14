@@ -2544,7 +2544,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
             .map(|d| d.plain_text())
             .ok_or_else(|| Error("No CV uploaded yet. Add one in CV & Career.".into()))?;
-        let mut facts = format!("{}{}", profile.application_facts.trim(), profile.cert_lines());
+        let mut facts = format!("{}{}{}", profile.application_facts.trim(), profile.cert_lines(), crate::fill::entry_lines(self));
         if let Some(min) = profile.min_salary {
             facts.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
         }

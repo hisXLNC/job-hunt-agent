@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.75.1] - 2026-11-14
+
+Job Hunt learns your GPA, start dates and language levels.
+
+### Changes
+
+- Details you type into a form about a school, a certificate or a language are now kept and used on the next form: a GPA, the year a degree started, a certificate's number and dates, a language's level (Classroom Study for French). Job Hunt used to discard anything typed inside a numbered entry such as Education 1 or Languages 3. They show under Me, About me, Your saved answers, where you can change them.
+
 ## [2.75.0] - 2026-11-14
 
 A tidier Queue, job page and setup, and two form-filling fixes.
@@ -2161,6 +2169,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.75.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.75.1
 [2.75.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.75.0
 [2.74.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.74.0
 [2.73.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.73.0

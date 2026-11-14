@@ -991,6 +991,25 @@ fn a_cv_is_built_from_a_conversation() {
 }
 
 #[test]
+fn what_you_type_about_a_school_or_a_language_is_learned() {
+    let s = setup();
+    let form = vec![
+        json!({"label": "School or University", "type": "text", "section": "Education 1", "value": "American University of Kuwait"}),
+        json!({"label": "Overall Result (GPA)", "type": "text", "section": "Education 1", "value": "3.4"}),
+        json!({"label": "Language", "type": "select", "section": "Languages 3", "value": "French"}),
+        json!({"label": "Comprehension", "type": "select", "section": "Languages 3", "value": "2 - Classroom Study"}),
+    ];
+    assert!(crate::fill::entry_lines(&s.agent).is_empty());
+    assert_eq!(crate::fill::learn(&s.agent, &form).unwrap(), 2);
+    let lines = crate::fill::entry_lines(&s.agent);
+    assert!(lines.contains("- Education (American University of Kuwait): Overall Result (GPA): 3.4") && lines.contains("- Language (French): Comprehension: 2 - Classroom Study"), "{lines}");
+    // Typed again with another value: the newer one replaces it, not a second line.
+    crate::fill::learn(&s.agent, &[form[0].clone(), json!({"label": "Overall Result (GPA)", "type": "text", "section": "Education 1", "value": "3.5"})]).unwrap();
+    let lines = crate::fill::entry_lines(&s.agent);
+    assert!(lines.contains("GPA): 3.5") && !lines.contains("GPA): 3.4"), "{lines}");
+}
+
+#[test]
 fn the_brief_for_another_assistant_says_what_is_left() {
     let s = setup();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();

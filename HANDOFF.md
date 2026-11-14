@@ -56,6 +56,14 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.75.1: details typed into entries are learned.** `personal_in` refuses anything in a numbered entry
+  ("Education 1", "Languages 3") so one school isn't copied into every entry; that also threw away a GPA, a degree's
+  start year and a language's level, however often they were typed. `fill::entry_details(fields)` now keeps those
+  by what they're about ("Education (American University of Kuwait): Overall Result (GPA)", "Language (French):
+  Reading", "Certification entry 2: Certification Number"; `ENTRY_KINDS`), as saved answers (so they show and can
+  be edited under Me → About me), and `entry_lines` gives them to Claude with the facts for forms and answers.
+  They're learned when a form is left (Next / Save and Continue) or marked applied, as before. Unverified on a
+  real form: that Workday's date boxes and school search box report their values to `learn`.
 - **2.75.0: tidy-ups from a screen-by-screen review, and two form-filling fixes from a Copy details.**
   - Review (screens photographed with the dev server; the user said "do them all"): the update bar only on the Queue
     and Settings → App (`updateBarHere`; the chip stays everywhere); the Queue's heading counts what the badge
