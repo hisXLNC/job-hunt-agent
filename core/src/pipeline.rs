@@ -837,7 +837,7 @@ impl Agent {
     }
 
     /// claim, for work handed to another thread.
-    fn claim_owned(self: &Arc<Self>, name: &str) -> Option<OwnedRunning> {
+    pub(crate) fn claim_owned(self: &Arc<Self>, name: &str) -> Option<OwnedRunning> {
         self.running.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string()).then(|| {
             STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
             OwnedRunning { agent: self.clone(), name: name.to_string() }
@@ -890,7 +890,7 @@ impl Agent {
     /// long that kind of work usually takes (`estimated`), and stops short of the end.
     pub fn activity(&self) -> Vec<Value> {
         // (prefix or name, what it's called, seconds it usually takes; 0: not shown)
-        const KINDS: [(&str, &str, i64); 26] = [
+        const KINDS: [(&str, &str, i64); 27] = [
             ("search", "Searching for jobs", 0), ("search-ending", "The stopped search is finishing what it was in the middle of", 30),
             ("cv-update", "Updating everything for your CV", 0), ("claude-fill", "Claude is filling in a form in your browser", 300),
             ("chrome-test", "Testing Claude's connection to your browser", 60), ("tailor:", "Tailoring a CV and cover letter", 100),
@@ -899,7 +899,7 @@ impl Agent {
             ("rescore", "Scoring postings again", 120), ("after-scores", "Scoring tailored CVs", 60), ("forecast", "Working out what tailoring could reach", 60),
             ("ask", "Ask Claude is answering", 25), ("cvchat", "Claude is working on your CV with you", 20), ("career", "Working out your career options", 90), ("coach", "Looking at what would help your applications", 90),
             ("insights", "Reading your results", 60), ("lessons", "Learning from your results", 45), ("weekly", "Writing your weekly review", 60), ("leads", "Looking for hiring posts", 120),
-            ("add", "Adding a job", 40), ("inbox", "Reading your job email", 60),
+            ("add", "Adding a job", 40), ("inbox", "Reading your job email", 60), ("apply-link:", "Looking for a job on the company's own site", 90),
         ];
         let now = Utc::now().timestamp();
         let started = STARTED.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -2838,7 +2838,14 @@ replies and interviews, and a little lower for kinds that got none from several 
         if job.apply_url.is_some() {
             return Ok(job.apply_url);
         }
-        let found = self.llm().company_apply(&job)?;
+        // First where the job board's own link leads (Adzuna's often goes on to the employer's page,
+        // sometimes to another job board that doesn't work): no Claude needed. Then Claude's search.
+        let followed = Some(job.url.as_str()).filter(|u| crate::sources::is_job_board(u)).and_then(crate::sources::follow_to_company);
+        let found = match followed {
+            Some(u) => Some(u),
+            None if self.engine_name() == "code" && self.claude_ready() => self.llm().company_apply(&job)?,
+            None => return err("The posting's own link doesn't lead to the company's site, and looking for it there needs your Claude subscription (Settings, Accounts, Claude). Search for it on the web with the button beside this one."),
+        };
         match &found {
             Some(u) => {
                 self.db().update_job(job_id, &[("apply_url", u.clone().into())])?;
@@ -2859,14 +2866,17 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// is on a job board and Claude Code is set up.
     pub fn find_company_apply_later(self: &Arc<Self>, job_id: &str) {
         let Ok(Some(job)) = self.db().job(job_id) else { return };
-        if job.apply_url.is_some() || job.apply_email.is_some() || job.url.trim().is_empty() || !crate::sources::is_job_board(&job.url) || self.engine_name() != "code" || !self.claude_ready() {
+        if job.apply_url.is_some() || job.apply_email.is_some() || job.url.trim().is_empty() || !crate::sources::is_job_board(&job.url) {
             return;
         }
         let (a, id) = (self.clone(), job_id.to_string());
         std::thread::spawn(move || {
             let Ok(_g) = a.claim(&format!("apply-link:{id}")) else { return };
             if let Err(e) = a.find_company_apply(&id) {
-                let _ = a.db().log(Some(&id), "apply-link:error", &e.0);
+                // (Without a Claude subscription only the link is followed: not finding it isn't a fault.)
+                if a.engine_name() == "code" {
+                    let _ = a.db().log(Some(&id), "apply-link:error", &e.0);
+                }
             }
         });
     }

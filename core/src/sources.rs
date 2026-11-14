@@ -35,8 +35,53 @@ pub fn is_job_board(url: &str) -> bool {
     let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default();
     ["linkedin.", "indeed.", "glassdoor.", "ziprecruiter.", "jooble.", "adzuna.", "google.", "monster.", "simplyhired.",
      "talent.com", "workopolis.", "jobbank.gc.ca", "guichetemplois.", "eluta.", "bayt.", "naukri", "gulftalent.", "careerbuilder.",
-     "jobs.ca", "dice.com", "wellfound.", "builtin.", "lensa.", "jobrapido.", "careerjet.", "neuvoo.", "seek.", "reed.co.uk", "totaljobs."]
+     "jobs.ca", "dice.com", "wellfound.", "builtin.", "lensa.", "jobrapido.", "careerjet.", "neuvoo.", "seek.", "reed.co.uk", "totaljobs.",
+     // Where Adzuna and the like send you on to: more lists of other people's jobs, some of them dead ends.
+     "jobbi", "whatjobs.", "jobsora.", "jobleads.", "trovit.", "jora.", "learn4good.", "recruit.net", "bebee.", "grabjobs.", "jobilize.",
+     "appcast.", "jobs2careers.", "talentify.", "jobtome.", "jobisjob.", "jobg8.", "myjobhelper.", "jobget.", "jobvertise.", "careerbeacon.",
+     "jobillico.", "jobboom.", "allthetopbananas.", "tiptopjob.", "joblift.", "jobsinnetwork.", "snagajob.", "nexxt.", "jobcase."]
         .iter().any(|b| host.contains(b))
+}
+
+/// Where a job board's link ends up, when that is the employer's own page (their site or the
+/// system they take applications through): followed as a browser would, through redirects and a
+/// page that only sends you on. None when it stays on a job board or can't be read.
+pub fn follow_to_company(url: &str) -> Option<String> {
+    follow_with(url, is_job_board)
+}
+
+fn follow_with(url: &str, board: fn(&str) -> bool) -> Option<String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+        .build().ok()?;
+    let mut at = url.to_string();
+    for _ in 0..3 {
+        let resp = client.get(&at).send().ok()?;
+        let landed = resp.url().to_string();
+        if !resp.status().is_success() {
+            return None;
+        }
+        if !board(&landed) {
+            // The employer's page for this job, not just their home page.
+            let path = url::Url::parse(&landed).ok().map(|u| format!("{}{}", u.path(), u.query().unwrap_or(""))).unwrap_or_default();
+            return (path.len() > 1).then_some(landed);
+        }
+        // Still a job board: a page that sends the browser on by itself?
+        let html = resp.text().ok()?;
+        let next = sent_on(&html)?;
+        at = url::Url::parse(&landed).ok()?.join(&next).ok()?.to_string();
+    }
+    None
+}
+
+/// The address a page sends the browser on to by itself (a meta refresh, or a script that sets the
+/// window's location), if it does.
+fn sent_on(html: &str) -> Option<String> {
+    static META: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r#"(?is)<meta[^>]+http-equiv=["']?refresh["']?[^>]*content=["'][^"']*?url=([^"'>\s]+)"#).unwrap());
+    static SCRIPT: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r#"(?is)(?:window\.|document\.)?location(?:\.href)?\s*=\s*["'](https?://[^"']+)["']|location\.replace\(\s*["'](https?://[^"']+)["']"#).unwrap());
+    let found = META.captures(html).and_then(|c| c.get(1)).or_else(|| SCRIPT.captures(html).and_then(|c| c.get(1).or(c.get(2))))?;
+    Some(found.as_str().replace("&amp;", "&"))
 }
 
 impl Posting {
@@ -2602,5 +2647,39 @@ https://www.linkedin.com/comm/jobs/view/4012345678/ (again)\nhttps://www.linkedi
     fn apply_email_needs_a_hint() {
         assert_eq!(find_apply_email("Questions? Write to hr@x.com"), None);
         assert_eq!(find_apply_email("Send your CV to jobs@x.com."), Some("jobs@x.com".into()));
+    }
+}
+
+#[cfg(test)]
+mod follow_tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    /// A job board's link is followed to the employer's page: through a redirect, and through a
+    /// page that only sends the browser on. One that ends on another job board gives nothing.
+    #[test]
+    fn a_board_link_is_followed_to_the_employers_page() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut s in listener.incoming().flatten() {
+                let mut buf = [0u8; 2048];
+                let n = s.read(&mut buf).unwrap_or(0);
+                let path = String::from_utf8_lossy(&buf[..n]).split_whitespace().nth(1).unwrap_or("").to_string();
+                let (status, extra, body) = match path.as_str() {
+                    "/board/land/1" => ("302 Found", "Location: /board/hop\r\n".to_string(), String::new()),
+                    "/board/hop" => ("200 OK", String::new(), format!("<html><script>window.location.href = \"http://127.0.0.1:{port}/careers/job/42\";</script></html>")),
+                    "/board/land/2" => ("302 Found", "Location: /board/dead\r\n".to_string(), String::new()),
+                    _ => ("200 OK", String::new(), "<html>a page</html>".to_string()),
+                };
+                let _ = s.write_all(format!("HTTP/1.1 {status}\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+            }
+        });
+        let board: fn(&str) -> bool = |u| u.contains("/board/");
+        let at = |p: &str| format!("http://127.0.0.1:{port}{p}");
+        assert_eq!(follow_with(&at("/board/land/1"), board), Some(at("/careers/job/42")));
+        assert_eq!(follow_with(&at("/board/land/2"), board), None, "it ends on another job board");
+        assert!(is_job_board("https://www.jobbi.ca/job/123") && is_job_board("https://ca.whatjobs.com/x") && !is_job_board("https://jobs.rbc.com/ca/en/job/1"));
+        assert_eq!(sent_on(r#"<meta http-equiv="refresh" content="0; url=https://x.example/job?a=1&amp;b=2">"#).as_deref(), Some("https://x.example/job?a=1&b=2"));
     }
 }

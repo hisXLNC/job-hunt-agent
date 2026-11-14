@@ -787,3 +787,17 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   Location, Pay, Found, Fit) are restored, and Shows pay / No red flags show above the list on a
   phone again. The Sort by menu keeps its Company / Role / Place options. Both screen tests (headers
   and menu) run. Don't remove these again.
+
+## 2.80.0
+
+- **A job board's link that leads nowhere (Adzuna → another aggregator).** `sources::follow_to_company`
+  follows the posting's link (redirects, meta refresh, a script setting `location`) and keeps where
+  it ends when that isn't a job board; `find_company_apply` tries it first (no Claude), then
+  Claude's search (Claude Code only; otherwise an error saying so). `find_company_apply_later`
+  (after approval) now runs for every engine. `is_job_board` knows ~30 more aggregators ("jobbi",
+  whatjobs, jobleads…). Not tried against real Adzuna links (host not reachable from the dev box).
+- **Find it on the company's site** runs in the background: `POST /api/jobs/<id>/apply-link`
+  returns `{started}`; claim `apply-link:<id>` is in `activity()` KINDS (status panel, Stop); the job
+  JSON has `finding`; the page shows "Looking…" and polls; a miss is logged as an `apply-link`
+  event ("not found: …") and shown under the actions. New button "Search the web for it"
+  (Google: "title" company careers) whenever a job has no company link.

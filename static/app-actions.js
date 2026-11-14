@@ -862,11 +862,11 @@ async function act(el) {
     }, 'Saving a copy to your Google Drive…');
   }
   if (a === 'findApply') {
-    return busy(async () => {
-      const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/apply-link`, { method: 'POST' });
-      toast(r.url ? 'Found it on the company\'s site.' : 'Couldn\'t find it on the company\'s own site; apply through the posting.', !r.url);
-      route();
-    }, 'Looking on the company\'s site (a minute or two)…');
+    // Started in the background: the job's page says it's looking and shows the result, and it has
+    // a line (with Stop) under what Job Hunt is doing.
+    try { await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/apply-link`, { method: 'POST' }); } catch (e) { toast(e.message, true); }
+    if (typeof actLoad === 'function') actLoad();
+    return route();
   }
   if (a === 'saveLetter') return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/letter`, { method: 'POST', body: { text: $('#letter').value } }); route(); }, 'Cover letter saved.');
   if (a === 'saveNotes') return busy(() => api(`/api/jobs/${encodeURIComponent(jobId)}/notes`, { method: 'POST', body: { text: $('#notes').value } }), 'Notes saved.');

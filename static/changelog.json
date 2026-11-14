@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.80.0",
+    "date": "2026-11-14",
+    "title": "Finding the real posting",
+    "changes": [
+      "When a job board's link leads to another job board (Adzuna's sometimes does), Job Hunt follows the link to the company's own page where it can, with no Claude needed.",
+      "Find it on the company's site now shows that it is looking, has a line under what Job Hunt is doing with a Stop, and says what it found.",
+      "A new button, Search the web for it, finds the job on the company's careers site when the links don't work.",
+      "More job-board sites are recognised as job boards, not as the company's own page."
+    ]
+  },
+  {
     "version": "2.79.1",
     "date": "2026-11-14",
     "title": "Sorting and filters are back",

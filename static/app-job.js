@@ -6,7 +6,7 @@ let jobPoll;
 const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions &amp; contacts'], ['interview', 'Interview']];
 const jobTabs = {};
 /** The job's buttons: its next step first, as the main one, then the rest, all in view. */
-function jobActions(j, tailoring, progress) {
+function jobActions(j, tailoring, progress, finding = false, looked = null) {
   const id = esc(j.id), on = `data-job="${id}" data-from="${esc(j.status)}"`;
   const enc = encodeURIComponent(j.id);
   // What to do now, in a sentence, with its button (or two).
@@ -29,11 +29,15 @@ function jobActions(j, tailoring, progress) {
   if (j.apply_url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="company">${svg('open')}On the company's site</button>`);
   if (j.url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="posting">${svg('open')}Open posting</button>`);
   // Applying: the other ways to get to the form.
-  if (['ready', 'approved'].includes(j.status) && !j.apply_url && j.url) b.push(`<button class="btn ghost sm" data-act="findApply" data-job="${id}" title="Claude searches the company's careers site for this job, so you apply to them and not through a job board">${svg('search')}Find it on the company's site</button>`);
+  if (finding) b.push('<span class="muted small"><span class="spin" data-kind="rating"></span>Looking for it on the company\'s site… (also under what Job Hunt is doing, bottom left, where you can stop it)</span>');
+  else if (['ready', 'approved'].includes(j.status) && !j.apply_url && j.url) b.push(`<button class="btn ghost sm" data-act="findApply" data-job="${id}" title="Claude searches the company's careers site for this job, so you apply to them and not through a job board">${svg('search')}Find it on the company's site</button>`);
+  // A job board's link can lead nowhere (Adzuna's sometimes goes on to another board): the web finds the employer's own posting.
+  if (!j.apply_url && j.url && !['applied', 'interviewing', 'offer', 'rejected', 'no_response'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="link" data-url="https://www.google.com/search?q=${encodeURIComponent(`"${j.title}" ${j.company} careers`)}" title="Searches the web for this job on ${esc(j.company)}'s own careers site, for when the job board's link doesn't work">${svg('search')}Search the web for it</button>`);
   if (['ready', 'approved', 'queued'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="stage" ${on} data-status="saved">Save for later</button>`, `<button class="btn ghost sm danger" data-act="stage" ${on} data-status="dismissed">Not interested</button>`);
   return `<section class="card next-step actions">
       <div class="next-main">${next ? `<p class="grow"><b>Next:</b> ${next}</p>` : '<span class="grow"></span>'}<div class="row">${main.filter(Boolean).join('')}</div></div>
-      ${b.length ? `<div class="row next-more">${b.join('')}</div>` : ''}</section>`;
+      ${b.length ? `<div class="row next-more">${b.join('')}</div>` : ''}
+      ${looked && !finding && !j.apply_url ? `<p class="small" style="margin:8px 0 0;color:var(--warn)">Looked on the company's site ${esc(ago(looked.created_at))}: ${esc(looked.detail.replace(/^not found: /, ''))}${/[.!?]$/.test(looked.detail) ? '' : '.'} Try Search the web for it.</p>` : ''}</section>`;
 }
 /** "Why it fits", up top: the strongest match, the biggest gap, and anything to check. */
 function whyBox(j, flags, note = '') {
@@ -56,7 +60,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const reviewBox = `<div class="ats-review"><header><h3>${sys ? `How ${esc(sys.name)}'s AI check would read your CV` : 'How an AI screen would read your CV'}</h3>
         ${reviewing ? '<span class="muted small"><span class="spin" data-kind="review"></span>Checking…</span>' : j.cv_path ? `<button class="btn" data-act="review">${review ? 'Check again' : 'Check my CV'}</button>` : ''}</header>
         ${review ? `<p><b>Meets ${review.met} of ${review.total}</b>${review.undecided ? `, ${review.undecided} it can't decide` : ''}${review.not ? `, ${review.not} not shown` : ''}. ${esc(review.note || '')}</p>
@@ -98,7 +102,7 @@ async function showJob(id) {
         <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}${(company_history || []).length ? ' <span class="pill info">Applied here before</span>' : ''}</div>
       </div>
     </div>
-    ${jobActions(j, tailoring, progress)}
+    ${jobActions(j, tailoring, progress, finding, (history || []).find(e => e.kind === 'apply-link'))}
     ${decline || declining || j.status === 'rejected' ? `<section class="card">
       <header><h2>Reply to the rejection</h2>${declining ? '<span class="muted small"><span class="spin" data-kind="decline"></span>Writing…</span>' : `<button class="btn" data-act="decline">${decline ? 'Write again' : 'Draft a reply'}</button>`}</header>
       ${decline ? `<p class="small muted">${decline.draft ? `Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>${decline.in_thread ? ', as a reply to their email' : ''}` : 'Written'} ${esc(ago(decline.at))}${decline.to ? ` · to ${esc(decline.to)}` : ' · add the address of the person you dealt with before sending'}</p>
@@ -299,7 +303,7 @@ async function showJob(id) {
   // Opened for one part of the page (Write a note → People at the company): go there.
   if (scrollToAfter) { const at = document.getElementById(scrollToAfter); scrollToAfter = ''; if (at) setTimeout(() => at.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
   loadKit();
-  if (tailoring || preparing || revising || following_up || answering || advising || writing_to || thanking) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
+  if (tailoring || finding || preparing || revising || following_up || answering || advising || writing_to || thanking) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
 }
 
 /** The copy-and-paste kit on a job's Apply tab: each detail with its own Copy button. */

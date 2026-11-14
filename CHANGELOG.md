@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.80.0] - 2026-11-14
+
+Finding the real posting.
+
+### Changes
+
+- When a job board's link leads to another job board (Adzuna's sometimes does), Job Hunt follows the link to the company's own page where it can, with no Claude needed.
+- Find it on the company's site now shows that it is looking, has a line under what Job Hunt is doing with a Stop, and says what it found.
+- A new button, Search the web for it, finds the job on the company's careers site when the links don't work.
+- More job-board sites are recognised as job boards, not as the company's own page.
+
 ## [2.79.1] - 2026-11-14
 
 Sorting and filters are back.
@@ -2234,6 +2245,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.80.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.80.0
 [2.79.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.79.1
 [2.79.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.79.0
 [2.78.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.78.0

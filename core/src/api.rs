@@ -754,6 +754,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "sent_compare": agent.compare_with_sent(&job),
                     "repeat_mode": agent.repeat_mode(),
                     "follow_up": agent.follow_up(id), "following_up": agent.is_running(&format!("followup:{id}")),
+                    "finding": agent.is_running(&format!("apply-link:{id}")),
                     "answers": agent.answers(id), "answering": agent.is_running(&format!("answers:{id}")),
                     "can_fill": host.can_fill() && !req.remote,
                     "recruiters_here": crate::recruiters::for_job(agent, id),
@@ -963,8 +964,18 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     if agent.is_running(&format!("apply-link:{id}")) {
                         return Err(Error("Job Hunt is already looking for it.".into()));
                     }
-                    let _g = agent.claim(&format!("apply-link:{id}"))?;
-                    Ok(Resp::json(&json!({ "url": agent.find_company_apply(id)? })))
+                    // In the background, with its own line under what Job Hunt is doing (and a Stop there):
+                    // the page used to wait on this request for minutes with nothing to see.
+                    let Some(g) = agent.claim_owned(&format!("apply-link:{id}")) else { return Err(Error("Job Hunt is already looking for it.".into())) };
+                    let (a, id) = (agent.clone(), id.to_string());
+                    std::thread::spawn(move || {
+                        let _g = g;
+                        let _task = crate::claude_code::Task::enter(&format!("apply-link:{id}"));
+                        if let Err(e) = a.find_company_apply(&id) {
+                            let _ = a.db().log(Some(&id), "apply-link", &format!("not found: {}", e.0));
+                        }
+                    });
+                    Ok(Resp::json(&json!({ "started": true })))
                 }
                 "prep" => {
                     let key = format!("prep:{id}");
