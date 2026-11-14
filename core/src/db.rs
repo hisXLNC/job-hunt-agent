@@ -436,6 +436,15 @@ impl Db {
         Db::init(Connection::open(path)?)
     }
 
+    /// A second connection to the same file that only reads: for what the page asks for again and
+    /// again (the Queue, a job), beside whatever the app's own connection is busy with. The file is
+    /// in WAL mode, so it sees everything written up to the moment of each read.
+    pub fn open_reader(path: &Path) -> R<Db> {
+        let con = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        con.busy_timeout(std::time::Duration::from_secs(5))?;
+        Ok(Db { con })
+    }
+
     pub fn memory() -> R<Db> {
         Db::init(Connection::open_in_memory()?)
     }

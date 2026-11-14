@@ -326,6 +326,8 @@ type Notify = Box<dyn Fn(&str, &str) + Send + Sync>;
 pub struct Agent {
     pub data: PathBuf,
     db: Mutex<Db>,
+    /// A read-only connection to the same database (none for the tests' in-memory one): see `reading`.
+    reader: Option<Mutex<Db>>,
     pub llm: RwLock<Arc<dyn Llm>>,
     pub mail: RwLock<Option<Arc<dyn Mail>>>,
     pub cal: RwLock<Option<Arc<dyn Cal>>>,
@@ -461,11 +463,26 @@ impl Drop for Running<'_> {
 /// shows as running, and a new one waits for this to clear. See Agent::force_stop_search.
 pub const SEARCH_ENDING: &str = "search-ending";
 
+thread_local! {
+    static READING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// See Agent::reading.
+pub struct Reading(bool);
+
+impl Drop for Reading {
+    fn drop(&mut self) {
+        READING.with(|r| r.set(self.0));
+    }
+}
+
 impl Agent {
     pub fn new(data: &Path, db: Db, notify: Notify) -> Agent {
+        let reader = db.file().and_then(|f| Db::open_reader(&f).ok()).map(Mutex::new);
         let agent = Agent {
             data: data.to_path_buf(),
             db: Mutex::new(db),
+            reader,
             llm: RwLock::new(Arc::new(Claude::new("", ""))),
             mail: RwLock::new(None),
             cal: RwLock::new(None),
@@ -491,7 +508,22 @@ impl Agent {
     }
 
     pub fn db(&self) -> MutexGuard<'_, Db> {
+        if READING.with(|r| r.get()) {
+            if let Some(reader) = &self.reader {
+                return reader.lock().unwrap_or_else(|e| e.into_inner());
+            }
+        }
         self.db.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Until the guard is dropped, `db()` on this thread hands out the read-only connection: for a
+    /// request from the page that only reads (the Queue, the job list, a job). The search, tailoring
+    /// and everything else that writes keep the app's own connection, so neither waits for the other.
+    /// (One PC's search sorted 1,664 postings in 17 minutes, waiting behind the page at each.) A write
+    /// attempted while reading fails ("readonly database"): the routes that read this way then answer
+    /// once more on the app's own connection.
+    pub fn reading(&self) -> Reading {
+        Reading(READING.with(|r| r.replace(self.reader.is_some())))
     }
 
     pub fn profile(&self) -> Profile {

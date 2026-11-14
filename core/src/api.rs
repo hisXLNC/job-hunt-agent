@@ -421,7 +421,25 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
 /// The Overview as last put together during a search, per agent (see the overview route).
 static OVERVIEW_KEPT: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<usize, (std::time::Instant, Value)>>> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
 
+/// What the page reads most (the Queue, the job list, a job) is answered on the read-only
+/// connection (see Agent::reading), so it neither waits for a search nor makes one wait. Should one
+/// of these ever try to write there, it's answered again on the app's own connection.
 fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
+    let parts: Vec<&str> = req.path.trim_matches('/').split('/').collect();
+    if req.method == "GET" && matches!(parts.as_slice(), ["api", "overview"] | ["api", "jobs"] | ["api", "jobs", _]) {
+        let got = {
+            let _reading = agent.reading();
+            route_on(agent, host, req)
+        };
+        match got {
+            Err(e) if e.0.contains("readonly") => {}
+            other => return other,
+        }
+    }
+    route_on(agent, host, req)
+}
+
+fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
     let p = req.path.as_str();
     let m = req.method.as_str();
     let parts: Vec<&str> = p.trim_matches('/').split('/').collect();

@@ -2594,3 +2594,33 @@ fn the_inbox_counts_new_mail_and_replies_from_it() {
     assert!(s.agent.reply_to_email("q3").is_err());
 }
 
+
+/// The page's reads go to a second, read-only connection: they see what was just written, don't
+/// wait while the app's own connection is held (a search, a sync), and can't write.
+#[test]
+fn the_page_reads_beside_the_apps_own_connection() {
+    let dir = tempfile::tempdir().unwrap();
+    let agent = Agent::new(dir.path(), Db::open(&dir.path().join("jobhunt.db")).unwrap(), Box::new(|_, _| {}));
+    agent.db().set("seen", "one").unwrap();
+    let held = agent.db(); // the app's own connection, busy
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            let _reading = agent.reading();
+            let got = agent.db().get("seen").unwrap();
+            let wrote = agent.db().set("seen", "two").map_err(|e| e.0);
+            tx.send((got, wrote)).unwrap();
+        });
+        let (got, wrote) = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("the read waited for the app's connection");
+        assert_eq!(got.as_deref(), Some("one"));
+        assert!(wrote.unwrap_err().contains("readonly"), "a write on the reading connection is refused");
+    });
+    drop(held);
+    // Reading ends with its guard: this thread is back on the app's own connection.
+    {
+        let _reading = agent.reading();
+    }
+    agent.db().set("seen", "three").unwrap();
+    let _reading = agent.reading();
+    assert_eq!(agent.db().get("seen").unwrap().as_deref(), Some("three"));
+}
