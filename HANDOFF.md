@@ -56,6 +56,42 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.74.0: a batch of small reports** (2.73.0 was never pushed to main on its own; it ships in this).
+  - *A picture in Ask Claude*: the paperclip, a pasted screenshot or a drop (`askAttach` in `app-ask.js`: resized to
+    ≤1600 px, a 220 px thumbnail kept with the message). `page.image {mime, b64}` → `people::ask_image` (PNG/JPEG/
+    WebP/GIF, ≤5 MB) → `Asked.image` → `Claude::call_seeing`: through Claude Code the file is put beside the request
+    and Claude is told to open it with Read; with an API key it's an image block; another AI doing everything is
+    told there was one it can't see. The picture itself is never stored.
+  - *Marked as applied, honestly*: the panel said "Marked as applied in Job Hunt" before asking, and `/ext/applied`
+    failed silently when the thank-you page couldn't be matched to a job. Now `markApplied` (fill.js) awaits the
+    answer, sends `job_id` (`filledFor`, from the fill's answer, kept in `sessionStorage['jobhunt-job']` for the next
+    page; the bridge uses it before `job_for_page`), and on failure shows Mark as applied or the chooser
+    (`afterPick`).
+  - *Which job is this page?* `apply.browser` from Fill in my browser has no site; it matched any page for two
+    hours (Job Bank was named as an Interac job). Now it's open (`*`) for 15 minutes to the first sites it's used
+    on, three at most, never a job board the job didn't come from; a choice made in the extension stays that one site.
+  - *Lists*: Ready to approve's select bar has Not interested (`dismissPicked` reads either list); the "did these go
+    through?" rows and the Queue's "Did it go through?" card have Not interested; Not interested or Save for later on
+    a job's own page returns to the screen you came from (`cameFrom`); a job opened by a link with no `data-tab-to`
+    opens on Overview (the stage's own tab is no longer the default).
+- **2.73.0: what's running, with a Stop for each; right-click a box to fill only it.**
+  - *Activity panel* (`static/app-activity.js`, bottom left, hidden when idle; state is `running`, not `act`, which
+    broke the whole app as a global). `Agent::activity()` lists the claims worth showing (`KINDS` in `pipeline.rs`:
+    search, cv-update, claude-fill, tailor:, revise:, answers:, prep:, ask, cvchat, career…; housekeeping like sync is
+    left out) with label, the job's name, seconds since it started (`STARTED`, set in `claim`/`claim_owned`) and a
+    percent: real for the search (`Progress.percent`) and a CV update (scored+tailored of what's owed), otherwise a
+    guess from the usual time for that kind, capped at 95 and drawn striped (`estimated`). `GET /api/activity`,
+    `POST /api/activity/stop {id}` → `stop_activity`: the search's force stop, the CV update's stop, or
+    `claude_code::cancel_task(name)`. Requests are tied to the work they're for by `claude_code::Task` (thread-local
+    name, set by `claim` on the claiming thread and by hand for `ask`/`cvchat`; outer name wins); `run_capture` kills
+    its child when its task is cancelled and refuses that task's next requests for 8 s. Not cancellable: requests
+    through the API engine or another AI, and a web request in flight.
+  - *Fill this in*: manifest permission `contextMenus`; `background.js` adds "Job Hunt: fill this in" (all contexts:
+    a drawn dropdown isn't "editable") and calls `startFill(tabId, true)` → `window.__jobhunt.fillOnly()`. `fill.js`:
+    the box is what was right-clicked (a `contextmenu` listener, when the script was already on the page) or what
+    has the cursor; `startNow` skips unfolding and the letter opener, narrows `list` to the field that is, holds or
+    sits in that element (`onlyKeys`), and `fillNow` fills only those and ends with one line about that box.
+    Extension test `one`.
 - **2.72.0: Force stop asks what to stop; Job Bank, Jobs.ca and a dropped Workday answer.** (This session's cloud
   environment "job-hunt-agent" now allows www.jobbank.gc.ca, www.jobs.ca and mastercard.wd1.myworkdayjobs.com, so
   those were looked at live.)

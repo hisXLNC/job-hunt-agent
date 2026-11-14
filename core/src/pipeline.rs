@@ -426,7 +426,12 @@ struct SearchCtx<'a> {
 pub struct Running<'a> {
     agent: &'a Agent,
     name: String,
+    /// The requests this thread makes to Claude are this work's (see claude_code::Task).
+    _task: crate::claude_code::Task,
 }
+
+/// When each piece of running work started (seconds since 1970), for the activity list.
+static STARTED: once_cell::sync::Lazy<Mutex<std::collections::HashMap<String, i64>>> = once_cell::sync::Lazy::new(Default::default);
 
 pub struct OwnedRunning {
     agent: Arc<Agent>,
@@ -435,12 +440,14 @@ pub struct OwnedRunning {
 
 impl Drop for OwnedRunning {
     fn drop(&mut self) {
+        STARTED.lock().unwrap().remove(&self.name);
         self.agent.running.lock().unwrap().remove(&self.name);
     }
 }
 
 impl Drop for Running<'_> {
     fn drop(&mut self) {
+        STARTED.lock().unwrap().remove(&self.name);
         let mut r = self.agent.running.lock().unwrap();
         r.remove(&self.name);
         // A search that was force-stopped has now really ended: the next one may start.
@@ -781,12 +788,16 @@ impl Agent {
         if !r.insert(name.to_string()) {
             return err(format!("{name} is already running"));
         }
-        Ok(Running { agent: self, name: name.to_string() })
+        STARTED.lock().unwrap().insert(name.to_string(), Utc::now().timestamp());
+        Ok(Running { agent: self, name: name.to_string(), _task: crate::claude_code::Task::enter(name) })
     }
 
     /// claim, for work handed to another thread.
     fn claim_owned(self: &Arc<Self>, name: &str) -> Option<OwnedRunning> {
-        self.running.lock().unwrap().insert(name.to_string()).then(|| OwnedRunning { agent: self.clone(), name: name.to_string() })
+        self.running.lock().unwrap().insert(name.to_string()).then(|| {
+            STARTED.lock().unwrap().insert(name.to_string(), Utc::now().timestamp());
+            OwnedRunning { agent: self.clone(), name: name.to_string() }
+        })
     }
 
     pub fn is_running(&self, name: &str) -> bool {
@@ -826,6 +837,83 @@ impl Agent {
             let _ = self.db().log(None, "search", "Force-stopped: what it had found and scored is kept");
         }
         was
+    }
+
+    /// What Job Hunt is doing right now that you might want to watch or stop: the search, Claude
+    /// filling in a form in your browser, tailoring, a CV update, an answer being written. Each
+    /// {id, label, detail, secs, percent, estimated, stoppable}, the oldest first. `percent` is real
+    /// where the work counts its steps (the search, a CV update); elsewhere it's a guess from how
+    /// long that kind of work usually takes (`estimated`), and stops short of the end.
+    pub fn activity(&self) -> Vec<Value> {
+        // (prefix or name, what it's called, seconds it usually takes; 0: not shown)
+        const KINDS: [(&str, &str, i64); 26] = [
+            ("search", "Searching for jobs", 0), ("search-ending", "The stopped search is letting go of its last request", 60),
+            ("cv-update", "Updating everything for your CV", 0), ("claude-fill", "Claude is filling in a form in your browser", 300),
+            ("chrome-test", "Testing Claude's connection to your browser", 60), ("tailor:", "Tailoring a CV and cover letter", 100),
+            ("revise:", "Changing a CV or cover letter", 40), ("answers:", "Writing answers to a form's questions", 45), ("prep:", "Writing interview prep", 80),
+            ("contact:", "Writing a note to a contact", 25), ("offer:", "Weighing an offer", 50), ("followup:", "Writing a follow-up", 25), ("rating:", "Looking up a company's rating", 20),
+            ("rescore", "Scoring postings again", 120), ("after-scores", "Scoring tailored CVs", 60), ("forecast", "Working out what tailoring could reach", 60),
+            ("ask", "Ask Claude is answering", 25), ("cvchat", "Claude is working on your CV with you", 20), ("career", "Working out your career options", 90), ("coach", "Looking at what would help your applications", 90),
+            ("insights", "Reading your results", 60), ("lessons", "Learning from your results", 45), ("weekly", "Writing your weekly review", 60), ("leads", "Looking for hiring posts", 120),
+            ("add", "Adding a job", 40), ("inbox", "Reading your job email", 60),
+        ];
+        let now = Utc::now().timestamp();
+        let started = STARTED.lock().unwrap().clone();
+        let mut names = self.running();
+        names.sort_by_key(|n| (started.get(n).copied().unwrap_or(now), n.clone()));
+        let mut out = vec![];
+        for name in names {
+            let Some((key, label, usual)) = KINDS.iter().find(|(k, _, _)| if k.ends_with(':') { name.starts_with(k) } else { name == *k }) else { continue };
+            let secs = (now - started.get(&name).copied().unwrap_or(now)).max(0);
+            let mut detail = String::new();
+            let (mut percent, mut estimated) = (((secs as f64 / (*usual).max(1) as f64) * 100.0).min(95.0) as u32, true);
+            if let Some(id) = key.ends_with(':').then(|| &name[key.len()..]) {
+                if let Ok(Some(j)) = self.db().job(id) {
+                    detail = format!("{} at {}", j.title, j.company);
+                }
+            }
+            match name.as_str() {
+                "search" => {
+                    let p = self.progress.lock().unwrap().clone();
+                    percent = p.percent;
+                    estimated = false;
+                    detail = [if p.paused { "Paused".to_string() } else { p.stage.clone() }, if p.also.is_empty() { p.detail.clone() } else { p.also.clone() }].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(": ");
+                }
+                "cv-update" => {
+                    let v: Value = serde_json::from_str(&self.secret("cv.update")).unwrap_or(Value::Null);
+                    let n = |k: &str| v[k].as_u64().unwrap_or(0);
+                    let (done, total) = (n("scored") + n("tailored") + n("approved_done"), n("to_score") + n("to_tailor") + n("approved"));
+                    if total > 0 {
+                        percent = ((done.min(total) as f64 / total as f64) * 100.0) as u32;
+                        estimated = false;
+                    }
+                    detail = match v["step"].as_str().unwrap_or("") { "titles" => "Reading the new CV", "scoring" => "Scoring your matches again", "tailoring" => "Tailoring the waiting applications again", "career" => "Career options", "leads" => "Hiring posts", _ => "" }.to_string();
+                }
+                "claude-fill" => detail = self.secret("claudefill:current"),
+                _ => {}
+            }
+            out.push(json!({ "id": name, "label": label, "detail": detail, "secs": secs, "percent": percent, "estimated": estimated, "stoppable": name != SEARCH_ENDING }));
+        }
+        out
+    }
+
+    /// Stop one thing in the activity list, now. The search and a CV update end as their own force
+    /// stops do; anything else has what Claude is doing for it cancelled, and it fails with "Stopped"
+    /// (ask for it again when you want it). Returns whether it was running.
+    pub fn stop_activity(&self, id: &str) -> bool {
+        if !self.is_running(id) || id == SEARCH_ENDING {
+            return false;
+        }
+        match id {
+            "search" => { self.force_stop_search(); }
+            "cv-update" => {
+                self.stop_cv_update(false);
+                crate::claude_code::cancel_task(id);
+            }
+            _ => crate::claude_code::cancel_task(id),
+        }
+        self.trace(&format!("stopped by you: {id}"));
+        true
     }
 
     /// Stop the other work Claude is doing in the background now: updating for a new CV, tailoring,

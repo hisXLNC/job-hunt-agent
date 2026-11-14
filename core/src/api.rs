@@ -766,6 +766,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             // Postings that mention a certification you listed, to score again now that Job Hunt knows.
             ["api", "certs", "rescore"] => return Ok(Resp::json(&json!({ "postings": agent.cert_postings().len(), "running": agent.is_running("rescore") }))),
+            // What's running now, for the activity panel.
+            ["api", "activity"] => return Ok(Resp::json(&json!({ "running": agent.activity() }))),
             // The search, when it seems stuck: where it is, how long it's been quiet, and its log.
             ["api", "search-log"] => return Ok(Resp::json(&agent.search_log())),
             // The interview that builds a CV from a conversation.
@@ -1166,6 +1168,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             });
             Ok(Resp::json(&json!({ "started": true })))
         }
+        // Stop one thing in the activity panel, now.
+        ["api", "activity", "stop"] => Ok(Resp::json(&json!({ "stopped": agent.stop_activity(s(&b, "id")), "running": agent.activity() }))),
         // Stop the search after its step; or force: "search" (now), "work" (CV updating, tailoring,
         // rescoring), "all" (everything Claude is doing).
         ["api", "search", "stop"] => Ok(Resp::json(&match (b["force"].as_str(), b["force"].as_bool()) {

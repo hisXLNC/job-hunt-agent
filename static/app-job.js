@@ -81,7 +81,9 @@ async function showJob(id) {
   const sent = ['applied', 'interviewing', 'offer', 'rejected', 'no_response'].includes(j.status);
   const tabs = JOB_TABS.filter(([k]) => k === 'apply' ? !['queued', 'skipped', 'dismissed'].includes(j.status) || (contacts || []).length || (answers || []).length
     : k === 'interview' ? sent || !!prep || preparing : true);
-  const want = jobTabs[id] === 'notes' ? 'overview' : jobTabs[id] || stageTab;
+  // A job opens on its Overview. A button that means another tab (Check and approve, Files and
+  // answers) says so, and the tab you switch to stays while you're on the job.
+  const want = jobTabs[id] === 'notes' ? 'overview' : jobTabs[id] || 'overview';
   const tab = tabs.some(([k]) => k === want) ? want : 'overview';
   const badge = { docs: revising || tailoring ? 'Working on it' : '', apply: answering || following_up || writing_to || advising ? 'Working on it' : (j.status === 'offer' && !offer ? 'Weigh the offer' : ''), interview: preparing ? 'Writing' : '' };
   page(`

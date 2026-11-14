@@ -2082,3 +2082,37 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 .force-stop .force-pick.danger b { color: var(--crit); }
 .force-stop .force-pick:disabled span { opacity: .8; }
 .status-btn { width: 100%; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+
+/* ---- What's running: the activity panel, bottom left ---- */
+.act-bar { position: fixed; left: 16px; bottom: 16px; z-index: 44; width: 340px; max-width: calc(100vw - 32px); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 2px 6px rgba(18, 24, 41, .08), 0 14px 36px rgba(18, 24, 41, .16); overflow: hidden; }
+.act-bar[hidden] { display: none; }
+.act-bar.shut { width: auto; max-width: 300px; }
+.act-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 0; background: none; color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.act-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-head .caret { color: var(--muted); font-size: 11px; }
+.act-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: act-pulse 1.4s ease-in-out infinite; }
+@keyframes act-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+.act-list { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; border-top: 1px solid var(--line-2); }
+.act-row { padding: 10px 12px; border-bottom: 1px solid var(--line-2); display: flex; flex-direction: column; gap: 4px; }
+.act-row:last-child { border-bottom: 0; }
+.act-top { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.act-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-line { display: flex; align-items: center; gap: 10px; }
+.act-line .pbar { flex: 1; margin: 0; }
+.act-line .btn { flex: none; min-height: 26px; padding: 2px 9px; }
+/* A guess, not a count: striped, so it doesn't read as an exact share. */
+.pbar.guess i { background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(255, 255, 255, .28) 6px 12px); background-size: 34px 100%; animation: act-slide 1.2s linear infinite; }
+@keyframes act-slide { to { background-position: 34px 0; } }
+.act-foot { padding: 6px 8px; border-top: 1px solid var(--line-2); display: flex; justify-content: flex-end; }
+@media (prefers-reduced-motion: reduce) { .act-dot, .pbar.guess i { animation: none; } }
+@media (max-width: 760px) { .act-bar { left: 8px; right: 64px; width: auto; bottom: calc(70px + env(safe-area-inset-bottom)); } }
+@media print { .act-bar { display: none !important; } }
+
+/* ---- Ask Claude: a picture with the question ---- */
+.ask-clip { flex: none; width: 40px; min-height: 40px; padding: 0; justify-content: center; border-radius: 12px; color: var(--ink-2); cursor: pointer; }
+.ask-pic { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface-2); }
+.ask-pic[hidden] { display: none; }
+.ask-pic img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.ask-pic span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+.ask-pic button { flex: none; border: 0; background: none; color: var(--muted); font-size: 16px; cursor: pointer; }
+.ask-thumb { display: block; max-width: 180px; max-height: 140px; border-radius: 8px; margin-bottom: 6px; }

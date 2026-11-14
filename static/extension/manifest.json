@@ -7,6 +7,6 @@
   "icons": { "48": "icon-48.png", "128": "icon-128.png" },
   "background": { "service_worker": "background.js" },
   "commands": { "fill-form": { "suggested_key": { "default": "Alt+Shift+F" }, "description": "Fill in the application form on this page" } },
-  "permissions": ["activeTab", "scripting", "clipboardWrite", "storage", "notifications", "debugger"],
+  "permissions": ["activeTab", "scripting", "clipboardWrite", "storage", "notifications", "debugger", "contextMenus"],
   "host_permissions": ["http://127.0.0.1:47613/*"]
 }

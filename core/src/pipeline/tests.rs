@@ -880,6 +880,36 @@ fn how_filling_went_is_tallied_by_site() {
 }
 
 #[test]
+fn what_is_running_is_listed_and_each_can_be_stopped() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    assert!(s.agent.activity().is_empty(), "nothing running, nothing listed");
+    let tailoring = s.agent.claim("tailor:test:1").unwrap();
+    let sync = s.agent.claim("sync").unwrap();
+    let fill = s.agent.claim("claude-fill").unwrap();
+    s.agent.db().set("claudefill:current", "Analyst at Maple").unwrap();
+    let list = s.agent.activity();
+    // Housekeeping (sync) isn't shown; the job's name comes with its work.
+    assert_eq!(list.iter().map(|a| a["id"].as_str().unwrap()).collect::<Vec<_>>(), vec!["claude-fill", "tailor:test:1"], "{list:?}");
+    let (fill_row, tailor_row) = (&list[0], &list[1]);
+    assert_eq!((tailor_row["label"].as_str(), tailor_row["detail"].as_str(), tailor_row["estimated"].as_bool(), tailor_row["stoppable"].as_bool()),
+        (Some("Tailoring a CV and cover letter"), Some("Technical Program Manager at Acme"), Some(true), Some(true)));
+    assert_eq!(fill_row["detail"], "Analyst at Maple");
+    assert!(tailor_row["percent"].as_u64().unwrap() <= 95, "a guess never reaches the end");
+    // Stopping one leaves the other; one that isn't running says so.
+    assert!(s.agent.stop_activity("tailor:test:1") && !s.agent.stop_activity("tailor:test:9") && !s.agent.stop_activity("nothing"));
+    drop((tailoring, sync, fill));
+    assert!(s.agent.activity().is_empty());
+    // The search shows its real share, and stopping it there is the search's own force stop.
+    let search = s.agent.claim("search").unwrap();
+    let a = s.agent.activity();
+    assert_eq!((a[0]["id"].as_str(), a[0]["estimated"].as_bool()), (Some("search"), Some(false)));
+    assert!(s.agent.stop_activity("search") && s.agent.search_ending());
+    assert_eq!(s.agent.activity()[0]["stoppable"], false, "what's left is only letting go");
+    drop(search);
+}
+
+#[test]
 fn a_search_can_be_force_stopped() {
     let s = setup();
     assert!(!s.agent.force_stop_search(), "nothing to stop");
@@ -1026,6 +1056,16 @@ fn the_assistant_answers_from_any_screen_and_keeps_the_conversation() {
     s.agent.ask_start("work in Snowflake please", &json!({ "where": "Settings" })).unwrap();
     wait();
     assert!(s.agent.ask_log().pop().unwrap()["actions"].as_array().unwrap().is_empty());
+    // A picture attached to a message goes to Claude with it; only its small copy is kept. One that
+    // isn't a picture Claude reads is refused before anything is sent.
+    s.agent.ask_start("what is this?", &json!({ "where": "Queue", "image": { "mime": "image/png", "b64": "aGVsbG8=" }, "thumb": "data:image/jpeg;base64,AAAA" })).unwrap();
+    wait();
+    let log = s.agent.ask_log();
+    let (mine, reply) = (&log[log.len() - 2], &log[log.len() - 1]);
+    assert_eq!((mine["image"].as_bool(), mine["thumb"].as_str()), (Some(true), Some("data:image/jpeg;base64,AAAA")));
+    assert!(reply["text"].as_str().unwrap().contains("sees image/png of 5 bytes"), "{reply}");
+    assert!(!s.agent.secret("ask:chat").contains("aGVsbG8="), "the picture itself isn't kept");
+    assert!(s.agent.ask_start("and this?", &json!({ "image": { "mime": "application/pdf", "b64": "aGVsbG8=" } })).is_err());
     // Across jobs: the assistant is given the applications in play, and an offer for several keeps
     // only jobs that exist.
     s.agent.ask_start("which are weakest? set aside many", &json!({ "where": "Queue" })).unwrap();

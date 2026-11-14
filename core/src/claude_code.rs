@@ -153,10 +153,64 @@ fn cancelled_since(m: (usize, u64, u64)) -> bool {
     CANCELLED[0].load(std::sync::atomic::Ordering::SeqCst) != m.1 || (m.0 > 0 && CANCELLED[m.0].load(std::sync::atomic::Ordering::SeqCst) != m.2)
 }
 
+// One piece of work, by the name it runs under ("tailor:<job>", "claude-fill", "ask"): so a single
+// thing in the activity list can be stopped and the rest left.
+thread_local! { static TASK: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) }; }
+
+/// Marks this thread's requests as part of the work called `name` until it's dropped. Work inside
+/// other work keeps the outer name (tailoring done by a search is the search's).
+pub struct Task(bool);
+impl Task {
+    pub fn enter(name: &str) -> Task {
+        TASK.with(|t| {
+            let mut t = t.borrow_mut();
+            if t.is_empty() {
+                *t = name.to_string();
+                Task(true)
+            } else {
+                Task(false)
+            }
+        })
+    }
+}
+impl Drop for Task {
+    fn drop(&mut self) {
+        if self.0 {
+            TASK.with(|t| t.borrow_mut().clear());
+        }
+    }
+}
+
+/// For each piece of work that was stopped: how many times, and until when new requests of it are refused.
+static TASK_STOPS: once_cell::sync::Lazy<std::sync::Mutex<std::collections::HashMap<String, (u64, i64)>>> = once_cell::sync::Lazy::new(Default::default);
+
+/// Cancel what Claude Code is doing for one piece of work, and refuse its next requests for a few
+/// seconds (so a list of jobs runs out instead of starting the next).
+pub fn cancel_task(name: &str) {
+    let mut m = TASK_STOPS.lock().unwrap();
+    let e = m.entry(name.to_string()).or_insert((0, 0));
+    e.0 += 1;
+    e.1 = chrono::Utc::now().timestamp() + 8;
+}
+
+fn task_mark() -> (String, u64, i64) {
+    let name = TASK.with(|t| t.borrow().clone());
+    let (n, until) = if name.is_empty() { (0, 0) } else { TASK_STOPS.lock().unwrap().get(&name).copied().unwrap_or((0, 0)) };
+    (name, n, until)
+}
+
+fn task_stopped_since(m: &(String, u64, i64)) -> bool {
+    !m.0.is_empty() && TASK_STOPS.lock().unwrap().get(&m.0).is_some_and(|e| e.0 != m.1)
+}
+
 /// Run to completion with a time limit; returns (exit ok, stdout, stderr).
 fn run_capture(mut c: Command, stdin: &str, limit: Duration) -> R<(bool, String, String)> {
     let marks = cancel_marks();
+    let task = task_mark();
     let now = chrono::Utc::now().timestamp();
+    if !cfg!(test) && now < task.2 {
+        return Err(Error(STOPPED.into()));
+    }
     // (Not in the tests, which run side by side: a force stop in one would cancel another's request.)
     if !cfg!(test) && (now < REFUSE_UNTIL[0].load(std::sync::atomic::Ordering::SeqCst) || (marks.0 > 0 && now < REFUSE_UNTIL[marks.0].load(std::sync::atomic::Ordering::SeqCst))) {
         return Err(Error(STOPPED.into()));
@@ -195,7 +249,7 @@ fn run_capture(mut c: Command, stdin: &str, limit: Duration) -> R<(bool, String,
             let _ = child.wait();
             return Err(Error("Claude Code took too long to answer and was stopped.".into()));
         }
-        if !cfg!(test) && cancelled_since(marks) {
+        if !cfg!(test) && (cancelled_since(marks) || task_stopped_since(&task)) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(Error(STOPPED.into()));
@@ -626,6 +680,25 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn one_piece_of_work_can_be_stopped_by_name() {
+        std::thread::spawn(|| {
+            let outer = Task::enter("tailor:unit-a");
+            let inner = Task::enter("score");
+            let mine = task_mark();
+            assert_eq!(mine.0, "tailor:unit-a", "work inside other work keeps the outer name");
+            drop(inner);
+            assert_eq!(task_mark().0, "tailor:unit-a");
+            cancel_task("tailor:unit-b");
+            assert!(!task_stopped_since(&mine), "another job's stop isn't this one's");
+            cancel_task("tailor:unit-a");
+            assert!(task_stopped_since(&mine));
+            assert!(task_mark().2 > chrono::Utc::now().timestamp(), "its next requests are refused for a moment");
+            drop(outer);
+            assert_eq!(task_mark().0, "");
+        }).join().unwrap();
+    }
+
     #[test]
     fn a_force_stop_cancels_one_kind_of_request_or_all() {
         // (On threads of their own: the marks belong to the thread that makes the request.)

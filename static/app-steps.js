@@ -235,7 +235,7 @@ function stepHtml(o, step, tracked) {
     `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="docs">Check and approve</a>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="ready" title="Not interested">${svg('close')}</button>`,
     o.ready.length > 1 ? `<input type="checkbox" data-appr="${id(j)}" data-email="${esc(j.apply_email || '')}" aria-label="Select ${esc(j.company)}">` : '')).join('')}
-    ${many ? `<div class="select-bar" hidden><span class="select-n"></span><button class="btn primary" data-act="approvePicked">Approve selected</button><button class="btn ghost" data-act="approveClear">Clear</button></div>` : ''}</div>`]);
+    ${many ? `<div class="select-bar" hidden><span class="select-n"></span><button class="btn primary" data-act="approvePicked">Approve selected</button><button class="btn" data-act="dismissPicked">${svg('close')}Not interested</button><button class="btn ghost" data-act="approveClear">Clear</button></div>` : ''}</div>`]);
   if (o.recruiter_asks?.length) groups.push(['Ask your recruiters to put you forward', o.recruiter_asks.map(j => row(j, `you know ${esc(j.recruiter)} there`,
     `<button class="btn sm" data-act="askRecruiter" data-job="${id(j)}" data-name="${esc(firstName(j.recruiter))}">Ask ${esc(firstName(j.recruiter))}</button>`)).join('')]);
   // Forms Job Hunt filled in that aren't marked applied: most went through, so ask.
@@ -243,7 +243,8 @@ function stepHtml(o, step, tracked) {
   if (unconfirmed.length) groups.push([`Filled in by Job Hunt: did these go through?${unconfirmed.length > 1 ? ` <button class="btn primary sm" data-act="appliedAll" data-ids="${esc(JSON.stringify(unconfirmed.map(j => j.id)))}" style="margin-left:8px">All went through</button>` : ''}`,
     unconfirmed.map(j => row(j, 'Job Hunt filled in the form; it isn\'t marked applied yet',
       `<button class="btn primary sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved">Yes, applied</button>
-       <a class="btn ghost sm" href="#job/${encodeURIComponent(j.id)}" title="Not submitted yet: open it again">Not yet</a>`)).join('')]);
+       <a class="btn ghost sm" href="#job/${encodeURIComponent(j.id)}" title="Not submitted yet: open it again">Not yet</a>
+       <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="approved" title="Not interested after all: takes it off this list">${svg('close')}</button>`)).join('')]);
   // Quickest first: one-click emails and short forms, then the ones that need an account.
   const toSubmit = [...(o.approved || [])].filter(j => !unconfirmed.some(u => u.id === j.id)).sort((a, b) => (a.effort?.minutes ?? 10) - (b.effort?.minutes ?? 10));
   const formable = toSubmit.filter(j => j.url && j.effort?.kind !== 'email');

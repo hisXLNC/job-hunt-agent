@@ -272,14 +272,33 @@ pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> 
     let recent = agent.secret("apply.browser");
     let mut parts = recent.splitn(3, '|');
     if let (Some(id), Some(at)) = (parts.next(), parts.next()) {
-        let site = parts.next().unwrap_or("");
-        let fresh = chrono::DateTime::parse_from_rfc3339(at).is_ok_and(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_hours() < 2);
-        let here = site.is_empty() || site == host_of(url);
-        if id == PROFILE && fresh && here {
+        // (No site, or a "*" among them: chosen in Job Hunt, still open to the sites it's used on.
+        // A site alone: chosen in the extension on that site, and only ever that one.)
+        let third = parts.next().unwrap_or("");
+        let open = third.is_empty() || third.split(',').any(|x| x == "*");
+        let sites: Vec<&str> = third.split(',').filter(|x| !x.is_empty() && *x != "*").collect();
+        let age = chrono::DateTime::parse_from_rfc3339(at).map(|t| (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_minutes()).unwrap_or(i64::MAX);
+        let fresh = age < 120;
+        let host = host_of(url);
+        if id == PROFILE && fresh && sites.contains(&host.as_str()) {
             return Ok(profile_job(url));
         }
-        if let Some(j) = jobs.iter().find(|j| j.id == id).filter(|_| fresh && here) {
-            return Ok(j.clone());
+        if let Some(j) = jobs.iter().find(|j| j.id == id).filter(|_| fresh) {
+            // Chosen in Job Hunt (Fill in my browser), which doesn't know where the form is: the
+            // sites this browser reaches in the next quarter of an hour are it (the posting, then
+            // the company's own form), three at most. Never a job board the job didn't come from:
+            // opening Job Bank an hour after an Interac form was naming it that Interac job.
+            let own = [host_of(&j.url), j.apply_url.as_deref().map(host_of).unwrap_or_default()];
+            let may_join = open && age < 15 && sites.len() < 3 && !host.is_empty() && (!crate::sources::is_job_board(url) || own.contains(&host));
+            if sites.contains(&host.as_str()) {
+                return Ok(j.clone());
+            }
+            if may_join {
+                let mut all: Vec<&str> = sites.clone();
+                all.push(&host);
+                let _ = agent.db().set("apply.browser", &format!("{id}|{at}|*,{}", all.join(",")));
+                return Ok(j.clone());
+            }
         }
     }
     Err(Error("Job Hunt can't tell which application this is. On the job's Apply page in Job Hunt, press Fill in my browser, then press Fill this form here again.".into()))
@@ -1104,6 +1123,17 @@ mod tests {
         s.agent.db().set("apply.browser", &format!("test:2|{}|trcareers.wd5.myworkdayjobs.com", now())).unwrap();
         assert_eq!(job_for_page(&s.agent, "https://trcareers.wd5.myworkdayjobs.com/apply", "Apply").unwrap().id, "test:2");
         assert!(job_for_page(&s.agent, "https://bmo.wd3.myworkdayjobs.com/apply", "Careers at BMO").is_err(), "BMO's site isn't the job chosen on Thomson Reuters'");
+        // Chosen in Job Hunt: the first sites it's used on are it; a job board it didn't come from never
+        // is (Job Bank an hour after an Interac form); and a quarter of an hour on, no new site is.
+        s.agent.db().set("apply.browser", &format!("test:2|{}", now())).unwrap();
+        assert!(job_for_page(&s.agent, "https://www.jobbank.gc.ca/findajob/match/profile", "Job Bank").is_err(), "a job board isn't the company's form");
+        assert_eq!(job_for_page(&s.agent, "https://forms.example/apply/77", "Apply").unwrap().id, "test:2");
+        assert!(s.agent.secret("apply.browser").ends_with("|*,forms.example"));
+        assert_eq!(job_for_page(&s.agent, "https://forms.example/apply/78", "Step 2").unwrap().id, "test:2", "its later pages too");
+        let earlier = (chrono::Utc::now() - chrono::Duration::minutes(40)).to_rfc3339();
+        s.agent.db().set("apply.browser", &format!("test:2|{earlier}|*,forms.example")).unwrap();
+        assert_eq!(job_for_page(&s.agent, "https://forms.example/apply/79", "Step 3").unwrap().id, "test:2");
+        assert!(job_for_page(&s.agent, "https://other.example/careers", "Careers").is_err(), "a site first opened long after isn't it");
     }
 }
 
@@ -1317,6 +1347,7 @@ pub fn claude_fill_start(agent: &std::sync::Arc<Agent>, job_id: &str, url: &str,
     let task = claude_fill_task(&text, url, &files.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>());
     let key = format!("claudefill:{job_id}");
     agent.db().set(&key, &json!({ "running": true, "at": now() }).to_string())?;
+    agent.db().set("claudefill:current", &job.as_ref().map(|j| format!("{} at {}", j.title, j.company)).unwrap_or_else(|| "your profile".into()))?;
     let (a, id, title) = (agent.clone(), job_id.to_string(), job.as_ref().map(|j| format!("{} at {}", j.title, j.company)).unwrap_or_else(|| "your profile".into()));
     std::thread::spawn(move || {
         let Ok(_g) = a.claim("claude-fill") else { return };

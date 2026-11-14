@@ -82,7 +82,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
 (async () => {
   const only = process.argv.slice(2);
   const names = Object.keys(VARIANTS).filter(n => !only.length || only.includes(n));
-  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && n !== 'letter' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
+  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && n !== 'letter' && n !== 'one' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
   // Job Hunt's side: says its version, and answers a form's questions.
   let picked = '';
   let leads = null;
@@ -382,6 +382,28 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (problems.length) { failed.push('letter'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();
   }
+  // Right-click a box and choose "Fill this in": only that box is filled, the rest of the form is left.
+  if (!only.length || only.includes('one')) {
+    const page = await ctx.newPage();
+    const url = `http://127.0.0.1:${site.address().port}/letter/review?one=1`;
+    await page.goto(url);
+    const t0 = Date.now();
+    await page.click('#phone', { button: 'right' });
+    await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id, true); }, url);
+    let s = '';
+    for (let i = 0; i < 60; i++) { await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled |has no answer|can't tell|wouldn't take|Couldn't|tripped/.test(s)) break; }
+    const got = await page.evaluate(() => ({ phone: document.getElementById('phone').value, email: document.getElementById('email').value, city: document.getElementById('city').value, docs: document.getElementById('up').style.display !== 'none' }));
+    const problems = [];
+    if (got.phone !== '416-555-0100') problems.push(`the box that was right-clicked holds "${got.phone}"`);
+    if (got.email || got.city) problems.push(`other boxes were filled too (email "${got.email}", city "${got.city}")`);
+    if (got.docs) problems.push('the page was prepared as for a whole fill (Supporting documents was opened)');
+    if (!/^Filled .Phone/.test(s)) problems.push(`the panel said "${s.slice(0, 140)}"`);
+    const hasMenu = await sw.evaluate(() => typeof chrome.contextMenus.onClicked.hasListeners === 'function' && chrome.contextMenus.onClicked.hasListeners());
+    if (!hasMenu) problems.push('the right-click menu has no listener');
+    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'one'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  phone ${got.phone || 'empty'}`);
+    if (problems.length) { failed.push('one'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
+    await page.close();
+  }
   // Hiring posts: a page of posts (a stand-in for LinkedIn's search) read by the extension and sent
   // to Job Hunt, each with who wrote it and its own link; and one ordinary page, sent as chosen.
   if (!only.length || only.includes('posts')) {
@@ -422,7 +444,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   };
   // Three browsers at a time (JOBS=1 for one after another, when reading a failure).
   const jobs = names.map(n => () => runVariant(n));
-  if (!only.length || ['app', 'profile', 'posts', 'folded', 'letter'].some(n => only.includes(n))) jobs.push(rest);
+  if (!only.length || ['app', 'profile', 'posts', 'folded', 'letter', 'one'].some(n => only.includes(n))) jobs.push(rest);
   const t0 = Date.now();
   await Promise.all(Array.from({ length: Math.max(1, Number(process.env.JOBS) || 3) }, async () => { while (jobs.length) await jobs.shift()(); }));
   console.log(`      (${Math.round((Date.now() - t0) / 1000)}s in all)`);

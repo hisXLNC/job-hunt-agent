@@ -142,7 +142,7 @@ impl Llm for FakeLlm {
         } else if a.message.contains("set aside many") {
             vec![crate::claude::Offer { kind: "set_aside_many".into(), label: "Set aside the weakest".into(), jobs: vec!["test:1".into(), "test:nope".into()], ..Default::default() }]
         } else { vec![] };
-        let knows = if a.facts.contains("[test:1]") { " knows [test:1]" } else { "" };
+        let knows = format!("{}{}", if a.facts.contains("[test:1]") { " knows [test:1]" } else { "" }, a.image.map(|i| format!(" sees {} of {} bytes", i.0, i.1.len())).unwrap_or_default());
         Ok(crate::claude::Assisted { reply: format!("On {} about {} ({} before, quote: {}){knows}: {}\n\nSee [All jobs](#applications).", a.place, a.job.map_or("no job", |j| j.title.as_str()), a.history.len(), a.quote, a.message), actions })
     }
     fn insights(&self, _c: &str, results: &str, _apps: &str) -> R<String> {

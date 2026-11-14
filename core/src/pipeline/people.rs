@@ -252,6 +252,7 @@ impl Agent {
         let a = self.clone();
         std::thread::spawn(move || {
             let _g = guard;
+            let _task = crate::claude_code::Task::enter("cvchat");
             // What Job Hunt has already, so it isn't asked for again.
             let p = a.profile();
             let mut known = vec![];
@@ -330,13 +331,19 @@ impl Agent {
         }
         let Some(guard) = self.claim_owned("ask") else { return err("Claude is still answering the last message.") };
         let mut list = self.ask_log();
-        list.push(json!({ "who": "you", "text": message, "at": now(), "about": page["where"].as_str().unwrap_or("") }));
+        // A picture goes with the message to Claude; only a small copy of it (made by the page) is kept.
+        let thumb: String = page["thumb"].as_str().filter(|t| t.starts_with("data:image/") && t.len() < 60_000).unwrap_or("").to_string();
+        if page["image"].is_object() && ask_image(page).is_none() {
+            return err("That picture can't be used: PNG, JPEG, WebP or GIF, up to 5 MB.");
+        }
+        list.push(json!({ "who": "you", "text": message, "at": now(), "about": page["where"].as_str().unwrap_or(""), "thumb": thumb, "image": page["image"].is_object() }));
         self.db().set("ask:chat", &json!(list).to_string())?;
         self.db().set("ask:error", "")?;
         self.db().set("ask:draft", "")?;
         let (a, page) = (self.clone(), page.clone());
         std::thread::spawn(move || {
             let _g = guard;
+            let _task = crate::claude_code::Task::enter("ask");
             if let Err(e) = a.ask_answer(&message, &page) {
                 // The message comes back to the box, so nothing typed is lost.
                 let mut list = a.ask_log();
@@ -373,7 +380,9 @@ impl Agent {
         let before = list.len().saturating_sub(1);
         let history: Vec<(String, String)> = list[..before].iter().rev().take(20).rev()
             .map(|m| (m["who"].as_str().unwrap_or("you").to_string(), m["text"].as_str().unwrap_or("").to_string())).collect();
+        let image = ask_image(page);
         let asked = crate::claude::Asked {
+            image: image.as_ref(),
             candidate: &profile.name,
             cv: &cv,
             job: job.as_ref(),
@@ -623,4 +632,16 @@ fn list_words(w: &[String]) -> String {
         1 => w[0].clone(),
         n => format!("{} and {}", w[..n - 1].join(", "), w[n - 1]),
     }
+}
+
+/// The picture attached to a message for the assistant ({mime, b64} under "image"): its type and
+/// bytes, when it's a kind Claude reads and not over 5 MB.
+fn ask_image(page: &Value) -> Option<(String, Vec<u8>)> {
+    use base64::Engine as _;
+    let mime = page["image"]["mime"].as_str()?;
+    if !["image/png", "image/jpeg", "image/webp", "image/gif"].contains(&mime) {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::STANDARD.decode(page["image"]["b64"].as_str()?).ok()?;
+    (!bytes.is_empty() && bytes.len() <= 5 * 1024 * 1024).then(|| (mime.to_string(), bytes))
 }

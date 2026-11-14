@@ -149,7 +149,7 @@ function decisionHtml(x, at, of) {
   if (x.kind === 'filled') {
     return `<article class="card decision" data-kind="filled">${decisionTop(j, where)}
       <div class="dbody"><div class="why blue"><b>Did it go through?</b>Job Hunt filled in this form, but it isn't marked applied yet. Most go through.</div></div>
-      ${dbar(`<a class="btn" href="#job/${enc}">Not yet: open it again</a>`, `<button class="btn primary big" data-primary data-act="stage" data-status="applied" data-job="${id}" data-from="approved">Yes, I applied${key('Enter')}</button>`)}</article>`;
+      ${dbar(`<button class="btn quiet" data-act="stage" data-status="dismissed" data-job="${id}" data-from="approved">Not interested${key('X')}</button><a class="btn" href="#job/${enc}">Not yet: open it again</a>`, `<button class="btn primary big" data-primary data-act="stage" data-status="applied" data-job="${id}" data-from="approved">Yes, I applied${key('Enter')}</button>`)}</article>`;
   }
   if (x.kind === 'ask') {
     return `<article class="card decision" data-kind="ask">${decisionTop(j, where)}

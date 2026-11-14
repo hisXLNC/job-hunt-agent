@@ -31,6 +31,9 @@ impl Llm for DemoLlm {
             return Err(jobhunt_core::Error("Claude is busy just now.".into()));
         }
         std::thread::sleep(std::time::Duration::from_millis(700));
+        if let Some(i) = a.image {
+            return Ok(jobhunt_core::claude::Assisted { reply: format!("I can see the picture you attached ({}, {} KB). It shows a form asking for supporting documents.", i.0, i.1.len() / 1024), actions: vec![] });
+        }
         let about = match (a.quote.is_empty(), a.job) {
             (false, _) => format!("**“{}”** is something the posting asks for.", a.quote.chars().take(60).collect::<String>()),
             (true, Some(j)) => format!("**{}** at {} scored {} because your CV shows most of what it asks for.", j.title, j.company, j.score.unwrap_or(0)),

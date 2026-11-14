@@ -110,7 +110,9 @@
     if (kind === 'pick') {
       const r = await rpc('/ext/pick', data);
       trace(r.ok ? 'application chosen' : 'choosing failed: ' + r.error);
-      if (r.ok) J.start(); else J.failed(r.why === 'orphan' ? ORPHAN : "Couldn't choose it: " + r.error);
+      // Chosen so it could be marked as applied (see markApplied): that, not a fill.
+      if (r.ok && afterPick) { const then = afterPick; afterPick = null; then(); }
+      else if (r.ok) J.start(); else J.failed(r.why === 'orphan' ? ORPHAN : "Couldn't choose it: " + r.error);
     } else if (['salary', 'dismiss', 'learn', 'applied'].includes(kind)) {
       const r = await rpc('/ext/' + kind, data);
       if (!r.ok) { trace(`${kind} not told to Job Hunt: ${r.error}`, { why: r.why }); flush(); }
@@ -178,7 +180,7 @@
     barEl = root.querySelector('.bar');
     root.querySelectorAll('[data-k]').forEach(b => { buttons[b.dataset.k] = b; });
     root.querySelector('.x').onclick = () => root.querySelector('.p').classList.toggle('min');
-    buttons.fill.onclick = () => { trace('Fill in this form pressed'); start(); };
+    buttons.fill.onclick = () => { trace('Fill in this form pressed'); onlyEl = null; onlyKeys = null; start(); };
     chooseEl = root.querySelector('.c');
     askEl = root.querySelector('.q');
     buttons.replace.onclick = async () => {
@@ -192,7 +194,8 @@
       const id = chooseEl.querySelector('select').value;
       if (!id) return;
       chooseEl.hidden = true; buttons.fill.hidden = false; buttons.fill.disabled = true;
-      status(id === 'profile' ? 'Filling it in from your CV…' : 'Filling it in for the job you chose…');
+      status(afterPick ? 'Marking it as applied…' : id === 'profile' ? 'Filling it in from your CV…' : 'Filling it in for the job you chose…');
+      buttons.pick.textContent = 'Fill it in for this job';
       send('pick', { job_id: id });
     };
     buttons.next.onclick = () => nextAmber();
@@ -261,7 +264,7 @@
     buttons.drop.onclick = () => { buttons.drop.disabled = true; clearTimeout(autoTimer); status(JOB.queue ? 'Set aside as Not interested. Opening the next application…' : 'Set aside as Not interested in Job Hunt. You can close this window.'); send('dismiss', {}); };
     buttons.stop.onclick = () => { clearTimeout(autoTimer); autoTimer = null; buttons.stop.hidden = true; status('Stopped. Read the form over, then press its Submit button yourself.'); };
     headEl = root.querySelector('.t');
-    buttons.applied.onclick = () => { const p = pressed(); recorded = true; window.name = ''; status(JOB.queue && JOB.more ? 'Marked as applied. Opening the next one…' : 'Marked as applied in Job Hunt. This window closes in a few seconds.'); buttons.applied.hidden = true; send('applied', { url: location.href, fields: (p && p.fields) || [] }); };
+    buttons.applied.onclick = () => { const p = pressed(); recorded = true; window.name = ''; markApplied(false, (p && p.fields) || []); };
     (document.body || document.documentElement).appendChild(host);
     ui = host;
   }
@@ -1185,6 +1188,16 @@
     version: EXT ? chrome.runtime.getManifest().version : '',
     alive: () => !EXT || !!(chrome.runtime && chrome.runtime.id),
     trail: () => trail,
+    // You right-clicked a box and chose Fill this in: only that box is filled.
+    fillOnly() {
+      const el = (lastMenuEl && lastMenuEl.isConnected && !own(lastMenuEl) ? lastMenuEl : null) || focused();
+      lastMenuEl = null;
+      panel();
+      if (!el || own(el)) { status('Right-click the box you want filled in, then choose Fill this in.'); return; }
+      onlyEl = el; onlyKeys = null;
+      trace('Fill this in chosen');
+      start();
+    },
     // Fill the form in. Something unexpected on the page part-way (a box that vanished, a site's own
     // script throwing): the form is read again and filled once more, then it's said plainly.
     async fill(answer) {
@@ -1207,6 +1220,7 @@
     async fillNow(answer) {
       if (retired) return;
       waitingSince = 0;
+      if (answer.job && answer.job.id && answer.job.id !== 'profile') { filledFor = answer.job.id; try { sessionStorage.setItem('jobhunt-job', filledFor); } catch (e) { /* storage off */ } }
       if (answer.job && headEl) headEl.textContent = answer.profile ? `Job Hunt · your profile on ${answer.job.company}` : `Job Hunt · ${answer.job.company}`;
       // The answers go to the boxes as they were when the form was sent (boxes added or moved since
       // would shift them); read again only if the page replaced them.
@@ -1267,6 +1281,7 @@
       for (const f of fields) {
         progress(base + (100 - base) * (i++ / total));
         if (f.type === 'add') continue;
+        if (onlyKeys && !onlyKeys.has(f.key)) continue;
         const file = answer.files && answer.files[f.key];
         const v = answer.values && answer.values[f.key];
         const done = await guarded(f, () => fillOne(f, v, file));
@@ -1298,6 +1313,24 @@
         const had = new Set(Object.values(byKey).flat());
         const appeared = collect().some(f => f.type !== 'add' && f.type !== 'file' && !f.value && !(byKey[f.key] || []).some(e => had.has(e)));
         if (appeared) { reveals++; round = Math.max(round, 1); status('Unticked "I currently work here" on past jobs; filling in their end dates…'); start(true, true); return; }
+      }
+      // One box was asked for: say how it went, and leave the rest of the form as it is.
+      if (onlyKeys) {
+        const mine = (diag.fields || []).filter(f => onlyKeys.has(f.key)).slice(-onlyKeys.size);
+        const name = String((mine[0] || {}).label || 'that box').replace(/^\*\s*/, '').slice(0, 50);
+        const done = mine.some(f => f.filled && f.want != null && f.want !== ''), had = mine.some(f => f.want != null && f.want !== '');
+        trace('fill this in: done', { ok: done, had });
+        onlyEl = null; onlyKeys = null;
+        ext('undebug');
+        progress(null);
+        buttons.fill.disabled = false;
+        buttons.diag.hidden = false;
+        flush();
+        status(done ? `Filled \u201c${name}\u201d. Right-click another box for the next, or press Fill in this form for the whole page.`
+          : had ? `\u201c${name}\u201d wouldn't take its answer. Type it in, or press Let Claude finish it.`
+          : `Job Hunt has no answer for \u201c${name}\u201d. Type it in and Job Hunt keeps it for next time.`);
+        if (had && !done && buttons.hand) buttons.hand.hidden = false;
+        return;
       }
       filled = true;
       trace('filled', { ok, todo, boxes: fields.length });
@@ -1390,7 +1423,17 @@
     amberAt++;
   }
   let sent = null, opens = 0, unfolded = false, lettersTried = false, letterOpened = 0;
+  // One box only: you right-clicked a box and chose "Fill this in". The box (the one right-clicked,
+  // noted as it happens while this script is on the page; otherwise the one the click put the
+  // cursor in), and the boxes of the form that are it.
+  let onlyEl = null, onlyKeys = null, lastMenuEl = null;
+  // The application this page's form was filled for (from Job Hunt's answer), and what to do once you've chosen one.
+  let filledFor = '', afterPick = null;
+  document.addEventListener('contextmenu', e => { lastMenuEl = e.composedPath ? e.composedPath()[0] : e.target; }, true);
+  const focused = () => { let a = document.activeElement; while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement; return a && a !== document.body ? a : null; };
   try { letterOpened = Number(sessionStorage.getItem('jobhunt-letter') || 0); } catch (e) { /* storage off */ }
+  // (Kept for the tab, so the site's own thank-you page, a new page, still knows which application it was.)
+  try { filledFor = sessionStorage.getItem('jobhunt-job') || ''; } catch (e) { /* storage off */ }
   // A form that keeps its cover letter behind a link (Indeed: "Supporting documents", an Add link
   // and "No cover letter or additional documents added"): the link that opens it, or nothing.
   const LETTER_BOX = /cover letter|supporting documents?|motivation letter/i;
@@ -1445,7 +1488,7 @@
     checkPay();
     // A form whose parts are folded away (SuccessFactors: "Expand all sections", then Profile
     // Information and the rest as closed bars) shows no boxes to read: its parts are opened first.
-    if (!more && !unfolded) {
+    if (!more && !unfolded && !onlyEl) {
       unfolded = true;
       const said = b => clean(b.textContent || b.getAttribute('aria-label') || '');
       const all = [...document.querySelectorAll('a,button,[role=button]')].find(b => !own(b) && shown(b) && /^\W*expand all( sections)?\W*$/i.test(said(b)));
@@ -1464,7 +1507,7 @@
     }
     // The cover letter's place, when the form keeps it behind a link: opened, so the letter goes in
     // with the rest. It may open here or on a page of its own (carried on with there).
-    if (!more && !lettersTried) {
+    if (!more && !lettersTried && !onlyEl) {
       lettersTried = true;
       const before = collect();
       const opener = before.some(f => ['file', 'textarea'].includes(f.type) && /cover|letter|motivation/i.test(`${f.label} ${f.section}`)) ? null : letterAdder();
@@ -1493,11 +1536,27 @@
     sent = { fields, byKey, adders };
     // The end dates that appeared: only the boxes still empty go (with the entries' checkboxes), not
     // the whole form again.
-    const list = dates ? all.filter(f => !['add', 'file', 'skills', 'prompt'].includes(f.type) && (!f.value || f.type === 'checkbox')) : all;
+    let list = dates ? all.filter(f => !['add', 'file', 'skills', 'prompt'].includes(f.type) && (!f.value || f.type === 'checkbox')) : all;
+    if (onlyEl) {
+      // The box that was right-clicked: the form's box that is it, holds it, or sits inside it (a
+      // drawn dropdown's button, a group of radio buttons).
+      const mine = all.filter(f => f.type !== 'add' && (byKey[f.key] || []).some(e => e === onlyEl || e.contains(onlyEl) || onlyEl.contains(e)));
+      const near = mine.length ? mine : all.filter(f => f.type !== 'add' && (byKey[f.key] || []).some(e => { const box = e.closest('label,[role=group],fieldset,li,div'); return box && box.contains(onlyEl) && box.querySelectorAll('input,select,textarea').length <= 2; }));
+      if (!near.length) {
+        trace('fill this in: no box found for what was right-clicked', { tag: onlyEl.tagName });
+        onlyEl = null; onlyKeys = null; progress(null);
+        if (buttons.fill) buttons.fill.disabled = false;
+        status('Job Hunt can\'t tell which box that is. Click inside the box first, then right-click it and choose Fill this in.');
+        return;
+      }
+      onlyKeys = new Set(near.map(f => f.key));
+      list = near;
+      trace('fill this in', { label: String(near[0].label || '').slice(0, 60), type: near[0].type });
+    }
     // No boxes here, but the page has a button that opens some (a profile's list of jobs with "Add a
     // new experience"): pressed for you. Its form may open on this page (then it's filled now) or
     // on the next one (the extension brings the panel there, and it carries on by itself).
-    if (!all.some(f => !['add'].includes(f.type)) && opens < 2) {
+    if (!onlyEl && !all.some(f => !['add'].includes(f.type)) && opens < 2) {
       const opener = Object.values(adders).find(b => b && b.isConnected && shown(b))
         || [...document.querySelectorAll('a,button,[role=button]')].find(b => { const t = clean(b.textContent || b.getAttribute('aria-label') || ''); return !own(b) && shown(b) && t.length <= 60 && ADD.test(t) && HISTORY.test(t) && !NOT_ADD.test(t); });
       if (opener) {
@@ -1551,6 +1610,34 @@
   };
   const pressedAt = () => (pressed() || {}).at || 0;
   let recorded = false;
+  // Tell Job Hunt this application was submitted, and say it's marked only once Job Hunt has said so.
+  // (It used to say "Marked as applied" straight away; when Job Hunt couldn't tell which application
+  // the confirmation page belonged to, nothing was marked and nothing said.) The job the form was
+  // filled for goes along, so the site's thank-you page needn't be recognised. If Job Hunt still
+  // can't tell, you choose the application here and it's marked.
+  async function markApplied(auto, fields) {
+    panel();
+    buttons.applied.hidden = true; buttons.applied.disabled = true;
+    status(auto ? 'Submitted: the site confirmed it. Marking it as applied in Job Hunt…' : 'Marking it as applied in Job Hunt…');
+    const r = await rpc('/ext/applied', { url: location.href, title: document.title, auto, fields: fields || [], job_id: filledFor });
+    buttons.applied.disabled = false;
+    if (r.ok) {
+      trace('marked as applied', { auto });
+      flush();
+      status(`${auto ? 'Submitted: the site confirmed it. ' : ''}${JOB.queue && JOB.more ? 'Marked as applied. Opening the next one…' : 'Marked as applied in Job Hunt. This window closes in a few seconds.'}`);
+      return;
+    }
+    trace(`applied not marked: ${r.error}`, { why: r.why });
+    flush('applied not marked');
+    buttons.applied.hidden = false; buttons.applied.textContent = 'Mark as applied';
+    if (r.data && r.data.choose && r.data.choose.length) {
+      afterPick = () => markApplied(false, fields);
+      window.__jobhunt.choose(`${auto ? 'Submitted, but ' : ''}Job Hunt can't tell which application this was. Choose it and it's marked as applied.`, r.data.choose.filter(j => j.id !== 'profile'));
+      if (buttons.pick) buttons.pick.textContent = 'Mark this one as applied';
+      return;
+    }
+    status(`${auto ? 'Submitted, but ' : ''}Job Hunt couldn't mark it as applied (${String(r.error || 'no answer').slice(0, 160)}). Press Mark as applied to try again, or mark it in Job Hunt.`);
+  }
   const pageText = () => (document.body ? document.body.innerText : '').slice(0, 40000);
   const confirmedHere = strict => DONE.test(pageText()) || (!strict && (DONE_AFTER_PRESS.test(pageText()) || DONE_URL.test(location.href)));
   function recordApplied() {
@@ -1558,10 +1645,7 @@
     recorded = true;
     const p = pressed();
     window.name = '';
-    panel();
-    buttons.applied.hidden = true;
-    status(JOB.queue && JOB.more ? 'Submitted: the site confirmed it. Marked as applied. Opening the next one…' : 'Submitted: the site confirmed it. Marked as applied in Job Hunt. This window closes in a few seconds.');
-    send('applied', { url: location.href, auto: true, fields: (p && p.fields) || [] });
+    markApplied(true, (p && p.fields) || []);
   }
   async function watchForConfirmation(seconds, vouched) {
     for (let i = 0; i < seconds && !recorded; i++) {

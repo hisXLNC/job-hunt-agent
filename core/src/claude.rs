@@ -1015,6 +1015,8 @@ pub struct Asked<'a> {
     /// The conversation so far: (who, text), oldest first.
     pub history: &'a [(String, String)],
     pub message: &'a str,
+    /// A picture they attached to this message (a screenshot, usually): its type ("image/png") and bytes.
+    pub image: Option<&'a (String, Vec<u8>)>,
 }
 
 fn assist_system() -> String {
@@ -1827,6 +1829,26 @@ impl Claude {
         self.call_as(&self.model, system, user, schema, effort)
     }
 
+    /// `call`, with a picture to look at (its type and bytes). Through Claude Code it's put beside
+    /// the request as a file for Claude to open; with an API key it goes in the message. Another AI
+    /// set to do everything isn't sent it, and is told there was one it can't see.
+    fn call_seeing<T: DeserializeOwned>(&self, system: &str, user: &str, schema: Value, effort: &str, image: &(String, Vec<u8>)) -> R<T> {
+        use base64::Engine as _;
+        if self.other.as_ref().is_some_and(|o| o.for_what == "all") {
+            return self.call(system, &format!("{user}\n\n(They attached a picture, which you can't see here: say so, and ask them to describe it.)"), schema, effort);
+        }
+        if let Engine::Code(_) = self.engine {
+            let name = format!("attached.{}", match image.0.as_str() { "image/jpeg" => "jpg", "image/webp" => "webp", "image/gif" => "gif", _ => "png" });
+            let prompt = format!("{user}\n\nThey attached a picture to this message: the file {name} in the current folder. Open it with the Read tool and look at it before you answer.");
+            return self.ask_code_as(&model_id(&self.model, false), system, &prompt, schema, effort, &[(name, image.1.clone())], 5);
+        }
+        let content = json!([
+            { "type": "image", "source": { "type": "base64", "media_type": image.0, "data": base64::engine::general_purpose::STANDARD.encode(&image.1) } },
+            { "type": "text", "text": user },
+        ]);
+        self.call_with_as(&model_id(&self.model, true), system, content, schema, effort)
+    }
+
     /// A request a search makes (scoring, titles, salaries, alerts): the other AI's when one is
     /// set for searching or for everything, else Claude's searching model.
     fn search_call<T: DeserializeOwned>(&self, system: &str, user: &str, schema: Value, effort: &str) -> R<T> {
@@ -2327,7 +2349,11 @@ exactly as if it were the only posting, never against the others. Answer with on
         let cv: String = a.cv.chars().take(12000).collect();
         user.push_str(&format!("\n<cv>\n{cv}\n</cv>\n\nThe conversation so far, oldest first (<you> is the job seeker, <claude> is you):\n{talk}\nTheir new message:\n<you>\n{}\n</you>", a.message));
         let offer = obj(json!({"kind": {"type": "string", "enum": OFFERS}, "label": {"type": "string"}, "note": {"type": "string"}, "keywords": strings(), "jobs": strings()}));
-        let r = self.call::<Assisted>(&assist_system(), &user, obj(json!({"reply": {"type": "string"}, "actions": {"type": "array", "items": offer}})), "low")?;
+        let schema = obj(json!({"reply": {"type": "string"}, "actions": {"type": "array", "items": offer}}));
+        let r: Assisted = match a.image {
+            Some(image) => self.call_seeing(&assist_system(), &user, schema, "low", image)?,
+            None => self.call(&assist_system(), &user, schema, "low")?,
+        };
         if r.reply.trim().is_empty() {
             return Err(Error("Claude's reply came back empty; try again.".into()));
         }

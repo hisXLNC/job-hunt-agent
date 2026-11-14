@@ -5,7 +5,7 @@
 
 const SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1-5.1-1.9 5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>';
 const PRACTISE = "Let's practise my interview for this role. You play the interviewer. Ask one question at a time, the kind this company would really ask for this role, and wait for my answer. After each answer, say in two or three plain sentences what worked and what to change, then ask the next question. Start with the first question now.";
-const askSt = { open: false, chat: [], busy: false, error: '', quote: '', timer: 0, sent: 0, loaded: false, earlier: [], earlierFor: '' };
+const askSt = { open: false, chat: [], busy: false, error: '', quote: '', timer: 0, sent: 0, loaded: false, earlier: [], earlierFor: '', image: null };
 const askKeep = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } };
 
 /** The screen you're on, as the assistant is told: its name, the job on it, and its text. */
@@ -48,7 +48,9 @@ function askBuild() {
       <div class="ask-foot">
         <div class="ask-quote" id="askQuote" hidden></div>
         <div class="ask-ideas" id="askIdeas"></div>
+        <div class="ask-pic" id="askPic" hidden></div>
         <form class="ask-send" id="askForm">
+          <label class="btn ask-clip" title="Attach a picture (a screenshot, say). You can also paste one, or drop it here."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10 17.5a2 2 0 0 1-3-3l7.5-7.5"/></svg><input type="file" id="askFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
           <textarea id="askMsg" rows="1" placeholder="Ask about anything on this screen…" aria-label="Your message"></textarea>
           <button class="btn primary ask-go" type="submit" aria-label="Send" title="Send (Enter)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
         </form>
@@ -68,6 +70,12 @@ function askBuild() {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); askSend(box.value); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); askClose(); }
   });
+  // A picture with the question: chosen, pasted (a screenshot from the clipboard) or dropped on the panel.
+  $('#askFile').addEventListener('change', e => { askAttach(e.target.files[0]); e.target.value = ''; });
+  $('#askPic').addEventListener('click', e => { if (e.target.closest('button')) { askSt.image = null; askDrawFoot(); } });
+  $('#askPanel').addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])].find(x => x.type.startsWith('image/')); if (f) { e.preventDefault(); askAttach(f); } });
+  $('#askPanel').addEventListener('dragover', e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
+  $('#askPanel').addEventListener('drop', e => { const f = [...(e.dataTransfer?.files || [])].find(x => x.type.startsWith('image/')); if (f) { e.preventDefault(); askAttach(f); } });
   $('#askIdeas').addEventListener('click', e => { const b = e.target.closest('button'); if (b) askSend(b.textContent); });
   $('#askQuote').addEventListener('click', e => { if (e.target.closest('button')) { askSt.quote = ''; askDrawFoot(); } });
   // A link in an answer goes to that screen; the conversation stays open beside it.
@@ -103,6 +111,25 @@ function askBuild() {
   sel.addEventListener('mousedown', e => e.preventDefault()); // keep the selection until the click lands
   sel.addEventListener('click', () => { const p = picked(); sel.hidden = true; askOpen(p?.text); });
   window.addEventListener('hashchange', () => setTimeout(() => { askDrawFoot(); if (askSt.open && askPage().job !== askSt.earlierFor) askLoad(); }, 400));
+}
+
+/** Attach a picture to the next message: made small enough to send (at most 1600 px a side), with a
+ *  thumbnail to keep in the conversation. */
+async function askAttach(file) {
+  if (!file) return;
+  if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return toast('That isn\'t a picture Claude can read. Use a PNG, JPEG, WebP or GIF.', true);
+  try {
+    const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(file); });
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+    const fit = (max, type, q) => { const k = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k)); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); return c.toDataURL(type, q); };
+    // Screenshots stay sharp as PNG; anything that comes out heavy goes as JPEG.
+    let data = fit(1600, 'image/png');
+    if (data.length > 2_500_000) data = fit(1600, 'image/jpeg', 0.85);
+    const [head, b64] = data.split(',');
+    askSt.image = { mime: head.slice(5, head.indexOf(';')), b64, thumb: fit(220, 'image/jpeg', 0.7), name: file.name || 'picture' };
+    askDrawFoot();
+    $('#askMsg').focus();
+  } catch (e) { toast('Couldn\'t read that picture.', true); }
 }
 
 /** Open the assistant; with `quote`, about those words. */
@@ -157,11 +184,13 @@ async function askSend(text) {
   const box = $('#askMsg');
   box.value = ''; box.style.height = 'auto';
   // Shown at once; the server's copy replaces it.
-  askSt.chat = [...askSt.chat, { who: 'you', text, about: page.where, quote: page.quote }];
-  askSt.busy = true; askSt.error = ''; askSt.sent = Date.now(); askSt.quote = '';
+  const pic = askSt.image;
+  if (pic) { page.image = { mime: pic.mime, b64: pic.b64 }; page.thumb = pic.thumb; }
+  askSt.chat = [...askSt.chat, { who: 'you', text, about: page.where, quote: page.quote, thumb: pic?.thumb }];
+  askSt.busy = true; askSt.error = ''; askSt.sent = Date.now(); askSt.quote = ''; askSt.image = null;
   askDraw(true);
   try { askTake(await api('/api/ask', { method: 'POST', body: { message: text, page } })); }
-  catch (e) { askSt.chat.pop(); askSt.busy = false; askSt.error = e.message; box.value = text; askDraw(true); }
+  catch (e) { askSt.chat.pop(); askSt.busy = false; askSt.error = e.message; box.value = text; askSt.image = pic; askDraw(true); }
 }
 
 /** What each of Claude's offers does when its button is pressed: [the request, what to say after]. */
@@ -223,6 +252,9 @@ function askDrawFoot() {
   const q = $('#askQuote');
   q.hidden = !askSt.quote;
   q.innerHTML = askSt.quote ? `<span>“${esc(askSt.quote.length > 160 ? `${askSt.quote.slice(0, 160)}…` : askSt.quote)}”</span><button type="button" aria-label="Don't ask about these words" title="Remove">×</button>` : '';
+  const pic = $('#askPic');
+  pic.hidden = !askSt.image;
+  pic.innerHTML = askSt.image ? `<img src="${askSt.image.thumb}" alt=""><span class="small">${esc(askSt.image.name)}<br><span class="muted">goes with your next message</span></span><button type="button" aria-label="Remove the picture" title="Remove">×</button>` : '';
   const ideas = $('#askIdeas');
   ideas.hidden = askSt.busy || !!$('#askMsg').value.trim();
   ideas.innerHTML = askIdeas().map(i => `<button type="button" class="ask-idea">${esc(i)}</button>`).join('');
@@ -235,7 +267,7 @@ function askDraw(toEnd) {
     if (m.who === 'you') {
       const on = m.about && m.about !== last ? `<div class="ask-on muted small">${esc(m.about)}</div>` : '';
       last = m.about || last;
-      return `${on}<div class="ask-msg me">${m.quote ? `<div class="ask-q">“${esc(m.quote.slice(0, 160))}${m.quote.length > 160 ? '…' : ''}”</div>` : ''}${esc(m.text)}</div>`;
+      return `${on}<div class="ask-msg me">${m.thumb ? `<img class="ask-thumb" src="${esc(m.thumb)}" alt="The picture you attached">` : m.image ? '<div class="ask-q">(a picture)</div>' : ''}${m.quote ? `<div class="ask-q">“${esc(m.quote.slice(0, 160))}${m.quote.length > 160 ? '…' : ''}”</div>` : ''}${esc(m.text)}</div>`;
     }
     const offers = (m.actions || []).filter(o => askKnows(o.kind)).map((o, k) => o.done
       ? `<span class="ask-done">✓ ${esc(o.label)}</span>`
@@ -246,7 +278,7 @@ function askDraw(toEnd) {
   if (askSt.earlier.length) rows.unshift(`<details class="ask-earlier"><summary>Earlier conversation about this job (${askSt.earlier.length} message${askSt.earlier.length === 1 ? '' : 's'})</summary>
     ${askSt.earlier.map(m => `<div class="ask-msg ${m.who === 'you' ? 'me' : 'them'}">${m.who === 'you' ? esc(m.text) : mdHtml(m.text)}</div>`).join('')}</details>`);
   if (!askSt.chat.length && !askSt.busy && !askSt.earlier.length) rows.push(`<div class="ask-hello"><span class="ask-mark big">${SPARK}</span><b>Ask about anything you see</b>
-    <p class="muted small">Claude can see the screen you're on, your CV and what Job Hunt knows about each job. Ask what a word means, why a role scored as it did, or for a draft answer. It can also offer to do things for you, here or anywhere in Job Hunt: change a letter, set jobs aside, start a search, change a setting, or fill in a form in your browser. Nothing happens until you press its button. Select words on a page to ask about just those.</p></div>`);
+    <p class="muted small">Claude can see the screen you're on, your CV and what Job Hunt knows about each job. Ask what a word means, why a role scored as it did, or for a draft answer. It can also offer to do things for you, here or anywhere in Job Hunt: change a letter, set jobs aside, start a search, change a setting, or fill in a form in your browser. Nothing happens until you press its button. Select words on a page to ask about just those, or attach a screenshot with the paperclip (or paste one).</p></div>`);
   if (askSt.busy) rows.push('<div class="ask-msg them wait"><span class="spin" data-kind="chat"></span>Thinking…</div>');
   if (askSt.error) rows.push(`<div class="ask-err small"><b>Claude couldn't answer.</b> ${esc(askSt.error)} Your message is back in the box to send again.</div>`);
   log.innerHTML = rows.join('');

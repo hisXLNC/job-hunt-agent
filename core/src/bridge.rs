@@ -332,7 +332,10 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
         // How a fill went on this site, for the tally in Settings (no answers in it, only counts and labels).
         ("POST", "/ext/report") => crate::fill::site_report(agent, url, &b).map(|_| json!({ "ok": true })),
         ("POST", "/ext/learn") => crate::fill::learn(agent, &fields).map(|n| json!({ "kept": n })),
-        ("POST", "/ext/applied") => crate::fill::job_for_page(agent, url, title)
+        // Submitted. The application the form was filled for comes with it when the page knows; the
+        // site's thank-you page is often one Job Hunt couldn't match to a job by itself.
+        ("POST", "/ext/applied") => b["job_id"].as_str().filter(|id| !id.is_empty() && *id != crate::fill::PROFILE).and_then(|id| agent.db().job(id).ok().flatten()).map(Ok)
+            .unwrap_or_else(|| crate::fill::job_for_page(agent, url, title))
             .and_then(|j| crate::fill::submitted_with(agent, &j.id, url, b["auto"].as_bool().unwrap_or(false), &fields).map(|_| json!({ "ok": true }))),
         _ => return json_resp(404, json!({ "error": "Not here." })),
     };

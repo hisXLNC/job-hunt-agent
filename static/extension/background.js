@@ -171,7 +171,7 @@ chrome.debugger.onDetach.addListener((s, reason) => { if (s.tabId) { clearTimeou
 const run = (tabId, func, args) => chrome.scripting.executeScript({ target: { tabId }, func, args: args || [] });
 // Start filling the form on a tab: its script is put there if it isn't (or if the one there is from
 // before an update and can no longer reach this extension), then told to start.
-async function startFill(tabId) {
+async function startFill(tabId, only) {
   const mine = chrome.runtime.getManifest().version;
   const [{ result: there }] = await run(tabId, v => !!window.__jobhunt && window.__jobhunt.version === v && window.__jobhunt.alive(), [mine]);
   if (!there) {
@@ -179,7 +179,9 @@ async function startFill(tabId) {
     await run(tabId, () => { delete window.__jobhunt; });
     await chrome.scripting.executeScript({ target: { tabId }, files: ['fill.js'] });
   }
-  await run(tabId, () => window.__jobhunt && window.__jobhunt.start());
+  // The whole form, or only the box that was right-clicked ("Fill this in").
+  if (only) await run(tabId, () => window.__jobhunt && window.__jobhunt.fillOnly());
+  else await run(tabId, () => window.__jobhunt && window.__jobhunt.start());
   // The site's next pages get the panel too, for twenty minutes (see below).
   try { const tab = await chrome.tabs.get(tabId); const site = new URL(tab.url).origin; const { armed = {} } = await stored().get('armed'); armed[tabId] = { site, until: Date.now() + 20 * 60 * 1000 }; await stored().set({ armed }); } catch (e) { /* no address to go by */ }
 }
@@ -203,6 +205,22 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 chrome.tabs.onRemoved.addListener(async tabId => { const { armed = {} } = await stored().get('armed'); if (armed[tabId]) { delete armed[tabId]; await stored().set({ armed }); } });
 // Fill this form from the keyboard (Alt+Shift+F unless you changed it in the browser's extension
 // shortcuts): the same as the popup's button, on the page you're looking at.
+// Right-click a box on a form: "Fill this in" fills only that box. (The menu is on every part of a
+// page, not only text boxes: a drawn dropdown or a tick box isn't one to the browser.)
+const MENU_ONE = 'jobhunt-fill-one';
+function addMenu() {
+  try { chrome.contextMenus.removeAll(() => { void chrome.runtime.lastError; chrome.contextMenus.create({ id: MENU_ONE, title: 'Job Hunt: fill this in', contexts: ['editable', 'page', 'frame', 'selection', 'link'] }, () => void chrome.runtime.lastError); }); }
+  catch (e) { log('failed', `menu: ${e.message}`); }
+}
+chrome.runtime.onInstalled.addListener(addMenu);
+chrome.runtime.onStartup.addListener(addMenu);
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== MENU_ONE || !tab || !tab.id) return;
+  log('fill', 'fill this in (right-click)', { tabId: tab.id });
+  try { await startFill(tab.id, true); }
+  catch (e) { log('failed', `fill this in: ${e.message}`); }
+});
+
 chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command !== 'fill-form' || !tab || !tab.id) return;
   try { await startFill(tab.id); }

@@ -4,6 +4,28 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.74.0] - 2026-11-14
+
+A picture in Ask Claude, an honest Marked as applied, and list fixes.
+
+### Changes
+
+- Ask Claude takes a picture with your question: use the paperclip, paste a screenshot, or drop one on the panel.
+- The extension now marks an application as applied reliably. It used to say Marked as applied before Job Hunt had confirmed it, and nothing was marked when the site's thank-you page could not be matched to a job. It now sends the job the form was filled for, says it is marked only once it is, and otherwise lets you choose the application or try again.
+- The extension no longer takes an unrelated page for the job you last chose in Job Hunt (Job Bank was named as an Interac application).
+- Ready to approve: tick several and press Not interested. The Did these go through list and card have Not interested too, so a form you started but no longer want can be cleared.
+- Not interested or Save for later on a job's own page takes you back to the list you came from.
+- A job opened by its title opens on Overview.
+
+## [2.73.0] - 2026-11-14
+
+See what is running and stop it; right-click a box to fill only that one.
+
+### Changes
+
+- A panel at the bottom left shows what Job Hunt is doing whenever something is running: the search, Claude filling in a form in your browser, tailoring, a CV update, an answer being written. Each has a progress bar, how long it has been going, and its own Stop. Where the work counts its steps the bar is exact; elsewhere it is a striped estimate from how long that kind of work usually takes.
+- On a form, right-click a box and choose Job Hunt: fill this in. Only that box is filled; the rest of the form is left as it is.
+
 ## [2.72.0] - 2026-11-14
 
 Force stop asks what to stop; Job Bank finds postings again.
@@ -2128,6 +2150,8 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.74.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.74.0
+[2.73.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.73.0
 [2.72.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.72.0
 [2.71.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.3
 [2.71.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.2

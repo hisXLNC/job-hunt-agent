@@ -358,7 +358,7 @@ async function act(el) {
     });
   }
   if (a === 'dismissPicked') {
-    const ids = [...el.closest('[data-pickbox]').querySelectorAll('[data-pick]:checked')].map(c => c.dataset.pick);
+    const ids = [...el.closest('[data-pickbox], [data-approvebox]').querySelectorAll('[data-pick]:checked, [data-appr]:checked')].map(c => c.dataset.pick || c.dataset.appr);
     // Set aside without changing how Job Hunt scores: to teach it, use Not interested on one job
     // and choose "and learn from it".
     const learn = false;
@@ -806,7 +806,10 @@ async function act(el) {
     }
     return busy(async () => {
       const done = await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status, note, learn, block } });
-      await refreshOverview(); route();
+      await refreshOverview();
+      // Set aside from the job's own page: back to the list you opened it from, not left on a job you're done with.
+      if (['dismissed', 'saved'].includes(status) && location.hash === `#job/${encodeURIComponent(id)}`) location.hash = cameFrom || '#overview';
+      else route();
       if (block) { toast(`You won't be shown this company again${done.also ? ` (${done.also} more of its postings went too)` : ''}. Change it under Me, in the companies to skip.`); return; }
       // A slip is easy to make from a list: offer to put it back.
       if (from && from !== status) {
@@ -1176,6 +1179,9 @@ document.addEventListener('click', e => {
     if (!m.contains(e.target) || e.target.closest('.menu-list')) m.open = false;
   });
 
+  // A job opened by its title (any link to it that names no tab) opens on its Overview, whatever tab it was left on.
+  const plain = e.target.closest('a[href^="#job/"]:not([data-tab-to])');
+  if (plain) delete jobTabs[decodeURIComponent(plain.getAttribute('href').replace('#job/', ''))];
   const to = e.target.closest('a[data-tab-to]');
   if (to) jobTabs[decodeURIComponent(to.getAttribute('href').replace('#job/', ''))] = to.dataset.tabTo;
   if (to && to.dataset.scroll) scrollToAfter = to.dataset.scroll;
@@ -1486,3 +1492,7 @@ function forceStopChoose() {
     back.querySelector('[data-pick]:not([disabled])').focus();
   });
 }
+
+// The screen you were on before a job's own page, to go back to when you set that job aside.
+let cameFrom = '';
+window.addEventListener('hashchange', e => { try { const was = new URL(e.oldURL).hash; if (was && !was.startsWith('#job/')) cameFrom = was; } catch (x) { /* an odd address: stay as it was */ } });

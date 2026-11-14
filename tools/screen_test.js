@@ -351,6 +351,16 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.goto(`${base}/#welcome`);
   await page.waitForTimeout(900);
   check(await page.locator('[data-cv-chat] .cv-chat-box').count() === 1, 'The first-run setup offers to build a CV by chat too');
+  // A job opened from a list opens on its Overview; set aside from its own page, you're back on that list.
+  await page.goto(`${base}/#overview`);
+  await page.waitForSelector('.jrow a.qt, .decision');
+  const fromList = await page.evaluate(async () => { const j = (await api('/api/jobs')).jobs.find(x => x.status === 'queued' || x.status === 'ready'); if (!j) return null; jobTabs[j.id] = 'docs'; location.hash = '#applications'; await new Promise(r => setTimeout(r, 700)); const a = document.createElement('a'); a.href = `#job/${encodeURIComponent(j.id)}`; a.textContent = 'open'; document.querySelector('#main').appendChild(a); a.click(); await new Promise(r => setTimeout(r, 900)); return { id: j.id, tab: document.querySelector('#jobTabs a.on')?.textContent || '' }; });
+  check(!!fromList && /Overview/.test(fromList.tab), `A job opened by its title opens on Overview (${fromList && fromList.tab})`);
+  await page.click('[data-act=stage][data-status=dismissed]');
+  await page.click('.modal button:has-text("Not interested"):not(:has-text("learn"))');
+  await page.waitForFunction(() => location.hash === '#applications', null, { timeout: 8000 }).catch(() => {});
+  check(await page.evaluate(() => location.hash) === '#applications', 'Not interested on a job page takes you back to the list you came from');
+  if (fromList) await page.evaluate(async id => { await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'queued', note: 'undone', learn: false } }); await refreshOverview(); }, fromList.id);
   // Certifications under Me, About me: added, saved, and still there when the page is opened again.
   await page.goto(`${base}/#cvs/details`);
   await page.waitForSelector('#certsCard');
@@ -390,6 +400,13 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.keyboard.press('Enter');
   await page.waitForSelector('#askLog .ask-err');
   check(await page.inputValue('#askMsg') === 'please fail' && await page.locator('#askLog .ask-msg').count() === 4, 'When Claude cannot answer, it says why and the message is back in the box');
+  // A picture with the question: attached, shown, sent with the message, and Claude answers about it.
+  await page.setInputFiles('#askFile', { name: 'form.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC', 'base64') });
+  await page.waitForSelector('#askPic:not([hidden]) img');
+  await page.fill('#askMsg', 'What is this page asking me?');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => /I can see the picture you attached \(image\/png/.test(document.querySelector('#askLog')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+  check(/I can see the picture you attached \(image\/png/.test(await page.textContent('#askLog')) && await page.locator('#askLog .ask-thumb').count() >= 1 && await page.evaluate(() => document.querySelector('#askPic').hidden), 'A picture attached in Ask Claude goes with the message and Claude answers about it');
   // Asked for a change on a job: Claude offers it as a button, and nothing happens until it's pressed.
   await page.goto(`${base}/#job/${encodeURIComponent(jobId)}`);
   await page.waitForSelector('#main h1');
@@ -432,6 +449,12 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await page.evaluate(async () => { const l = await api('/api/search-log'); return Array.isArray(l.trail) && l.trail.some(x => /search (started|finished)/.test(x.m)) && 'quiet_seconds' in l; }), 'The search keeps a log of its steps');
   check(await page.evaluate(() => /data-act="searchForceStop"/.test(progressHtml({ stage: 'x', percent: 1, moved: Date.now() / 1000 })) && /data-act="searchForceStop"/.test(searchCtl({ stage: 'x', percent: 1 }))), 'A running search offers Force stop, on its card and in its menu');
   check(await page.evaluate(async () => (await api('/api/search/stop', { method: 'POST', body: { force: 'search' } })).stopping === false), 'Force stop with no search running does nothing');
+  // What's running: a panel with a progress bar and a Stop for each thing; nothing shown when idle.
+  check(await page.evaluate(async () => Array.isArray((await api('/api/activity')).running)) && await page.evaluate(() => { actDraw([]); return document.getElementById('actBar').hidden; }), 'With nothing running, the activity panel is hidden');
+  await page.evaluate(() => { running.shut = false; actDraw([{ id: 'claude-fill', label: 'Claude is filling in a form in your browser', detail: 'Analyst at Maple', secs: 75, percent: 25, estimated: true, stoppable: true }, { id: 'search', label: 'Searching for jobs', detail: 'Searching job sites: Adzuna', secs: 200, percent: 69, estimated: false, stoppable: true }]); });
+  check(await page.evaluate(() => { const b = document.getElementById('actBar'); return !b.hidden && b.querySelectorAll('.act-row').length === 2 && b.querySelectorAll('[data-act-stop]').length === 2 && b.querySelector('.pbar.guess') && /1:15/.test(b.textContent) && /2 things running/.test(b.textContent); }), 'While Claude takes over a form or a search runs, each shows with its progress bar, time and Stop');
+  check(await page.evaluate(async () => (await api('/api/activity/stop', { method: 'POST', body: { id: 'claude-fill' } })).stopped === false), 'Stopping something that has already finished says so');
+  await page.evaluate(() => actDraw([]));
   // Force stop asks what to stop: the search, CV updating and tailoring, or everything.
   const picking = page.evaluate(() => forceStopChoose());
   await page.waitForSelector('.force-stop');
@@ -452,8 +475,10 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   // Settings, Applying, Filling in forms: the tally of how forms go on each site.
   await page.goto(`${base}/#settings/applying/forms`);
   await page.waitForSelector('#fillSites');
-  await page.waitForFunction(() => !/Loading/.test(document.querySelector('#fillSites').textContent), null, { timeout: 8000 }).catch(() => {});
-  check(/Nothing yet|Boxes filled/.test(await page.textContent('#fillSites')), 'Settings shows how forms go, site by site');
+  await page.waitForFunction(() => !/Loading/.test(document.querySelector('#fillSites')?.textContent || 'Loading'), null, { timeout: 8000 }).catch(() => {});
+  // (The page may have been drawn again by an earlier step's refresh: the card fills itself when asked.)
+  for (let i = 0; i < 6 && /Loading/.test(await page.textContent('#fillSites').catch(() => 'Loading')); i++) { await page.evaluate(() => renderFillSites()).catch(() => {}); await page.waitForTimeout(1200); }
+  { const t = await page.textContent('#fillSites'); check(/Nothing yet|Boxes filled/.test(t), `Settings shows how forms go, site by site (${t.slice(0, 160)})`); }
   await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('c');
   check(await page.isVisible('#askPanel'), 'The C key opens Ask Claude from any screen');
