@@ -141,11 +141,10 @@ const noLogo = new Map(); // company: when its logo last wasn't there (asked aga
 document.addEventListener('load', e => { const i = e.target; if (i.matches?.('img.logo')) { if (i.naturalWidth >= 16) i.classList.add('ok'); else i.remove(); } }, true);
 document.addEventListener('error', e => { const i = e.target; if (i.matches?.('img.logo')) { try { noLogo.set(new URL(i.src).searchParams.get('c'), Date.now()); } catch (x) {} i.remove(); } }, true);
 /** What a posting pays, for a job's line of facts: the figure it states (its full wording on hover,
- *  and a mark when it's below your minimum), or that it states none. Always there, so no pay is
- *  something you see, not something missing. */
+ *  and a mark when it's below your minimum). Nothing when the posting states none. */
 const payFact = j => j.salary
   ? `<span class="pay${belowMin(j) ? ' low' : ''}" title="${esc(j.salary)}${belowMin(j) ? `. Below your minimum of ${money(minSalary())}` : ''}">${esc(String(j.salary).split(/\s+[•·|]\s+/)[0])}</span>`
-  : '<span class="pay none" title="The posting doesn\'t say what it pays">No pay stated</span>';
+  : ''; // nothing said about pay: nothing shown (it was "No pay stated" on nearly every row)
 /** Under this share of a posting's keywords, a tailored CV is thin for it. */
 const THIN_COVER = 0.6;
 /** How much of a posting's keywords the tailored CV covers, as a fact for its row: marked when thin. */
@@ -207,8 +206,8 @@ function stepHtml(o, step, tracked) {
     const rows = [...picking].sort((a, b) => applyRank(b) - applyRank(a)).map(j => jobRow(j, {
       cls: 'pick', tick: `<input type="checkbox" data-pick="${esc(j.id)}" aria-label="Pick ${esc(j.title)}">`, tags: `${oneTag(j)}${appliedBeforeTag(j)}`, facts: ageTag(j), sub: whyFits(j),
       attrs: `data-expired="${expiredWhy(j) ? 1 : 0}" data-now="${applyRank(j)}" data-score="${j.score ?? 0}" data-reach="${j.score_after ?? canReach(j) ?? j.score ?? 0}" data-age="${+new Date(ageValue(j) || 0) || 0}" data-pay="${Math.max(0, salaryValue(j.salary))}" data-rating="${j.rating?.found ? j.rating.rating : 0}" data-flags="${(j.red_flags || []).length}" data-place="${esc(`${j.location || ''}${j.remote ? ' remote' : ''}`.toLowerCase())}"`,
-      actions: `${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}${j.score != null ? `<button class="btn sm primary" type="button" data-act="tailorPicked" data-job="${id(j)}" title="Tailor a CV and cover letter for this one now">Tailor</button>` : ''}<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="overview">View</a><button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button>` })).join('');
-    groups.push([`Pick from <span data-pickhead>${picking.length} new match${picking.length === 1 ? '' : 'es'}</span>`, `<div data-pickbox>
+      actions: `${j.score == null ? `<button class="btn sm" type="button" data-act="scoreAnyway" data-job="${id(j)}">Score it</button>` : ''}${j.score != null ? `<button class="btn sm primary" type="button" data-act="tailorPicked" data-job="${id(j)}" title="Tailor a CV and cover letter for this one now">Tailor</button>` : ''}<button class="btn ghost sm icon-only" type="button" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="queued" title="Not interested">${svg('close')}</button>` })).join('');
+    groups.push([`<span data-pickhead>${picking.length} new match${picking.length === 1 ? '' : 'es'}</span>`, `<div data-pickbox>
     <div class="row" style="margin:2px 0 8px">${picking.length > 5 ? '<button class="btn sm" type="button" data-act="pickTop" data-n="5">Tick the top 5</button>' : ''}<button class="btn ghost sm" type="button" data-act="pickAll">Select all</button>${(() => { const old = picking.filter(j => daysUp(j) > 21 || expiredWhy(j)); return old.length ? `<button class="btn ghost sm" type="button" data-act="pickStale" data-ids="${esc(JSON.stringify(old.map(j => j.id)))}" title="Postings up for more than three weeks, or expired: an application now is rarely read. It doesn't change how Job Hunt scores.">Set aside ${old.length} older than 3 weeks</button>` : ''; })()}${inWork ? `<span class="muted small"><span class="spin" data-kind="tailor+score" data-n="${Math.ceil(inWork / 3)}"></span>Tailoring ${inWork}…</span>` : ''}</div>
     ${foldFilters(`<div class="pick-filters">
       <label class="small">Sort by <select data-pickf="sort">${opt('now', 'Best to apply to now')}${opt('fit', 'Best fit')}${opt('reach', 'Fit after tailoring')}${opt('new', 'Newest')}${opt('pay', 'Highest pay')}${opt('rating', 'Best-rated company')}</select></label>
@@ -277,7 +276,7 @@ function stepHtml(o, step, tracked) {
     return rows.length ? [[title, rows.map(trackRow).join('')]] : [];
   };
   const by = {
-    pick: [has('Pick'), has('Tailoring')].filter(Boolean),
+    pick: [has('<span data-pickhead'), has('Tailoring')].filter(Boolean),
     approve: ready,
     submit: [has('Filled in by Job Hunt'), has('Ask your recruiters'), has('Submit')].filter(Boolean),
     waiting: [has('Turned down'), has('In your Gmail drafts'), has('Message the recruiter'), has('No reply from the recruiter'), has('No reply yet'), has('Quiet'), ...rest('Everything else you applied to', r => r.status === 'applied')].filter(Boolean),
@@ -499,21 +498,26 @@ function cvHtml(blocks) {
 /** What a list of jobs can be put in order by: (key, its name, whether it's a number). Numbers start
  *  largest first (best fit, highest pay, newest); names start at A. */
 const LIST_COLS = [['role', 'Role'], ['co', 'Company'], ['loc', 'Location'], ['pay', 'Pay', 1], ['new', 'Found', 1], ['fit', 'Fit', 1]];
+// The orders by name, chosen in the Sort by menu (the others there go by number: see applyQueueView).
+const TEXT_SORTS = ['co', 'role', 'loc'];
 let listSort = null;
 try { listSort = JSON.parse(localStorage.getItem('jh.listSort') || 'null'); } catch (e) {}
+// (Kept from the headers there used to be: only the orders the menu offers.)
+if (listSort && !(TEXT_SORTS.includes(listSort.key) && listSort.dir === 'asc')) listSort = null;
 const jobLists = () => [...new Set([...document.querySelectorAll('.page .jrow[data-job-row]')].map(r => r.parentElement))];
 /** A row of headers over each list of jobs (two or more): press one to sort by it, again to turn it round. */
 function listHeads() {
   for (const p of jobLists()) {
     const rows = [...p.children].filter(c => c.matches('.jrow[data-job-row]'));
     if (rows.length < 2 || p.querySelector(':scope > .list-head')) continue;
-    rows[0].insertAdjacentHTML('beforebegin', `<div class="list-head" role="group" aria-label="Sort this list"><span>Sort by</span>${LIST_COLS.map(([k, name]) => `<button type="button" data-lsort="${k}" title="Sort by ${name.toLowerCase()}">${name}<span class="arrow"></span></button>`).join('')}</div>`);
+    // (The row of headers to sort by is gone: the Sort by menu does it, company and role included.)
     const at = {};
     rows.forEach(r => { if (r.dataset.lco) at[r.dataset.lco] = (at[r.dataset.lco] || 0) + 1; });
     rows.forEach(r => { const n = at[r.dataset.lco]; if (n > 1 && !r.querySelector('.co-more')) r.querySelector('.jtitle')?.insertAdjacentHTML('beforeend', ` <button type="button" class="pill co-more" data-lsort="co" data-together="1" title="This company has ${n} roles in this list. Press to put them side by side.">${n} roles here</button>`); });
     // Select all sits at the start of the headers, and the row it had to itself goes.
     const all = p.closest('[data-pickbox], [data-approvebox]')?.querySelector('[data-act=approveAll], [data-act=pickAll]'), was = all?.parentElement;
     if (all && !was.classList.contains('list-head')) {
+      rows[0].insertAdjacentHTML('beforebegin', '<div class="list-head"></div>');
       p.querySelector(':scope > .list-head').prepend(all);
       if (!was.children.length) was.hidden = true;
     }
@@ -522,6 +526,9 @@ function listHeads() {
 }
 function applyListSort() {
   const col = listSort && LIST_COLS.find(c => c[0] === listSort.key);
+  // The Sort by menu shows it (a company's roles put together by its tag count as "Company").
+  const menu = document.querySelector('[data-queuef=sort]');
+  if (menu && col && TEXT_SORTS.includes(col[0])) menu.value = col[0];
   document.querySelectorAll('.list-head [data-lsort]').forEach(b => { const on = col && b.dataset.lsort === col[0]; b.classList.toggle('on', !!on); b.querySelector('.arrow').textContent = on ? (listSort.dir === 'asc' ? ' ▲' : ' ▼') : ''; });
   if (!col) return;
   const val = r => col[2] ? Number(r.dataset['q' + col[0]]) || 0 : r.dataset['l' + col[0]] || '';
@@ -544,12 +551,15 @@ document.addEventListener('click', e => {
   try { localStorage.setItem('jh.listSort', JSON.stringify(listSort)); } catch (err) {}
   if (off) route(); else applyListSort();
 });
-// Choosing an order from a list's own Sort by menu takes over from the headers.
+// The Sort by menu: by company, role or place (A to Z) sorts every list by that name; any other
+// choice lets go of it.
 document.addEventListener('change', e => {
-  if (!e.target.matches?.('[data-queuef=sort], [data-pickf=sort]') || !listSort) return;
-  listSort = null;
-  try { localStorage.removeItem('jh.listSort'); } catch (err) {}
-  applyListSort();
+  if (!e.target.matches?.('[data-queuef=sort], [data-pickf=sort]')) return;
+  const byName = e.target.matches('[data-queuef=sort]') && TEXT_SORTS.includes(e.target.value);
+  if (!byName && !listSort) return;
+  listSort = byName ? { key: e.target.value, dir: 'asc' } : null;
+  try { listSort ? localStorage.setItem('jh.listSort', JSON.stringify(listSort)) : localStorage.removeItem('jh.listSort'); } catch (err) {}
+  if (listSort) applyListSort(); else route();
 }, true);
 
 // ---- Before you open a form, and what to fix first ----

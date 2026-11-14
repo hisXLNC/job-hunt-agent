@@ -83,6 +83,10 @@ async function showJob(id) {
     : k === 'interview' ? sent || !!prep || preparing : true);
   // A job opens on its Overview. A button that means another tab (Check and approve, Files and
   // answers) says so, and the tab you switch to stays while you're on the job.
+  // A job nothing has been done with yet (found, set aside, saved; no CV tailored): its Overview
+  // leads with why it fits and the posting; the stage is one line at the end, not a track of six
+  // steps with one filled in. (Drawn in that order by CSS: see .jpane.early.)
+  const early = ['queued', 'skipped', 'dismissed', 'saved'].includes(j.status) && !j.cv_path && !tailoring;
   const want = jobTabs[id] === 'notes' ? 'overview' : jobTabs[id] || 'overview';
   const tab = tabs.some(([k]) => k === want) ? want : 'overview';
   const badge = { docs: revising || tailoring ? 'Working on it' : '', apply: answering || following_up || writing_to || advising ? 'Working on it' : (j.status === 'offer' && !offer ? 'Weigh the offer' : ''), interview: preparing ? 'Writing' : '' };
@@ -111,7 +115,7 @@ async function showJob(id) {
     ${tailoring ? `<p class="muted small"><span class="spin" data-kind="tailor+score"></span> Tailoring…</p>` : ''}
     ${revising ? `<div class="card"><p><span class="spin" data-kind="revise"></span> Making your changes… this page updates by itself.</p></div>` : ''}
     <nav class="tabs job-tabs" id="jobTabs">${tabs.map(([k, n]) => `<a href="#" data-jtab="${k}" class="${k === tab ? 'on' : ''}">${n}${badge[k] ? `<span class="tab-dot" title="${esc(badge[k])}"></span>` : ''}</a>`).join('')}</nav>
-    <div class="jpane" data-pane="overview" ${tab === 'overview' ? '' : 'hidden'}>
+    <div class="jpane${early ? ' early' : ''}" data-pane="overview" ${tab === 'overview' ? '' : 'hidden'}>
     ${!sys && (j.cv_path || review) ? `<details class="card ats-tips"${review || reviewing ? ' open' : ''}><summary><b>How an AI screen would read your CV.</b> <span class="muted">Many employers now check CVs requirement by requirement</span></summary>${reviewBox}</details>` : ''}
     ${sys ? `<details class="card ats-tips"${review || reviewing ? ' open' : ''}><summary><b>${esc(j.company)} takes applications through ${esc(sys.name)}.</b> <span class="muted">What that means for this one</span></summary>
       ${(sys.here || []).length ? `<p style="color:var(--warn)">You've applied to ${sys.here.length} other role${sys.here.length === 1 ? '' : 's'} here in the last 90 days (${sys.here.slice(0, 3).map(h => esc(h.title) + (h.status === 'rejected' ? ', turned down' : '')).join('; ')}). ${esc(sys.name)} lets employers block repeat applications, so check this one is worth it.</p>` : ''}
@@ -119,7 +123,7 @@ async function showJob(id) {
       <h3>What else to know</h3>
       <ul>${sys.tips.map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join('')}</ul>
       <p class="muted small">From ${esc(sys.name)}'s own published help pages. Employers choose which of these they switch on, so not all of it applies to every company.</p></details>` : ''}
-      <section class="card progress-main">
+      <section class="card progress-main${early ? ' slim' : ''}">
         <header><h2>${progress ? 'Progress' : 'Stage'}</h2>${progress ? `<span class="who ${esc(progress.who)}">${{ you: 'Your move', them: 'Waiting on them', later: 'Saved', done: 'Done' }[progress.who] || ''}</span>` : ''}</header>
         ${progress ? stepsHtml(progress) : ''}
         <div class="progress-foot">

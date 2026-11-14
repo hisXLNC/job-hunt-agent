@@ -753,3 +753,30 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
 - **Remote access:** `read_request_if`: a body over 64 KB (`UNSIGNED_BODY`) is read only when the
   cookie in the headers is a signed-in session (and Remote access is on); otherwise the connection
   is dropped unread. The bridge (127.0.0.1) keeps `read_request`.
+
+## 2.79.0 (UI pass, and Job Bank's job title again)
+
+- **Extension, suggestion boxes:** Job Bank's suggestions arrive ~1 s after typing while the last
+  query's list stays up, so every shorter form of a title collected the first (wrong) list and
+  Claude chose "excise tax collector". `fillSuggested`'s `ask` now empties the box, types, and waits
+  until the list differs from the last one seen (or 2.5 s). The chooser's label says to match the
+  role, not the subject. Mock (`letter` variant, `#occ`) now answers after 900 ms.
+- **One way to sort Queue lists:** the `.list-head` sort buttons are gone (it only carries Select
+  all now). The Sort by menu has Company / Role / Place (A to Z): these set `listSort`
+  (`TEXT_SORTS` in app-steps.js); numeric orders still go through `applyQueueView`. The screen
+  test for sortable headers was replaced on purpose by one for the menu.
+- Queue heading follows the tab (`tabHeading`); the sort bar hides when the tab's list is empty.
+- Pick rows: no "No pay stated" (`payFact` returns ''), no View button (the title opens the job),
+  group heading is "N new matches" (`has('<span data-pickhead')` finds the group: it matched on the
+  heading's first word before).
+- **Top bar:** `#dGoogle`/`#mGoogle` are always hidden; `#dSync`/`#mSync` show only when sync is
+  not fine, with their words (`chip()` in app.js). What's fine is in the search chip's title.
+- **Phone:** Ask Claude is a button in the top bar (`data-act="askOpen"`); `.ask-fab` is hidden
+  under 760 px (it covered each row's ×). Shows pay / No red flags and the key hints are hidden
+  above the list under 640 px (they're in Sort and filter).
+- **Job page:** `early` (queued/skipped/dismissed/saved, nothing tailored): `.jpane.early` orders
+  the Overview by CSS `order` (fit and posting, then the ATS note, then a one-line stage). DOM order
+  is unchanged, so keyboard order differs from what's seen there.
+- All jobs: set-aside rows say "Tailor anyway" (ghost). Settings → Applying: the two long fields
+  take the full row; `.field > .hint` matches `label.field .hint`. The notice card's first row has
+  no top border.

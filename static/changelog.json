@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.79.0",
+    "date": "2026-11-14",
+    "title": "A tidier Queue, and Job Bank's job title",
+    "changes": [
+      "The browser extension waits for Job Bank's own suggestions for each form of your job title before choosing (it chose from the first, wrong list).",
+      "The Queue has one way to sort: the Sort by menu, now with company, role and place. The second row of sort headers is gone.",
+      "The Queue's heading follows the tab you're on, and rows no longer say No pay stated or carry a View button.",
+      "The top bar shows email and sync only when they need a look, in words.",
+      "On a phone, Ask Claude is in the top bar (it covered the Not interested button), and the first job sits higher.",
+      "A job you haven't acted on opens with why it fits and the posting first."
+    ]
+  },
+  {
     "version": "2.78.0",
     "date": "2026-11-14",
     "title": "A lighter backend",

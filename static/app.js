@@ -448,6 +448,7 @@ function phoneTop() {
     <a class="mchip" id="mGoogle" href="#settings/connections">${ic('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>')}<span class="dot" id="mDotGoogle"></span><span class="mchip-t" id="mGoogleNote"></span></a>
     <a class="mchip" id="mSync" href="#settings/sync">${ic('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a3.75 3.75 0 0 1-.5 7.5z"/>')}<span class="dot" id="mDotSync"></span><span class="mchip-t" id="mSyncNote"></span></a>
     <a class="mchip" id="mWarn" href="#settings/connections" hidden><span class="dot warn"></span><span class="mchip-t" id="mWarnNote"></span></a></span>
+    <button type="button" class="mbtn mask" data-act="askOpen" aria-label="Ask Claude about what's on screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" fill="currentColor" stroke="none"/></svg></button>
     <button type="button" class="mbtn" data-act="palette" aria-label="Find a job">${ic('<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>')}</button>
     <button type="button" class="mbtn" id="mTheme" data-act="themeCycle"></button>`);
   showTheme();
@@ -515,14 +516,24 @@ function renderNav() {
   $('#syncLine').title = sync && side.sync_error ? side.sync_error : sync ? `Syncing to ${side.sync_where === 'drive' ? 'Google Drive' : 'your sync folder'}. Open Sync & backup to sync now.` : 'Daily backups. Open Sync & backup to sync to Google Drive.';
   $('#syncLine').hidden = overview?.kind === 'server' && !sync && !at;
   // The phone's chips: the same lines, short. The words show when there's room; the dot always does.
-  const chip = (id, line, dot, note, short) => { const el = $(id); if (!el) return; el.hidden = $(line).hidden; el.title = $(note).textContent; el.setAttribute('aria-label', $(note).textContent); $(id.replace(/^#(.)/, '#$1Dot')).className = $(dot).className; $(`${id}Note`).textContent = short; };
-  // The desktop bar's chips: the same lines.
-  chip('#dGoogle', '#googleLine', '#dotGoogle', '#googleNote', g ? (overview?.last_inbox ? `Email ${ago(overview.last_inbox)}` : 'Email on') : 'Email off');
+  // Email and sync in the bar only when they need a look (sync failed or stale; nothing to say when
+  // they're fine): then with their words, not as an icon with a dot. What's fine is in the search
+  // chip's tip. (They were two icons nobody could read at a glance.)
+  const chip = (id, line, dot, note, short, always) => {
+    const el = $(id); if (!el) return;
+    const fine = /\b(on|busy)\b/.test($(dot).className);
+    el.hidden = $(line).hidden || (fine && !always);
+    el.classList.toggle('warn', !fine);
+    el.title = $(note).textContent; el.setAttribute('aria-label', $(note).textContent);
+    $(id.replace(/^#(.)/, '#$1Dot')).className = $(dot).className; $(`${id}Note`).textContent = short;
+  };
+  // Email not connected isn't a fault (the Queue offers Connect email): no chip for it.
+  for (const id of ['#dGoogle', '#mGoogle']) { const el = $(id); if (el) { el.hidden = true; el.title = $('#googleNote').textContent; } }
   chip('#dSync', '#syncLine', '#dotSync', '#syncNote', $('#syncNote').textContent);
-  if ($('#dRunNote')) { $('#dRunNote').textContent = $('#runNote').textContent; $('#dDotRun').className = $('#dotRun').className; }
-  chip('#mGoogle', '#googleLine', '#dotGoogle', '#googleNote', g ? (overview?.last_inbox ? `Email ${ago(overview.last_inbox)}` : 'Email on') : 'Email off');
+  const allFine = [$('#runNote').textContent, g ? $('#googleNote').textContent : '', $('#syncLine').hidden ? '' : $('#syncNote').textContent].filter(Boolean).join(' · ');
+  if ($('#dRunNote')) { $('#dRunNote').textContent = $('#runNote').textContent; $('#dDotRun').className = $('#dotRun').className; $('#dRun').title = `${allFine}. Press for what the search found.`; }
   chip('#mSync', '#syncLine', '#dotSync', '#syncNote', $('#syncNote').textContent);
-  if ($('#mStatus')) $('#mStatus').title = 'What the search found';
+  if ($('#mStatus')) $('#mStatus').title = `${allFine}. Press for what the search found.`;
   const lim = side.claude_limited_until && new Date(side.claude_limited_until) > new Date();
   $('#limitLine').hidden = !lim && !side.deferred;
   $('#limitNote').textContent = lim ? `Claude limit until ${new Date(side.claude_limited_until).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : `${side.deferred} batch${side.deferred === 1 ? '' : 'es'} waiting for tonight`;

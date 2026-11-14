@@ -43,19 +43,19 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await until(async () => page.evaluate(() => [...document.querySelectorAll('.modal .btn')].some(b => /^Never show /.test(b.textContent))), 15), 'Queue: Not interested offers never to show the company again');
   await page.click('.modal .btn.ghost');
 
-  // Headers over the Queue's lists sort them: by company A to Z, then turned round; and a table
-  // that was built without sorting (the usage table in Settings) sorts by its headers too.
-  const listCos = () => page.evaluate(() => { const h = document.querySelector('.list-head'); return h ? [...h.parentElement.children].filter(c => c.matches('.jrow[data-job-row]')).map(r => r.dataset.lco) : null; });
+  // One way to sort the Queue's lists: the Sort by menu, by company A to Z too (the row of headers
+  // that also sorted them is gone); another choice lets go of it.
+  const listCos = () => page.evaluate(() => { const first = document.querySelector('.page .jrow[data-job-row]'); return first ? [...first.parentElement.children].filter(c => c.matches('.jrow[data-job-row]')).map(r => r.dataset.lco) : null; });
   const cos = await listCos();
   if (cos && cos.length > 1) {
     const az = [...cos].sort();
-    await page.click('.list-head [data-lsort=co]');
-    check(JSON.stringify(await listCos()) === JSON.stringify(az) && await page.evaluate(() => /▲/.test(document.querySelector('.list-head button.on')?.textContent || '')), 'Queue: the Company header sorts the list A to Z');
-    await page.click('.list-head [data-lsort=co]');
-    check(JSON.stringify(await listCos()) === JSON.stringify([...az].reverse()), 'Queue: pressed again, Z to A');
-    await page.click('.list-head [data-lsort=co]');
-    check(await until(async () => page.evaluate(() => !!document.querySelector('.list-head') && !document.querySelector('.list-head button.on')), 15), 'Queue: a third press goes back to the list\'s own order');
-  } else check(false, 'Queue: a list of two or more jobs has headers to sort by');
+    await page.selectOption('[data-queuef=sort]', 'co');
+    check(await until(async () => JSON.stringify(await listCos()) === JSON.stringify(az), 10) && !(await page.$('.list-head [data-lsort]')), 'Queue: Sort by, Company (A to Z) sorts the list, and there is no second row of sort headers');
+    await page.reload(); await page.waitForTimeout(900);
+    check(JSON.stringify(await listCos()) === JSON.stringify(az) && await page.evaluate(() => document.querySelector('[data-queuef=sort]').value === 'co'), 'Queue: the order by company is kept, and the menu says so');
+    await page.selectOption('[data-queuef=sort]', '');
+    check(await until(async () => page.evaluate(() => !localStorage.getItem('jh.listSort')), 10), 'Queue: Recommended order lets go of it');
+  } else check(false, 'Queue: a list of two or more jobs can be sorted');
   await page.evaluate(() => localStorage.removeItem('jh.listSort'));
   await at('overview');
   await page.click('[data-act=queueView][data-view=one]'); await page.waitForTimeout(500);
@@ -302,8 +302,8 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
     check(body.length > 40 && !body.includes("Couldn't load"), `#${h} draws`);
   }
   check((await text('#nav')).replace(/\s+/g, ' ').trim().replace(/ \d+/g, '') === 'Queue Inbox Calendar Me Insights Settings', 'The places are Queue, Inbox, Calendar, Me, Insights, Settings');
-  // The top bar: the search, email and sync each have their own chip, and the theme button sits outside any pop-up.
-  check(await page.evaluate(() => { const bar = document.querySelector('#nav').getBoundingClientRect(); return document.querySelector('#statusPop').hidden && ['#dRun', '#dGoogle', '#dSync', '#dTheme'].every(q => { const r = document.querySelector(q)?.getBoundingClientRect(); return r && r.width > 0 && r.right <= innerWidth && r.left >= bar.right - 1; }) && [...document.querySelectorAll('.dstats > :not([hidden]), #dTheme')].every((el, i, all) => !i || el.getBoundingClientRect().left >= all[i - 1].getBoundingClientRect().right - 1); }), 'The top bar shows search, email, sync and the theme button side by side');
+  // The top bar: the search; email and sync only when they need a look; the theme button outside any pop-up.
+  check(await page.evaluate(() => { const bar = document.querySelector('#nav').getBoundingClientRect(); return document.querySelector('#statusPop').hidden && document.querySelector('#dGoogle').hidden && ['#dRun', '#dSync', '#dTheme'].every(q => { const r = document.querySelector(q)?.getBoundingClientRect(); return r && r.width > 0 && r.right <= innerWidth && r.left >= bar.right - 1; }) && [...document.querySelectorAll('.dstats > :not([hidden]), #dTheme')].every((el, i, all) => !i || el.getBoundingClientRect().left >= all[i - 1].getBoundingClientRect().right - 1); }), 'The top bar shows the search, sync when it needs a look (with its words) and the theme button; email that is fine has no chip');
   { const mode = () => page.evaluate(() => document.documentElement.dataset.theme || 'auto'); const was = await mode(); await page.click('#dTheme'); const one = await mode(); await page.click('#dTheme'); const two = await mode(); await page.click('#dTheme');
     check(new Set([was, one, two]).size === 3 && await mode() === was, 'The top bar theme button steps through Auto, Light and Dark'); }
   const on = async () => `${(await text('#nav a.on')).replace(/\s*\d+\s*$/, '').trim()} / ${(await text('.place-tabs a.on, .pipe-tabs a.on')).replace(/\s*\d+\s*$/, '').trim()}`;

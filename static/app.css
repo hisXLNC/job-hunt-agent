@@ -116,7 +116,7 @@ input[type=text], input[type=search], input[type=email], input[type=url], input[
   width: 100%; border: 1px solid var(--line); background: var(--surface); }
 textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 label.field { display: flex; flex-direction: column; gap: 5px; font-weight: 500; }
-label.field .hint { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+label.field .hint, .field > .hint { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
 .check { display: flex; gap: 8px; align-items: flex-start; }
 .check input[type=checkbox] { margin-top: 3px; flex: none; }
 h3.sub { margin: 6px 0 -4px; font-size: 14px; }
@@ -901,6 +901,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .next-card { gap: 0; }
 .next-card > header { margin-bottom: 6px; }
 .next-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line-2); }
+.next-card > .next-row:first-child { border-top: 0; padding-top: 2px; }
+.next-card > .next-row:last-child { padding-bottom: 2px; }
 .next-row .grow { flex: 1; min-width: 0; }
 .next-n { flex: none; padding: 0 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-family: var(--font-d); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .next-n svg, .auto-line > svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -1846,7 +1848,7 @@ details.kit > summary { cursor: pointer; }
   .dstats > .status-pill > .dot { flex: none; }
   .dchip.warn .dchip-t { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
   /* An amber chip is showing: the search status makes room for it; two, and it's down to its dot. */
-  .dstats:has(.dchip.warn:not([hidden])) > .status-pill { max-width: 120px; }
+  .dstats:has(.dchip.warn:not([hidden])) > .status-pill { max-width: 170px; }
   .dstats:has(#dWarn:not([hidden])):has(#dUp:not([hidden])) > .status-pill > span:last-child { display: none; }
   .dstats:has(#dWarn:not([hidden])):has(#dUp:not([hidden])) .dchip.warn .dchip-t { max-width: 84px; }
 }
@@ -2012,8 +2014,9 @@ body.panel-open .ask-panel { right: 482px; }
 .ask-go svg { stroke-width: 2.2; }
 /* A phone: the button sits above the tabs, and the conversation takes the screen. */
 @media (max-width: 760px) {
-  .ask-fab, .ask-fab:hover { right: 12px; bottom: calc(72px + env(safe-area-inset-bottom)); padding: 0; width: 40px; height: 40px; gap: 0; }
-  .ask-fab span { display: none; }
+  /* The floating button sat on each row's last button (the × of Not interested): on a phone Ask
+     Claude is a button in the top bar instead. */
+  .ask-fab, .ask-fab:hover { display: none; }
   .ask-panel { inset: 0; width: auto; max-width: none; height: auto; border: 0; border-radius: 0; z-index: 70; padding-bottom: env(safe-area-inset-bottom); }
 }
 @media print { .ask-fab, .ask-panel, .ask-sel { display: none !important; } }
@@ -2149,3 +2152,20 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 .before-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
 .before-rows li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); }
 .before-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+
+/* A job nothing has been done with yet: why it fits and the posting first, then how its site takes
+   applications, then the stage as one line (see app-job.js, `early`). */
+.jpane.early:not([hidden]) { display: flex; flex-direction: column; }
+.jpane.early > .job-grid { order: 1; }
+.jpane.early > .ats-tips { order: 2; }
+.jpane.early > .progress-main { order: 3; }
+.progress-main.slim { padding-block: 12px; }
+.progress-main.slim > header, .progress-main.slim .tsteps { display: none; }
+.progress-main.slim .progress-foot { margin: 0; align-items: center; }
+/* A phone's Queue: the sort menu and "Sort and filter" are enough above the list (Shows pay and No
+   red flags are inside Sort and filter too), so the first job isn't two-thirds down the screen. */
+@media (max-width: 640px) {
+  .queue-filters label.check, .pick-keys { display: none; }
+  .queue-filters.inline { margin-top: 2px; }
+  .mbtn.mask svg { width: 20px; height: 20px; }
+}

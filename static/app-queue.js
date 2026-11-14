@@ -2,6 +2,16 @@
 'use strict';
 
 // ---- Overview ----
+/** The Queue's heading on one of its tabs: what that tab holds, not the whole Queue's count. */
+function tabHeading(step, n) {
+  const s = n === 1 ? '' : 's';
+  if (step === 'pick') return n ? `${n} new match${n === 1 ? '' : 'es'} to pick from` : 'No new matches to pick from';
+  if (step === 'approve') return n ? `${n} application${s} to check and approve` : 'Nothing to approve';
+  if (step === 'submit') return n ? `${n} approved application${s} to send` : 'Nothing to send';
+  if (step === 'waiting') return n ? `${n} sent, waiting for a reply` : 'Nothing waiting for a reply';
+  if (step === 'interviews') return n ? `${n} interview${s} and offer${s}` : 'No interviews yet';
+  return n ? `${n} here` : 'Nothing here';
+}
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
@@ -261,8 +271,8 @@ async function showOverview(arg) {
     // What's furthest along first, as in the one-by-one order; a step you chose shows all of itself.
     const order = step ? [step] : ['interviews', 'approve', 'submit', 'pick', 'waiting'].filter(s => all.some(x => x.step === s));
     const qopt = (v, n) => `<option value="${v}">${n}</option>`;
-    const qbar = all.filter(x => x.j).length > 1 ? `<div class="queue-filters" data-queuebox>
-        <label class="small" title="Recommended: each list in the order that suits it. Pick and Ready to approve: the best to apply to now first (fit, less for each day the posting has been up, for red flags and for pay under your minimum). Submit: the quickest to send first.">Sort by <select data-queuef="sort">${qopt('', 'Recommended order')}${qopt('now', 'Best to apply to now')}${qopt('fit', 'Best fit')}${qopt('new', 'Newest')}${qopt('pay', 'Highest pay')}</select></label>
+    const qbar = (step ? all.filter(x => x.step === step) : all).filter(x => x.j).length > 1 ? `<div class="queue-filters" data-queuebox>
+        <label class="small" title="Recommended: each list in the order that suits it. Pick and Ready to approve: the best to apply to now first (fit, less for each day the posting has been up, for red flags and for pay under your minimum). Submit: the quickest to send first.">Sort by <select data-queuef="sort">${qopt('', 'Recommended order')}${qopt('now', 'Best to apply to now')}${qopt('fit', 'Best fit')}${qopt('new', 'Newest')}${qopt('pay', 'Highest pay')}${qopt('co', 'Company (A to Z)')}${qopt('role', 'Role (A to Z)')}${qopt('loc', 'Place (A to Z)')}</select></label>
         <label class="check small"><input type="checkbox" data-queuef="pay"> Shows pay</label>
         <label class="check small"><input type="checkbox" data-queuef="flags"> No red flags</label>
         <span class="muted small" data-queuecount></span></div>` : '';
@@ -282,7 +292,7 @@ async function showOverview(arg) {
   page(`<div class="head">
       <div class="grow">
         <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${first ? ` · ${greeting()}, ${esc(first)}` : ''}</div>
-        <h1>${needsYou ? `${needsYou} waiting for you` : queueCount(all) ? `${queueCount(all)} new match${queueCount(all) === 1 ? '' : 'es'} to pick from` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
+        <h1>${step ? tabHeading(step, all.filter(x => x.step === step).length) : needsYou ? `${needsYou} waiting for you` : queueCount(all) ? `${queueCount(all)} new match${queueCount(all) === 1 ? '' : 'es'} to pick from` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
         ${neededDone ? `<p class="week-line"><span class="week-label">This week</span>
           <a href="#results" title="Applications sent this week${o.weekly_goal ? `, against your goal of ${o.weekly_goal}` : ''}${delta ? ` (${delta > 0 ? delta + ' more' : -delta + ' fewer'} than last week)` : ''}"><b>${o.this_week}</b>${o.weekly_goal ? ` of ${o.weekly_goal}` : ''} applied${delta ? ` <span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span>` : ''}</a>
           <a href="#calendar" title="Interviews coming up"><b>${o.interviews.length}</b> interview${o.interviews.length === 1 ? '' : 's'}</a>

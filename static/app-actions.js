@@ -344,6 +344,7 @@ async function act(el) {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/offer`, { method: 'POST', body: { offer: $('#offerText').value } }); setTimeout(route, 300); }, 'Weighing the offer…');
   }
   if (a === 'palette') return jobPalette();
+  if (a === 'askOpen') return askOpen();
   if (a === 'pickClear' || a === 'approveClear') {
     const box = el.closest('[data-pickbox], [data-approvebox]');
     box.querySelectorAll('[data-pick]:checked, [data-appr]:checked').forEach(c => { c.checked = false; });

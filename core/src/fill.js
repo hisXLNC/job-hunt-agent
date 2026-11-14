@@ -806,7 +806,7 @@
   // for you)? Returns the choice, or '' when there's no answer in half a minute.
   async function chooseFrom(label, names, want) {
     if (!EXT || names.length < 2) return '';
-    const field = { key: 'pick0', type: 'select', label: `${String(label).slice(0, 160)} (the answer meant: ${String(want).slice(0, 80)}; choose the closest of the options, or Other / Not listed when none fits)`, required: true, options: names };
+    const field = { key: 'pick0', type: 'select', label: `${String(label).slice(0, 160)} (the answer meant: ${String(want).slice(0, 80)}; choose the closest of the options, or Other / Not listed when none fits. For a job title, match the kind of work, the role, not the subject it was about: "Business Systems Analyst, Tax System" is a business systems analyst, not a tax collector)`, required: true, options: names };
     const r = await rpc('/ext/fill/start', { url: location.href, title: document.title, fields: [field] });
     if (!r.ok || !r.v || !r.v.ticket) return '';
     for (let i = 0; i < 25; i++) {
@@ -835,7 +835,23 @@
     const want = clean(String(v));
     if (!want) return null;
     const rows = () => [...document.querySelectorAll(SUGGESTED)].filter(o => !own(o) && shown(o) && clean(o.textContent).length > 0 && clean(o.textContent).length < 160);
-    const ask = async q => { typeInto(el, q); let list = []; for (let i = 0; i < 8; i++) { await wait(250); list = rows(); if (list.length && i >= 2) break; } return list; };
+    // A site's suggestions arrive a moment after the typing (Job Bank asks its server), and until
+    // then the last query's are still on show: taken for this query's, every shorter form of a
+    // title "found" the same wrong list. So the box is emptied first, and the list is waited for
+    // until it differs from the last one (or has stayed the same for a few seconds).
+    let lastSeen = '';
+    const ask = async q => {
+      typeInto(el, ''); await wait(200);
+      typeInto(el, q);
+      let list = [], sig = '';
+      for (let i = 0; i < 14; i++) {
+        await wait(250);
+        list = rows(); sig = list.map(o => clean(o.textContent)).join('|');
+        if (list.length && i >= 2 && (sig !== lastSeen || i >= 9)) break;
+      }
+      lastSeen = sig;
+      return list;
+    };
     const parts = want.split(/\s*(?:[,&/|–—]|\s-\s|\band\b)\s*/i).map(clean).filter(p => p.length > 2);
     const plain = t => t.replace(/^(senior|sr\.?|junior|jr\.?|lead|principal|staff|associate|assistant|chief|head of)\s+/i, '');
     const queries = [...new Set([want, ...parts, ...parts.map(plain), plain(want)])].slice(0, 6);

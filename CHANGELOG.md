@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.79.0] - 2026-11-14
+
+A tidier Queue, and Job Bank's job title.
+
+### Changes
+
+- The browser extension waits for Job Bank's own suggestions for each form of your job title before choosing (it chose from the first, wrong list).
+- The Queue has one way to sort: the Sort by menu, now with company, role and place. The second row of sort headers is gone.
+- The Queue's heading follows the tab you're on, and rows no longer say No pay stated or carry a View button.
+- The top bar shows email and sync only when they need a look, in words.
+- On a phone, Ask Claude is in the top bar (it covered the Not interested button), and the first job sits higher.
+- A job you haven't acted on opens with why it fits and the posting first.
+
 ## [2.78.0] - 2026-11-14
 
 A lighter backend.
@@ -2213,6 +2226,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.79.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.79.0
 [2.78.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.78.0
 [2.77.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.77.0
 [2.76.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.76.0

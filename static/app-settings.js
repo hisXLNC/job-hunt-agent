@@ -358,10 +358,10 @@ async function settingsCards(tab, sub, host, given) {
         <div class="field">Daily search<div class="row">${scheduleMenu(overview?.side?.paused, false)}</div><span class="hint">${overview?.side?.paused ? esc(pausedWords(overview.side.paused)) + '.' : 'On. Pause it for a while, or turn it off.'}</span></div>
       </div></section>
       <!--@tailoring--><section class="card"><header><h2>Tailoring</h2></header><div class="form">
-        <label class="field">Tailor by itself<select name="auto_tailor_mode">${[['off', 'No: I pick which roles to tailor'], ['strong', 'Only strong fits (85 or better), so they\'re ready to approve'], ['all', 'Every role that clears my fit score']].map(([v, n]) => `<option value="${v}" ${(p.auto_tailor ? 'all' : p.auto_tailor_min > 0 ? 'strong' : 'off') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Strong fits: after each search the best new matches from the last two weeks are tailored without waiting for you, at most as many as Most applications tailored per search. They use your Claude plan as any tailoring does.</span></label>
+        <label class="field" style="grid-column:1/-1">Tailor by itself<select name="auto_tailor_mode">${[['off', 'No: I pick which roles to tailor'], ['strong', 'Only strong fits (85 or better), so they\'re ready to approve'], ['all', 'Every role that clears my fit score']].map(([v, n]) => `<option value="${v}" ${(p.auto_tailor ? 'all' : p.auto_tailor_min > 0 ? 'strong' : 'off') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">Strong fits: after each search the best new matches from the last two weeks are tailored without waiting for you, at most as many as Most applications tailored per search. They use your Claude plan as any tailoring does.</span></label>
         <label class="field">Most applications tailored per search<input type="number" min="1" max="50" name="max_per_run" value="${p.max_per_run}"><span class="hint">When Job Hunt tailors by itself: the most it does after one search, best fits first.</span></label>
         <label class="field">Fit score needed to tailor<span class="range-row"><input type="range" min="0" max="100" step="1" value="${p.score_threshold}" data-range-for="score_threshold" aria-label="Fit score needed to tailor"><input type="number" min="0" max="100" name="score_threshold" value="${p.score_threshold}"></span><span class="hint">0–100. Roles below it are skipped.</span></label>
-        <div class="field">A company you've applied to before<select data-act="repeatMode">${[['light', 'Light touch: the same headline, at most 4 paragraphs changed (recommended)'], ['same', 'The same CV as before, with a new cover letter'], ['usual', 'Tailor as usual']].map(([v, n]) => `<option value="${v}" ${(st.repeat_mode || 'light') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">They keep every CV you send on file, side by side. A different headline or a different story for the same achievement is what stands out.</span></div>
+        <div class="field" style="grid-column:1/-1">A company you've applied to before<select data-act="repeatMode">${[['light', 'Light touch: the same headline, at most 4 paragraphs changed (recommended)'], ['same', 'The same CV as before, with a new cover letter'], ['usual', 'Tailor as usual']].map(([v, n]) => `<option value="${v}" ${(st.repeat_mode || 'light') === v ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">They keep every CV you send on file, side by side. A different headline or a different story for the same achievement is what stands out.</span></div>
       </div></section>
       <!--@limits--><section class="card"><header><h2>Scoring</h2></header><div class="form">
         <label class="field">Most new postings scored per search<input type="number" min="5" max="200" name="max_scored_per_run" value="${p.max_scored_per_run}"><span class="hint">Spares your Claude usage; the rest are scored next time. With more than 40 matches waiting to be picked, a search by itself scores half this many, newest first.</span></label>
@@ -1078,7 +1078,7 @@ function applyQueueView(restore) {
     if (!r.parentElement.classList.contains('pick-list')) parents.add(r.parentElement);
   }
   // Each group in the order chosen; its heading, buttons and bar stay where they are.
-  if (v.sort) for (const p of parents) {
+  if (v.sort && !TEXT_SORTS.includes(v.sort)) for (const p of parents) {
     const mine = [...p.children].filter(c => c.matches('.jrow[data-job-row]'));
     const after = mine[mine.length - 1].nextSibling;
     mine.sort((a, b) => Number(b.dataset['q' + v.sort]) - Number(a.dataset['q' + v.sort])).forEach(r => p.insertBefore(r, after));
@@ -1089,7 +1089,7 @@ function applyQueueView(restore) {
   if (!restore) document.querySelectorAll('[data-pickbox]').forEach(pb => {
     const set = (k, val) => { const el = pb.querySelector(`[data-pickf="${k}"]`); if (el) el.type === 'checkbox' ? el.checked = val : el.value = val; };
     set('pay', !!v.pay); set('flags', !!v.flags);
-    if (v.sort) set('sort', v.sort);
+    if (v.sort && !TEXT_SORTS.includes(v.sort)) set('sort', v.sort);
     applyPickView(pb);
   });
   if (typeof applyListSort === 'function') applyListSort();
