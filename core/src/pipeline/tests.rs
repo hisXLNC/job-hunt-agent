@@ -880,6 +880,17 @@ fn how_filling_went_is_tallied_by_site() {
 }
 
 #[test]
+fn a_search_leaves_a_log_of_its_steps() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    let log = s.agent.search_log();
+    let lines: Vec<&str> = log["trail"].as_array().unwrap().iter().filter_map(|l| l["m"].as_str()).collect();
+    assert!(lines.iter().any(|l| l.starts_with("search started")) && lines.iter().any(|l| l.starts_with("sorted 1 postings in")) && lines.iter().any(|l| l.starts_with("search finished: 1 found")), "{lines:?}");
+    assert!(log["trail"][0]["t"].as_str().unwrap().contains('T'), "each line has its time");
+    assert!(log["progress"]["moved"].as_i64().unwrap() > 0 && log["quiet_seconds"].as_i64().unwrap() < 60);
+}
+
+#[test]
 fn a_cv_is_built_from_a_conversation() {
     let s = setup();
     let wait = || {

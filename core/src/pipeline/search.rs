@@ -272,7 +272,8 @@ impl Agent {
         }
         let _unhold = Unhold(&self.hold);
         let held = self.hold.load(std::sync::atomic::Ordering::SeqCst);
-        *self.progress.lock().unwrap() = Progress { paused: held, ..Progress::default() };
+        *self.progress.lock().unwrap() = Progress { paused: held, moved: chrono::Utc::now().timestamp(), ..Progress::default() };
+        self.trace(&format!("search started{}{}", only.map(|o| format!(" ({o} only)")).unwrap_or_default(), if postings.is_some() { " (postings handed in)" } else { "" }));
         let profile = self.profile();
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
@@ -322,7 +323,7 @@ impl Agent {
                             return crate::sources::Fetched::default();
                         }
                         let send = |batch: &[Posting]| { let _ = tx.send(batch.to_vec()); };
-                        crate::sources::fetch_streaming(profile_ref, &keys, only, &|i, n, name| { self.step("Searching job sites", i, n, name); !self.stopping() }, &send)
+                        crate::sources::fetch_noting(profile_ref, &keys, only, &|i, n, name| { self.step("Searching job sites", i, n, name); !self.stopping() }, &send, &|note| self.trace(note))
                     });
                     // What the last search left: first, while the sources are being searched.
                     if only.is_none() {
@@ -340,8 +341,10 @@ impl Agent {
                         }
                         self.take_in(batch, &mut run, &mut report, &ctx)?;
                     }
+                    self.trace("the job sites have all answered; finishing what they found");
                     Ok(fetcher.join().unwrap_or_default())
                 })?;
+                self.trace(&format!("job sites done: {} sources, {} problems", fetched.by_source.len(), fetched.problems.len()));
                 report.source_problems = fetched.problems;
                 report.by_source = fetched.by_source.iter().map(|(n, k, p, e)| json!({ "name": n, "searches": k, "found": p, "failed": e })).collect();
                 report.broken_boards = fetched.failed.iter().map(|(s, n)| json!({ "source": s, "name": n })).collect();
@@ -397,6 +400,7 @@ impl Agent {
             report.deferred += near.len(); // over the batch size: next search
         }
         // Held for the next search, which looks at them first.
+        self.trace("choosing what to tailor");
         self.hold(near);
         let found_here = std::mem::take(&mut run.found_here);
         let known_before = std::mem::take(&mut run.known_before);
@@ -425,6 +429,7 @@ impl Agent {
             self.tally(&report);
         }
         self.step("Tailoring applications", 1, 1, "done");
+        self.trace(&format!("search finished: {} found, {} new, {} scored, {} tailored, {} errors", report.found, report.new, report.scored, report.tailored, report.errors.len()));
         if self.stopping() {
             report.errors.push("Stopped: you stopped this search; what it found so far is kept".into());
         }
@@ -598,6 +603,14 @@ impl Agent {
             return Ok(());
         }
         let profile = ctx.profile;
+        // A big batch takes a while to sort against what's known (each posting is looked up): said,
+        // so the last source's name doesn't sit there as if it were stuck.
+        let (began, size) = (std::time::Instant::now(), postings.len());
+        if size >= 40 {
+            self.also(&format!("sorting {size} postings against what you've already seen"));
+        } else {
+            self.trace(&format!("taking in {size} postings"));
+        }
         run.all_ids.extend(postings.iter().map(|p| p.id()));
         if ctx.keep_found {
             for p in &postings {
@@ -666,7 +679,15 @@ impl Agent {
             }
         }
         self.tally(report);
-        self.score_these(candidates, run, report, ctx)
+        self.trace(&format!("sorted {size} postings in {:.1}s: {} to score, {} new so far, {} near-miss titles waiting", began.elapsed().as_secs_f64(), candidates.len(), report.new, run.near.len()));
+        if size >= 40 {
+            self.also("");
+        }
+        let began = std::time::Instant::now();
+        let r = self.score_these(candidates, run, report, ctx);
+        self.trace(&format!("that batch done in {:.1}s ({} scored so far){}", began.elapsed().as_secs_f64(), report.scored, r.as_ref().err().map(|e| format!("; stopped by: {}", e.0)).unwrap_or_default()));
+        self.also("");
+        r
     }
 
     /// Score new postings that passed the filters, as many as this search still has room for (the

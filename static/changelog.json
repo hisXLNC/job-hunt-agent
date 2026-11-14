@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.71.1",
+    "date": "2026-11-14",
+    "title": "A log for searches that seem stuck",
+    "changes": [
+      "A search now says what it is doing in the quiet steps too (sorting what the sites returned against what you have already seen), so the last site's name no longer sits there as if it were stuck. When nothing has moved for a minute and a half the search card says so, and Copy search log (on the card and in the search menu) copies every step with the time it took, to send to Claude."
+    ]
+  },
+  {
     "version": "2.71.0",
     "date": "2026-11-14",
     "title": "Build your CV by talking to Claude",

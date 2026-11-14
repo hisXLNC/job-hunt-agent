@@ -766,6 +766,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             // Postings that mention a certification you listed, to score again now that Job Hunt knows.
             ["api", "certs", "rescore"] => return Ok(Resp::json(&json!({ "postings": agent.cert_postings().len(), "running": agent.is_running("rescore") }))),
+            // The search, when it seems stuck: where it is, how long it's been quiet, and its log.
+            ["api", "search-log"] => return Ok(Resp::json(&agent.search_log())),
             // The interview that builds a CV from a conversation.
             ["api", "cv-chat"] => return Ok(Resp::json(&agent.cv_chat_state())),
             // Claude in your browser: is Claude Code here, is a test running, and how the last one went.

@@ -374,7 +374,14 @@ pub struct Progress {
     /// Scoring the postings that were waiting (Score them all now), not a search.
     #[serde(default)]
     pub scoring: bool,
+    /// When anything here last changed (seconds since 1970): a search that has gone quiet shows.
+    #[serde(default)]
+    pub moved: i64,
 }
+
+/// What searches did, step by step with the time of each, newest last: the last few hundred lines.
+/// Kept beside your data as search-log.json too, so a search that hangs can be read afterwards.
+static TRAIL: once_cell::sync::Lazy<Mutex<std::collections::VecDeque<(String, String)>>> = once_cell::sync::Lazy::new(|| Mutex::new(std::collections::VecDeque::new()));
 
 /// The search's stages and the share of the bar each one fills.
 // Scoring runs alongside the search (see take_in), so searching is most of the bar.
@@ -847,7 +854,10 @@ impl Agent {
     /// What the search is doing alongside its stage (scoring a posting while the sources are still
     /// being searched): shown with the stage.
     fn also(&self, what: &str) {
-        self.progress.lock().unwrap().also = what.to_string();
+        let changed = { let mut p = self.progress.lock().unwrap(); let c = p.also != what; p.also = what.to_string(); if c { p.moved = chrono::Utc::now().timestamp(); } c };
+        if changed && !what.is_empty() {
+            self.trace(&format!("meanwhile: {what}"));
+        }
     }
 
     /// Paused by you: wait here until you resume or stop the search.
@@ -858,10 +868,39 @@ impl Agent {
         }
     }
 
+    /// Write a line in the search log (see TRAIL).
+    pub(crate) fn trace(&self, what: &str) {
+        let lines: Vec<Value> = {
+            let mut t = TRAIL.lock().unwrap();
+            t.push_back((chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true), what.chars().take(300).collect()));
+            while t.len() > 400 {
+                t.pop_front();
+            }
+            t.iter().map(|(at, what)| json!({ "t": at, "m": what })).collect()
+        };
+        if !cfg!(test) {
+            let _ = std::fs::write(self.data.join("search-log.json"), serde_json::to_vec_pretty(&lines).unwrap_or_default());
+        }
+    }
+
+    /// The search as it stands, for when it seems stuck: what the page shows, what's running, how
+    /// long since anything moved, and the log of its steps.
+    pub fn search_log(&self) -> Value {
+        let p = self.progress.lock().unwrap().clone();
+        let quiet = if p.moved > 0 { chrono::Utc::now().timestamp() - p.moved } else { 0 };
+        let trail: Vec<Value> = TRAIL.lock().unwrap().iter().map(|(at, what)| json!({ "t": at, "m": what })).collect();
+        json!({ "at": crate::util::now(), "version": env!("CARGO_PKG_VERSION"), "running": self.running(), "quiet_seconds": quiet, "progress": p,
+            "paused": self.hold.load(std::sync::atomic::Ordering::SeqCst), "stopping": self.stopping(), "limited": self.limited(), "trail": trail })
+    }
+
     pub(crate) fn step(&self, stage: &str, done: usize, total: usize, detail: &str) {
         let (from, to) = STAGES.iter().find(|s| s.0 == stage).map(|s| (s.1, s.2)).unwrap_or((0, 100));
         let share = if total > 0 { done.min(total) as f64 / total as f64 } else { 0.0 };
+        if { let p = self.progress.lock().unwrap(); p.stage != stage || p.detail != detail } {
+            self.trace(&if total > 0 { format!("{stage} {} of {total}: {detail}", (done + 1).min(total)) } else { format!("{stage}: {detail}") });
+        }
         let mut p = self.progress.lock().unwrap();
+        p.moved = chrono::Utc::now().timestamp();
         p.stage = stage.into();
         p.done = done;
         p.total = total;
@@ -878,6 +917,9 @@ impl Agent {
 
     fn tally(&self, r: &Report) {
         let mut p = self.progress.lock().unwrap();
+        if (p.found, p.new, p.scored, p.tailored) != (r.found, r.new, r.scored, r.tailored) {
+            p.moved = chrono::Utc::now().timestamp();
+        }
         (p.found, p.new, p.scored, p.tailored) = (r.found, r.new, r.scored, r.tailored);
     }
 
@@ -1507,6 +1549,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         if complete.is_empty() {
             return Ok(0);
         }
+        self.trace(&format!("checking which waiting postings are gone from {} company boards", complete.len()));
         let prefixes: Vec<String> = crate::sources::boards(profile).iter().map(|(s, n)| crate::sources::board_prefix(s, n)).collect();
         let mut waiting = vec![];
         for s in ["queued", "ready", "approved", "saved"] {

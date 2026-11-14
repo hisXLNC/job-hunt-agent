@@ -54,6 +54,14 @@ async function act(el) {
       if (card && overview?.progress) card.outerHTML = progressHtml(overview.progress);
     });
   }
+  if (a === 'searchLog') {
+    try {
+      const text = 'Job Hunt search log ' + JSON.stringify(await api('/api/search-log'), null, 1);
+      try { await navigator.clipboard.writeText(text); } catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+      toast('Copied. Paste it to Claude and say what you saw.');
+    } catch (e) { toast(e.message, true); }
+    return;
+  }
   if (a === 'searchStop') {
     return busy(async () => {
       const r = await api('/api/search/stop', { method: 'POST' });

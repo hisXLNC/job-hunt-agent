@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.71.1] - 2026-11-14
+
+A log for searches that seem stuck.
+
+### Changes
+
+- A search now says what it is doing in the quiet steps too (sorting what the sites returned against what you have already seen), so the last site's name no longer sits there as if it were stuck. When nothing has moved for a minute and a half the search card says so, and Copy search log (on the card and in the search menu) copies every step with the time it took, to send to Claude.
+
 ## [2.71.0] - 2026-11-14
 
 Build your CV by talking to Claude.
@@ -2092,6 +2100,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.71.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.1
 [2.71.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.0
 [2.70.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.70.0
 [2.69.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.69.0

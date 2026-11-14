@@ -1865,6 +1865,11 @@ pub fn fetch_only(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn Fn
 /// fetch_only, handing each request's postings to `on_batch` as soon as they're in (new to this
 /// search only), so they can be scored while the rest are searched.
 pub fn fetch_streaming(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn Fn(usize, usize, &str) -> bool, on_batch: &dyn Fn(&[Posting])) -> Fetched {
+    fetch_noting(p, keys, only, on_step, on_batch, &|_| {})
+}
+
+/// The same, with a line for each search that was slow or failed (`on_note`), for the search log.
+pub fn fetch_noting(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn Fn(usize, usize, &str) -> bool, on_batch: &dyn Fn(&[Posting]), on_note: &dyn Fn(&str)) -> Fetched {
     type Call<'a> = Box<dyn Fn() -> Result<(Vec<Posting>, bool), String> + 'a>;
     let c = http();
     // (what's being searched, the kind of source, the company board if it is one, the request)
@@ -1995,7 +2000,12 @@ pub fn fetch_streaming(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &d
         if !on_step(i, total, &name) {
             break;
         }
+        let began = std::time::Instant::now();
         let res = call();
+        // One that took long, or failed, is worth a line in the search log (the caller writes it).
+        if began.elapsed().as_secs() >= 8 || res.is_err() {
+            on_note(&format!("{name}: {} after {:.1}s", match &res { Ok((l, _)) => format!("{} postings", l.len()), Err(e) => format!("failed ({})", e.chars().take(120).collect::<String>()) }, began.elapsed().as_secs_f64()));
+        }
         if !by_source.iter().any(|t| t.0 == kind) {
             by_source.push((kind.clone(), 0, 0, 0));
         }

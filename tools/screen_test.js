@@ -428,6 +428,9 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.waitForSelector('#chromeCard');
   await page.waitForFunction(() => !/Loading/.test(document.querySelector('#chromeCard').textContent), null, { timeout: 8000 }).catch(() => {});
   check(/Claude extension/.test(await page.textContent('#chromeCard')) && await page.locator('#chromeCard [data-act=chromeTest]').count() === 1, 'Settings explains Claude in the browser and offers a test');
+  // A search that seems stuck: its log can be read (and copied from the progress card).
+  check(await page.evaluate(async () => { const l = await api('/api/search-log'); return Array.isArray(l.trail) && l.trail.some(x => /search (started|finished)/.test(x.m)) && 'quiet_seconds' in l; }), 'The search keeps a log of its steps');
+  check(await page.evaluate(() => /Copy search log/.test(progressHtml({ stage: 'Searching job sites', done: 119, total: 120, percent: 69, detail: 'Adzuna', found: 1, new: 0, scored: 0, tailored: 0, moved: Date.now() / 1000 - 400 })) && /Nothing has moved for 7 minutes/.test(progressHtml({ stage: 'x', percent: 1, moved: Date.now() / 1000 - 400 }))), 'A search that has gone quiet says so and offers its log');
   // Insights opens with what to fix first.
   await page.goto(`${base}/#results`);
   await page.waitForSelector('#fixesCard .fixes', { timeout: 10000 }).catch(() => {});

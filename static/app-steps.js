@@ -328,6 +328,7 @@ function searchCtl(pr) {
       <div class="row">
         <button class="btn sm${pr.paused ? ' primary' : ''}" data-act="searchHold" data-sv="hold" data-on="${pr.paused ? '0' : '1'}">${pr.paused ? 'Resume' : 'Pause'}</button>
         <button class="btn ghost danger sm" data-act="searchStop" title="Ends it after the step it's on; what it found or scored so far is kept">Stop</button>
+        <button class="btn ghost sm" type="button" data-act="searchLog" title="Copies what this search did, step by step with the time each took, to paste to Claude when it seems stuck">Copy log</button>
       </div>
     </div></details>`;
 }
@@ -357,6 +358,13 @@ function updateSearchCtl() {
   }
 }
 
+/** A search that has gone quiet: how long nothing has moved, and its log to copy. */
+function quietNote(pr) {
+  const quiet = pr.moved && !pr.paused ? Math.round(Date.now() / 1000 - pr.moved) : 0;
+  const log = '<button class="btn ghost sm" type="button" data-act="searchLog" title="Copies what this search did, step by step with the time each took, to paste to Claude when it seems stuck">Copy search log</button>';
+  if (quiet < 90) return `<div class="row quiet-row">${log}</div>`;
+  return `<div class="row quiet-row warn"><span class="warn-text small"><b>Nothing has moved for ${quiet < 120 ? `${quiet} seconds` : `${Math.round(quiet / 60)} minutes`}.</b> ${pr.also ? 'It may still be working on the step above.' : 'A site may be slow to answer, or the search may be stuck.'} You can wait, press Stop (what it found is kept), or copy the log and send it to Claude.</span>${log}</div>`;
+}
 function progressHtml(pr) {
   if (!pr) return '';
   const count = pr.total ? ` ${Math.min(pr.done + 1, pr.total)} of ${pr.total}` : '';
@@ -364,6 +372,7 @@ function progressHtml(pr) {
     <header><h2>${pr.paused ? 'Paused: ' : ''}${esc(pr.stage || 'Starting the search')}${count}</h2><b class="pct">${pr.percent}%</b></header>
     <div class="pbar${pr.paused ? ' paused' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pr.percent}"><i style="width:${pr.percent}%"></i></div>
     <p class="muted small">${pr.paused ? 'Everything found so far is kept. Resume carries on from this step.' : esc(pr.detail || '')}${!pr.paused && pr.also ? `<br><b>Meanwhile:</b> ${esc(pr.also)}` : ''}</p>
+    ${quietNote(pr)}
     ${pr.paused ? `<div class="row"><button class="btn primary sm" data-act="searchHold" data-on="0">${pr.scoring ? 'Resume scoring' : 'Resume search'}</button><button class="btn ghost danger sm" data-act="searchStop">Stop</button></div>` : ''}
     <div class="facts small"><span><b>${pr.found}</b> postings found</span><span><b>${pr.new}</b> new</span><span><b>${pr.scored}</b> scored</span><span><b>${pr.tailored}</b> tailored</span></div>
   </section>`;

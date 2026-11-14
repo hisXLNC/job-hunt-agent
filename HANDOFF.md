@@ -56,6 +56,17 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.71.1: a log for searches that seem stuck.** Report: the Queue sat at "Searching job sites 120 of 120 · Adzuna
+  …" (69%) with 16 new, 3 scored. `on_step(i, n)` is called *before* search i, so that label means either the last
+  request is in flight (30 s timeout a page) or, more likely, the sources are done and the main thread is in
+  `take_in` (looking each of ~2,000 postings up, one commit each for reposts) or reading details, with nothing said.
+  Cause not confirmed. Added: `Agent::trace` (static `TRAIL`, last 400 lines with times, also written to
+  `search-log.json` in the data folder), written by `step`/`also` on change and at: search start/finish, each batch
+  sorted (with seconds and counts) and scored, sources done, closed-board check, choosing what to tailor, and any
+  single search that took ≥ 8 s or failed (`sources::fetch_noting`'s `on_note`). `Progress.moved` (last change);
+  `GET /api/search-log` ({running, quiet_seconds, progress, paused, stopping, limited, trail}). The progress card
+  (`quietNote`) and the top-bar menu have Copy search log; after 90 s with nothing moving the card says so. A big
+  batch now shows "Meanwhile: sorting N postings against what you've already seen".
 - **2.71.0: a CV from a conversation.** `static/app-cvchat.js` draws a card wherever a page puts `[data-cv-chat]`
   (the setup's "Add your CV" step in `app-flow.js`, and Me → CVs under the drop box); a MutationObserver mounts it.
   `Llm::cv_interview(history, message, known) -> CvTalk { reply, cv, ready }` (`cv_interview_system()`: one question
