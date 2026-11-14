@@ -257,6 +257,7 @@ async function settingsCards(tab, sub, host, given) {
       <details class="more"><summary class="small muted">What Job Hunt changes in a CV</summary><p class="muted small">Word files are edited in place, so your formatting stays. PDF and text CVs are converted, word for word, into a clean Word copy first. Only your headline, summary, skills and bullet points are ever reworded, and an edit that adds a figure your CV doesn't state is refused.</p></details>
       <label class="drop" id="drop"><input type="file" accept=".docx,.pdf,.txt" multiple data-upload="cv-add" hidden>
         <b>Add CVs</b><span class="muted small">Drop Word, PDF or text files here, or click to choose. Claude reads each one and suggests the job titles to search for.</span></label>
+      <div data-cv-chat></div>
     </section>
     <div id="cvUpdate">${cvUpdateHtml(st.cv_update)}</div>
     ${st.cvs.map(c => `<section class="card" data-cv="${esc(c.track)}" data-drop-cv="${esc(c.track)}" title="Drop a newer file of this CV here to replace it">
@@ -781,7 +782,7 @@ async function showWhatsNew() {
 // slows as it nears the end and stops short of full, so it never says "done" before the work is.
 // Work with real progress (a search) gives its percentage in data-p. A page redrawn while the work
 // runs carries on from where its bar was, rather than starting again.
-const GUESS_SECS = { score: 25, tailor: 100, revise: 40, answers: 45, followup: 25, outreach: 25, offer: 50, chat: 25, prep: 80, thanks: 25, decline: 25, lessons: 45, review: 40,
+const GUESS_SECS = { cvchat: 20, score: 25, tailor: 100, revise: 40, answers: 45, followup: 25, outreach: 25, offer: 50, chat: 25, prep: 80, thanks: 25, decline: 25, lessons: 45, review: 40,
   career: 120, coach: 90, insights: 60, ratings: 45, recruiters: 60, employers: 120 };
 let typicalSecs = {};
 async function loadTypical() {
@@ -1401,7 +1402,7 @@ const CONN_ACT = {
   phoneTest: () => ['Send a test', 'phoneTest'], syncNow: () => ['Sync now', 'syncNow'], backupNow: () => ['Back up now', 'backupNow'],
 };
 let connPoll;
-const USAGE_KIND = { score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', coach: 'Career coach', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', chat: 'Ask Claude (job chat)', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters', salaries: 'Finding salaries' };
+const USAGE_KIND = { cvchat: 'Building a CV by chat', score: 'Scoring postings', tailor: 'Tailoring CVs and letters', email: 'Reading job email', indeed: 'Searching Indeed', titles: 'Checking near-miss titles', alerts: 'Job-alert emails', employers: 'Finding employers', prep: 'Interview prep', revise: 'Your changes to documents', answers: 'Application questions', offer: 'Offers', outreach: 'Messages to contacts', insights: "What's working", thanks: 'Thank-you notes', career: 'Career paths', coach: 'Career coach', postings: 'Reading postings', followup: 'Follow-ups', ratings: 'Company ratings', 'apply-link': "Finding companies' own postings", reasons: 'Shortening fit reasons', chat: 'Ask Claude (job chat)', cv: 'Reading your CVs', fill: 'Filling in forms', recruiters: 'Finding your recruiters', salaries: 'Finding salaries' };
 async function renderUsage() {
   const box = $('#usageCard'); if (!box) return;
   let u;

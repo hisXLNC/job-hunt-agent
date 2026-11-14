@@ -19,6 +19,13 @@ use std::sync::Arc;
 struct DemoLlm;
 
 impl Llm for DemoLlm {
+    fn cv_interview(&self, history: &[(String, String)], message: &str, _known: &str) -> R<jobhunt_core::claude::CvTalk> {
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        let turns = history.iter().filter(|(w, _)| w == "you").count();
+        let cv = if turns >= 1 || message.len() > 60 { "Sam Rivera\nToronto, ON | sam@example.com\n\nSUMMARY\nProgram delivery lead in banking and payments.\n\nEXPERIENCE\nSenior Program Manager, Northbank, Toronto | Mar 2018 - Present\n- Led a payments platform migration across nine teams.\n- Managed three system integrators and the vendor budget.\n\nEDUCATION\nBSc Computer Science, 2011".to_string() } else { String::new() };
+        let reply = match turns { 0 => "Good start. Where do you work now, what's your title, and when did you start?", 1 => "Got it. What's one thing that changed because of your work there? A number helps: how many teams, how much money, how much faster.", _ => "That's a solid CV now. A second job or a certification would make it stronger; or press **Create my CV**." };
+        Ok(jobhunt_core::claude::CvTalk { reply: reply.into(), ready: turns >= 1, cv })
+    }
     fn assist(&self, a: &jobhunt_core::claude::Asked) -> R<jobhunt_core::claude::Assisted> {
         if a.message.contains("fail") {
             return Err(jobhunt_core::Error("Claude is busy just now.".into()));

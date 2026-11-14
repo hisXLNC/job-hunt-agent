@@ -2054,3 +2054,21 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 .fix-list li { counter-increment: fix; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); }
 .fix-list li::before { content: counter(fix); flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12.5px; }
 .fix-list li > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+/* ---- A CV from a conversation ---- */
+.cv-chat-box { margin-top: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.cv-chat-box > summary { cursor: pointer; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; list-style: none; }
+.cv-chat-box > summary::-webkit-details-marker { display: none; }
+.cv-chat-box > summary b::before { content: "+ "; color: var(--accent); }
+.cv-chat-box[open] > summary b::before { content: "− "; }
+.cv-chat-box[open] > summary { border-bottom: 1px solid var(--line-2); }
+.cv-chat-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; }
+.cv-chat-talk { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line-2); }
+.cv-chat-log { height: 340px; flex: none; }
+.cv-chat-talk .ask-send { padding: 10px 12px 12px; border-top: 1px solid var(--line-2); }
+.cv-chat-talk .ask-send textarea { min-height: 56px; }
+.cv-chat-mic { flex: none; width: 40px; min-height: 40px; padding: 0; justify-content: center; border-radius: 12px; }
+.cv-chat-mic.on { background: var(--crit-soft); border-color: var(--crit); color: var(--crit); }
+.cv-chat-cv { padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cv-chat-draft { margin: 0; flex: 1; max-height: 330px; overflow: auto; padding: 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-2); font: 13px/1.5 var(--font-b); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 900px) { .cv-chat-grid { grid-template-columns: 1fr; } .cv-chat-talk { border-right: 0; border-bottom: 1px solid var(--line-2); } .cv-chat-log { height: 280px; } }

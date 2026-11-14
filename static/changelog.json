@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.71.0",
+    "date": "2026-11-14",
+    "title": "Build your CV by talking to Claude",
+    "changes": [
+      "No CV, or yours is out of date? In the first-run setup and on Me, CVs, you can now build one by chat. Claude asks about your work a step at a time (what you do, each job and what came of it, education, skills), writes the CV as you answer, and Create my CV adds it to your CVs as a Word file. It only uses what you tell it. You can paste an old CV or LinkedIn profile to start from, and speak your answers where the microphone button shows."
+    ]
+  },
+  {
     "version": "2.70.0",
     "date": "2026-11-14",
     "title": "Claude fills forms in your browser, and Ask Claude works across the app",

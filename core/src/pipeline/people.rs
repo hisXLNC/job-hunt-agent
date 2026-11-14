@@ -222,6 +222,92 @@ impl Agent {
         Ok(out)
     }
 
+    // --- a CV from a conversation: Claude interviews you and writes it ------------------------------
+
+    /// The CV interview as the page shows it: the conversation ([{who, text}]), the CV as it stands,
+    /// whether it's enough to use, whether an answer is being written, and the last error with the
+    /// message it lost.
+    pub fn cv_chat_state(&self) -> Value {
+        let v: Value = serde_json::from_str(&self.secret("cvchat")).unwrap_or(json!({}));
+        json!({ "chat": v["chat"].as_array().cloned().unwrap_or_default(), "cv": v["cv"].as_str().unwrap_or(""), "ready": v["ready"].as_bool().unwrap_or(false),
+            "busy": self.is_running("cvchat"), "error": self.secret("cvchat:error"), "draft": self.secret("cvchat:draft") })
+    }
+
+    /// Take a message in the CV interview and answer it in the background.
+    pub fn cv_chat_start(self: &Arc<Self>, message: &str) -> R<()> {
+        let message = message.trim().to_string();
+        if message.is_empty() {
+            return err("Write a message first.");
+        }
+        let Some(guard) = self.claim_owned("cvchat") else { return err("Claude is still answering the last message.") };
+        let mut v: Value = serde_json::from_str(&self.secret("cvchat")).unwrap_or(json!({}));
+        let mut chat = v["chat"].as_array().cloned().unwrap_or_default();
+        let history: Vec<(String, String)> = chat.iter().rev().take(60).rev()
+            .map(|m| (m["who"].as_str().unwrap_or("you").to_string(), m["text"].as_str().unwrap_or("").to_string())).collect();
+        chat.push(json!({ "who": "you", "text": message, "at": now() }));
+        v["chat"] = json!(chat);
+        self.db().set("cvchat", &v.to_string())?;
+        self.db().set("cvchat:error", "")?;
+        self.db().set("cvchat:draft", "")?;
+        let a = self.clone();
+        std::thread::spawn(move || {
+            let _g = guard;
+            // What Job Hunt has already, so it isn't asked for again.
+            let p = a.profile();
+            let mut known = vec![];
+            if !p.name.trim().is_empty() { known.push(format!("Name: {}", p.name.trim())); }
+            if !p.email.trim().is_empty() { known.push(format!("Email: {}", p.email.trim())); }
+            if !p.locations.is_empty() { known.push(format!("Looks for work in: {}", p.locations.join("; "))); }
+            let certs = p.cert_lines();
+            if !certs.is_empty() { known.push(certs.trim().to_string()); }
+            if !p.stories.trim().is_empty() { known.push(format!("Stories they wrote down:\n{}", p.stories.trim())); }
+            let known = if known.is_empty() { "Nothing yet.".to_string() } else { known.join("\n") };
+            let mut v: Value = serde_json::from_str(&a.secret("cvchat")).unwrap_or(json!({}));
+            let mut chat = v["chat"].as_array().cloned().unwrap_or_default();
+            match a.llm().cv_interview(&history, &message, &known) {
+                Ok(t) => {
+                    chat.push(json!({ "who": "claude", "text": t.reply, "at": now() }));
+                    v["chat"] = json!(chat);
+                    // A turn that comes back without the CV keeps the one before it.
+                    if !t.cv.trim().is_empty() {
+                        v["cv"] = json!(t.cv.trim());
+                    }
+                    v["ready"] = json!(t.ready && !v["cv"].as_str().unwrap_or("").is_empty());
+                    let _ = a.db().set("cvchat", &v.to_string());
+                }
+                Err(e) => {
+                    if chat.last().is_some_and(|m| m["who"] == "you") {
+                        chat.pop();
+                    }
+                    v["chat"] = json!(chat);
+                    let _ = a.db().set("cvchat", &v.to_string());
+                    let _ = a.db().set("cvchat:error", &e.0);
+                    let _ = a.db().set("cvchat:draft", &message);
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// Make the CV from the interview one of your CVs, laid out as a Word file like any text CV you
+    /// add. The conversation is kept, so you can carry on and make a better one.
+    pub fn cv_chat_create(&self) -> R<crate::profile::Track> {
+        let v: Value = serde_json::from_str(&self.secret("cvchat")).unwrap_or(json!({}));
+        let cv = v["cv"].as_str().unwrap_or("").trim().to_string();
+        if cv.lines().count() < 4 || cv.len() < 200 {
+            return err("There isn't enough for a CV yet. Tell Claude about a job you've had or what you studied first.");
+        }
+        let name = cv.lines().next().unwrap_or("").trim().chars().filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-').take(40).collect::<String>();
+        let file = if name.trim().is_empty() { "CV.txt".to_string() } else { format!("{} CV.txt", name.trim()) };
+        self.add_cv(&file, cv.as_bytes(), true)
+    }
+
+    pub fn cv_chat_clear(&self) -> R<()> {
+        self.db().set("cvchat", "")?;
+        self.db().set("cvchat:error", "")?;
+        self.db().set("cvchat:draft", "")
+    }
+
     // --- the assistant: one conversation, wherever you are in Job Hunt -----------------------------
 
     /// The conversation with the assistant: [{who: "you"|"claude", text, at, about}], oldest first.

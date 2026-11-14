@@ -880,6 +880,44 @@ fn how_filling_went_is_tallied_by_site() {
 }
 
 #[test]
+fn a_cv_is_built_from_a_conversation() {
+    let s = setup();
+    let wait = || {
+        for _ in 0..400 {
+            if !s.agent.is_running("cvchat") {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("the interview never answered");
+    };
+    assert!(s.agent.cv_chat_start(" ").is_err());
+    assert!(s.agent.cv_chat_create().is_err(), "nothing to make a CV from yet");
+    s.agent.cv_chat_start("I want program management roles").unwrap();
+    wait();
+    let st = s.agent.cv_chat_state();
+    assert_eq!((st["chat"].as_array().unwrap().len(), st["cv"].as_str(), st["ready"].as_bool()), (2, Some(""), Some(false)));
+    // A job named: the CV starts, and what Job Hunt knows went along.
+    s.agent.cv_chat_start("I'm a Program Manager at Northbank since 2019").unwrap();
+    wait();
+    let st = s.agent.cv_chat_state();
+    assert!(st["cv"].as_str().unwrap().contains("Northbank") && st["ready"] == true, "{st}");
+    // No answer: the message comes back, and the CV so far is kept.
+    s.agent.cv_chat_start("please fail").unwrap();
+    wait();
+    let st = s.agent.cv_chat_state();
+    assert_eq!((st["chat"].as_array().unwrap().len(), st["draft"].as_str()), (4, Some("please fail")));
+    assert!(st["cv"].as_str().unwrap().contains("Northbank"));
+    // Made into a CV: one more CV in Job Hunt, converted like any text one.
+    let before = s.agent.profile().tracks.len();
+    let t = s.agent.cv_chat_create().unwrap();
+    assert_eq!(s.agent.profile().tracks.len(), before + 1);
+    assert!(s.agent.cv_path(&t.name).is_file() && t.kind == "text", "{t:?}");
+    s.agent.cv_chat_clear().unwrap();
+    assert!(s.agent.cv_chat_state()["chat"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn the_brief_for_another_assistant_says_what_is_left() {
     let s = setup();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();

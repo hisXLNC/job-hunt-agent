@@ -56,6 +56,14 @@ and `DEVELOPING.md`.
   were applied (`cargo clippy --fix`). Not done, as not worth their risk: the 157-branch action
   chain in `app-actions.js` as a table, and the usage meter's forwarding methods as a macro.
 - **2.52.1: the phone's top bar holds everything.** No menu, no status card: `phoneTop()` in `app.js`
+- **2.71.0: a CV from a conversation.** `static/app-cvchat.js` draws a card wherever a page puts `[data-cv-chat]`
+  (the setup's "Add your CV" step in `app-flow.js`, and Me → CVs under the drop box); a MutationObserver mounts it.
+  `Llm::cv_interview(history, message, known) -> CvTalk { reply, cv, ready }` (`cv_interview_system()`: one question
+  at a time, the whole CV rewritten in plain text each turn, only what was said). `Agent::cv_chat_start/state/
+  create/clear` in `pipeline/people.rs` (state in `cvchat`, claim `cvchat`, usage kind `cvchat`); `GET/POST
+  /api/cv-chat` ({message} | {clear} | {create}). Create = `add_cv("<name> CV.txt", text, convert)`: the same path as
+  a text file you upload (Claude lays it out as Word), then career options and `after_cv_added`. The microphone
+  button uses the browser's speech recognition when the window has it (unverified in the Windows app's WebView2).
 - **2.70.0: Claude in the browser; the assistant across the app.**
   - *The connection to the Claude extension is through Claude Code*: `claude --chrome -p …` gives Claude Code the
     Claude in Chrome tools (docs: code.claude.com/docs/en/chrome; needs the extension ≥ 1.0.36 signed in to the same

@@ -332,6 +332,25 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   check(await page.evaluate(() => location.hash === '#search') && (await page.getAttribute('#dSync', 'title') || '').length > 3, 'The search chip in the top bar opens what the search found, and each chip says its status');
 
   // A phone: nothing wider than the screen.
+  // A CV from a conversation, on Me, CVs: Claude asks, the CV grows, and one button makes it a CV.
+  await page.goto(`${base}/#cvs`);
+  await page.waitForSelector('[data-cv-chat] .cv-chat-box');
+  const cvsBefore = await page.evaluate(async () => (await api('/api/settings')).cvs.length);
+  await page.click('[data-cv-chat] summary');
+  await page.fill('[data-cv-chat] textarea', 'I want program manager roles in banking.');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('[data-cv-chat] .ask-msg.them:not(.wait)').length === 2, null, { timeout: 20000 });
+  check(await page.evaluate(() => !document.querySelector('[data-cv-chat] .cv-chat-draft') && document.querySelector('[data-cv-chat-create]').disabled), 'Building a CV by chat: Claude asks, and there is no CV until a job is told');
+  await page.fill('[data-cv-chat] textarea', 'Senior Program Manager at Northbank since March 2018.');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('[data-cv-chat] .cv-chat-draft', { timeout: 20000 });
+  check(/Northbank/.test(await page.textContent('[data-cv-chat] .cv-chat-draft')) && /Ready to use/.test(await page.textContent('[data-cv-chat] .cv-chat-cv')), 'The CV is written as the answers come');
+  await page.click('[data-cv-chat-create]');
+  await page.waitForFunction(async n => (await api('/api/settings')).cvs.length === n + 1, cvsBefore, { timeout: 30000 }).catch(() => {});
+  check(await page.evaluate(async n => (await api('/api/settings')).cvs.length === n + 1, cvsBefore), 'Create my CV adds it to your CVs');
+  await page.goto(`${base}/#welcome`);
+  await page.waitForTimeout(900);
+  check(await page.locator('[data-cv-chat] .cv-chat-box').count() === 1, 'The first-run setup offers to build a CV by chat too');
   // Certifications under Me, About me: added, saved, and still there when the page is opened again.
   await page.goto(`${base}/#cvs/details`);
   await page.waitForSelector('#certsCard');

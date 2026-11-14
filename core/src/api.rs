@@ -766,6 +766,8 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             // Postings that mention a certification you listed, to score again now that Job Hunt knows.
             ["api", "certs", "rescore"] => return Ok(Resp::json(&json!({ "postings": agent.cert_postings().len(), "running": agent.is_running("rescore") }))),
+            // The interview that builds a CV from a conversation.
+            ["api", "cv-chat"] => return Ok(Resp::json(&agent.cv_chat_state())),
             // Claude in your browser: is Claude Code here, is a test running, and how the last one went.
             ["api", "claude-chrome"] => return Ok(Resp::json(&json!({
                 "installed": crate::claude_code::find(&agent.secret("claude.path")).is_some(), "testing": agent.is_running("chrome-test"),
@@ -1358,6 +1360,23 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             agent.connect();
             ok()
+        }
+        // A message in the CV interview ({message}), start over ({clear}), or make its CV yours ({create}).
+        ["api", "cv-chat"] => {
+            if b["clear"].as_bool() == Some(true) {
+                agent.cv_chat_clear()?;
+            } else if b["create"].as_bool() == Some(true) {
+                let t = agent.cv_chat_create()?;
+                start_career(agent);
+                let change = agent.after_cv_added();
+                let mut st = agent.cv_chat_state();
+                st["track"] = json!(t);
+                st["change"] = json!(change);
+                return Ok(Resp::json(&st));
+            } else {
+                agent.cv_chat_start(s(&b, "message"))?;
+            }
+            Ok(Resp::json(&agent.cv_chat_state()))
         }
         ["api", "claude-chrome", "test"] => {
             if agent.is_running("chrome-test") {

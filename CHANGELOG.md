@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.71.0] - 2026-11-14
+
+Build your CV by talking to Claude.
+
+### Changes
+
+- No CV, or yours is out of date? In the first-run setup and on Me, CVs, you can now build one by chat. Claude asks about your work a step at a time (what you do, each job and what came of it, education, skills), writes the CV as you answer, and Create my CV adds it to your CVs as a Word file. It only uses what you tell it. You can paste an old CV or LinkedIn profile to start from, and speak your answers where the microphone button shows.
+
 ## [2.70.0] - 2026-11-14
 
 Claude fills forms in your browser, and Ask Claude works across the app.
@@ -2084,6 +2092,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.71.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.71.0
 [2.70.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.70.0
 [2.69.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.69.0
 [2.68.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.68.0

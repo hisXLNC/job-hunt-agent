@@ -118,6 +118,15 @@ impl Llm for FakeLlm {
     fn find_recruiters(&self, job: &Job) -> R<Vec<crate::claude::FoundPerson>> {
         Ok(vec![crate::claude::FoundPerson { name: "Priya Shah".into(), title: format!("Talent Acquisition Partner at {}", job.company), linkedin: "https://www.linkedin.com/in/priya-shah-ta".into(), why: "hires for PMO roles in Toronto".into() }])
     }
+    fn cv_interview(&self, history: &[(String, String)], message: &str, known: &str) -> R<crate::claude::CvTalk> {
+        if message.contains("fail") {
+            return Err(crate::Error("Claude is busy.".into()));
+        }
+        // A draft once a job has been named; ready once there are two turns behind it.
+        let said: String = history.iter().filter(|(w, _)| w == "you").map(|(_, t)| format!("{t}\n")).collect::<String>() + message;
+        let cv = if said.contains("Northbank") { format!("Sam Rivera\nToronto | sam@example.com\nEXPERIENCE\nProgram Manager, Northbank, Toronto | Jan 2019 - Present\n- Led a payments migration across nine teams and three vendors, on time.\n- Managed the vendor budget and the cutover weekend.\nEDUCATION\nBSc Computer Science, 2011\n({} known)", known.len()) } else { String::new() };
+        Ok(crate::claude::CvTalk { reply: format!("Next question ({} before).", history.len()), ready: !cv.is_empty() && history.len() >= 2, cv })
+    }
     fn assist(&self, a: &crate::claude::Asked) -> R<crate::claude::Assisted> {
         if a.message.contains("fail") {
             return Err(crate::Error("Claude is busy.".into()));
