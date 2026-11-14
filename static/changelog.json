@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.67.2",
+    "date": "2026-11-14",
+    "title": "A smaller Ask Claude button",
+    "changes": [
+      "The Ask Claude button is now a small, quiet round icon in the corner that no longer covers the buttons on a row. It shows its name when the mouse is on it."
+    ]
+  },
+  {
     "version": "2.67.1",
     "date": "2026-11-13",
     "title": "Hand a form over to the Claude extension",

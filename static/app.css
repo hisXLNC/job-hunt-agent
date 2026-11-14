@@ -1954,12 +1954,17 @@ details.kit > summary { cursor: pointer; }
 }
 
 /* ---- Ask Claude: the assistant that floats over every screen ---- */
-.ask-fab { position: fixed; right: 22px; bottom: 22px; z-index: 45; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px 0 14px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; cursor: pointer; box-shadow: 0 2px 4px color-mix(in srgb, var(--accent) 35%, transparent), 0 10px 28px rgba(18, 24, 41, .22); transition: transform .12s ease, background .12s ease; }
-.ask-fab:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.ask-fab { position: fixed; right: 14px; bottom: 14px; z-index: 45; display: inline-flex; align-items: center; justify-content: center; gap: 0; width: 36px; height: 36px; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; opacity: .8; box-shadow: 0 1px 2px rgba(18, 24, 41, .08), 0 4px 12px rgba(18, 24, 41, .1); transition: width .15s ease, opacity .15s ease, gap .15s ease; }
+.ask-fab span { max-width: 0; opacity: 0; overflow: hidden; transition: max-width .15s ease, opacity .15s ease; }
+/* Small and quiet until the mouse is on it; then it says what it is. */
+.ask-fab:hover, .ask-fab:focus-visible { width: auto; padding: 0 13px 0 10px; gap: 7px; opacity: 1; border-color: var(--accent); }
+.ask-fab:hover span, .ask-fab:focus-visible span { max-width: 90px; opacity: 1; }
 .ask-fab[hidden], .ask-sel[hidden], .ask-panel[hidden], .ask-quote[hidden], .ask-ideas[hidden] { display: none; }
-.ask-fab svg, .ask-sel svg, .ask-mark svg { width: 18px; height: 18px; fill: currentColor; stroke: none; }
-.ask-fab.new::after { content: ""; position: absolute; top: 2px; right: 4px; width: 11px; height: 11px; border-radius: 50%; background: var(--good); border: 2px solid var(--surface); }
-body.panel-open .ask-fab { right: 482px; }
+.ask-fab svg, .ask-sel svg, .ask-mark svg { width: 18px; height: 18px; fill: currentColor; stroke: none; flex: none; }
+.ask-fab svg { width: 16px; height: 16px; }
+.ask-fab.new { overflow: visible; opacity: 1; }
+.ask-fab.new::after { content: ""; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--good); border: 2px solid var(--surface); }
+body.panel-open .ask-fab { right: 474px; }
 .ask-sel { position: fixed; z-index: 46; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px 6px 9px; border: 0; border-radius: 999px; background: var(--ink); color: var(--surface); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 18px rgba(18, 24, 41, .25); }
 .ask-sel svg { width: 14px; height: 14px; }
 .ask-panel { position: fixed; right: 22px; bottom: 22px; z-index: 45; width: 410px; max-width: calc(100vw - 24px); height: min(640px, calc(100vh - 96px)); display: flex; flex-direction: column; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: 0 2px 6px rgba(18, 24, 41, .08), 0 24px 60px rgba(18, 24, 41, .24); }
@@ -2007,7 +2012,7 @@ body.panel-open .ask-panel { right: 482px; }
 .ask-go svg { stroke-width: 2.2; }
 /* A phone: the button sits above the tabs, and the conversation takes the screen. */
 @media (max-width: 760px) {
-  .ask-fab { right: 14px; bottom: calc(74px + env(safe-area-inset-bottom)); padding: 0; width: 48px; min-height: 48px; justify-content: center; }
+  .ask-fab, .ask-fab:hover { right: 12px; bottom: calc(72px + env(safe-area-inset-bottom)); padding: 0; width: 40px; height: 40px; gap: 0; }
   .ask-fab span { display: none; }
   .ask-panel { inset: 0; width: auto; max-width: none; height: auto; border: 0; border-radius: 0; z-index: 70; padding-bottom: env(safe-area-inset-bottom); }
 }
