@@ -14,6 +14,8 @@ A faster backend.
 - Syncing no longer copies the whole database every few minutes when nothing changed.
 - The Queue's refresh, opening a job, company logos and the spreadsheet export read far less of the database.
 - Saving is faster (fewer waits for the disk).
+- The browser extension fills a box that only takes a title from the site's own list (Job Bank's job title): it tries your title in shorter forms and picks the closest suggestion.
+- Pressing Add, Save or Next on a form is no longer mistaken for sending the application.
 
 ## [2.76.0] - 2026-11-14
 

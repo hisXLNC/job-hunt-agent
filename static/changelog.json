@@ -7,7 +7,9 @@
       "The page now reads the database on its own connection, so a search and the page no longer wait for each other: lists and clicks stay quick while a search runs.",
       "Syncing no longer copies the whole database every few minutes when nothing changed.",
       "The Queue's refresh, opening a job, company logos and the spreadsheet export read far less of the database.",
-      "Saving is faster (fewer waits for the disk)."
+      "Saving is faster (fewer waits for the disk).",
+      "The browser extension fills a box that only takes a title from the site's own list (Job Bank's job title): it tries your title in shorter forms and picks the closest suggestion.",
+      "Pressing Add, Save or Next on a form is no longer mistaken for sending the application."
     ]
   },
   {

@@ -726,3 +726,10 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   `cert_postings`, `/api/jobs` full-row loads; `posting_outcomes` per-posting lookups; per-row
   commits in `score_these`/`merge_duplicates`; one thread per connection and per logo; body read
   before sign-in on Remote access; docx parsed under the DB guard in Settings.
+- **Extension, boxes that only take a suggestion (Job Bank "Add a work experience" → Job title).**
+  `suggests(el)` (tt-input, ui-autocomplete-input, aria-autocomplete…) → `fillSuggested`: types the
+  answer whole and in shorter forms (`typeInto`, no blur), gathers the suggestions (`SUGGESTED`
+  selectors), clicks an exact one or asks `chooseFrom`. Job Bank's real markup wasn't seen (needs a
+  login): selectors are the usual typeahead.js / jQuery UI ones. Mock: `letter` variant, `#occ`.
+- The `submit` listener ignores a form sent by a NOT_SEND button (Add, Save, Next…; `notSendAt`,
+  `e.submitter`): Job Bank's Add set the panel to "Waiting for the site to confirm".

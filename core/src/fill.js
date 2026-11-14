@@ -791,6 +791,7 @@
     // A box that opens a list of its own, named by the box (SuccessFactors: "No Selection", its
     // list in aria-owns): opened as a click opens it, and the answer chosen from that list.
     if (f.type === 'combobox' && await fillOwned(el, v)) return true;
+    if (suggests(el)) { const done = await fillSuggested(el, v, f); if (done !== null) return done; }
     el.focus();
     setter(el, String(v));
     if (f.type === 'combobox') {
@@ -815,6 +816,59 @@
       if (p.v && !p.v.waiting) return String((p.v.values || {}).pick0 || '');
     }
     return '';
+  }
+  // A box that suggests as you type and takes only a suggestion (Job Bank's job title: its own list
+  // of occupations; your title typed whole is refused with "Add a job title"). The answer is typed
+  // whole, then in shorter forms (each part of "Senior Product Owner & Program Manager, Tax
+  // Systems", with and without "Senior"), the suggestions of each are gathered, and the one that is
+  // the answer is clicked; when none is, Job Hunt chooses the closest. Returns null when the box
+  // suggests nothing (it's then filled as plain text).
+  const SUGGESTED = '.tt-menu .tt-suggestion, .tt-dropdown-menu .tt-suggestion, ul.ui-autocomplete li, .autocomplete-suggestions .autocomplete-suggestion, .typeahead.dropdown-menu li, [role=listbox] [role=option]';
+  const suggests = el => el instanceof HTMLInputElement && (el.matches('.tt-input, .ui-autocomplete-input, .typeahead, [aria-autocomplete=list], [aria-autocomplete=both], [data-typeahead], [data-autocomplete]') || /typeahead|autocomplete|autosuggest/i.test(el.className || ''));
+  const typeInto = (el, q) => {
+    el.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, q);
+    // No blur (see setter): a list of suggestions closes when its box loses focus.
+    for (const e of [new KeyboardEvent('keydown', { bubbles: true, key: q.slice(-1) }), new Event('input', { bubbles: true }), new KeyboardEvent('keyup', { bubbles: true, key: q.slice(-1) })]) el.dispatchEvent(e);
+  };
+  async function fillSuggested(el, v, f) {
+    const want = clean(String(v));
+    if (!want) return null;
+    const rows = () => [...document.querySelectorAll(SUGGESTED)].filter(o => !own(o) && shown(o) && clean(o.textContent).length > 0 && clean(o.textContent).length < 160);
+    const ask = async q => { typeInto(el, q); let list = []; for (let i = 0; i < 8; i++) { await wait(250); list = rows(); if (list.length && i >= 2) break; } return list; };
+    const parts = want.split(/\s*(?:[,&/|–—]|\s-\s|\band\b)\s*/i).map(clean).filter(p => p.length > 2);
+    const plain = t => t.replace(/^(senior|sr\.?|junior|jr\.?|lead|principal|staff|associate|assistant|chief|head of)\s+/i, '');
+    const queries = [...new Set([want, ...parts, ...parts.map(plain), plain(want)])].slice(0, 6);
+    const from = new Map(); // a suggestion's words -> what was typed to get it
+    let exact = '';
+    for (const q of queries) {
+      const list = await ask(q);
+      if (!list.length && q === want && queries.length === 1) break;
+      for (const o of list) { const n = clean(o.textContent); if (!from.has(n)) from.set(n, q); if (!exact && same(n.replace(/\s*\(\d+\)\s*$/, ''), want)) exact = n; }
+      if (exact || from.size >= 60) break;
+    }
+    if (!from.size) { trace('a box that suggests showed nothing', { label: labelOf(el).slice(0, 60) }); return null; }
+    let name = exact;
+    if (!name) {
+      const picked = await chooseFrom(labelOf(el), [...from.keys()].slice(0, 80), want);
+      if (picked) name = [...from.keys()].find(n => same(n, picked)) || [...from.keys()].find(n => near(n, picked)) || '';
+    }
+    if (!name) {
+      // None chosen: your own words stay, as text (a box that only suggests takes them).
+      trace('nothing suggested was the answer', { label: labelOf(el).slice(0, 60), want: want.slice(0, 40), has: [...from.keys()].slice(0, 10).map(n => n.slice(0, 30)) });
+      typeInto(el, want); pressKey(el, 'Escape');
+      return f.required ? false : null;
+    }
+    const list = await ask(from.get(name));
+    const opt = list.find(o => same(clean(o.textContent), name));
+    if (!opt) { trace('the suggestion went away', { label: labelOf(el).slice(0, 60), want: name.slice(0, 40) }); return false; }
+    const typed = el.value;
+    const took = () => el.value !== typed || !rows().length;
+    mouse(opt);
+    await wait(350);
+    if (!took() && opt.isConnected && shown(opt)) { await realClick(opt, true); await wait(350); }
+    trace(took() ? 'chosen from what the box suggested' : 'the suggestion took no click', { label: labelOf(el).slice(0, 60), wanted: want.slice(0, 40), chose: name.slice(0, 40) });
+    return took();
   }
   async function fillOwned(el, v) {
     const id = el.getAttribute('aria-owns') || el.getAttribute('aria-controls');
@@ -1639,6 +1693,7 @@
     return v && v.at && Date.now() - v.at < 10 * 60 * 1000 ? v : null;
   };
   const pressedAt = () => (pressed() || {}).at || 0;
+  let notSendAt = 0; // when a button that doesn't send the application (Add, Save, Next…) was last pressed
   let recorded = false;
   // Tell Job Hunt this application was submitted, and say it's marked only once Job Hunt has said so.
   // (It used to say "Marked as applied" straight away; when Job Hunt couldn't tell which application
@@ -1703,10 +1758,12 @@
     if (/^\s*(save and continue|save & continue|next|continue)\b/i.test(t) && ui && !retired) {
       try { send('learn', { fields: collect().filter(f => !['file', 'add', 'skills'].includes(f.type) && f.value).map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options, section: f.section })).slice(0, 80) }); } catch (err) { /* the form changed */ }
     }
-    if (NOT_SEND.test(t)) return;
+    if (NOT_SEND.test(t)) { notSendAt = Date.now(); return; }
     if ((b.type === 'submit' && b.form) || /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|apply now|complete application|finish application/i.test(b.textContent || b.value || '')) onPressed();
   }, true);
-  document.addEventListener('submit', e => { if (!own(e.target) && filled) onPressed(); }, true);
+  // (Not the form sent by Add, Save, Next…: Job Bank's "Add" on a work experience sends its form,
+  // and the panel then waited for a confirmation of an application that hadn't been sent.)
+  document.addEventListener('submit', e => { if (!own(e.target) && filled && !(Date.now() - notSendAt < 3000) && !NOT_SEND.test(clean((e.submitter && (e.submitter.textContent || e.submitter.value)) || ''))) onPressed(); }, true);
   // Arrived on a new page after pressing Submit: is this the confirmation? (The app also asks each
   // page that loads after it filled the form in this window, for confirmations on another site.)
   if (pressedAt()) watchForConfirmation(30);
