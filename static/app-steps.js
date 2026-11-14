@@ -191,7 +191,7 @@ function jobRow(j, { tick = '', sub = '', actions = '', tags = '', cls = '', att
 
 function stepHtml(o, step, tracked) {
   jobOrder = [...(o.ready || []), ...(o.approved || []), ...(o.follow_ups || [])].map(j => j.id);
-  const row = (j, sub, actions, tick = '') => jobRow(j, { tick, sub: sub ? `<span class="muted">${sub}</span>` : '', actions, tags: `${oneTag(j)}${effortTag(j)}${appliedBeforeTag(j)}` });
+  const row = (j, sub, actions, tick = '') => jobRow(j, { tick, facts: ageTag(j), sub: sub ? `<span class="muted">${sub}</span>` : '', actions, tags: `${oneTag(j)}${effortTag(j)}${appliedBeforeTag(j)}` });
   const id = j => esc(j.id);
   const groups = [];
   const soon = (o.interviews || []).filter(i => new Date(i.start) - Date.now() < 3 * 86400000);

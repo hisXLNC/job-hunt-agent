@@ -124,7 +124,7 @@ const empCell = j => j.employment ? `<span class="emp-${esc(empKind(j).toLowerCa
 /** The kind alone, for the Type filter: "Contract · 12 months" is a Contract. */
 const empKind = j => !j.employment ? 'Not stated' : j.employment.startsWith('Full-time or') ? 'Part-time' : j.employment.split(' · ')[0];
 /** You've sent this company a CV before (for another role): a tag, with which ones. */
-const appliedBeforeTag = j => (j.applied_before || []).length ? ` <span class="pill info" title="${esc(`You applied to ${j.company} before: ${j.applied_before.map(x => `${x.title} (${STAGES[x.status] || x.status}${x.applied_at ? `, ${fmtDate(x.applied_at)}` : ''})`).join('; ')}`)}">Applied here before</span>` : '';
+const appliedBeforeTag = j => (j.applied_before || []).length ? ` <button type="button" class="pill info pill-btn" data-act="appliedBefore" data-job="${esc(j.id)}" title="${esc(`You applied to ${j.company} before: ${j.applied_before.map(x => `${x.title} (${STAGES[x.status] || x.status}${x.applied_at ? `, ${fmtDate(x.applied_at)}` : ''})`).join('; ')}. Click to see them.`)}">Applied here before</button>` : '';
 /** Your history with the company: where you applied before, and your own notes. */
 function historyHtml(j, history, notes, mode) {
   if (!(history || []).length && !notes) return '';

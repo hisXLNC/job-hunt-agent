@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.76.0",
+    "date": "2026-11-14",
+    "title": "Faster search, a force stop that stops, and posting ages",
+    "changes": [
+      "Searching is much faster when there are many new postings: one PC took 17 minutes to sort 1,664 of them, because the search waited behind the page's refresh at every posting.",
+      "Force stop ends the search in seconds: it no longer sorts what the job sites were still sending.",
+      "The × (Not interested) opens straight away, also while a search is running.",
+      "Ready to approve and the other lists show how old each posting is; hover (or tap) for the exact date and time.",
+      "Click Applied here before to see the roles you applied to at that company, with their CVs and letters."
+    ]
+  },
+  {
     "version": "2.75.2",
     "date": "2026-11-14",
     "title": "Sync no longer freezes Job Hunt while it copies your data",

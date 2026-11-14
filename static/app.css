@@ -2141,3 +2141,11 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 @media (max-width: 760px) { .tabs.qsteps { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 24px; } }
 /* The top bar's status says what it says: room for the words. */
 .status-pill > span:last-child { max-width: 190px; }
+
+/* ---- Applied here before: the roles, on a click ---- */
+.pill-btn { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
+.pill-btn:hover { filter: brightness(.95); text-decoration: underline; }
+.modal.before-list { width: min(640px, 100%); }
+.before-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
+.before-rows li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); }
+.before-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }

@@ -361,6 +361,13 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.waitForFunction(() => location.hash === '#applications', null, { timeout: 8000 }).catch(() => {});
   check(await page.evaluate(() => location.hash) === '#applications', 'Not interested on a job page takes you back to the list you came from');
   if (fromList) await page.evaluate(async id => { await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'queued', note: 'undone', learn: false } }); await refreshOverview(); }, fromList.id);
+  // "Applied here before" opens the roles you applied to at that company, with a way into each.
+  check(await page.evaluate(() => /data-act="appliedBefore"/.test(appliedBeforeTag({ id: 'x', company: 'Acme', applied_before: [{ title: 'Analyst', status: 'applied' }] })) && appliedBeforeTag({ id: 'x', company: 'Acme' }) === ''), 'Applied here before is a button when there is something to show');
+  await page.evaluate(id => { const b = document.createElement('button'); b.dataset.act = 'appliedBefore'; b.dataset.job = id; b.id = 'abTest'; document.querySelector('#main').appendChild(b); }, jobId);
+  await page.click('#abTest');
+  await page.waitForSelector('.before-list');
+  check(/Your applications to /.test(await page.textContent('.before-list h2')), 'Clicking it lists your applications to that company');
+  await page.click('.before-list [data-close]');
   // Certifications under Me, About me: added, saved, and still there when the page is opened again.
   await page.goto(`${base}/#cvs/details`);
   await page.waitForSelector('#certsCard');

@@ -262,7 +262,7 @@ impl Agent {
             return err("Job Hunt is about to restart for an update; it searches again after.");
         }
         if self.search_ending() {
-            return err("The search you force-stopped is still letting go of its last request (a minute at most). Try again in a moment.");
+            return err("The search you force-stopped is still finishing what it was in the middle of. Try again in a moment.");
         }
         let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_SEARCH);
         let _guard = self.claim("search")?;
@@ -357,7 +357,10 @@ impl Agent {
                     let dropped = self.drop_dead_boards(&fetched.failed);
                     report.broken_boards.retain(|b| !dropped.contains(b));
                 }
-                report.closed += self.close_missing(&profile, &fetched.complete, &run.all_ids)?;
+                // (Not after a stop: postings left unsorted would look as if they'd been taken down.)
+                if !self.stopping() {
+                    report.closed += self.close_missing(&profile, &fetched.complete, &run.all_ids)?;
+                }
                 // Indeed (through Claude), and job-alert emails that arrived meanwhile.
                 let indeed_on = profile.sources.indeed && only.is_none_or(|o| o == "indeed");
                 if indeed_on && !self.stopping() {
@@ -607,6 +610,12 @@ impl Agent {
         if postings.is_empty() {
             return Ok(());
         }
+        // Stopped: what the job sites still hand over isn't sorted (the next search finds it again),
+        // so a force stop ends in seconds, not after every batch still on its way.
+        if self.stopping() {
+            self.trace(&format!("stopped: {} postings left unsorted", postings.len()));
+            return Ok(());
+        }
         let profile = ctx.profile;
         // A big batch takes a while to sort against what's known (each posting is looked up): said,
         // so the last source's name doesn't sit there as if it were stuck.
@@ -696,19 +705,29 @@ impl Agent {
                     }
                 }
             }
-            for p in fresh {
-                report.new += 1;
-                // A company you've set a minimum employee rating for, already rated below it.
-                let low = profile.min_rating.and_then(|min| {
-                    let r = self.db().rating(&p.company)?;
-                    let got = r["rating"].as_f64().filter(|_| r["found"] == true)?;
-                    (got < min).then(|| format!("rated {got:.1} by employees, below your minimum of {min:.1}"))
-                });
-                match low.or_else(|| prefilter(&p, profile)) {
-                    None => candidates.push(p),
-                    Some(why) if why == NO_TITLE_MATCH => run.near.push(p),
-                    Some(why) => self.skip(&p, &why, report)?,
+            // The new ones: one more turn at the database for them all (each posting's company rating,
+            // and the filtered-out ones written down together), not two or three turns a posting. With
+            // the page reading alongside, each turn could wait a second: 1,664 postings took 17 minutes.
+            report.new += fresh.len();
+            let mut out: Vec<crate::db::Job> = vec![];
+            {
+                let asked = std::time::Instant::now();
+                let db = self.db();
+                waited += asked.elapsed();
+                for p in fresh {
+                    // A company you've set a minimum employee rating for, already rated below it.
+                    let low = profile.min_rating.and_then(|min| {
+                        let r = db.rating(&p.company)?;
+                        let got = r["rating"].as_f64().filter(|_| r["found"] == true)?;
+                        (got < min).then(|| format!("rated {got:.1} by employees, below your minimum of {min:.1}"))
+                    });
+                    match low.or_else(|| prefilter(&p, profile)) {
+                        None => candidates.push(p),
+                        Some(why) if why == NO_TITLE_MATCH => run.near.push(p),
+                        Some(why) => out.push(skipped_job(&p, &why, report)),
+                    }
                 }
+                db.insert_jobs(&out)?;
             }
             self.tally(report);
             // A slow stretch is written down as it happens, not only at the end of the batch.
@@ -915,26 +934,7 @@ impl Agent {
 
     /// Store a posting as skipped before scoring, with the reason.
     pub(super) fn skip(&self, p: &Posting, why: &str, report: &mut Report) -> R<()> {
-        report.filtered += 1;
-        let kind = if why.starts_with("location") {
-            "outside your locations"
-        } else if why == NO_TITLE_MATCH {
-            "title doesn't match your CVs"
-        } else if why.starts_with("title contains") {
-            "a title word you skip"
-        } else if why.starts_with("salary") {
-            "salary below your minimum"
-        } else if why.starts_with("excluded") {
-            "a company you skip"
-        } else if why.starts_with("rated") {
-            "company rated below your minimum"
-        } else {
-            "other"
-        };
-        *report.why_filtered.entry(kind.to_string()).or_insert(0) += 1;
-        let mut job = p.to_job();
-        job.status = "skipped".into();
-        job.reasoning = Some(format!("Filtered out: {why}"));
+        let job = skipped_job(p, why, report);
         self.db().insert_job(&job)
     }
 
@@ -1231,4 +1231,30 @@ impl Agent {
         }
         Ok(job.id)
     }
+}
+
+/// A posting the filters turned away, counted in the report and as the job to store (so the next
+/// search knows it and doesn't look at it again).
+fn skipped_job(p: &Posting, why: &str, report: &mut Report) -> crate::db::Job {
+    report.filtered += 1;
+    let kind = if why.starts_with("location") {
+        "outside your locations"
+    } else if why == NO_TITLE_MATCH {
+        "title doesn't match your CVs"
+    } else if why.starts_with("title contains") {
+        "a title word you skip"
+    } else if why.starts_with("salary") {
+        "salary below your minimum"
+    } else if why.starts_with("excluded") {
+        "a company you skip"
+    } else if why.starts_with("rated") {
+        "company rated below your minimum"
+    } else {
+        "other"
+    };
+    *report.why_filtered.entry(kind.to_string()).or_insert(0) += 1;
+    let mut job = p.to_job();
+    job.status = "skipped".into();
+    job.reasoning = Some(format!("Filtered out: {why}"));
+    job
 }

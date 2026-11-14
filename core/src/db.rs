@@ -705,6 +705,19 @@ impl Db {
         Ok(())
     }
 
+    /// insert_job for many at once, written together (one write to the disk, not one each).
+    pub fn insert_jobs(&self, jobs: &[Job]) -> R<()> {
+        if jobs.is_empty() {
+            return Ok(());
+        }
+        let tx = self.con.unchecked_transaction()?;
+        for j in jobs {
+            self.insert_job(j)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn insert_job(&self, j: &Job) -> R<()> {
         let stamp = now();
         self.con.execute(

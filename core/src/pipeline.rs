@@ -847,7 +847,7 @@ impl Agent {
     pub fn activity(&self) -> Vec<Value> {
         // (prefix or name, what it's called, seconds it usually takes; 0: not shown)
         const KINDS: [(&str, &str, i64); 26] = [
-            ("search", "Searching for jobs", 0), ("search-ending", "The stopped search is letting go of its last request", 60),
+            ("search", "Searching for jobs", 0), ("search-ending", "The stopped search is finishing what it was in the middle of", 30),
             ("cv-update", "Updating everything for your CV", 0), ("claude-fill", "Claude is filling in a form in your browser", 300),
             ("chrome-test", "Testing Claude's connection to your browser", 60), ("tailor:", "Tailoring a CV and cover letter", 100),
             ("revise:", "Changing a CV or cover letter", 40), ("answers:", "Writing answers to a form's questions", 45), ("prep:", "Writing interview prep", 80),

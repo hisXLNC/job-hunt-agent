@@ -375,6 +375,28 @@ async function act(el) {
   }
   // A mock interview with the assistant: Claude asks, you answer, it says how the answer landed.
   if (a === 'practise') return askSend(PRACTISE);
+  // "Applied here before": the roles you applied to at this company, where each stands, and a way into each application.
+  if (a === 'appliedBefore') {
+    let r;
+    try { r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}`); } catch (e) { return toast(e.message, true); }
+    const list = r.company_history || [], co = r.job.company;
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    back.innerHTML = `<div class="modal before-list" role="dialog" aria-modal="true" aria-label="Your applications to ${esc(co)}"><h2>Your applications to ${esc(co)}</h2>
+      ${list.length ? `<p class="muted small">${list.length === 1 ? 'One role' : `${list.length} roles`} before this one, newest first. ${esc(co)} keeps what you sent on file.</p>
+        <ul class="before-rows">${list.map(x => `<li><div class="grow"><b>${esc(x.title)}</b>
+            <div class="small muted">${[x.location, x.applied_at ? `applied ${fmtDate(x.applied_at)}` : '', x.fit != null ? `fit ${x.fit}` : ''].filter(Boolean).map(esc).join(' · ')}</div>
+            ${x.last ? `<div class="small muted">Last: ${esc(x.last)}</div>` : ''}</div>
+          <span class="before-side">${stagePill(x.status)}<span class="row">${x.cv || x.letter ? `<a class="btn sm" href="#job/${encodeURIComponent(x.id)}" data-tab-to="docs" data-close>${x.cv ? 'CV' : ''}${x.cv && x.letter ? ' and ' : ''}${x.letter ? 'letter' : ''} sent</a>` : ''}<a class="btn sm primary" href="#job/${encodeURIComponent(x.id)}" data-close>Open</a></span></span></li>`).join('')}</ul>`
+        : '<p class="muted">Nothing found: it may have been removed since.</p>'}
+      <div class="row" style="justify-content:flex-end"><button class="btn ghost" type="button" data-close>Close</button></div></div>`;
+    const end = () => { back.remove(); document.removeEventListener('keydown', key, true); };
+    const key = e => { if (e.key === 'Escape') { e.stopPropagation(); end(); } };
+    back.addEventListener('click', e => { if (e.target === back || e.target.closest('[data-close]')) setTimeout(end, 0); });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(back);
+    return;
+  }
   if (a === 'jumpTo') { document.getElementById(el.dataset.to)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (a === 'chromeTest') return busy(async () => { await api('/api/claude-chrome/test', { method: 'POST' }); setTimeout(renderChrome, 500); }, 'Testing: watch your browser.');
   if (a === 'chromeSetup') return busy(async () => { await api('/api/claude-chrome/setup', { method: 'POST' }); }, 'A window opened: follow its steps, then press Test the connection.');
@@ -790,7 +812,9 @@ async function act(el) {
     let learn = true;
     let block = false;
     if (status === 'dismissed' && !note) {
-      const co = (await api(`/api/jobs/${encodeURIComponent(id)}`).catch(() => null))?.job?.company || '';
+      // The company's name, for "Never show …": from what's on the page already. Asking the app for it
+      // first left the × doing nothing for as long as the app was busy (a search holds the database).
+      const co = companyOf(id) || (await Promise.race([api(`/api/jobs/${encodeURIComponent(id)}`).catch(() => null), new Promise(r => setTimeout(() => r(null), 400))]))?.job?.company || '';
       const r = await dialog({
         title: 'Not interested in this role?',
         text: 'It goes to All jobs under Not interested. Job Hunt can also learn from it and score roles like it lower, or you can keep it as a backup.',
@@ -1497,3 +1521,16 @@ function forceStopChoose() {
 // The screen you were on before a job's own page, to go back to when you set that job aside.
 let cameFrom = '';
 window.addEventListener('hashchange', e => { try { const was = new URL(e.oldURL).hash; if (was && !was.startsWith('#job/')) cameFrom = was; } catch (x) { /* an odd address: stay as it was */ } });
+
+// A job's company from the lists the page already holds (the Queue's, or the open job), without asking the app.
+function companyOf(id) {
+  const seen = new Set();
+  const look = (v, depth) => {
+    if (!v || typeof v !== 'object' || depth > 3 || seen.has(v)) return '';
+    seen.add(v);
+    if (Array.isArray(v)) { for (const x of v) { if (x && x.id === id && x.company) return x.company; } return ''; }
+    for (const k in v) { const got = look(v[k], depth + 1); if (got) return got; }
+    return '';
+  };
+  return look(overview, 0);
+}

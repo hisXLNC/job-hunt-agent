@@ -919,7 +919,7 @@ fn a_search_can_be_force_stopped() {
     // Off the screen at once, and told to end; a new one waits until the old one has let go.
     assert!(!s.agent.is_running("search") && s.agent.progress().is_none() && s.agent.stopping() && s.agent.search_ending());
     let e = s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap_err();
-    assert!(e.0.contains("letting go"), "{e}");
+    assert!(e.0.contains("finishing"), "{e}");
     assert!(!s.agent.force_stop_search(), "not twice");
     drop(guard); // the old search ends
     assert!(!s.agent.search_ending());

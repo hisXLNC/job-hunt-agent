@@ -418,6 +418,9 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
     }))
 }
 
+/// The Overview as last put together during a search, per agent (see the overview route).
+static OVERVIEW_KEPT: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<usize, (std::time::Instant, Value)>>> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
 fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
     let p = req.path.as_str();
     let m = req.method.as_str();
@@ -427,6 +430,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         crate::sync::forget_view(agent);
     }
 
+    if m != "GET" {
+        OVERVIEW_KEPT.lock().unwrap().clear();
+    }
     if m == "GET" {
         if p == "/" || p == "/index.html" {
             // Never kept by the browser: after an update, yesterday's page must not stay behind.
@@ -440,8 +446,24 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         match parts.as_slice() {
             ["api", "overview"] => {
-                let (newer, in_use) = crate::sync::overview_view(agent);
-                let mut o = agent.overview_with(newer, in_use)?;
+                // While a search runs, the page asks for this every second or two, and putting it together
+                // reads thousands of rows with the database held: the search waited behind it at every
+                // step (17 minutes to sort 1,664 postings on one PC). So during a search it's put together
+                // at most every few seconds; anything you do (any change sent) has it made afresh.
+                let me = Arc::as_ptr(agent) as usize;
+                let searching = !cfg!(test) && (agent.is_running("search") || agent.search_ending());
+                let kept = if searching { OVERVIEW_KEPT.lock().unwrap().get(&me).filter(|(at, _)| at.elapsed().as_secs() < 6).map(|(_, o)| o.clone()) } else { None };
+                let mut o = match kept {
+                    Some(o) => o,
+                    None => {
+                        let (newer, in_use) = crate::sync::overview_view(agent);
+                        let o = agent.overview_with(newer, in_use)?;
+                        if searching {
+                            OVERVIEW_KEPT.lock().unwrap().insert(me, (std::time::Instant::now(), o.clone()));
+                        }
+                        o
+                    }
+                };
                 o["version"] = json!(host.version());
                 o["side"] = agent.side_status();
                 o["title_ideas"] = json!(agent.title_ideas());
@@ -694,7 +716,9 @@ fn route(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "undo": { "cv": agent.can_undo(id, "cv"), "letter": agent.can_undo(id, "letter") },
                     "revision": agent.last_revision(id),
                     // Your history with the company: where you applied before, your notes, and this CV beside the last one you sent them.
-                    "company_history": agent.company_history(&job.company, id).iter().map(|j| json!({ "id": j.id, "title": j.title, "status": j.status, "applied_at": j.applied_at })).collect::<Vec<_>>(),
+                    "company_history": agent.company_history(&job.company, id).iter().map(|j| json!({ "id": j.id, "title": j.title, "status": j.status, "applied_at": j.applied_at,
+                        "location": j.location, "fit": j.score_after.or(j.score), "cv": j.cv_path.as_deref().is_some_and(|p| Path::new(p).is_file()), "letter": j.cover_letter.as_deref().is_some_and(|l| !l.trim().is_empty()),
+                        "last": agent.db().history(&j.id).ok().and_then(|h| h.first().map(|e| e.detail.chars().take(140).collect::<String>())) })).collect::<Vec<_>>(),
                     "company_notes": agent.company_notes(&job.company),
                     "sent_compare": agent.compare_with_sent(&job),
                     "repeat_mode": agent.repeat_mode(),

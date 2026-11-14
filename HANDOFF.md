@@ -679,3 +679,22 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   filters (Search's last-search card links each reason to its setting instead).
 - `git push origin HEAD:main --no-verify` is refused in cloud sessions; push without the flag (the hook
   isn't on unless `core.hooksPath` is set).
+
+## 2.76.0
+
+- **Search slow for new postings (the 2.75.1 log: 1,664 postings quiet for 1,053 s).** Cause: every
+  `self.db()` waited ~0.4–1.1 s behind the page's `/api/overview` poll (it reads thousands of rows with
+  the mutex held), and each NEW posting still took 2–3 turns (`rating`, `skip` → `insert_job`). Now
+  `take_in` handles a chunk's new postings in one turn (`skipped_job` + `Db::insert_jobs`, one
+  transaction), and the overview route keeps its answer for up to 6 s while a search runs
+  (`OVERVIEW_KEPT` in api.rs, cleared by any non-GET request; off under `cfg!(test)`).
+- **Force stop sat on "letting go".** After a stop, `take_in` still sorted every batch the job sites
+  handed over (known-check, sightings, one chunk each) and `close_missing` still ran. Now `take_in`
+  returns at once when `stopping()`, and `close_missing` is skipped after a stop (unsorted postings
+  must not read as taken down). Label is now "finishing what it was in the middle of"; test updated.
+- **× on Ready to approve did nothing.** The handler awaited `GET /api/jobs/<id>` (for the company
+  name) before opening the dialog, so it hung while the database was busy. `companyOf(id)` reads it
+  from `overview`; the fetch is a 400 ms fallback.
+- Posting age (`ageTag`, exact date/time in its title) on every `row()` list (approve, submit…).
+- "Applied here before" tag is a button: modal of earlier roles at that company (`company_history`
+  in the job JSON now carries location, fit, cv, letter, last).
