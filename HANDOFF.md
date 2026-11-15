@@ -941,6 +941,11 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.86.0
+
+- Company names are links everywhere a list shows one: `coName(company)` in app.js (a span with `data-act="companyJobs"`, used by `coCell` and `coLocLine`) opens All jobs filtered to that company, as the job page's name already did. A span, not an `<a>`: some rows are themselves links or labels.
+- The job page's header now shows the rating stars beside the company (`ratingTag(rating, j.company)`); stars anywhere open the reviews popup (`showReviews`, unchanged). Stars only exist once a rating has been looked up and found.
+
 ## 2.85.2
 
 - Zoho skills, report from 2.85.1: lists found, every click "not taken", no tags. The tab was not in front (`hidden: true`), where the debugger's real click doesn't land, and 2.85.1 returned straight after it. Now on Zoho a real click that isn't seen in the tags is followed by a script click (`mouse`, then `el.click()`); keyboard choosing (`byKeys`, which ends in Enter) is never used there. `ZOHO_CLICK=1 node tools/ext_test/ext_test.js zoho` runs the mock with real clicks ignored (not in verify; the mock also fails the test if the form is sent or Enter pressed).

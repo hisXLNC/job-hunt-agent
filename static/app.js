@@ -320,6 +320,8 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   const star = e.target.closest?.('.stars[data-company]');
   if (star && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); showReviews(star.dataset.company); }
+  const co = e.target.closest?.('.co-link[data-act]');
+  if (co && e.target === co && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); co.click(); }
 });
 document.addEventListener('click', e => {
   const tag = e.target.closest?.('.age');
@@ -343,7 +345,9 @@ const pct = x => x == null ? '–' : `${Math.round(x * 100)}%`;
 const scoreBand = n => n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo';
 const scoreBadge = n => n == null ? '' : `<span class="score ${scoreBand(n)}" style="--p:${n}" title="Fit score">${n}</span>`;
 /** Company and location as their own cells: the company with its rating, a dash for no place. */
-const coCell = j => `${esc(j.company)}${ratingTag(j.rating, j.company)}`;
+/** A company's name, as something to click: every posting Job Hunt has seen from it (All jobs, filtered to it). */
+const coName = company => company ? `<span class="co-link" role="link" tabindex="0" data-act="companyJobs" data-company="${esc(company)}" title="Every posting from ${esc(company)}">${esc(company)}</span>` : '';
+const coCell = j => `${coName(j.company)}${ratingTag(j.rating, j.company)}`;
 /** Country names as a place line spells them, and the short form a remote role shows: "Remote (US)". */
 const COUNTRY_SHORT = [[/^(united states( of america)?|usa|u\.?s\.?a?\.?)$/i, 'US'], [/^canada$/i, 'Canada'], [/^(united kingdom|uk|great britain|england)$/i, 'UK'],
   [/^(australia|ireland|germany|france|india|netherlands|spain|singapore|kuwait|qatar|united arab emirates|uae|saudi arabia|new zealand|mexico|brazil|poland|portugal|italy|sweden|switzerland|japan|philippines|south africa)$/i, null]];
@@ -377,7 +381,7 @@ const placeHtml = j => {
 };
 const locCell = j => j.location ? placeHtml(j) : '<span class="muted">–</span>';
 /** On a phone the columns fold: company and place under the role. */
-const coLocLine = j => `<span class="phone-only"><br><span class="muted small">${esc(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}</span></span>`;
+const coLocLine = j => `<span class="phone-only"><br><span class="muted small">${coName(j.company)}${j.location ? ` · ${placeHtml(j)}` : ''}</span></span>`;
 /** A company's employee rating, as a small star tag with the rating out of 5. */
 const ratingTag = (r, company) => r?.found && r.rating != null ? ` <span class="stars ${r.rating >= 4 ? 'hi' : r.rating >= 3.3 ? 'mid' : 'lo'}${company ? ' open-reviews' : ''}" ${company ? `data-company="${esc(company)}" role="button" tabindex="0"` : ''} title="Employees rate it ${r.rating.toFixed(1)} out of 5${r.reviews ? `, ${r.reviews.toLocaleString()} reviews` : ''}${r.source ? ` on ${esc(r.source)}` : ''}${company ? '. Click for what they say.' : ''}">${svg('star')}${r.rating.toFixed(1)}</span>` : '';
 /** What employees say about a company, in a popup over the page you're on (a star was clicked). */

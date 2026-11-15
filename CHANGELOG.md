@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.86.0] - 2026-11-15
+
+Click an employer to see all its postings.
+
+### Changes
+
+- Click an employer's name in any list to see every posting Job Hunt has found from that employer.
+- A job's page now shows the employer's star rating beside its name. Click the stars, there or in any list, to read what employees say.
+
 ## [2.85.2] - 2026-11-15
 
 Zoho Recruit skills, when the tab isn't in front.
@@ -2358,6 +2367,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.86.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.86.0
 [2.85.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.2
 [2.85.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.1
 [2.85.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.0

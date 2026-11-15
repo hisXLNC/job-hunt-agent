@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.86.0",
+    "date": "2026-11-15",
+    "title": "Click an employer to see all its postings",
+    "changes": [
+      "Click an employer's name in any list to see every posting Job Hunt has found from that employer.",
+      "A job's page now shows the employer's star rating beside its name. Click the stars, there or in any list, to read what employees say."
+    ]
+  },
+  {
     "version": "2.85.2",
     "date": "2026-11-15",
     "title": "Zoho Recruit skills, when the tab isn't in front",
