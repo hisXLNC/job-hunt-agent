@@ -330,7 +330,31 @@
     if (by) { const t = clean(by.split(/\s+/).map(id => textOf(document.getElementById(id))).join(' ')); if (t) return t; }
     if (el.labels && el.labels.length) { const t = textOf(el.labels[0]); if (t) return t; }
     if (el.getAttribute('aria-label')) return clean(el.getAttribute('aria-label'));
-    return question(el) || clean(el.placeholder || el.name || el.id);
+    const q = question(el);
+    if (q && !NO_NAME.test(q)) return q;
+    return rowLabel(el) || q || clean(el.placeholder || el.name || el.id);
+  }
+  // Not a box's name: a spinner's "Loading", or the site's own id for the box (Zoho Recruit's
+  // "rec-form_1615…", its "inputId"), which is all the usual way finds on forms built of custom parts.
+  const NO_NAME = /^(loading\b.*|rec-form_\w+|inputid|input|select( one)?|search)$/i;
+  // The name of a box on such a form: its part (Zoho's crux-…#rec-form_<id>, a lyte-input) sits in a
+  // row of its own with its label; the row is as far up as holds no other part. The label is the
+  // first words in that row outside the part (a <label> when there is one).
+  const PART = '[id^="rec-form_"],lyte-autocomplete,lyte-dropdown,lyte-input';
+  function rowLabel(el) {
+    const host = el.closest('[id^="rec-form_"]') || el.closest(PART);
+    if (!host) return '';
+    let row = host;
+    for (let i = 0; i < 5 && row.parentElement && !row.parentElement.matches('form,[role=region],body'); i++) {
+      const p = row.parentElement;
+      if ([...p.querySelectorAll('[id^="rec-form_"],input,select,textarea')].some(x => !host.contains(x) && x !== host && x.type !== 'hidden' && !own(x))) break;
+      row = p;
+    }
+    if (row === host) return '';
+    const cands = [...row.querySelectorAll('label,legend,span,div,p')].filter(x => !host.contains(x) && !x.contains(host) && (x.compareDocumentPosition(host) & Node.DOCUMENT_POSITION_FOLLOWING)
+      && !x.querySelector('input,select,textarea') && textOf(x).length > 1 && textOf(x).length < 120 && !NO_NAME.test(textOf(x)));
+    const best = cands.find(x => x.matches('label,legend')) || cands[0];
+    return best ? textOf(best).replace(/\s*\*\s*$/, '') : '';
   }
   let addNote = '', otherChosen = [], skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
@@ -1056,14 +1080,15 @@
     const tookItself = had => names().find(p => !had.some(h => same(h, p))) || '';
     // Typing the way the page takes it: as a script does (most sites), or as real typing through the
     // extension when the site didn't react to that.
-    let trusted = false, scriptWorks = false, silent = false;
+    let trusted = false, scriptWorks = false, silent = false, quiet = 0;
     const trace = [];
     const search = async query => {
       if (options().length || nothing()) { pressKey(box(), 'Escape'); await wait(350); }
       const el = box();
       const before = sig();
       let added = 0;
-      const seen = new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && !own(n)) added++; });
+      let grew = null;
+      const seen = new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && !own(n)) { added++; if (!grew || (n.textContent || '').length > (grew.textContent || '').length) grew = n; } });
       seen.observe(document.body, { childList: true, subtree: true });
       const t0 = Date.now();
       el.focus(); el.click();
@@ -1094,6 +1119,9 @@
       // Settled: the same list three looks in a row (Workday fills it in a bit at a time).
       if (list.length) { let last = sig(), same3 = 0; for (let i = 0; i < 20 && same3 < 3; i++) { await wait(220); const now = sig(); same3 = now === last ? same3 + 1 : 0; last = now; } }
       list = options();
+      // No list Job Hunt knows, and the site never said "no items": what the page did put up after the
+      // typing goes in Copy details (once), so a list drawn another way can be learned.
+      if (!list.length && none < 2) { quiet++; if (grew && grew.isConnected && !diag.skillPopup) diag.skillPopup = { q: query, at: where(grew), html: htmlOf(grew, 2500) }; }
       trace.push({ q: query, found: list.length, ms: Date.now() - t0, real: trusted || undefined, reacted: reacted || undefined, hidden: document.hidden || undefined,
         top: [...new Set(list.map(o => clean(o.getAttribute('data-automation-label') || o.textContent).slice(0, 70)))].slice(0, 8) });
       return list;
@@ -1230,6 +1258,15 @@
       if (itself) { if (box().value) typeIn(box(), ''); await wait(250); continue; }
       const log = { skill, searches: trace.slice() };
       diag.skills.push(log);
+      // The first one brought up no list at all, whatever was typed: this box doesn't work the way
+      // Job Hunt knows, and the rest would each wait as long for nothing (two minutes on Zoho Recruit).
+      // They're all left for you, at once.
+      if (!best && !added && !names().length && trace.length && quiet >= trace.filter(t => !t.same).length && skill === want[0] && want.length > 1) {
+        for (const w of want) if (!skillMiss.some(x => same(x, w))) skillMiss.push(w);
+        log.gaveUp = true;
+        pressKey(box(), 'Escape'); await wait(250); typeIn(box(), ''); await wait(300);
+        break;
+      }
       if (!best) {
         if (!skillMiss.some(x => same(x, skill))) skillMiss.push(skill);
         log.notInList = list.slice(0, 8).map(o => clean(o.textContent).slice(0, 60));
@@ -1393,7 +1430,8 @@
           const now = !live ? '(box replaced)' : e.type === 'checkbox' || e.type === 'radio' ? String(e.checked) : e.type === 'file' ? (e.files && e.files.length ? e.files[0].name : '') : e.tagName === 'SELECT' ? clean((e.options[e.selectedIndex] || {}).text || '') : clean(e.value || e.getAttribute('aria-label') || e.textContent || '');
           (diag.fields ||= []).push({ key: f.key, label: String(f.label || '').slice(0, 60), type: f.type, section: f.section, required: f.required || undefined, had: f.value ? String(f.value).slice(0, 60) : '', want: file ? `file: ${file.name || file.kind || 'yes'}` : v == null ? null : String(v).slice(0, 80), now: String(now).slice(0, 80), filled: !!done,
             options: f.options ? f.options.slice(0, 15) : undefined, at: live ? where(e) : undefined,
-            html: live && (f.type === 'file' || (!done && (v != null && v !== '' || file))) ? htmlOf(e.closest('[data-automation-id^="formField"],[data-automation-id*="attachments" i],fieldset,li,section') || e.parentElement, 1500) : undefined }); }
+            html: live && NO_NAME.test(String(f.label || '')) ? htmlOf(e.closest('[id^="rec-form_"]')?.parentElement?.parentElement || e.parentElement?.parentElement || e, 1500)
+              : live && (f.type === 'file' || (!done && (v != null && v !== '' || file))) ? htmlOf(e.closest('[data-automation-id^="formField"],[data-automation-id*="attachments" i],fieldset,li,section') || e.parentElement, 1500) : undefined }); }
         // Green is what Job Hunt filled; a box the site (or you) had filled already isn't marked.
         const theirs = f.value !== '' && f.type !== 'file' && (v == null || v === '' || same(f.value, v));
         if (theirs && done) continue;

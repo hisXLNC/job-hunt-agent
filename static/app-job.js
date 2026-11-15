@@ -195,10 +195,10 @@ async function showJob(id) {
       <p class="muted small">${own?.cv ? 'This is the CV you attached; it\'s the one used when you apply. ' : j.cv_path ? '<span class="chg-key">Highlighted</span> paragraphs were reworded for this posting. ' : ''}Open the Word files above to see the exact layout.</p>
       ${ats ? atsHtml(ats) : ''}
     </section>
-    <section class="card">
-      <header><h2>Ask for changes</h2>${undo.cv || undo.letter ? `<div class="row">${undo.cv ? '<button class="btn ghost" data-act="undoRevision" data-what="cv">Undo last CV change</button>' : ''}${undo.letter ? '<button class="btn ghost" data-act="undoRevision" data-what="letter">Undo last letter change</button>' : ''}</div>` : ''}</header>
+    <section class="card" id="reviseCard">
+      <header><h2>Ask for changes to the <span id="reviseName">${j.cv_path && !own?.cv ? 'CV' : 'cover letter'}</span></h2>${undo.cv || undo.letter ? `<div class="row">${undo.cv ? '<button class="btn ghost" data-act="undoRevision" data-what="cv">Undo last CV change</button>' : ''}${undo.letter ? '<button class="btn ghost" data-act="undoRevision" data-what="letter">Undo last letter change</button>' : ''}</div>` : ''}</header>
       <div class="row" style="align-items:flex-start">
-        <select id="reviseWhat" style="width:auto">${j.cv_path && !own?.cv ? '<option value="cv">Tailored CV</option>' : ''}${j.cover_letter && !own?.letter ? '<option value="letter">Cover letter</option>' : ''}</select>
+        <input type="hidden" id="reviseWhat" value="${j.cv_path && !own?.cv ? 'cv' : 'letter'}" data-ok="${j.cv_path && !own?.cv ? 'cv ' : ''}${j.cover_letter && !own?.letter ? 'letter' : ''}">
         <textarea id="reviseNote" style="flex:1;min-height:64px" placeholder="e.g. Make it shorter · Lead with the ERP rollout · Put SAP in the summary · Less formal"></textarea>
       </div>
       <div class="row"><button class="btn primary" data-act="revise" ${revising || tailoring ? 'disabled' : ''}>Make the change</button>
@@ -307,6 +307,9 @@ async function showJob(id) {
     const ed = $('#letterEditCard'), ch = $('#cvChangesCard');
     if (ed) ed.hidden = b.dataset.pv !== 'letter';
     if (ch) ch.hidden = b.dataset.pv === 'letter';
+    // Ask for changes is about the one on screen (your own attached file can't be changed: then it stays on the other).
+    const rw = $('#reviseWhat');
+    if (rw && rw.dataset.ok.split(' ').includes(b.dataset.pv)) { rw.value = b.dataset.pv; $('#reviseName').textContent = b.dataset.pv === 'cv' ? 'CV' : 'cover letter'; }
   }));
   if (j.cv_path && !(own?.cv && /\.pdf$/i.test(j.cv_path))) api(`/api/jobs/${encodeURIComponent(id)}/preview`).then(({ cv }) => {
     const el = $('#pv-cv'); if (el) el.innerHTML = cv ? cvHtml(cv) : own?.cv ? '<p class="muted">Your own CV is a PDF: use <b>Open tailored CV</b> to see it.</p>' : '<p class="muted">The tailored CV file is missing. Re-tailor to make a new one.</p>';

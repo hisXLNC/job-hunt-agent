@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.84.1",
+    "date": "2026-11-15",
+    "title": "Ask for changes without the dropdown; Zoho Recruit forms",
+    "changes": [
+      "Ask for changes on the CV & letter tab no longer has a dropdown: it changes whichever of the CV or cover letter is showing in the preview, and its heading says which.",
+      "On Zoho Recruit application forms, boxes Job Hunt couldn't name (First Name read as Loading, Phone, Mobile, City, Province, Postal code) are now named from their row, so they can be filled.",
+      "A skills box that brings up no list Job Hunt recognises is given up on after the first skill, not after every one (it took two minutes on Zoho Recruit); the skills are left for you, and Copy details now records what the site showed."
+    ]
+  },
+  {
     "version": "2.84.0",
     "date": "2026-11-15",
     "title": "Pictures for questions and contacts, each on its own tab",

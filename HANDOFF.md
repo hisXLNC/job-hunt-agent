@@ -926,3 +926,17 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   "Contacts" (People, then Follow-up) and `offer` "Offer". Links that meant contacts or the
   follow-up use `data-tab-to="people"`.
 - Waiting on the user: approval of the screen-by-screen merge/split proposal sent with this version.
+
+## 2.84.1
+
+- **Ask for changes**: `#reviseWhat` is a hidden input (`data-ok` = which of cv/letter may be
+  changed); the `#pvTabs` click sets it and `#reviseName` in the heading.
+- **Zoho Recruit** (upstaff.zohorecruit.ca report; the site can't be reached from the cloud session,
+  so none of this was tried on it). fill.js `labelOf`: when `question()` gives nothing or a
+  non-name (`NO_NAME`: "Loading", `rec-form_…`, `inputId`), `rowLabel(el)` takes the first label-like
+  text in the row of the box's part (`[id^="rec-form_"]`, lyte-*). Copy details gets the row's HTML
+  for any box still without a name. Skills: `quiet` counts searches with no list and no "no items";
+  when the first skill is all quiet, the rest are marked missed at once (`gaveUp`), and
+  `diag.skillPopup` keeps the biggest node the page added after typing. Still unknown there: how
+  its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
+  rows, which aren't read as boxes at all.

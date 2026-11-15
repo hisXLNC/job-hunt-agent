@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.84.1] - 2026-11-15
+
+Ask for changes without the dropdown; Zoho Recruit forms.
+
+### Changes
+
+- Ask for changes on the CV & letter tab no longer has a dropdown: it changes whichever of the CV or cover letter is showing in the preview, and its heading says which.
+- On Zoho Recruit application forms, boxes Job Hunt couldn't name (First Name read as Loading, Phone, Mobile, City, Province, Postal code) are now named from their row, so they can be filled.
+- A skills box that brings up no list Job Hunt recognises is given up on after the first skill, not after every one (it took two minutes on Zoho Recruit); the skills are left for you, and Copy details now records what the site showed.
+
 ## [2.84.0] - 2026-11-15
 
 Pictures for questions and contacts, each on its own tab.
@@ -2311,6 +2321,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.84.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.84.1
 [2.84.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.84.0
 [2.83.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.83.0
 [2.82.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.82.0
