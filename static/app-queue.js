@@ -3,8 +3,9 @@
 
 // ---- Overview ----
 /** The Queue's heading on one of its tabs: what that tab holds, not the whole Queue's count. */
-function tabHeading(step, n) {
+function tabHeading(step, n, held = 0) {
   const s = n === 1 ? '' : 's';
+  if (step === 'pick' && !n && held) return `${held} posting${held === 1 ? '' : 's'} waiting to be scored`;
   if (step === 'pick') return n ? `${n} new match${n === 1 ? '' : 'es'} to pick from` : 'No new matches to pick from';
   if (step === 'approve') return n ? `${n} application${s} to check and approve` : 'Nothing to approve';
   if (step === 'submit') return n ? `${n} approved application${s} to send` : 'Nothing to send';
@@ -104,7 +105,8 @@ function queueItems(o) {
   return items;
 }
 /** How many decisions are waiting: everything but the notes that are merely worth a look. */
-const queueCount = items => items.filter(x => x.kind !== 'health' || x.h.level === 'problem').length;
+// (Not the postings still waiting to be scored: 12 of those showed as "1 new match to pick from".)
+const queueCount = items => items.filter(x => x.kind !== 'held' && (x.kind !== 'health' || x.h.level === 'problem')).length;
 const QUEUE_KIND = { pick: 'Pick', approve: 'Approve', submit: 'Submit', filled: 'Submit', ask: 'Ask a recruiter', turned: 'Turned down', draft: 'Draft to send', contact: 'Follow up', follow: 'Follow up', reach: 'Say hello', quiet: 'Tidy up', interview: 'Interview', health: 'Needs attention', held: 'Waiting to be scored' };
 let queueSkipped = new Set(), queueAt = '';
 /** How the Queue is shown: every listing at once ('list', unless you choose otherwise) or one decision at a time ('one'). Remembered on this device. */
@@ -292,7 +294,7 @@ async function showOverview(arg) {
   page(`<div class="head">
       <div class="grow">
         <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${first ? ` · ${greeting()}, ${esc(first)}` : ''}</div>
-        <h1>${step ? tabHeading(step, all.filter(x => x.step === step).length) : needsYou ? `${needsYou} waiting for you` : queueCount(all) ? `${queueCount(all)} new match${queueCount(all) === 1 ? '' : 'es'} to pick from` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
+        <h1>${step ? tabHeading(step, all.filter(x => x.step === step && x.kind !== 'held').length, o.held || 0) : needsYou ? `${needsYou} waiting for you` : queueCount(all) ? `${queueCount(all)} new match${queueCount(all) === 1 ? '' : 'es'} to pick from` : o.held ? `${o.held} posting${o.held === 1 ? '' : 's'} waiting to be scored` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
         ${neededDone ? `<p class="week-line"><span class="week-label">This week</span>
           <a href="#results" title="Applications sent this week${o.weekly_goal ? `, against your goal of ${o.weekly_goal}` : ''}${delta ? ` (${delta > 0 ? delta + ' more' : -delta + ' fewer'} than last week)` : ''}"><b>${o.this_week}</b>${o.weekly_goal ? ` of ${o.weekly_goal}` : ''} applied${delta ? ` <span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span>` : ''}</a>
           <a href="#calendar" title="Interviews coming up"><b>${o.interviews.length}</b> interview${o.interviews.length === 1 ? '' : 's'}</a>

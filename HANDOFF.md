@@ -836,3 +836,12 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   from here (they're listed under saved answers in the app).
 - One button, **Find the real posting** (`findApply`): the page remembers the job (`findAsked`), and when `finding` ends without an `apply_url` it opens the web search itself (`webSearchFor`). Shown for any job not yet sent that has no company link.
 - Logos: the whole name is also tried as .io/.co/.ai/.net (home page must name the company); the miss marker is `none5` so earlier misses (`none4`) are looked up again. Test of tried addresses updated on purpose. SOFTIQ's own site couldn't be reached from the dev box, so whether it now gets a logo is unknown.
+
+## 2.81.1
+
+- **Queue tabs went stale.** The 8 s refresh redrew only `#overview` (and results, calendar, a job),
+  not `#overview/<step>`: on Pick, "Tailoring 7 applications" stayed for hours. It now redraws any
+  `#overview…` view (not while a box is ticked), and also when the queued count or held count changes.
+- **"1 new match to pick from" with nothing to pick.** The `held` item (postings waiting to be
+  scored) counted as a pick. `queueCount` and the tab counts leave `kind === 'held'` out; with only
+  held postings the heading says "N postings waiting to be scored" and the Pick tab shows no number.

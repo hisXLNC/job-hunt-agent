@@ -1470,14 +1470,16 @@ window.addEventListener('hashchange', () => document.body.classList.remove('more
 window.addEventListener('hashchange', route);
 // Keep the sidebar and the overview fresh while searches and email checks run in the background.
 setInterval(async () => {
-  // Housekeeping that runs every few minutes doesn't redraw the page.
-  const busyWith = () => JSON.stringify((overview?.running || []).filter(r => !['care', 'calsync', 'sync', 'backup', 'check-postings'].includes(r))) + (overview?.counts?.ready || 0);
+  // Housekeeping that runs every few minutes doesn't redraw the page. (The Queue's tabs are redrawn
+  // too: on Pick, "Tailoring 7 applications" stayed on screen for hours after they were done.)
+  const busyWith = () => JSON.stringify((overview?.running || []).filter(r => !['care', 'calsync', 'sync', 'backup', 'check-postings'].includes(r))) + (overview?.counts?.ready || 0) + '/' + (overview?.counts?.queued || 0) + '/' + (overview?.held || 0);
   const before = busyWith();
   await refreshOverview();
   const after = busyWith();
   const editing = document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
   const here = location.hash;
-  if (before !== after && !editing && !pageDirty && !$('#calAddCard:not([hidden])') && (here === '' || ['#overview', '#results', '#calendar'].includes(here) || here.startsWith('#job/'))) route();
+  const ticked = !!document.querySelector('.page [data-pick]:checked, .page [data-appr]:checked'); // what you've ticked isn't thrown away
+  if (before !== after && !editing && !ticked && !pageDirty && !$('#calAddCard:not([hidden])') && (here === '' || ['#results', '#calendar'].includes(here) || here.startsWith('#overview') || here.startsWith('#job/'))) route();
 }, 8000);
 
 refreshOverview().then(route).then(noteUpdated);

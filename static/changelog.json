@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.81.1",
+    "date": "2026-11-15",
+    "title": "The Queue keeps itself up to date",
+    "changes": [
+      "On the Queue's tabs (Pick, Approve…), the page now refreshes when tailoring finishes; it could show Tailoring for hours after it was done.",
+      "Postings waiting to be scored are no longer counted as a match to pick from."
+    ]
+  },
+  {
     "version": "2.81.0",
     "date": "2026-11-14",
     "title": "See what Job Hunt is doing",

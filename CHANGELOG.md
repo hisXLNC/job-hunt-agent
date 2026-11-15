@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.81.1] - 2026-11-15
+
+The Queue keeps itself up to date.
+
+### Changes
+
+- On the Queue's tabs (Pick, Approve…), the page now refreshes when tailoring finishes; it could show Tailoring for hours after it was done.
+- Postings waiting to be scored are no longer counted as a match to pick from.
+
 ## [2.81.0] - 2026-11-14
 
 See what Job Hunt is doing.
@@ -2266,6 +2275,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.81.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.81.1
 [2.81.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.81.0
 [2.80.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.80.1
 [2.80.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.80.0

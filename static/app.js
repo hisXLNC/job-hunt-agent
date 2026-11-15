@@ -191,8 +191,10 @@ const findBox = () => `<button class="find-box" data-act="palette" title="Find a
  *  Queue's List / One by one switch, shown on the waiting tabs. */
 function queueTabs(on, view) {
   const all = overview ? queueItems(overview) : [];
-  const n = k => all.filter(x => x.step === k).length;
-  return `<nav class="tabs qsteps" aria-label="What's waiting, and every job"><a href="#overview" class="${on ? '' : 'on'}">Everything <span class="n">${queueCount(all)}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${n(id) ? '' : ' none'}" ${n(id) || id === on ? '' : 'hidden'}>${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id)}</span></a>`).join('')}
+  // (Postings still waiting to be scored aren't matches to pick: they keep the Pick tab there, without a count.)
+  const n = k => all.filter(x => x.step === k && x.kind !== 'held').length;
+  const there = k => n(k) || (k === 'pick' && all.some(x => x.kind === 'held'));
+  return `<nav class="tabs qsteps" aria-label="What's waiting, and every job"><a href="#overview" class="${on ? '' : 'on'}">Everything <span class="n">${queueCount(all)}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${there(id) ? '' : ' none'}" ${there(id) || id === on ? '' : 'hidden'}>${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id) || ''}</span></a>`).join('')}
       <a href="#leads" class="leads-tab${on === 'leads' ? ' on' : ''}${overview?.leads ? '' : ' none'}" title="People saying they're hiring and companies that just raised money: write to them directly">Leads <span class="n">${overview?.leads || 0}</span></a>
       <a href="#applications" class="all-jobs${on === 'jobs' ? ' on' : ''}" title="Every job Job Hunt has seen, wherever it stands: applied, closed, set aside">All jobs</a>
       ${view ? `<span class="tabs-gap"></span><span class="seg view-seg" role="group" aria-label="How to show them"><button type="button" data-act="queueView" data-view="list" class="${view === 'list' ? 'on' : ''}" title="Every listing at once">List</button><button type="button" data-act="queueView" data-view="one" class="${view === 'one' ? 'on' : ''}" title="One decision at a time, with everything you need to decide">One by one</button></span>` : ''}</nav>`;
