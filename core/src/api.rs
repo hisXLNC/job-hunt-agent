@@ -1108,10 +1108,11 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     agent.undo_revision(id, what)?;
                     ok()
                 }
-                // Dealt with: a no you've read, or a draft you've sent or deleted, leaves the Queue.
+                // Dealt with: a no you've read, or a draft you've sent or deleted, leaves the Queue. So does
+                // a note or a follow-up you'd rather not write ("reach", "contact", "followup").
                 "seen" => {
                     let what = s(&b, "what");
-                    if !["turned", "draft"].contains(&what) {
+                    if !["turned", "draft", "reach", "contact", "followup"].contains(&what) {
                         return Err(Error("Nothing to put away.".into()));
                     }
                     agent.db().set(&format!("seen:{what}:{id}"), &crate::util::now())?;

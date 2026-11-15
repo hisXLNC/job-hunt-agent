@@ -669,6 +669,10 @@ pub struct FoundPerson {
     pub name: String,
     pub title: String,
     pub linkedin: String,
+    /// Their work email, only when a page showed it publicly (the posting, the company's site).
+    pub email: String,
+    /// The page that shows them, when it isn't their LinkedIn profile (the company's team page, say).
+    pub source: String,
     /// Why them: "Talent acquisition partner for technology roles in Toronto".
     pub why: String,
 }
@@ -775,18 +779,45 @@ fit (fit under 50)."
     )
 }
 
+/// The people a search for a job's recruiter gave, kept only when there's a real way to reach them:
+/// a LinkedIn profile, an address a page showed, or the page they're on. Anything else is dropped
+/// from the person, not guessed.
+pub fn found_people(people: Vec<FoundPerson>) -> Vec<FoundPerson> {
+    people.into_iter().filter_map(|mut p| {
+        p.name = p.name.split_whitespace().collect::<Vec<_>>().join(" ");
+        p.linkedin = Some(p.linkedin.trim().to_string()).filter(|l| l.starts_with("http") && l.contains("linkedin.com/in/")).unwrap_or_default();
+        p.source = Some(p.source.trim().to_string()).filter(|l| l.starts_with("http")).unwrap_or_default();
+        let e = p.email.trim().to_lowercase();
+        p.email = if e.contains('@') && !e.contains(' ') && e.split('@').nth(1).is_some_and(|d| d.contains('.')) && !crate::pipeline::robot_address(&e) { e } else { String::new() };
+        (!p.name.is_empty() && !(p.linkedin.is_empty() && p.source.is_empty() && p.email.is_empty())).then_some(p)
+    }).take(5).collect()
+}
+
 fn find_recruiters_system() -> String {
     format!(
         "You find the people a job applicant should message about one job: the recruiter or talent acquisition \
-partner who hires for it, and if you can tell, the hiring manager.\n\n{UNTRUSTED}\n\n\
-Search the web for their LinkedIn profiles (searches like: site:linkedin.com/in \"<company>\" recruiter <city>; \
-\"<company>\" \"talent acquisition\" <field>; the job title's likely manager, such as \"Director, PMO\" at the \
-company). Prefer, in order: a recruiter who hires for this kind of role in this city or country, any recruiter or \
-talent acquisition person at the company in that country, then the likely hiring manager. People who now work \
-at the company, not former employees, and not recruiters at staffing agencies unless the posting is an \
-agency's. At most 3, best first. Each with their name, title as LinkedIn shows it, the linkedin.com/in/ link, \
-and why them in one short line. Only people your search results actually showed, with their real profile \
-link: never guess a name or make up a link. None found: an empty list."
+partner who hires for it, and the hiring manager when you can tell who that is.\n\n{UNTRUSTED}\n\n\
+Work through these in order, and keep searching until you have someone or have tried them all:\n\
+1. The posting itself: a recruiter, hiring manager or contact it names, an email address to apply or ask at, \
+and \"reports to\" (the manager's title).\n\
+2. LinkedIn profiles, with several differently worded web searches: site:linkedin.com/in \"<company>\" recruiter \
+<city>; \"<company>\" \"talent acquisition\" <field or country>; \"<company>\" \"talent partner\" OR \"people \
+partner\" OR \"HR business partner\"; and the role's likely manager by title (for a project manager, \"<company>\" \
+\"Director, PMO\" OR \"Head of Delivery\"; for a product manager, \"Director of Product\" OR \"VP Product\").\n\
+3. LinkedIn posts about this opening: site:linkedin.com/posts \"<company>\" \"<job title>\" hiring. Whoever posted \
+\"we're hiring\" or \"my team is looking for\" about this role is the best person there is.\n\
+4. The company's own site (team, about, leadership, careers and contact pages) and pages about its people \
+(theorg.com, news, press releases, conference speaker pages) for the head of the function the role sits in. In \
+a small company with no recruiter that is the founder or the head of that function.\n\
+5. A staffing agency's posting: the agency's own recruiter for this field, from the agency's site or LinkedIn.\n\
+Prefer, in order: someone named on the posting or who posted about this role; a recruiter who hires for this \
+kind of role in this city or country; the likely hiring manager; any recruiter or talent acquisition person at \
+the company in that country. People who work there now (not former employees), and not recruiters at staffing \
+agencies unless the posting is an agency's. At most 5, best first. Each with their name, their title as the \
+page shows it, their linkedin.com/in/ link when you found it, source (the page that shows them, when that isn't \
+their LinkedIn profile), email only when a page shows that person's own work address or the posting gives an \
+address to write to (never a guessed or pattern-built address), and why them in one short line. Only people \
+your search results actually showed: never guess a name or make up a link. None found: an empty list."
     )
 }
 
@@ -894,7 +925,10 @@ A first message is 3 to 4 sentences, in this order:\n\
 2. One concrete line linking their strongest proof (a specific achievement, system, scale or figure from the CV) \
 to what this role needs.\n\
 3. Their availability, and a move or relocation if the brief states one; leave this sentence out when it states none.\n\
-4. An offer of a quick call.\n\
+4. One small, easy ask: an offer of a quick call, or to send anything that would help.\n\
+Recruiters carry dozens of open roles: the role's exact title belongs in the first sentence, or the message means \
+nothing to them. Short messages get more replies than long ones, so when in doubt, cut. Never ask about pay, how \
+many applied or where the candidate ranks.\n\
 For a staffing agency, also say they're open to similar roles the recruiter is filling. \
 Who it's to changes sentence 2 and 3. A recruiter or talent acquisition partner screens for fit and logistics: keep them as above. \
 The hiring manager, or someone on the team the role sits in (a director, head, lead or manager of that function, by their role in <contact>), \
@@ -907,7 +941,9 @@ kind of work and offer the call. Use the points the brief lists, never anything 
 sentences: refer back to the first message, add one new specific point of fit (not a repeat), and offer the call \
 again; it's the last message, so don't promise more.\n\
 Never ask about the status or for an update; never paste the CV or list its contents; mention no attachments. \
-If there's an email address in <contact>, write an email (\"Subject: ...\" first, then at most 110 words); \
+If there's an email address in <contact>, write an email: \"Subject: ...\" first (the role's title and the \
+candidate's name, such as \"Senior Analyst application, Jane Doe\": a few words, no \"Quick question\" or \"Hello\"), \
+then 40 to 90 words; \
 otherwise a LinkedIn note of at most the number of characters <brief> gives as the LinkedIn note limit (300 when it gives none): \
 count them, and cut words, never the name or the role, to fit. Warm, direct, no flattery or clichés. Sign with the \
 candidate's first name. Never invent facts.\n\
@@ -1473,8 +1509,9 @@ fn follow_up_system() -> String {
     format!(
         "You write a short follow-up email from a job candidate about an application that hasn't had a reply.\n\n\
 {UNTRUSTED}\n\n{HUMAN}\n\n\
-Write in the candidate's voice: warm, brief (60-110 words), confident and not pushy. Name the role (with its \
-job ID or reference number if the posting shows one) and when they applied, restate in one sentence the \
+Write in the candidate's voice: warm, brief (50-90 words: shorter gets more replies), confident and not pushy. \
+The first sentence names the role (with its \
+job ID or reference number if the posting shows one) and when they applied. Then restate in one sentence the \
 strongest concrete reason they fit (from the posting and their application), offer a quick call or anything \
 else that would help, and thank them. Never ask about the status or for an update, never paste the CV, and \
 mention no attachments. Sign with the candidate's name. subject: \"Following up: <job title> application\". \
@@ -2565,15 +2602,14 @@ note says; no company name, no filler. Return them in the same order, one for ea
     fn find_recruiters(&self, job: &crate::db::Job) -> R<Vec<FoundPerson>> {
         let cc = self.code()?;
         let user = posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description);
-        let person = obj(json!({"name": {"type": "string"}, "title": {"type": "string"}, "linkedin": {"type": "string"}, "why": {"type": "string"}}));
+        let person = obj(json!({"name": {"type": "string"}, "title": {"type": "string"}, "linkedin": {"type": "string"}, "email": {"type": "string"}, "source": {"type": "string"}, "why": {"type": "string"}}));
         let schema = obj(json!({"people": {"type": "array", "items": person}}));
         let v = crate::claude_code::ask(cc, &crate::claude_code::Ask {
-            system: &find_recruiters_system(), prompt: &user, schema: &schema, model: &model_id(self.search_model(), false), effort: "low", files: &[],
-            connectors: &[], web: true, limit: Duration::from_secs(6 * 60),
+            system: &find_recruiters_system(), prompt: &user, schema: &schema, model: &model_id(self.search_model(), false), effort: "medium", files: &[],
+            connectors: &[], web: true, limit: Duration::from_secs(8 * 60),
         })?;
         let people: Vec<FoundPerson> = serde_json::from_value(v["people"].clone()).unwrap_or_default();
-        // Only real profile links.
-        Ok(people.into_iter().filter(|p| !p.name.trim().is_empty() && p.linkedin.contains("linkedin.com/in/")).take(3).collect())
+        Ok(found_people(people))
     }
 
     fn size_up_leads(&self, candidate: &str, cv: &str, wants: &str, leads: &str) -> R<Vec<LeadView>> {

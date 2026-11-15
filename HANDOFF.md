@@ -941,6 +941,14 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.88.0
+
+- Finding people: `find_recruiters_system` now works through the posting, LinkedIn profiles, LinkedIn posts about the opening, the company's own site and (agency postings) the agency; up to 5; effort medium, 8 min. `FoundPerson` gained `email` and `source`; `claude::found_people` keeps a person only with a linkedin.com/in link, an http source page or a real address (never an application system's: `pipeline::robot_address`). `find_recruiter` fills a known contact's missing email/link instead of skipping them.
+- `follow_up_to`: apply email, then a contact's address not yet written to, then the newest sender that isn't `robot_address` (ATS domains such as myworkday.com were being used as the recipient).
+- Skip: `POST /api/jobs/<id>/seen {what}` now takes "reach", "contact", "followup" (keys `seen:<what>:<id>`, read by `Agent::skipped` in `reach_out_due`, `contact_follow_ups_due`, `follow_ups_due`). Overview `reach_out[]` rows carry `people` and `finding`; without people the row's button is `findPeople` with `data-job`.
+- Bug since 94bf1dd: the `seen` and `emailReply` actions read an undefined `t` (and `seen` took the job from the page, not the row), so "Done" / "Got it" on Queue rows and "Draft a reply" in the Inbox only showed an error. Now `el`.
+- Wording rules from what recruiters say works (short gets more replies; role title first; subject = role + name): first email 40-90 words, follow-up 50-90.
+
 ## 2.87.0
 
 - Followed companies: secret `companies.followed` (JSON array of names; one per `db::company_key`, newest spelling wins, max 200). `Agent::followed_companies / is_followed / follow_company` (tailoring.rs). A search collects every fresh posting (before filters) from a followed company into `SearchRun.followed`; `note_followed` sends one notice per company at the end of the search ("New opening at X" / "N new openings at X"). `POST /api/companies/follow {company,on}` → `{followed}`; job JSON `following`; settings `followed` (read through `get`: the settings handler holds the database, so calling `agent.followed_companies()` there deadlocks). UI: `followBtn` (app.js) on the job page, `followedHtml` card inside the Sources `list` piece, action `followCompany`, form `data-follow-add`.

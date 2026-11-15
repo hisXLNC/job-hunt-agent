@@ -2256,7 +2256,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             let Some(at) = j.applied_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok()) else { continue };
             let age = (now - at.with_timezone(&Utc)).num_days();
             // Too soon, or too long ago to be worth chasing.
-            if age < days || age > 45 || j.closed_at.is_some() || self.follow_up(&j.id).is_some() {
+            if age < days || age > 45 || j.closed_at.is_some() || self.follow_up(&j.id).is_some() || self.skipped("followup", &j.id) {
                 continue;
             }
             // Government hiring is formal: chasing doesn't help. And a recruiter you're already
@@ -2276,15 +2276,26 @@ replies and interviews, and a little lower for kinds that got none from several 
 
     /// Who a follow-up goes to: where the application was emailed, else whoever wrote about it
     /// (not a no-reply address), else nobody yet.
+    /// Taken off a Queue list by you ("Skip"): `what` is "reach" (a note to the recruiter),
+    /// "contact" (the follow-up to someone you messaged) or "followup" (the no-reply follow-up).
+    pub(crate) fn skipped(&self, what: &str, job_id: &str) -> bool {
+        self.db().get(&format!("seen:{what}:{job_id}")).ok().flatten().is_some()
+    }
+
     fn follow_up_to(&self, job: &Job) -> R<String> {
         if let Some(e) = job.apply_email.as_deref().filter(|e| !e.is_empty()) {
             return Ok(e.to_string());
         }
-        let robot = |a: &str| ["noreply", "no-reply", "donotreply", "do-not-reply", "notification", "mailer", "talent-acquisition-system"].iter().any(|w| a.contains(w));
+        // Someone you know there by address (found on the posting or the web, or added by you) and
+        // haven't written to: a person reads it, where an application system's address goes nowhere.
+        if let Some(e) = self.contacts(&job.id).iter().filter(|c| contact_time(c, "sent_at").is_none())
+            .filter_map(|c| c["email"].as_str()).map(|e| e.trim().to_lowercase()).find(|e| e.contains('@') && !robot_address(e)) {
+            return Ok(e);
+        }
         Ok(self.db().job_emails()?.into_iter().rev()
             .filter(|(id, _, _, _)| *id == job.id)
             .map(|(_, _, from, _)| google::address(&from))
-            .find(|a| a.contains('@') && !robot(a))
+            .find(|a| a.contains('@') && !robot_address(&a.to_lowercase()))
             .unwrap_or_default())
     }
 
@@ -3985,7 +3996,13 @@ impl Agent {
             .filter(|j| self.db().history(&j.id).unwrap_or_default().iter().any(|e| e.kind == "fill" && e.detail.contains("filled in on the application form")))
             .map(|j| j.brief()).collect();
         // The playbook's nudges: message the recruiter now, or follow up once (read before taking the database).
-        let reach_out: Vec<Value> = self.reach_out_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
+        // `people`: someone to write to is on the job already; without, the Queue offers to find them.
+        let reach_out: Vec<Value> = self.reach_out_due().unwrap_or_default().iter().map(|j| {
+            let mut b = j.brief();
+            b["people"] = json!(self.contacts(&j.id).iter().any(|c| c["name"] != "Recruiter"));
+            b["finding"] = json!(self.is_running(&format!("contact:{}", j.id)));
+            b
+        }).collect();
         let contact_follow_ups = self.contact_follow_ups_due().unwrap_or_default();
         let closing: Vec<Value> = self.closing_soon(7).unwrap_or_default().iter().map(|j| j.brief()).collect();
         let health = self.health();
@@ -4194,4 +4211,16 @@ fn add_known(list: &mut Vec<Value>, words: &[String], at: &str) {
             None => list.push(json!({ "k": w.trim(), "n": 1, "at": at })),
         }
     }
+}
+
+/// An address nobody reads: an application system's own (Workday sends as <company>@myworkday.com),
+/// or a no-reply one. `a` in lower case.
+pub(crate) fn robot_address(a: &str) -> bool {
+    let (name, domain) = a.split_once('@').unwrap_or((a, ""));
+    ["noreply", "no-reply", "no_reply", "donotreply", "do-not-reply", "do_not_reply", "notification", "mailer", "talent-acquisition-system", "bounce", "automated", "autoreply", "auto-reply", "postmaster"]
+        .iter().any(|w| name.contains(w) || domain.contains(w))
+        || ["myworkday.com", "myworkdayjobs.com", "workday.com", "greenhouse.io", "greenhouse-mail.io", "icims.com", "lever.co", "smartrecruiters.com", "ashbyhq.com", "successfactors.com", "successfactors.eu", "taleo.net", "jobvite.com",
+            "workablemail.com", "workable.com", "bamboohr.com", "applytojob.com", "recruitee.com", "teamtailor.com", "teamtailor-mail.com", "breezy.hr", "jazz.co", "zohorecruit.com", "oraclecloud.com", "adp.com", "ultipro.com", "dayforcehcm.com", "paylocity.com",
+            "linkedin.com", "indeed.com", "indeedemail.com", "glassdoor.com", "ziprecruiter.com"]
+            .iter().any(|d| domain == *d || domain.ends_with(&format!(".{d}")))
 }

@@ -116,7 +116,7 @@ impl Llm for FakeLlm {
         Ok(all.into_iter().filter(|l| !skip.contains(&l.company)).collect())
     }
     fn find_recruiters(&self, job: &Job) -> R<Vec<crate::claude::FoundPerson>> {
-        Ok(vec![crate::claude::FoundPerson { name: "Priya Shah".into(), title: format!("Talent Acquisition Partner at {}", job.company), linkedin: "https://www.linkedin.com/in/priya-shah-ta".into(), why: "hires for PMO roles in Toronto".into() }])
+        Ok(vec![crate::claude::FoundPerson { name: "Priya Shah".into(), title: format!("Talent Acquisition Partner at {}", job.company), linkedin: "https://www.linkedin.com/in/priya-shah-ta".into(), why: "hires for PMO roles in Toronto".into(), ..Default::default() }])
     }
     fn cv_interview(&self, history: &[(String, String)], message: &str, known: &str) -> R<crate::claude::CvTalk> {
         if message.contains("fail") {

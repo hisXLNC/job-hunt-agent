@@ -445,8 +445,8 @@ async function act(el) {
   }
   // A note to the recruiter, with no name needed: added as a contact, then written.
   if (a === 'findPeople') {
-    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/find-people`, { method: 'POST' }); setTimeout(route, 300); },
-      'Looking on LinkedIn for the recruiter, then writing the note. This takes a minute or two.');
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/find-people`, { method: 'POST' }); await refreshOverview(); setTimeout(route, 300); },
+      'Looking for the recruiter or hiring team (the posting, LinkedIn, the company\'s site), then writing the note. This takes a few minutes; the job\'s People tab shows who it found.');
   }
   if (a === 'noteRecruiter') {
     const list = JSON.parse(main().dataset.contacts || '[]');
@@ -682,10 +682,10 @@ async function act(el) {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/undo`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Put back as it was.');
   }
   if (a === 'emailReply') {
-    return busy(async () => { await api(`/api/emails/${encodeURIComponent(t.dataset.id)}/reply`, { method: 'POST' }); toast('The reply is in your Gmail drafts, in that email\'s thread. Read it, change what you like, and send it from Gmail.'); route(); }, 'Writing the reply…');
+    return busy(async () => { await api(`/api/emails/${encodeURIComponent(el.dataset.id)}/reply`, { method: 'POST' }); toast('The reply is in your Gmail drafts, in that email\'s thread. Read it, change what you like, and send it from Gmail.'); route(); }, 'Writing the reply…');
   }
   if (a === 'seen') {
-    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/seen`, { method: 'POST', body: { what: t.dataset.what } }); await refreshOverview(); route(); });
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/seen`, { method: 'POST', body: { what: el.dataset.what } }); await refreshOverview(); route(); }, el.dataset.done || '');
   }
   if (a === 'review' || a === 'reviewFix') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/review`, { method: 'POST', body: { fix: a === 'reviewFix' } }); setTimeout(route, 300); }, a === 'reviewFix' ? 'Rewording, then checking again…' : 'Checking your CV…');

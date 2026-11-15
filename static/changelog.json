@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.88.0",
+    "date": "2026-11-15",
+    "title": "Finding the recruiter, and skipping notes",
+    "changes": [
+      "Finding the recruiter or hiring team looks in more places: the posting itself, LinkedIn profiles and posts about the opening, and the company's own site. It keeps an email address when a page shows one.",
+      "On the Queue, 'Find them and write' finds the people and writes the note without opening the job.",
+      "Skip takes a note or follow-up you don't want to write off the Queue.",
+      "Fixed: 'Done' and 'Got it' on the Queue, and 'Draft a reply' in the Inbox, showed an error instead of working.",
+      "Follow-ups are no longer addressed to an application system's address (such as one at myworkday.com).",
+      "Notes and follow-ups are shorter and name the role first, which is what recruiters say gets a reply."
+    ]
+  },
+  {
     "version": "2.87.0",
     "date": "2026-11-15",
     "title": "Follow a company",

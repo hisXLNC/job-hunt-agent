@@ -186,7 +186,8 @@ function decisionHtml(x, at, of) {
       : `<a class="btn primary big" data-primary href="#job/${enc}" data-tab-to="people">${x.kind === 'reach' ? 'Write a note' : 'Write the follow-up'}${key('Enter')}</a>`;
     return `<article class="card decision" data-kind="${x.kind}">${decisionTop(j, where)}
       <div class="dbody"><div class="why blue"><b>${text[0]}</b>${text[1]}</div></div>
-      ${dbar(x.kind === 'follow' ? `<button class="btn quiet" data-act="stage" data-status="no_response" data-job="${id}" data-from="applied" title="Stop waiting for this one">Close as No response</button>` : '', main)}</article>`;
+      ${dbar(`${x.kind === 'follow' ? `<button class="btn quiet" data-act="stage" data-status="no_response" data-job="${id}" data-from="applied" title="Stop waiting for this one">Close as No response</button>` : ''}
+        <button class="btn quiet" data-act="seen" data-what="${x.kind === 'follow' ? 'followup' : x.kind}" data-job="${id}" data-done="Skipped." title="Don't write this one: take it off the Queue">Skip</button>`, main)}</article>`;
   }
   if (x.kind === 'quiet') {
     const l = x.list;

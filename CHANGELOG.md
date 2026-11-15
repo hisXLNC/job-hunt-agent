@@ -4,6 +4,19 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.88.0] - 2026-11-15
+
+Finding the recruiter, and skipping notes.
+
+### Changes
+
+- Finding the recruiter or hiring team looks in more places: the posting itself, LinkedIn profiles and posts about the opening, and the company's own site. It keeps an email address when a page shows one.
+- On the Queue, 'Find them and write' finds the people and writes the note without opening the job.
+- Skip takes a note or follow-up you don't want to write off the Queue.
+- Fixed: 'Done' and 'Got it' on the Queue, and 'Draft a reply' in the Inbox, showed an error instead of working.
+- Follow-ups are no longer addressed to an application system's address (such as one at myworkday.com).
+- Notes and follow-ups are shorter and name the role first, which is what recruiters say gets a reply.
+
 ## [2.87.0] - 2026-11-15
 
 Follow a company.
@@ -2384,6 +2397,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.88.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.88.0
 [2.87.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.87.0
 [2.86.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.86.1
 [2.86.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.86.0

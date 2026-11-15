@@ -2772,3 +2772,23 @@ fn a_new_posting_from_a_followed_company_gets_its_own_notice() {
     let notes = s.notes.lock().unwrap().clone();
     assert!(!notes.iter().any(|n| n.contains("opening")), "{notes:?}");
 }
+
+#[test]
+fn skipped_notes_leave_the_queue_and_follow_ups_avoid_application_systems() {
+    use crate::pipeline::robot_address;
+    assert!(robot_address("ryan@myworkday.com") && robot_address("no-reply@acme.com") && robot_address("jobs@us.greenhouse-mail.io"));
+    assert!(!robot_address("dana.recruiter@acme.com") && !robot_address("recdep@symbioticgroup.com"));
+    // Found people: kept with a profile, a page or a real address; an application system's address is dropped.
+    let p = |name: &str, linkedin: &str, email: &str, source: &str| crate::claude::FoundPerson { name: name.into(), linkedin: linkedin.into(), email: email.into(), source: source.into(), ..Default::default() };
+    let kept = crate::claude::found_people(vec![p("A One", "https://www.linkedin.com/in/a-one", "acme@myworkday.com", ""), p("B Two", "", "B.Two@Acme.com", ""),
+        p("C Three", "", "", "https://acme.example/team"), p("D Four", "linkedin.com/company/acme", "not an address", ""), p("", "https://www.linkedin.com/in/x", "", "")]);
+    assert_eq!(kept.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["A One", "B Two", "C Three"]);
+    assert_eq!((kept[0].email.as_str(), kept[1].email.as_str()), ("", "b.two@acme.com"));
+
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    s.agent.db().set_status("test:1", "applied", "").unwrap();
+    assert!(s.agent.reach_out_due().unwrap().iter().any(|j| j.id == "test:1"));
+    s.agent.db().set("seen:reach:test:1", "x").unwrap();
+    assert!(s.agent.reach_out_due().unwrap().is_empty(), "skipped: off the list");
+}

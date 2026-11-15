@@ -69,19 +69,26 @@ impl Agent {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let found = self.llm().find_recruiters(&job)?;
         if found.is_empty() {
-            return err(format!("Couldn't find a recruiter at {} on LinkedIn. Look on LinkedIn yourself, add their name here, and Job Hunt writes the note.", job.company));
+            return err(format!("Couldn't find the recruiter or hiring team at {} on the posting, LinkedIn or the company's site. Found them yourself? Add their name here (or a screenshot of their profile), and Job Hunt writes the note.", job.company));
         }
         let mut list = self.contacts(job_id);
         let mut first_new = None;
         for p in &found {
-            let link = p.linkedin.trim().trim_end_matches('/').to_string();
-            let same = |c: &Value| c["link"].as_str().is_some_and(|l| l.trim_end_matches('/') == link) || c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(p.name.trim()));
+            let link = Some(p.linkedin.trim()).filter(|l| !l.is_empty()).unwrap_or(p.source.trim()).trim_end_matches('/').to_string();
+            let same = |c: &Value| (!link.is_empty() && c["link"].as_str().is_some_and(|l| l.trim_end_matches('/') == link)) || c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(p.name.trim()));
             if let Some(i) = list.iter().position(same) {
+                // Known already: an address or a profile found now fills a gap, nothing is overwritten.
+                for (k, v) in [("email", p.email.trim()), ("link", link.as_str())] {
+                    if !v.is_empty() && list[i][k].as_str().unwrap_or("").is_empty() {
+                        list[i][k] = json!(v);
+                    }
+                }
                 first_new.get_or_insert(i);
                 continue;
             }
-            list.push(json!({ "name": p.name.trim(), "role": p.title.trim(), "link": link, "email": "",
-                "note": format!("Found on LinkedIn by Job Hunt ({}). The candidate doesn't know them: a first, cold message.", p.why.trim()) }));
+            let at = if !p.linkedin.trim().is_empty() { "on LinkedIn" } else if !p.source.trim().is_empty() { "on the web" } else { "on the posting" };
+            list.push(json!({ "name": p.name.trim(), "role": p.title.trim(), "link": link, "email": p.email.trim(),
+                "note": format!("Found {at} by Job Hunt ({}). The candidate doesn't know them: a first, cold message.", p.why.trim()) }));
             first_new.get_or_insert(list.len() - 1);
         }
         // A placeholder "Recruiter" with no message yet gives way to the real person.
@@ -89,7 +96,7 @@ impl Agent {
         self.save_contacts(job_id, &list)?;
         let list = self.contacts(job_id);
         let best = found.first().and_then(|p| list.iter().position(|c| c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(p.name.trim())))).or(first_new).unwrap_or(0);
-        self.db().log(Some(job_id), "contact", &format!("found {} on LinkedIn", found.iter().map(|p| p.name.trim()).collect::<Vec<_>>().join(", ")))?;
+        self.db().log(Some(job_id), "contact", &format!("found {} (the posting, LinkedIn and the web)", found.iter().map(|p| p.name.trim()).collect::<Vec<_>>().join(", ")))?;
         // Already messaged them: no new note.
         if list.get(best).is_some_and(|c| c["sent_at"].as_str().unwrap_or("").is_empty()) {
             self.write_outreach(job_id, best)?;
@@ -227,14 +234,14 @@ impl Agent {
         let mut due: Vec<Job> = applied.into_iter().filter(|j| {
             let age = j.applied_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok()).map(|t| (now - t.with_timezone(&Utc)).num_days());
             age.is_some_and(|d| d <= crate::playbook::REACH_OUT_WITHIN) && j.closed_at.is_none() && crate::playbook::kind(j).reach_out()
-                && self.messaged_at(&j.company).is_empty()
+                && self.messaged_at(&j.company).is_empty() && !self.skipped("reach", &j.id)
         }).collect();
         // Approved and not sent yet, with someone to write to (the posting's hiring team, say): a
         // note the day you apply lands better than one days after.
         let approved = self.db().jobs(Some("approved"), 500)?;
         due.extend(approved.into_iter().filter(|j| j.closed_at.is_none() && crate::playbook::kind(j).reach_out()
             && self.contacts(&j.id).iter().any(|c| contact_time(c, "sent_at").is_none() && !(c["link"].as_str().unwrap_or("").is_empty() && c["email"].as_str().unwrap_or("").is_empty()))
-            && self.messaged_at(&j.company).is_empty()));
+            && self.messaged_at(&j.company).is_empty() && !self.skipped("reach", &j.id)));
         Ok(due)
     }
 
@@ -245,7 +252,10 @@ impl Agent {
         let mut out = vec![];
         let applied = self.db().jobs(Some("applied"), 2000)?; // read first: contacts() takes the database too
         for j in applied {
-            // They wrote back (anything but an automatic acknowledgement): no chasing.
+            // They wrote back (anything but an automatic acknowledgement): no chasing. Nor when you said to leave it.
+            if self.skipped("contact", &j.id) {
+                continue;
+            }
             if emails.iter().any(|(id, cat, _, _)| *id == j.id && !["application_received", "job_alert", "not_job"].contains(&cat.as_str())) {
                 continue;
             }
