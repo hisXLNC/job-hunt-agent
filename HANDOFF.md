@@ -941,6 +941,12 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.85.1
+
+- Zoho Recruit skills (fill.js `fillSkills`, `zoho = first.closest('skills-tag')`): Enter is never pressed there (Zoho's Enter = `selectFirstSuggestion`, it added a dozen unrelated skills); a list that doesn't hold a word of the search is the previous search's and counts as empty; chosen skills are read from the tags' "Remove skill : X" buttons (`skillPills`); no keyboard choosing. New mock `tools/ext_test/zoho.html`, case `zoho` in ext_test (in verify).
+- Skill level on Zoho: radios `name=skillTags` (master/intermediate/…) in the suggestions popover, Master ticked by default; left as is.
+- Copy details: `now.rows` = HTML of Zoho's `rec-tabular-component`s (Duration dates in Education/Experience are not read as boxes yet; need this to build it).
+
 ## 2.85.0
 
 The ten screen changes the user approved ("do them all"):

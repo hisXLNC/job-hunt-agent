@@ -85,7 +85,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
 (async () => {
   const only = process.argv.slice(2);
   const names = Object.keys(VARIANTS).filter(n => !only.length || only.includes(n));
-  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && n !== 'letter' && n !== 'one' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
+  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && n !== 'letter' && n !== 'zoho' && n !== 'one' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
   // Job Hunt's side: says its version, and answers a form's questions.
   let picked = '';
   let leads = null;
@@ -167,7 +167,8 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     + '<div id="docs"><div style="display:flex;justify-content:space-between"><h2>Supporting documents</h2><a href="#" id="addDocs" onclick="document.getElementById(\'up\').style.display=\'block\';this.remove();return false">Add</a></div><div>No cover letter or additional documents added. This is optional to add.</div>'
     + '<div id="up" style="display:none"><label for="doc">Upload a file</label><input id="doc" type="file"></div></div><button type="button">Submit your application</button></body></html>';
   const postsHtml = fs.readFileSync(path.join(__dirname, 'posts.html'));
-  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/nothing') ? '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Careers - Mock</title></head><body><h1>Thanks for your interest</h1><p>Nothing to fill in here.</p></body></html>' : req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/letter') ? letterHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
+  const zohoHtml = fs.readFileSync(path.join(__dirname, 'zoho.html'));
+  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/nothing') ? '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Careers - Mock</title></head><body><h1>Thanks for your interest</h1><p>Nothing to fill in here.</p></body></html>' : req.url.startsWith('/zoho') ? zohoHtml : req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/letter') ? letterHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
   const base = `http://127.0.0.1:${site.address().port}/apply`;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
@@ -395,6 +396,30 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (problems.length) { failed.push('letter'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 300)}`); }
     await page.close();
   }
+  // Zoho Recruit's skills box: each skill clicked in its suggestions, Enter never pressed (it adds
+  // whatever is first), nothing taken from a list left over from the search before.
+  if (!only.length || only.includes('zoho')) {
+    const page = await ctx.newPage();
+    const url = `http://127.0.0.1:${site.address().port}/zoho/apply`;
+    await page.goto(url);
+    const t0 = Date.now();
+    await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, url);
+    let s = '';
+    for (let i = 0; i < 240; i++) { await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s) || /Couldn't|can't find|No answers|tripped/.test(s)) break; }
+    const got = await page.evaluate(() => ({ skills: window.mock.skills(), enters: window.mock.enters }));
+    const problems = [], wanted = ['Python', 'Project Management', 'SQL', 'Vendor Management', 'Payments'];
+    if (JSON.stringify(got.skills) !== JSON.stringify(wanted)) problems.push(`the skills are ${JSON.stringify(got.skills)}, not ${JSON.stringify(wanted)}`);
+    if (got.enters) problems.push(`Enter was pressed ${got.enters} times in the skills box (it adds the first suggestion, whatever it is)`);
+    if (!/Underwater Basket Weaving/.test(s)) problems.push("the skill the site doesn't have wasn't reported");
+    if (/add these yourself\): [^.]*(Python|SQL|Project Management|Vendor Management)/.test(s) || /didn't show it/.test(s)) problems.push('a skill that was chosen is reported as not taken or unsure');
+    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'zoho'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s  skills: ${got.skills.join(', ') || 'none'}`);
+    if (problems.length) {
+      failed.push('zoho'); for (const p of problems) console.log(`        ${p}`); console.log(`        panel: ${s.slice(0, 400)}`);
+      const details = await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => window.__jobhunt.details() }); return r.result; }, url).catch(() => null);
+      for (const k of (details && details.skills) || []) console.log(`        ${k.skill} -> ${k.chose || 'nothing'} (${k.how || ''}) ${(k.searches || []).map(x => `${x.q}: ${x.found} in ${x.ms}ms [${(x.top || []).join(', ')}]`).join('; ')}`);
+    }
+    await page.close();
+  }
   // Right-click a box and choose "Fill this in": only that box is filled, the rest of the form is left.
   if (!only.length || only.includes('one')) {
     const page = await ctx.newPage();
@@ -457,7 +482,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   };
   // Three browsers at a time (JOBS=1 for one after another, when reading a failure).
   const jobs = names.map(n => () => runVariant(n));
-  if (!only.length || ['app', 'profile', 'posts', 'folded', 'letter', 'one'].some(n => only.includes(n))) jobs.push(rest);
+  if (!only.length || ['app', 'profile', 'posts', 'folded', 'letter', 'zoho', 'one'].some(n => only.includes(n))) jobs.push(rest);
   const t0 = Date.now();
   await Promise.all(Array.from({ length: Math.max(1, Number(process.env.JOBS) || 3) }, async () => { while (jobs.length) await jobs.shift()(); }));
   console.log(`      (${Math.round((Date.now() - t0) / 1000)}s in all)`);

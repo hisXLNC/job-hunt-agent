@@ -206,7 +206,9 @@
       // Open the thing that went wrong, then press Copy details.
       const tags = document.querySelector('skills-tag,[class*="skill" i][class*="tag" i]');
       const open = [...document.querySelectorAll('lyte-popover-wormhole,lyte-wormhole,lyte-drop-box,lyte-menu-body,[role=dialog],[role=listbox],[role=menu],[class*="popover" i]')].filter(x => !own(x) && shown(x) && clean(x.textContent)).slice(0, 3);
-      diag.now = { skillTags: tags ? htmlOf(tags, 5000) : undefined, open: open.length ? open.map(x => ({ at: where(x), html: htmlOf(x, 3000) })) : undefined };
+      // Zoho's rows of education and experience (their dates are drawn in a way not yet read).
+      const rows = [...document.querySelectorAll('rec-tabular-component')].slice(0, 2).map(x => htmlOf(x, 7000));
+      diag.now = { rows: rows.length ? rows : undefined, skillTags: tags ? htmlOf(tags, 1500) : undefined, open: open.length ? open.map(x => ({ at: where(x), html: htmlOf(x, 3000) })) : undefined };
       let text = 'Job Hunt form details ' + JSON.stringify({ page: location.hostname, ...diag, trail: trail.map(e => ({ ...e, t: new Date(e.t).toISOString() })) }, null, 1);
       // With the extension's own log (what it asked Job Hunt and what came back, no answers in it).
       if (EXT) { flush(); try { const more = await Promise.race([chrome.runtime.sendMessage({ report: 'copy details', page: location.hostname }), wait(4000)]); if (more) text += '\n\n' + more; } catch (e) { /* the extension was updated */ } }
@@ -436,6 +438,9 @@
   const isPrompt = (el, type) => ['text', 'search'].includes(type) && !SKILLS.test(labelOf(el)) && (builtAsPrompt(el) || PROMPT.test(labelOf(el)) && (/myworkday/i.test(location.hostname) || !!(el.closest('[data-automation-id^=formField]') || el.parentElement)?.parentElement?.querySelector('[data-automation-id=promptIcon],[data-automation-id=multiselectInputContainer],[data-uxi-widget-type=multiselect],[data-automation-id=multiSelectContainer]')));
   const isSkills = (el, type) => ['text', 'search'].includes(type) && SKILLS.test(labelOf(el)) && !/years|level|describe|summary/i.test(labelOf(el));
   const skillPills = el => {
+    // Zoho Recruit: each chosen skill is a tag with a "Remove skill : name" button.
+    const zoho = el.closest('skills-tag');
+    if (zoho) return [...zoho.querySelectorAll('button[aria-label^="Remove skill" i]')].map(b => clean(b.getAttribute('aria-label').replace(/^remove skill\s*:\s*/i, ''))).filter(Boolean);
     const box = el.closest('[data-automation-id=multiSelectContainer],[data-uxi-widget-type=multiselect],[role=group],div');
     const area = box && box.parentElement ? box.parentElement.parentElement || box.parentElement : null;
     return area ? [...area.querySelectorAll('[data-automation-id=selectedItem],[data-automation-id=promptSelectionLabel],[role=listitem],.pill,.tag,.chip')].map(x => clean(x.textContent)).filter(Boolean) : [];
@@ -1078,6 +1083,10 @@
     // The chosen items, as far as they can be seen: named pills, and how many items the box's own
     // list of chosen ones holds (Workday's selectedItemList), whatever they look like.
     const names = () => skillPills(box());
+    // Zoho Recruit's skills box: Enter there adds whatever suggestion is first (it added a dozen
+    // unrelated skills), and its list stays up, unchanged, when a search finds nothing. So: no Enter,
+    // no keyboard choosing, and a short wait.
+    const zoho = !!first.closest('skills-tag');
     const kids = () => { const l = field !== document.body && field.querySelector('[data-automation-id=selectedItemList]'); return l ? l.children.length : -1; };
     const rowOf = o => o.closest('[role=option],[data-automation-id=menuItem],li') || o;
     const tick = o => rowOf(o).querySelector('input[type=checkbox],input[type=radio]');
@@ -1110,18 +1119,18 @@
       el.focus(); el.click();
       typeIn(el, '');
       await wait(150);
-      if (trusted) { el.focus(); await ext('type', { text: query }); await wait(250); await ext('key', { key: 'Enter' }); }
-      else { typeIn(el, query); await wait(300); pressKey(el, 'Enter'); }
+      if (trusted) { el.focus(); await ext('type', { text: query }); await wait(250); if (!zoho) await ext('key', { key: 'Enter' }); }
+      else { typeIn(el, query); await wait(300); if (!zoho) pressKey(el, 'Enter'); }
       const key = words(query);
       const ours = l => l.some(o => key.some(w => label(o).includes(w)));
       let list = [], none = 0, reacted = true;
       // A list that never says "No items" is waited on in full once; after that, five seconds.
-      const looks = silent ? 30 : 70;
+      const looks = zoho ? 24 : silent ? 30 : 70;
       for (let i = 0; i < looks; i++) {
         await wait(170);
         list = options();
         const busy = !list.length || /^(searching|loading)/i.test(clean(list[0].textContent));
-        if (!busy && (ours(list) || (sig() !== before && i > 30))) break;
+        if (!busy && ((ours(list) && (!zoho || sig() !== before || i > 8)) || (sig() !== before && i > 30))) break;
         // "No Items", twice in a row and not straight away (the last search's may still be showing).
         none = i > 3 && nothing() ? none + 1 : 0;
         if (none >= 2) { list = []; break; }
@@ -1133,8 +1142,11 @@
       if (!reacted && EXT && !trusted && !scriptWorks) { trusted = true; return search(query); }
       if (reacted && !trusted) scriptWorks = true;
       // Settled: the same list three looks in a row (Workday fills it in a bit at a time).
+      // (Zoho's unchanged list is the last search's: not this one's matches.)
+      if (zoho && list.length && !ours(list)) list = [];
       if (list.length) { let last = sig(), same3 = 0; for (let i = 0; i < 20 && same3 < 3; i++) { await wait(220); const now = sig(); same3 = now === last ? same3 + 1 : 0; last = now; } }
       list = options();
+      if (zoho && !ours(list)) list = [];
       // No list Job Hunt knows, and the site never said "no items": what the page did put up after the
       // typing goes in Copy details (once), so a list drawn another way can be learned.
       if (!list.length && none < 2) { quiet++; if (grew && grew.isConnected && !diag.skillPopup) diag.skillPopup = { q: query, at: where(grew), html: htmlOf(grew, 2500) }; }
@@ -1180,6 +1192,7 @@
       if (EXT) {
         const canSee = visible(cur() || best);
         if (await realClick(cur())) { if (await settle(canSee ? 4000 : 1500)) return 'click'; if (!canSee) return 'unseen'; }
+        if (zoho) return got() ? 'click' : '';
         // Not taken, and it shows as not chosen: its tick box itself, then the keyboard.
         let t = cur();
         const c = t && tick(t);

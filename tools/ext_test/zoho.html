@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Senior Project Manager - Mock Recruit</title></head><body>
+<!-- A skills box as Zoho Recruit draws it: suggestions in a window that stays open (and unchanged when
+     a search finds nothing), Enter adds whatever suggestion is first, chosen skills are tags. -->
+<h1>Senior Project Manager</h1>
+<form><div role="region"><h2>Professional Details</h2>
+<label id="crc-label-rec-form_77">Skill Set</label>
+<rec-skills-component id="rec-form_77"><skills-tag id="careersite-skills-tag"><ul data-zcqa="skillsTagList" id="tags"><li id="inli"><lyte-input><div><input id="addSkills" type="text" name="-add-skills" placeholder="Search and add skills" autocomplete="off"></div></lyte-input></li></ul></skills-tag></rec-skills-component>
+</div></form>
+<lyte-wormhole><div id="pop" style="display:none;border:1px solid #999;padding:8px"><ul id="competencySkillsSuggestedList"></ul></div></lyte-wormhole>
+<script>
+const ALL = ['Python', 'python scripting', 'Project Management', 'project management', 'agile project management', 'SQL', 'sql server', 'Vendor Management', 'vendor management skills', 'Payments', 'senior stakeholder management', 'defence procurement'];
+const input = document.getElementById('addSkills'), list = document.getElementById('competencySkillsSuggestedList'), tags = document.getElementById('tags');
+window.mock = { skills: () => [...tags.querySelectorAll('button')].map(b => b.getAttribute('aria-label').replace('Remove skill : ', '')), enters: 0 };
+const add = name => { const li = document.createElement('li'); li.tabIndex = 0; li.innerHTML = '<em></em><span></span><button type="button" tabindex="-1"></button>'; li.querySelector('span').textContent = name.length > 25 ? name.slice(0, 25) + '...' : name; li.querySelector('button').setAttribute('aria-label', 'Remove skill : ' + name); tags.insertBefore(li, document.getElementById('inli')); };
+input.addEventListener('input', () => { const q = input.value.toLowerCase().trim(); if (!q) return; setTimeout(() => {
+  const m = ALL.filter(x => x.toLowerCase().includes(q) && !window.mock.skills().includes(x)); if (!m.length) return;
+  list.innerHTML = ''; for (const x of m) { const li = document.createElement('li'); li.setAttribute('role', 'button'); li.tabIndex = 0; li.setAttribute('aria-label', 'Add skill : ' + x); li.textContent = x.length > 30 ? x.slice(0, 30) + '...' : x; li.onclick = () => { add(x); li.remove(); }; list.appendChild(li); }
+  document.getElementById('pop').style.display = 'block'; }, 500); });
+input.addEventListener('keydown', e => { if (e.key === 'Enter') { window.mock.enters++; const li = list.querySelector('li'); if (li) li.click(); } });
+</script></body></html>
