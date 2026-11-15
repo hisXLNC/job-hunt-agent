@@ -25,6 +25,7 @@ mod checks;
 mod people;
 mod reports;
 mod tailoring;
+pub(crate) use tailoring::cert_mime;
 mod mail;
 
 /// Near-miss titles Claude looks at per search; the rest wait for the next one.

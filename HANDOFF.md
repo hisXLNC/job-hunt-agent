@@ -940,3 +940,32 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   `diag.skillPopup` keeps the biggest node the page added after typing. Still unknown there: how
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
+
+## 2.85.0
+
+The ten screen changes the user approved ("do them all"):
+- About me (app-settings.js `details`): `#aboutCard` holds the name/email form and the signature
+  (`h3#sigCard`); `#storiesCard` only stories; `#formsCard` = facts form (part `stories`, only the
+  fields present are saved) + `#bankCard` (now a div inside it). `renderAutoSubmit()` draws
+  `#autoSubmitCard` on Settings → Applying → Filling in forms.
+- Settings: SET_NAV drops `phone` (alias → `notifications`, now "Notifications & phone") and adds
+  `help` ("Help & updates": updates, debug, whatsnew; alias `app` → `help` so update links land
+  there). `jobs` tabs: Sources | `limits` "When & how much" | Last search (`schedule` → `limits`).
+  `mail` has no tabs.
+- Career: `#cvs/coach` redirects to `#cvs/career`; `renderCoachPart()` (app-calendar.js) fills
+  `#coachPart` under `#pathsPart`. `careerSeg()` is a jump row.
+- Insights: `resultsTab` ('do' | 'numbers'), `[data-rtab]` blocks, action `resultsTab`.
+- People: `#people` (Queue tab, `queueTabs('people')`) shows what was Inbox → Recruiters;
+  `#inbox/recruiters` and `#recruiters` redirect. `inboxTabs()` returns ''.
+- **Certificate files**: `<files>/Certificates/` (`cert_files`, `add_cert_file`, `remove_cert_file`,
+  `cert_mime` in pipeline/tailoring.rs); POST `/api/settings/cert-file?filename=` (raw body) and
+  `/api/settings/cert-file-remove`; `cert_files` in GET settings. `fill::answers` gives the next
+  one to each file box whose label/section says certif/licen.
+- **Zoho Recruit, from the second report** (DOM seen in Copy details): labels are
+  `#crc-label-rec-form_<id>` (`rowLabel` looks these up from the box's ancestors' ids first);
+  skill suggestions are `#competencySkillsSuggestedList li[role=button][aria-label^="Add skill : "]`
+  (`options()` / `optName`); `fill::answers` skips a CV-reader upload box (label/section says
+  autofill / easyresume) when another box takes the CV. Not yet handled, DOM unknown: the level
+  on each skill tag, lyte dropdowns (salutation, phone country code, the Duration months/years in
+  Education and Experience rows). `diag.now` in Copy details records `skills-tag` and any open
+  popover for that.

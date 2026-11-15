@@ -1273,6 +1273,43 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
         ["png", "jpeg"].iter().find_map(|e| std::fs::read(self.signature_path(e)).ok())
     }
 
+    /// Copies of your certificates (PDFs or pictures), kept in a Certificates folder with your other
+    /// files, for application forms that ask for them. Their names, in order.
+    pub fn cert_files(&self) -> Vec<String> {
+        let mut v: Vec<String> = std::fs::read_dir(self.files().join("Certificates")).into_iter().flatten().flatten()
+            .filter(|e| e.path().is_file()).filter_map(|e| e.file_name().into_string().ok())
+            .filter(|n| cert_mime(n).is_some()).collect();
+        v.sort_by_key(|n| n.to_lowercase());
+        v
+    }
+
+    pub fn cert_file_path(&self, name: &str) -> std::path::PathBuf {
+        self.files().join("Certificates").join(name)
+    }
+
+    /// Keep a certificate's file: a PDF, PNG or JPEG up to 10 MB. Returns the name it's kept under.
+    pub fn add_cert_file(&self, name: &str, bytes: &[u8]) -> R<String> {
+        let base = name.rsplit(['/', '\\']).next().unwrap_or("").trim();
+        let clean: String = base.chars().filter(|c| !c.is_control() && !"<>:\"|?*".contains(*c)).collect();
+        if cert_mime(&clean).is_none() || clean.starts_with('.') {
+            return err("Use a PDF, PNG or JPEG of the certificate.");
+        }
+        if bytes.is_empty() || bytes.len() > 10_000_000 {
+            return err("That file is empty or over 10 MB.");
+        }
+        let dir = self.files().join("Certificates");
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(dir.join(&clean), bytes)?;
+        Ok(clean)
+    }
+
+    pub fn remove_cert_file(&self, name: &str) -> R<()> {
+        if self.cert_files().iter().any(|n| n == name) {
+            std::fs::remove_file(self.cert_file_path(name))?;
+        }
+        Ok(())
+    }
+
     pub fn set_signature(&self, bytes: &[u8]) -> R<()> {
         let Some((ext, _, _)) = cv::image_info(bytes) else {
             return err("Use a PNG or JPEG picture of your signature.");
@@ -1349,4 +1386,14 @@ pub fn has_word(text: &str, term: &str) -> bool {
         from = b;
     }
     false
+}
+
+/// The kind of file a certificate's copy is, from its name; None for anything else.
+pub(crate) fn cert_mime(name: &str) -> Option<&'static str> {
+    match name.rsplit('.').next().unwrap_or("").to_lowercase().as_str() {
+        "pdf" => Some("application/pdf"),
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        _ => None,
+    }
 }

@@ -155,16 +155,16 @@ const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</
 /** Four places. Queue: what's waiting for you, and behind its last tab every job, wherever it stands. Inbox: the email about them. Calendar: interviews and reminders. Me: what you're looking for, your CVs and details, the files tailored from them, and how it's going. The same four are the phone's tabs. Settings (the gear) has the accounts, the job sources and the app itself. */
 const NAV = [['overview', 'Queue'], ['inbox', 'Inbox'], ['calendar', 'Calendar'], ['cvs', 'Me'], ['results', 'Insights'], ['settings', 'Settings']];
 /** Pages that belong to a place: a job, applying, review and every job to the Queue; the tailored files and the insights to Me; Recruiters to Inbox. */
-const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applications: 'overview', pipeline: 'overview', review: 'overview', welcome: 'overview', leads: 'overview', documents: 'cvs', recruiters: 'inbox' };
+const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applications: 'overview', pipeline: 'overview', review: 'overview', welcome: 'overview', leads: 'overview', people: 'overview', documents: 'cvs', recruiters: 'overview' };
 /** Which place a page belongs to. What you're looking for is part of Me; where it looks is part of Settings. */
 const placeOf = () => { const [page, arg] = (location.hash.slice(1) || 'overview').split('/'); return page === 'search' ? (arg === 'what' ? 'cvs' : 'settings') : page === 'applications' && arg === 'files' ? 'cvs' : NAV_HOME[page] || page; };
 /** Each place's views, as the same row of tabs wherever you are in it. */
 const placeTabs = (tabs, on) => `<nav class="tabs place-tabs">${tabs.map(([href, name, id]) => `<a href="${href}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
-const inboxTabs = on => placeTabs([['#inbox', 'Email', 'email'], ['#inbox/recruiters', 'Recruiters', 'recruiters']], on);
+const inboxTabs = () => ''; // one view now: Recruiters moved to the Queue's People tab
 /** Me: what you're looking for, then what Job Hunt knows about you. */
 const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['#cvs', `CVs${n ? ` (${n})` : ''}`, 'cvs'], ['#cvs/details', 'About me', 'details'], ['#cvs/career', 'Career', 'career'], ['#applications/files', 'Tailored files', 'files']], on);
 /** Career's two views, on the one tab: the paths your CV supports, and the skills that would help most. */
-const careerSeg = on => `<nav class="mode career-seg" aria-label="Career"><a href="#cvs/career" class="${on === 'paths' ? 'on' : ''}">Paths you could take</a><a href="#cvs/coach" class="${on === 'skills' ? 'on' : ''}">Skills to build</a></nav>`;
+const careerSeg = () => `<nav class="jump" aria-label="On this page"><a href="#cvs/career" data-act="jumpTo" data-to="pathsPart">Paths you could take</a><a href="#cvs/career" data-act="jumpTo" data-to="coachPart">Skills to build</a></nav>`;
 const meHead = (on, about, n) => `<div class="head"><div class="grow"><h1>Me</h1><p class="muted">${about}</p></div><span class="save-state" ${on === 'what' ? '' : 'id="saveState"'} aria-live="polite">${['cvs', 'details'].includes(on) ? 'Changes save by themselves' : ''}</span></div>${meTabs(on, n)}`;
 /** Settings' tabs: what belongs to no one place, and where Job Hunt looks for jobs. */
 /** The job hunt, step by step: each a view of Pipeline and a kind of decision in the Queue, with how many are in it and what to do there. */
@@ -214,6 +214,7 @@ function queueTabs(on, view) {
   const there = k => n(k) || (k === 'pick' && all.some(x => x.kind === 'held'));
   return `<nav class="tabs qsteps" aria-label="What's waiting, and every job"><a href="#overview" class="${on ? '' : 'on'}">Everything <span class="n">${queueCount(all)}</span></a>${FLOW.map(([id, name]) => `<a href="#overview/${id}" class="${id === on ? 'on' : ''}${there(id) ? '' : ' none'}" ${there(id) || id === on ? '' : 'hidden'}>${id === 'waiting' ? 'Follow up' : name} <span class="n">${n(id) || ''}</span></a>`).join('')}
       <a href="#leads" class="leads-tab${on === 'leads' ? ' on' : ''}${overview?.leads ? '' : ' none'}" title="People saying they're hiring and companies that just raised money: write to them directly">Leads <span class="n">${overview?.leads || 0}</span></a>
+      <a href="#people" class="people-tab${on === 'people' ? ' on' : ''}" title="Recruiters who wrote to you, people you know at companies, and the email Job Hunt writes them when you apply">People</a>
       <a href="#applications" class="all-jobs${on === 'jobs' ? ' on' : ''}" title="Every job Job Hunt has seen, wherever it stands: applied, closed, set aside">All jobs</a>
       ${view ? `<span class="tabs-gap"></span><span class="seg view-seg" role="group" aria-label="How to show them"><button type="button" data-act="queueView" data-view="list" class="${view === 'list' ? 'on' : ''}" title="Every listing at once">List</button><button type="button" data-act="queueView" data-view="one" class="${view === 'one' ? 'on' : ''}" title="One decision at a time, with everything you need to decide">One by one</button></span>` : ''}</nav>`;
 }
@@ -696,7 +697,7 @@ async function showRoute() {
     if (name === 'overview' && arg === 'ready') { location.replace('#overview/approve'); return; }
     // A page's settings are tabs of Settings.
     if ((name === 'inbox' || name === 'calendar') && arg === 'settings') { location.replace(`#settings/${name}`); return; }
-    if (name === 'cvs' && arg === 'coach') await showCoach();
+    if (name === 'cvs' && arg === 'coach') { scrollToAfter = 'coachPart'; location.replace('#cvs/career'); return; }
     // A step of the hunt is the Queue's: an old link to it in the Pipeline goes there, as a list.
     else if (name === 'applications' && FLOW.some(([id]) => id === arg)) { location.replace(`#overview/${arg}/list`); return; }
     else if (name === 'applications') { if (!overview || Date.now() - overviewAt > 1500) await refreshOverview(); await showPipeline(arg); }
@@ -711,7 +712,8 @@ async function showRoute() {
     else if (name === 'calendar') await showCalendar();
     else if (name === 'results') await showResults();
     else if (name === 'search') await showSearch(arg);
-    else if (name === 'inbox' && arg === 'recruiters' || name === 'recruiters') await showRecruiters();
+    else if (name === 'inbox' && arg === 'recruiters' || name === 'recruiters') { location.replace('#people'); return; }
+    else if (name === 'people') { if (!overview) await refreshOverview(); await showRecruiters(); }
     else if (name === 'inbox') await showInbox();
     else if (name === 'add') showAdd();
     else if (name === 'settings' && ['search', 'preferences', 'sources'].includes(arg)) { location.replace(arg === 'sources' ? '#search/setup' : '#search/what'); return; }

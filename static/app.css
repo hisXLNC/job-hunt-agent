@@ -2209,3 +2209,8 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 .own-on { display: inline-flex; align-items: center; gap: 4px; }
 .own-row .tabs-gap { flex: 1; }
 .pic-add { margin-top: 8px; align-items: center; }
+.part-head { font-size: 20px; }
+/* Parts of a page that hold several cards (Insights' two views, Career's two halves): spaced like the page. */
+[data-rtab]:not([hidden]), #pathsPart, #coachPart { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.part-head { margin: 6px 0 -8px; }
+@media (max-width: 720px) { [data-rtab]:not([hidden]), #pathsPart, #coachPart { gap: 16px; } }

@@ -323,7 +323,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
     check(new Set([was, one, two]).size === 3 && await mode() === was, 'The top bar theme button steps through Auto, Light and Dark'); }
   const on = async () => `${(await text('#nav a.on')).replace(/\s*\d+\s*$/, '').trim()} / ${(await text('.place-tabs a.on, .pipe-tabs a.on')).replace(/\s*\d+\s*$/, '').trim()}`;
   await at('calendar'); check((await text('#nav a.on')).trim() === 'Calendar', 'The calendar is its own place');
-  await at('inbox'); check(await on() === 'Inbox / Email', 'Inbox opens on Email');
+  await at('inbox'); check((await text('#nav a.on')).replace(/\s*\d+\s*$/, '').trim() === 'Inbox' && !(await page.$('.place-tabs')), 'Inbox is one view: the email (Recruiters moved to the Queue, People)');
   check(await page.evaluate(() => { const row = [...document.querySelectorAll('.inbox-list tr')].find(r => /Rejection/.test(r.textContent)); return !!row && /Draft a reply/.test(row.textContent) && /Open in Gmail/.test(row.textContent) && !!row.querySelector('a[href^="#job/"], a[href*="job"]'); }), 'Inbox: a rejection offers a reply and a link to its application');
   await at('results'); check((await text('#nav a.on')).trim() === 'Insights', 'Insights is its own place');
   await at('applications/files'); check(await on() === 'Me / Tailored files', 'Tailored files are under Me');
@@ -340,7 +340,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   await page.keyboard.press('/'); await page.keyboard.type('calendar'); await page.waitForTimeout(900);
   check(await page.evaluate(() => document.activeElement.id === 'setFind' && [...document.querySelectorAll('.set-hit')].some(h => /Which Google calendar/.test(h.textContent) && /Email & calendar/.test(h.querySelector('.set-where').textContent))), 'Searching settings (the / key) lists what matches, each with where it is');
   await page.click('.set-hit:has-text("Which Google calendar")'); await page.waitForTimeout(900);
-  check(await page.evaluate(() => location.hash === '#settings/mail/calendar' && document.querySelector('[name=calendar_id]').closest('details').open && !!document.querySelector('.set-flash')), 'Opening a found setting goes to its page, unfolds it and lights it');
+  check(await page.evaluate(() => location.hash === '#settings/mail' && document.querySelector('[name=calendar_id]').closest('details').open && !!document.querySelector('.set-flash')), 'Opening a found setting goes to its page, unfolds it and lights it');
   await at('settings');
   await at('search'); check((await text('#nav a.on')).trim() === 'Settings' && (await text('.set-nav a.on')).trim() === 'Job search' && (await text('.set-main .place-tabs a.on')).trim() === 'Sources' && await page.evaluate(() => document.querySelectorAll('.src-card .tile.src').length >= 8 && !!document.querySelector('.src-card .src-group')), 'Where it looks is Settings, Job search, Sources: one list, in groups');
   await page.click('#dRun'); await page.waitForTimeout(400);

@@ -565,11 +565,19 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     let stem = |what: &str| if who.is_empty() { what.to_string() } else { format!("{who} - {what}") };
     let files_wanted: Vec<&Value> = fields.iter().filter(|f| f["type"] == "file").collect();
     let mut files = serde_json::Map::new();
+    let mut certs_left = agent.cert_files().into_iter();
     for f in &files_wanted {
         // By what the box says, else by the part of the form it's in (Workday's box says only
         // "Select files", under Resume/CV); a certificate's own upload box gets neither.
         let (label, section) = (f["label"].as_str().unwrap_or(""), f["section"].as_str().unwrap_or(""));
         let other_doc = ["certif", "licen", "transcript", "portfolio", "reference"].iter().any(|w| format!("{label} {section}").to_lowercase().contains(w));
+        // A box that reads your CV to fill the form in for you (Zoho Recruit's "Autofill Application"),
+        // when the form has its own box for the CV as well: left alone. What such a reader guesses then
+        // lands over what Job Hunt fills in (a certificate's issuer as your school, every skill a beginner's).
+        let reader = |l: &str| { let l = l.to_lowercase(); l.contains("autofill") || l.contains("auto-fill") || l.contains("easyresume") || l.contains("easy resume") };
+        if (reader(label) || reader(section)) && files_wanted.iter().any(|o| !std::ptr::eq(*o, *f) && { let l = o["label"].as_str().unwrap_or("").to_lowercase(); !reader(&l) && !reader(o["section"].as_str().unwrap_or("")) && (l.contains("resume") || l.contains("résumé") || l.contains("cv")) }) {
+            continue;
+        }
         let which = if other_doc { None } else { file_for(label, false).or_else(|| file_for(section, files_wanted.len() == 1)) };
         let path = match which {
             Some("cv") => job.cv_path.as_deref().map(|p| as_pdf(Path::new(p))),
@@ -578,6 +586,16 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
         };
         if let Some(a) = path.and_then(|p| attachment(&p, &stem(if which == Some("cv") { "CV" } else { "Cover letter" }))) {
             files.insert(f["key"].as_str().unwrap_or("").to_string(), a);
+        }
+        // A box for certificates or licences: the copies you keep under Me, About me, Certifications,
+        // one a box, in order (never in a box for a transcript, a portfolio or references).
+        let ls = format!("{label} {section}").to_lowercase();
+        if (ls.contains("certif") || ls.contains("licen")) && !["transcript", "portfolio", "reference"].iter().any(|w| ls.contains(w)) {
+            if let Some(name) = certs_left.next() {
+                if let (Ok(bytes), Some(mime)) = (std::fs::read(agent.cert_file_path(&name)), crate::pipeline::cert_mime(&name)) {
+                    files.insert(f["key"].as_str().unwrap_or("").to_string(), json!({ "name": name, "mime": mime, "b64": base64::engine::general_purpose::STANDARD.encode(bytes) }));
+                }
+            }
         }
     }
     // Questions you've answered before, from the bank: no need to ask Claude.

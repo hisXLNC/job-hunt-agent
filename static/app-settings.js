@@ -37,11 +37,18 @@ async function renderBank() {
   const box = $('#bankCard'); if (!box) return;
   let b;
   try { b = await api('/api/answer-bank'); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
-  box.innerHTML = `<header><h2>Your saved answers</h2>${b.answers.length ? `<span class="pill">${b.answers.length}</span>` : ''}</header>
+  box.innerHTML = `<h3 class="sub">Your saved answers ${b.answers.length ? `<span class="pill">${b.answers.length}</span>` : ''}</h3>
     <p class="muted">When you submit a form, Job Hunt keeps your answers to the questions forms keep asking (work authorization, notice period, salary, how you heard about the job…) and fills them in next time without asking Claude: faster, the same answer everywhere, and less of your plan. Answers about one employer (why this role, your cover letter) aren't kept.</p>
     ${b.answers.length ? `<div class="bank">${b.answers.map((x, i) => `<div class="bank-row" data-i="${i}"><input type="text" class="bank-q" value="${esc(x.q)}" aria-label="Question"><input type="text" class="bank-a" value="${esc(x.a)}" aria-label="Your answer"><span class="muted small" title="Times used">${x.uses ? `used ${x.uses}×` : ''}</span><button class="btn ghost sm icon-only" data-act="bankDrop" data-i="${i}" title="Forget this answer">${svg('close')}</button></div>`).join('')}</div>` : '<p class="empty small">None yet: they appear after your first form.</p>'}
     <div class="row"><button class="btn" data-act="bankAdd">Add one</button>${b.answers.length ? '<button class="btn primary" data-act="bankSave">Save changes</button>' : ''}</div>
-    <h3 class="sub">Submitting for you</h3>
+    <p class="muted small">Whether Job Hunt may press Submit for you on simple forms is in <a href="#settings/applying/forms">Settings → Applying → Filling in forms</a>.</p>`;
+}
+/** Settings, Applying, Filling in forms: whether Job Hunt may submit a simple form itself. */
+async function renderAutoSubmit() {
+  const box = $('#autoSubmitCard'); if (!box) return;
+  let b;
+  try { b = await api('/api/answer-bank'); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  box.innerHTML = `<header><h2>Submitting for you</h2></header>
     <label class="check"><input type="checkbox" data-act="autoSubmit" ${b.auto_submit ? 'checked' : ''}> <span>Submit simple forms for me<br><span class="muted small">Only on Greenhouse, Lever and Ashby forms, and only when every required question is answered from your saved answers, facts and files, nothing long was written for this job, there's no captcha and no box left for you to tick. It counts down 10 seconds first, with a Stop button. Anything else waits for you to press Submit.</span></span></label>`;
 }
 const bankRows = () => [...document.querySelectorAll('#bankCard .bank-row')].map(r => ({ q: r.querySelector('.bank-q').value, a: r.querySelector('.bank-a').value }));
@@ -164,8 +171,8 @@ async function settingsCards(tab, sub, host, given) {
     <!--@google--><section class="card" id="googleCard"><header><h2>Google</h2>${st.google.connected ? `<span class="pill good">Connected${st.google.email ? ` · ${esc(st.google.email)}` : ''}</span>` : '<span class="pill">Optional</span>'}</header>
       <p class="muted">One sign-in for your Gmail, Google Calendar and Drive. Everything stays in your Google account; each part has its own settings, linked here.</p>
       <div class="uses">${[
-        ['Gmail', 'Sorts your job email, reads job alerts and drafts replies and follow-ups.', '#settings/mail/email', 'Email settings', st.google.connected],
-        ['Calendar', 'Books interviews and reminders in your calendar.', '#settings/mail/calendar', 'Calendar settings', st.google.connected],
+        ['Gmail', 'Sorts your job email, reads job alerts and drafts replies and follow-ups.', '#settings/mail', 'Email settings', st.google.connected],
+        ['Calendar', 'Books interviews and reminders in your calendar.', '#settings/mail', 'Calendar settings', st.google.connected],
         ['Drive', 'Keeps your data in step between computers, with backups.', '#settings/sync', 'Sync & backup', st.google.connected && st.sync.on && st.sync.where === 'drive'],
       ].map(([n, about, href, link, on]) => `<div class="use"><b><span class="dot ${on ? 'on' : ''}"></span>${n}</b><span class="muted small">${about}</span><a class="small" href="${href}">${link} →</a></div>`).join('')}</div>
       ${st.google.connected && !st.sync.on && st.sync.drive_ready ? `<div class="advice"><b>Back up and sync to your Google Drive</b><p>Keeps everything in a private "Job Hunt" folder in your Drive, so you can install Job Hunt on any PC and pick up where you left off.</p><div class="row"><button class="btn primary" data-act="syncOn">Turn on</button></div></div>` : ''}
@@ -308,14 +315,14 @@ async function settingsCards(tab, sub, host, given) {
       </div></section>`).join('')}
     ${st.cvs.length ? '' : '<p class="empty">No CVs yet. Add one above to start.</p>'}`;
     const career = st.cvs.length ? careerHtml(st.career, st.career_thinking, st.profile.tracks || [], st.profile.wants?.path || '') : '<section class="card"><p>Add a CV first: Claude maps your career paths from it.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>';
-    const details = `<nav class="jump" aria-label="On this page">${[['aboutCard', 'About you'], ['sigCard', 'Signature'], ['certsCard', 'Certifications'], ['storiesCard', 'Stories and facts'], ['kwCard', 'Keywords'], ['bankCard', 'Saved answers']].map(([id, n]) => `<a href="#cvs/details" data-act="jumpTo" data-to="${id}">${n}</a>`).join('')}</nav>
-    <form data-form="profile" data-part="about"><section class="card" id="aboutCard"><header><h2>About you</h2></header>
+    const details = `<nav class="jump" aria-label="On this page">${[['aboutCard', 'About you'], ['certsCard', 'Certifications'], ['storiesCard', 'Stories'], ['kwCard', 'Keywords'], ['formsCard', 'For application forms']].map(([id, n]) => `<a href="#cvs/details" data-act="jumpTo" data-to="${id}">${n}</a>`).join('')}</nav>
+    <section class="card" id="aboutCard"><header><h2>About you</h2></header>
       <p class="muted">Your name goes on your CVs' file names and cover letters; your email is where the weekly review goes.</p>
-      <div class="form">
+      <form data-form="profile" data-part="about"><div class="form">
         <label class="field">Your name<input type="text" name="name" value="${esc(p.name)}"></label>
         <label class="field">Your email<input type="email" name="email" value="${esc(p.email)}"></label>
-      </div></section></form>
-    <section class="card" id="sigCard"><header><h2>Signature</h2>${st.signature ? '<span class="pill good">Added</span>' : ''}</header>
+      </div></form>
+      <h3 class="sub" id="sigCard">Signature ${st.signature ? '<span class="pill good">Added</span>' : ''}</h3>
       <p class="muted">Goes on every cover letter, between the sign-off and your name. Sign a white sheet of paper, take a photo or scan, and crop it close. PNG or JPEG.</p>
       ${st.signature ? `<p><img src="${st.signature}" alt="Your signature" style="max-height:60px;max-width:260px;background:#fff;padding:6px;border-radius:6px"></p>` : ''}
       <div class="row">
@@ -327,17 +334,24 @@ async function settingsCards(tab, sub, host, given) {
       <p class="muted">The certifications and licences you hold, like PMP or CPMAI. Job Hunt counts them as yours when it scores a posting, writes a cover letter and fills in an application form, whether or not your CV lists them. Only the name is needed; forms sometimes ask for the rest.</p>
       <div class="cert-list" id="certList">${(p.certifications || []).map(certRow).join('')}</div>
       <div class="row"><button class="btn" type="button" data-act="certAdd">${svg('add')}Add a certification</button></div>
-      <p class="muted small" id="certRescore" hidden></p></section></form>
+      <p class="muted small" id="certRescore" hidden></p>
+      <h3 class="sub">Certificate files</h3>
+      <p class="muted small">Copies of your certificates (PDF, PNG or JPEG). When an application form has a box for certificates or licences, Job Hunt attaches them there, one a box, in this order.</p>
+      ${(st.cert_files || []).length ? `<div class="kw-list">${st.cert_files.map(n => `<span class="kw">${esc(n)}<button type="button" class="kw-x" data-act="certFileRemove" data-name="${esc(n)}" aria-label="Remove ${esc(n)}">${svg('close')}</button></span>`).join('')}</div>` : ''}
+      <div class="row"><label class="btn">${svg('add')}Add a certificate file<input type="file" accept=".pdf,.png,.jpg,.jpeg" data-upload="cert-file" multiple hidden></label></div></section></form>
     <form data-form="profile" data-part="stories"><section class="card" id="storiesCard"><header><h2>Your stories</h2></header>
       <p class="muted">True achievements and stories that aren't in your CV, for cover letters to draw on, like a hard delivery you pulled off or a problem only you solved. Cover letters may use them; your CV is never changed with them.</p>
       <label class="field">Stories<textarea name="stories" style="min-height:160px" placeholder="e.g. Managed a key shipment for a \$2B oil project in Iran.\nCoordinated urgent delivery of medical supplies to Iraq.">${esc(st.profile.stories || '')}</textarea><span class="hint">One per line or paragraph. Keep the real numbers.</span></label>
-      <label class="field">Facts for application forms<textarea name="application_facts" placeholder="e.g. Citizen, no visa sponsorship needed.\nNotice period: one month.\nSalary expectation: (your range and currency).\nOpen to hybrid; not relocating.\nAddress: 123 Main St, Toronto, ON M5P 3M1\nPhone: (416) 555-0100">${esc(st.profile.application_facts || '')}</textarea><span class="hint">Used to answer application questions. Anything not here is left as “[Fill in]”.</span></label>
       <div class="row"><button class="btn primary" type="submit">Save</button></div></section></form>
     <section class="card" id="kwCard"><header><h2>Keywords you really have</h2></header><p class="muted small">Loading…</p></section>
-    <section class="card" id="bankCard"><header><h2>Your saved answers</h2></header><p class="muted small">Loading…</p></section>`;
+    <section class="card" id="formsCard"><header><h2>For application forms</h2></header>
+      <p class="muted">What Job Hunt puts on application forms besides your CV: the facts you give it here, and the answers it has kept from forms you've sent.</p>
+      <form data-form="profile" data-part="stories"><label class="field">Your facts<textarea name="application_facts" style="min-height:130px" placeholder="e.g. Citizen, no visa sponsorship needed.\nNotice period: one month.\nSalary expectation: (your range and currency).\nOpen to hybrid; not relocating.\nAddress: 123 Main St, Toronto, ON M5P 3M1\nPhone: (416) 555-0100">${esc(st.profile.application_facts || '')}</textarea><span class="hint">Used to answer application questions. Anything not here is left as “[Fill in]”.</span></label>
+      <div class="row"><button class="btn primary" type="submit">Save</button></div></form>
+      <div id="bankCard"><h3 class="sub">Your saved answers</h3><p class="muted small">Loading…</p></div></section>`;
     const view = ['career', 'details'].includes(sub) ? sub : 'cvs';
     body = `${cvsTabs(view, st.cvs.length)}
-      ${view === 'career' ? careerSeg('paths') + career : view === 'details' ? details : body}`;
+      ${view === 'career' ? `${careerSeg()}<div id="pathsPart">${career}</div><div id="coachPart"><p class="muted small">Loading the skills to build…</p></div>` : view === 'details' ? details : body}`;
   } else if (tab === 'search') {
     body = `<!--@titles--><section class="card"><header><h2>Job titles</h2><a class="btn ghost" href="#cvs">Your CVs</a></header>
         <p class="muted small">Each CV searches for its own titles. Type one and press Enter to add it. A posting whose title doesn't match is still scored if it mentions one of the keywords.</p>
@@ -401,7 +415,7 @@ async function settingsCards(tab, sub, host, given) {
     if (host && host !== SET_RAW) {
       const P = cut(body);
       body = `${P.titles}<form data-form="profile" data-part="search">${P.where}${P.wants}${P.filters}</form>
-        <p class="muted small">When Job Hunt searches and how many postings it scores are in <a href="#settings/jobs/schedule">Settings → Job search</a>; how applications are tailored is in <a href="#settings/applying">Settings → Applying</a>.</p>`;
+        <p class="muted small">When Job Hunt searches and how many postings it scores are in <a href="#settings/jobs/limits">Settings → Job search</a>; how applications are tailored is in <a href="#settings/applying">Settings → Applying</a>.</p>`;
     }
   } else if (tab === 'calendar') {
     const c = p.calendar;
@@ -572,6 +586,7 @@ async function settingsCards(tab, sub, host, given) {
     if (st.career_thinking) watchCareer(location.hash);
     if (st.cv_update?.running || st.cv_update?.tailoring) watchCvUpdate();
     if ($('#bankCard')) renderBank();
+    if ($('#coachPart')) renderCoachPart();
     if ($('#kwCard')) renderKeywords();
     if ($('#certRescore')) renderCertRescore();
     return;
@@ -588,19 +603,18 @@ const SET_NAV = [
   ['jobs', 'Job search', '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', 'Where Job Hunt looks, when, and how much it scores. What you\'re looking for (titles, places, filters) is in <a href="#search/what">Me → Looking for</a>.'],
   ['applying', 'Applying', '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', 'How applications are tailored, filled in and followed up.'],
   ['mail', 'Email & calendar', '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>', 'How Job Hunt reads your job email and books interviews.'],
-  ['notifications', 'Notifications', '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 'How Job Hunt lets you know what\'s happening.'],
-  ['phone', 'Phone', '<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>', 'Job Hunt on your phone: using it there, filling in forms, sending jobs and getting notices.'],
+  ['notifications', 'Notifications & phone', '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>', 'How Job Hunt lets you know what\'s happening, and Job Hunt on your phone: notices, using it there and filling in forms.'],
   ['sync', 'Sync & backup', '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a3.75 3.75 0 0 1-.5 7.5z"/>', 'Your data on more than one computer, and safe copies of it.'],
-  ['computer', 'App', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', 'Updates, starting with Windows, sleep, and the app itself.'],
+  ['computer', 'App', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', 'Starting with Windows, sleep, closing, and the app itself.'],
+  ['help', 'Help & updates', '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/>', 'New versions, what changed in each, and the report to send when something goes wrong.'],
 ];
 /** The tabs inside a place: [id, name, address when it isn't #settings/<place>/<id>]. */
 const SET_TABS = {
-  jobs: [['sources', 'Sources', '#search'], ['schedule', 'Schedule'], ['limits', 'Scoring & limits'], ['last', 'Last search', '#search/last']],
+  jobs: [['sources', 'Sources', '#search'], ['limits', 'When & how much'], ['last', 'Last search', '#search/last']],
   applying: [['tailoring', 'Tailoring'], ['forms', 'Filling in forms'], ['followups', 'Following up']],
-  mail: [['email', 'Email'], ['calendar', 'Calendar & interviews']],
 };
 /** Addresses from before the places were regrouped (links in old notices, and in the app). */
-const SET_ALIAS = { connections: 'accounts', inbox: 'mail/email', calendar: 'mail/calendar', extension: 'applying/forms', app: 'computer', extras: 'computer', schedule: 'mail/calendar' };
+const SET_ALIAS = { connections: 'accounts', inbox: 'mail/email', calendar: 'mail/calendar', extension: 'applying/forms', app: 'help', extras: 'computer', phone: 'notifications', updates: 'help', schedule: 'mail/calendar' };
 const setHref = (section, tab) => { const t = (SET_TABS[section] || []).find(x => x[0] === tab) || (SET_TABS[section] || [])[0]; return section === 'jobs' && !tab ? '#search' : t ? (t[2] || `#settings/${section}/${t[0]}`) : `#settings/${section}`; };
 const setWhere = (section, tab) => { const n = (SET_NAV.find(x => x[0] === section) || [])[1] || '', t = (SET_TABS[section] || []).find(x => x[0] === tab); return t ? `${n} › ${t[1]}` : n; };
 
@@ -630,22 +644,21 @@ async function settingsBody(section, tab, st) {
   if (section === 'accounts') { const c = await of('connections'); return `${c.attention}${c.claude}${c.google}${c.other}${c.usage}`; }
   if (section === 'jobs') {
     const s = await of('search');
-    if (tab === 'schedule') return form('search', s.when);
-    if (tab === 'limits') return `${form('search', s.limits)}${s.employers}`;
+    if (tab === 'limits') return `${form('search', s.when)}${form('search', s.limits)}${s.employers}`;
     const src = await of('sources');
     return `${src.list}${src.clip}`;
   }
   if (section === 'applying') {
-    if (tab === 'forms') { const e = await of('extension'); return `${e.ext}<section class="card" id="chromeCard"><header><h2>Claude fills in what Job Hunt can't</h2></header><p class="muted small">Loading…</p></section><section class="card" id="fillSites"><header><h2>How forms go, site by site</h2></header><p class="muted small">Loading…</p></section>${link('On a phone, a bookmark fills in forms in the extension\'s place.', '#settings/phone', 'Phone')}`; }
+    if (tab === 'forms') { const e = await of('extension'); return `${e.ext}<section class="card" id="chromeCard"><header><h2>Claude fills in what Job Hunt can't</h2></header><p class="muted small">Loading…</p></section><section class="card" id="autoSubmitCard"><header><h2>Submitting for you</h2></header><p class="muted small">Loading…</p></section><section class="card" id="fillSites"><header><h2>How forms go, site by site</h2></header><p class="muted small">Loading…</p></section>${link('On a phone, a bookmark fills in forms in the extension\'s place.', '#settings/phone', 'Phone')}`; }
     if (tab === 'followups') { const i = await of('inbox'), a = await of('app'); return `${i.followups}${a.links}`; }
     return form('search', (await of('search')).tailoring);
   }
-  if (section === 'mail') return tab === 'calendar' ? (await of('calendar')).calendar : (await of('inbox')).email;
-  if (section === 'notifications') { const n = await of('notifications'); return `${n.weekly}${n.notices}`; }
-  if (section === 'phone') { const a = await of('app'), e = await of('extension'); return `${a.remote}${e.phonefill}${link('Interviews, offers and applications ready, as notices on your phone.', '#settings/notifications', 'Notifications')}`; }
+  if (section === 'mail') return `${(await of('inbox')).email}${(await of('calendar')).calendar}`;
+  if (section === 'notifications') { const n = await of('notifications'), a = await of('app'), e = await of('extension'); return `${n.weekly}${n.notices}${a.remote}${e.phonefill}`; }
   if (section === 'sync') return (await of('sync')).sync;
   const a = await of('app');
-  return `${a.updates}${a.app}${a.extras}${a.debug}${a.whatsnew}`;
+  if (section === 'help') return `${a.updates}${a.debug}${a.whatsnew}`;
+  return `${a.app}${a.extras}`;
 }
 
 /** #settings/<place>/<tab>. */
@@ -655,6 +668,7 @@ async function showSettings(arg) {
   // Job search's Sources and Last search have the search's own page (what each place found).
   if (section === 'jobs' && (!tab || tab === 'sources' || tab === 'last')) { location.replace(tab === 'last' ? '#search/last' : '#search'); return; }
   const tabs = SET_TABS[section];
+  if (section === 'jobs' && tab === 'schedule') tab = 'limits'; // one tab now
   if (tabs && !tabs.some(x => x[0] === tab)) tab = tabs[0][0];
   const st = settingsCache = await api('/api/settings');
   const autosaves = section === 'notifications' || section === 'mail' || (section === 'jobs') || (section === 'applying' && tab !== 'forms');
@@ -670,6 +684,7 @@ function settingsShown() {
   if ($('#connStatus')) renderConnStatus();
   if ($('#fillSites')) renderFillSites();
   if ($('#chromeCard')) renderChrome();
+  if ($('#autoSubmitCard')) renderAutoSubmit();
   if ($('#usageCard')) renderUsage();
   if ($('#debugCard')) renderDebug();
   if ($('#whatsnew')) { showWhatsNew(); if (update?.available) showUpdate(update); }
@@ -1209,8 +1224,9 @@ async function showRecruiters() {
       <label class="field">Phone<input name="phone" value="${esc(r.phone)}"></label><label class="field">LinkedIn<input name="linkedin" value="${esc(r.linkedin)}"></label>
       <label class="field" style="grid-column:1/-1">Notes<textarea name="notes">${esc(r.notes)}</textarea></label>
       <div class="row"><button class="btn primary" type="submit">Save</button></div></form></section>`;
-  page(`${inboxHead('recruiters', 'Recruiters who emailed you about a role, saved with the applications they handled. Ask them to put you forward for new roles.', `${rec.gmail ? `<button class="btn" data-act="recruiterScan" ${rec.scanning ? 'disabled' : ''}>${rec.scanning ? '<span class="spin" data-kind="recruiters"></span>Looking…' : 'Find them in my email'}</button>` : ''}
-        <button class="btn" data-act="recruiterNew">Add a recruiter</button><a class="btn ghost" href="/api/recruiters.csv" download>Download spreadsheet</a>`)}
+  page(`<div class="head"><div class="grow"><h1>People</h1><p class="muted">Recruiters who emailed you about a role, saved with the applications they handled, and the people you know. Ask them to put you forward for new roles.</p></div><div class="row">${`${rec.gmail ? `<button class="btn" data-act="recruiterScan" ${rec.scanning ? 'disabled' : ''}>${rec.scanning ? '<span class="spin" data-kind="recruiters"></span>Looking…' : 'Find them in my email'}</button>` : ''}
+        <button class="btn" data-act="recruiterNew">Add a recruiter</button><a class="btn ghost" href="/api/recruiters.csv" download>Download spreadsheet</a>`}</div></div>
+    ${queueTabs('people')}
     <section class="card"><header><h2>When you apply</h2></header>
       <p class="muted small">When you mark an application as submitted (or Job Hunt sees the confirmation email), it writes to the recruiter on it, or one you know at that company, or the person named in the posting: that you've applied, and, if they know you, could they put you forward. Never more than once a week to the same person, and never to the address the application went to.</p>
       <div class="row" style="gap:16px;flex-wrap:wrap">${[['draft', 'Draft it in Gmail for me to send'], ['send', 'Send it for me'], ['off', 'Off']].map(([v, n]) => `<label class="check"><input type="radio" name="applyMode" data-act="applyMode" value="${v}" ${(rec.on_apply?.mode || 'draft') === v ? 'checked' : ''}> ${n}</label>`).join('')}</div>

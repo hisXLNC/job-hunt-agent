@@ -93,14 +93,16 @@ function titleIdeasHtml(ideas) {
 
 const COACH_KIND = { show: ['good', 'Say it on your CV'], learn: ['', 'Learn it'], experience: ['warn', 'Get the experience'] };
 let coachWatch;
-async function showCoach() {
-  const r = await api('/api/coach');
+/** Career, second half: the skills to build, under the paths (one page since 2.85). */
+async function renderCoachPart() {
+  const box = $('#coachPart'); if (!box) return;
+  let r;
+  try { r = await api('/api/coach'); } catch (e) { box.innerHTML = `<section class="card"><p class="muted">${esc(e.message)}</p></section>`; return; }
+  if (!box.isConnected) return;
   const g = r.gaps || { postings: 0, skills: [], must_haves: [] }, c = r.coach;
   const ideas = overview?.title_ideas || [];
   const jobsOf = x => (x.jobs || []).map(j => `<a href="#job/${encodeURIComponent(j.id)}">${esc(j.company)}</a>`).join(', ');
-  page(`
-    ${meHead('career', 'The skills the roles you go for ask for that your CV doesn\'t show, and what would help most.')}
-    ${careerSeg('skills')}
+  box.innerHTML = `<h2 class="part-head">Skills to build</h2>
     <section class="card coach-plan"><header><h2>Your career coach</h2>
       ${r.thinking ? '<span class="pill"><span class="spin" data-kind="coach"></span>Thinking…</span>' : `<button class="btn ${c ? 'ghost' : 'primary'}" data-act="coachRun" ${r.claude && g.postings ? '' : 'disabled'}>${c ? 'Look again' : 'Get my plan'}</button>`}</header>
       ${c ? `<p>${esc(c.advice)}</p><p class="muted small">From ${esc(fmtDate(c.at))}. Job Hunt looks again every week with your weekly review.</p>
@@ -119,7 +121,8 @@ async function showCoach() {
         : `<p class="muted">${g.postings ? 'Your CV covers what these roles ask for. Nice.' : 'Nothing yet: run a search first.'}</p>`}
     </section>
     ${g.must_haves.length ? `<section class="card"><header><h2>Hard requirements you missed</h2></header><ul class="flags">
-      ${g.must_haves.map(m => `<li>${esc(m.text)} <span class="muted small">· <a href="#job/${encodeURIComponent(m.id)}">${esc(m.company)} – ${esc(m.title)}</a></span></li>`).join('')}</ul></section>` : ''}`);
+      ${g.must_haves.map(m => `<li>${esc(m.text)} <span class="muted small">· <a href="#job/${encodeURIComponent(m.id)}">${esc(m.company)} – ${esc(m.title)}</a></span></li>`).join('')}</ul></section>` : ''}`;
+  if (scrollToAfter === 'coachPart') { scrollToAfter = ''; setTimeout(() => box.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }
   const t = document.getElementById('t-gaps');
   if (t) { if (!sortState['t-gaps']) sortState['t-gaps'] = { col: 1, dir: 'desc' }; applySort(t); }
   clearTimeout(coachWatch);
@@ -231,6 +234,8 @@ function overlapCard(list) {
     </tbody></table></section>`;
 }
 /** The period Results covers: 7, 30 or 90 days, or 0 for everything. Remembered in this browser. */
+// Insights' two views: what to do about your results, and the numbers behind them.
+let resultsTab = 'do';
 let resultsDays = (() => { try { return Number(localStorage.getItem('jh.resultsDays') || 0); } catch (e) { return 0; } })();
 /** Reply rate by source, best first, with how many applications each rests on; small ones hidden unless asked. */
 function sourceRates(rows, all) {
@@ -260,14 +265,29 @@ async function showResults() {
   const days = r.per_day || [], maxDay = Math.max(1, ...days.map(d => d.sent)), sentDays = days.reduce((a, d) => a + d.sent, 0);
   const label = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const every = Math.ceil(days.length / 8);
+  const rejections = `<section class="card prep"><header><h2>What your rejections say</h2>
+      ${r.studying ? '<span class="muted small"><span class="spin" data-kind="lessons"></span>Claude is reading them…</span>' : `<button class="btn" data-act="lessons">${r.lessons ? 'Study them again' : 'Study my rejections'}</button>`}</header>
+      ${r.lessons ? `<p class="muted small">From ${esc(fmtDate(r.lessons.at))}, across ${r.lessons.count} rejection${r.lessons.count === 1 ? '' : 's'}. Job Hunt reads them again as more arrive.</p>
+        ${r.lessons.note ? `<p>${esc(r.lessons.note)}</p>` : ''}
+        ${(r.lessons.said || []).length ? `<table><thead><tr><th>What the emails said</th><th class="num">Emails</th></tr></thead><tbody>${r.lessons.said.filter(x => x.count > 0).map(x => `<tr><td>${esc(x.reason)}</td><td class="num">${x.count}</td></tr>`).join('')}</tbody></table>` : ''}
+        ${(r.lessons.patterns || []).length ? `<h3>What the set shows</h3><ul>${r.lessons.patterns.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+        ${(r.lessons.lessons || []).length ? `<h3>What tailoring now does differently</h3><ul>${r.lessons.lessons.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="muted small">These are handed to Claude every time it tailors a CV and cover letter for you, within the usual rule: nothing is added that your CV doesn't state.</p>` : '<p class="muted small">Nothing here to change in how your CVs are tailored yet.</p>'}`
+      : '<p class="muted">Claude reads every rejection email matched to an application: what it says (most give no reason), how fast it came, and at which stage. What it learns is used the next time a CV and cover letter are tailored for you.</p>'}
+    </section>`;
+  const working = `<section class="card prep"><header><h2>What's working, and what to change</h2>
+      ${r.thinking ? '<span class="muted small"><span class="spin" data-kind="insights"></span>Claude is looking…</span>' : `<button class="btn" data-act="insights">${r.insights ? 'Look again' : 'Ask Claude'}</button>`}</header>
+      ${r.insights ? `<p class="muted small">From ${esc(fmtDate(r.insights.at))}. Job Hunt also does this once a month by itself.</p>${mdHtml(r.insights.text)}` : '<p class="muted">Claude reads your results and the applications behind them, and says what is working and what to change: titles, CVs, sources or your fit threshold.</p>'}
+    </section>`;
+  const careerRow = `<section class="card row" style="justify-content:space-between"><span><b>Your career options</b><br><span class="muted small">${r.career ? `${(r.career.paths || []).length} directions with pay, pros and cons, and Claude's advice. Ask again now and then: it uses what's working above.` : 'Every direction your CVs support, with pay ranges, pros and cons, and Claude\'s advice.'}</span></span><a class="btn" href="#cvs/career">${svg('cvs')}Open Me</a></section>`;
   page(`<div class="head"><div class="grow"><h1>Insights</h1><p class="muted">Which CVs, sources and fit scores turn into replies and interviews. A reply is any answer from the company, a rejection included, but not an automatic “we received it”.</p></div></div>
       <nav class="mode" aria-label="Period">${[[7, '7 days'], [30, '30 days'], [90, '90 days'], [0, 'All']].map(([v, n]) => `<a href="#results" data-act="resultsDays" data-days="${v}" class="${resultsDays === v ? 'on' : ''}">${n}</a>`).join('')}</nav>
+    <nav class="tabs" id="resTabs">${[['do', 'What to do'], ['numbers', 'Numbers']].map(([k, n]) => `<a href="#results" data-act="resultsTab" data-tab="${k}" class="${resultsTab === k ? 'on' : ''}">${n}</a>`).join('')}</nav>
+    <div data-rtab="do" ${resultsTab === 'do' ? '' : 'hidden'}>
     <div id="fixesCard"></div>
-    ${Object.keys(r.outreach || {}).length ? `<section class="card"><header><h2>Your messages to people</h2></header>
-      <p class="muted small">How often a note got a reply, by who it went to. A reply is one you marked with They replied, or an email back about that job.</p>
-      <div class="facts">${[['recruiter', 'Recruiters'], ['manager', 'Hiring managers and team leads'], ['other', 'Others']].filter(([k]) => r.outreach[k]).map(([k, n]) => `<span><b>${n}:</b> ${r.outreach[k].replied} of ${r.outreach[k].sent} replied${r.outreach[k].sent >= 5 ? ` (${Math.round(100 * r.outreach[k].replied / r.outreach[k].sent)}%)` : ''}</span>`).join('')}</div>
-      ${Object.values(r.outreach).reduce((n, x) => n + x.sent, 0) < 10 ? '<p class="muted small">Too few yet to say which works better for you.</p>' : ''}</section>` : ''}
     ${r.week_words?.length ? `<section class="card week-words"><header><h2>Your week</h2></header>${r.week_words.map(w => `<p>${esc(w)}</p>`).join('')}</section>` : ''}
+    ${rejections}${working}${careerRow}
+    </div>
+    <div data-rtab="numbers" ${resultsTab === 'numbers' ? '' : 'hidden'}>
     <section class="kpis">
       <div class="kpi"><span class="kpi-l">Applications sent</span><span class="kpi-v">${f.sent}</span><span class="kpi-s">of ${f.tailored} tailored</span></div>
       <div class="kpi"><span class="kpi-l">Reply rate</span><span class="kpi-v">${rate(f.replied, f.sent)}</span><span class="kpi-s">${f.replied} repl${f.replied === 1 ? 'y' : 'ies'}</span></div>
@@ -311,21 +331,12 @@ async function showResults() {
 </div>`;
     })()}
     ${payHtml(r.pay)}
-    <section class="card prep"><header><h2>What your rejections say</h2>
-      ${r.studying ? '<span class="muted small"><span class="spin" data-kind="lessons"></span>Claude is reading them…</span>' : `<button class="btn" data-act="lessons">${r.lessons ? 'Study them again' : 'Study my rejections'}</button>`}</header>
-      ${r.lessons ? `<p class="muted small">From ${esc(fmtDate(r.lessons.at))}, across ${r.lessons.count} rejection${r.lessons.count === 1 ? '' : 's'}. Job Hunt reads them again as more arrive.</p>
-        ${r.lessons.note ? `<p>${esc(r.lessons.note)}</p>` : ''}
-        ${(r.lessons.said || []).length ? `<table><thead><tr><th>What the emails said</th><th class="num">Emails</th></tr></thead><tbody>${r.lessons.said.filter(x => x.count > 0).map(x => `<tr><td>${esc(x.reason)}</td><td class="num">${x.count}</td></tr>`).join('')}</tbody></table>` : ''}
-        ${(r.lessons.patterns || []).length ? `<h3>What the set shows</h3><ul>${r.lessons.patterns.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
-        ${(r.lessons.lessons || []).length ? `<h3>What tailoring now does differently</h3><ul>${r.lessons.lessons.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="muted small">These are handed to Claude every time it tailors a CV and cover letter for you, within the usual rule: nothing is added that your CV doesn't state.</p>` : '<p class="muted small">Nothing here to change in how your CVs are tailored yet.</p>'}`
-      : '<p class="muted">Claude reads every rejection email matched to an application: what it says (most give no reason), how fast it came, and at which stage. What it learns is used the next time a CV and cover letter are tailored for you.</p>'}
-    </section>
-    <section class="card prep"><header><h2>What's working, and what to change</h2>
-      ${r.thinking ? '<span class="muted small"><span class="spin" data-kind="insights"></span>Claude is looking…</span>' : `<button class="btn" data-act="insights">${r.insights ? 'Look again' : 'Ask Claude'}</button>`}</header>
-      ${r.insights ? `<p class="muted small">From ${esc(fmtDate(r.insights.at))}. Job Hunt also does this once a month by itself.</p>${mdHtml(r.insights.text)}` : '<p class="muted">Claude reads your results and the applications behind them, and says what is working and what to change: titles, CVs, sources or your fit threshold.</p>'}
-    </section>
-    <section class="card row" style="justify-content:space-between"><span><b>Your career options</b><br><span class="muted small">${r.career ? `${(r.career.paths || []).length} directions with pay, pros and cons, and Claude's advice. Ask again now and then: it uses what's working above.` : 'Every direction your CVs support, with pay ranges, pros and cons, and Claude\'s advice.'}</span></span><a class="btn" href="#cvs/career">${svg('cvs')}Open Me</a></section>
-    ${f.sent && f.sent < 20 ? '<p class="muted small">With only a few applications in a group, its rates can swing a lot. They settle as you send more.</p>' : ''}`);
+    ${Object.keys(r.outreach || {}).length ? `<section class="card"><header><h2>Your messages to people</h2></header>
+      <p class="muted small">How often a note got a reply, by who it went to. A reply is one you marked with They replied, or an email back about that job.</p>
+      <div class="facts">${[['recruiter', 'Recruiters'], ['manager', 'Hiring managers and team leads'], ['other', 'Others']].filter(([k]) => r.outreach[k]).map(([k, n]) => `<span><b>${n}:</b> ${r.outreach[k].replied} of ${r.outreach[k].sent} replied${r.outreach[k].sent >= 5 ? ` (${Math.round(100 * r.outreach[k].replied / r.outreach[k].sent)}%)` : ''}</span>`).join('')}</div>
+      ${Object.values(r.outreach).reduce((n, x) => n + x.sent, 0) < 10 ? '<p class="muted small">Too few yet to say which works better for you.</p>' : ''}</section>` : ''}
+    ${f.sent && f.sent < 20 ? '<p class="muted small">With only a few applications in a group, its rates can swing a lot. They settle as you send more.</p>' : ''}
+    </div>`);
 }
 
 async function showInbox() {

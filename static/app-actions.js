@@ -369,6 +369,12 @@ async function act(el) {
       await refreshOverview(); route(); toast(`${ids.length} set aside as not interested.`);
     });
   }
+  if (a === 'resultsTab') {
+    resultsTab = el.dataset.tab;
+    document.querySelectorAll('#resTabs a').forEach(x => x.classList.toggle('on', x === el));
+    document.querySelectorAll('[data-rtab]').forEach(x => { x.hidden = x.dataset.rtab !== resultsTab; });
+    return;
+  }
   if (a === 'resultsDays') {
     resultsDays = Number(el.dataset.days);
     try { localStorage.setItem('jh.resultsDays', String(resultsDays)); } catch (e) {}
@@ -452,6 +458,7 @@ async function act(el) {
       setTimeout(route, 300);
     }, 'Writing the note…');
   }
+  if (a === 'certFileRemove') return busy(async () => { await api('/api/settings/cert-file-remove', { method: 'POST', body: { name: el.dataset.name } }); route(); });
   if (a === 'picPick') {
     const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif' });
     inp.addEventListener('change', () => jobPicture(jobId, el.dataset.what, inp.files[0]));
@@ -1350,6 +1357,12 @@ document.addEventListener('change', async e => {
       try {
         const r = await api('/api/network', { method: 'POST', raw: await el.files[0].text() });
         toast(`${r.count} connections saved. Jobs at their companies now show who you know there.`);
+        route();
+      } catch (err) { toast(err.message, true); }
+    } else if (el.dataset.upload === 'cert-file') {
+      try {
+        for (const f of el.files) await api(`/api/settings/cert-file?filename=${encodeURIComponent(f.name)}`, { method: 'POST', raw: await f.arrayBuffer() });
+        toast(el.files.length === 1 ? 'Certificate kept. Forms that ask for one will get it.' : `${el.files.length} certificates kept.`);
         route();
       } catch (err) { toast(err.message, true); }
     } else if (el.dataset.upload === 'signature') {

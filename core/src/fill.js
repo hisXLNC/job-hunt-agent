@@ -201,6 +201,12 @@
     buttons.next.onclick = () => nextAmber();
     buttons.diag.onclick = async () => {
       if (!(diag.fields || []).length && !diag.snapshot) diag = { ...diag, version: ME, snapshot: snapshot() };
+      // As the page is right now: the site's own skill tags (Zoho Recruit gives each a level), and any
+      // small window open over the form (a tag's level chooser, a list), so how they're built can be learned.
+      // Open the thing that went wrong, then press Copy details.
+      const tags = document.querySelector('skills-tag,[class*="skill" i][class*="tag" i]');
+      const open = [...document.querySelectorAll('lyte-popover-wormhole,lyte-wormhole,lyte-drop-box,lyte-menu-body,[role=dialog],[role=listbox],[role=menu],[class*="popover" i]')].filter(x => !own(x) && shown(x) && clean(x.textContent)).slice(0, 3);
+      diag.now = { skillTags: tags ? htmlOf(tags, 5000) : undefined, open: open.length ? open.map(x => ({ at: where(x), html: htmlOf(x, 3000) })) : undefined };
       let text = 'Job Hunt form details ' + JSON.stringify({ page: location.hostname, ...diag, trail: trail.map(e => ({ ...e, t: new Date(e.t).toISOString() })) }, null, 1);
       // With the extension's own log (what it asked Job Hunt and what came back, no answers in it).
       if (EXT) { flush(); try { const more = await Promise.race([chrome.runtime.sendMessage({ report: 'copy details', page: location.hostname }), wait(4000)]); if (more) text += '\n\n' + more; } catch (e) { /* the extension was updated */ } }
@@ -342,6 +348,14 @@
   // first words in that row outside the part (a <label> when there is one).
   const PART = '[id^="rec-form_"],lyte-autocomplete,lyte-dropdown,lyte-input';
   function rowLabel(el) {
+    // Zoho Recruit names each box's label after the box: <label id="crc-label-rec-form_<id>"> for the
+    // part crux-…#rec-form_<id> (its inner parts are #<id> and #rec-form_<id>_input).
+    for (let x = el, i = 0; x && i < 12; x = x.parentElement, i++) {
+      if (!x.id) continue;
+      const id = x.id.replace(/_input$/, '');
+      const lab = document.getElementById('crc-label-' + id) || document.getElementById('crc-label-rec-form_' + id);
+      if (lab && textOf(lab)) return textOf(lab).replace(/\s*\*\s*$/, '');
+    }
     const host = el.closest('[id^="rec-form_"]') || el.closest(PART);
     if (!host) return '';
     let row = host;
@@ -1010,7 +1024,9 @@
   // with the same markup as an option, inside the box (they were taken for search results).
   const CHOSEN = '[data-automation-id=selectedItem],[data-automation-id=selectedItemList],[data-automation-id=multiselectInputContainer]';
   // Nor the line a list shows when a search found nothing: Workday draws "No Items." as an option.
-  const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].filter(o => !own(o) && !o.closest(CHOSEN) && shown(o) && clean(o.textContent) && !/^no (items|results|matches|options)\.?$/i.test(clean(o.textContent)));
+  // (Zoho Recruit's skill suggestions are <li role=button aria-label="Add skill : …"> in a popover, their text cut short.)
+  const optName = o => clean(o.getAttribute('data-automation-label') || (/^add skill\s*:/i.test(o.getAttribute('aria-label') || '') ? o.getAttribute('aria-label').replace(/^add skill\s*:\s*/i, '') : '') || o.textContent);
+  const options = () => [...document.querySelectorAll('[data-automation-id=promptOption],[role=option],#competencySkillsSuggestedList li[role=button],li[role=button][aria-label^="Add skill" i]')].filter(o => !own(o) && !o.closest(CHOSEN) && shown(o) && clean(o.textContent) && !/^no (items|results|matches|options)\.?$/i.test(clean(o.textContent)));
   // The site saying a search found nothing ("No Items."), in the box's field or in the list that opened.
   const NOTHING = /\bno (items|results|matches|options)\b/i;
   const LISTS = '[data-automation-id=activeListContainer],[data-automation-id*=noResult],[data-automation-id=popupContent],[role=listbox],[role=dialog]';
@@ -1023,7 +1039,7 @@
     const field = first.closest('[data-automation-id^=formField]') || first.parentElement?.parentElement?.parentElement || document.body;
     const box = () => first.isConnected ? first : (first.id && document.getElementById(first.id)) || [...field.querySelectorAll('input')].find(x => shown(x) && !own(x)) || first;
     const sig = () => options().map(o => clean(o.textContent)).join('|');
-    const label = o => clean(o.getAttribute('data-automation-label') || o.textContent).toLowerCase();
+    const label = o => optName(o).toLowerCase();
     const bare = x => x.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
     const words = x => x.toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9+#]+/).filter(w => w.length > 1 && !['and', 'the', 'for', 'of', '&'].includes(w)).map(w => w.slice(0, 6));
     // How well an option fits a skill: the same name best, then one that starts with it or holds it,
@@ -1073,7 +1089,7 @@
     // Whether this option's state can be seen at all. When it can't, one real click is trusted and
     // never repeated: a second click would untick it.
     const visible = o => !!tick(o) || [o, rowOf(o)].some(x => (x.hasAttribute('aria-selected') && !lit(rowOf(o))) || x.hasAttribute('aria-checked')) || kids() >= 0 || names().length > 0;
-    const find = name => { const l = options().filter(o => same(o.getAttribute('data-automation-label') || o.textContent, name)); return l.find(o => o.matches('[data-automation-id=promptOption]')) || l[0] || null; };
+    const find = name => { const l = options().filter(o => same(optName(o), name)); return l.find(o => o.matches('[data-automation-id=promptOption]')) || l[0] || null; };
     const nothing = () => !options().length && ([...document.querySelectorAll('[data-automation-id=promptOption],[role=option]')].some(o => !own(o) && !o.closest(CHOSEN) && shown(o) && NOTHING.test(clean(o.textContent))) || NOTHING.test(clean(field === document.body ? '' : field.textContent || '')) || [...document.querySelectorAll(LISTS)].some(x => !own(x) && shown(x) && NOTHING.test(clean(x.textContent).slice(0, 200))));
     // The search took an item by itself: with one match, Workday's Enter chooses it and closes the
     // list (the school's "Other" became "Other School" that way, and was then reported as not found).
@@ -1123,7 +1139,7 @@
       // typing goes in Copy details (once), so a list drawn another way can be learned.
       if (!list.length && none < 2) { quiet++; if (grew && grew.isConnected && !diag.skillPopup) diag.skillPopup = { q: query, at: where(grew), html: htmlOf(grew, 2500) }; }
       trace.push({ q: query, found: list.length, ms: Date.now() - t0, real: trusted || undefined, reacted: reacted || undefined, hidden: document.hidden || undefined,
-        top: [...new Set(list.map(o => clean(o.getAttribute('data-automation-label') || o.textContent).slice(0, 70)))].slice(0, 8) });
+        top: [...new Set(list.map(o => optName(o).slice(0, 70)))].slice(0, 8) });
       return list;
     };
     // Choosing with real arrow keys and Enter, when clicks didn't take: only when the row the keys
@@ -1275,7 +1291,7 @@
         continue;
       }
       // The list as it is now (a plainer search may have replaced the one the best match came from).
-      const name = clean(best.getAttribute('data-automation-label') || best.textContent);
+      const name = optName(best);
       if (!best.isConnected && !find(name)) await search(name);
       const snap = ((find(name) || best).closest('[role=listbox]') || best.parentElement?.parentElement || best).cloneNode(true);
       const how = await choose(best, name);

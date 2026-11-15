@@ -422,6 +422,7 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
             "added": cd_config.as_deref().map(crate::mcp::in_claude_desktop).unwrap_or(false),
             "config": cd_config,
         },
+        "cert_files": agent.cert_files(),
         "signature": signature.and_then(|b| crate::cv::image_info(&b).map(|(ext, _, _)| {
             use base64::Engine;
             format!("data:image/{ext};base64,{}", base64::engine::general_purpose::STANDARD.encode(&b))
@@ -2123,6 +2124,15 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         ["api", "settings", "signature"] => {
             agent.set_signature(&req.body)?;
+            ok()
+        }
+        // A certificate's file (PDF or picture), for forms that ask for one: ?filename=…, the file as the body.
+        ["api", "settings", "cert-file"] => {
+            let name = req.query.get("filename").cloned().unwrap_or_default();
+            Ok(Resp::json(&json!({ "name": agent.add_cert_file(&name, &req.body)? })))
+        }
+        ["api", "settings", "cert-file-remove"] => {
+            agent.remove_cert_file(s(&b, "name"))?;
             ok()
         }
         ["api", "settings", "forget", what] => {

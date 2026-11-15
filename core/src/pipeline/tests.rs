@@ -2721,3 +2721,32 @@ fn a_picture_gives_the_forms_questions_and_adds_the_people_it_shows() {
     assert!(s.agent.read_picture("test:1", "questions", &pic(b"blank")).unwrap_err().0.contains("no questions"));
     assert!(s.agent.read_picture("test:1", "people", &json!({ "image": { "mime": "application/pdf", "b64": "AAAA" } })).unwrap_err().0.contains("can't be used"));
 }
+
+/// Certificate files you keep are attached to a form's certificate boxes, one a box; and a box that
+/// reads your CV to fill the form in is left alone when the form has its own box for the CV.
+#[test]
+fn certificate_files_go_in_certificate_boxes_and_the_cv_reader_is_left_alone() {
+    let s = setup();
+    *s.agent.cal.write().unwrap() = None;
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    assert!(s.agent.add_cert_file("virus.exe", b"x").is_err());
+    assert_eq!(s.agent.add_cert_file("C:\\docs\\PMP.pdf", b"%PDF-1").unwrap(), "PMP.pdf");
+    s.agent.add_cert_file("CSM.png", b"png").unwrap();
+    assert_eq!(s.agent.cert_files(), vec!["CSM.png".to_string(), "PMP.pdf".to_string()]);
+    let fields = vec![
+        json!({ "key": "f0", "type": "file", "label": "rec-easyresume_file", "section": "Autofill Application", "value": "" }),
+        json!({ "key": "f1", "type": "email", "label": "Email", "value": "" }),
+        json!({ "key": "f2", "type": "file", "label": "Resume", "section": "Attachment Information", "value": "" }),
+        json!({ "key": "f3", "type": "file", "label": "License and certifications", "section": "Attachment Information", "value": "" }),
+        json!({ "key": "f4", "type": "file", "label": "Other Certifications", "section": "Attachment Information", "value": "" }),
+        json!({ "key": "f5", "type": "file", "label": "Other Documents", "section": "Attachment Information", "value": "" }),
+    ];
+    let a = crate::fill::answers(&s.agent, "test:1", &fields).unwrap();
+    assert!(a["files"].get("f0").is_none(), "the CV reader gets nothing: {}", a["files"]["f0"]["name"]);
+    assert!(a["files"]["f2"]["name"].as_str().unwrap().contains("CV"));
+    assert_eq!((a["files"]["f3"]["name"].as_str(), a["files"]["f4"]["name"].as_str()), (Some("CSM.png"), Some("PMP.pdf")));
+    assert_eq!(a["files"]["f4"]["mime"], "application/pdf");
+    assert!(a["files"].get("f5").is_none());
+    s.agent.remove_cert_file("CSM.png").unwrap();
+    assert_eq!(s.agent.cert_files(), vec!["PMP.pdf".to_string()]);
+}

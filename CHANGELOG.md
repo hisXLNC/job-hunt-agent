@@ -4,6 +4,24 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.85.0] - 2026-11-15
+
+Screens regrouped, certificate files, and Zoho Recruit forms.
+
+### Changes
+
+- Me, About me: your name, email and signature are one card; stories have their own card; and the facts for forms sit with your saved answers in one For application forms card.
+- Submit simple forms for me moved to Settings, Applying, Filling in forms.
+- Settings has a new place, Help & updates, with updates, Finding problems and What's new; App keeps starting, sleeping and closing.
+- Settings: Phone joined Notifications; Schedule joined Scoring & limits as When & how much; Email and Calendar are one page.
+- Me, Career is one page: the paths you could take, then the skills to build.
+- Insights has two tabs: What to do, and Numbers.
+- Recruiters and the people you know moved from the Inbox to a People tab in the Queue, beside Leads.
+- Copy details on a form now records the site's own skill tags and any small window open over the form (a skill's level chooser, say), so Job Hunt can learn to set them.
+- Me, About me, Certifications: add copies of your certificates (PDF, PNG or JPEG). Forms with a box for certificates or licences get them attached, one a box.
+- Zoho Recruit forms: First Name, Phone, Mobile, City, State/Province and Zip/Postal Code are now read by their real names (the last three all got the province before), and skills are chosen from Zoho's own suggestion list.
+- A form's Autofill Application box, which has the site read your CV and fill the form in its own way, is now left alone when the form has a separate box for your CV. On Zoho Recruit its guesses were what marked your skills and English as beginner and put PMI as your school.
+
 ## [2.84.1] - 2026-11-15
 
 Ask for changes without the dropdown; Zoho Recruit forms.
@@ -2321,6 +2339,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.85.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.0
 [2.84.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.84.1
 [2.84.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.84.0
 [2.83.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.83.0
