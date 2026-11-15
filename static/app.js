@@ -346,6 +346,8 @@ const scoreBand = n => n >= 80 ? 'hi' : n >= 60 ? 'mid' : 'lo';
 const scoreBadge = n => n == null ? '' : `<span class="score ${scoreBand(n)}" style="--p:${n}" title="Fit score">${n}</span>`;
 /** Company and location as their own cells: the company with its rating, a dash for no place. */
 /** A company's name, as something to click: every posting Job Hunt has seen from it (All jobs, filtered to it). */
+/** Follow / Following for one company: a new posting from a followed company gets its own notice. */
+const followBtn = (company, on) => company ? `<button type="button" class="btn sm ${on ? '' : 'ghost'} follow-btn" data-act="followCompany" data-company="${esc(company)}" data-on="${on ? 0 : 1}" aria-pressed="${on ? 'true' : 'false'}" title="${on ? `You're told about every new posting from ${esc(company)}. Click to stop.` : `Tell me whenever a search finds a new posting from ${esc(company)}`}">${on ? 'Following' : 'Follow'}</button>` : '';
 const coName = company => company ? `<span class="co-link" role="link" tabindex="0" data-act="companyJobs" data-company="${esc(company)}" title="Every posting from ${esc(company)}">${esc(company)}</span>` : '';
 const coCell = j => `${coName(j.company)}${ratingTag(j.rating, j.company)}`;
 /** Country names as a place line spells them, and the short form a remote role shows: "Remote (US)". */

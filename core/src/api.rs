@@ -423,6 +423,8 @@ fn settings(agent: &Agent, host: &Arc<dyn Host>) -> R<Value> {
             "config": cd_config,
         },
         "cert_files": agent.cert_files(),
+        // Read through `get`: the database is held here, so `agent.followed_companies()` would wait for ever.
+        "followed": serde_json::from_str::<Vec<String>>(&get("companies.followed")).unwrap_or_default(),
         "signature": signature.and_then(|b| crate::cv::image_info(&b).map(|(ext, _, _)| {
             use base64::Engine;
             format!("data:image/{ext};base64,{}", base64::engine::general_purpose::STANDARD.encode(&b))
@@ -772,6 +774,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         "location": j.location, "fit": j.score_after.or(j.score), "cv": j.cv_path.as_deref().is_some_and(|p| Path::new(p).is_file()), "letter": j.cover_letter.as_deref().is_some_and(|l| !l.trim().is_empty()),
                         "last": agent.db().history(&j.id).ok().and_then(|h| h.first().map(|e| e.detail.chars().take(140).collect::<String>())) })).collect::<Vec<_>>(),
                     "company_notes": agent.company_notes(&job.company),
+                    "following": agent.is_followed(&job.company),
                     // The company's other roles you could still apply to, best fit first.
                     "company_open": agent.db().open_at_company(&crate::db::company_key(&job.company)).into_iter().filter(|o| o.0 != job.id)
                         .map(|(id, title, location, status, score, after)| json!({ "id": id, "title": title, "location": location, "status": status, "score": score, "fit": after.or(score) })).collect::<Vec<_>>(),
@@ -2130,6 +2133,11 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         ["api", "settings", "cert-file"] => {
             let name = req.query.get("filename").cloned().unwrap_or_default();
             Ok(Resp::json(&json!({ "name": agent.add_cert_file(&name, &req.body)? })))
+        }
+        // Follow a company (a notice for each new posting from it), or stop: {company, on}.
+        ["api", "companies", "follow"] => {
+            let on = b["on"].as_bool().unwrap_or(true);
+            Ok(Resp::json(&json!({ "followed": agent.follow_company(s(&b, "company"), on)? })))
         }
         ["api", "settings", "cert-file-remove"] => {
             agent.remove_cert_file(s(&b, "name"))?;

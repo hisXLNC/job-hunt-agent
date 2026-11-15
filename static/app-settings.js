@@ -113,6 +113,16 @@ function modelsLine(c) {
   return `Searching, scoring and filling in forms: <b>${esc(pick(c.score_model))}</b> · CVs and cover letters: <b>${esc(pick(c.tailor_model))}</b> · Everything else (email, interview prep): <b>${esc(other)}</b>.`;
 }
 
+/** The companies you follow (Settings → Job search → Sources): each new posting from one of them
+ *  gets its own notice. The list comes from /api/settings or /api/companies/follow. */
+function followedHtml(list) {
+  list = list || [];
+  return `<header><h2>Companies you follow</h2>${list.length ? `<span class="muted small">${list.length}</span>` : ''}</header>
+    <p class="muted">Job Hunt tells you (here, and on your phone if notices are on) whenever a search finds a new posting from one of these companies, even one that doesn't match your job titles. It can only tell you about postings its searches find: for a company with its own careers site, add that under Employers' own sites above too.</p>
+    <div class="chips">${list.map(c => `<span class="chip">${coName(c)}<button type="button" data-act="followCompany" data-company="${esc(c)}" data-on="0" title="Stop following ${esc(c)}" aria-label="Stop following ${esc(c)}">×</button></span>`).join('') || '<span class="muted small">None yet. Add one here, or press Follow on any job\'s page.</span>'}</div>
+    <form class="row" data-follow-add><input type="text" name="company" placeholder="Company name" maxlength="80" aria-label="Company to follow" style="max-width:280px"><button class="btn" type="submit">Follow</button></form>`;
+}
+
 /** The cards of one group of settings, as HTML, with a marker before each (<!--@name-->) so the
  *  Settings pages can put them where they belong (see settingsBody and cut). `host`: Me's pages
  *  (CVs, Looking for) are drawn here whole, under their own heading; SET_RAW gives the HTML back. */
@@ -270,6 +280,7 @@ async function settingsCards(tab, sub, host, given) {
       ${group('Recruiters', T.agencies)}
       ${group('Sent to you', T.alerts)}
     </section>
+    <section class="card" id="followedCard">${followedHtml(st.followed)}</section>
     <!--@clip--><section class="card" id="clipCard"><header><h2>Jobs you find yourself</h2>${desk ? `<span class="pill ${st.clip_watch ? 'good' : ''}">${st.clip_watch ? 'Button on' : 'Button off'}</span>` : ''}</header>
       <p class="muted">Found a role on LinkedIn, a company site or anywhere else? ${desk ? 'Add a <b>Send to Job Hunt</b> button to your browser: on the posting, click it, and Job Hunt adds the job, scores it and puts it in your Queue to pick. Or' : ''} paste it on the <a href="#add">Add a job</a> page.</p>
       ${desk ? `<div class="row"><button class="btn primary" data-act="bookmarkSetup"><img src="/static/logo.svg" alt="" width="16" height="16">Set up the button</button><span class="muted small">Opens a page in your browser that walks you through it, so the button gets the Job Hunt logo.</span></div>

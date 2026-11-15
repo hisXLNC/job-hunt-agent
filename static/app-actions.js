@@ -601,6 +601,15 @@ async function act(el) {
     return;
   }
   if (a === 'kwForget') return busy(async () => { renderKeywords(await api('/api/keywords', { method: 'POST', body: { forget: el.dataset.k } })); }, 'Removed. Job Hunt no longer adds it by itself.');
+  if (a === 'followCompany') {
+    const on = el.dataset.on === '1', company = el.dataset.company;
+    return busy(async () => {
+      const r = await api('/api/companies/follow', { method: 'POST', body: { company, on } });
+      const card = $('#followedCard');
+      if (card) card.innerHTML = followedHtml(r.followed);
+      document.querySelectorAll('.follow-btn').forEach(b => { if (b.dataset.company === company) b.outerHTML = followBtn(company, on); });
+    }, on ? `Following ${company}. You'll be told about each new posting.` : `No longer following ${company}.`);
+  }
   if (a === 'companyJobs') {
     // All jobs, showing only this company (whatever was filtered before).
     try { localStorage.setItem('jh.allFilters', JSON.stringify({ q: el.dataset.company, stage: '', fit: '0', source: '', age: '', emp: '', pay: false, sort: '4' })); } catch (e) {}
@@ -1383,6 +1392,18 @@ document.addEventListener('change', async e => {
 });
 
 document.addEventListener('submit', async e => {
+  const fol = e.target.closest('form[data-follow-add]');
+  if (fol) {
+    e.preventDefault();
+    const company = fol.company.value.trim();
+    if (!company) return;
+    try {
+      const r = await api('/api/companies/follow', { method: 'POST', body: { company, on: true } });
+      $('#followedCard').innerHTML = followedHtml(r.followed);
+      toast(`Following ${company}.`);
+    } catch (err) { toast(err.message, true); }
+    return;
+  }
   const form = e.target.closest('form[data-form]');
   if (!form) return;
   e.preventDefault();

@@ -469,6 +469,7 @@ impl Agent {
             db.set("last.search", &crate::util::now())?;
             db.set("last.report", &serde_json::to_string(&report).unwrap_or_default())?;
         }
+        self.note_followed(&run.followed);
         if report.tailored > 0 {
             let n = report.tailored;
             self.note(
@@ -715,6 +716,10 @@ impl Agent {
             // and the filtered-out ones written down together), not two or three turns a posting. With
             // the page reading alongside, each turn could wait a second: 1,664 postings took 17 minutes.
             report.new += fresh.len();
+            let watched: Vec<String> = self.followed_companies().iter().map(|c| crate::db::company_key(c)).collect();
+            if !watched.is_empty() {
+                run.followed.extend(fresh.iter().filter(|p| watched.contains(&crate::db::company_key(&p.company))).map(|p| (p.company.clone(), p.title.clone())));
+            }
             let mut out: Vec<crate::db::Job> = vec![];
             {
                 let asked = std::time::Instant::now();

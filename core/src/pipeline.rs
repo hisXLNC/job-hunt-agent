@@ -134,7 +134,7 @@ pub fn private_notice(title: &str) -> (String, String) {
         "A posting you picked closes soon"
     } else if t.contains("ready") || t.contains("tailored") {
         "Applications ready for you"
-    } else if t.contains("roles") || t.contains("search") || t.contains("found") {
+    } else if t.contains("roles") || t.contains("search") || t.contains("found") || t.contains("opening") {
         "New roles to look at"
     } else if t.contains("thank") || t.contains("follow") {
         "A note to send"
@@ -412,6 +412,8 @@ struct SearchRun {
     seen: HashSet<String>,
     all_ids: HashSet<String>,
     near: Vec<Posting>,
+    /// New postings from companies you follow, as (company, title): told at the end of the search.
+    followed: Vec<(String, String)>,
     found_here: Vec<Posting>,
     known_before: HashSet<String>,
 }

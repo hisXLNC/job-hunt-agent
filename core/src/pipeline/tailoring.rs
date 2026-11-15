@@ -835,6 +835,55 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
         }
     }
 
+    /// The companies you follow: a new posting from one gets its own notice (see `note_followed`).
+    /// By name as you gave it, oldest first.
+    pub fn followed_companies(&self) -> Vec<String> {
+        serde_json::from_str(&self.secret("companies.followed")).unwrap_or_default()
+    }
+
+    pub fn is_followed(&self, company: &str) -> bool {
+        let key = crate::db::company_key(company);
+        !key.is_empty() && self.followed_companies().iter().any(|c| crate::db::company_key(c) == key)
+    }
+
+    /// Follow a company, or stop. "ACME Inc." and "Acme" are the same company.
+    pub fn follow_company(&self, company: &str, on: bool) -> R<Vec<String>> {
+        let (name, key) = (company.trim(), crate::db::company_key(company));
+        if key.is_empty() {
+            return err("Which company?");
+        }
+        let mut list = self.followed_companies();
+        list.retain(|c| crate::db::company_key(c) != key);
+        if on {
+            if list.len() >= 200 {
+                return err("That's 200 companies followed already: stop following one first.");
+            }
+            list.push(name.chars().take(80).collect());
+        }
+        self.db().set("companies.followed", &json!(list).to_string())?;
+        Ok(list)
+    }
+
+    /// A notice for each followed company a search brought new postings from: (company, title) of
+    /// every new one, whether or not it passed your filters (they're all under All jobs).
+    pub(crate) fn note_followed(&self, new: &[(String, String)]) {
+        let mut by: Vec<(String, Vec<&str>)> = vec![];
+        for (company, title) in new {
+            match by.iter_mut().find(|(c, _)| crate::db::company_key(c) == crate::db::company_key(company)) {
+                Some((_, t)) => t.push(title),
+                None => by.push((company.clone(), vec![title])),
+            }
+        }
+        for (company, titles) in by.iter().take(5) {
+            let n = titles.len();
+            let more = if n > 3 { format!(", and {} more", n - 3) } else { String::new() };
+            self.note(
+                &if n == 1 { format!("New opening at {company}") } else { format!("{n} new openings at {company}") },
+                &format!("{}{more}. Click the company's name in Job Hunt to see them all.", titles.iter().take(3).copied().collect::<Vec<_>>().join("; ")),
+            );
+        }
+    }
+
     /// Your own notes on a company ("the recruiter said to wait six months").
     pub fn company_notes(&self, company: &str) -> String {
         self.secret(&format!("company.notes:{}", crate::db::company_key(company)))

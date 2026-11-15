@@ -2750,3 +2750,25 @@ fn certificate_files_go_in_certificate_boxes_and_the_cv_reader_is_left_alone() {
     s.agent.remove_cert_file("CSM.png").unwrap();
     assert_eq!(s.agent.cert_files(), vec!["PMP.pdf".to_string()]);
 }
+
+#[test]
+fn a_new_posting_from_a_followed_company_gets_its_own_notice() {
+    let s = setup();
+    // "ACME Inc." and "Acme" are one company; following twice keeps one.
+    s.agent.follow_company("ACME Inc.", true).unwrap();
+    assert_eq!(s.agent.follow_company("Acme", true).unwrap(), vec!["Acme".to_string()]);
+    assert!(s.agent.is_followed("acme inc") && !s.agent.is_followed("Elsewhere"));
+    let mut other = posting("Senior Program Manager", "9");
+    other.company = "Elsewhere".into();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Night Baker", "2"), other])).unwrap();
+    let notes = s.notes.lock().unwrap().clone();
+    assert!(notes.iter().any(|n| n == "2 new openings at Acme"), "{notes:?}");
+    assert!(!notes.iter().any(|n| n.contains("Elsewhere")), "{notes:?}");
+    // The same postings found again are not new: no second notice. Nor once you stop following.
+    s.notes.lock().unwrap().clear();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    assert!(s.agent.follow_company("Acme", false).unwrap().is_empty());
+    s.agent.search(Some(vec![posting("Program Director", "3")])).unwrap();
+    let notes = s.notes.lock().unwrap().clone();
+    assert!(!notes.iter().any(|n| n.contains("opening")), "{notes:?}");
+}
