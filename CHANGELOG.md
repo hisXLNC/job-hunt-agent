@@ -4,6 +4,20 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.82.0] - 2026-11-15
+
+Remembers the keywords you have; no posting waits for ever.
+
+### Changes
+
+- Keywords you tick as really yours (or ask Claude to work in) are remembered, and worked into a tailored CV by themselves whenever a posting asks for one. See and edit the list in CV & Career, Your details.
+- A posting that could never be read or scored kept showing as waiting to be scored. After three tries it now goes to All jobs without a score, with the reason, and the activity list says what went wrong.
+- Show them, beside Score them all now, lists the postings waiting to be scored and why each is still waiting.
+- The small arrows on the search button and the status chip are drawn properly, and Ask Claude has a minimise button instead of an X.
+- After keywords are worked in, the change shows the fit and the share of the posting's keywords matched, before and after.
+- On a job's page the company name opens All jobs showing that company's postings, and beside it is how many other roles there are still open to you.
+- A job's page warns you when another open role at the same company fits you better.
+
 ## [2.81.1] - 2026-11-15
 
 The Queue keeps itself up to date.
@@ -2275,6 +2289,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.82.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.82.0
 [2.81.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.81.1
 [2.81.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.81.0
 [2.80.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.80.1

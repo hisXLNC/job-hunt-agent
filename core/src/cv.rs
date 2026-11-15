@@ -765,7 +765,7 @@ pub fn cover_letter(doc: &Doc, text: &str, signature: Option<&[u8]>) -> R<Vec<u8
     doc.with_image(&new_xml, Some((&format!("image9001.{ext}"), bytes, SIGNATURE_REL)))
 }
 
-fn norm(s: &str) -> String {
+pub(crate) fn norm(s: &str) -> String {
     let t: String = s.to_lowercase().chars().map(|c| if c.is_alphanumeric() || "+#&".contains(c) { c } else { ' ' }).collect();
     t.split_whitespace().collect::<Vec<_>>().join(" ")
 }

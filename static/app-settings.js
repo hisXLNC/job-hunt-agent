@@ -8,6 +8,19 @@ let settingsCache = null;
 
 /** Your answers to the questions application forms keep asking, learned as you submit forms, and
  *  whether Job Hunt may submit simple forms for you. */
+/** The keywords you've said you have though your CV doesn't say so: tailoring works them in by
+ *  itself where a posting asks for one. Learned from what you tick under a thin CV; yours to edit. */
+async function renderKeywords(got) {
+  const box = $('#kwCard'); if (!box) return;
+  let k;
+  try { k = got || await api('/api/keywords'); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  const list = k.keywords || [];
+  box.innerHTML = `<header><h2>Keywords you really have</h2>${list.length ? `<span class="pill">${list.length}</span>` : ''}</header>
+    <p class="muted">Skills and terms you have real experience with, though your CV doesn't say so. Job Hunt learns them when you tick missing keywords under a tailored CV (or ask Claude to work some in), and from then on works each one into a tailored CV by itself whenever a posting asks for it. Only add what you could talk about in an interview.</p>
+    ${list.length ? `<div class="kw-list">${list.map(x => `<span class="kw">${esc(x.k)}${x.n > 1 ? ` <span class="muted small" title="Times you've asked for it">×${x.n}</span>` : ''}<button type="button" class="kw-x" data-act="kwForget" data-k="${esc(x.k)}" aria-label="Remove ${esc(x.k)}" title="Stop adding it">×</button></span>`).join('')}</div>` : '<p class="empty">None yet. Tick the keywords you have under a tailored CV that covers few of a posting\'s keywords, or add some here.</p>'}
+    <form class="row" data-form="kwAdd"><input type="text" name="k" placeholder="e.g. burn-down, statements of work" aria-label="Keywords to add, separated by commas" style="flex:1;min-width:220px"><button class="btn" type="submit">Add</button></form>`;
+}
+
 async function renderBank() {
   const box = $('#bankCard'); if (!box) return;
   let b;
@@ -283,7 +296,7 @@ async function settingsCards(tab, sub, host, given) {
       </div></section>`).join('')}
     ${st.cvs.length ? '' : '<p class="empty">No CVs yet. Add one above to start.</p>'}`;
     const career = st.cvs.length ? careerHtml(st.career, st.career_thinking, st.profile.tracks || [], st.profile.wants?.path || '') : '<section class="card"><p>Add a CV first: Claude maps your career paths from it.</p><div class="row"><a class="btn primary" href="#cvs">Add your CV</a></div></section>';
-    const details = `<nav class="jump" aria-label="On this page">${[['aboutCard', 'About you'], ['sigCard', 'Signature'], ['certsCard', 'Certifications'], ['storiesCard', 'Stories and facts'], ['bankCard', 'Saved answers']].map(([id, n]) => `<a href="#cvs/details" data-act="jumpTo" data-to="${id}">${n}</a>`).join('')}</nav>
+    const details = `<nav class="jump" aria-label="On this page">${[['aboutCard', 'About you'], ['sigCard', 'Signature'], ['certsCard', 'Certifications'], ['storiesCard', 'Stories and facts'], ['kwCard', 'Keywords'], ['bankCard', 'Saved answers']].map(([id, n]) => `<a href="#cvs/details" data-act="jumpTo" data-to="${id}">${n}</a>`).join('')}</nav>
     <form data-form="profile" data-part="about"><section class="card" id="aboutCard"><header><h2>About you</h2></header>
       <p class="muted">Your name goes on your CVs' file names and cover letters; your email is where the weekly review goes.</p>
       <div class="form">
@@ -308,6 +321,7 @@ async function settingsCards(tab, sub, host, given) {
       <label class="field">Stories<textarea name="stories" style="min-height:160px" placeholder="e.g. Managed a key shipment for a \$2B oil project in Iran.\nCoordinated urgent delivery of medical supplies to Iraq.">${esc(st.profile.stories || '')}</textarea><span class="hint">One per line or paragraph. Keep the real numbers.</span></label>
       <label class="field">Facts for application forms<textarea name="application_facts" placeholder="e.g. Citizen, no visa sponsorship needed.\nNotice period: one month.\nSalary expectation: (your range and currency).\nOpen to hybrid; not relocating.\nAddress: 123 Main St, Toronto, ON M5P 3M1\nPhone: (416) 555-0100">${esc(st.profile.application_facts || '')}</textarea><span class="hint">Used to answer application questions. Anything not here is left as “[Fill in]”.</span></label>
       <div class="row"><button class="btn primary" type="submit">Save</button></div></section></form>
+    <section class="card" id="kwCard"><header><h2>Keywords you really have</h2></header><p class="muted small">Loading…</p></section>
     <section class="card" id="bankCard"><header><h2>Your saved answers</h2></header><p class="muted small">Loading…</p></section>`;
     const view = ['career', 'details'].includes(sub) ? sub : 'cvs';
     body = `${cvsTabs(view, st.cvs.length)}
@@ -545,6 +559,7 @@ async function settingsCards(tab, sub, host, given) {
     if (st.career_thinking) watchCareer(location.hash);
     if (st.cv_update?.running || st.cv_update?.tailoring) watchCvUpdate();
     if ($('#bankCard')) renderBank();
+    if ($('#kwCard')) renderKeywords();
     if ($('#certRescore')) renderCertRescore();
     return;
   }

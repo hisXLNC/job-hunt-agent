@@ -658,7 +658,15 @@ impl Agent {
                 job.company, p.applied_at.as_deref().unwrap_or("").get(..10).unwrap_or(""), p.title, d.plain_text().chars().take(8000).collect::<String>()),
             _ => String::new(),
         };
-        let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.letter_facts(), &t.letter_style, &consistency, &self.tailoring_guidance(&job))?;
+        // Keywords you've said you have before, that this posting asks for and your CV doesn't say.
+        let mine = self.confirmed_for(&job, &doc.plain_text());
+        let mut guidance = self.tailoring_guidance(&job);
+        if !mine.is_empty() {
+            guidance.push_str(&format!("\n\nConfirmed by the candidate: they have real experience with each of these, though the CV doesn't say so: {}. \
+This posting asks for them, so work each one into the CV where it honestly fits (a skills or tools line, or a bullet about related work), in the posting's \
+own wording, and don't list them in keyword_gaps. Add the keyword only: no employer, project, number or result invented around it.", mine.join(", ")));
+        }
+        let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.letter_facts(), &t.letter_style, &consistency, &guidance)?;
         // Held to it, whatever came back: the headline as they saw it, and only the few edits that add most.
         if let Some(pd) = prior_doc.as_ref().filter(|_| mode == "light") {
             let headline = headline_indices(&doc);
@@ -706,6 +714,7 @@ impl Agent {
         let (before, _) = cv::keyword_coverage(&doc.plain_text(), &job.keywords);
         let (after, missing) = cv::keyword_coverage(&tailored_text, &job.keywords);
 
+        let worked_in: Vec<String> = mine.iter().filter(|k| !missing.contains(k)).cloned().collect();
         let mut gaps: Vec<String> = result.keyword_gaps.iter().chain(missing.iter()).cloned().collect();
         gaps.sort_by_key(|g| g.to_lowercase());
         gaps.dedup_by_key(|g| g.to_lowercase());
@@ -729,6 +738,9 @@ impl Agent {
             detail.push_str(&format!("; refused: {}", applied.rejected.join("; ")));
         }
         db.log(Some(job_id), "tailored", &detail)?;
+        if !worked_in.is_empty() {
+            db.log(Some(job_id), "tailored", &format!("worked in keywords you've said you have: {}", worked_in.join(", ")))?;
+        }
         if let Some(p) = &prior {
             db.log(Some(job_id), "tailored", &match mode.as_str() {
                 "same" => format!("the same CV as you sent {} for {}", job.company, p.title),
@@ -750,7 +762,7 @@ impl Agent {
     /// tailoring. Two scorings of the same experience differ by a few points by chance, so the
     /// scorer is told the fit before, and a fit a little lower than it is taken as that chance,
     /// not a worse CV.
-    fn score_tailored(&self, job: &Job, track: &str, tailored_text: &str) -> R<i64> {
+    pub(crate) fn score_tailored(&self, job: &Job, track: &str, tailored_text: &str) -> R<i64> {
         let mut guidance = self.scoring_guidance(&self.profile());
         if let Some(a) = job.score {
             guidance.push_str(&format!("\n\nThis CV is the candidate's own, reworded for this posting. Before the rewording you scored it {a} for this same posting. Use the same scale: score it lower than {a} only if the rewording removed or weakened evidence the posting asks for, and higher only where it now shows evidence it didn't."));

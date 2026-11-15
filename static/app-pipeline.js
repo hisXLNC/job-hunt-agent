@@ -157,11 +157,20 @@ function wordDiff(before, after) {
   return out.replace(/<\/ins>(\s*)<ins>/g, '$1').replace(/<\/del><del>/g, ' ');
 }
 /** The last change you asked for (or made) to the tailored CV or letter, highlighted word by word. */
+/** After keywords were worked in: the fit and the keyword match, before and after. */
+function revScores(sc) {
+  if (!sc) return '';
+  const [kb, ka] = sc.keywords || [], [fb, fa] = sc.fit || [];
+  const move = (b, a, show) => b == null || a == null ? (a != null ? `<b>${show(a)}</b>` : '') : `${show(b)} <span class="fit-arrow">→</span> <b class="${a > b ? 'good-text' : a < b ? 'warn-text' : ''}">${show(a)}</b>`;
+  const fit = fa != null ? move(fb, fa, x => x) : '<span class="muted">not scored again (Claude was out of reach); it\'s scored later</span>';
+  return `<div class="rev-scores"><div><span class="muted small">Fit</span><br>${fit}</div><div><span class="muted small">Posting's keywords matched</span><br>${move(kb, ka, pct)}</div>${sc.left != null ? `<div><span class="muted small">Keywords still missing</span><br><b>${sc.left}</b></div>` : ''}</div>`;
+}
 function revisionHtml(r) {
   if (!r || !(r.changes || []).length) return '';
   const what = r.what === 'letter' ? 'cover letter' : 'CV';
   return `<section class="card revision"><header><h2>What changed just now</h2><button class="btn sm" data-act="revisionSeen">Done</button></header>
     <p class="muted small">In your ${what}${r.note && r.note !== 'your edit' ? `, for “${esc(r.note)}”` : r.note === 'your edit' ? ', by you' : ''} · ${esc(ago(r.at))}. <del>Struck through</del> is gone, <ins>highlighted</ins> is new; the paragraphs are marked in the preview too.</p>
+    ${revScores(r.scores)}
     ${r.changes.map(c => `<div class="rev-para">${!c.before ? '<span class="pill good">New paragraph</span> ' : !c.after ? '<span class="pill crit">Removed</span> ' : ''}${wordDiff(c.before, c.after)}</div>`).join('')}</section>`;
 }
 /** Mark the changed paragraphs in the preview, once it's drawn. */

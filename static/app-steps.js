@@ -160,8 +160,9 @@ const FLAT_WHY = 'The tailored CV scores about the same as yours and still lacks
 const gapsHtml = j => j.coverage_after != null && j.coverage_after < THIN_COVER && (j.keyword_gaps || []).length ? `<div class="advice warn gaps" data-gaps="${esc(j.id)}">
     <b>This CV covers ${pct(j.coverage_after)} of the posting's keywords.</b>
     ${flatTailor(j) ? `<p class="small flat-tailor"><b>Tailoring didn't lift the fit${j.score_after === j.score ? ` (still ${j.score})` : ` (${j.score} to ${j.score_after})`}.</b> ${FLAT_WHY}</p>` : ''}
-    <p class="small">Job Hunt left these out because nothing in your CV backs them. Tick the ones you really have and it works them in; leave the rest.</p>
-    <div class="gap-list">${j.keyword_gaps.slice(0, 14).map(k => `<label class="check small"><input type="checkbox" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div>
+    <p class="small">Job Hunt left these out because nothing in your CV backs them. Tick the ones you really have and it works them in; leave the rest. It remembers what you tick, and adds those by itself the next time a posting asks for them.</p>
+    ${(j.keywords_have || []).length ? '<p class="small muted">Ticked already: the ones you\'ve said you have before.</p>' : ''}
+    <div class="gap-list">${[...j.keyword_gaps].sort((a, b) => (j.keywords_have || []).includes(b) - (j.keywords_have || []).includes(a)).slice(0, 14).map(k => `<label class="check small"><input type="checkbox" value="${esc(k)}" ${(j.keywords_have || []).includes(k) ? 'checked' : ''}> ${esc(k)}</label>`).join('')}</div>
     <div class="row"><button class="btn sm" type="button" data-act="gapsAdd" data-job="${esc(j.id)}">Work in the ticked ones</button></div></div>` : '';
 /** How good a match is to apply to now, for ordering: its fit, less for each day the posting has
  *  been up after the first two (a role's first days are when applications get read), less for red
@@ -320,7 +321,7 @@ function stageLine(pr) {
 function searchCtl(pr) {
   pr = pr || {};
   return `<details class="menu" id="searchCtl"><summary class="btn${pr.paused ? ' primary' : ''}" data-sv="summary" title="${esc(stageLine(pr))}">
-      <span class="spin" data-sv="bar" data-p="${pr.percent ?? 0}"></span><span data-sv="label">${esc(ctlLabel(pr))}</span><span class="caret">▾</span></summary>
+      <span class="spin" data-sv="bar" data-p="${pr.percent ?? 0}"></span><span data-sv="label">${esc(ctlLabel(pr))}</span><span class="caret"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
     <div class="menu-list right search-now">
       <b data-sv="stage">${esc(stageLine(pr))}</b>
       <span class="muted small" data-sv="detail">${esc(pr.detail || '')}</span>

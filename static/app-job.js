@@ -63,7 +63,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_open, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const reviewBox = `<div class="ats-review"><header><h3>${sys ? `How ${esc(sys.name)}'s AI check would read your CV` : 'How an AI screen would read your CV'}</h3>
         ${reviewing ? '<span class="muted small"><span class="spin" data-kind="review"></span>Checking…</span>' : j.cv_path ? `<button class="btn" data-act="review">${review ? 'Check again' : 'Check my CV'}</button>` : ''}</header>
         ${review ? `<p><b>Meets ${review.met} of ${review.total}</b>${review.undecided ? `, ${review.undecided} it can't decide` : ''}${review.not ? `, ${review.not} not shown` : ''}. ${esc(review.note || '')}</p>
@@ -102,9 +102,10 @@ async function showJob(id) {
       <div class="grow">
         <div class="eyebrow"><a href="#applications">Jobs</a> / ${esc(STAGES[j.status] || j.status)}</div>
         <h1>${esc(j.title)}</h1>
-        <div class="facts" style="margin-top:6px"><b>${esc(j.company)}</b>${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}${(company_history || []).length ? ' <span class="pill info">Applied here before</span>' : ''}</div>
+        <div class="facts" style="margin-top:6px"><a class="co-link" href="#applications/all" data-act="companyJobs" data-company="${esc(j.company)}" title="Every posting Job Hunt has seen from ${esc(j.company)}"><b>${esc(j.company)}</b></a>${(company_open || []).length ? `<a class="co-open" href="#applications/all" data-act="companyJobs" data-company="${esc(j.company)}" title="Other roles at ${esc(j.company)} that are still open and you haven't applied to">${company_open.length} more open role${company_open.length === 1 ? '' : 's'} here</a>` : ''}${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}${(company_history || []).length ? ' <span class="pill info">Applied here before</span>' : ''}</div>
       </div>
     </div>
+    ${betterHere(j, company_open)}
     ${jobActions(j, tailoring, progress, finding, (history || []).find(e => e.kind === 'apply-link'))}
     ${decline || declining || j.status === 'rejected' ? `<section class="card">
       <header><h2>Reply to the rejection</h2>${declining ? '<span class="muted small"><span class="spin" data-kind="decline"></span>Writing…</span>' : `<button class="btn" data-act="decline">${decline ? 'Write again' : 'Draft a reply'}</button>`}</header>
@@ -344,4 +345,15 @@ async function loadKit() {
     ${group('Cover letter', row('Letter', k.letter, true))}
     ${group('Whole CV as text', row('CV', k.cv, true))}
     <p class="muted small">From the CV this application uses${(k.jobs || []).length ? '' : ' (Job Hunt found no dated jobs in it: copy from the whole CV below)'} and your <a href="#cvs/details">facts for forms</a>. Edit those to change what's here.</p></div>`;
+}
+
+/** Another open role at the same company that your CV fits better than this one (by a clear
+ *  margin, on the fit before tailoring, so the two are measured the same way). Not once sent. */
+function betterHere(j, open) {
+  if (j.applied_at || j.score == null) return '';
+  const better = (open || []).filter(o => o.score != null && o.score >= j.score + 3).slice(0, 3);
+  if (!better.length) return '';
+  return `<div class="advice warn better-here"><b>${better.length === 1 ? 'Another role' : `${better.length} other roles`} at ${esc(j.company)} may fit you better than this one (fit ${j.score}).</b>
+    <ul class="small">${better.map(o => `<li><a href="#job/${encodeURIComponent(o.id)}">${esc(o.title)}</a>${o.location ? ` · ${esc(o.location)}` : ''} · fit <b>${o.score}</b> · ${esc(STAGES[o.status] || o.status)}</li>`).join('')}</ul>
+    <p class="small muted">Companies usually see every application you send them, so the stronger match is the better first one.</p></div>`;
 }

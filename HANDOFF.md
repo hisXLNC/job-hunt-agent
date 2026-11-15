@@ -845,3 +845,36 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
 - **"1 new match to pick from" with nothing to pick.** The `held` item (postings waiting to be
   scored) counted as a pick. `queueCount` and the tab counts leave `kind === 'held'` out; with only
   held postings the heading says "N postings waiting to be scored" and the Pick tab shows no number.
+
+## 2.82.0
+
+- **Keywords you really have are remembered.** `keywords.have` = [{k, n, at}] (`known_keywords`,
+  `learn_keywords`, `forget_keyword` in pipeline.rs). Learned in `revise()` when a CV request is the
+  "work these in" note (`confirmed_in`: the text after "though my CV doesn't say so:", which both the
+  Queue's ticked gaps and Ask Claude's add_keywords offer send; don't reword that note without
+  changing `CONFIRMED`). First read backfills from past `revised` events (`Db::events_of_kind`).
+  `tailor()` adds a "Confirmed by the candidate" block to the guidance for `confirmed_for(job, cv)`
+  (posting keywords that are known and missing from the CV), and logs which made it in. The guidance
+  preface in claude.rs allows that one exception to "never adds experience". The job JSON has
+  `keywords_have` (gaps already known: pre-ticked in `gapsHtml`). `GET/POST /api/keywords`
+  ({add} / {forget}); card `#kwCard` in CV & Career → Your details. Not tried with real Claude.
+- **A held posting could wait for ever** ("scored 0 … 1 still waiting" after every batch): one whose
+  text can't be read (LinkedIn / Job Bank / job site page gone) or that fails scoring was held again
+  each time. `hold_tried(list, why, report)` counts tries in `search.held.tries` ({id: {n, why}});
+  the third failure files it as skipped ("couldn't be scored after 3 tries: …") with a `held` event.
+  Only postings a read was actually tried for count (the first `room`), not those over the cap, and
+  not failures that stop every request (usage limit, no key). The `held` event now carries the first
+  error when nothing was scored. Which of the causes the user's posting had is unknown.
+- `GET /api/held` (`held_list`) and "Show them" beside "Score them all now" (`heldShown`, `heldLine`).
+- Carets are drawn (`.caret` with an svg chevron, `.up` turned) instead of the ▾ character; Ask
+  Claude's × is a minimise bar (same `askClose`).
+- **Scores after working in keywords.** `revise()` → `rescore_revision` when the note is a "work
+  these in" one: scores the tailored CV again (`score_tailored`, now pub(crate); one more request)
+  and adds `scores: {keywords: [before, after], fit: [before, after], left}` to `revision.last:<id>`;
+  `revScores` shows it in "What changed just now" (CV & letter tab). Fit is null there when the
+  re-score failed. Other CV changes don't re-score.
+- **Company on the job page.** `Db::open_at_company(company_key)` (queued/saved/ready/approved, not
+  sent, not closed) → `company_open` in the job JSON (without this job). The name and "N more open
+  roles here" are links (`companyJobs`: writes `jh.allFilters` with q = company, opens All jobs).
+  `betterHere`: warns when another open role's `score` (fit before tailoring, so like for like) is
+  3+ above this one's; not once applied.

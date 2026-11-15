@@ -1348,6 +1348,49 @@ replies and interviews, and a little lower for kinds that got none from several 
         let _ = db.set("search.held.count", &(held.len() - keep).to_string());
     }
 
+    /// Hold postings that were tried and couldn't be read or scored (`why`). One that has failed
+    /// `GIVE_UP` times isn't held again: it's filed in All jobs as set aside, with the reason, so it
+    /// doesn't wait for ever ("1 still waiting" after every batch, with nothing said).
+    pub(crate) fn hold_tried(&self, list: Vec<Posting>, why: &str, report: &mut crate::pipeline::Report) {
+        const GIVE_UP: u64 = 3;
+        if list.is_empty() {
+            return;
+        }
+        let mut tries = self.held_tries();
+        let mut again = vec![];
+        for p in list {
+            let n = tries[p.id()]["n"].as_u64().unwrap_or(0) + 1;
+            if n >= GIVE_UP {
+                tries.as_object_mut().unwrap().remove(&p.id());
+                let said = format!("couldn't be scored after {n} tries: {why}");
+                let _ = self.skip(&p, &said, report);
+                let _ = self.db().log(Some(&p.id()), "held", &format!("set aside without a score ({why}, {n} tries). Open it and press Score it anyway to try again."));
+            } else {
+                tries[p.id()] = json!({ "n": n, "why": why });
+                again.push(p);
+            }
+        }
+        let _ = self.db().set("search.held.tries", &tries.to_string());
+        report.deferred += again.len();
+        self.hold(again);
+    }
+
+    /// How often each waiting posting has been tried, and what went wrong: {id: {n, why}}.
+    fn held_tries(&self) -> Value {
+        self.db().get("search.held.tries").ok().flatten().and_then(|s| serde_json::from_str::<Value>(&s).ok()).filter(|v| v.is_object()).unwrap_or_else(|| json!({}))
+    }
+
+    /// The postings waiting to be scored, newest first, for the Queue: what each is, and why it's
+    /// still waiting when it has been tried.
+    pub fn held_list(&self) -> Vec<Value> {
+        let list: Vec<Posting> = self.db().get("search.held").ok().flatten().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let tries = self.held_tries();
+        let mut out: Vec<Value> = list.iter().map(|p| json!({ "title": p.title, "company": p.company, "location": p.location, "url": p.url, "source": p.source,
+            "posted": p.posted_at, "tries": tries[p.id()]["n"].as_u64().unwrap_or(0), "why": tries[p.id()]["why"].as_str().unwrap_or("") })).collect();
+        out.sort_by(|a, b| b["posted"].as_str().unwrap_or("").cmp(a["posted"].as_str().unwrap_or("")));
+        out
+    }
+
     fn take_held(&self) -> Vec<Posting> {
         let db = self.db();
         let list: Vec<Posting> = db.get("search.held").ok().flatten().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
@@ -1883,6 +1926,14 @@ replies and interviews, and a little lower for kinds that got none from several 
                 db.log(Some(job_id), "revised", &detail)?;
                 drop(db);
                 self.keep_revision(job_id, "cv", note, applied.changes.iter().map(|c| (c.before.clone(), c.after.clone())).collect());
+                // Keywords you said you have: remembered, so the next tailoring adds them by itself.
+                let asked = confirmed_in(note);
+                let _ = self.learn_keywords(&asked);
+                if !asked.is_empty() {
+                    if let Ok(d) = cv::open(Path::new(&path)) {
+                        self.rescore_revision(&job, &d.plain_text());
+                    }
+                }
             }
             "letter" => {
                 let letter = job.cover_letter.clone().filter(|l| !l.trim().is_empty()).ok_or_else(|| Error("There's no cover letter yet. Tailor this application first.".into()))?;
@@ -1948,6 +1999,70 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// say you've seen it.
     pub fn last_revision(&self, job_id: &str) -> Option<Value> {
         serde_json::from_str(&self.secret(&format!("revision.last:{job_id}"))).ok()
+    }
+
+    // --- keywords you've said you have ---------------------------------------------------------
+
+    /// The keywords you've told Job Hunt you really have though your CV doesn't say so (ticked
+    /// under a thin CV, or through Ask Claude), each with how often and when last: [{k, n, at}],
+    /// most used first. The first time, they're read from the changes you asked for before.
+    pub fn known_keywords(&self) -> Vec<Value> {
+        let kept = self.db().get("keywords.have").ok().flatten();
+        let mut list: Vec<Value> = match kept {
+            Some(s) => serde_json::from_str(&s).unwrap_or_default(),
+            None => {
+                let mut list: Vec<Value> = vec![];
+                let past = self.db().events_of_kind("revised", 2000).unwrap_or_default();
+                for e in past.iter().rev() {
+                    add_known(&mut list, &confirmed_in(&e.detail), &e.created_at);
+                }
+                let _ = self.db().set("keywords.have", &json!(list).to_string());
+                list
+            }
+        };
+        list.sort_by_key(|v| std::cmp::Reverse(v["n"].as_u64().unwrap_or(0)));
+        list
+    }
+
+    /// Remember keywords as yours, so tailoring works them in by itself where a posting asks.
+    pub fn learn_keywords(&self, words: &[String]) -> R<()> {
+        if words.is_empty() {
+            return Ok(());
+        }
+        let mut list = self.known_keywords();
+        add_known(&mut list, words, &now());
+        self.db().set("keywords.have", &json!(list).to_string())
+    }
+
+    /// Stop counting a keyword as yours.
+    pub fn forget_keyword(&self, word: &str) -> R<()> {
+        let mut list = self.known_keywords();
+        list.retain(|v| cv::norm(v["k"].as_str().unwrap_or("")) != cv::norm(word));
+        self.db().set("keywords.have", &json!(list).to_string())
+    }
+
+    /// Of a posting's keywords, the ones you've said you have that `cv_text` doesn't mention: what
+    /// tailoring works in without being asked, in the posting's own wording.
+    pub fn confirmed_for(&self, job: &Job, cv_text: &str) -> Vec<String> {
+        let known: HashSet<String> = self.known_keywords().iter().map(|v| cv::norm(v["k"].as_str().unwrap_or(""))).collect();
+        if known.is_empty() {
+            return vec![];
+        }
+        let (_, missing) = cv::keyword_coverage(cv_text, &job.keywords);
+        missing.into_iter().filter(|k| known.contains(&cv::norm(k))).collect()
+    }
+
+    /// After keywords were worked in: the tailored CV is scored again (one more request), and the
+    /// fit and the share of the posting's keywords, before and after, go with the kept revision
+    /// for the page to show. On failure the keyword figures are still shown.
+    fn rescore_revision(&self, before: &Job, text: &str) {
+        let Ok(Some(now_job)) = self.db().job(&before.id) else { return };
+        let fit_before = before.score_after.or(before.score);
+        let fit_after = self.score_tailored(&now_job, now_job.track.as_deref().unwrap_or(""), text).ok();
+        let Some(mut v) = self.last_revision(&before.id) else { return };
+        v["scores"] = json!({ "keywords": [before.coverage_after, now_job.coverage_after], "fit": [fit_before, fit_after],
+            "left": now_job.keyword_gaps.len() });
+        let _ = self.db().set(&format!("revision.last:{}", before.id), &v.to_string());
     }
 
     fn keep_revision(&self, job_id: &str, what: &str, note: &str, changes: Vec<(String, String)>) {
@@ -3988,4 +4103,34 @@ fn rejection_names(e: &crate::db::EmailRow, job: &Job) -> bool {
     let words = crate::logos::name_words(&job.company);
     let text = email_words(e);
     !words.is_empty() && words.concat().len() >= 3 && (words.iter().all(|w| text.contains(w)) || text.contains(&words.concat()))
+}
+
+/// What a "work these in" request starts with (the Queue's ticked keywords and Ask Claude's offer
+/// both send it), before the keywords.
+const CONFIRMED: &str = "though my CV doesn't say so:";
+
+/// The keywords in a request to work in what you really have ("I do have real experience with each
+/// of these, though my CV doesn't say so: a, b. Work each one into…"); none for any other request.
+pub(crate) fn confirmed_in(note: &str) -> Vec<String> {
+    let Some(at) = note.find(CONFIRMED) else { return vec![] };
+    let rest = &note[at + CONFIRMED.len()..];
+    let list = rest.split(". Work each one").next().unwrap_or("");
+    list.split(',').map(|k| k.trim().trim_end_matches('.').trim().to_string()).filter(|k| !k.is_empty() && k.chars().count() <= 60).collect()
+}
+
+/// Count `words` into the kept list of keywords ([{k, n, at}]), by their meaning, not their spelling.
+fn add_known(list: &mut Vec<Value>, words: &[String], at: &str) {
+    for w in words {
+        let key = cv::norm(w);
+        if key.is_empty() {
+            continue;
+        }
+        match list.iter_mut().find(|v| cv::norm(v["k"].as_str().unwrap_or("")) == key) {
+            Some(v) => {
+                v["n"] = json!(v["n"].as_u64().unwrap_or(0) + 1);
+                v["at"] = json!(at);
+            }
+            None => list.push(json!({ "k": w.trim(), "n": 1, "at": at })),
+        }
+    }
 }

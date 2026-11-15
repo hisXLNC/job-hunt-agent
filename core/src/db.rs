@@ -934,6 +934,11 @@ impl Db {
         self.events_where("WHERE e.kind LIKE '%:error' AND e.created_at >= ?1 ORDER BY e.id DESC LIMIT 50", &[&since])
     }
 
+    /// The newest events of one kind.
+    pub fn events_of_kind(&self, kind: &str, limit: usize) -> R<Vec<Event>> {
+        self.events_where("WHERE e.kind = ?1 ORDER BY e.id DESC LIMIT ?2", &[&kind, &(limit as i64)])
+    }
+
     pub fn recent_events(&self, limit: usize) -> R<Vec<Event>> {
         self.events_where("ORDER BY e.id DESC LIMIT ?1", &[&(limit as i64)])
     }
@@ -1303,6 +1308,22 @@ impl Db {
         let mut st = self.con.prepare("SELECT * FROM jobs WHERE applied_at IS NOT NULL AND applied_at >= ?1")?;
         let rows = st.query_map([since], Job::from_row)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// A company's roles you could still apply to (waiting to be picked, saved, tailored or approved;
+    /// not sent, not closed), by its company_key, best fit first: (id, title, location, status, fit
+    /// of your own CV, fit after tailoring).
+    pub fn open_at_company(&self, key: &str) -> Vec<(String, String, String, String, Option<i64>, Option<i64>)> {
+        if key.is_empty() {
+            return vec![];
+        }
+        let run = || -> R<Vec<(String, String, String, String, Option<i64>, Option<i64>)>> {
+            let mut st = self.con.prepare("SELECT id, title, location, status, score, score_after FROM jobs WHERE dupe_key >= ?1 AND dupe_key < ?2 \
+                AND status IN ('queued', 'saved', 'ready', 'approved') AND applied_at IS NULL AND closed_at IS NULL ORDER BY score DESC LIMIT 100")?;
+            let rows = st.query_map(params![format!("{key}|"), format!("{key}}}")], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        };
+        run().unwrap_or_default()
     }
 
     /// The links (posting, where to apply) of a company's jobs, by its company_key.

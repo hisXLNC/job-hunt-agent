@@ -587,6 +587,18 @@ async function act(el) {
     try { await navigator.clipboard.writeText(phoneBookmark(st)); toast('Copied. Send it to your phone and paste it as a bookmark\'s address.'); } catch (e) { toast('Couldn\'t copy.', true); }
     return;
   }
+  if (a === 'kwForget') return busy(async () => { renderKeywords(await api('/api/keywords', { method: 'POST', body: { forget: el.dataset.k } })); }, 'Removed. Job Hunt no longer adds it by itself.');
+  if (a === 'companyJobs') {
+    // All jobs, showing only this company (whatever was filtered before).
+    try { localStorage.setItem('jh.allFilters', JSON.stringify({ q: el.dataset.company, stage: '', fit: '0', source: '', age: '', emp: '', pay: false, sort: '4' })); } catch (e) {}
+    if (location.hash === '#applications/all') route(); else location.hash = '#applications/all';
+    return;
+  }
+  if (a === 'heldShow') {
+    heldShown.open = !heldShown.open;
+    if (heldShown.open) { heldShown.list = null; route(); await heldLoad(); }
+    return route();
+  }
   if (a === 'scoreHeld') {
     if (!confirm('Score every waiting posting now? It uses your Claude plan (about one request per posting, in batches of 25), and stops at its usage limit; the rest then wait for the usual batches.')) return;
     return busy(async () => { await api('/api/run/score-held', { method: 'POST' }); refreshOverview(); }, 'Scoring them all: matches show up under Pick as they come in.');
@@ -1346,6 +1358,12 @@ document.addEventListener('submit', async e => {
   try {
     const kind = form.dataset.form;
     const f = form.elements;
+    if (kind === 'kwAdd') {
+      const add = f.k.value.split(',').map(x => x.trim()).filter(Boolean);
+      if (!add.length) { toast('Type a keyword first.', true); return; }
+      renderKeywords(await api('/api/keywords', { method: 'POST', body: { add } }));
+      toast('Added. Tailoring works it in where a posting asks for it.'); return;
+    }
     if (kind === 'declineChange') {
       await api(`/api/jobs/${encodeURIComponent(form.dataset.job)}/decline`, { method: 'POST', body: { change: f.change.value } });
       toast('Rewriting the reply…'); setTimeout(route, 300); return;

@@ -2135,7 +2135,7 @@ exactly as if it were the only posting, never against the others. Answer with on
         let user = if guidance.trim().is_empty() {
             user
         } else {
-            format!("{user}\n\nGuidance for this application (follow it wherever the CV supports it; the honesty rules above always win, and it never adds experience the CV doesn't state):\n{}", guidance.trim())
+            format!("{user}\n\nGuidance for this application (follow it wherever the CV supports it; the honesty rules above always win, and it never adds experience the CV doesn't state, except the keywords it says the candidate has confirmed themselves):\n{}", guidance.trim())
         };
         let model = if self.tailor_model.trim().is_empty() { self.model.as_str() } else { self.tailor_model.as_str() };
         let effort = if ["low", "medium", "high"].contains(&self.tailor_effort.as_str()) { self.tailor_effort.as_str() } else { TAILOR_EFFORT };

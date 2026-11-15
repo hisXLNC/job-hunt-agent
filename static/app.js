@@ -183,7 +183,7 @@ function nextStepId(c = overview?.counts || {}) {
   return ['approve', 'submit', 'pick', 'waiting', 'interviews'].find(id => FLOW.find(f => f[0] === id)[2](c)) || '';
 }
 /** A list's sort and filters: shown on a wide window, folded under one line on a phone so the jobs come first. */
-const foldFilters = (html, few) => `<details class="fold-filters${few ? ' few' : ''}" ${!few && matchMedia('(min-width: 761px)').matches && !matchMedia('(pointer: coarse) and (max-width: 1100px) and (max-height: 700px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret">▾</span></summary>${html}</details>`;
+const foldFilters = (html, few) => `<details class="fold-filters${few ? ' few' : ''}" ${!few && matchMedia('(min-width: 761px)').matches && !matchMedia('(pointer: coarse) and (max-width: 1100px) and (max-height: 700px)').matches ? 'open' : ''}><summary class="btn ghost sm">${svg('settings')}Sort and filter<span class="caret"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>${html}</details>`;
 /** Find any job, and add one you found: at the top of Today and Jobs. */
 const findBox = () => `<button class="find-box" data-act="palette" title="Find any job (Ctrl+K)">${svg('search')}<span>Find a job…</span><kbd>Ctrl K</kbd></button>`;
 /** The Queue's row of tabs, the same on every one of them: what's waiting (all of it, then by step), and
@@ -202,7 +202,16 @@ function queueTabs(on, view) {
 /** Postings found but not scored yet, with the button that scores them now. */
 function heldLine() {
   const waiting = overview?.held || 0;
-  return waiting ? `<p class="small muted held-line">${waiting} posting${waiting === 1 ? '' : 's'} found and waiting to be scored (newest first, ${(overview?.running || []).includes('search') ? 'scoring now' : 'a batch every 45 minutes'}). <button class="btn sm" data-act="scoreHeld">Score them all now</button></p>` : '';
+  if (!waiting) return '';
+  // Open, and the number has changed since the list was read: read it again (once per number).
+  if (heldShown.open && heldShown.list && heldShown.list.length !== waiting && heldShown.asked !== waiting) { heldShown.asked = waiting; heldLoad().then(route); }
+  const rows = heldShown.open ? (heldShown.list ? heldShown.list.map(h => `<li><span class="grow"><a href="${esc(h.url)}" target="_blank" rel="noopener"><b>${esc(h.title)}</b></a> <span class="muted">${esc([h.company, h.location, sourceName(h.source)].filter(Boolean).join(' · '))}</span>${h.tries ? `<br><span class="warn-text small">Tried ${h.tries === 1 ? 'once' : `${h.tries} times`}: ${esc(h.why)}. After 3 tries it goes to All jobs without a score.</span>` : ''}</span></li>`).join('') || '<li class="muted">None left: they\'ve just been scored.</li>' : '<li class="muted">Loading…</li>') : '';
+  return `<div class="held-box"><p class="small muted held-line">${waiting} posting${waiting === 1 ? '' : 's'} found and waiting to be scored (newest first, ${(overview?.running || []).includes('search') ? 'scoring now' : 'a batch every 45 minutes'}). <button class="btn sm" data-act="scoreHeld">Score them all now</button> <button class="btn sm ghost" data-act="heldShow" aria-expanded="${heldShown.open}">${heldShown.open ? 'Hide them' : 'Show them'}</button></p>${heldShown.open ? `<ul class="held-list small">${rows}</ul>` : ''}</div>`;
+}
+/** The waiting postings themselves, once asked for (Show them). */
+const heldShown = { open: false, list: null };
+async function heldLoad() {
+  try { heldShown.list = (await api('/api/held')).held || []; } catch (e) { heldShown.list = []; }
 }
 /** The top of the Jobs page: its name, find and add, and the steps. */
 function jobsHead(extra = '') {
@@ -222,7 +231,7 @@ function pausedWords(paused) {
 function scheduleMenu(paused, right = true) {
   const label = !paused ? 'Daily search: on' : paused === 'off' ? 'Daily search: off' : `Paused until ${new Date(paused).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
   const opt = (days, text) => `<button data-act="searchPause" data-days="${days}">${text}</button>`;
-  return `<details class="menu sched-menu"><summary class="btn ghost${paused ? ' paused' : ''}" title="${paused ? esc(pausedWords(paused)) : 'Job Hunt searches once a day by itself'}">${svg('clock')}${label}<span class="caret">▾</span></summary><div class="menu-list${right ? ' right' : ''}">
+  return `<details class="menu sched-menu"><summary class="btn ghost${paused ? ' paused' : ''}" title="${paused ? esc(pausedWords(paused)) : 'Job Hunt searches once a day by itself'}">${svg('clock')}${label}<span class="caret"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="menu-list${right ? ' right' : ''}">
       ${paused ? opt(0, 'Turn the daily search back on') : ''}
       ${opt(1, 'Pause for a day')}${opt(3, 'Pause for 3 days')}${opt(7, 'Pause for a week')}${opt(14, 'Pause for 2 weeks')}
       ${paused === 'off' ? '' : opt('off', 'Turn the daily search off')}
@@ -629,7 +638,7 @@ function fitTabs() {
     const links = [...nav.querySelectorAll(':scope > a')];
     const more = document.createElement('details');
     more.className = 'menu tabs-more';
-    more.innerHTML = '<summary>More <span class="caret">▾</span></summary><div class="menu-list right"></div>';
+    more.innerHTML = '<summary>More <span class="caret"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="menu-list right"></div>';
     nav.insertBefore(more, nav.querySelector(':scope > a.tab-end') || null);
     nav.classList.add('fitted'); // the menu opens past the bar's edge
     const list = more.querySelector('.menu-list');

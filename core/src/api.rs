@@ -627,6 +627,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "last_search": Some(agent.secret("last.search")).filter(|x| !x.is_empty()), "next_search": side["next_search"], "paused": side["paused"],
                     "held": agent.held_count() })));
             }
+            ["api", "keywords"] => return Ok(Resp::json(&json!({ "keywords": agent.known_keywords() }))),
+            ["api", "held"] => return Ok(Resp::json(&json!({ "held": agent.held_list() }))),
             ["api", "answer-bank"] => return Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent) }))),
             ["api", "tracker"] => return Ok(Resp::json(&json!({ "rows": agent.tracker(None)? }))),
             ["api", "connections"] => {
@@ -737,9 +739,15 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let job = job_or_404(agent, id)?;
                 let history = agent.db().history(id)?;
                 let pdf = |p: &Option<String>| p.as_deref().map(|p| !crate::util::pdf_stale(Path::new(p))).unwrap_or(false);
+                // With the missing keywords you've said you have before: ticked for you under a thin CV.
+                let known: std::collections::HashSet<String> = agent.known_keywords().iter().map(|v| crate::cv::norm(v["k"].as_str().unwrap_or(""))).collect();
+                let mut job_json = json!(job);
+                job_json["keywords_have"] = json!(job.keyword_gaps.iter().filter(|k| known.contains(&crate::cv::norm(k))).collect::<Vec<_>>());
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
-                    "effort": crate::fill::effort(&job), "job": job, "history": history, "progress": agent.tracker(Some(id))?.pop(),
+                    "effort": crate::fill::effort(&job),
+                    "job": job_json,
+                    "history": history, "progress": agent.tracker(Some(id))?.pop(),
                     "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "system": crate::ats::of(&job).map(|a| json!({ "name": crate::ats::name(a), "tips": crate::ats::tips(a), "here": agent.applied_here(&job) })), "review": agent.criteria_review(id), "reviewing": agent.is_running(&format!("review:{id}")), "decline": agent.rejection_reply(id), "declining": agent.is_running(&format!("decline:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
                     "rating": agent.db().rating(&job.company), "rating_busy": agent.is_running(&format!("rating:{}", crate::db::company_key(&job.company))),
                     "cv_pdf": pdf(&job.cv_path), "letter_pdf": pdf(&job.letter_path),
@@ -751,6 +759,9 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         "location": j.location, "fit": j.score_after.or(j.score), "cv": j.cv_path.as_deref().is_some_and(|p| Path::new(p).is_file()), "letter": j.cover_letter.as_deref().is_some_and(|l| !l.trim().is_empty()),
                         "last": agent.db().history(&j.id).ok().and_then(|h| h.first().map(|e| e.detail.chars().take(140).collect::<String>())) })).collect::<Vec<_>>(),
                     "company_notes": agent.company_notes(&job.company),
+                    // The company's other roles you could still apply to, best fit first.
+                    "company_open": agent.db().open_at_company(&crate::db::company_key(&job.company)).into_iter().filter(|o| o.0 != job.id)
+                        .map(|(id, title, location, status, score, after)| json!({ "id": id, "title": title, "location": location, "status": status, "score": score, "fit": after.or(score) })).collect::<Vec<_>>(),
                     "sent_compare": agent.compare_with_sent(&job),
                     "repeat_mode": agent.repeat_mode(),
                     "follow_up": agent.follow_up(id), "following_up": agent.is_running(&format!("followup:{id}")),
@@ -1207,6 +1218,15 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
             });
             Ok(Resp::json(&json!({ "started": true })))
+        }
+        // Keywords you really have: add some ({add: [..]}) or take one off ({forget: ".."}).
+        ["api", "keywords"] => {
+            let add: Vec<String> = b["add"].as_array().map(|l| l.iter().filter_map(|x| x.as_str()).map(|x| x.trim().to_string()).filter(|x| !x.is_empty() && x.chars().count() <= 60).collect()).unwrap_or_default();
+            agent.learn_keywords(&add)?;
+            if !s(&b, "forget").is_empty() {
+                agent.forget_keyword(s(&b, "forget"))?;
+            }
+            Ok(Resp::json(&json!({ "keywords": agent.known_keywords() })))
         }
         ["api", "run", task] if ["search", "search-force", "inbox", "score-held"].contains(task) => {
             if task.starts_with("search") {

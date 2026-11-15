@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.82.0",
+    "date": "2026-11-15",
+    "title": "Remembers the keywords you have; no posting waits for ever",
+    "changes": [
+      "Keywords you tick as really yours (or ask Claude to work in) are remembered, and worked into a tailored CV by themselves whenever a posting asks for one. See and edit the list in CV & Career, Your details.",
+      "A posting that could never be read or scored kept showing as waiting to be scored. After three tries it now goes to All jobs without a score, with the reason, and the activity list says what went wrong.",
+      "Show them, beside Score them all now, lists the postings waiting to be scored and why each is still waiting.",
+      "The small arrows on the search button and the status chip are drawn properly, and Ask Claude has a minimise button instead of an X.",
+      "After keywords are worked in, the change shows the fit and the share of the posting's keywords matched, before and after.",
+      "On a job's page the company name opens All jobs showing that company's postings, and beside it is how many other roles there are still open to you.",
+      "A job's page warns you when another open role at the same company fits you better."
+    ]
+  },
+  {
     "version": "2.81.1",
     "date": "2026-11-15",
     "title": "The Queue keeps itself up to date",

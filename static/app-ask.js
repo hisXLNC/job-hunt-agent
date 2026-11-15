@@ -42,7 +42,7 @@ function askBuild() {
         <span class="ask-mark">${SPARK}</span>
         <div class="ask-title"><b>Ask Claude</b><span class="muted small" id="askWhere"></span></div>
         <button class="btn ghost sm" type="button" id="askNew" hidden>New chat</button>
-        <button class="ask-x" type="button" id="askClose" aria-label="Close" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="ask-x" type="button" id="askClose" aria-label="Minimise" title="Minimise (Esc). Your chat is kept."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18h12"/></svg></button>
       </header>
       <div class="ask-log" id="askLog" aria-live="polite"></div>
       <div class="ask-foot">

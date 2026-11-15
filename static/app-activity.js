@@ -12,7 +12,7 @@ const actTime = s => s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).
 
 function actIdleHtml() {
   const rows = running.recent.map(e => `<li class="act-row"><div class="act-top"><span>${jobLink(e)}${eventText(e)}</span><span class="muted small nowrap" title="${esc(new Date(e.created_at).toLocaleString())}">${esc(ago(e.created_at))}</span></div></li>`).join('');
-  return `<button class="act-head" type="button" data-act-idle aria-expanded="${running.idleOpen}" title="Job Hunt isn't doing anything in the background right now. Press for what it did last."><span class="act-dot idle"></span><b>Idle</b><span class="caret">${running.idleOpen ? '▾' : '▴'}</span></button>
+  return `<button class="act-head" type="button" data-act-idle aria-expanded="${running.idleOpen}" title="Job Hunt isn't doing anything in the background right now. Press for what it did last."><span class="act-dot idle"></span><b>Idle</b><span class="caret${running.idleOpen ? '' : ' up'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
     ${running.idleOpen ? `<div class="act-idle"><p class="small"><b>Nothing is running right now.</b> ${running.lastSearch ? `Last search ${esc(ago(running.lastSearch))}.` : ''} When Job Hunt works on something (a search, tailoring, checking postings, syncing), it shows here with a Stop.</p>
       ${rows ? `<p class="small muted" style="margin:6px 0 2px">The last things it did</p><ul class="act-list">${rows}</ul>` : ''}</div>` : ''}`;
 }
@@ -24,7 +24,7 @@ function actHtml(list) {
       <div class="act-line"><div class="pbar${a.estimated ? ' guess' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${a.percent}" title="${a.estimated ? 'A guess from how long this usually takes' : `${a.percent}% done`}"><i style="width:${Math.max(3, a.percent)}%"></i></div>
         ${a.stoppable ? `<button class="btn ghost danger sm" type="button" data-act-stop="${esc(a.id)}" ${running.stopping.has(a.id) ? 'disabled' : ''} title="Ends this now. What's done so far is kept; ask for it again when you want it.">${running.stopping.has(a.id) ? 'Stopping…' : 'Stop'}</button>` : ''}</div>
     </li>`).join('');
-  return `<button class="act-head" type="button" data-act-toggle aria-expanded="${!running.shut}" title="${running.shut ? 'Show what\'s running' : 'Hide'}"><span class="act-dot"></span><b>${list.length === 1 ? esc(list[0].label) : `${list.length} things running`}</b><span class="caret">${running.shut ? '▴' : '▾'}</span></button>
+  return `<button class="act-head" type="button" data-act-toggle aria-expanded="${!running.shut}" title="${running.shut ? 'Show what\'s running' : 'Hide'}"><span class="act-dot"></span><b>${list.length === 1 ? esc(list[0].label) : `${list.length} things running`}</b><span class="caret${running.shut ? ' up' : ''}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
     ${running.shut ? '' : `<ul class="act-list">${rows}</ul>${list.length > 1 ? '<div class="act-foot"><button class="btn ghost danger sm" type="button" data-act="searchForceStop">Stop several…</button></div>' : ''}`}`;
 }
 

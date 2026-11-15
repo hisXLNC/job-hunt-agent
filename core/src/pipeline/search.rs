@@ -406,8 +406,7 @@ impl Agent {
                 }
                 Err(e) => {
                     report.errors.push(format!("checking near-miss titles: {e}"));
-                    report.deferred += take.len();
-                    near.extend(take);
+                    self.hold_tried(take, "Claude couldn't check whether the title fits", &mut report);
                 }
             }
             report.deferred += near.len(); // over the batch size: next search
@@ -449,7 +448,9 @@ impl Agent {
         if batch.is_some() {
             let waiting = self.held_count(); // before taking the database: it reads it too
             let db = self.db();
-            db.log(None, "held", &format!("scored {} of the postings the last search left, {} cleared your fit score; {waiting} still waiting", report.scored, report.to_pick))?;
+            // Nothing scored and some still waiting: say what went wrong, not only the count.
+            let why = if report.scored == 0 && waiting > 0 { report.errors.first().map(|e| format!(" ({})", e.chars().take(200).collect::<String>())).unwrap_or_default() } else { String::new() };
+            db.log(None, "held", &format!("scored {} of the postings the last search left, {} cleared your fit score; {waiting} still waiting{why}", report.scored, report.to_pick))?;
             db.set("last.held", &crate::util::now())?;
             return Ok(report);
         }
@@ -798,9 +799,14 @@ impl Agent {
             }
         }
         // Not read: held for the next search. Read: their pay, and the filters again.
+        // The ones a read was tried for (the first `room`), to tell from those not reached yet.
+        let attempted: HashSet<String> = if self.stopping() { HashSet::new() } else { candidates.iter().take(room).filter(|p| thin_source(&p.source) && p.description.trim().is_empty()).map(|p| p.id()).collect() };
         let (unread, read): (Vec<Posting>, Vec<Posting>) = candidates.into_iter().partition(|p| thin_source(&p.source) && p.description.trim().is_empty());
-        report.deferred += unread.len();
-        self.hold(unread);
+        // Tried and not read (the page is gone, or the site wouldn't answer): only so many times.
+        let (tried, waiting): (Vec<Posting>, Vec<Posting>) = unread.into_iter().partition(|p| attempted.contains(&p.id()));
+        report.deferred += waiting.len();
+        self.hold(waiting);
+        self.hold_tried(tried, "its text couldn't be read from the site", report);
         let mut kept = vec![];
         for mut p in read {
             if p.salary.is_none() && thin_source(&p.source) {
@@ -881,8 +887,10 @@ impl Agent {
                     // Every other posting would fail the same way: stop scoring (they're held).
                     if stops_all(&e) {
                         run.halted = true;
+                        self.hold(vec![p]);
+                    } else {
+                        self.hold_tried(vec![p], &format!("Claude couldn't score it ({})", e.0.chars().take(120).collect::<String>()), report);
                     }
-                    self.hold(vec![p]);
                 }
             }
             self.tally(report);

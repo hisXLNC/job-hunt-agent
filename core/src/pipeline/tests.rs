@@ -2625,3 +2625,62 @@ fn the_page_reads_beside_the_apps_own_connection() {
     let _reading = agent.reading();
     assert_eq!(agent.db().get("seen").unwrap().as_deref(), Some("three"));
 }
+
+#[test]
+fn a_posting_that_cant_be_read_stops_waiting_after_three_tries() {
+    let s = setup();
+    // A job site's posting with no text, whose page can't be read.
+    let mut p = posting("Technical Program Manager", "gone");
+    p.source = "site-test".into();
+    p.url = "nowhere".into();
+    p.description = String::new();
+    s.agent.search(Some(vec![p])).unwrap();
+    assert_eq!(s.agent.held_count(), 1, "held after the first try");
+    let shown = s.agent.held_list();
+    assert_eq!((shown[0]["title"].as_str(), shown[0]["tries"].as_u64()), (Some("Technical Program Manager"), Some(1)));
+    assert!(shown[0]["why"].as_str().unwrap().contains("couldn't be read"));
+    s.agent.score_held().unwrap();
+    assert_eq!(s.agent.held_count(), 1, "and after the second");
+    // The third try is the last: it's filed without a score, with the reason, and nothing waits.
+    s.agent.score_held().unwrap();
+    assert_eq!(s.agent.held_count(), 0);
+    let job = s.agent.db().job("site-test:gone").unwrap().unwrap();
+    assert_eq!(job.status, "skipped");
+    assert!(job.reasoning.as_deref().unwrap_or("").contains("couldn't be scored after 3 tries"), "{:?}", job.reasoning);
+}
+
+#[test]
+fn keywords_you_ask_for_are_remembered_and_worked_in_by_themselves() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
+    s.agent.tailor("test:1", None).unwrap();
+    assert!(s.agent.known_keywords().is_empty());
+    // Any other change teaches nothing.
+    assert!(super::confirmed_in("shorter bullets").is_empty());
+    // Ticking missing keywords (the request the Queue and Ask Claude send) does.
+    let note = "I do have real experience with each of these, though my CV doesn't say so: Kubernetes, burn-down. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.";
+    assert_eq!(super::confirmed_in(note), vec!["Kubernetes", "burn-down"]);
+    s.agent.revise("test:1", "cv", note).unwrap();
+    let known: Vec<String> = s.agent.known_keywords().iter().map(|v| v["k"].as_str().unwrap().to_string()).collect();
+    assert_eq!(known, vec!["Kubernetes", "burn-down"]);
+    // The change comes with the fit and the keyword match, before and after, for the page to show.
+    let rev = s.agent.last_revision("test:1").unwrap();
+    assert!(rev["scores"]["keywords"][1].is_number() && rev["scores"]["fit"][1].is_number(), "{rev}");
+    // The company's roles still open to you: both (one tailored, one waiting to be picked).
+    let open = s.agent.db().open_at_company(&crate::db::company_key("Acme"));
+    assert_eq!(open.len(), 2, "{open:?}");
+    s.agent.db().update_job("test:2", &[("closed_at", crate::util::now().into())]).unwrap();
+    assert_eq!(s.agent.db().open_at_company(&crate::db::company_key("Acme")).len(), 1, "a closed one isn't counted");
+    s.agent.db().update_job("test:2", &[("closed_at", Value::Null)]).unwrap();
+    // The next posting that asks for one, on a CV that doesn't say it: worked in without asking.
+    let other = s.agent.db().job("test:2").unwrap().unwrap();
+    assert!(other.keywords.iter().any(|k| k == "Kubernetes"));
+    assert_eq!(s.agent.confirmed_for(&other, "Led program delivery and UAT."), vec!["Kubernetes"]);
+    assert!(s.agent.confirmed_for(&other, "Ran Kubernetes clusters.").is_empty(), "already in the CV: nothing to add");
+    // Read again from the changes asked for before, when the list was never kept (older versions).
+    s.agent.db().delete("keywords.have").unwrap();
+    assert_eq!(s.agent.known_keywords().len(), 2);
+    // Taken off: no longer added.
+    s.agent.forget_keyword("kubernetes").unwrap();
+    assert!(s.agent.confirmed_for(&other, "Led program delivery and UAT.").is_empty());
+}
