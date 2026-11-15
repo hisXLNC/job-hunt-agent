@@ -183,7 +183,7 @@ function decisionHtml(x, at, of) {
       : x.kind === 'reach' ? j.applied_at ? ['Just applied: say hello', `You applied ${esc(ago(j.applied_at))}. A short note to the recruiter within one to three days helps you stand out.`] : ['Say hello before you apply', 'You know who to write to there. A short note the day you apply gets read before the pile does.']
       : ['No reply from the recruiter', `You messaged ${esc(x.f.name)} ${esc(ago(x.f.sent_at))}${x.f.late ? '. Follow up now, or let it go' : ''}.`];
     const main = x.kind === 'follow' ? `<button class="btn primary big" data-primary data-act="followUp" data-job="${id}">Write the follow-up${key('Enter')}</button>`
-      : `<a class="btn primary big" data-primary href="#job/${enc}" data-tab-to="apply" ${x.kind === 'reach' ? 'data-scroll="people"' : ''}>${x.kind === 'reach' ? 'Write a note' : 'Write the follow-up'}${key('Enter')}</a>`;
+      : `<a class="btn primary big" data-primary href="#job/${enc}" data-tab-to="people">${x.kind === 'reach' ? 'Write a note' : 'Write the follow-up'}${key('Enter')}</a>`;
     return `<article class="card decision" data-kind="${x.kind}">${decisionTop(j, where)}
       <div class="dbody"><div class="why blue"><b>${text[0]}</b>${text[1]}</div></div>
       ${dbar(x.kind === 'follow' ? `<button class="btn quiet" data-act="stage" data-status="no_response" data-job="${id}" data-from="applied" title="Stop waiting for this one">Close as No response</button>` : '', main)}</article>`;

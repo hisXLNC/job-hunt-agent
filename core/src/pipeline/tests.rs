@@ -2699,3 +2699,25 @@ fn the_debug_report_says_what_is_going_on() {
     assert!(r.contains("[email]") && !r.contains("dana@maple.example"), "addresses are taken out");
     assert!(r.contains(env!("CARGO_PKG_VERSION")));
 }
+
+/// A picture attached to a job: the form's questions come back for the questions box; the people it
+/// shows are added to the contacts once, and a picture with nothing in it says so.
+#[test]
+fn a_picture_gives_the_forms_questions_and_adds_the_people_it_shows() {
+    use base64::Engine as _;
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    let pic = |bytes: &[u8]| json!({ "image": { "mime": "image/png", "b64": base64::engine::general_purpose::STANDARD.encode(bytes) } });
+    let q = s.agent.read_picture("test:1", "questions", &pic(b"form")).unwrap();
+    assert_eq!(q["questions"].as_array().unwrap().len(), 2);
+    assert!(q["questions"][1].as_str().unwrap().contains("[Yes / No]"));
+    let p = s.agent.read_picture("test:1", "people", &pic(b"profile")).unwrap();
+    assert_eq!(p["added"], json!(["Dana Okafor"]));
+    let c = s.agent.contacts("test:1");
+    assert_eq!(c.len(), 1, "the nameless one is dropped");
+    assert_eq!(c[0]["link"], "https://www.linkedin.com/in/dana-okafor");
+    // The same picture again adds no one twice.
+    assert!(s.agent.read_picture("test:1", "people", &pic(b"profile")).unwrap_err().0.contains("already"));
+    assert!(s.agent.read_picture("test:1", "questions", &pic(b"blank")).unwrap_err().0.contains("no questions"));
+    assert!(s.agent.read_picture("test:1", "people", &json!({ "image": { "mime": "application/pdf", "b64": "AAAA" } })).unwrap_err().0.contains("can't be used"));
+}

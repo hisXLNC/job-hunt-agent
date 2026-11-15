@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.84.0] - 2026-11-15
+
+Pictures for questions and contacts, each on its own tab.
+
+### Changes
+
+- On a job's Questions tab, Add a picture of the form (or paste a screenshot into the box): Claude reads the questions in it and puts them in the box, ready for Write answers.
+- On a job's Contacts tab, Add from a picture (or paste a screenshot): Claude reads the name, role, email and profile link from a LinkedIn profile, a hiring-team box, an email signature or a business card and adds the person.
+- Questions and Contacts are now separate tabs on a job. The follow-up sits with Contacts, and an offer has its own Offer tab.
+
 ## [2.83.0] - 2026-11-15
 
 Debugging mode, and corrections on forms saved as you type.
@@ -2301,6 +2311,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.84.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.84.0
 [2.83.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.83.0
 [2.82.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.82.0
 [2.81.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.81.1

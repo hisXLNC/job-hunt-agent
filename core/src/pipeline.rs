@@ -952,7 +952,7 @@ impl Agent {
             ("cv-update", "Updating everything for your CV", 0), ("claude-fill", "Claude is filling in a form in your browser", 300),
             ("chrome-test", "Testing Claude's connection to your browser", 60), ("tailor:", "Tailoring a CV and cover letter", 100),
             ("revise:", "Changing a CV or cover letter", 40), ("answers:", "Writing answers to a form's questions", 45), ("prep:", "Writing interview prep", 80),
-            ("contact:", "Writing a note to a contact", 25), ("offer:", "Weighing an offer", 50), ("followup:", "Writing a follow-up", 25), ("rating:", "Looking up a company's rating", 20),
+            ("contact:", "Writing a note to a contact", 25), ("picture:", "Reading a picture", 25), ("offer:", "Weighing an offer", 50), ("followup:", "Writing a follow-up", 25), ("rating:", "Looking up a company's rating", 20),
             ("rescore", "Scoring postings again", 120), ("after-scores", "Scoring tailored CVs", 60), ("forecast", "Working out what tailoring could reach", 60),
             ("ask", "Ask Claude is answering", 25), ("cvchat", "Claude is working on your CV with you", 20), ("career", "Working out your career options", 90), ("coach", "Looking at what would help your applications", 90),
             ("insights", "Reading your results", 60), ("lessons", "Learning from your results", 45), ("weekly", "Writing your weekly review", 60), ("leads", "Looking for hiring posts", 120),

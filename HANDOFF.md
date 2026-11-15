@@ -910,3 +910,19 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
 - "Your own files" and "Tailor again" are no longer cards: they're the second row (`.own-row`) of
   the file buttons at the top of CV & letter ("From another CV" is a small menu). A job not yet
   tailored keeps a Tailor card.
+
+## 2.84.0
+
+- **Pictures on a job.** `Llm::read_picture(what, company, image) -> Seen {questions, people}`
+  (claude.rs, through `call_seeing`; metered as "picture"; stand-ins in testkit.rs and
+  examples/dev_server.rs). `Agent::read_picture(job_id, "questions"|"people", {image:{mime,b64}})`
+  in pipeline/people.rs: questions are only returned (the page appends them to `#questions`);
+  people are added to `contacts:<id>` (skipped when the name is there already). POST
+  `/api/jobs/<id>/picture` `{what, image}`, synchronous, claims `picture:<id>`. Page:
+  `pictureOf(file)` (app-ask.js, shared with Ask Claude), `jobPicture` + action `picPick`
+  (app-actions.js), paste handlers on `#questions` and `#people` (app-job.js). Not tried with the
+  real Claude.
+- **Job tabs**: `apply` is now "Questions" (pre-check, What the form asks, kit), new `people`
+  "Contacts" (People, then Follow-up) and `offer` "Offer". Links that meant contacts or the
+  follow-up use `data-tab-to="people"`.
+- Waiting on the user: approval of the screen-by-screen merge/split proposal sent with this version.

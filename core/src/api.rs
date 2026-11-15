@@ -1078,6 +1078,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     agent.contact_replied(id, b["index"].as_u64().unwrap_or(0) as usize)?;
                     ok()
                 }
+                // A picture of the form's questions, or of someone at the company, read by Claude.
+                "picture" => Ok(Resp::json(&agent.read_picture(id, if s(&b, "what") == "people" { "people" } else { "questions" }, &b)?)),
                 "contacts" => {
                     let list = b.get("contacts").and_then(|v| v.as_array()).cloned().unwrap_or_default();
                     agent.save_contacts(id, &list)?;

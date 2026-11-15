@@ -238,7 +238,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
 
   // The separate Apply and Review pages are gone: their links open the job's own page and the Queue.
   await page.goto(`${base}/#apply/${encodeURIComponent(jobId)}`); await page.waitForTimeout(1200);
-  check(await page.evaluate(id => location.hash === `#job/${encodeURIComponent(id)}` && /Questions/.test(document.querySelector('#jobTabs a.on')?.textContent || ''), jobId), 'An old link to Apply opens the job on Questions & contacts');
+  check(await page.evaluate(id => location.hash === `#job/${encodeURIComponent(id)}` && /Questions/.test(document.querySelector('#jobTabs a.on')?.textContent || ''), jobId), 'An old link to Apply opens the job on Questions');
   await page.goto(`${base}/#review`); await page.waitForTimeout(1200);
   check(await page.evaluate(() => location.hash === '#overview/approve'), 'An old link to Review opens the Queue on Approve');
 

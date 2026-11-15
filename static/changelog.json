@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.84.0",
+    "date": "2026-11-15",
+    "title": "Pictures for questions and contacts, each on its own tab",
+    "changes": [
+      "On a job's Questions tab, Add a picture of the form (or paste a screenshot into the box): Claude reads the questions in it and puts them in the box, ready for Write answers.",
+      "On a job's Contacts tab, Add from a picture (or paste a screenshot): Claude reads the name, role, email and profile link from a LinkedIn profile, a hiring-team box, an email signature or a business card and adds the person.",
+      "Questions and Contacts are now separate tabs on a job. The follow-up sits with Contacts, and an offer has its own Offer tab."
+    ]
+  },
+  {
     "version": "2.83.0",
     "date": "2026-11-15",
     "title": "Debugging mode, and corrections on forms saved as you type",

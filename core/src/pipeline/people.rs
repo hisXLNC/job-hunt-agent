@@ -10,6 +10,44 @@ impl Agent {
         serde_json::from_str(&self.secret(&format!("contacts:{job_id}"))).unwrap_or_default()
     }
 
+    /// A picture attached to a job, read by Claude. `what` "questions": the questions the form in it
+    /// asks, returned for the questions box (nothing is saved until answers are written). "people":
+    /// the people it shows, added to the job's contacts (ones already there by name are left alone).
+    /// `page`: {image: {mime, b64}}.
+    pub fn read_picture(&self, job_id: &str, what: &str, page: &Value) -> R<Value> {
+        let Some(image) = ask_image(page) else { return err("That picture can't be used: PNG, JPEG, WebP or GIF, up to 5 MB.") };
+        let job = self.db().job(job_id)?.ok_or_else(|| crate::Error("That job isn't in Job Hunt any more.".into()))?;
+        let _g = self.claim(&format!("picture:{job_id}")).map_err(|_| crate::Error("Claude is still reading the last picture.".into()))?;
+        let seen = self.llm().read_picture(what, &job.company, &image)?;
+        if what == "questions" {
+            let list: Vec<String> = seen.questions.iter().map(|q| q.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|q| q.chars().count() > 3).take(40).collect();
+            if list.is_empty() {
+                return err("Claude found no questions in that picture. Try a sharper screenshot, or type them in.");
+            }
+            let _ = self.db().log(Some(job_id), "picture", &format!("read {} question(s) from a picture", list.len()));
+            return Ok(json!({ "questions": list }));
+        }
+        let mut contacts = self.contacts(job_id);
+        let mut added: Vec<String> = Vec::new();
+        for p in seen.people.iter().take(12) {
+            let name = p.name.split_whitespace().collect::<Vec<_>>().join(" ");
+            if name.is_empty() || contacts.iter().any(|c| c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(&name))) {
+                continue;
+            }
+            let email = p.email.trim();
+            let link = p.link.trim();
+            contacts.push(json!({ "name": name, "role": p.role.trim(), "email": if email.contains('@') { email } else { "" },
+                "link": if link.starts_with("http") { link.to_string() } else if link.starts_with("linkedin.com") || link.starts_with("www.") { format!("https://{link}") } else { String::new() } }));
+            added.push(name);
+        }
+        if added.is_empty() {
+            return err(if seen.people.iter().any(|p| !p.name.trim().is_empty()) { "The people in that picture are in your contacts already." } else { "Claude found no one in that picture. Try a sharper screenshot, or type the name in." });
+        }
+        self.save_contacts(job_id, &contacts)?;
+        let _ = self.db().log(Some(job_id), "picture", &format!("added {} from a picture", list_words(&added)));
+        Ok(json!({ "added": added }))
+    }
+
     pub fn save_contacts(&self, job_id: &str, list: &[Value]) -> R<()> {
         let clean: Vec<Value> = list.iter().filter(|c| c["name"].as_str().is_some_and(|n| !n.trim().is_empty())).map(|c| {
             let f = |k: &str| c[k].as_str().unwrap_or("").trim().to_string();

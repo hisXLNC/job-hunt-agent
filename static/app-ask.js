@@ -117,7 +117,19 @@ function askBuild() {
  *  thumbnail to keep in the conversation. */
 async function askAttach(file) {
   if (!file) return;
-  if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return toast('That isn\'t a picture Claude can read. Use a PNG, JPEG, WebP or GIF.', true);
+  const pic = await pictureOf(file);
+  if (pic) {
+    askSt.image = pic;
+    askDrawFoot();
+    $('#askMsg').focus();
+  }
+}
+
+/** A picture file made ready to send to Claude: {mime, b64, thumb, name}, at most 1600 px a side.
+ *  Nothing (with a message on screen) when it isn't a picture Claude reads. */
+async function pictureOf(file) {
+  if (!file) return null;
+  if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) { toast('That isn\'t a picture Claude can read. Use a PNG, JPEG, WebP or GIF.', true); return null; }
   try {
     const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(file); });
     const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
@@ -126,10 +138,8 @@ async function askAttach(file) {
     let data = fit(1600, 'image/png');
     if (data.length > 2_500_000) data = fit(1600, 'image/jpeg', 0.85);
     const [head, b64] = data.split(',');
-    askSt.image = { mime: head.slice(5, head.indexOf(';')), b64, thumb: fit(220, 'image/jpeg', 0.7), name: file.name || 'picture' };
-    askDrawFoot();
-    $('#askMsg').focus();
-  } catch (e) { toast('Couldn\'t read that picture.', true); }
+    return { mime: head.slice(5, head.indexOf(';')), b64, thumb: fit(220, 'image/jpeg', 0.7), name: file.name || 'picture' };
+  } catch (e) { toast('Couldn\'t read that picture.', true); return null; }
 }
 
 /** Open the assistant; with `quote`, about those words. */

@@ -127,6 +127,17 @@ impl Llm for FakeLlm {
         let cv = if said.contains("Northbank") { format!("Sam Rivera\nToronto | sam@example.com\nEXPERIENCE\nProgram Manager, Northbank, Toronto | Jan 2019 - Present\n- Led a payments migration across nine teams and three vendors, on time.\n- Managed the vendor budget and the cutover weekend.\nEDUCATION\nBSc Computer Science, 2011\n({} known)", known.len()) } else { String::new() };
         Ok(crate::claude::CvTalk { reply: format!("Next question ({} before).", history.len()), ready: !cv.is_empty() && history.len() >= 2, cv })
     }
+    fn read_picture(&self, what: &str, company: &str, image: &(String, Vec<u8>)) -> R<crate::claude::Seen> {
+        if image.1 == b"blank" {
+            return Ok(Default::default());
+        }
+        Ok(if what == "questions" {
+            crate::claude::Seen { questions: vec![format!("Why do you want to work at {company}?"), "Are you legally able to work in Canada? [Yes / No]".into()], ..Default::default() }
+        } else {
+            crate::claude::Seen { people: vec![crate::claude::SeenPerson { name: "Dana Okafor".into(), role: "Talent Acquisition Partner".into(), link: "https://www.linkedin.com/in/dana-okafor".into(), ..Default::default() },
+                crate::claude::SeenPerson { name: "  ".into(), ..Default::default() }], ..Default::default() }
+        })
+    }
     fn assist(&self, a: &crate::claude::Asked) -> R<crate::claude::Assisted> {
         if a.message.contains("fail") {
             return Err(crate::Error("Claude is busy.".into()));

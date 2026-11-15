@@ -26,6 +26,14 @@ impl Llm for DemoLlm {
         let reply = match turns { 0 => "Good start. Where do you work now, what's your title, and when did you start?", 1 => "Got it. What's one thing that changed because of your work there? A number helps: how many teams, how much money, how much faster.", _ => "That's a solid CV now. A second job or a certification would make it stronger; or press **Create my CV**." };
         Ok(jobhunt_core::claude::CvTalk { reply: reply.into(), ready: turns >= 1, cv })
     }
+    fn read_picture(&self, what: &str, company: &str, _image: &(String, Vec<u8>)) -> R<jobhunt_core::claude::Seen> {
+        std::thread::sleep(std::time::Duration::from_millis(900));
+        Ok(if what == "questions" {
+            jobhunt_core::claude::Seen { questions: vec![format!("Why do you want to work at {company}?"), "Describe a program you delivered across several teams.".into(), "Are you legally able to work in Canada? [Yes / No]".into()], ..Default::default() }
+        } else {
+            jobhunt_core::claude::Seen { people: vec![jobhunt_core::claude::SeenPerson { name: "Dana Okafor".into(), role: "Talent Acquisition Partner".into(), link: "https://www.linkedin.com/in/dana-okafor".into(), ..Default::default() }], ..Default::default() }
+        })
+    }
     fn assist(&self, a: &jobhunt_core::claude::Asked) -> R<jobhunt_core::claude::Assisted> {
         if a.message.contains("fail") {
             return Err(jobhunt_core::Error("Claude is busy just now.".into()));

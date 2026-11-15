@@ -232,6 +232,9 @@ impl Llm for Metered {
     fn assist(&self, asked: &crate::claude::Asked) -> R<crate::claude::Assisted> {
         self.run("chat", |l| l.assist(asked))
     }
+    fn read_picture(&self, what: &str, company: &str, image: &(String, Vec<u8>)) -> R<crate::claude::Seen> {
+        self.run("picture", |l| l.read_picture(what, company, image))
+    }
     fn insights(&self, candidate: &str, results: &str, applications: &str) -> R<String> {
         self.run("insights", |l| l.insights(candidate, results, applications))
     }

@@ -3,7 +3,7 @@
 
 // ---- Job ----
 let jobPoll;
-const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions &amp; contacts'], ['interview', 'Interview']];
+const JOB_TABS = [['overview', 'Overview'], ['docs', 'CV &amp; letter'], ['apply', 'Questions'], ['people', 'Contacts'], ['offer', 'Offer'], ['interview', 'Interview']];
 const jobTabs = {};
 /** The job's buttons: its next step first, as the main one, then the rest, all in view. */
 /** A web search for a job on its company's own careers site. */
@@ -86,7 +86,9 @@ async function showJob(id) {
   // Only the tabs this stage needs: questions and contacts once there's an application, the
   // interview once it's sent. Notes and history are on the Overview.
   const sent = ['applied', 'interviewing', 'offer', 'rejected', 'no_response'].includes(j.status);
-  const tabs = JOB_TABS.filter(([k]) => k === 'apply' ? !['queued', 'skipped', 'dismissed'].includes(j.status) || (contacts || []).length || (answers || []).length
+  const tabs = JOB_TABS.filter(([k]) => k === 'apply' ? ['ready', 'approved', 'applied', 'interviewing', 'offer'].includes(j.status) || (answers || []).length
+    : k === 'people' ? !['queued', 'skipped', 'dismissed'].includes(j.status) || (contacts || []).length || !!fu
+    : k === 'offer' ? !!offer || advising || j.status === 'offer'
     : k === 'interview' ? sent || !!prep || preparing : true);
   // A job opens on its Overview. A button that means another tab (Check and approve, Files and
   // answers) says so, and the tab you switch to stays while you're on the job.
@@ -96,7 +98,7 @@ async function showJob(id) {
   const early = ['queued', 'skipped', 'dismissed', 'saved'].includes(j.status) && !j.cv_path && !tailoring;
   const want = jobTabs[id] === 'notes' ? 'overview' : jobTabs[id] || 'overview';
   const tab = tabs.some(([k]) => k === want) ? want : 'overview';
-  const badge = { docs: revising || tailoring ? 'Working on it' : '', apply: answering || following_up || writing_to || advising ? 'Working on it' : (j.status === 'offer' && !offer ? 'Weigh the offer' : ''), interview: preparing ? 'Writing' : '' };
+  const badge = { docs: revising || tailoring ? 'Working on it' : '', apply: answering ? 'Working on it' : '', people: following_up || writing_to ? 'Working on it' : '', offer: advising ? 'Working on it' : (j.status === 'offer' && !offer ? 'Weigh the offer' : ''), interview: preparing ? 'Writing' : '' };
   page(`
     <div class="head">
       <div class="grow">
@@ -225,17 +227,14 @@ async function showJob(id) {
       <header><h2>What the form asks</h2>${answering ? '<span class="muted small"><span class="spin" data-kind="answers"></span>Writing…</span>' : ''}</header>
       <p class="muted small">Paste the form's questions, one per line, or leave it empty for the usual ones (why this role, salary expectations, notice period…). Answers use your CV, this posting and your <a href="#cvs/details">facts for forms</a>.</p>
       <textarea id="questions" placeholder="Why do you want to work at ${esc(j.company)}?\nHow many years of experience do you have with SAP?">${esc((answers || []).map(a => a.question).join('\n'))}</textarea>
-      <div class="row"><button class="btn primary" data-act="answers" ${answering ? 'disabled' : ''}>${answers ? 'Write them again' : 'Write answers'}</button></div>
+      <div class="row"><button class="btn primary" data-act="answers" ${answering ? 'disabled' : ''}>${answers ? 'Write them again' : 'Write answers'}</button>
+        <button class="btn" data-act="picPick" data-what="questions" title="Claude reads the questions from a screenshot of the form and adds them to the box">${svg('image')}Add a picture of the form</button>
+        <span class="muted small">or paste a screenshot into the box (Ctrl+V)</span></div>
       ${(answers || []).map((a, i) => `<div class="qa"><b>${esc(a.question)}</b><div class="posting" id="ans${i}">${esc(a.answer)}</div><button class="btn ghost" data-act="copy" data-from="ans${i}">Copy</button></div>`).join('')}
       ${['ready', 'approved', 'applied', 'interviewing', 'offer'].includes(j.status) ? `<details class="kit" id="kitCard" ${j.status === 'approved' ? 'open' : ''}><summary><b>Every detail, to copy</b> <span class="muted small">every detail a form asks for, to copy one at a time when Fill this form doesn't work</span></summary><div id="kitBody" data-job="${esc(j.id)}"><p class="muted small">Loading…</p></div></details>` : ''}
     </section>` : ''}
-    ${fu || following_up || j.status === 'applied' ? `<section class="card">
-      <header><h2>Follow-up</h2>${following_up ? '<span class="muted small"><span class="spin" data-kind="followup"></span>Writing…</span>' : `<button class="btn" data-act="followUp" data-job="${esc(j.id)}">${fu ? 'Write again' : 'Write follow-up'}</button>`}</header>
-      ${fu ? `<p class="small muted">${fu.draft ? 'Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>' : 'Written'} ${esc(ago(fu.at))}${fu.to ? ` · to ${esc(fu.to)}` : ' · add the recruiter\'s address before sending'}</p>
-        <p><b>${esc(fu.subject)}</b></p><div class="posting" id="fuBody">${esc(fu.body)}</div>
-        <div class="row"><button class="btn ghost" data-act="copy" data-from="fuBody">Copy</button></div>`
-        : `<p class="muted">${following_up ? 'Claude is writing a short, polite note asking about the timeline.' : `No reply yet? Job Hunt drafts a short follow-up ${st.profile.follow_up_after ? `${st.profile.follow_up_after} days after you apply` : 'when you ask'}.`}</p>`}
-    </section>` : ''}
+    </div>
+    <div class="jpane" data-pane="people" ${tab === 'people' ? '' : 'hidden'}>
     ${!['skipped', 'dismissed'].includes(j.status) ? `<section class="card" id="people">
       <header><h2>People at ${esc(j.company)}</h2>${writing_to ? '<span class="muted small"><span class="spin" data-kind="outreach"></span>Working on it: finding people and writing the note…</span>' : (contacts || []).length ? '<button class="btn ghost" data-act="findPeople">Find the recruiter on LinkedIn</button>' : ''}</header>
       <p class="muted small">A recruiter, the hiring manager or someone you know there. A short note to the right person often counts for more than a perfect CV. <a href="#" data-act="link" data-url="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(j.company + ' ' + (playbook?.kind === 'agency' ? 'recruiter' : j.title.split(/[,(-]/)[0]))}">Look on LinkedIn</a></p>
@@ -251,7 +250,19 @@ async function showJob(id) {
         <button class="btn${recruiter ? ' primary' : ''}" data-act="noteRecruiter" data-name="${esc(recruiter?.name || '')}" data-email="${esc(recruiter?.email || '')}" ${writing_to ? 'disabled' : ''}>${recruiter ? `Write a note to ${esc(firstName(recruiter.name))}` : 'Write it without a name'}</button></span></div></div>` : ''}
       <div class="row contact-add"><input type="text" id="cName" placeholder="Name"><input type="text" id="cRole" placeholder="Role (e.g. hiring manager)"><input type="text" id="cEmail" placeholder="Email or LinkedIn link (optional)">
         <button class="btn" data-act="addContact">Add</button></div>
-    </section>` : ''}    ${offer || advising || j.status === 'offer' ? `<section class="card prep">
+      <div class="row pic-add"><button class="btn" data-act="picPick" data-what="people" title="Claude reads the name, role and link from a screenshot and adds the person here">${svg('image')}Add from a picture</button>
+        <span class="muted small">A screenshot of their LinkedIn profile, the posting's hiring team, an email signature or a business card. You can also paste it here (Ctrl+V).</span></div>
+    </section>` : ''}
+    ${fu || following_up || j.status === 'applied' ? `<section class="card">
+      <header><h2>Follow-up</h2>${following_up ? '<span class="muted small"><span class="spin" data-kind="followup"></span>Writing…</span>' : `<button class="btn" data-act="followUp" data-job="${esc(j.id)}">${fu ? 'Write again' : 'Write follow-up'}</button>`}</header>
+      ${fu ? `<p class="small muted">${fu.draft ? 'Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>' : 'Written'} ${esc(ago(fu.at))}${fu.to ? ` · to ${esc(fu.to)}` : ' · add the recruiter\'s address before sending'}</p>
+        <p><b>${esc(fu.subject)}</b></p><div class="posting" id="fuBody">${esc(fu.body)}</div>
+        <div class="row"><button class="btn ghost" data-act="copy" data-from="fuBody">Copy</button></div>`
+        : `<p class="muted">${following_up ? 'Claude is writing a short, polite note asking about the timeline.' : `No reply yet? Job Hunt drafts a short follow-up ${st.profile.follow_up_after ? `${st.profile.follow_up_after} days after you apply` : 'when you ask'}.`}</p>`}
+    </section>` : ''}
+    </div>
+    <div class="jpane" data-pane="offer" ${tab === 'offer' ? '' : 'hidden'}>
+    ${offer || advising || j.status === 'offer' ? `<section class="card prep">
       <header><h2>The offer</h2>${advising ? '<span class="muted small"><span class="spin" data-kind="offer"></span>Weighing it…</span>' : ''}</header>
       <textarea id="offerText" placeholder="Paste the offer: base salary, bonus, equity, benefits, vacation, start date…">${esc(offer?.offer || '')}</textarea>
       <div class="row"><button class="btn primary" data-act="offerAdvice" ${advising ? 'disabled' : ''}>${offer ? 'Weigh it again' : 'Weigh the offer'}</button>
@@ -285,6 +296,10 @@ async function showJob(id) {
     document.querySelectorAll('#jobTabs [data-jtab]').forEach(x => x.classList.toggle('on', x === a));
     document.querySelectorAll('.jpane').forEach(p => { p.hidden = p.dataset.pane !== a.dataset.jtab; });
   }));
+  // A screenshot pasted on the questions box or the contacts card is read like one picked with the button.
+  for (const [sel, what] of [['#questions', 'questions'], ['#people', 'people']]) {
+    $(sel)?.addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])].find(x => x.type.startsWith('image/')); if (f) { e.preventDefault(); jobPicture(id, what, f); } });
+  }
   document.querySelectorAll('#pvTabs [data-pv]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('#pvTabs [data-pv]').forEach(x => x.classList.toggle('on', x === b));
     ['cv', 'letter'].forEach(k => { const el = $(`#pv-${k}`); if (el) el.hidden = k !== b.dataset.pv; });

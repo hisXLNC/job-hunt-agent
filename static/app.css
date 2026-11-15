@@ -2208,3 +2208,4 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 .own-row { margin-top: -4px; padding-bottom: 10px; border-bottom: 1px solid var(--line-2); margin-bottom: 12px; }
 .own-on { display: inline-flex; align-items: center; gap: 4px; }
 .own-row .tabs-gap { flex: 1; }
+.pic-add { margin-top: 8px; align-items: center; }

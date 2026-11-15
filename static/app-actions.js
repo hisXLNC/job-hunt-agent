@@ -452,6 +452,12 @@ async function act(el) {
       setTimeout(route, 300);
     }, 'Writing the note…');
   }
+  if (a === 'picPick') {
+    const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif' });
+    inp.addEventListener('change', () => jobPicture(jobId, el.dataset.what, inp.files[0]));
+    inp.click();
+    return;
+  }
   if (a === 'addContact' || a === 'removeContact') {
     const list = JSON.parse(main().dataset.contacts || '[]');
     if (a === 'addContact') {
@@ -1569,4 +1575,29 @@ function companyOf(id) {
     return '';
   };
   return look(overview, 0);
+}
+
+/** A picture attached to a job, read by Claude: a screenshot of the form puts its questions in the
+ *  questions box (after any already there); one of a person adds them to the contacts. */
+async function jobPicture(jobId, what, file) {
+  const pic = await pictureOf(file);
+  if (!pic) return;
+  const btn = document.querySelector(`[data-act=picPick][data-what=${what}]`);
+  if (btn) btn.disabled = true;
+  toast(what === 'questions' ? 'Reading the questions in the picture… (up to a minute)' : 'Reading who is in the picture… (up to a minute)');
+  try {
+    const r = await api(`/api/jobs/${encodeURIComponent(jobId)}/picture`, { method: 'POST', body: { what, image: { mime: pic.mime, b64: pic.b64 } } });
+    if (what === 'questions') {
+      const box = $('#questions');
+      if (!box) return;
+      const have = box.value.split('\n').map(x => x.trim()).filter(Boolean);
+      const fresh = (r.questions || []).filter(q => !have.some(h => h.toLowerCase() === q.toLowerCase()));
+      box.value = [...have, ...fresh].join('\n');
+      box.style.height = `${Math.min(520, Math.max(box.scrollHeight, 120))}px`;
+      toast(fresh.length ? `${fresh.length} question${fresh.length === 1 ? '' : 's'} added from the picture. Check them, then press Write answers.` : 'Those questions are in the box already.');
+    } else {
+      toast(`Added ${(r.added || []).join(', ')}.`);
+      route();
+    }
+  } catch (e) { toast(e.message, true); } finally { if (btn) btn.disabled = false; }
 }
