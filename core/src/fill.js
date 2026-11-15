@@ -207,7 +207,13 @@
       const tags = document.querySelector('skills-tag,[class*="skill" i][class*="tag" i]');
       const open = [...document.querySelectorAll('lyte-popover-wormhole,lyte-wormhole,lyte-drop-box,lyte-menu-body,[role=dialog],[role=listbox],[role=menu],[class*="popover" i]')].filter(x => !own(x) && shown(x) && clean(x.textContent)).slice(0, 3);
       // Zoho's rows of education and experience (their dates are drawn in a way not yet read).
-      const rows = [...document.querySelectorAll('rec-tabular-component')].slice(0, 2).map(x => htmlOf(x, 7000));
+      // Each part of the first entry: its label, what it's built from, and the HTML of the parts that aren't plain boxes.
+      const PLAIN = /^crux-(text|text-area|boolean)-component$/;
+      const rows = [...document.querySelectorAll('rec-tabular-component')].slice(0, 2).map(x => [...(x.querySelector('[role=region]') || x).children].slice(0, 14).map(part => {
+        const made = [...part.children].find(c => /-/.test(c.localName) && c.localName !== 'rec-form-tooltip') || part.querySelector('[id]');
+        const name = made ? made.localName : part.localName;
+        return { label: clean(part.querySelector('label')?.textContent || '').slice(0, 60), made: name, html: PLAIN.test(name) ? undefined : htmlOf(part, 6000).replace(/\s(cx-prop|lt-prop)-(tooltip[\w-]*|class|direction|appearance|date-[\w-]*|from|zcqa|none-keyword|calendar-properties|prevent-focus-on-error|disable-extra-value|title|width|autocomplete)="[^"]*"/g, '').replace(/<template[^>]*><\/template>/g, '').slice(0, 2500) };
+      }));
       diag.now = { rows: rows.length ? rows : undefined, skillTags: tags ? htmlOf(tags, 1500) : undefined, open: open.length ? open.map(x => ({ at: where(x), html: htmlOf(x, 3000) })) : undefined };
       let text = 'Job Hunt form details ' + JSON.stringify({ page: location.hostname, ...diag, trail: trail.map(e => ({ ...e, t: new Date(e.t).toISOString() })) }, null, 1);
       // With the extension's own log (what it asked Job Hunt and what came back, no answers in it).
@@ -1190,18 +1196,19 @@
       const cur = () => find(name) || (best.isConnected ? best : null);
       if (cur() && ticked(cur())) return 'already';
       if (EXT) {
-        const canSee = visible(cur() || best);
+        const canSee = zoho || visible(cur() || best);
         if (await realClick(cur())) { if (await settle(canSee ? 4000 : 1500)) return 'click'; if (!canSee) return 'unseen'; }
-        if (zoho) return got() ? 'click' : '';
         // Not taken, and it shows as not chosen: its tick box itself, then the keyboard.
-        let t = cur();
+        // (Not on Zoho, where keys add the first suggestion. There a real click that didn't land,
+        // as on a tab that isn't in front, is followed by a script's click below.)
+        let t = zoho ? null : cur();
         const c = t && tick(t);
         if (t && c && !ticked(t) && shown(c) && await realClick(c, true) && await settle(3000)) return 'box';
         t = cur();
-        if (t && !ticked(t) && !got() && await byKeys(name) && await settle(3000)) return 'keys';
+        if (t && !ticked(t) && !zoho && !got() && await byKeys(name) && await settle(3000)) return 'keys';
         for (let i = 0; i < 15 && !got() && !find(name); i++) await wait(200);
-        t = cur();
-        if (t && find(name) && !ticked(t) && !got() && await byKeys(name, true) && await settle(3000)) return 'keys';
+        t = zoho ? null : cur();
+        if (t && find(name) && !ticked(t) && !zoho && !got() && await byKeys(name, true) && await settle(3000)) return 'keys';
         if (got()) return 'click';
       }
       // Without real clicks (the app's window, or the phone): a mouse-like press on the option, its box, its row.
@@ -1210,6 +1217,7 @@
         if (!t.isConnected || got()) break;
         mouse(t);
         if (await settle(1500)) return 'mouse';
+        if (zoho && t.isConnected) { ownClick = true; t.click(); ownClick = false; if (await settle(1500)) return 'mouse'; }
       }
       return got() ? 'mouse' : '';
     };

@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.85.2] - 2026-11-15
+
+Zoho Recruit skills, when the tab isn't in front.
+
+### Changes
+
+- On Zoho Recruit, skills were found but not added when the form's tab wasn't the one in front. Job Hunt now adds them either way.
+- Copy details on a Zoho form now shows how the education and experience dates are built, so they can be filled in a later version.
+
 ## [2.85.1] - 2026-11-15
 
 Zoho Recruit skills.
@@ -2349,6 +2358,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.85.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.2
 [2.85.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.1
 [2.85.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.0
 [2.84.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.84.1

@@ -400,15 +400,18 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   // whatever is first), nothing taken from a list left over from the search before.
   if (!only.length || only.includes('zoho')) {
     const page = await ctx.newPage();
-    const url = `http://127.0.0.1:${site.address().port}/zoho/apply`;
+    const url = `http://127.0.0.1:${site.address().port}/zoho/apply${process.env.ZOHO_CLICK ? '?click=script' : ''}`;
     await page.goto(url);
+    if (process.env.TRACE) { page.on('framenavigated', f => console.log('        nav', f.url())); page.on('pageerror', e => console.log('        pageerror', e.message)); }
     const t0 = Date.now();
-    await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, url);
+    await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, url.split('?')[0]);
     let s = '';
     for (let i = 0; i < 240; i++) { await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s) || /Couldn't|can't find|No answers|tripped/.test(s)) break; }
-    const got = await page.evaluate(() => ({ skills: window.mock.skills(), enters: window.mock.enters }));
+    const got = await page.evaluate(() => ({ skills: window.mock.skills(), enters: window.mock.enters, submits: window.mock.submits, log: window.mock.log }));
+    if (process.env.TRACE) console.log('        ' + got.log.join(' | '));
     const problems = [], wanted = ['Python', 'Project Management', 'SQL', 'Vendor Management', 'Payments'];
     if (JSON.stringify(got.skills) !== JSON.stringify(wanted)) problems.push(`the skills are ${JSON.stringify(got.skills)}, not ${JSON.stringify(wanted)}`);
+    if (got.submits) problems.push('the form was sent');
     if (got.enters) problems.push(`Enter was pressed ${got.enters} times in the skills box (it adds the first suggestion, whatever it is)`);
     if (!/Underwater Basket Weaving/.test(s)) problems.push("the skill the site doesn't have wasn't reported");
     if (/add these yourself\): [^.]*(Python|SQL|Project Management|Vendor Management)/.test(s) || /didn't show it/.test(s)) problems.push('a skill that was chosen is reported as not taken or unsure');

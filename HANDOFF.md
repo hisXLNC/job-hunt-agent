@@ -941,6 +941,11 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.85.2
+
+- Zoho skills, report from 2.85.1: lists found, every click "not taken", no tags. The tab was not in front (`hidden: true`), where the debugger's real click doesn't land, and 2.85.1 returned straight after it. Now on Zoho a real click that isn't seen in the tags is followed by a script click (`mouse`, then `el.click()`); keyboard choosing (`byKeys`, which ends in Enter) is never used there. `ZOHO_CLICK=1 node tools/ext_test/ext_test.js zoho` runs the mock with real clicks ignored (not in verify; the mock also fails the test if the form is sent or Enter pressed).
+- Copy details `now.rows`: was cut off before the Duration part (Zoho's attributes are long). Now one item per part of the first entry: label, what it's made of, trimmed HTML for parts that aren't plain boxes.
+
 ## 2.85.1
 
 - Zoho Recruit skills (fill.js `fillSkills`, `zoho = first.closest('skills-tag')`): Enter is never pressed there (Zoho's Enter = `selectFirstSuggestion`, it added a dozen unrelated skills); a list that doesn't hold a word of the search is the previous search's and counts as empty; chosen skills are read from the tags' "Remove skill : X" buttons (`skillPills`); no keyboard choosing. New mock `tools/ext_test/zoho.html`, case `zoho` in ext_test (in verify).

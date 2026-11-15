@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.85.2",
+    "date": "2026-11-15",
+    "title": "Zoho Recruit skills, when the tab isn't in front",
+    "changes": [
+      "On Zoho Recruit, skills were found but not added when the form's tab wasn't the one in front. Job Hunt now adds them either way.",
+      "Copy details on a Zoho form now shows how the education and experience dates are built, so they can be filled in a later version."
+    ]
+  },
+  {
     "version": "2.85.1",
     "date": "2026-11-15",
     "title": "Zoho Recruit skills",

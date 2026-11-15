@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Senior Project Manager - Mock Recruit</title></head><body>
-<!-- A skills box as Zoho Recruit draws it: suggestions in a window that stays open (and unchanged when
+<!-- A skills box as Zoho Recruit draws it: suggestions in a window that stays open (?click=script: real clicks do nothing, as on a tab that isn't in front) (and unchanged when
      a search finds nothing), Enter adds whatever suggestion is first, chosen skills are tags. -->
 <h1>Senior Project Manager</h1>
 <form><div role="region"><h2>Professional Details</h2>
@@ -14,7 +14,10 @@ window.mock = { skills: () => [...tags.querySelectorAll('button')].map(b => b.ge
 const add = name => { const li = document.createElement('li'); li.tabIndex = 0; li.innerHTML = '<em></em><span></span><button type="button" tabindex="-1"></button>'; li.querySelector('span').textContent = name.length > 25 ? name.slice(0, 25) + '...' : name; li.querySelector('button').setAttribute('aria-label', 'Remove skill : ' + name); tags.insertBefore(li, document.getElementById('inli')); };
 input.addEventListener('input', () => { const q = input.value.toLowerCase().trim(); if (!q) return; setTimeout(() => {
   const m = ALL.filter(x => x.toLowerCase().includes(q) && !window.mock.skills().includes(x)); if (!m.length) return;
-  list.innerHTML = ''; for (const x of m) { const li = document.createElement('li'); li.setAttribute('role', 'button'); li.tabIndex = 0; li.setAttribute('aria-label', 'Add skill : ' + x); li.textContent = x.length > 30 ? x.slice(0, 30) + '...' : x; li.onclick = () => { add(x); li.remove(); }; list.appendChild(li); }
+  list.innerHTML = ''; for (const x of m) { const li = document.createElement('li'); li.setAttribute('role', 'button'); li.tabIndex = 0; li.setAttribute('aria-label', 'Add skill : ' + x); li.textContent = x.length > 30 ? x.slice(0, 30) + '...' : x; li.onclick = e => { if (e.isTrusted && /click=script/.test(location.search)) return; add(x); li.remove(); }; list.appendChild(li); }
   document.getElementById('pop').style.display = 'block'; }, 500); });
+window.mock.log = []; window.mock.submits = 0;
+document.querySelector('form').addEventListener('submit', e => { e.preventDefault(); window.mock.submits++; window.mock.log.push('SUBMIT'); });
+for (const t of ['keydown', 'keypress', 'click']) document.addEventListener(t, e => window.mock.log.push(`${t}:${e.key || e.target.localName}:${e.isTrusted ? 'real' : 'script'}:${input.value}`), true);
 input.addEventListener('keydown', e => { if (e.key === 'Enter') { window.mock.enters++; const li = list.querySelector('li'); if (li) li.click(); } });
 </script></body></html>
