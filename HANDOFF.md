@@ -878,3 +878,35 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   roles here" are links (`companyJobs`: writes `jh.allFilters` with q = company, opens All jobs).
   `betterHere`: warns when another open role's `score` (fit before tailoring, so like for like) is
   3+ above this one's; not once applied.
+
+## 2.83.0
+
+- **Debugging mode** (`core/src/debug.rs`, global, not per agent). `debug::always(area, text)` is
+  kept whether it's on or not (errors); `debug::note` only when on (`debug.on` = "1", read in
+  `Agent::new` via `debug::init`, which also sets the panic hook outside tests). Ring of 4000 lines
+  + `debug-log.txt` beside the data (starts again past 4 MB; `.old.txt`). Every line goes through
+  `scrub` (email addresses, long tokens, key=…). Hooks: `api::handle` (non-GET and GETs ≥ 300 ms
+  when on; errors and crashes always; `/api/debug*` itself never), `bridge::handle` (the
+  extension's requests, with the site), `usage::Metered::run` (each Claude request: kind, seconds,
+  error), `Db::log` (every event; kinds containing "error" always), `Agent::trace` (search steps),
+  claims start/end (`ended`), `fill::learn` and the form answer (which entry details are kept:
+  labels only), the page (`pageNote` in app.js: script errors always, screens opened when on →
+  `POST /api/debug/log`). `Agent::debug_report()` is the text to send (state, database, held
+  postings and tries, connections, last errors/events, search trail, the record);
+  `GET /api/debug`, `/api/debug/report`, `POST /api/debug` ({on} / {clear}), `/api/debug/save`
+  (file beside the data). Card `#debugCard` in Settings → App (section marker `@debug`; a checkbox's
+  action lives in the `change` handler, not `act()`).
+- **Workday, from a Copy details (fil.wd3):** GPA and French levels now fill. Left: (1) the end date
+  of the current job was counted as "to do" although I currently work here was ticked and no end
+  date was given: skipped now (`here` in the fill loop). (2) Education "From (YYYY)" had no answer.
+  Server logic checked and looks right, so the likely cause is that the year was never kept: it
+  was only learned on Save and Continue. Now `learnEdit` (fill.js) sends the edited entry's boxes
+  1.5 s after you change one (`nowOf`: live value, else what the box was given, `f.put`), the learn
+  cap went 80 → 200 boxes (a long Workday page has 88; the last language was cut off), and
+  `apply_entry_details` also takes a detail kept by the entry's place when none is kept by name.
+  The debug record now says which entry details are kept, so the next report settles it.
+- Job page, CV & letter: "Edit the cover letter yourself" shows only with the Cover letter preview
+  (`#letterEditCard`); "What changed in your CV" is full width and shows with the CV (`#cvChangesCard`).
+- "Your own files" and "Tailor again" are no longer cards: they're the second row (`.own-row`) of
+  the file buttons at the top of CV & letter ("From another CV" is a small menu). A job not yet
+  tailored keeps a Tailor card.

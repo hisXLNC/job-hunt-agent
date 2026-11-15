@@ -898,6 +898,11 @@ impl Db {
     // --- history ---------------------------------------------------------------------------
 
     pub fn log(&self, job_id: Option<&str>, kind: &str, detail: &str) -> R<()> {
+        if kind.contains("error") {
+            crate::debug::always("event", &format!("{kind}{}: {detail}", job_id.map(|j| format!(" ({j})")).unwrap_or_default()));
+        } else {
+            crate::debug::note("event", &format!("{kind}{}: {detail}", job_id.map(|j| format!(" ({j})")).unwrap_or_default()));
+        }
         self.con.execute(
             "INSERT INTO events (job_id, kind, detail, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![job_id, kind, detail, now()],

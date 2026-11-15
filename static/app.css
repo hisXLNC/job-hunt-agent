@@ -2203,3 +2203,8 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 .better-here ul { margin: 6px 0; padding-left: 18px; }
 .rev-scores { display: flex; flex-wrap: wrap; gap: 10px 32px; margin: 4px 0 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); font-size: 18px; }
 .good-text { color: var(--good); }
+
+/* Job page, CV & letter: your own files and tailoring again, in the row under the file buttons. */
+.own-row { margin-top: -4px; padding-bottom: 10px; border-bottom: 1px solid var(--line-2); margin-bottom: 12px; }
+.own-on { display: inline-flex; align-items: center; gap: 4px; }
+.own-row .tabs-gap { flex: 1; }

@@ -248,6 +248,8 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
     let b: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
     let (url, title) = (b["url"].as_str().unwrap_or(""), b["title"].as_str().unwrap_or(""));
     let fields: Vec<Value> = b["fields"].as_array().cloned().unwrap_or_default();
+    let (began, boxes) = (std::time::Instant::now(), fields.len());
+    let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
     let r: crate::R<Value> = match (method, path) {
         // With this Job Hunt's version and the extension's folder: an extension older than the app
         // reloads itself from the folder (background.js).
@@ -339,6 +341,11 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
             .and_then(|j| crate::fill::submitted_with(agent, &j.id, url, b["auto"].as_bool().unwrap_or(false), &fields).map(|_| json!({ "ok": true }))),
         _ => return json_resp(404, json!({ "error": "Not here." })),
     };
+    // For finding problems: what the extension asked for, on which site, and how it ended.
+    if path != "/ext/ping" {
+        let line = format!("extension {method} {path} on {host} ({boxes} boxes) \u{2192} {} ({} ms)", match &r { Ok(_) => "ok".to_string(), Err(e) => format!("error: {}", e.0) }, began.elapsed().as_millis());
+        if r.is_err() { crate::debug::always("extension", &line) } else { crate::debug::note("extension", &line) }
+    }
     match r {
         Ok(v) => json_resp(200, v),
         // Not sure which application this is: the jobs to choose from come with the answer.

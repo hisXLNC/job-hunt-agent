@@ -21,6 +21,18 @@ async function renderKeywords(got) {
     <form class="row" data-form="kwAdd"><input type="text" name="k" placeholder="e.g. burn-down, statements of work" aria-label="Keywords to add, separated by commas" style="flex:1;min-width:220px"><button class="btn" type="submit">Add</button></form>`;
 }
 
+/** Debugging mode: a record of everything Job Hunt does, and one report to send when something's wrong. */
+async function renderDebug(got) {
+  const box = $('#debugCard'); if (!box) return;
+  let d;
+  try { d = got || await api('/api/debug'); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  box.innerHTML = `<header><h2>Finding problems</h2>${d.on ? '<span class="pill warn">Debugging on</span>' : ''}</header>
+    <p class="muted">When something goes wrong, the report below is what to send: the version, what's running, the database, the postings waiting to be scored and why, each connection, the latest errors and events, the last search step by step, and the debugging record. It never holds your CV, your keys, or the text of emails or of what's sent to Claude; email addresses are taken out.</p>
+    <label class="check"><input type="checkbox" data-act="debugOn" ${d.on ? 'checked' : ''}> <span>Debugging mode: record everything Job Hunt does<br><span class="muted small">Every button you press and how long it took, every request to Claude, all background work, each step of a search and of filling a form. Errors and crashes are always recorded, even with this off. Turn it on, make the problem happen again, then copy the report.${d.on && d.since ? ` On since ${esc(ago(d.since))}.` : ''}</span></span></label>
+    <div class="row"><button class="btn primary" data-act="debugCopy">Copy the report</button><button class="btn" data-act="debugSave">Save it as a file</button><button class="btn ghost" data-act="debugClear">Empty the record</button></div>
+    <p class="muted small">${d.lines} line${d.lines === 1 ? '' : 's'} recorded. Also kept as a file: ${esc(d.file)}</p>`;
+}
+
 async function renderBank() {
   const box = $('#bankCard'); if (!box) return;
   let b;
@@ -542,6 +554,7 @@ async function settingsCards(tab, sub, host, given) {
         <form data-form="links" class="form"><label class="field">Job Hunt's public address<input name="base" type="url" placeholder="https://jobhunt.example.com" value="${esc(st.links?.base || '')}"><span class="hint">Leave empty to turn it off.</span></label>
         <div class="row"><button class="btn" type="submit">Save</button></div></form></section>
       <!--@extras-->${extras}
+      <!--@debug--><section class="card" id="debugCard"><header><h2>Finding problems</h2></header><p class="muted small">Loading…</p></section>
       <!--@whatsnew--><section class="card" id="whatsnew"><header><h2>What's new</h2></header><p class="muted small">Loading…</p></section>
       <!--@app-->${server || here ? `<section class="card"><header><h2>Starting, sleeping and closing</h2></header><p class="muted small">Your data: ${esc(st.app.data)}</p></section>` : `<section class="card"><header><h2>Starting, sleeping and closing</h2></header>
       <label class="check"><input type="checkbox" data-act="autostart" ${st.app.autostart ? 'checked' : ''}> Start Job Hunt when I sign in to Windows (in the tray, so searches and email checks keep running)</label>
@@ -632,7 +645,7 @@ async function settingsBody(section, tab, st) {
   if (section === 'phone') { const a = await of('app'), e = await of('extension'); return `${a.remote}${e.phonefill}${link('Interviews, offers and applications ready, as notices on your phone.', '#settings/notifications', 'Notifications')}`; }
   if (section === 'sync') return (await of('sync')).sync;
   const a = await of('app');
-  return `${a.updates}${a.app}${a.extras}${a.whatsnew}`;
+  return `${a.updates}${a.app}${a.extras}${a.debug}${a.whatsnew}`;
 }
 
 /** #settings/<place>/<tab>. */
@@ -658,6 +671,7 @@ function settingsShown() {
   if ($('#fillSites')) renderFillSites();
   if ($('#chromeCard')) renderChrome();
   if ($('#usageCard')) renderUsage();
+  if ($('#debugCard')) renderDebug();
   if ($('#whatsnew')) { showWhatsNew(); if (update?.available) showUpdate(update); }
   if (connScrollTo) { const t = document.getElementById(connScrollTo); connScrollTo = null; if (t) { t.scrollIntoView({ block: 'start' }); t.querySelector('details')?.setAttribute('open', ''); } }
   if (setFlash) {

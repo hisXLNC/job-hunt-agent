@@ -1385,6 +1385,7 @@
         const file = answer.files && answer.files[f.key];
         const v = answer.values && answer.values[f.key];
         const done = await guarded(f, () => fillOne(f, v, file));
+        if (done && v != null && v !== '' && !file) f.put = String(v); // what the box was given (see learnEdit)
         // For Copy details: what each box got (no values: the labels and whether each was filled).
         // (Now also what Job Hunt meant to put in each box and what the box held afterwards, so a
         // wrong or missing answer can be traced: it's your own details, copied only when you press it.)
@@ -1398,7 +1399,9 @@
         if (theirs && done) continue;
         // Not yours to fix: the end date of the job you're in ("Present": its box goes when I currently
         // work here is ticked), and an upload box for a certificate or transcript that isn't asked for.
-        const present = f.type === 'date' && /^(present|current|now|ongoing)$/i.test(String(v || '').trim());
+        // (Also with no end date given at all, when that entry's "I currently work here" is ticked.)
+        const here = f.type === 'date' && (v == null || v === '') && /^(to|end)\b/i.test(f.label || '') && fields.some(g => g.section === f.section && g.type === 'checkbox' && /currently|present/i.test(g.label || '') && ((byKey[g.key] || [])[0] || {}).checked);
+        const present = here || (f.type === 'date' && /^(present|current|now|ongoing)$/i.test(String(v || '').trim()));
         const sideFile = f.type === 'file' && !file && !f.required && /certif|licen|transcript|portfolio|reference/i.test(`${f.label} ${f.section}`);
         if (present || sideFile) continue;
         const matters = f.required || done || v || f.type === 'file';
@@ -1763,6 +1766,39 @@
     try { window.name = MARK + JSON.stringify({ at: Date.now(), fields: fields.slice(0, 80) }); } catch (e) { window.name = MARK + JSON.stringify({ at: Date.now() }); }
     watchForConfirmation(120);
   }
+  // A box you correct or fill in yourself is kept for next time as soon as you leave it (not only
+  // when Save and Continue is pressed): with the rest of its entry, so "From (YYYY)" is kept as
+  // that school's. The form isn't read again for this (a fill may be under way): the boxes as last
+  // read, with what each holds now, or was given when the site has since replaced the box.
+  let learnTimer = null;
+  const learnSections = new Set();
+  function nowOf(f) {
+    const els = (byKey[f.key] || []).filter(x => x && x.isConnected);
+    if (!els.length) return f.put || f.value || '';
+    if (f.type === 'date') { const y = els.find(x => datePart(x) === 'year'); return !y || y.value ? els.map(x => clean(x.value)).filter(Boolean).join('/') : ''; }
+    const e = els[0];
+    if (e.tagName === 'SELECT') return clean((e.options[e.selectedIndex] || {}).text || '');
+    if (e.tagName === 'BUTTON') return /^select one$/i.test(clean(e.textContent)) ? '' : clean(e.textContent);
+    return clean(e.value || '') || f.put || '';
+  }
+  function learnEdit(e) {
+    const el = e.target;
+    if (!e.isTrusted || !ui || retired || !filled || !el || !el.tagName || own(el) || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || ['checkbox', 'radio', 'file', 'password'].includes(el.type)) return;
+    const f = fields.find(x => (byKey[x.key] || []).includes(el));
+    if (!f || !f.section) return;
+    learnSections.add(f.section);
+    clearTimeout(learnTimer);
+    learnTimer = setTimeout(() => {
+      try {
+        const list = fields.filter(x => learnSections.has(x.section) && !['file', 'add', 'skills', 'checkbox', 'checkboxes'].includes(x.type))
+          .map(x => ({ label: x.label, type: x.type, value: nowOf(x), options: x.options, section: x.section })).filter(x => x.value);
+        learnSections.clear();
+        if (list.length) { trace('kept what you changed', { boxes: list.length }); send('learn', { fields: list.slice(0, 60) }); }
+      } catch (err) { /* the form changed */ }
+    }, 1500);
+  }
+  document.addEventListener('change', learnEdit, true);
+  document.addEventListener('focusout', learnEdit, true);
   document.addEventListener('click', e => {
     const b = e.target.closest && e.target.closest('button,input[type=submit],[role=button]');
     if (!b || own(b) || ownClick) return;
@@ -1772,7 +1808,7 @@
     // Save and Continue / Next on a form of several pages (Workday): keep this page's answers for
     // next time now (your GPA, notice period…), since only the last page is there when you submit.
     if (/^\s*(save and continue|save & continue|next|continue)\b/i.test(t) && ui && !retired) {
-      try { send('learn', { fields: collect().filter(f => !['file', 'add', 'skills'].includes(f.type) && f.value).map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options, section: f.section })).slice(0, 80) }); } catch (err) { /* the form changed */ }
+      try { send('learn', { fields: collect().filter(f => !['file', 'add', 'skills'].includes(f.type) && f.value).map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options, section: f.section })).slice(0, 200) }); } catch (err) { /* the form changed */ }
     }
     if (NOT_SEND.test(t)) { notSendAt = Date.now(); return; }
     if ((b.type === 'submit' && b.form) || /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|apply now|complete application|finish application/i.test(b.textContent || b.value || '')) onPressed();

@@ -263,7 +263,19 @@ pub fn handle(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> Resp {
     if req.method != "GET" && !req.path.starts_with("/api/update/") {
         LAST_ACTION.store(chrono::Utc::now().timestamp(), std::sync::atomic::Ordering::Relaxed);
     }
+    let began = std::time::Instant::now();
     let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(agent, host, req)));
+    let ms = began.elapsed().as_millis();
+    // For finding problems: what failed is always written down; with debugging on, so is everything
+    // you press, and any page that took long to put together. (Not the page's own notes.)
+    let api = req.path.starts_with("/api/") && !req.path.starts_with("/api/debug");
+    let line = |end: &str| format!("{} {} \u{2192} {end} ({ms} ms){}", req.method, req.path, if req.remote { " [remote]" } else { "" });
+    match &out {
+        Ok(Ok(r)) if api && (req.method != "GET" || ms >= 300) => crate::debug::note(if ms >= 2000 { "slow" } else { "request" }, &line(&r.status.to_string())),
+        Ok(Err(e)) if api && e.0 != "not found" => crate::debug::always("request", &line(&format!("error: {}", e.0))),
+        Err(_) => crate::debug::always("crash", &line("crashed while answering")),
+        _ => {}
+    }
     match out {
         Ok(Ok(r)) => r,
         Ok(Err(e)) if e.0 == "not found" => Resp::error(404, "Not found"),
@@ -838,6 +850,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ["api", "activity"] => return Ok(Resp::json(&json!({ "running": agent.activity(), "recent": agent.db().recent_events(6)?, "last_search": agent.secret("last.search") }))),
             // The search, when it seems stuck: where it is, how long it's been quiet, and its log.
             ["api", "search-log"] => return Ok(Resp::json(&agent.search_log())),
+            ["api", "debug"] => return Ok(Resp::json(&agent.debug_state())),
+            ["api", "debug", "report"] => return Ok(Resp::json(&json!({ "report": agent.debug_report() }))),
             // The interview that builds a CV from a conversation.
             ["api", "cv-chat"] => return Ok(Resp::json(&agent.cv_chat_state())),
             // Claude in your browser: is Claude Code here, is a test running, and how the last one went.
@@ -1218,6 +1232,32 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
             });
             Ok(Resp::json(&json!({ "started": true })))
+        }
+        // Debugging: turn it on or off ({on}), empty the record ({clear: true}).
+        ["api", "debug"] => {
+            if let Some(on) = b.get("on").and_then(|v| v.as_bool()) {
+                agent.db().set("debug.on", if on { "1" } else { "0" })?;
+                agent.db().set("debug.since", &if on { crate::util::now() } else { String::new() })?;
+                crate::debug::set(on);
+            }
+            if b["clear"].as_bool() == Some(true) {
+                crate::debug::clear();
+            }
+            Ok(Resp::json(&agent.debug_state()))
+        }
+        // What the page itself noticed: script errors (always kept), and with debugging on, where you went.
+        ["api", "debug", "log"] => {
+            for l in b["lines"].as_array().into_iter().flatten().take(50) {
+                let (kind, text) = (l["kind"].as_str().unwrap_or("page"), l["text"].as_str().unwrap_or(""));
+                if kind == "page-error" { crate::debug::always(kind, text) } else { crate::debug::note("page", text) }
+            }
+            Ok(Resp::json(&json!({ "on": crate::debug::on() })))
+        }
+        // The report, written beside your data as a file, for when it's too long to paste.
+        ["api", "debug", "save"] => {
+            let path = agent.data.join(format!("debug-report-{}.txt", chrono::Local::now().format("%Y-%m-%d-%H%M")));
+            std::fs::write(&path, agent.debug_report())?;
+            Ok(Resp::json(&json!({ "path": path.to_string_lossy() })))
         }
         // Keywords you really have: add some ({add: [..]}) or take one off ({forget: ".."}).
         ["api", "keywords"] => {

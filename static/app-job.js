@@ -178,6 +178,14 @@ async function showJob(id) {
       <div class="row file-row">${j.cv_path ? `<button class="btn" data-act="open" data-what="cv">${svg('doc')}${own?.cv ? 'Open your CV' : 'Open tailored CV'}</button><button class="btn" data-act="open" data-what="letter">${svg('doc')}Open cover letter</button>
         <button class="btn ghost" data-act="open" data-what="cv-pdf" title="${cv_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">CV PDF</button><button class="btn ghost" data-act="open" data-what="letter-pdf" title="${letter_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">Letter PDF</button>
         <button class="btn" data-act="open" data-what="folder">${svg('folder')}Show files</button>` : ''}</div>
+      <div class="row file-row own-row">
+        ${['cv', 'letter'].map(w => own?.[w]
+          ? `<span class="own-on"><span class="pill good" title="${esc(((w === 'cv' ? j.cv_path : j.letter_path) || '').split(/[\\/]/).pop())}">Using your own ${w === 'cv' ? 'CV' : 'cover letter'}</span><button class="btn ghost sm" data-act="ownOff" data-what="${w}">Use Job Hunt's</button><label class="btn ghost sm">Replace<input type="file" accept=".docx,.pdf" data-upload="own-${w}" hidden></label></span>`
+          : `<label class="btn ghost" title="Tailored it yourself? Attach it (Word or PDF) and Job Hunt uses it instead, in the Apply screen and in emailed applications. Job Hunt's version is kept.">${svg('add')}Attach my own ${w === 'cv' ? 'CV' : 'cover letter'}<input type="file" accept=".docx,.pdf" data-upload="own-${w}" hidden></label>`).join('')}
+        <span class="tabs-gap"></span>
+        ${tracks.length && j.cv_path ? `<button class="btn ghost" data-act="retailor" ${tailoring ? 'disabled' : ''} title="Starts again from your ${esc(trackLabel(j.track || tracks[0].name))} CV, the closest fit for this role">Tailor again</button>` : ''}
+        ${tracks.length > 1 ? `<details class="menu"><summary class="btn ghost" title="Tailor from another of your CVs">From another CV<span class="caret"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="menu-list right" style="padding:10px;min-width:260px"><select id="track">${tracks.map(t => `<option value="${esc(t.name)}" ${t.name === j.track ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select><button class="btn" style="margin-top:8px" data-act="retailor" data-pick="1" ${tailoring ? 'disabled' : ''}>Tailor from it</button></div></details>` : ''}
+      </div>
       <header><h2>Preview</h2><div class="seg small" id="pvTabs">
         ${j.cv_path ? `<button class="on" data-pv="cv">${own?.cv ? 'Your CV' : 'Tailored CV'}</button>` : ''}${j.cover_letter && !own?.letter ? `<button class="${j.cv_path ? '' : 'on'}" data-pv="letter">Cover letter</button>` : ''}</div></header>
       ${j.cv_path ? (own?.cv && /\.pdf$/i.test(j.cv_path) ? `<div id="pv-cv"><iframe class="pdf-view" src="/api/jobs/${encodeURIComponent(j.id)}/view/cv" title="Your CV"></iframe></div>` : '<div class="paper" id="pv-cv"><p class="muted">Loading…</p></div>') : ''}
@@ -194,38 +202,22 @@ async function showJob(id) {
       <div class="row"><button class="btn primary" data-act="revise" ${revising || tailoring ? 'disabled' : ''}>Make the change</button>
         <span class="muted small">Claude changes only what you ask, using what's true in your CV. You can undo the last change.</span></div>
     </section>` : ''}
-      <div class="grid-2">
-        <div class="stack">
-        ${(j.cv_changes || []).length && !own?.cv ? `<section class="card">
-          <header><h2>What changed in your CV</h2><span class="muted small">${j.cv_changes.length} paragraph${j.cv_changes.length === 1 ? '' : 's'} reworded</span></header>
-          ${gapsHtml(j)}
-          ${changesHtml(j, false)}
-        </section>` : ''}
-        ${j.cv_path || j.cover_letter ? `<section class="card">
-          <header><h2>Your own files</h2></header>
-          <p class="muted small">Tailored a CV or letter for this role yourself? Attach it (Word or PDF) and Job Hunt uses it instead, in the Apply screen and in emailed applications. Job Hunt's version is kept.</p>
-          ${['cv', 'letter'].map(w => own?.[w]
-            ? `<div class="row"><span class="pill good">Using your own ${w === 'cv' ? 'CV' : 'cover letter'}</span><span class="small">${esc(((w === 'cv' ? j.cv_path : j.letter_path) || '').split(/[\\/]/).pop())}</span>
-                <button class="btn ghost sm" data-act="ownOff" data-what="${w}">Use Job Hunt's ${w === 'cv' ? 'CV' : 'letter'}</button>
-                <label class="btn ghost sm">Replace<input type="file" accept=".docx,.pdf" data-upload="own-${w}" hidden></label></div>`
-            : `<label class="btn">${svg('doc')}Attach my own ${w === 'cv' ? 'CV' : 'cover letter'}<input type="file" accept=".docx,.pdf" data-upload="own-${w}" hidden></label>`).join(' ')}
-        </section>` : ''}
-        <section class="card">
-          <header><h2>${j.cv_path ? 'Tailor again' : 'Tailor'}</h2></header>
-          ${tracks.length ? `<p class="muted small">Starts from your <b>${esc(trackLabel(j.track || tracks[0].name))}</b> CV, the closest fit for this role.</p>` : '<p class="muted small">Add a CV in <a href="#cvs">Profile</a> first.</p>'}
-          <div class="row" ${tracks.length && j.cv_path ? '' : 'hidden'}><button class="btn" data-act="retailor" ${tailoring ? 'disabled' : ''}>Tailor again</button></div>
-          ${tracks.length > 1 ? `<details class="small" style="margin-top:6px"><summary class="muted">Use a different CV</summary><div class="row" style="margin-top:6px"><select id="track" style="width:auto">${tracks.map(t => `<option value="${esc(t.name)}" ${t.name === j.track ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select><button class="btn" data-act="retailor" data-pick="1" ${tailoring ? 'disabled' : ''}>Tailor from it</button></div></details>` : ''}
-        </section>
-        </div>
-        <div class="stack">
-        ${j.cover_letter != null && !own?.letter ? `<details class="card">
+      ${j.cover_letter != null && !own?.letter ? `<details class="card" id="letterEditCard" ${j.cv_path ? 'hidden' : ''}>
           <summary><b>Edit the cover letter yourself</b> <span class="muted small">or ask for changes above</span></summary>
           <p class="muted small">Your edits update the Word file too. Put ** around words to make them bold.</p>
           <textarea id="letter" style="min-height:340px">${esc(j.cover_letter)}</textarea>
           <div class="row"><button class="btn" data-act="saveLetter">Save cover letter</button></div>
         </details>` : ''}
-        </div>
-      </div>
+        ${(j.cv_changes || []).length && !own?.cv ? `<section class="card" id="cvChangesCard">
+          <header><h2>What changed in your CV</h2><span class="muted small">${j.cv_changes.length} paragraph${j.cv_changes.length === 1 ? '' : 's'} reworded</span></header>
+          ${gapsHtml(j)}
+          ${changesHtml(j, false)}
+        </section>` : ''}
+      ${j.cv_path || j.cover_letter ? '' : `<section class="card">
+          <header><h2>Tailor</h2></header>
+          ${tracks.length ? `<p class="muted small">Starts from your <b>${esc(trackLabel(j.track || tracks[0].name))}</b> CV, the closest fit for this role.</p>` : '<p class="muted small">Add a CV in <a href="#cvs">Profile</a> first.</p>'}
+          ${tracks.length > 1 ? `<div class="row"><select id="track" style="width:auto">${tracks.map(t => `<option value="${esc(t.name)}" ${t.name === j.track ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select><button class="btn" data-act="retailor" data-pick="1" ${tailoring ? 'disabled' : ''}>Tailor from it</button></div>` : ''}
+        </section>`}
     </div>
     <div class="jpane" data-pane="apply" ${tab === 'apply' ? '' : 'hidden'}>
     ${['ready', 'approved'].includes(j.status) ? `<div class="precheck card" data-precheck="${esc(j.id)}" hidden></div>` : ''}
@@ -296,6 +288,10 @@ async function showJob(id) {
   document.querySelectorAll('#pvTabs [data-pv]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('#pvTabs [data-pv]').forEach(x => x.classList.toggle('on', x === b));
     ['cv', 'letter'].forEach(k => { const el = $(`#pv-${k}`); if (el) el.hidden = k !== b.dataset.pv; });
+    // What goes with each: the CV's changes under the CV, the letter's editor under the letter.
+    const ed = $('#letterEditCard'), ch = $('#cvChangesCard');
+    if (ed) ed.hidden = b.dataset.pv !== 'letter';
+    if (ch) ch.hidden = b.dataset.pv === 'letter';
   }));
   if (j.cv_path && !(own?.cv && /\.pdf$/i.test(j.cv_path))) api(`/api/jobs/${encodeURIComponent(id)}/preview`).then(({ cv }) => {
     const el = $('#pv-cv'); if (el) el.innerHTML = cv ? cvHtml(cv) : own?.cv ? '<p class="muted">Your own CV is a PDF: use <b>Open tailored CV</b> to see it.</p>' : '<p class="muted">The tailored CV file is missing. Re-tailor to make a new one.</p>';

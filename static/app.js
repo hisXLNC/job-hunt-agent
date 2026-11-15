@@ -32,6 +32,23 @@ function phoneCard(st) {
   </section>`;
 }
 
+/** For debugging: script errors in the page are always sent to Job Hunt's record; with debugging
+ *  mode on (the app says so when it answers), so is each screen you open. Sent a few at a time. */
+const pageLog = { lines: [], timer: null, on: false };
+function pageNote(kind, text) {
+  if (kind !== 'page-error' && !pageLog.on) return;
+  pageLog.lines.push({ kind, text: String(text).slice(0, 1200) });
+  if (pageLog.lines.length > 40) pageLog.lines.shift();
+  clearTimeout(pageLog.timer);
+  pageLog.timer = setTimeout(async () => {
+    const lines = pageLog.lines.splice(0);
+    try { const r = await fetch('/api/debug/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lines }) }); pageLog.on = !!(await r.json()).on; } catch (e) {}
+  }, 800);
+}
+window.addEventListener('error', e => pageNote('page-error', `${e.message} at ${(e.filename || '').split('/').pop()}:${e.lineno}:${e.colno} on ${location.hash}${e.error && e.error.stack ? ' | ' + e.error.stack.split('\n').slice(0, 4).join(' < ') : ''}`));
+window.addEventListener('unhandledrejection', e => pageNote('page-error', `unhandled: ${(e.reason && (e.reason.stack || e.reason.message)) || e.reason} on ${location.hash}`));
+window.addEventListener('hashchange', () => pageNote('page', `opened ${location.hash}`));
+fetch('/api/debug').then(r => r.json()).then(d => { pageLog.on = !!d.on; }).catch(() => {});
 async function api(path, { method = 'GET', body, raw } = {}) {
   const opts = { method, headers: {} };
   if (raw !== undefined) { opts.body = raw; opts.headers['Content-Type'] = 'application/octet-stream'; }

@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.83.0] - 2026-11-15
+
+Debugging mode, and corrections on forms saved as you type.
+
+### Changes
+
+- Settings, App, Finding problems: turn on debugging mode to record everything Job Hunt does, then copy or save one report to send. Errors and crashes are always recorded.
+- A box you correct on an application form is saved the moment you leave it, with the rest of its entry (a school's start year, say), not only when you press Save and Continue.
+- The end date of the job you're in is no longer counted as left to do on Workday.
+- On a job's CV & letter tab, the cover letter editor shows only with the cover letter, and What changed in your CV takes the full width.
+- Attach my own CV, Attach my own cover letter and Tailor again moved into the row of buttons at the top of the CV & letter tab.
+
 ## [2.82.0] - 2026-11-15
 
 Remembers the keywords you have; no posting waits for ever.
@@ -2289,6 +2301,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.83.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.83.0
 [2.82.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.82.0
 [2.81.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.81.1
 [2.81.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.81.0

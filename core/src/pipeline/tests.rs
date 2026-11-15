@@ -2684,3 +2684,18 @@ fn keywords_you_ask_for_are_remembered_and_worked_in_by_themselves() {
     s.agent.forget_keyword("kubernetes").unwrap();
     assert!(s.agent.confirmed_for(&other, "Led program delivery and UAT.").is_empty());
 }
+
+#[test]
+fn the_debug_report_says_what_is_going_on() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    s.agent.db().log(Some("test:1"), "revise:error", "Claude didn't answer; wrote to dana@maple.example").unwrap();
+    let r = s.agent.debug_report();
+    for part in ["=== Job Hunt debug report ===", "=== Running now ===", "=== Database ===", "=== Postings waiting to be scored ===", "=== Connections ===",
+        "=== Latest errors (newest first) ===", "=== Latest events (newest first) ===", "=== Last search, step by step ===", "=== Debugging record (oldest first) ==="] {
+        assert!(r.contains(part), "missing {part}");
+    }
+    assert!(r.contains("revise:error (test:1): Claude didn't answer"), "errors are listed");
+    assert!(r.contains("[email]") && !r.contains("dana@maple.example"), "addresses are taken out");
+    assert!(r.contains(env!("CARGO_PKG_VERSION")));
+}

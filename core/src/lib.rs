@@ -12,6 +12,7 @@ pub mod claude;
 pub mod claude_code;
 pub mod cv;
 pub mod db;
+pub mod debug;
 pub mod filters;
 pub mod fill;
 pub mod google;

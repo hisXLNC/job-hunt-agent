@@ -145,6 +145,10 @@ impl Metered {
         u.calls = 1;
         u.errors = out.is_err() as u64;
         u.secs = start.elapsed().as_secs_f64();
+        match &out {
+            Ok(_) => crate::debug::note("claude", &format!("{kind}: answered in {:.1} s", u.secs)),
+            Err(e) => crate::debug::always("claude", &format!("{kind}: failed after {:.1} s: {}", u.secs, e.0)),
+        }
         let now = Utc::now();
         let mut log = self.log.lock().unwrap();
         log.record(kind, &u, now);

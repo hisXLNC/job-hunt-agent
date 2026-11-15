@@ -440,8 +440,17 @@ pub struct OwnedRunning {
     name: String,
 }
 
+/// For the debugging record: a piece of background work has ended, and how long it ran.
+fn ended(name: &str) {
+    if crate::debug::on() {
+        let began = STARTED.lock().unwrap_or_else(|e| e.into_inner()).get(name).copied().unwrap_or_else(|| Utc::now().timestamp());
+        crate::debug::note("work", &format!("{name}: ended after {} s{}", Utc::now().timestamp() - began, if std::thread::panicking() { " (it crashed)" } else { "" }));
+    }
+}
+
 impl Drop for OwnedRunning {
     fn drop(&mut self) {
+        ended(&self.name);
         STARTED.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.name);
         self.agent.running.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.name);
     }
@@ -449,6 +458,7 @@ impl Drop for OwnedRunning {
 
 impl Drop for Running<'_> {
     fn drop(&mut self) {
+        ended(&self.name);
         STARTED.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.name);
         let mut r = self.agent.running.lock().unwrap_or_else(|e| e.into_inner());
         r.remove(&self.name);
@@ -501,10 +511,55 @@ impl Agent {
         if let Ok(log) = serde_json::from_str(&agent.secret("usage.log")) {
             *agent.usage.lock().unwrap() = log;
         }
+        crate::debug::init(data, agent.secret("debug.on") == "1");
         let _ = agent.drop_outside_locations();
         let _ = agent.db().merge_duplicates();
         agent.connect();
         agent
+    }
+
+    // --- debugging -----------------------------------------------------------------------------
+
+    /// Whether debugging is on, since when, and how much is recorded.
+    pub fn debug_state(&self) -> Value {
+        json!({ "on": crate::debug::on(), "since": Some(self.secret("debug.since")).filter(|s| !s.is_empty()), "lines": crate::debug::count(),
+            "file": self.data.join("debug-log.txt").to_string_lossy() })
+    }
+
+    /// Everything needed to find the cause of a problem, as text to paste or send: the version and
+    /// the computer, what's running, the database, the postings waiting to be scored and why, the
+    /// state of each connection, the latest errors, the latest events, the last search step by
+    /// step, and the debugging record. No CV text, keys or email text; addresses are taken out.
+    pub fn debug_report(&self) -> String {
+        let mut out: Vec<String> = vec![];
+        let mut section = |name: &str, lines: Vec<String>| {
+            out.push(format!("\n=== {name} ==="));
+            out.extend(if lines.is_empty() { vec!["(nothing)".to_string()] } else { lines });
+        };
+        let profile = self.profile();
+        section("Job Hunt debug report", vec![
+            format!("made: {} (UTC)", crate::util::now()),
+            format!("version: {} on {} {}", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH),
+            format!("debugging: {}{}", if crate::debug::on() { "on" } else { "off (only errors are recorded; turn it on, repeat the problem, then make this report again)" },
+                Some(self.secret("debug.since")).filter(|s| !s.is_empty()).map(|s| format!(" since {s}")).unwrap_or_default()),
+            format!("Claude through: {}", self.engine_name()),
+            format!("usage limit reached until: {}", self.limited().map(|t| t.to_rfc3339()).unwrap_or_else(|| "no".into())),
+            format!("CVs: {}; scored per search: up to {}; last search: {}; last scoring of waiting postings: {}", profile.tracks.len(), profile.max_scored_per_run,
+                Some(self.secret("last.search")).filter(|s| !s.is_empty()).unwrap_or_else(|| "never".into()), Some(self.secret("last.held")).filter(|s| !s.is_empty()).unwrap_or_else(|| "never".into())),
+        ]);
+        section("Running now", self.activity().iter().map(|a| a.to_string()).chain(std::iter::once(format!("claims: {:?}; search stopping: {}; paused: {}", self.running(), self.stopping(), self.hold.load(std::sync::atomic::Ordering::SeqCst)))).collect());
+        section("Database", vec![self.db_facts().to_string(), format!("jobs by stage: {}", self.db().counts().map(Value::Object).unwrap_or(Value::Null))]);
+        section("Postings waiting to be scored", self.held_list().iter().map(|h| format!("{} / {} [{}] tries: {}{} {}", h["company"].as_str().unwrap_or(""), h["title"].as_str().unwrap_or(""),
+            h["source"].as_str().unwrap_or(""), h["tries"], Some(h["why"].as_str().unwrap_or("")).filter(|w| !w.is_empty()).map(|w| format!(" ({w})")).unwrap_or_default(), h["url"].as_str().unwrap_or(""))).collect());
+        section("Connections", self.connections().unwrap_or_default().iter().map(|c| format!("{}: {}{}", c["name"].as_str().unwrap_or(""), c["state"].as_str().unwrap_or(""),
+            Some(c["detail"].as_str().unwrap_or("")).filter(|d| !d.is_empty()).map(|d| format!(" ({d})")).unwrap_or_default())).collect());
+        let events = self.db().recent_events(400).unwrap_or_default();
+        let line = |e: &crate::db::Event| format!("{} {}{}: {}", e.created_at, e.kind, e.job_id.as_deref().map(|j| format!(" ({j})")).unwrap_or_default(), e.detail.chars().take(600).collect::<String>());
+        section("Latest errors (newest first)", events.iter().filter(|e| e.kind.contains("error")).take(60).map(line).collect());
+        section("Latest events (newest first)", events.iter().take(200).map(line).collect());
+        section("Last search, step by step", TRAIL.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|(at, what)| format!("{at} {what}")).collect());
+        section("Debugging record (oldest first)", crate::debug::lines(2500));
+        crate::debug::scrub(&out.join("\n"))
     }
 
     pub fn db(&self) -> MutexGuard<'_, Db> {
@@ -832,6 +887,7 @@ impl Agent {
         if !r.insert(name.to_string()) {
             return err(format!("{name} is already running"));
         }
+        crate::debug::note("work", &format!("{name}: started"));
         STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
         Ok(Running { agent: self, name: name.to_string(), _task: crate::claude_code::Task::enter(name) })
     }
@@ -839,6 +895,7 @@ impl Agent {
     /// claim, for work handed to another thread.
     pub(crate) fn claim_owned(self: &Arc<Self>, name: &str) -> Option<OwnedRunning> {
         self.running.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string()).then(|| {
+            crate::debug::note("work", &format!("{name}: started"));
             STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
             OwnedRunning { agent: self.clone(), name: name.to_string() }
         })
@@ -1074,6 +1131,7 @@ impl Agent {
 
     /// Write a line in the search log (see TRAIL).
     pub(crate) fn trace(&self, what: &str) {
+        crate::debug::note("search", what);
         let lines: Vec<Value> = {
             let mut t = TRAIL.lock().unwrap_or_else(|e| e.into_inner());
             t.push_back((chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true), what.chars().take(300).collect()));

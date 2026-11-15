@@ -166,6 +166,7 @@ pub fn learn(agent: &Agent, fields: &[Value]) -> R<usize> {
         list.insert(0, json!({ "q": label.trim(), "key": key, "a": value, "at": now(), "uses": 0 }));
         n += 1;
     }
+    crate::debug::always("form", &format!("kept {n} answers from a form; entry details: {}", entry_details(fields).iter().map(|(q, _)| q.as_str()).collect::<Vec<_>>().join(" | ")));
     save_bank(agent, &list)?;
     Ok(n)
 }
@@ -281,7 +282,10 @@ fn apply_entry_details(bank: &[Value], fields: &[Value], values: &mut serde_json
         let place = format!("entry {}", if place.is_empty() { "1" } else { &place });
         // This entry's kept details: by its name (either may be the longer form of the other), else by its place.
         let about = |w: &str| who.as_deref().is_some_and(|me| w == me || (w.len() > 5 && me.contains(w)) || (me.len() > 5 && w.contains(me)));
-        let theirs: Vec<&(String, String, String, String)> = kept.iter().filter(|k| k.0 == *kind && (about(&k.1) || (who.is_none() && k.1 == place))).collect();
+        // (By name first; a detail kept only by the entry's place, from a form that didn't say which
+        // school it was, still counts when nothing kept by name has it.)
+        let mut theirs: Vec<&(String, String, String, String)> = kept.iter().filter(|k| k.0 == *kind && about(&k.1)).collect();
+        theirs.extend(kept.iter().filter(|k| k.0 == *kind && k.1 == place));
         if theirs.is_empty() {
             continue;
         }
@@ -672,7 +676,12 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     // What you put on earlier forms about a school, certificate or language wins over what Claude
     // made of the CV and your notes (it kept answering French "Beginner" from a note, and leaving the
     // GPA and a degree's first year out, however often you'd corrected them).
-    apply_entry_details(&bank(agent), fields, &mut values);
+    let kept_bank = bank(agent);
+    let applied = apply_entry_details(&kept_bank, fields, &mut values);
+    // Always in the debugging record (labels only, no answers): which school, certificate and
+    // language details are kept, so a box left empty can be told from a detail never saved.
+    crate::debug::always("form", &format!("{} boxes, {} answers; {applied} from kept entry details; kept: {}", fields.len(), values.len(),
+        kept_bank.iter().filter_map(|x| x["q"].as_str()).filter(|q| ENTRY_KINDS.iter().any(|(k, _, _)| q.starts_with(k))).collect::<Vec<_>>().join(" | ")));
     let n = values.len() + files.len();
     if is_profile {
         agent.db().log(None, "fill", &format!("{n} of {} fields filled in on your profile at {}", fields.len(), job.company))?;

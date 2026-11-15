@@ -594,6 +594,16 @@ async function act(el) {
     if (location.hash === '#applications/all') route(); else location.hash = '#applications/all';
     return;
   }
+  if (a === 'debugClear') return busy(async () => { renderDebug(await api('/api/debug', { method: 'POST', body: { clear: true } })); }, 'Emptied.');
+  if (a === 'debugSave') return busy(async () => { const r = await api('/api/debug/save', { method: 'POST' }); toast(`Saved as ${r.path}`); });
+  if (a === 'debugCopy') {
+    try {
+      const text = (await api('/api/debug/report')).report;
+      try { await navigator.clipboard.writeText(text); } catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+      toast('Copied. Paste it to Claude and say what you saw.');
+    } catch (e) { toast(e.message, true); }
+    return;
+  }
   if (a === 'heldShow') {
     heldShown.open = !heldShown.open;
     if (heldShown.open) { heldShown.list = null; route(); await heldLoad(); }
@@ -1299,6 +1309,10 @@ document.addEventListener('change', async e => {
     const body = el.dataset.act === 'applyMode' ? { mode: el.value } : { attach_cv: el.checked };
     await api('/api/recruiters/settings', { method: 'POST', body }).then(() => toast(el.dataset.act === 'applyCv' ? (el.checked ? 'Your tailored CV goes with emails Job Hunt sends.' : 'No CV attached.')
       : { draft: 'When you apply, the email waits in your Gmail drafts.', send: 'When you apply, Job Hunt sends the email for you.', off: 'No emails when you apply.' }[el.value])).catch(err => toast(err.message, true));
+    return;
+  }
+  if (el.dataset.act === 'debugOn') {
+    await api('/api/debug', { method: 'POST', body: { on: el.checked } }).then(d => { pageLog.on = el.checked; renderDebug(d); toast(el.checked ? 'Debugging is on. Make the problem happen again, then copy the report.' : 'Debugging is off. Errors are still recorded.'); }).catch(err => toast(err.message, true));
     return;
   }
   if (el.dataset.act === 'keepAwake') {
