@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.87.0",
+    "date": "2026-11-15",
+    "title": "Follow a company",
+    "changes": [
+      "Follow a company and Job Hunt tells you about every new posting its searches find from it, even one that doesn't match your job titles. Press Follow beside the company's name on a job's page, or add names under Settings, Job search, Sources."
+    ]
+  },
+  {
     "version": "2.86.1",
     "date": "2026-11-15",
     "title": "Zoho Recruit dates, and progress bars that agree",

@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.87.0] - 2026-11-15
+
+Follow a company.
+
+### Changes
+
+- Follow a company and Job Hunt tells you about every new posting its searches find from it, even one that doesn't match your job titles. Press Follow beside the company's name on a job's page, or add names under Settings, Job search, Sources.
+
 ## [2.86.1] - 2026-11-15
 
 Zoho Recruit dates, and progress bars that agree.
@@ -2376,6 +2384,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.87.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.87.0
 [2.86.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.86.1
 [2.86.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.86.0
 [2.85.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.2

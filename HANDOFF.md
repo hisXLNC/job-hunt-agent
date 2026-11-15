@@ -941,6 +941,10 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.87.0
+
+- Followed companies: secret `companies.followed` (JSON array of names; one per `db::company_key`, newest spelling wins, max 200). `Agent::followed_companies / is_followed / follow_company` (tailoring.rs). A search collects every fresh posting (before filters) from a followed company into `SearchRun.followed`; `note_followed` sends one notice per company at the end of the search ("New opening at X" / "N new openings at X"). `POST /api/companies/follow {company,on}` → `{followed}`; job JSON `following`; settings `followed` (read through `get`: the settings handler holds the database, so calling `agent.followed_companies()` there deadlocks). UI: `followBtn` (app.js) on the job page, `followedHtml` card inside the Sources `list` piece, action `followCompany`, form `data-follow-add`.
+
 ## 2.86.1
 
 - Zoho Recruit dates ("Duration" / "Work Duration" in an entry): `rec-month-range-component` holds four `lyte-dropdown`s (ids `<field>_<n>_from_month`, `_from_year`, `_to_month`, `_to_year`), each a `div[role=combobox][aria-haspopup=listbox][aria-controls=cxdby-<id>]` whose `lyte-drop-item[role=option]`s are in `lyte-drop-body#cxdby-<id>`. They join `DROPS` (`ZOHO_DROP`) and go through `readDrops`/`fillDrop` as Workday's do; labelled "Work Duration: from (month)" etc. (`zohoDate`); the month list and the year list are read once each (`zohoLists`); a real click follows when a script's doesn't open the list or take the option. On such a page `fields` is sorted into page order so an entry's dates sit with its other boxes (Zoho's entries aren't numbered). `UNCHOSEN` = "Select One" / "Month" / "Year". fill.rs `personal_in`: a "duration" box in an entry is never banked. Mock: `tools/ext_test/zoho.html` has one such range; the `zoho` case checks it. Untested on the real site (the `to_*` ids are assumed from `from_month`; position is the fallback).
