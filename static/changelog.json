@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.86.1",
+    "date": "2026-11-15",
+    "title": "Zoho Recruit dates, and progress bars that agree",
+    "changes": [
+      "On Zoho Recruit forms, Job Hunt now fills the start and end month and year of each school and job.",
+      "The small progress bar on a page and the one in the panel at the bottom left now look the same and show the same progress."
+    ]
+  },
+  {
     "version": "2.86.0",
     "date": "2026-11-15",
     "title": "Click an employer to see all its postings",

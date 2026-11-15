@@ -846,6 +846,16 @@ function expectedSecs(el) {
   const each = (el.dataset.kind || '').split('+').filter(Boolean).reduce((t, k) => t + (typicalSecs[k] || GUESS_SECS[k] || 30), 0) || 30;
   return each * Math.max(1, Number(el.dataset.n) || 1);
 }
+/** The row of "what Job Hunt is doing" that is this bar's work, if there is one: named beside the
+ *  bar in the same words, or the same kind of work (on a job's page, for that job). */
+const BAR_RUNS = { score: 'rescore', career: 'career', coach: 'coach', insights: 'insights', lessons: 'lessons', weekly: 'weekly', leads: 'leads' };
+function barActivity(el) {
+  const list = (typeof running !== 'undefined' && running.list) || [];
+  if (!list.length) return null;
+  const kind = el.dataset.kind || '', near = (el.parentElement?.textContent || '').toLowerCase();
+  const job = location.hash.startsWith('#job/') ? decodeURIComponent(location.hash.slice(5).split('/')[0]) : '';
+  return list.find(a => a.id === BAR_RUNS[kind]) || (job && list.find(a => a.id === `${kind}:${job}`)) || list.find(a => a.label && near.includes(a.label.toLowerCase())) || null;
+}
 const barStarts = new Map(); // which work → [when it started, last seen]
 function barKey(el) {
   // The same work on a redrawn page: its kind, the page, and the words beside it (numbers left out).
@@ -856,7 +866,10 @@ function tickBars() {
   const now = Date.now();
   for (const el of document.querySelectorAll('.spin')) {
     let p;
+    const act = barActivity(el);
     if (el.dataset.p != null && el.dataset.p !== '') p = Math.max(2, Math.min(100, Number(el.dataset.p))) / 100;
+    // The same work as a row in "what Job Hunt is doing" (bottom left): the same share, so the two bars agree.
+    else if (act) p = Math.max(3, Math.min(100, act.percent)) / 100;
     else {
       const key = barKey(el);
       const seen = barStarts.get(key) || [now, now];
@@ -866,6 +879,8 @@ function tickBars() {
       const t = (now - seen[0]) / 1000 / expectedSecs(el);
       p = Math.max(0.04, Math.min(0.95, 1 - Math.exp(-1.6 * t)));
     }
+    // Counted, not guessed: a plain bar (a guess is striped, here and bottom left).
+    el.classList.toggle('real', act ? !act.estimated : el.dataset.p != null && el.dataset.p !== '');
     el.style.setProperty('--p', p.toFixed(3));
     if (!el.hasAttribute('role')) { el.setAttribute('role', 'progressbar'); el.setAttribute('aria-valuemin', '0'); el.setAttribute('aria-valuemax', '100'); }
     el.setAttribute('aria-valuenow', String(Math.round(p * 100)));

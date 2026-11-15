@@ -5,12 +5,30 @@
 <form><div role="region"><h2>Professional Details</h2>
 <label id="crc-label-rec-form_77">Skill Set</label>
 <rec-skills-component id="rec-form_77"><skills-tag id="careersite-skills-tag"><ul data-zcqa="skillsTagList" id="tags"><li id="inli"><lyte-input><div><input id="addSkills" type="text" name="-add-skills" placeholder="Search and add skills" autocomplete="off"></div></lyte-input></li></ul></skills-tag></rec-skills-component>
-</div></form>
+</div>
+<div role="region"><h2>Experience Details</h2>
+<rec-tabular-component id="rec-form_9_8"><div><div role="region" aria-label="Experience Details : Entry 1 of 10">
+<div><label id="crc-form-tabular-label-55">Company</label><crux-text-component id="55_1"><div><lyte-input id="55_1_tab"><div><input type="text" name="55_1"></div></lyte-input></div></crux-text-component></div>
+<div><label id="crc-form-tabular-label-66">Work Duration</label><rec-month-range-component id="66_1" cx-prop-label="Work Duration"><div id="range"></div></rec-month-range-component></div>
+</div></div></rec-tabular-component></div></form>
 <lyte-wormhole><div id="pop" style="display:none;border:1px solid #999;padding:8px"><ul id="competencySkillsSuggestedList"></ul></div></lyte-wormhole>
 <script>
+// The dates of an entry, as Zoho draws them: a month and a year dropdown for the start, and for the end.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+for (const [side, part] of [['from', 'month'], ['from', 'year'], ['to', 'month'], ['to', 'year']]) {
+  const id = `66_1_${side}_${part}`, word = part === 'month' ? 'Month' : 'Year';
+  const w = document.createElement('rec-month-component');
+  w.innerHTML = `<div><rec-dropdown id="${id}"><lyte-dropdown id="cxd-${id}"><div tabindex="0" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="cxdby-${id}"><lyte-drop-button><span>${word}</span></lyte-drop-button></div>
+    <lyte-drop-box id="cxdb-${id}" style="display:none"><lyte-drop-body id="cxdby-${id}" role="listbox">${(part === 'month' ? MONTHS : Array.from({ length: 30 }, (_, k) => String(2026 - k))).map(x => `<lyte-drop-item role="option" style="display:block">${x}</lyte-drop-item>`).join('')}</lyte-drop-body></lyte-drop-box></lyte-dropdown></rec-dropdown></div>`;
+  document.getElementById('range').appendChild(w);
+  const head = w.querySelector('[role=combobox]'), box = w.querySelector('lyte-drop-box');
+  head.onclick = () => { box.style.display = box.style.display === 'none' ? 'block' : 'none'; };
+  box.onclick = e => { const it = e.target.closest('lyte-drop-item'); if (it) { head.querySelector('span').textContent = it.textContent; box.style.display = 'none'; } };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') box.style.display = 'none'; });
+}
 const ALL = ['Python', 'python scripting', 'Project Management', 'project management', 'agile project management', 'SQL', 'sql server', 'Vendor Management', 'vendor management skills', 'Payments', 'senior stakeholder management', 'defence procurement'];
 const input = document.getElementById('addSkills'), list = document.getElementById('competencySkillsSuggestedList'), tags = document.getElementById('tags');
-window.mock = { skills: () => [...tags.querySelectorAll('button')].map(b => b.getAttribute('aria-label').replace('Remove skill : ', '')), enters: 0 };
+window.mock = { dates: () => [...document.querySelectorAll('#range [role=combobox] span')].map(x => x.textContent), skills: () => [...tags.querySelectorAll('button')].map(b => b.getAttribute('aria-label').replace('Remove skill : ', '')), enters: 0 };
 const add = name => { const li = document.createElement('li'); li.tabIndex = 0; li.innerHTML = '<em></em><span></span><button type="button" tabindex="-1"></button>'; li.querySelector('span').textContent = name.length > 25 ? name.slice(0, 25) + '...' : name; li.querySelector('button').setAttribute('aria-label', 'Remove skill : ' + name); tags.insertBefore(li, document.getElementById('inli')); };
 input.addEventListener('input', () => { const q = input.value.toLowerCase().trim(); if (!q) return; setTimeout(() => {
   const m = ALL.filter(x => x.toLowerCase().includes(q) && !window.mock.skills().includes(x)); if (!m.length) return;

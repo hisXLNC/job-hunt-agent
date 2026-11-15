@@ -453,8 +453,23 @@
   };
   // Dropdowns made of a button and a list (Workday's "Select One"): their options are only on the page
   // while open, so each is opened once, read and closed before the form is read.
-  const DROPS = 'button[aria-haspopup=listbox]';
+  // And Zoho Recruit's dates in an education or experience entry ("Duration"): a month and a year
+  // dropdown for the start, and the same for the end.
+  const ZOHO_DROP = 'rec-month-range-component lyte-dropdown [role=combobox][aria-haspopup=listbox]';
+  const DROPS = 'button[aria-haspopup=listbox],' + ZOHO_DROP;
   const dropOptions = new WeakMap();
+  // What a dropdown shows before anything is chosen.
+  const UNCHOSEN = /^(select one|month|year|-\s*none\s*-)$/i;
+  // Which of the four a Zoho date dropdown is: { name: 'Work Duration', side: 'from'|'to', part: 'month'|'year' }.
+  const zohoDate = b => {
+    const range = b.closest && b.closest('rec-month-range-component');
+    if (!range) return null;
+    const i = [...range.querySelectorAll(ZOHO_DROP)].indexOf(b);
+    const m = /_(from|to)_(month|year)$/.exec((b.closest('rec-dropdown') || b.closest('lyte-dropdown') || b).id || '');
+    return { name: clean(range.getAttribute('cx-prop-label') || '') || 'Duration', side: m ? m[1] : i < 2 ? 'from' : 'to', part: m ? m[2] : i % 2 ? 'year' : 'month' };
+  };
+  // Every month list is the same, and every year list: each is read once.
+  const zohoLists = {};
   // (Not the items already chosen in a skills or school box: Workday draws those like options, and
   // counted as the open list's they kept a long list from being scrolled.)
   // Options of a list that wouldn't close (a search box's results that only real keys dismiss): they
@@ -490,6 +505,8 @@
       const box = ctl && document.getElementById(ctl);
       list = box ? [...box.querySelectorAll('[role=option],[data-automation-id=promptOption]')].filter(shown) : openOptions();
       if (list.length) break;
+      // Zoho's didn't open to a script's click: a real one.
+      if (i === 5 && EXT && b.matches(ZOHO_DROP)) await realClick(b, true);
     }
     return list;
   }
@@ -526,10 +543,14 @@
   async function readDrops() {
     let n = 0;
     for (const b of document.querySelectorAll(DROPS)) {
-      if (own(b) || !shown(b) || b.disabled || dropOptions.has(b) || n++ > 40) continue;
+      if (own(b) || !shown(b) || b.disabled || dropOptions.has(b)) continue;
+      const z = zohoDate(b);
+      if (z && zohoLists[z.part]) { dropOptions.set(b, zohoLists[z.part]); continue; }
+      if (n++ > 40) continue;
       const texts = [];
       await moreOptions(await openDrop(b), '', texts);
-      dropOptions.set(b, texts.filter(t => !/^select one$/i.test(t)));
+      dropOptions.set(b, texts.filter(t => !UNCHOSEN.test(t)));
+      if (z && dropOptions.get(b).length) zohoLists[z.part] = dropOptions.get(b);
       await closeLists(b);
     }
   }
@@ -548,8 +569,9 @@
     list[i].scrollIntoView({ block: 'nearest' });
     ownClick = true; list[i].click(); ownClick = false;
     await wait(300);
+    if (EXT && b.matches(ZOHO_DROP) && UNCHOSEN.test(clean(b.textContent)) && list[i].isConnected && shown(list[i])) { await realClick(list[i], true); await wait(300); }
     await closeLists(b);
-    const ok = same(core(b.textContent), core(name || v)) || !/^select one$/i.test(clean(b.textContent));
+    const ok = same(core(b.textContent), core(name || v)) || !UNCHOSEN.test(clean(b.textContent));
     if (!ok) tell('clicked, not taken');
     return ok;
   }
@@ -668,10 +690,17 @@
       if (own(b) || !shown(b) || b.disabled) continue;
       const key = 'd' + n++;
       const now = clean(b.textContent);
-      const f = { key, type: 'select', drop: true, label: labelOf(b).replace(/\s*(select one|required)\s*/gi, ' ').trim(), required: b.getAttribute('aria-required') === 'true' || /required/i.test(b.getAttribute('aria-label') || ''),
-        value: /^select one$/i.test(now) ? '' : now, options: (dropOptions.get(b) || []).slice(0, 260) };
+      const z = zohoDate(b);
+      const f = { key, type: 'select', drop: true, label: z ? `${z.name}: ${z.side} (${z.part})` : labelOf(b).replace(/\s*(select one|required)\s*/gi, ' ').trim(), required: b.getAttribute('aria-required') === 'true' || /required/i.test(b.getAttribute('aria-label') || ''),
+        value: UNCHOSEN.test(now) ? '' : now, options: (dropOptions.get(b) || []).slice(0, 260) };
       const sec = sectionOf(b); if (sec) f.section = sec;
       fields.push(f); byKey[key] = [b];
+    }
+    // Zoho's entries: every box in the order it is on the page, so each entry's dates sit with its
+    // other boxes (the entries aren't numbered; their order is what tells them apart).
+    if (document.querySelector(ZOHO_DROP)) {
+      const at = f => (byKey[f.key] || [])[0];
+      fields.sort((a, b) => { const x = at(a), y = at(b); return !x || !y || x === y || !x.compareDocumentPosition ? 0 : x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1; });
     }
     fields = fields.slice(0, 160);
     collectAdders(n);

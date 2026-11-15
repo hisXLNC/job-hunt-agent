@@ -941,6 +941,12 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.86.1
+
+- Zoho Recruit dates ("Duration" / "Work Duration" in an entry): `rec-month-range-component` holds four `lyte-dropdown`s (ids `<field>_<n>_from_month`, `_from_year`, `_to_month`, `_to_year`), each a `div[role=combobox][aria-haspopup=listbox][aria-controls=cxdby-<id>]` whose `lyte-drop-item[role=option]`s are in `lyte-drop-body#cxdby-<id>`. They join `DROPS` (`ZOHO_DROP`) and go through `readDrops`/`fillDrop` as Workday's do; labelled "Work Duration: from (month)" etc. (`zohoDate`); the month list and the year list are read once each (`zohoLists`); a real click follows when a script's doesn't open the list or take the option. On such a page `fields` is sorted into page order so an entry's dates sit with its other boxes (Zoho's entries aren't numbered). `UNCHOSEN` = "Select One" / "Month" / "Year". fill.rs `personal_in`: a "duration" box in an entry is never banked. Mock: `tools/ext_test/zoho.html` has one such range; the `zoho` case checks it. Untested on the real site (the `to_*` ids are assumed from `from_month`; position is the fallback).
+- Zoho skills: 2.85.2 confirmed working by the user's report (all "click").
+- Progress bars: the small inline bar (`.spin`, `tickBars`) now takes its share from the matching row of "what Job Hunt is doing" (`barActivity`: by kind via `BAR_RUNS`, `<kind>:<job>` on a job page, or the row's label in the text beside the bar), and is striped like that row's when it's a guess (`.spin:not(.real)`).
+
 ## 2.86.0
 
 - Company names are links everywhere a list shows one: `coName(company)` in app.js (a span with `data-act="companyJobs"`, used by `coCell` and `coLocLine`) opens All jobs filtered to that company, as the job page's name already did. A span, not an `<a>`: some rows are themselves links or labels.

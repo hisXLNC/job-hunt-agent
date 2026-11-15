@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.86.1] - 2026-11-15
+
+Zoho Recruit dates, and progress bars that agree.
+
+### Changes
+
+- On Zoho Recruit forms, Job Hunt now fills the start and end month and year of each school and job.
+- The small progress bar on a page and the one in the panel at the bottom left now look the same and show the same progress.
+
 ## [2.86.0] - 2026-11-15
 
 Click an employer to see all its postings.
@@ -2367,6 +2376,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.86.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.86.1
 [2.86.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.86.0
 [2.85.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.2
 [2.85.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.85.1

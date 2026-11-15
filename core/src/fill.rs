@@ -100,6 +100,10 @@ fn personal_in(label: &str, section: &str, kind: &str) -> bool {
     if kind == "date" && (in_entry || s.is_empty()) {
         return true;
     }
+    // A month or a year chosen from a list in an entry (Zoho's "Work Duration: from (month)") is a date too.
+    if in_entry && label.to_lowercase().contains("duration") {
+        return true;
+    }
     // Every box in a numbered entry ("Languages 2", "Education 1") is that entry's own: a saved
     // answer would put the same language, level or school in each of them.
     if in_entry && (s.contains("language") || s.trim_end().ends_with(|c: char| c.is_ascii_digit())) {

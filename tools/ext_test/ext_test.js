@@ -62,6 +62,7 @@ function answers(fields, name) {
     if (f.type === 'add') { if (/certif/i.test(sec)) values[f.key] = String(Math.max(0, 2 - (f.entries || 0))); else if (/language/i.test(sec)) values[f.key] = String(Math.max(0, 3 - (f.entries || 0))); }
     else if (f.type === 'file') { if (/cover|letter/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - Cover letter.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 letter').toString('base64') }; else if (/resume|cv/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - CV.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 test').toString('base64') }; }
     else if (f.type === 'skills') values[f.key] = SKILLS;
+    else if (/^Work Duration: /.test(f.label)) values[f.key] = { 'from (month)': 'March', 'from (year)': '2019', 'to (month)': 'June', 'to (year)': '2023' }[f.label.replace('Work Duration: ', '')] || '';
     else if (f.type === 'prompt') values[f.key] = /school|university/i.test(f.label) ? 'American University of Kuwait' : /certif/i.test(f.label) ? (nth === 1 ? 'PMP' : 'PMI-CPMAI') : 'Computer Science';
     else if (/^language$/i.test(f.label)) values[f.key] = LANGS[nth - 1] || '';
     else if (/comprehension/i.test(f.label)) values[f.key] = nth === 3 ? 'Beginner' : 'Fluent';
@@ -407,11 +408,12 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     await sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, url.split('?')[0]);
     let s = '';
     for (let i = 0; i < 240; i++) { await page.waitForTimeout(500); s = await page.evaluate(() => document.querySelector('[data-jobhunt-panel]')?.shadowRoot.querySelector('.s')?.textContent || ''); if (/^Filled \d+/.test(s) || /Couldn't|can't find|No answers|tripped/.test(s)) break; }
-    const got = await page.evaluate(() => ({ skills: window.mock.skills(), enters: window.mock.enters, submits: window.mock.submits, log: window.mock.log }));
+    const got = await page.evaluate(() => ({ skills: window.mock.skills(), dates: window.mock.dates(), enters: window.mock.enters, submits: window.mock.submits, log: window.mock.log }));
     if (process.env.TRACE) console.log('        ' + got.log.join(' | '));
     const problems = [], wanted = ['Python', 'Project Management', 'SQL', 'Vendor Management', 'Payments'];
     if (JSON.stringify(got.skills) !== JSON.stringify(wanted)) problems.push(`the skills are ${JSON.stringify(got.skills)}, not ${JSON.stringify(wanted)}`);
     if (got.submits) problems.push('the form was sent');
+    if (got.dates.join() !== 'March,2019,June,2023') problems.push(`the entry's dates are ${JSON.stringify(got.dates)}, not March 2019 to June 2023`);
     if (got.enters) problems.push(`Enter was pressed ${got.enters} times in the skills box (it adds the first suggestion, whatever it is)`);
     if (!/Underwater Basket Weaving/.test(s)) problems.push("the skill the site doesn't have wasn't reported");
     if (/add these yourself\): [^.]*(Python|SQL|Project Management|Vendor Management)/.test(s) || /didn't show it/.test(s)) problems.push('a skill that was chosen is reported as not taken or unsure');
