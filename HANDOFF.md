@@ -1148,3 +1148,9 @@ The ten screen changes the user approved ("do them all"):
 - Job page Why box: each must-have has "I meet this" (`mustMet` action ->
   `POST /api/jobs/<id>/must-met {flag}`), which drops that "Must have:" red flag and logs
   `must-met`; the Stretch tag goes with it. Postings scored before keep their flags until then.
+- Form filler (same release): `personal_in` now keeps every box in a work-history section
+  (experience/employment/work history…) out of the saved-answer bank, both ways; KEYS gained
+  "occupation", "occupation title", "designation"… User report: strategizeit.zohorecruit.com put a
+  banked "Occupation / Title: Founder & Managing Partner" into all seven experience rows.
+- Test fix: `api::tests::settings_flow` looked for "k1" anywhere in the settings JSON; a random token
+  could contain it (the flaky failures). It now uses "adzuna-secret-k1".

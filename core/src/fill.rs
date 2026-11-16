@@ -100,6 +100,11 @@ fn personal_in(label: &str, section: &str, kind: &str) -> bool {
     if kind == "date" && (in_entry || s.is_empty()) {
         return true;
     }
+    // Every box in a job of your work history is that job's own, whatever it's called (Zoho's
+    // "Occupation / Title"): a saved answer would put one job's title in every entry.
+    if ["experience", "employment", "work history", "work details", "job history", "positions held"].iter().any(|w| s.contains(w)) {
+        return true;
+    }
     // A month or a year chosen from a list in an entry (Zoho's "Work Duration: from (month)") is a date too.
     if in_entry && label.to_lowercase().contains("duration") {
         return true;
@@ -123,6 +128,7 @@ fn personal_in(label: &str, section: &str, kind: &str) -> bool {
 /// come from your CV each time.
 fn work_history(label: &str) -> bool {
     const KEYS: &[&str] = &["job title", "title", "position", "position title", "role", "role title", "company", "company name",
+        "occupation", "occupation title", "designation", "position held", "job role", "summary",
         "employer", "employer name", "organization", "organisation", "role description", "description", "job description",
         "responsibilities", "duties", "from", "to", "start date", "end date", "dates", "location", "city", "school",
         "school name", "school or university", "university", "college", "institution", "degree", "field of study", "major",
@@ -1372,6 +1378,10 @@ mod tests {
         let list = vec![json!({ "q": "City", "key": "city", "a": "Toronto" })];
         assert_eq!(from_bank(&list, &json!({ "label": "City", "type": "text", "section": "Address" })).as_deref(), Some("Toronto"));
         assert_eq!(from_bank(&list, &json!({ "label": "City", "type": "text", "section": "Work Experience 1" })), None);
+        // Zoho: an old answer to "Occupation / Title" put one job's title in all seven entries.
+        let list = vec![json!({ "q": "Occupation / Title", "key": "occupation title", "a": "Founder & Managing Partner" })];
+        assert_eq!(from_bank(&list, &json!({ "label": "Occupation / Title", "type": "text", "section": "Experience Details Clear Collapse" })), None);
+        assert_eq!(from_bank(&list, &json!({ "label": "Occupation / Title", "type": "text", "section": "" })), None);
     }
 
     #[test]

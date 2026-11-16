@@ -2559,11 +2559,11 @@ mod tests {
         assert_eq!(r.status, 400);
         assert_eq!(call(&agent, &host, "POST", "/api/settings/google-connect", Value::Null).0, 400);
 
-        call(&agent, &host, "POST", "/api/settings/keys", json!({"adzuna_id": "id1", "adzuna_key": "k1"}));
+        call(&agent, &host, "POST", "/api/settings/keys", json!({"adzuna_id": "id1", "adzuna_key": "adzuna-secret-k1"}));
         // A pasted key the service refuses isn't saved, and the one that worked stays.
         let (code, body) = call(&agent, &host, "POST", "/api/settings/keys", json!({"adzuna_key": "bad-key", "jooble_key": "j1"}));
         assert!(code >= 400 && body.to_string().contains("wasn't saved"), "{code} {body}");
-        assert_eq!((agent.secret("adzuna.key").as_str(), agent.secret("jooble.key").as_str()), ("k1", ""));
+        assert_eq!((agent.secret("adzuna.key").as_str(), agent.secret("jooble.key").as_str()), ("adzuna-secret-k1", ""));
         assert_eq!(call(&agent, &host, "POST", "/api/settings/claude", json!({"path": "/no/such/claude"})).0, 400);
         call(&agent, &host, "POST", "/api/settings/claude", json!({"engine": "api", "model": "claude-opus-5-5"}));
         let st0 = call(&agent, &host, "GET", "/api/settings", Value::Null).1;
@@ -2576,7 +2576,7 @@ mod tests {
         assert_eq!((st2["claude"]["engine"].as_str(), st2["claude"]["model"].as_str()), (Some("api"), Some("claude-opus-5-5")));
         let (_, st) = call(&agent, &host, "GET", "/api/settings", Value::Null);
         assert_eq!((st["adzuna"]["id"].as_str(), st["adzuna"]["key"].as_bool()), (Some("id1"), Some(true)));
-        assert!(serde_json::to_string(&st).unwrap().find("k1").is_none(), "secrets are never sent to the window");
+        assert!(serde_json::to_string(&st).unwrap().find("adzuna-secret-k1").is_none(), "secrets are never sent to the window");
 
         call(&agent, &host, "POST", "/api/settings/app", json!({"autostart": true, "close": "exit"}));
         assert!(*fh.auto.lock().unwrap());

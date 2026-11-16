@@ -6,12 +6,13 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.96.1] - 2026-11-16
 
-A certification the posting accepts as an alternative isn't a gap.
+Stretch for a certification you don't need; one job title in every work entry.
 
 ### Changes
 
 - Fit scoring: when a posting accepts any of several certifications ("PMP or Scrum Master"), holding one meets it, and one it only prefers isn't counted as required.
 - On a job's page, each requirement it says you lack has an "I meet this" button: it stops counting as a gap and the role is no longer marked a stretch.
+- Form filling: a job title you typed on one form ("Occupation / Title") is no longer reused in every job of the work history on the next form; each entry gets its own title from your CV.
 
 ## [2.96.0] - 2026-11-16
 
