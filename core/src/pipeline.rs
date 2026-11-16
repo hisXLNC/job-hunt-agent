@@ -1265,8 +1265,10 @@ impl Agent {
     pub fn notices(&self) -> Vec<Value> {
         let mut all: Vec<Value> = serde_json::from_str(&self.secret("notices.log")).unwrap_or_default();
         // Kept before notices had a link: worked out once, then saved with it.
-        if all.iter().any(|n| n.get("link").is_none()) {
-            for n in all.iter_mut().filter(|n| n.get("link").is_none()) {
+        let again = self.secret("notices.relinked") != "2";
+        if again || all.iter().any(|n| n.get("link").is_none()) {
+            let _ = self.db().set("notices.relinked", "2");
+            for n in all.iter_mut().filter(|n| again || n.get("link").is_none()) {
                 n["link"] = json!(self.notice_link(n["title"].as_str().unwrap_or(""), n["body"].as_str().unwrap_or("")));
             }
             let _ = self.db().set("notices.log", &json!(all).to_string());
@@ -1281,6 +1283,18 @@ impl Agent {
         // The job it names ("<title> at <company>"), the newest first; else the company in its
         // heading, for an application of yours there.
         let jobs = self.db().jobs(None, 2000).unwrap_or_default();
+        // New postings at a company you follow: the one posting, or all of that company's.
+        let opening = title.strip_prefix("New opening at ").or_else(|| title.split_once(" new openings at ").map(|x| x.1));
+        if let Some(company) = opening.map(str::trim).filter(|c| !c.is_empty()) {
+            let key = crate::db::company_key(company);
+            let first = body.split(['.', ';']).next().unwrap_or("").trim().to_lowercase();
+            if title.starts_with("New opening at ") {
+                if let Some(j) = jobs.iter().find(|j| crate::db::company_key(&j.company) == key && j.title.trim().to_lowercase() == first) {
+                    return format!("#job/{}", url::form_urlencoded::byte_serialize(j.id.as_bytes()).collect::<String>());
+                }
+            }
+            return format!("#company/{}", url::form_urlencoded::byte_serialize(company.as_bytes()).collect::<String>());
+        }
         let named = jobs.iter().find(|j| !j.title.is_empty() && !j.company.is_empty() && text.contains(&format!("{} at {}", j.title, j.company).to_lowercase()));
         let tracked = || jobs.iter().filter(|j| ["ready", "approved", "applied", "interviewing", "offer", "rejected"].contains(&j.status.as_str()))
             .find(|j| j.company.chars().count() >= 3 && title.to_lowercase().contains(&j.company.to_lowercase()));
@@ -3408,17 +3422,22 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Jobs found on a known employer's Workday site before it had a name: named now
     /// ("canadiantirecorporation" is Canadian Tire). Once.
     pub fn name_workday_jobs(&self) {
-        if self.secret("workday.named") == "1" {
+        if self.secret("boards.named") == "1" {
             return;
         }
         let db = self.db();
-        for (name, _, link) in CANADA_EMPLOYERS.iter().filter(|e| e.1 == "workday") {
-            let Some(b) = crate::sources::workday_board(link) else { continue };
-            for j in db.jobs_light(100_000, false).unwrap_or_default().into_iter().filter(|j| j.source == "workday" && j.company.eq_ignore_ascii_case(&b.tenant) && j.id.starts_with(&format!("workday:{}-", b.tenant))) {
+        let all = db.jobs_light(100_000, false).unwrap_or_default();
+        for (name, kind, slug) in CANADA_EMPLOYERS {
+            // The name the board's postings went by, and how their ids start.
+            let (code, prefix) = match *kind {
+                "workday" => match crate::sources::workday_board(slug) { Some(b) => (b.tenant.clone(), format!("workday:{}-", b.tenant)), None => continue },
+                _ => (slug.to_string(), format!("{kind}:{slug}-")),
+            };
+            for j in all.iter().filter(|j| j.company.eq_ignore_ascii_case(&code) && j.id.to_lowercase().starts_with(&prefix.to_lowercase())) {
                 let _ = db.rename_company(&j.id, &j.title, name);
             }
         }
-        let _ = db.set("workday.named", "1");
+        let _ = db.set("boards.named", "1");
     }
 
     /// In Canada, the careers sites of the big employers, each added once: the steadiest

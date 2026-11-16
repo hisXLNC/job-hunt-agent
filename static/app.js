@@ -757,6 +757,8 @@ async function showRoute() {
     else if (name === 'applications') { if (!overview || Date.now() - overviewAt > 1500) await refreshOverview(); await showPipeline(arg); }
     else if (name === 'overview') await showOverview(arg);
     else if (name === 'leads') { if (!overview) await refreshOverview(); await showLeads(); }
+    // A company's postings (from a notice): All jobs, showing that company only.
+    else if (name === 'company') { try { localStorage.setItem('jh.allFilters', JSON.stringify({ q: decodeURIComponent(arg || '').replace(/\+/g, ' '), stage: '', fit: '0', source: '', age: '', emp: '', pay: false, sort: '7' })); } catch (e) {} location.replace('#applications/all'); return; }
     else if (name === 'job') await showJob(arg);
     // The old Review page: the Queue's tailored applications, where each opens with its CV and letter.
     else if (name === 'review') { location.replace('#overview/approve'); return; }

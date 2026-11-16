@@ -1185,3 +1185,12 @@ The ten screen changes the user approved ("do them all"):
   "Tailor anyway" link was first-child ghost and got clipped to "or anyway". It now sizes itself.
 - All jobs search (`applyAllFilters` in app-pipeline.js): each word must start a word of the row's
   text (`(^|[^\p{L}\p{N}])word`, unicode). Clicking Artech brought in "Martech Platform Engineer".
+
+## 2.96.4 (new-opening notices open the posting; boards named after the employer)
+
+- `notice_link`: "New opening at X" opens that posting (matched by company key and the title in the
+  body), "N new openings at X" opens `#company/X`, a new route that sets the All jobs filter to the
+  company. Notices kept earlier get their links worked out again once (`notices.relinked` = 2).
+- `sources::board_name(kind, slug)` names Greenhouse (fallback), Lever and Ashby postings after the
+  employer in `CANADA_EMPLOYERS` ("wealthsimple" -> "Wealthsimple"); `name_workday_jobs` now renames
+  stored jobs from every listed board, once (`boards.named`).

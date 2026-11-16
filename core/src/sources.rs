@@ -411,7 +411,7 @@ pub fn parse_greenhouse(token: &str, body: &Value) -> Vec<Posting> {
         out.push(Posting {
             source: "greenhouse".into(),
             external_id: format!("{token}-{}", id_str(j)),
-            company: if company.is_empty() { token.to_string() } else { company },
+            company: if company.is_empty() { board_name("greenhouse", token) } else { company },
             title: s(j, "title").trim().to_string(),
             remote: is_remote(&[&loc]),
             location: loc,
@@ -448,7 +448,7 @@ pub fn parse_lever(company: &str, body: &Value) -> Vec<Posting> {
             apply_url: None,
             source: "lever".into(),
             external_id: format!("{company}-{}", id_str(j)),
-            company: company.to_string(),
+            company: board_name("lever", company),
             title: s(j, "text").trim().to_string(),
             remote: s(j, "workplaceType") == "remote" || is_remote(&[&loc]),
             location: loc,
@@ -480,7 +480,7 @@ pub fn parse_ashby(board: &str, body: &Value) -> Vec<Posting> {
             apply_url: None,
             source: "ashby".into(),
             external_id: format!("{board}-{}", id_str(j)),
-            company: board.to_string(),
+            company: board_name("ashby", board),
             title: s(j, "title").trim().to_string(),
             remote: j.get("isRemote") == Some(&Value::Bool(true)) || s(j, "workplaceType") == "Remote" || is_remote(&[&loc]),
             location: loc,
@@ -559,6 +559,12 @@ pub fn parse_workday_list(body: &Value) -> (Vec<(String, String, String)>, u64) 
         .filter(|(t, p, _)| !t.is_empty() && !p.is_empty())
         .collect();
     (list, body.get("total").and_then(|x| x.as_u64()).unwrap_or(0))
+}
+
+/// A company job board's employer by name ("Wealthsimple" for Ashby's "wealthsimple"): from Job
+/// Hunt's list of employers when it's one of them, else the board's own name.
+pub fn board_name(kind: &str, slug: &str) -> String {
+    crate::pipeline::CANADA_EMPLOYERS.iter().find(|e| e.1 == kind && e.2.eq_ignore_ascii_case(slug)).map(|e| e.0.to_string()).unwrap_or_else(|| slug.to_string())
 }
 
 /// The employer behind a Workday site, by name ("Canadian Tire", not "canadiantirecorporation"):

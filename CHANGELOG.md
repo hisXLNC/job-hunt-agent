@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.96.4] - 2026-11-16
+
+Notifications open the posting.
+
+### Changes
+
+- A "New opening at" notification opens that posting; one about several openings opens all of that company's postings.
+- Postings from Wealthsimple, EQ Bank and the other added employers show the employer's name, not the job board's lowercase code.
+
 ## [2.96.3] - 2026-11-16
 
 A company's postings are only its own; employers by name.
@@ -2554,6 +2563,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.96.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.4
 [2.96.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.3
 [2.96.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.2
 [2.96.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.1

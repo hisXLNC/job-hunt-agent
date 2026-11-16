@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.96.4",
+    "date": "2026-11-16",
+    "title": "Notifications open the posting",
+    "changes": [
+      "A \"New opening at\" notification opens that posting; one about several openings opens all of that company's postings.",
+      "Postings from Wealthsimple, EQ Bank and the other added employers show the employer's name, not the job board's lowercase code."
+    ]
+  },
+  {
     "version": "2.96.3",
     "date": "2026-11-16",
     "title": "A company's postings are only its own; employers by name",

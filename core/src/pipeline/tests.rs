@@ -1040,6 +1040,16 @@ fn the_brief_for_another_assistant_says_what_is_left() {
 }
 
 #[test]
+fn a_new_opening_notice_opens_the_posting_or_the_companys_postings() {
+    let s = setup();
+    s.agent.db().insert_job(&crate::db::Job { id: "ashby:wealthsimple-1".into(), source: "ashby".into(), company: "Wealthsimple".into(),
+        title: "Senior Data Scientist, People Analytics".into(), status: "skipped".into(), found_at: now(), ..Default::default() }).unwrap();
+    assert_eq!(s.agent.notice_link("New opening at Wealthsimple", "Senior Data Scientist, People Analytics. Click the company's name in Job Hunt to see them all."), "#job/ashby%3Awealthsimple-1");
+    assert_eq!(s.agent.notice_link("2 new openings at wealthsimple", "Team Lead; Senior Executive Assistant. Click the company's name in Job Hunt to see them all."), "#company/wealthsimple");
+    assert_eq!(crate::sources::board_name("ashby", "wealthsimple"), "Wealthsimple");
+}
+
+#[test]
 fn the_assistant_sees_any_job_the_question_names() {
     let s = setup();
     s.agent.db().insert_job(&crate::db::Job { id: "w:maarut".into(), source: "t".into(), company: "Maarut".into(), title: "Technical Project Manager".into(),
