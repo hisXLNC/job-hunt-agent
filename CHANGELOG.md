@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.92.1] - 2026-11-16
+
+Slimmer phone bar, keywords always there to tick.
+
+### Changes
+
+- On a phone the floating bar on a job's page is about half as tall: the buttons share one line and its sentence no longer rides along.
+- The list of posting keywords your tailored CV lacks, to tick the ones you really have, now shows whenever any are missing (under CV & letter), not only when the CV covers under 60%.
+
 ## [2.92.0] - 2026-11-16
 
 A bell for notifications, and a tidier job heading.
@@ -2473,6 +2482,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.92.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.92.1
 [2.92.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.92.0
 [2.91.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.91.0
 [2.90.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.4

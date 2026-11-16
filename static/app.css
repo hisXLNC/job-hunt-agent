@@ -2409,3 +2409,17 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
   .bell.desk { display: none; }
   .bell.phone { display: inline-grid; width: 36px; height: 36px; margin-left: 6px; }
 }
+
+/* ---- On a phone the job's fixed next-step bar is slim: the buttons on one line, the smaller actions
+   on a second that slides; its sentence stays up in the page, not on the bar. ---- */
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  #main .card.next-step.actions { padding: 8px 10px 4px; gap: 2px; border-radius: 14px; }
+  #main:has(.card.next-step.actions) > .page { padding-bottom: 130px; }
+  .card.next-step.actions .next-main p { display: none; }
+  .card.next-step.actions .next-main .row { flex-wrap: nowrap; gap: 6px; }
+  .card.next-step.actions .next-main .btn { min-height: 40px; padding: 6px 10px; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card.next-step.actions .next-main .btn.primary { flex: 1 1 auto; min-width: 0; }
+  .card.next-step.actions .next-main .btn:not(.primary) { flex: 0 1 auto; }
+  .card.next-step.actions .next-more { margin: 4px -4px 0; padding-top: 2px; }
+  .card.next-step.actions .next-more .btn { min-height: 32px; padding: 2px 8px; font-size: 13px; }
+}

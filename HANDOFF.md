@@ -941,6 +941,13 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.92.1
+
+- Phones: the fixed `.card.next-step.actions` bar is slim (its sentence hidden, buttons on one nowrap row,
+  `.next-more` a small sliding row); page bottom padding 130px.
+- `gapsHtml` (the tick-list of posting keywords the tailored CV lacks) shows whenever there are gaps, not
+  only under `THIN_COVER`; amber only when thin.
+
 ## 2.92.0
 
 - Job page header: `.head.job-head` = `.job-id` (avatar/logo 64px with `ratingTag` under it) + the title

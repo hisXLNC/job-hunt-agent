@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.92.1",
+    "date": "2026-11-16",
+    "title": "Slimmer phone bar, keywords always there to tick",
+    "changes": [
+      "On a phone the floating bar on a job's page is about half as tall: the buttons share one line and its sentence no longer rides along.",
+      "The list of posting keywords your tailored CV lacks, to tick the ones you really have, now shows whenever any are missing (under CV & letter), not only when the CV covers under 60%."
+    ]
+  },
+  {
     "version": "2.92.0",
     "date": "2026-11-16",
     "title": "A bell for notifications, and a tidier job heading",
