@@ -945,6 +945,7 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
 
 - Applying looks for the recruiter: `after_stage("applied")` runs `recruiters::on_applied` as before; when that had nobody to write to (`Ok(None)`), `Agent::find_after_applying` (people.rs) runs under the same `contact:<id>` claim: skipped for government hiring, a job with someone on it, a company already messaged, or a skipped note; otherwise `find_recruiter`, then a notice "Found <name> at <company>" or "No recruiter found at <company>". Other errors (Claude's limit) are only logged (`contact:error`), so the Queue's button remains.
 - Email in the top bar: `#dGoogle` / `#mGoogle` (class `mail-chip`, no dot) get `data-act="run" data-task="inbox"` when Gmail is connected, else link to connecting it (hidden when Google was skipped). The Queue heading's `mail-btn` is gone.
+- iPhone fill by Shortcut: `/m/fill.js?k=<key>&s=1` (`phone_script(.., shortcut)`) is for Shortcuts' Get Contents of URL → Run JavaScript on Web Page: base is the saved `phone.url` (no `currentScript`), wrapped in try/catch, ends with `completion(...)`. The script is fetched by Shortcuts, not by the page, so a page's script-src CSP can't block it (its connect-src still can). Steps in `phoneCard`; action `copyFillLink`. NOT tried on a real iPhone.
 - Phone top bar: `.mtop a { min-height: 44px }` applied to the name and version links too, pushing them apart; they're `min-height: 0` now, logo 28px.
 
 ## 2.88.0

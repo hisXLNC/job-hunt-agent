@@ -595,6 +595,11 @@ async function act(el) {
   if (a === 'insights') {
     return busy(async () => { await api('/api/results/insights', { method: 'POST' }); route(); setTimeout(() => { if (location.hash === '#results') route(); }, 30000); }, 'Claude is looking at your results. This takes a minute.');
   }
+  if (a === 'copyFillLink') {
+    const st = await api('/api/settings');
+    try { await navigator.clipboard.writeText(`${st.phone_url}/m/fill.js?k=${encodeURIComponent(st.ext_key)}&s=1`); toast('Copied. Send it to your phone and paste it into the shortcut\'s Get Contents of URL.'); } catch (e) { toast('Couldn\'t copy.', true); }
+    return;
+  }
   if (a === 'copyPhone') {
     const st = await api('/api/settings');
     try { await navigator.clipboard.writeText(phoneBookmark(st)); toast('Copied. Send it to your phone and paste it as a bookmark\'s address.'); } catch (e) { toast('Couldn\'t copy.', true); }

@@ -82,7 +82,7 @@ pub fn start(agent: Arc<Agent>) {
                 let mut reply = if req.method == "OPTIONS" {
                     Resp { status: 204, ctype: "text/plain".into(), body: vec![], headers: vec![] }
                 } else if req.method == "GET" && req.path == "/m/fill.js" {
-                    phone_script(&agent, &sent)
+                    phone_script(&agent, &sent, req.query.get("s").is_some_and(|s| s == "1"))
                 } else if req.path == "/m/add" {
                     // A job shared from your phone (the LinkedIn app's Share → Send to Job Hunt): the
                     // link as ?u=, or the shared text as the body.
@@ -107,13 +107,28 @@ pub fn start(agent: Arc<Agent>) {
 
 /// The form filler for your phone's bookmark (`/m/fill.js?k=…`): the extension's script, talking to
 /// Job Hunt at the address it was loaded from (your PC's Tailscale name), with the key.
-fn phone_script(agent: &Agent, sent: &str) -> Resp {
+///
+/// `shortcut` (`&s=1`): for an iPhone Shortcut instead (Safari's Share button → Fill with Job Hunt).
+/// Shortcuts fetches this text itself and runs it on the page ("Run JavaScript on Web Page"), so a
+/// site that blocks scripts from elsewhere can't stop it loading; there is no script tag to read the
+/// address from, so the saved one is written in, and it ends by calling Shortcuts' `completion`.
+fn phone_script(agent: &Agent, sent: &str, shortcut: bool) -> Resp {
     let want = key(agent);
     if sent.len() != want.len() || !sent.bytes().zip(want.bytes()).fold(true, |ok, (a, b)| ok & (a == b)) {
-        let body = "alert('Job Hunt: this bookmark has an old key. Copy the bookmark again from Job Hunt on your PC: Settings, Browser extension, Fill forms on your phone.');";
+        let body = if shortcut { "completion('Job Hunt: the key in this shortcut is old. Copy the link again from Job Hunt on your PC (Settings, Browser extension, Fill forms on your phone) and paste it into the shortcut.');" }
+            else { "alert('Job Hunt: this bookmark has an old key. Copy the bookmark again from Job Hunt on your PC: Settings, Browser extension, Fill forms on your phone.');" };
         return Resp { status: 200, ctype: "application/javascript; charset=utf-8".into(), body: body.as_bytes().to_vec(), headers: vec![("Cache-Control".into(), "no-store".into())] };
     }
     let _ = agent.db().set("phone.last", &crate::util::now());
+    if shortcut {
+        let script = format!(
+            "try {{\nif (!window.__jobhunt) {{\nwindow.__jobhuntRemote = {{ base: {}, key: {} }};\n{}\n}} else window.__jobhunt.start();\ncompletion('Job Hunt is on the page.');\n}} catch (e) {{ completion('Job Hunt could not start on this page: ' + e.message); }}\n",
+            json!(agent.secret("phone.url").trim_end_matches('/')),
+            json!(want),
+            crate::fill::extension_script()
+        );
+        return Resp { status: 200, ctype: "application/javascript; charset=utf-8".into(), body: script.into_bytes(), headers: vec![("Cache-Control".into(), "no-store".into())] };
+    }
     let script = format!(
         "if (!window.__jobhunt) {{\nwindow.__jobhuntRemote = {{ base: new URL(document.currentScript.src).origin, key: {} }};\n{}\n}} else window.__jobhunt.start();\n",
         json!(want),
@@ -386,10 +401,16 @@ mod tests {
         assert_eq!(handle(&s.agent, "GET", "/ext/ping", "wrong", b"").status, 401);
         assert_eq!(handle(&s.agent, "GET", "/ext/ping", &k, b"").status, 200);
         // The phone's script: only with the key, and set up to call back where it came from.
-        let js = String::from_utf8(phone_script(&s.agent, &k).body).unwrap();
+        let js = String::from_utf8(phone_script(&s.agent, &k, false).body).unwrap();
         assert!(js.contains("__jobhuntRemote") && js.contains(&k) && js.contains("window.__jobhunt"));
-        let bad = String::from_utf8(phone_script(&s.agent, "nope").body).unwrap();
+        let bad = String::from_utf8(phone_script(&s.agent, "nope", false).body).unwrap();
         assert!(bad.starts_with("alert(") && !bad.contains(&k));
+        // For an iPhone Shortcut: the saved address written in (no script tag to read it from), and it tells Shortcuts it's done.
+        s.agent.db().set("phone.url", "https://pc.tail.example/").unwrap();
+        let js = String::from_utf8(phone_script(&s.agent, &k, true).body).unwrap();
+        assert!(js.contains(r#"base: "https://pc.tail.example""#) && !js.contains("currentScript.src).origin, key") && js.trim_end().ends_with("}") && js.contains("completion('Job Hunt is on the page.')"));
+        let bad = String::from_utf8(phone_script(&s.agent, "nope", true).body).unwrap();
+        assert!(bad.starts_with("completion(") && !bad.contains(&k));
         // A job shared from the phone: only with the key, and only with a link in it.
         assert_eq!(phone_add(&s.agent, "nope", "https://www.linkedin.com/jobs/view/123456789").status, 401);
         assert_eq!(phone_add(&s.agent, &k, "Look at this job!").status, 400);

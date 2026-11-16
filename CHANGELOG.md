@@ -13,6 +13,7 @@ The recruiter, found when you apply.
 - When you mark a job applied and know nobody there, Job Hunt looks for the recruiter or hiring team by itself, writes the note, and sends you a notice saying who it found (or that it found nobody).
 - The envelope that checks your email is now in the bar at the top, on every page.
 - On a phone, the logo, name and version at the top line up again.
+- Filling forms on an iPhone: a new way that needs no bookmark. Make a shortcut once (Settings, Browser extension, Fill forms on your phone), then on any application form in Safari press Share, Fill with Job Hunt. It also works on sites that blocked the bookmark from loading.
 
 ## [2.88.0] - 2026-11-15
 

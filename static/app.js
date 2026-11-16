@@ -10,12 +10,22 @@ function phoneCard(st) {
   const url = st.phone_url || '';
   return `<section class="card" id="phoneCard"><header><h2>Fill forms on your phone</h2>${url ? `<span class="pill ${st.phone_last ? 'good' : ''}">${st.phone_last ? 'Used ' + esc(fmtWhen(st.phone_last)) : 'Ready'}</span>` : ''}</header>
     <p class="muted">Apply from your phone's browser and Job Hunt fills in the form, from this PC (it has to be on, with Job Hunt running). Your phone reaches it through Tailscale, so only your own devices can.</p>
-    ${url ? `<ol class="small steps-list">
+    ${url ? `<h3>From Safari's Share button (iPhone and iPad)</h3>
+      <p class="muted small">A shortcut you make once. After that: on an application form, <b>Share</b> → <b>Fill with Job Hunt</b>, and the Job Hunt panel appears on the page and fills it in. Nothing to install: Shortcuts comes with the iPhone.</p>
+      <ol class="small steps-list">
       <li>On your phone, turn on Tailscale.</li>
-      <li>Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself (a note or an email to yourself). Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.</li>
+      <li>Get this link onto your phone: <button class="btn sm" data-act="copyFillLink">Copy the link</button> and send it to yourself (a note or an email to yourself). It holds your key: keep it to yourself.</li>
+      <li>In the iPhone's <b>Settings</b> → <b>Apps</b> → <b>Shortcuts</b> → <b>Advanced</b>, turn on <b>Allow Running Scripts</b>.</li>
+      <li>In <b>Shortcuts</b>, press <b>+</b> and name it <b>Fill with Job Hunt</b>. Press the <b>ⓘ</b>, turn on <b>Show in Share Sheet</b>, and under what it receives leave only <b>Safari web pages</b> ticked.</li>
+      <li>Add the action <b>Get Contents of URL</b> and paste the link as its address.</li>
+      <li>Add the action <b>Run JavaScript on Web Page</b>. Its page is the <b>Shortcut Input</b>. Delete the sample script in its box, then tap the box and choose the variable <b>Contents of URL</b>, so that is the whole script.</li>
+      <li>On an application form in Safari: <b>Share</b> → <b>Fill with Job Hunt</b>. The first time, the iPhone asks whether the shortcut may run on that site: allow it.</li></ol>
+      <h3 style="margin-top:18px">Or a bookmark (any browser, Android too)</h3>
+      <ol class="small steps-list">
+      <li>Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself. Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.</li>
       <li>On the phone, bookmark any page, then edit the bookmark: name it <b>Job Hunt Fill</b> and paste what you copied as its address (URL).</li>
-      <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark (in Safari, open Bookmarks and tap it). The Job Hunt panel appears and fills in the form.</li></ol>
-      <p class="muted small">On the phone, Workday's skills are chosen as best Job Hunt can; tick any it missed. The bookmark holds your key: keep it to yourself. Address: <code>${esc(url)}</code> <button class="btn ghost sm" data-act="phoneReset">Change</button></p>
+      <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark (in Safari, open Bookmarks and tap it). A few sites block a bookmark from loading Job Hunt; the Share button's shortcut still works there.</li></ol>
+      <p class="muted small">On the phone, Workday's skills are chosen as best Job Hunt can; tick any it missed. This PC has to be on, with Job Hunt running. Address: <code>${esc(url)}</code> <button class="btn ghost sm" data-act="phoneReset">Change</button></p>
       <h3 style="margin-top:18px">Send jobs from the LinkedIn app</h3>
       <p class="muted small">Share a job from the LinkedIn app (or any app or browser) to Job Hunt: it's added and scored here, and you get a notice.</p>
       <ol class="small steps-list">
