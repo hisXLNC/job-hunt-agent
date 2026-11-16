@@ -524,7 +524,28 @@ function listHeads() {
       if (!was.children.length) was.hidden = true;
     }
   }
+  seatQueueBar();
   applyListSort();
+}
+/** The Queue's Sort by menu and its two filters sit on the first list's sort bar: the menu in place
+ *  of the bar's "Sort by", then the columns, then Shows pay and No red flags, all on one line. */
+function seatQueueBar() {
+  const box = document.querySelector('.page [data-queuebox]');
+  // The first list still showing (a filter can empty one, and its card steps aside).
+  const heads = [...document.querySelectorAll('.page .list-head')];
+  const head = heads.find(h => !h.closest('.qf-hide') && h.parentElement.querySelector(':scope > .jrow[data-job-row]:not(.qf-hide)')) || heads.find(h => h.contains(box)) || heads[0];
+  if (!box || !head || head.contains(box)) return;
+  const menu = document.querySelector('.page [data-queuef=sort]')?.closest('label'), word = head.querySelector(':scope > span');
+  if (menu && word) {
+    // The bar it leaves gets its "Sort by" back.
+    if (menu.classList.contains('list-sortby')) menu.insertAdjacentHTML('beforebegin', '<span>Sort by</span>');
+    menu.classList.add('list-sortby');
+    word.replaceWith(menu);
+  }
+  box.closest('.list-head')?.classList.remove('with-queuebar');
+  box.classList.add('inline');
+  head.classList.add('with-queuebar');
+  head.appendChild(box);
 }
 function applyListSort() {
   const col = listSort && LIST_COLS.find(c => c[0] === listSort.key);

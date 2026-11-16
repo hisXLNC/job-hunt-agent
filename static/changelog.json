@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.90.1",
+    "date": "2026-11-16",
+    "title": "Sort and filters on one line",
+    "changes": [
+      "The Queue's Sort by menu now sits on the sort bar itself, with Shows pay and No red flags on the same line.",
+      "Fixed: ticking Shows pay or No red flags could hide the sort bar."
+    ]
+  },
+  {
     "version": "2.90.0",
     "date": "2026-11-16",
     "title": "One status button, and a better phone",

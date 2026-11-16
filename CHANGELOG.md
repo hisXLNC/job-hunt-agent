@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.90.1] - 2026-11-16
+
+Sort and filters on one line.
+
+### Changes
+
+- The Queue's Sort by menu now sits on the sort bar itself, with Shows pay and No red flags on the same line.
+- Fixed: ticking Shows pay or No red flags could hide the sort bar.
+
 ## [2.90.0] - 2026-11-16
 
 One status button, and a better phone.
@@ -2419,6 +2428,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.90.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.1
 [2.90.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.0
 [2.89.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.89.0
 [2.88.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.88.0

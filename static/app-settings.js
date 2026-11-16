@@ -1082,7 +1082,8 @@ function applyPickView(box, saved) {
   if (!list) return;
   const key = { now: 'now', fit: 'score', reach: 'reach', new: 'age', pay: 'pay', rating: 'rating' }[v.sort] || 'now';
   // Expired postings last, whatever the order.
-  const rows = [...list.children].sort((a, b) => (a.dataset.expired === '1') - (b.dataset.expired === '1') || Number(b.dataset[key]) - Number(a.dataset[key]) || Number(b.dataset.score) - Number(a.dataset.score));
+  // The rows only: the list's sort bar is not one of them, and stays on top.
+  const rows = [...list.children].filter(c => c.matches('[data-pick], .jrow') || c.querySelector('[data-pick]')).sort((a, b) => (a.dataset.expired === '1') - (b.dataset.expired === '1') || Number(b.dataset[key]) - Number(a.dataset[key]) || Number(b.dataset.score) - Number(a.dataset.score));
   let shown = 0;
   for (const r of rows) {
     // Fit: "70" is 70 or more, "-70" under 70. Found: "7" within 7 days, "-14" over 14 days ago.
@@ -1121,10 +1122,8 @@ function restorePickViews() {
 function applyQueueView(restore) {
   const box = document.querySelector('[data-queuebox]');
   if (!box) return;
-  const controls = [...box.querySelectorAll('[data-queuef]')];
-  // On the first group's heading line, to its right: no row of its own.
-  const first = document.querySelector('.page [data-act=approveAll], .page [data-act=pickAll]')?.closest('.todo-group')?.querySelector('.group-h');
-  if (first && !first.contains(box)) { first.appendChild(box); box.classList.add('inline'); first.classList.add('with-filters'); }
+  if (typeof seatQueueBar === 'function') seatQueueBar();
+  const controls = [...document.querySelectorAll('.page [data-queuef]')];
   if (restore) {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem('jh.queueF') || '{}') || {}; } catch (e) {}
@@ -1150,6 +1149,9 @@ function applyQueueView(restore) {
   }
   // A group with nothing left to show steps aside.
   document.querySelectorAll('.page .todo-group').forEach(g => { const all = g.querySelectorAll('.jrow[data-job-row]'); const card = g.closest('.card'); if (card && all.length) card.classList.toggle('qf-hide', !g.querySelector('.jrow[data-job-row]:not(.qf-hide)') && !card.contains(box)); });
+  // The sort bar that carries these moves to the first list still showing; with none left, its card stays.
+  if (typeof seatQueueBar === 'function') seatQueueBar();
+  box.closest('.card.qf-hide')?.classList.remove('qf-hide');
   // The Pick group's own controls follow these (only when you change one here).
   if (!restore) document.querySelectorAll('[data-pickbox]').forEach(pb => {
     const set = (k, val) => { const el = pb.querySelector(`[data-pickf="${k}"]`); if (el) el.type === 'checkbox' ? el.checked = val : el.value = val; };

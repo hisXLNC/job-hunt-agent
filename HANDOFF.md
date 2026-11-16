@@ -941,6 +941,14 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.90.1
+
+- Queue: `seatQueueBar()` (app-steps.js) moves the Sort by menu (`[data-queuef=sort]`) into the first
+  showing `.list-head` in place of its "Sort by" word, and appends `[data-queuebox]` (Shows pay, No red
+  flags, count) to the same bar. `applyQueueView` reads controls from the page, not the box, and calls
+  it again after filtering so the bar moves to the first list that still shows (its card stays if none).
+- Fix: `applyPickView` treated the `.list-head` as a row (hid it under a filter, re-sorted it).
+
 ## 2.90.0
 
 - One status button ("hub", app-activity.js): `hubState()` (busy from `running.list`; warn from the hidden `#statusPop` lines `connLine`, `limitLine`, `updateNote`, `syncLine` + `dotSync`; else "All good"), `hubSheetHtml()` (running rows with Stop, Search / Email / Backup / Claude rows with their action, Notices, recent events, `data-hub-theme`), `hubDraw()` (called from `actDraw` and the end of `renderNav`), `hubToggle()`. Buttons `.hub.desk` (before `#statusPop`) and `.hub.phone` (in `.mtop`); the sheet `#hubSheet` is fixed under whichever shows. The old `.dstats`, `#dTheme`, `.mstats`, `#mTheme` are still made and updated (their words feed the hub) but hidden by CSS; `#actBar` is gone.
