@@ -374,13 +374,14 @@ function quietNote(pr) {
 function progressHtml(pr) {
   if (!pr) return '';
   const count = pr.total ? ` ${Math.min(pr.done + 1, pr.total)} of ${pr.total}` : '';
+  const q = quietNote(pr), stuck = q.includes('quiet-row warn');
   return `<section class="card progress-card" id="progressCard">
     <header><h2>${pr.paused ? 'Paused: ' : ''}${esc(pr.stage || 'Starting the search')}${count}</h2><b class="pct">${pr.percent}%</b></header>
     <div class="pbar${pr.paused ? ' paused' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pr.percent}"><i style="width:${pr.percent}%"></i></div>
     <p class="muted small">${pr.paused ? 'Everything found so far is kept. Resume carries on from this step.' : esc(pr.detail || '')}${!pr.paused && pr.also ? `<br><b>Meanwhile:</b> ${esc(pr.also)}` : ''}</p>
-    ${quietNote(pr)}
+    ${stuck ? q : ''}
     ${pr.paused ? `<div class="row"><button class="btn primary sm" data-act="searchHold" data-on="0">${pr.scoring ? 'Resume scoring' : 'Resume search'}</button><button class="btn ghost danger sm" data-act="searchStop">Stop</button></div>` : ''}
-    <div class="facts small"><span><b>${pr.found}</b> postings found</span><span><b>${pr.new}</b> new</span><span><b>${pr.scored}</b> scored</span><span><b>${pr.tailored}</b> tailored</span></div>
+    <div class="progress-foot"><div class="facts small"><span><b>${pr.found}</b> postings found</span><span><b>${pr.new}</b> new</span><span><b>${pr.scored}</b> scored</span><span><b>${pr.tailored}</b> tailored</span></div>${stuck ? '' : q}</div>
   </section>`;
 }
 function reportHtml(r) {

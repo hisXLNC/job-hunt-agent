@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.94.0] - 2026-11-16
+
+A smaller search card; a job says when work on it didn't finish.
+
+### Changes
+
+- The search's progress card is compact: its counts and the Copy search log and Force stop buttons share one line.
+- When tailoring, interview prep, a follow-up, a thank-you note or the CV check doesn't finish, the job's page says so and why, with Try again.
+- Behind the scenes: a job's page takes its next step from the one shared source.
+
 ## [2.93.0] - 2026-11-16
 
 One place for a job's stages.
@@ -2491,6 +2501,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.94.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.94.0
 [2.93.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.93.0
 [2.92.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.92.1
 [2.92.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.92.0

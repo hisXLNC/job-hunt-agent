@@ -1093,13 +1093,16 @@ The ten screen changes the user approved ("do them all"):
   place of `jobActions` / `queueItems` / the All jobs `next` / `nextText`; show failed work on the
   job page; step 5, refuse moves outside `MOVES` (only after the user's debug logs show none).
 
-## Unreleased on the working branch (lifecycle step 4, part 1: the job page)
+## 2.94.0 (lifecycle step 4, part 1: the job page; compact search card)
 
 - `lifecycle::next` now carries the job page's wording (`text`), a list wording (`short`), per-action
   `short` labels and `quiet` for the ways out. `static/app-job.js`: `jobActions(..., lc)` takes its
   sentence and buttons from `lifecycle.next` through `nextButton(j, a)`; `workFailed(j, work)`
-  draws a `.work-failed` line per failed piece of work, with Try again where one call restarts it.
+  draws a `.work-failed` line per failed piece of work that one call can restart (tailor, prep,
+  followup, thanks, review; the others are left out so a setup problem doesn't repeat on every job).
 - Checked: the Next card's HTML for all 11 stages, before and after, is identical except the word
   "below" dropped from the Ready sentence and the new failed-work line.
-- Not released: waiting for the user to see the failed-work line. Still to switch: Queue
-  (`queueItems`, `rowActions`), All jobs `next`, the assistant.
+- Still to switch: Queue (`queueItems`, `rowActions`), All jobs `next`, the assistant.
+- Search progress card (`progressHtml`, app-steps.js): the counts and Copy search log / Force stop
+  share one `.progress-foot` line (the stuck warning still gets its own row); the card's row-gap
+  and margins are cut down.

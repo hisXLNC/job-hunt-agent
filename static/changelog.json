@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.94.0",
+    "date": "2026-11-16",
+    "title": "A smaller search card; a job says when work on it didn't finish",
+    "changes": [
+      "The search's progress card is compact: its counts and the Copy search log and Force stop buttons share one line.",
+      "When tailoring, interview prep, a follow-up, a thank-you note or the CV check doesn't finish, the job's page says so and why, with Try again.",
+      "Behind the scenes: a job's page takes its next step from the one shared source."
+    ]
+  },
+  {
     "version": "2.93.0",
     "date": "2026-11-16",
     "title": "One place for a job's stages",

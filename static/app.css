@@ -2427,3 +2427,13 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
 /* Work on a job that didn't finish: said under its next step, with a way to try again. */
 .work-failed { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .work-failed b { color: var(--warn); }
+
+/* The search's progress card, compact: its counts and its log / stop buttons share one line. */
+.card.progress-card { padding-top: 14px; padding-bottom: 12px; row-gap: 2px; }
+.card.progress-card > .progress-foot { margin-top: 0; }
+.card.progress-card > header { margin-bottom: 6px; }
+.card.progress-card > .pbar { margin: 0 0 6px; }
+.card.progress-card > p.muted { margin: 0 0 4px; min-height: 0; }
+.progress-foot .facts { gap: 2px 14px; }
+.progress-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 16px; }
+.progress-foot .facts, .progress-foot .quiet-row { margin: 0; }

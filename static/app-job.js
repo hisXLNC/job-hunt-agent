@@ -29,7 +29,7 @@ function nextButton(j, a, tailoring = false) {
 const WORK_NAME = { tailor: 'Tailoring your CV', revise: 'Your change to the CV or letter', prep: 'The interview prep', contact: 'Finding who to write to', answers: 'The answers to the form\'s questions', followup: 'The follow-up', thanks: 'The thank-you note', review: 'The CV check', decline: 'The reply', offer: 'The offer advice' };
 const WORK_RETRY = { tailor: 'tailorAnyway', prep: 'prep', followup: 'followUp', thanks: 'thanks', review: 'review' };
 function workFailed(j, work) {
-  return Object.entries(work || {}).filter(([k, w]) => w.state === 'failed' && WORK_NAME[k]).map(([k, w]) => {
+  return Object.entries(work || {}).filter(([k, w]) => w.state === 'failed' && WORK_NAME[k] && WORK_RETRY[k]).map(([k, w]) => {
     const why = (w.why || '').trim().replace(/[.\s]+$/, '');
     return `<p class="small work-failed"><span><b>${WORK_NAME[k]} didn't finish</b>${why ? `: ${esc(why.length > 220 ? why.slice(0, 220) + '…' : why)}` : ''}.</span>${WORK_RETRY[k] ? `<button class="btn sm" data-act="${WORK_RETRY[k]}" data-job="${esc(j.id)}">Try again</button>` : ''}</p>`;
   }).join('');
