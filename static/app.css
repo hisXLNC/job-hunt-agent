@@ -2455,3 +2455,13 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
 
 /* A must-have with "I meet this" beside it. */
 .must-one .btn.sm { min-height: 22px; padding: 0 6px; font-size: 12px; margin-left: 2px; }
+
+/* All jobs: no cell's text runs past its column, whatever the computer's font (the age, "Found 1
+   day ago", stayed on one line and spilled past the card on Windows). */
+#t-all .age { white-space: normal; }
+#t-all th:nth-child(8) { width: 92px; }
+#t-all td { overflow: hidden; }
+#t-all td.fit { overflow: visible; }
+/* A keyword without a remove button (a job's Posting keywords): the same space each side. The
+   settings' removable keywords keep room for their ×. */
+.kw:not(:has(.kw-x)) { padding: 4px 10px; justify-content: center; }

@@ -1154,3 +1154,12 @@ The ten screen changes the user approved ("do them all"):
   banked "Occupation / Title: Founder & Managing Partner" into all seven experience rows.
 - Test fix: `api::tests::settings_flow` looked for "k1" anywhere in the settings JSON; a random token
   could contain it (the flaky failures). It now uses "adzuna-secret-k1".
+
+## 2.96.2 (All jobs fits its card; keyword chips centred)
+
+- All jobs (`#t-all`): `.age` wraps inside the table (it was `nowrap` and "Found 1 day ago" spilled
+  past the card in Windows' font), Age column 92px, cells clip their own overflow (the Fit cell
+  excepted). No sideways scrolling: the user doesn't want scrolling tables. Checked at 1100–1600px
+  with text 8% wider: nothing runs past a cell or the card.
+- `.kw` had two rules; the later one (settings' removable keywords, room for ×) gave a job's
+  Posting keywords uneven padding. `.kw:not(:has(.kw-x))` is 4px 10px.

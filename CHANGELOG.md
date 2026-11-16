@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.96.2] - 2026-11-16
+
+All jobs fits its card; keywords centred.
+
+### Changes
+
+- All jobs: the Age column no longer runs past the right edge of the card; long dates wrap instead.
+- A job's posting keywords sit centred in their tags.
+
 ## [2.96.1] - 2026-11-16
 
 Stretch for a certification you don't need; one job title in every work entry.
@@ -2532,6 +2541,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.96.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.2
 [2.96.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.1
 [2.96.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.0
 [2.95.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.95.0
