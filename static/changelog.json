@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.96.5",
+    "date": "2026-11-16",
+    "title": "The form filler leaves newsletter boxes alone",
+    "changes": [
+      "On a job posting that isn't the application form yet, Job Hunt no longer fills the site's newsletter sign-up or its country picker; it tells you to open the form with the page's Apply button."
+    ]
+  },
+  {
     "version": "2.96.4",
     "date": "2026-11-16",
     "title": "Notifications open the posting",

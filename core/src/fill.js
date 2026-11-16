@@ -543,7 +543,7 @@
   async function readDrops() {
     let n = 0;
     for (const b of document.querySelectorAll(DROPS)) {
-      if (own(b) || !shown(b) || b.disabled || dropOptions.has(b)) continue;
+      if (own(b) || !shown(b) || b.disabled || dropOptions.has(b) || notTheForm(b)) continue;
       const z = zohoDate(b);
       if (z && zohoLists[z.part]) { dropOptions.set(b, zohoLists[z.part]); continue; }
       if (n++ > 40) continue;
@@ -617,6 +617,12 @@
     }
     return parts.every(el => !datePart(el) || !want[datePart(el)] || clean(el.value).replace(/^0/, '') === want[datePart(el)].replace(/^0/, ''));
   }
+  // Not part of any application: a newsletter sign-up, or the site's own header, menu and footer
+  // (Stripe's "Get industry insights" email box and its country picker were filled on a posting).
+  const NEWS = /newsletter|subscribe|insights and updates|mailing list|sign up for (our )?(news|updates|emails?)/i;
+  const notTheForm = el => !!el.closest('footer,nav,header,[role=contentinfo],[role=navigation],[role=banner]')
+    || NEWS.test(`${el.id || ''} ${el.name || ''} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('placeholder') || ''} ${labelOf(el)}`)
+    || NEWS.test(textOf(el.closest('form') || document.createElement('i')).slice(0, 300));
   function collect() {
     fields = []; byKey = {};
     heads = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,[role=heading]')].filter(h => !own(h) && shown(h) && textOf(h).length > 1);
@@ -630,7 +636,7 @@
     let n = 0;
     const datesDone = new Set();
     for (const el of document.querySelectorAll('input,select,textarea')) {
-      if (own(el) || el.disabled) continue;
+      if (own(el) || el.disabled || notTheForm(el)) continue;
       // A date in parts (Workday's MM / YYYY boxes): one field for the whole date, filled part by part.
       const part = datePart(el);
       if (part) {
@@ -687,7 +693,7 @@
     }
     // Workday's dropdowns ("Select One"): buttons that open a list, read beforehand (readDrops).
     for (const b of document.querySelectorAll(DROPS)) {
-      if (own(b) || !shown(b) || b.disabled) continue;
+      if (own(b) || !shown(b) || b.disabled || notTheForm(b)) continue;
       const key = 'd' + n++;
       const now = clean(b.textContent);
       const z = zohoDate(b);

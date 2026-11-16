@@ -1194,3 +1194,11 @@ The ten screen changes the user approved ("do them all"):
 - `sources::board_name(kind, slug)` names Greenhouse (fallback), Lever and Ashby postings after the
   employer in `CANADA_EMPLOYERS` ("wealthsimple" -> "Wealthsimple"); `name_workday_jobs` now renames
   stored jobs from every listed board, once (`boards.named`).
+
+## 2.96.5 (the form filler leaves newsletter boxes and site menus alone)
+
+- fill.js `notTheForm(el)`: boxes inside footer/nav/header (or their ARIA roles) and newsletter
+  sign-ups (`NEWS` on id/name/label/placeholder or the form's text) are not collected, in `collect`
+  and both drop-down loops. User report: on a Stripe posting (no form yet) it filled the
+  "Get industry insights" email box and the footer's country picker; with nothing left the panel now
+  says to open the form with the page's own Apply button.

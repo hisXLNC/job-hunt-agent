@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.96.5] - 2026-11-16
+
+The form filler leaves newsletter boxes alone.
+
+### Changes
+
+- On a job posting that isn't the application form yet, Job Hunt no longer fills the site's newsletter sign-up or its country picker; it tells you to open the form with the page's Apply button.
+
 ## [2.96.4] - 2026-11-16
 
 Notifications open the posting.
@@ -2563,6 +2571,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.96.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.5
 [2.96.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.4
 [2.96.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.3
 [2.96.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.2
