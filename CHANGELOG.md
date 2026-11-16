@@ -14,6 +14,7 @@ Mark a job applied from any stage; All jobs fits its card.
 - A confirmation email ("we received your application") moves a job to Applied only when Job Hunt is sure which job it is: the email names the employer and the role, and either quotes the job's posting number or no other job there has that role. When it isn't sure, you get a notification asking you to mark the right one.
 - All jobs: the Age column no longer runs past the right edge of the card; long dates wrap instead.
 - A job's posting keywords sit centred in their tags.
+- Ask Claude sees all of Job Hunt, not just the screen you're on: every application you've sent and how it stands, how many jobs are at each stage, and in full any job you name by company or title, even misspelled ("marut pay" finds Maarut and its pay).
 
 ## [2.96.1] - 2026-11-16
 

@@ -1171,3 +1171,7 @@ The ten screen changes the user approved ("do them all"):
   email and no other open job at that company with a title it fits). Unsure: no move, an
   `email:maybe-applied` event on the job and a notice that links to it. A job added from the email
   itself (source "email") is sure. Test `a_confirmation_moves_a_job_to_applied_only_when_it_is_surely_that_job`.
+- Ask Claude: `Agent::ask_lookup(message, history, on_screen)` is added to the assistant's facts:
+  stage counts, the last 60 applications sent, and up to 5 jobs the message (or the previous one)
+  names by company/title words, matched with `edit_distance` <= 1 or a prefix (posting text up to
+  2,500 characters, pay, history). Test `the_assistant_sees_any_job_the_question_names`.

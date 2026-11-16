@@ -1040,6 +1040,20 @@ fn the_brief_for_another_assistant_says_what_is_left() {
 }
 
 #[test]
+fn the_assistant_sees_any_job_the_question_names() {
+    let s = setup();
+    s.agent.db().insert_job(&crate::db::Job { id: "w:maarut".into(), source: "t".into(), company: "Maarut".into(), title: "Technical Project Manager".into(),
+        salary: Some("$120,000–$140,000".into()), status: "queued".into(), found_at: now(), ..Default::default() }).unwrap();
+    s.agent.db().insert_job(&crate::db::Job { id: "w:cleo".into(), source: "t".into(), company: "Cleo Consulting".into(), title: "Project Manager".into(), status: "applied".into(),
+        applied_at: Some(now()), found_at: now(), ..Default::default() }).unwrap();
+    let cleo = s.agent.db().job("w:cleo").unwrap();
+    let seen = s.agent.ask_lookup("marut pay", &[], cleo.as_ref());
+    assert!(seen.contains("Maarut") && seen.contains("$120,000–$140,000"), "misspelled, and not on screen: found, with its pay\n{seen}");
+    assert!(seen.contains("Applications sent") && seen.contains("Cleo Consulting"), "every application sent is listed");
+    assert!(!s.agent.ask_lookup("what about the weather", &[], None).contains("A job the question may mean"), "nothing named: no job pulled in");
+}
+
+#[test]
 fn the_assistant_answers_from_any_screen_and_keeps_the_conversation() {
     let s = setup();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
