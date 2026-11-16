@@ -948,6 +948,7 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
 - `skills_by_posting` (fill.rs) reorders Claude's answer for a `skills` field whatever it gave: in the
   title, then by posting keyword order, then mentioned in the description, then the rest; repeats dropped.
   fill.js adds them in that order (cap 12).
+- `.facts { align-items: center }` and a compact `.follow-btn` there: the job header line is level.
 
 ## 2.90.4
 

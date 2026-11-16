@@ -2376,3 +2376,8 @@ article.card.decision[data-swipe="skip"] { box-shadow: 0 0 0 3px var(--accent); 
 ol.steps-list { display: block; list-style: decimal; padding-left: 24px; margin: 6px 0 10px; }
 ol.steps-list > li { display: list-item; margin: 0 0 8px; line-height: 1.5; }
 ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
+
+/* A job's line of facts (company, rating, Follow, place, pay, found, stage): one level, whatever each is. */
+.facts { align-items: center; }
+.facts .follow-btn { min-height: 0; padding: 1px 8px; line-height: 1.35; font-size: 13px; }
+.facts .pill, .facts .stars { align-self: center; }

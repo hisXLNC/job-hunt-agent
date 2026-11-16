@@ -5,7 +5,8 @@
     "title": "Skills boxes follow the posting",
     "changes": [
       "A form's skills box now gets every skill the posting asks for that your CV shows (up to 12, was 10), not just a selection.",
-      "They go in by priority: skills named in the job title first, then the posting's keywords in order, then others the posting mentions, then the rest of your strongest."
+      "They go in by priority: skills named in the job title first, then the posting's keywords in order, then others the posting mentions, then the rest of your strongest.",
+      "Fixed: on a job's page the line under the title (company, rating, Follow, place, pay, Applied) was not level."
     ]
   },
   {
