@@ -1202,3 +1202,10 @@ The ten screen changes the user approved ("do them all"):
   and both drop-down loops. User report: on a Stripe posting (no form yet) it filled the
   "Get industry insights" email box and the footer's country picker; with nothing left the panel now
   says to open the form with the page's own Apply button.
+
+## 2.96.6 (a form inside a job-board frame opens on its own)
+
+- fill.js `start`: no boxes on the page and an `iframe[src]` matching `ATS` (Stripe's
+  stripe.com/careers/apply/... shows Greenhouse's form in a frame): it says so and opens the frame's
+  address in the tab, where the form can be filled. Before, a press filled only what the outer page
+  had (Stripe's newsletter box; 2.96.5 stopped that).

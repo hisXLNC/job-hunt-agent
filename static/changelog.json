@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.96.6",
+    "date": "2026-11-16",
+    "title": "Forms shown inside another site's page",
+    "changes": [
+      "When a careers site shows the application form inside its own page (Stripe shows Greenhouse's form that way), Fill in this form opens the form on its own so Job Hunt can fill it."
+    ]
+  },
+  {
     "version": "2.96.5",
     "date": "2026-11-16",
     "title": "The form filler leaves newsletter boxes alone",

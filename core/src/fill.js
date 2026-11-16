@@ -1785,6 +1785,18 @@
         return;
       }
     }
+    // The form is a job board's, shown inside this page (Stripe's careers site shows Greenhouse's
+    // form in a frame, which a page can't reach into): the form opens on its own, to be filled there.
+    if (!list.length) {
+      const frame = [...document.querySelectorAll('iframe[src]')].find(f => ATS.test(f.src));
+      if (frame) {
+        progress(null);
+        trace('the form is in a frame: opening it', { src: frame.src.slice(0, 120) });
+        status('The form is inside this page, where Job Hunt can\'t reach it. Opening it on its own… Press Fill in this form there if it doesn\'t start by itself.');
+        setTimeout(() => { location.href = frame.src; }, 900);
+        return;
+      }
+    }
     if (!list.length) { progress(null); unfolded = false; status('Job Hunt can\'t find a form to fill on this page. If the form is here, press Copy a brief for Claude below and give it to the Claude extension; if it isn\'t yet, open it with the page\'s own button (Apply, or Add), then press Fill in this form.'); return; }
     // No answer in six minutes (Job Hunt closed, Claude busy): the button comes back.
     const mine = waitingSince = Date.now();
