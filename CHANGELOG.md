@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.92.0] - 2026-11-16
+
+A bell for notifications, and a tidier job heading.
+
+### Changes
+
+- Notifications have their own bell button beside the status button, with the count of new ones on it. The status button keeps the search, email, backup, Claude and the light/dark switch.
+- A job's page now leads with the company's logo, its rating underneath, and the title and details to the right of it.
+
 ## [2.91.0] - 2026-11-16
 
 Skills boxes follow the posting.
@@ -2464,6 +2473,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.92.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.92.0
 [2.91.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.91.0
 [2.90.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.4
 [2.90.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.3

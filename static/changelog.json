@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.92.0",
+    "date": "2026-11-16",
+    "title": "A bell for notifications, and a tidier job heading",
+    "changes": [
+      "Notifications have their own bell button beside the status button, with the count of new ones on it. The status button keeps the search, email, backup, Claude and the light/dark switch.",
+      "A job's page now leads with the company's logo, its rating underneath, and the title and details to the right of it."
+    ]
+  },
+  {
     "version": "2.91.0",
     "date": "2026-11-16",
     "title": "Skills boxes follow the posting",

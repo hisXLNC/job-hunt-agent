@@ -22,7 +22,7 @@ function actDraw(list) {
 // the search, email, backup, Claude, the last notices, and the Auto / Light / Dark switch. It says the
 // one thing that matters most: blue while working, amber with the words when something needs you, a
 // quiet green "All good" otherwise. (It replaced a row of separate chips and the panel at the bottom left.)
-const hub = { open: false, html: '', seen: '' };
+const hub = { open: false, which: 'status', html: '', seen: '' };
 try { hub.seen = localStorage.getItem('hub.seen') || ''; } catch (e) {}
 
 function hubState() {
@@ -68,20 +68,24 @@ function hubSheetHtml() {
       '<button class="hub-do danger" type="button" data-act="searchForceStop" title="Ends the search, CV updating and tailoring, or everything Claude is doing, now">Force stop…</button>'),
     shown('updateNote') ? row('warn', 'Update', 'A newer version is ready', go('#settings/app', 'See it')) : '',
   ].join('');
-  const notices = (running.notices || []).slice(0, 5).map(n => `<li class="${n.at > hub.seen ? 'new' : ''}"><div class="act-top"><b>${esc(n.title)}</b><span class="muted small nowrap" title="${esc(new Date(n.at).toLocaleString())}">${esc(ago(n.at))}</span></div><div class="muted small">${esc(n.body)}</div></li>`).join('');
-  const recent = running.recent.slice(0, 5).map(e => `<li><div class="act-top"><span>${jobLink(e)}${eventText(e)}</span><span class="muted small nowrap">${esc(ago(e.created_at))}</span></div></li>`).join('');
   const theme = document.documentElement.dataset.theme || 'auto';
   return `${doing ? `<ul class="act-list hub-doing">${doing}</ul>${running.list.length > 1 ? '<div class="act-foot"><button class="btn ghost danger sm" type="button" data-act="searchForceStop">Stop several…</button></div>' : ''}` : ''}
     <div class="hub-rows">${rows}</div>
-    ${notices ? `<h3 class="hub-h">Notices</h3><ul class="hub-notes">${notices}</ul>` : ''}
-    ${recent ? `<details class="hub-recent"><summary class="small muted">The last things Job Hunt did</summary><ul class="hub-notes">${recent}</ul></details>` : ''}
     <div class="hub-theme" role="radiogroup" aria-label="Appearance">${[['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']].map(([k, n]) => `<button type="button" role="radio" aria-checked="${k === theme}" class="${k === theme ? 'on' : ''}" data-hub-theme="${k}">${n}</button>`).join('')}</div>
     <a class="muted small hub-ver" href="#settings/app">${esc(txt('versionNote'))} · what's new</a>`;
+}
+/** The bell's sheet: the notices Job Hunt sent (new ones marked), then the last things it did. */
+function bellSheetHtml() {
+  const notices = (running.notices || []).slice(0, 8).map(n => `<li class="${n.at > hub.seen ? 'new' : ''}"><div class="act-top"><b>${esc(n.title)}</b><span class="muted small nowrap" title="${esc(new Date(n.at).toLocaleString())}">${esc(ago(n.at))}</span></div><div class="muted small">${esc(n.body)}</div></li>`).join('');
+  const recent = running.recent.slice(0, 5).map(e => `<li><div class="act-top"><span>${jobLink(e)}${eventText(e)}</span><span class="muted small nowrap">${esc(ago(e.created_at))}</span></div></li>`).join('');
+  return `<h3 class="hub-h bell-h">Notifications</h3>
+    ${notices ? `<ul class="hub-notes">${notices}</ul>` : '<p class="muted small bell-none">Nothing yet. Job Hunt tells you here when a search finds new matches, a reply comes in or it finds a recruiter.</p>'}
+    ${recent ? `<details class="hub-recent"><summary class="small muted">The last things Job Hunt did</summary><ul class="hub-notes">${recent}</ul></details>` : ''}`;
 }
 
 function hubPlace() {
   const sheet = document.getElementById('hubSheet');
-  const btn = [...document.querySelectorAll('[data-hub]')].find(b => b.getBoundingClientRect().width > 0);
+  const btn = [...document.querySelectorAll(hub.which === 'bell' ? '[data-bell]' : '[data-hub]')].find(b => b.getBoundingClientRect().width > 0);
   if (!sheet || !btn) return;
   const r = btn.getBoundingClientRect();
   sheet.style.top = `${Math.round(r.bottom + 8)}px`;
@@ -92,7 +96,7 @@ function hubPlace() {
 function hubDraw() {
   // The buttons: one in the desktop bar, one in the phone's (whichever shows).
   const caret = '<span class="caret"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>';
-  const make = cls => `<button type="button" class="hub ${cls}" data-hub aria-haspopup="dialog" aria-expanded="false"><span class="dot"></span><span class="hub-t"></span><span class="hub-n" hidden></span>${caret}</button>`;
+  const make = cls => `<button type="button" class="hub ${cls}" data-hub aria-haspopup="dialog" aria-expanded="false"><span class="dot"></span><span class="hub-t"></span>${caret}</button><button type="button" class="bell ${cls}" data-bell aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="bell-n" hidden></span></button>`;
   const pop = document.getElementById('statusPop');
   if (pop && !document.querySelector('.hub.desk')) pop.insertAdjacentHTML('beforebegin', make('desk'));
   const top = document.querySelector('.mtop'), ask = top?.querySelector('[data-act="askOpen"]');
@@ -102,29 +106,37 @@ function hubDraw() {
     b.className = `hub ${b.classList.contains('desk') ? 'desk' : 'phone'} ${st.kind}`;
     b.querySelector('.dot').className = `dot ${st.kind === 'ok' ? 'on' : st.kind}`;
     const t = b.querySelector('.hub-t'); t.textContent = b.classList.contains('phone') ? st.short : st.text;
-    const n = b.querySelector('.hub-n'); n.hidden = !unread; n.textContent = unread;
-    b.title = `${st.text}${unread ? ` · ${unread} new notice${unread === 1 ? '' : 's'}` : ''}. Press for the search, email, backup and what Job Hunt is doing.`;
-    b.setAttribute('aria-label', b.title); b.setAttribute('aria-expanded', hub.open);
+    b.title = `${st.text}. Press for the search, email, backup and what Job Hunt is doing.`;
+    b.setAttribute('aria-label', b.title); b.setAttribute('aria-expanded', hub.open && hub.which === 'status');
+  });
+  document.querySelectorAll('[data-bell]').forEach(b => {
+    const n = b.querySelector('.bell-n'); n.hidden = !unread; n.textContent = unread;
+    b.classList.toggle('new', !!unread);
+    b.title = unread ? `${unread} new notification${unread === 1 ? '' : 's'}` : 'Notifications';
+    b.setAttribute('aria-label', b.title); b.setAttribute('aria-expanded', hub.open && hub.which === 'bell');
   });
   let sheet = document.getElementById('hubSheet');
   if (!sheet) { sheet = document.createElement('section'); sheet.id = 'hubSheet'; sheet.className = 'hub-sheet'; sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-label', 'What Job Hunt is doing'); sheet.hidden = true; document.body.appendChild(sheet); }
   sheet.hidden = !hub.open;
   if (!hub.open) return;
-  const html = hubSheetHtml();
+  const html = hub.which === 'bell' ? bellSheetHtml() : hubSheetHtml();
+  sheet.setAttribute('aria-label', hub.which === 'bell' ? 'Notifications' : 'What Job Hunt is doing');
   // Redrawn only when something changed, so a list you opened or scrolled stays as it was.
   if (html !== hub.html) { const was = sheet.querySelector('.hub-recent')?.open; sheet.innerHTML = hub.html = html; if (was) sheet.querySelector('.hub-recent').open = true; }
   hubPlace();
 }
-function hubToggle(open) {
-  hub.open = open; hub.html = '';
+function hubToggle(open, which) {
+  hub.open = open; hub.html = ''; if (open) hub.which = which || 'status';
   hubDraw();
-  // Opened: the notices have been seen (they stay marked new until it's closed).
-  if (open) { const newest = (running.notices || [])[0]?.at; if (newest && newest > hub.seen) { setTimeout(() => { hub.seen = newest; try { localStorage.setItem('hub.seen', newest); } catch (e) {} if (!hub.open) hubDraw(); }, 0); } }
+  // The bell opened: the notices have been seen (they stay marked new until it's closed).
+  if (open && hub.which === 'bell') { const newest = (running.notices || [])[0]?.at; if (newest && newest > hub.seen) { setTimeout(() => { hub.seen = newest; try { localStorage.setItem('hub.seen', newest); } catch (e) {} if (!hub.open) hubDraw(); }, 0); } }
   else hubDraw();
 }
 document.addEventListener('click', e => {
   const btn = e.target.closest?.('[data-hub]');
-  if (btn) { e.stopPropagation(); return hubToggle(!hub.open); }
+  if (btn) { e.stopPropagation(); return hubToggle(!(hub.open && hub.which === 'status'), 'status'); }
+  const bell = e.target.closest?.('[data-bell]');
+  if (bell) { e.stopPropagation(); return hubToggle(!(hub.open && hub.which === 'bell'), 'bell'); }
   if (!hub.open) return;
   const sheet = document.getElementById('hubSheet');
   const pick = e.target.closest?.('[data-hub-theme]');

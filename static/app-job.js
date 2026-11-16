@@ -100,11 +100,12 @@ async function showJob(id) {
   const tab = tabs.some(([k]) => k === want) ? want : 'overview';
   const badge = { docs: revising || tailoring ? 'Working on it' : '', apply: answering ? 'Working on it' : '', people: following_up || writing_to ? 'Working on it' : '', offer: advising ? 'Working on it' : (j.status === 'offer' && !offer ? 'Weigh the offer' : ''), interview: preparing ? 'Writing' : '' };
   page(`
-    <div class="head">
+    <div class="head job-head">
+      <div class="job-id">${avatar(j.company)}${ratingTag(rating, j.company)}</div>
       <div class="grow">
         <div class="eyebrow"><a href="#applications">Jobs</a> / ${esc(STAGES[j.status] || j.status)}</div>
         <h1>${esc(j.title)}</h1>
-        <div class="facts" style="margin-top:6px"><a class="co-link" href="#applications/all" data-act="companyJobs" data-company="${esc(j.company)}" title="Every posting Job Hunt has seen from ${esc(j.company)}"><b>${esc(j.company)}</b></a>${ratingTag(rating, j.company)}${followBtn(j.company, following)}${(company_open || []).length ? `<a class="co-open" href="#applications/all" data-act="companyJobs" data-company="${esc(j.company)}" title="Other roles at ${esc(j.company)} that are still open and you haven't applied to">${company_open.length} more open role${company_open.length === 1 ? '' : 's'} here</a>` : ''}${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}${(company_history || []).length ? ' <span class="pill info">Applied here before</span>' : ''}</div>
+        <div class="facts" style="margin-top:6px"><a class="co-link" href="#applications/all" data-act="companyJobs" data-company="${esc(j.company)}" title="Every posting Job Hunt has seen from ${esc(j.company)}"><b>${esc(j.company)}</b></a>${followBtn(j.company, following)}${(company_open || []).length ? `<a class="co-open" href="#applications/all" data-act="companyJobs" data-company="${esc(j.company)}" title="Other roles at ${esc(j.company)} that are still open and you haven't applied to">${company_open.length} more open role${company_open.length === 1 ? '' : 's'} here</a>` : ''}${j.location ? `<span>${placeHtml(j)}</span>` : ''}${j.salary ? `<span>${esc(j.salary)}</span>` : ''}<span>${ageTag(j)} · found on ${esc(sourceName(j.source))}</span>${stagePill(j.status)}${closedTag(j)}${belowMinTag(j)}${deadlineTag(j)}${stretchTag(j)}${effortTag(j)}${(company_history || []).length ? ' <span class="pill info">Applied here before</span>' : ''}</div>
       </div>
     </div>
     ${betterHere(j, company_open)}

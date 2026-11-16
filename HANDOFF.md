@@ -941,6 +941,15 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.92.0
+
+- Job page header: `.head.job-head` = `.job-id` (avatar/logo 64px with `ratingTag` under it) + the title
+  and facts beside it; the rating left the facts line.
+- Notifications left the status sheet: `[data-bell]` button (`.bell.desk` / `.bell.phone`, count in
+  `.bell-n`) made beside each `[data-hub]`; `hub.which` = 'status' | 'bell' picks `hubSheetHtml()` or
+  `bellSheetHtml()` (notices, then "The last things Job Hunt did") for the one `#hubSheet`. Notices are
+  marked seen when the bell opens, not the status button.
+
 ## 2.91.0
 
 - Skills boxes: `fill_system` now asks for every skill the posting asks for that the CV shows (up to 12,
