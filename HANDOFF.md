@@ -1106,3 +1106,6 @@ The ten screen changes the user approved ("do them all"):
 - Search progress card (`progressHtml`, app-steps.js): the counts and Copy search log / Force stop
   share one `.progress-foot` line (the stuck warning still gets its own row); the card's row-gap
   and margins are cut down.
+- Fit rings (`reachTag`, `fitNote`, `stillReach` in app.js): tailored with `score_after === score`
+  and `score_potential > score` shows `~potential` as the dashed second ring (phone: the score with
+  "~85 possible" under it). A changed `score_after` still shows as before.

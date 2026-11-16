@@ -11,6 +11,7 @@ A smaller search card; a job says when work on it didn't finish.
 ### Changes
 
 - The search's progress card is compact: its counts and the Copy search log and Force stop buttons share one line.
+- Fit scores: when a tailored CV scores the same as before, the second ring shows the fit it could reach (dashed) instead of the same number twice.
 - When tailoring, interview prep, a follow-up, a thank-you note or the CV check doesn't finish, the job's page says so and why, with Try again.
 - Behind the scenes: a job's page takes its next step from the one shared source.
 
