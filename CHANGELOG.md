@@ -6,10 +6,11 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.96.2] - 2026-11-16
 
-All jobs fits its card; keywords centred.
+Mark a job applied from any stage; All jobs fits its card.
 
 ### Changes
 
+- Applied by yourself? Every job not yet applied to has "I already applied" on its page, whatever its stage: it moves to Applied and Job Hunt reminds you to follow up.
 - All jobs: the Age column no longer runs past the right edge of the card; long dates wrap instead.
 - A job's posting keywords sit centred in their tags.
 

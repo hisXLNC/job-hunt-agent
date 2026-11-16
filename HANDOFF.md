@@ -1163,3 +1163,6 @@ The ten screen changes the user approved ("do them all"):
   with text 8% wider: nothing runs past a cell or the card.
 - `.kw` had two rules; the later one (settings' removable keywords, room for ×) gave a job's
   Posting keywords uneven padding. `.kw:not(:has(.kw-x))` is 4px 10px.
+- `lifecycle::next` adds a quiet "I already applied" (stage -> applied) for queued, ready, saved,
+  skipped and dismissed; the job page draws it with the other quiet actions. User report: applied on
+  their own to a job still at Pick to tailor, and nothing offered Applied.

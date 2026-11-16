@@ -21,7 +21,7 @@ function nextButton(j, a, tailoring = false) {
     case 'fill': return `<button class="${cls}" data-act="fillBrowser" data-job="${id}">${svg('open')}${esc(a.label)}</button>`;
     case 'open': return `<button class="${cls}" data-act="open" data-job="${id}" data-what="${esc(a.what || 'posting')}">${svg('open')}${esc(a.label)}</button>`;
     case 'follow_up': return `<button class="${cls}" data-act="followUp" data-job="${id}">${esc(a.label)}</button>`;
-    case 'stage': return `<button class="${cls}${a.to === 'dismissed' ? ' danger' : ''}" data-act="stage" ${on} data-status="${esc(a.to)}">${a.to === 'applied' ? svg('check') : ''}${esc(a.label)}</button>`;
+    case 'stage': return `<button class="${cls}${a.to === 'dismissed' ? ' danger' : ''}" data-act="stage" ${on} data-status="${esc(a.to)}"${a.to === 'applied' && a.quiet ? ' title="You applied on your own: Job Hunt moves it to Applied and reminds you to follow up"' : ''}>${a.to === 'applied' ? svg('check') : ''}${esc(a.label)}</button>`;
   }
   return '';
 }

@@ -189,6 +189,12 @@ pub fn next(job: &Job, tracked: Option<&Value>, tailoring: bool, can_fill: bool)
             _ => (s("", ""), "done", vec![]),
         }
     };
+    // Applied by yourself, without Job Hunt: say so from any stage before it.
+    if ["queued", "ready", "saved", "skipped", "dismissed"].contains(&job.status.as_str()) {
+        let mut a = stage_action("applied", "I already applied", false);
+        a["quiet"] = json!(true);
+        actions.push(a);
+    }
     if ["queued", "ready", "approved"].contains(&job.status.as_str()) {
         for (to, label) in [("saved", "Save for later"), ("dismissed", "Not interested")] {
             let mut a = stage_action(to, label, false);
@@ -263,6 +269,7 @@ mod tests {
         assert_eq!(st["next"]["who"], "you");
         assert_eq!(st["next"]["actions"][0]["act"], "tailor");
         assert!(st["allowed"].as_array().unwrap().iter().any(|a| a["stage"] == "ready"));
+        assert!(st["next"]["actions"].as_array().unwrap().iter().any(|a| a["to"] == "applied" && a["quiet"] == true), "applied by yourself: one click");
         s.agent.db().set_status(id, "ready", "").unwrap();
         s.agent.db().set_status(id, "approved", "").unwrap();
         let job = s.agent.db().job(id).unwrap().unwrap();

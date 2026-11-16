@@ -2,8 +2,9 @@
   {
     "version": "2.96.2",
     "date": "2026-11-16",
-    "title": "All jobs fits its card; keywords centred",
+    "title": "Mark a job applied from any stage; All jobs fits its card",
     "changes": [
+      "Applied by yourself? Every job not yet applied to has \"I already applied\" on its page, whatever its stage: it moves to Applied and Job Hunt reminds you to follow up.",
       "All jobs: the Age column no longer runs past the right edge of the card; long dates wrap instead.",
       "A job's posting keywords sit centred in their tags."
     ]
