@@ -941,6 +941,13 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.90.3
+
+- Phones: `PHONE_FILL` (app-steps.js), a `<details data-phonefill>` at the top of the Queue's "Submit on
+  the company's site" group; on open it loads /api/settings and draws `phoneCard(st, true)`. Hidden on
+  desktop (`.phone-fill`).
+- Phones: `.jrow .jfit { min-width: 80px }` so fit badges line up whatever the caption under them.
+
 ## 2.90.2
 
 - Phones: `.list-head.with-queuebar` is one line (nowrap, slides sideways). Under 600px the order is

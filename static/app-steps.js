@@ -250,7 +250,7 @@ function stepHtml(o, step, tracked) {
   const formable = toSubmit.filter(j => j.url && j.effort?.kind !== 'email');
   const runIds = list => esc(JSON.stringify(list.map(j => ({ id: j.id, name: `${j.company}: ${j.title}` }))));
   const quick = formable.filter(j => (j.effort?.minutes ?? 10) <= 5);
-  if (toSubmit.length) groups.push([`Submit on the company's site${formable.length > 1 && o.can_fill ? ` ${quick.length > 1 && quick.length < formable.length ? `<button class="btn primary sm" data-act="applyAll" data-ids="${runIds(quick)}" style="margin-left:8px" title="The short forms, a few minutes each: each opens in your browser, the extension fills it, you press Submit, then the next">Apply to the ${quick.length} quick ones</button>` : ''}<button class="btn ${quick.length > 1 && quick.length < formable.length ? '' : 'primary '}sm" data-act="applyAll" data-ids="${runIds(formable)}" style="margin-left:8px" title="Each opens in your browser, quickest first; the extension fills it, you check it and press Submit, then the next one opens">Apply to all ${formable.length}</button>` : ''}`, toSubmit.map(j => row(j, onCompanySite(j),
+  if (toSubmit.length) groups.push([`Submit on the company's site${formable.length > 1 && o.can_fill ? ` ${quick.length > 1 && quick.length < formable.length ? `<button class="btn primary sm" data-act="applyAll" data-ids="${runIds(quick)}" style="margin-left:8px" title="The short forms, a few minutes each: each opens in your browser, the extension fills it, you press Submit, then the next">Apply to the ${quick.length} quick ones</button>` : ''}<button class="btn ${quick.length > 1 && quick.length < formable.length ? '' : 'primary '}sm" data-act="applyAll" data-ids="${runIds(formable)}" style="margin-left:8px" title="Each opens in your browser, quickest first; the extension fills it, you check it and press Submit, then the next one opens">Apply to all ${formable.length}</button>` : ''}`, PHONE_FILL + toSubmit.map(j => row(j, onCompanySite(j),
     `${o.can_fill && j.url && j.effort?.kind !== 'email' ? `<button class="btn sm" data-act="fillBrowser" data-job="${id(j)}" title="Opens the form in your browser, for the extension to fill in">Apply</button>` : `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}">Apply</a>`}
      <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="approved" title="Not interested after all (the pay, say)">${svg('close')}</button>`)).join('')]);
@@ -503,6 +503,17 @@ function cvHtml(blocks) {
 /** What a list of jobs can be put in order by: (key, its name, whether it's a number). Numbers start
  *  largest first (best fit, highest pay, newest); names start at A. */
 const LIST_COLS = [['role', 'Role'], ['co', 'Company'], ['loc', 'Location'], ['pay', 'Pay', 1], ['new', 'Found', 1], ['fit', 'Fit', 1]];
+// On a phone, under Submit: how to get Job Hunt to fill the form there (the steps load when opened).
+const PHONE_FILL = '<details class="phone-fill" data-phonefill><summary>How to fill the form on this phone</summary><div class="phone-fill-body"><p class="muted small">Loading…</p></div></details>';
+document.addEventListener('toggle', async e => {
+  const d = e.target;
+  if (!d.matches?.('[data-phonefill]') || !d.open || d.dataset.done) return;
+  d.dataset.done = '1';
+  try {
+    const st = await api('/api/settings');
+    d.querySelector('.phone-fill-body').innerHTML = st.ext_key ? phoneCard(st, true) : '<p class="muted small">Job Hunt is not running on a PC of yours here, so it can\'t fill forms on this phone.</p>';
+  } catch (err) { delete d.dataset.done; }
+}, true);
 // The orders by name, chosen in the Sort by menu (the others there go by number: see applyQueueView).
 const TEXT_SORTS = ['co', 'role', 'loc'];
 let listSort = null;

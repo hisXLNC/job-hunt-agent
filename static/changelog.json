@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.90.3",
+    "date": "2026-11-16",
+    "title": "Phone: form-filling steps under Submit",
+    "changes": [
+      "On a phone, the steps for getting Job Hunt to fill a form there are now in the Queue, at the top of Submit on the company's site: press How to fill the form on this phone.",
+      "Fixed: on a phone the fit scores in a list did not line up when the note under them differed (was 64, same before)."
+    ]
+  },
+  {
     "version": "2.90.2",
     "date": "2026-11-16",
     "title": "Sort and filters on one line on phones",

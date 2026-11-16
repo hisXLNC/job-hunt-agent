@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.90.3] - 2026-11-16
+
+Phone: form-filling steps under Submit.
+
+### Changes
+
+- On a phone, the steps for getting Job Hunt to fill a form there are now in the Queue, at the top of Submit on the company's site: press How to fill the form on this phone.
+- Fixed: on a phone the fit scores in a list did not line up when the note under them differed (was 64, same before).
+
 ## [2.90.2] - 2026-11-16
 
 Sort and filters on one line on phones.
@@ -2436,6 +2445,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.90.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.3
 [2.90.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.2
 [2.90.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.1
 [2.90.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.0
