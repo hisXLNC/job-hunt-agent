@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.91.0] - 2026-11-16
+
+Skills boxes follow the posting.
+
+### Changes
+
+- A form's skills box now gets every skill the posting asks for that your CV shows (up to 12, was 10), not just a selection.
+- They go in by priority: skills named in the job title first, then the posting's keywords in order, then others the posting mentions, then the rest of your strongest.
+
 ## [2.90.4] - 2026-11-16
 
 Readable phone steps, and Tailscale's permission as a button.
@@ -2454,6 +2463,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.91.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.91.0
 [2.90.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.4
 [2.90.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.3
 [2.90.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.2

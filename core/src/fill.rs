@@ -676,6 +676,10 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
                 continue;
             }
             if known.contains(v.key.as_str()) && !v.value.trim().is_empty() {
+                // A skills box: whatever order Claude gave, the ones the posting names go in first.
+                let v = if fields.iter().any(|f| f["key"] == v.key.as_str() && f["type"] == "skills") {
+                    crate::claude::FieldValue { value: skills_by_posting(&v.value, &job), key: v.key }
+                } else { v };
                 let long = v.value.chars().count() > 120;
                 written.push(v.key.clone());
                 values.insert(v.key, json!(if long { cv::humanize(&v.value, &own) } else { v.value }));
@@ -1383,6 +1387,15 @@ mod tests {
     }
 
     #[test]
+    fn a_skills_box_gets_the_postings_skills_first() {
+        let job = crate::db::Job { title: "Release Management Lead".into(), description: "You will own budgeting and vendors.".into(),
+            keywords: vec!["Agile".into(), "stakeholder management".into()], ..Default::default() };
+        // Title first, then the keywords in their order, then what the text mentions, then the rest; no repeats.
+        assert_eq!(skills_by_posting("Power BI; Budgeting; Stakeholder Management; agile; Release Management; Power BI", &job),
+            "Release Management; agile; Stakeholder Management; Budgeting; Power BI");
+    }
+
+    #[test]
     fn saved_answers_fill_without_claude_and_may_submit() {
         let s = crate::testkit::setup();
         s.agent.search(Some(vec![crate::testkit::posting("Technical Program Manager", "1")])).unwrap();
@@ -1605,6 +1618,27 @@ pub fn keep_answers(agent: &Agent, given: &[Value]) -> R<usize> {
 // --- Claude in your browser: the Claude extension fills in what Job Hunt's own filler can't --------
 
 /// Where a hand-over to Claude stands for a job: {running, at, said, error}; empty when never asked.
+/// A skills answer ("a; b; c") with no repeats, the skills this posting names first: those in its
+/// title, then those among its keywords (in the keywords' order), then those its text mentions, then
+/// the rest. Within each the order given is kept.
+pub(crate) fn skills_by_posting(answer: &str, job: &crate::db::Job) -> String {
+    let norm = |s: &str| s.to_lowercase().chars().map(|c| if c.is_alphanumeric() || c == '+' || c == '#' { c } else { ' ' }).collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ");
+    let holds = |hay: &str, needle: &str| !needle.is_empty() && format!(" {hay} ").contains(&format!(" {needle} "));
+    let (title, text) = (norm(&job.title), norm(&job.description));
+    let keys: Vec<String> = job.keywords.iter().map(|k| norm(k)).collect();
+    let mut seen = std::collections::HashSet::new();
+    let mut list: Vec<(usize, usize, &str)> = answer.split([';', '\n']).map(str::trim).filter(|s| !s.is_empty() && seen.insert(norm(s))).enumerate().map(|(i, s)| {
+        let n = norm(s);
+        let rank = if holds(&title, &n) { 0 }
+            else if let Some(k) = keys.iter().position(|k| holds(k, &n) || holds(&n, k)) { 1 + k }
+            else if holds(&text, &n) { 1000 }
+            else { 2000 };
+        (rank, i, s)
+    }).collect();
+    list.sort();
+    list.into_iter().map(|(_, _, s)| s).collect::<Vec<_>>().join("; ")
+}
+
 pub fn claude_fill_state(agent: &Agent, job_id: &str) -> Value {
     let mut v: Value = serde_json::from_str(&agent.secret(&format!("claudefill:{job_id}"))).unwrap_or(json!({}));
     if v.get("at").is_some() {

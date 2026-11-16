@@ -941,6 +941,14 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.91.0
+
+- Skills boxes: `fill_system` now asks for every skill the posting asks for that the CV shows (up to 12,
+  was 6-10), in the posting's order of importance; `fill_form`'s message carries `<keywords>` (job.keywords).
+- `skills_by_posting` (fill.rs) reorders Claude's answer for a `skills` field whatever it gave: in the
+  title, then by posting keyword order, then mentioned in the description, then the rest; repeats dropped.
+  fill.js adds them in that order (cap 12).
+
 ## 2.90.4
 
 - `phoneTailscale` (app-actions.js): when /api/phone answers with Tailscale's "allow this once" link

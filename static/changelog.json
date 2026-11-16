@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.91.0",
+    "date": "2026-11-16",
+    "title": "Skills boxes follow the posting",
+    "changes": [
+      "A form's skills box now gets every skill the posting asks for that your CV shows (up to 12, was 10), not just a selection.",
+      "They go in by priority: skills named in the job title first, then the posting's keywords in order, then others the posting mentions, then the rest of your strongest."
+    ]
+  },
+  {
     "version": "2.90.4",
     "date": "2026-11-16",
     "title": "Readable phone steps, and Tailscale's permission as a button",

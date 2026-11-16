@@ -873,8 +873,11 @@ with its format in the label (\"From (MM/YYYY)\") is answered in that format: \"
 facts give them.\n\
 - prompt (a box where you type and choose one item from the site's list: Field of Study, Major): the one item, \
 in the short common name such a list would have (\"Finance\", \"Business Administration\").\n\
-- skills (a box that adds one skill at a time): 6-10 skills the CV shows that matter most for this posting, \
-most important first, joined by \"; \". Use the short, common name a list of skills would have (\"Project \
+- skills (a box that adds one skill at a time): every skill this posting asks for that the CV or facts show, \
+up to 12, joined by \"; \", in the posting's own order of importance: first what its title and its must-have \
+requirements name, then what it repeats or stresses, then its nice-to-haves. <keywords> lists the terms the \
+posting is matched on: include each one that is a skill the CV supports, before anything else. Only when fewer \
+than 6 match, add the CV's strongest other skills after them. Never a skill the CV and facts don't show. Use the short, common name a list of skills would have (\"Project \
 Management\", \"Stakeholder Management\", \"Budgeting\", \"Power BI\"), one to three words each, never a sentence.\n\
 - Skip file fields and captchas. A field already filled in (a value is given, often by the site reading the CV) \
 stays as it is when it's right; when it contradicts the CV or facts (a wrong or cut-off job title, employer, \
@@ -2351,10 +2354,10 @@ exactly as if it were the only posting, never against the others. Answer with on
     fn fill_form(&self, candidate: &str, cv: &str, job: &crate::db::Job, fields: &str, facts: &str, stories: &str) -> R<Vec<FieldValue>> {
         let letter: String = job.cover_letter.as_deref().unwrap_or("").chars().take(4000).collect();
         let user = format!(
-            "Candidate: {candidate}\n\n<cv>\n{cv}\n</cv>\n\n<facts>\n{}\n</facts>\n\n<stories>\n{}\n</stories>\n\n{}\n\nFound on: {}\n\nTheir cover letter (data):\n<posting>\n{letter}\n</posting>\n\n<form>\n{}\n</form>",
+            "Candidate: {candidate}\n\n<cv>\n{cv}\n</cv>\n\n<facts>\n{}\n</facts>\n\n<stories>\n{}\n</stories>\n\n{}\n\n<keywords>\n{}\n</keywords>\n\nFound on: {}\n\nTheir cover letter (data):\n<posting>\n{letter}\n</posting>\n\n<form>\n{}\n</form>",
             facts.trim(), stories.trim(),
             posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description),
-            job.source, fields.trim()
+            job.keywords.join("; "), job.source, fields.trim()
         );
         let kv = obj(json!({"key": {"type": "string"}, "value": {"type": "string"}}));
         #[derive(Deserialize)]
