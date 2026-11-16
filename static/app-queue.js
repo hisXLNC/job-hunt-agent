@@ -303,8 +303,6 @@ async function showOverview(arg) {
       </div>
       <div class="row head-acts">
         <a class="btn ghost" href="#add">${svg('add')}Add a job</a>
-        ${setup.google ? `<button class="btn ghost mail-btn" data-act="run" data-task="inbox" title="Your job email was checked ${esc(ago(o.last_inbox))}. Press to check it now.">${svg('mail')}<span>${esc(ago(o.last_inbox))}</span></button>`
-          : googleOff ? '' : `<a class="btn ghost mail-btn" href="#settings/connections" title="Gmail isn't connected: connect it and Job Hunt sorts your job email and drafts replies">${svg('mail')}<span>Connect email</span></a>`}
         ${searching ? searchCtl(o.progress)
           : `<span class="split"><button class="btn${all.length ? '' : ' primary'}" data-act="run" data-task="search" ${!o.setup?.cvs ? 'disabled title="Add your CV first"' : ''}>${svg('search')}Search for jobs now</button><details class="menu search-menu"><summary class="btn${all.length ? '' : ' primary'}${side.paused ? ' paused' : ''}" title="The last search, its results, and the daily search" aria-label="Search: results and schedule"><span class="caret"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="menu-list right">
               <p class="menu-note"><b>Last search</b> ${o.last_search ? `${esc(ago(o.last_search))}${o.last_report ? `: ${o.last_report.new} new` : ''}` : 'not yet'}</p>

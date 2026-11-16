@@ -563,8 +563,17 @@ function renderNav() {
     el.title = $(note).textContent; el.setAttribute('aria-label', $(note).textContent);
     $(id.replace(/^#(.)/, '#$1Dot')).className = $(dot).className; $(`${id}Note`).textContent = short;
   };
-  // Email not connected isn't a fault (the Queue offers Connect email): no chip for it.
-  for (const id of ['#dGoogle', '#mGoogle']) { const el = $(id); if (el) { el.hidden = true; el.title = $('#googleNote').textContent; } }
+  // Email, in the bar: connected, the envelope checks it now (its tip says when it was last checked);
+  // not connected (and not turned down), it leads to connecting it. No dot: it isn't a fault.
+  for (const id of ['#dGoogle', '#mGoogle']) {
+    const el = $(id); if (!el) continue;
+    el.hidden = !g && off;
+    const tip = g ? `${overview?.last_inbox ? `Your job email was checked ${ago(overview.last_inbox)}` : 'Gmail is connected'}. Press to check it now.` : 'Gmail isn\'t connected: connect it and Job Hunt sorts your job email and drafts replies';
+    el.title = tip; el.setAttribute('aria-label', tip);
+    if (g) { el.dataset.act = 'run'; el.dataset.task = 'inbox'; } else { delete el.dataset.act; delete el.dataset.task; }
+    el.classList.add('mail-chip');
+    $(`${id}Note`).textContent = g ? (overview?.last_inbox ? ago(overview.last_inbox) : 'Check email') : 'Connect email';
+  }
   chip('#dSync', '#syncLine', '#dotSync', '#syncNote', $('#syncNote').textContent);
   const allFine = [$('#runNote').textContent, g ? $('#googleNote').textContent : '', $('#syncLine').hidden ? '' : $('#syncNote').textContent].filter(Boolean).join(' · ');
   if ($('#dRunNote')) { $('#dRunNote').textContent = $('#runNote').textContent; $('#dDotRun').className = $('#dotRun').className; $('#dRun').title = `${allFine}. Press for what the search found.`; }

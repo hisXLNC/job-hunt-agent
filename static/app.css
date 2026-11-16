@@ -2218,3 +2218,23 @@ table.site-fills th { font-size: 12px; color: var(--muted); font-weight: 600; wh
 [data-rtab]:not([hidden]), #pathsPart, #coachPart { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
 .part-head { margin: 6px 0 -8px; }
 @media (max-width: 720px) { [data-rtab]:not([hidden]), #pathsPart, #coachPart { gap: 16px; } }
+
+/* ---- Email in the top bar: an envelope that checks it now (it was a button in the Queue's heading) ---- */
+.mail-chip .dot { display: none; }
+.mail-chip svg { display: inline-block !important; }
+.mail-chip { cursor: pointer; }
+.mail-chip:disabled, .mail-chip[disabled] { opacity: .5; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
+  .mchip.mail-chip { color: var(--ink); padding: 4px 8px; }
+  .mchip.mail-chip svg { width: 21px; height: 21px; }
+  .mchip.mail-chip .mchip-t { display: none; }
+  /* The name and the version stay two tight lines beside the logo (each link was made 44px tall, as a
+     bar button is, which pushed them apart and the logo off its line). */
+  .mtop .mbrand { align-items: center; }
+  .mtop .mbrand .brand-text a { min-height: 0; display: block; }
+  .mtop .mbrand .brand-text { justify-content: center; gap: 2px; }
+  .mtop .mbrand > a { min-height: 44px; }
+  .mtop .mbrand img { width: 28px; height: 28px; display: block; }
+  .mtop .mbrand .brand-text b { font-size: 15px; line-height: 1.1; }
+  .mtop .mbrand .brand-ver { font-size: 10.5px; line-height: 1.1; margin-top: 0; white-space: nowrap; }
+}

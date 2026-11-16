@@ -2792,3 +2792,18 @@ fn skipped_notes_leave_the_queue_and_follow_ups_avoid_application_systems() {
     s.agent.db().set("seen:reach:test:1", "x").unwrap();
     assert!(s.agent.reach_out_due().unwrap().is_empty(), "skipped: off the list");
 }
+
+#[test]
+fn applying_looks_for_the_recruiter_and_says_who_it_found() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    s.agent.db().set_status("test:1", "applied", "").unwrap();
+    s.notes.lock().unwrap().clear();
+    assert_eq!(s.agent.find_after_applying("test:1").unwrap(), Some(1));
+    let notes = s.notes.lock().unwrap().clone();
+    assert!(notes.iter().any(|n| n == "Found Priya Shah at Acme"), "{notes:?}");
+    let people = s.agent.contacts("test:1");
+    assert!(!people[0]["message"].as_str().unwrap().is_empty(), "the note is written");
+    // Someone is on the job now: applying again (or a second look) finds nothing to do.
+    assert_eq!(s.agent.find_after_applying("test:1").unwrap(), None);
+}

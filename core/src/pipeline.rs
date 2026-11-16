@@ -1841,8 +1841,17 @@ replies and interviews, and a little lower for kinds that got none from several 
                     let (a, id) = (self.clone(), job_id.to_string());
                     std::thread::spawn(move || {
                         let Ok(_g) = a.claim(&format!("contact:{id}")) else { return };
-                        if let Err(e) = crate::recruiters::on_applied(&a, &id) {
-                            let _ = a.db().log(Some(&id), "recruiter:error", &e.0);
+                        match crate::recruiters::on_applied(&a, &id) {
+                            Err(e) => {
+                                let _ = a.db().log(Some(&id), "recruiter:error", &e.0);
+                            }
+                            // Nobody known to write to: look for the recruiter or hiring team, and say what came of it.
+                            Ok(None) => {
+                                if let Err(e) = a.find_after_applying(&id) {
+                                    let _ = a.db().log(Some(&id), "contact:error", &e.0);
+                                }
+                            }
+                            Ok(Some(_)) => {}
                         }
                     });
                 }

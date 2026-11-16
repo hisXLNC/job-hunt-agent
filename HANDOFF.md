@@ -941,6 +941,12 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.89.0
+
+- Applying looks for the recruiter: `after_stage("applied")` runs `recruiters::on_applied` as before; when that had nobody to write to (`Ok(None)`), `Agent::find_after_applying` (people.rs) runs under the same `contact:<id>` claim: skipped for government hiring, a job with someone on it, a company already messaged, or a skipped note; otherwise `find_recruiter`, then a notice "Found <name> at <company>" or "No recruiter found at <company>". Other errors (Claude's limit) are only logged (`contact:error`), so the Queue's button remains.
+- Email in the top bar: `#dGoogle` / `#mGoogle` (class `mail-chip`, no dot) get `data-act="run" data-task="inbox"` when Gmail is connected, else link to connecting it (hidden when Google was skipped). The Queue heading's `mail-btn` is gone.
+- Phone top bar: `.mtop a { min-height: 44px }` applied to the name and version links too, pushing them apart; they're `min-height: 0` now, logo 28px.
+
 ## 2.88.0
 
 - Finding people: `find_recruiters_system` now works through the posting, LinkedIn profiles, LinkedIn posts about the opening, the company's own site and (agency postings) the agency; up to 5; effort medium, 8 min. `FoundPerson` gained `email` and `source`; `claude::found_people` keeps a person only with a linkedin.com/in link, an http source page or a real address (never an application system's: `pipeline::robot_address`). `find_recruiter` fills a known contact's missing email/link instead of skipping them.

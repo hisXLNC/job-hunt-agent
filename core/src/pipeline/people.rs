@@ -104,6 +104,35 @@ impl Agent {
         Ok(found.len())
     }
 
+    /// You just applied and know nobody there: look for the recruiter or hiring team (and write the
+    /// note to the best one), then send a notice with what came of it. None when there's no call to
+    /// look: government hiring, someone already on the job or already messaged at the company, or a
+    /// note you skipped. Some(how many were found).
+    pub fn find_after_applying(&self, job_id: &str) -> R<Option<usize>> {
+        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        if !crate::playbook::kind(&job).reach_out() || self.contacts(job_id).iter().any(|c| c["name"] != "Recruiter")
+            || !self.messaged_at(&job.company).is_empty() || self.skipped("reach", job_id) {
+            return Ok(None);
+        }
+        let found = match self.find_recruiter(job_id) {
+            Ok(n) => n,
+            // Nobody found is a result too; anything else (Claude's limit, say) is left for the Queue's button.
+            Err(e) if e.0.starts_with("Couldn't find") => 0,
+            Err(e) => return Err(e),
+        };
+        if found == 0 {
+            self.note(&format!("No recruiter found at {}", job.company), &format!("Job Hunt looked on the posting, LinkedIn and the company's site for who hires for {}. Know who it is? Add them on the job's People tab and Job Hunt writes the note.", job.title));
+            return Ok(Some(0));
+        }
+        let people = self.contacts(job_id);
+        let best = people.iter().find(|c| !c["message"].as_str().unwrap_or("").is_empty()).or(people.first());
+        let (name, role) = best.map(|c| (c["name"].as_str().unwrap_or("").to_string(), c["role"].as_str().unwrap_or("").to_string())).unwrap_or_default();
+        let more = if found > 1 { format!(" and {} more", found - 1) } else { String::new() };
+        self.note(&format!("Found {name} at {}", job.company), &format!("{}{more}, for your application for {}. A short note to {} is written: read it on the job's People tab and send it.",
+            if role.is_empty() { "The person to write to".into() } else { role }, job.title, name.split_whitespace().next().unwrap_or("them")));
+        Ok(Some(found))
+    }
+
     pub fn write_outreach(&self, job_id: &str, index: usize) -> R<String> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let mut list = self.contacts(job_id);

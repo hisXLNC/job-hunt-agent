@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.89.0] - 2026-11-16
+
+The recruiter, found when you apply.
+
+### Changes
+
+- When you mark a job applied and know nobody there, Job Hunt looks for the recruiter or hiring team by itself, writes the note, and sends you a notice saying who it found (or that it found nobody).
+- The envelope that checks your email is now in the bar at the top, on every page.
+- On a phone, the logo, name and version at the top line up again.
+
 ## [2.88.0] - 2026-11-15
 
 Finding the recruiter, and skipping notes.
@@ -2397,6 +2407,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.89.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.89.0
 [2.88.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.88.0
 [2.87.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.87.0
 [2.86.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.86.1
