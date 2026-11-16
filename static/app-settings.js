@@ -489,13 +489,8 @@ async function settingsCards(tab, sub, host, given) {
     body = st.kind === 'server' || st.remote.here
       ? `<!--@ext--><section class="card"><header><h2>Browser extension</h2></header><p class="muted"><b>Send to Job Hunt</b> for Chrome or Edge sends a posting you're looking at to Job Hunt and fills in application forms in your own browser. It's set up on the computer Job Hunt runs on: open Job Hunt there and go to <b>Settings → Applying → Filling in forms</b>.</p>
           </section>
-        <!--@phonefill--><section class="card"><header><h2>Fill forms on this phone</h2></header>
-          <p class="muted">A phone's browser can't run the extension, so on a phone a bookmark does the filling. It carries your private key, so Job Hunt only hands it out on your PC.</p>
-          <ol class="small steps-list">
-            <li>On your PC, open Job Hunt: <b>Settings</b> → <b>Phone</b> → <b>Fill forms on your phone</b>.</li>
-            <li>Press <b>Copy the bookmark</b> and send it to yourself (a note or an email to yourself).</li>
-            <li>On this phone, bookmark any page, then edit that bookmark: name it <b>Job Hunt Fill</b> and paste what you copied as its address.</li>
-            <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark. The Job Hunt panel appears and fills in the form.</li></ol></section>`
+        <!--@phonefill-->${st.ext_key ? phoneCard(st, true) : `<section class="card"><header><h2>Fill forms on this phone</h2></header>
+          <p class="muted">A phone's browser can't run the extension. Job Hunt on your PC fills forms on a phone through a shortcut or a bookmark; this copy of Job Hunt (a server) can't.</p></section>`}`
       : `<!--@ext-->${extensionCard(st)}<!--@phonefill-->${st.ext_key ? phoneCard(st) : `<section class="card"><header><h2>Fill forms on your phone</h2></header><p class="muted">Set up the <a href="#settings/applying/forms">browser extension</a> on this PC first: the phone uses the same key.</p></section>`}`;
   } else if (tab === 'sync') {
     const server = st.kind === 'server', here = st.remote.here;

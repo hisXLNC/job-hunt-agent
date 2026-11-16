@@ -597,12 +597,12 @@ async function act(el) {
   }
   if (a === 'copyFillLink') {
     const st = await api('/api/settings');
-    try { await navigator.clipboard.writeText(`${st.phone_url}/m/fill.js?k=${encodeURIComponent(st.ext_key)}&s=1`); toast('Copied. Send it to your phone and paste it into the shortcut\'s Get Contents of URL.'); } catch (e) { toast('Couldn\'t copy.', true); }
+    if (await copyText(`${st.phone_url}/m/fill.js?k=${encodeURIComponent(st.ext_key)}&s=1`)) toast(st.remote?.here ? 'Copied. Paste it into the shortcut\'s Get Contents of URL.' : 'Copied. Send it to your phone and paste it into the shortcut\'s Get Contents of URL.'); else toast('Couldn\'t copy.', true);
     return;
   }
   if (a === 'copyPhone') {
     const st = await api('/api/settings');
-    try { await navigator.clipboard.writeText(phoneBookmark(st)); toast('Copied. Send it to your phone and paste it as a bookmark\'s address.'); } catch (e) { toast('Couldn\'t copy.', true); }
+    if (await copyText(phoneBookmark(st))) toast(st.remote?.here ? 'Copied. Paste it as a bookmark\'s address.' : 'Copied. Send it to your phone and paste it as a bookmark\'s address.'); else toast('Couldn\'t copy.', true);
     return;
   }
   if (a === 'kwForget') return busy(async () => { renderKeywords(await api('/api/keywords', { method: 'POST', body: { forget: el.dataset.k } })); }, 'Removed. Job Hunt no longer adds it by itself.');
@@ -642,7 +642,7 @@ async function act(el) {
   }
   if (a === 'copyShare') {
     const st = await api('/api/settings');
-    try { await navigator.clipboard.writeText(`${st.phone_url}/m/add?k=${encodeURIComponent(st.ext_key)}&u=`); toast('Copied. Send it to your phone for the shortcut.'); } catch (e) { toast('Couldn\'t copy.', true); }
+    if (await copyText(`${st.phone_url}/m/add?k=${encodeURIComponent(st.ext_key)}&u=`)) toast('Copied, for the shortcut.'); else toast('Couldn\'t copy.', true);
     return;
   }
   if (a === 'phoneTailscale') return busy(async () => { await api('/api/phone', { method: 'POST', body: { action: 'tailscale' } }); route(); }, 'Set up: Job Hunt can be reached from your phone through Tailscale.');

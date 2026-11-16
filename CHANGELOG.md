@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.90.0] - 2026-11-16
+
+One status button, and a better phone.
+
+### Changes
+
+- The top bar has one status button in place of the separate icons: green when all is well, blue while Job Hunt is working, amber with the words when something needs you. Press it for the search, email, backup, Claude, what's running (with Stop) and the Auto, Light and Dark switch. The Idle panel at the bottom left is gone.
+- Notices are kept: the last ones are listed under the status button, with a count for new ones, so one you missed isn't lost.
+- On a phone: the Queue's heading is much shorter, a job's next step stays in reach at the bottom of its page, and in One by one you swipe left for Not interested (it asks first) and right to skip.
+- Filling forms on a phone can be set up on the phone itself: open Job Hunt there, Settings, Fill forms on this phone, and copy the link or bookmark straight to it. No PC needed for that step.
+
 ## [2.89.0] - 2026-11-16
 
 The recruiter, found when you apply.
@@ -2408,6 +2419,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.90.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.90.0
 [2.89.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.89.0
 [2.88.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.88.0
 [2.87.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.87.0

@@ -6,15 +6,27 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 
 /** The phone's "Fill this form" bookmark: loads Job Hunt's form filler from your PC (through Tailscale). */
 const phoneBookmark = st => `javascript:(function(){var s=document.createElement('script');s.src='${st.phone_url}/m/fill.js?k=${encodeURIComponent(st.ext_key)}&t='+Date.now();s.onerror=function(){alert('Job Hunt: couldn\\'t reach your PC. Is Job Hunt running there, and Tailscale on on this phone? (A few sites block it.)')};document.documentElement.appendChild(s)})();`;
-function phoneCard(st) {
+/** Copy text, also where the page isn't served securely (Job Hunt on a phone, by its Tailscale
+ *  address, has no clipboard API): the old way, through a text box. */
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  const t = document.createElement('textarea');
+  t.value = text; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+  document.body.appendChild(t); t.focus(); t.select(); t.setSelectionRange(0, text.length);
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+  t.remove(); return ok;
+}
+/** `here`: drawn on the phone itself (Job Hunt opened there), so nothing has to be sent to it. */
+function phoneCard(st, here) {
   const url = st.phone_url || '';
+  const sent = here ? '. It\'s copied on this phone, ready to paste' : ' and send it to yourself (a note or an email to yourself)';
   return `<section class="card" id="phoneCard"><header><h2>Fill forms on your phone</h2>${url ? `<span class="pill ${st.phone_last ? 'good' : ''}">${st.phone_last ? 'Used ' + esc(fmtWhen(st.phone_last)) : 'Ready'}</span>` : ''}</header>
-    <p class="muted">Apply from your phone's browser and Job Hunt fills in the form, from this PC (it has to be on, with Job Hunt running). Your phone reaches it through Tailscale, so only your own devices can.</p>
+    <p class="muted">Apply from your phone's browser and Job Hunt fills in the form, from ${here ? 'your' : 'this'} PC (it has to be on, with Job Hunt running). Your phone reaches it through Tailscale, so only your own devices can.</p>
     ${url ? `<h3>From Safari's Share button (iPhone and iPad)</h3>
       <p class="muted small">A shortcut you make once. After that: on an application form, <b>Share</b> → <b>Fill with Job Hunt</b>, and the Job Hunt panel appears on the page and fills it in. Nothing to install: Shortcuts comes with the iPhone.</p>
       <ol class="small steps-list">
       <li>On your phone, turn on Tailscale.</li>
-      <li>Get this link onto your phone: <button class="btn sm" data-act="copyFillLink">Copy the link</button> and send it to yourself (a note or an email to yourself). It holds your key: keep it to yourself.</li>
+      <li>${here ? '' : 'Get this link onto your phone: '}<button class="btn sm" data-act="copyFillLink">Copy the link</button>${sent}. It holds your key: keep it to yourself.</li>
       <li>In the iPhone's <b>Settings</b> → <b>Apps</b> → <b>Shortcuts</b> → <b>Advanced</b>, turn on <b>Allow Running Scripts</b>.</li>
       <li>In <b>Shortcuts</b>, press <b>+</b> and name it <b>Fill with Job Hunt</b>. Press the <b>ⓘ</b>, turn on <b>Show in Share Sheet</b>, and under what it receives leave only <b>Safari web pages</b> ticked.</li>
       <li>Add the action <b>Get Contents of URL</b> and paste the link as its address.</li>
@@ -22,14 +34,14 @@ function phoneCard(st) {
       <li>On an application form in Safari: <b>Share</b> → <b>Fill with Job Hunt</b>. The first time, the iPhone asks whether the shortcut may run on that site: allow it.</li></ol>
       <h3 style="margin-top:18px">Or a bookmark (any browser, Android too)</h3>
       <ol class="small steps-list">
-      <li>Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself. Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.</li>
+      <li>${here ? '<button class="btn sm" data-act="copyPhone">Copy the bookmark</button>. It\'s copied on this phone.' : 'Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself. Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.'}</li>
       <li>On the phone, bookmark any page, then edit the bookmark: name it <b>Job Hunt Fill</b> and paste what you copied as its address (URL).</li>
       <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark (in Safari, open Bookmarks and tap it). A few sites block a bookmark from loading Job Hunt; the Share button's shortcut still works there.</li></ol>
       <p class="muted small">On the phone, Workday's skills are chosen as best Job Hunt can; tick any it missed. This PC has to be on, with Job Hunt running. Address: <code>${esc(url)}</code> <button class="btn ghost sm" data-act="phoneReset">Change</button></p>
       <h3 style="margin-top:18px">Send jobs from the LinkedIn app</h3>
       <p class="muted small">Share a job from the LinkedIn app (or any app or browser) to Job Hunt: it's added and scored here, and you get a notice.</p>
       <ol class="small steps-list">
-        <li>Get this link onto your iPhone: <button class="btn sm" data-act="copyShare">Copy the link</button> (send it to yourself, like the bookmark).</li>
+        <li>${here ? '' : 'Get this link onto your iPhone: '}<button class="btn sm" data-act="copyShare">Copy the link</button>${here ? '' : ' (send it to yourself, like the bookmark)'}.</li>
         <li>In <b>Shortcuts</b>, press <b>+</b> and name it <b>Send to Job Hunt</b>. Press the <b>ⓘ</b> and turn on <b>Show in Share Sheet</b>.</li>
         <li>Add the action <b>URL Encode</b> (it takes the <b>Shortcut Input</b>).</li>
         <li>Add <b>Get Contents of URL</b>: paste the link as its address, then tap at its end and insert <b>URL Encoded Text</b>.</li>
@@ -602,6 +614,8 @@ function renderNav() {
   if (overview?.version) $('#versionNote').textContent = `Job Hunt ${shortVersion(overview.version)}`;
   // Under the name, top left: the version, which opens what's new in it.
   if (overview?.version) document.querySelectorAll('[data-version]').forEach(el => { el.textContent = `Version ${shortVersion(overview.version)}`; });
+  // The one status button says what all of the above adds up to (app-activity.js).
+  if (typeof hubDraw === 'function') hubDraw();
 }
 
 let overviewAt = 0, scrollToAfter = '';

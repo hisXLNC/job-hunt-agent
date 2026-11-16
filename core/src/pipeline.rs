@@ -1216,7 +1216,20 @@ impl Agent {
     /// A Windows notification (or whatever the host shows).
     pub fn note(&self, title: &str, body: &str) {
         (self.notify)(title, body);
+        self.keep_notice(title, body);
         self.push_to_phone(title, body);
+    }
+
+    /// The last notices, newest first, for the app's own list (a pop-up missed isn't lost): [{at, title, body}].
+    pub fn notices(&self) -> Vec<Value> {
+        serde_json::from_str(&self.secret("notices.log")).unwrap_or_default()
+    }
+
+    fn keep_notice(&self, title: &str, body: &str) {
+        let mut all = self.notices();
+        all.insert(0, json!({ "at": now(), "title": title, "body": body }));
+        all.truncate(30);
+        let _ = self.db().set("notices.log", &json!(all).to_string());
     }
 
     /// The same notice on your phone, through the ntfy app, when you've turned that on.

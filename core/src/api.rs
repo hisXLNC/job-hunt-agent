@@ -851,7 +851,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ["api", "certs", "rescore"] => return Ok(Resp::json(&json!({ "postings": agent.cert_postings().len(), "running": agent.is_running("rescore") }))),
             // What's running now, for the activity panel.
             // What's running now, and (for when nothing is) the last things Job Hunt did.
-            ["api", "activity"] => return Ok(Resp::json(&json!({ "running": agent.activity(), "recent": agent.db().recent_events(6)?, "last_search": agent.secret("last.search") }))),
+            ["api", "activity"] => return Ok(Resp::json(&json!({ "running": agent.activity(), "recent": agent.db().recent_events(6)?, "last_search": agent.secret("last.search"),
+                "notices": agent.notices().into_iter().take(8).collect::<Vec<_>>() }))),
             // The search, when it seems stuck: where it is, how long it's been quiet, and its log.
             ["api", "search-log"] => return Ok(Resp::json(&agent.search_log())),
             ["api", "debug"] => return Ok(Resp::json(&agent.debug_state())),
@@ -878,8 +879,10 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ["api", "settings"] => {
                 let mut v = settings(agent, host)?;
                 v["remote"]["here"] = json!(req.remote);
-                if req.remote {
-                    v["ext_key"] = json!(""); // only on the computer itself
+                // The fill key goes to your own signed-in phone too (Remote access), so the phone's
+                // bookmark or shortcut can be made on the phone itself. The server has no filler.
+                if req.remote && host.kind() == "server" {
+                    v["ext_key"] = json!("");
                 }
                 return Ok(Resp::json(&v));
             }
@@ -1361,7 +1364,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         // Fill forms on your phone: share Job Hunt with your own devices through Tailscale, or keep the
         // address you typed (another way to reach this computer).
-        ["api", "phone"] if req.remote || host.kind() == "server" => Err(Error("Set this up in Job Hunt on your PC.".into())),
+        ["api", "phone"] if host.kind() == "server" => Err(Error("Set this up in Job Hunt on your PC.".into())),
         ["api", "phone"] => {
             let url = if s(&b, "action") == "tailscale" {
                 crate::bridge::tailscale_serve()?

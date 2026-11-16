@@ -941,6 +941,13 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.90.0
+
+- One status button ("hub", app-activity.js): `hubState()` (busy from `running.list`; warn from the hidden `#statusPop` lines `connLine`, `limitLine`, `updateNote`, `syncLine` + `dotSync`; else "All good"), `hubSheetHtml()` (running rows with Stop, Search / Email / Backup / Claude rows with their action, Notices, recent events, `data-hub-theme`), `hubDraw()` (called from `actDraw` and the end of `renderNav`), `hubToggle()`. Buttons `.hub.desk` (before `#statusPop`) and `.hub.phone` (in `.mtop`); the sheet `#hubSheet` is fixed under whichever shows. The old `.dstats`, `#dTheme`, `.mstats`, `#mTheme` are still made and updated (their words feed the hub) but hidden by CSS; `#actBar` is gone.
+- Notices kept: `Agent::note` → `keep_notice` (secret `notices.log`, newest first, 30); `/api/activity` returns `notices` (8). Unread = newer than `localStorage hub.seen`, cleared when the sheet is opened.
+- Phone: `.qhead` (no date line, small headline, only Add a job; search is in the hub); swipes on `article.card.decision` (left clicks the card's `[data-status="dismissed"]`, which asks first; right clicks `queueSkip`), those two buttons hidden on touch screens with `.swipe-hint` in their place; the job page's `.card.next-step.actions` is fixed above the tab bar.
+- Phone fill set up from the phone: a signed-in remote session on the desktop app now gets `ext_key` and may call `/api/phone`; `phoneCard(st, here)`; `copyText()` falls back to a text box where there is no clipboard API (plain http by Tailscale address).
+
 ## 2.89.0
 
 - Applying looks for the recruiter: `after_stage("applied")` runs `recruiters::on_applied` as before; when that had nobody to write to (`Ok(None)`), `Agent::find_after_applying` (people.rs) runs under the same `contact:<id>` claim: skipped for government hiring, a job with someone on it, a company already messaged, or a skipped note; otherwise `find_recruiter`, then a notice "Found <name> at <company>" or "No recruiter found at <company>". Other errors (Claude's limit) are only logged (`contact:error`), so the Queue's button remains.

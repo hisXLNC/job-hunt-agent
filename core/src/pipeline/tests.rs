@@ -2805,5 +2805,7 @@ fn applying_looks_for_the_recruiter_and_says_who_it_found() {
     let people = s.agent.contacts("test:1");
     assert!(!people[0]["message"].as_str().unwrap().is_empty(), "the note is written");
     // Someone is on the job now: applying again (or a second look) finds nothing to do.
+    // The notice is kept for the app's own list too.
+    assert_eq!(s.agent.notices()[0]["title"], "Found Priya Shah at Acme");
     assert_eq!(s.agent.find_after_applying("test:1").unwrap(), None);
 }

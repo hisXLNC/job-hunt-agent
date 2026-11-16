@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.90.0",
+    "date": "2026-11-16",
+    "title": "One status button, and a better phone",
+    "changes": [
+      "The top bar has one status button in place of the separate icons: green when all is well, blue while Job Hunt is working, amber with the words when something needs you. Press it for the search, email, backup, Claude, what's running (with Stop) and the Auto, Light and Dark switch. The Idle panel at the bottom left is gone.",
+      "Notices are kept: the last ones are listed under the status button, with a count for new ones, so one you missed isn't lost.",
+      "On a phone: the Queue's heading is much shorter, a job's next step stays in reach at the bottom of its page, and in One by one you swipe left for Not interested (it asks first) and right to skip.",
+      "Filling forms on a phone can be set up on the phone itself: open Job Hunt there, Settings, Fill forms on this phone, and copy the link or bookmark straight to it. No PC needed for that step."
+    ]
+  },
+  {
     "version": "2.89.0",
     "date": "2026-11-16",
     "title": "The recruiter, found when you apply",

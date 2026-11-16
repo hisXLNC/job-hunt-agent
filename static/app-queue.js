@@ -112,7 +112,7 @@ let queueSkipped = new Set(), queueAt = '';
 /** How the Queue is shown: every listing at once ('list', unless you choose otherwise) or one decision at a time ('one'). Remembered on this device. */
 const queueView = () => { try { return localStorage.getItem('jh.queueView') === 'one' ? 'one' : 'list'; } catch (e) { return 'list'; } };
 /** A decision's buttons: the quiet ones on the left, a gap, then the one that moves it on. */
-const dbar = (quiet, main) => `<div class="dbar">${quiet}<span class="sp"></span>${main}<button class="btn ghost skip" type="button" data-act="queueSkip" title="Leave it for now and see the next one (→)">Skip${svg('next')}</button></div>`;
+const dbar = (quiet, main) => `<div class="dbar">${quiet}<span class="sp"></span>${main}<button class="btn ghost skip" type="button" data-act="queueSkip" title="Leave it for now and see the next one (→)">Skip${svg('next')}</button><span class="swipe-hint">Swipe left: not interested · swipe right: skip</span></div>`;
 const key = k => `<kbd class="k">${k}</kbd>`;
 /** The top of a decision about a job: its company tile, what kind of decision, its name and facts, its fit. */
 function decisionTop(j, kicker, fit = fitRing(j.score_after ?? j.score)) {
@@ -292,7 +292,7 @@ async function showOverview(arg) {
   const picks = n('pick');
   // The same number as the Queue's badge: what needs you. New matches to pick from are their own count.
   const needsYou = queueCount(all.filter(x => x.step !== 'pick'));
-  page(`<div class="head">
+  page(`<div class="head qhead">
       <div class="grow">
         <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${first ? ` · ${greeting()}, ${esc(first)}` : ''}</div>
         <h1>${step ? tabHeading(step, all.filter(x => x.step === step && x.kind !== 'held').length, o.held || 0) : needsYou ? `${needsYou} waiting for you` : queueCount(all) ? `${queueCount(all)} new match${queueCount(all) === 1 ? '' : 'es'} to pick from` : o.held ? `${o.held} posting${o.held === 1 ? '' : 's'} waiting to be scored` : all.length ? 'No decisions waiting' : neededDone ? 'Nothing needs you right now' : 'Let\'s get you set up'}</h1>
