@@ -2423,3 +2423,7 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
   .card.next-step.actions .next-more { margin: 4px -4px 0; padding-top: 2px; }
   .card.next-step.actions .next-more .btn { min-height: 32px; padding: 2px 8px; font-size: 13px; }
 }
+
+/* Work on a job that didn't finish: said under its next step, with a way to try again. */
+.work-failed { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.work-failed b { color: var(--warn); }

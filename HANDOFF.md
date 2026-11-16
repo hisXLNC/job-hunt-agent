@@ -1092,3 +1092,14 @@ The ten screen changes the user approved ("do them all"):
 - Still to do: step 4, the screens read `lifecycle.next` (job page, Queue, All jobs, assistant) in
   place of `jobActions` / `queueItems` / the All jobs `next` / `nextText`; show failed work on the
   job page; step 5, refuse moves outside `MOVES` (only after the user's debug logs show none).
+
+## Unreleased on the working branch (lifecycle step 4, part 1: the job page)
+
+- `lifecycle::next` now carries the job page's wording (`text`), a list wording (`short`), per-action
+  `short` labels and `quiet` for the ways out. `static/app-job.js`: `jobActions(..., lc)` takes its
+  sentence and buttons from `lifecycle.next` through `nextButton(j, a)`; `workFailed(j, work)`
+  draws a `.work-failed` line per failed piece of work, with Try again where one call restarts it.
+- Checked: the Next card's HTML for all 11 stages, before and after, is identical except the word
+  "below" dropped from the Ready sentence and the new failed-work line.
+- Not released: waiting for the user to see the failed-work line. Still to switch: Queue
+  (`queueItems`, `rowActions`), All jobs `next`, the assistant.

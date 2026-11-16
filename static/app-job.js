@@ -11,24 +11,39 @@ const webSearchFor = j => `https://www.google.com/search?q=${encodeURIComponent(
 // The job whose real posting you asked for: when the look on the company's site ends with
 // nothing, the web search opens by itself (see renderJob).
 let findAsked = '';
-function jobActions(j, tailoring, progress, finding = false, looked = null) {
+/** One of the lifecycle's actions (see core/src/lifecycle.rs) as a button. */
+function nextButton(j, a, tailoring = false) {
+  const id = esc(j.id), on = `data-job="${id}" data-from="${esc(j.status)}"`, cls = `btn${a.quiet ? ' ghost sm' : ''}${a.primary ? ' primary' : ''}`;
+  switch (a.act) {
+    case 'tailor': return `<button class="${cls}" data-act="tailorPicked" data-job="${id}">${esc(a.label)}</button>`;
+    case 'tailor_anyway': return `<button class="${cls}" data-act="tailorAnyway" data-job="${id}" ${tailoring ? 'disabled' : ''}>${esc(a.label)}</button>`;
+    case 'approve': return `<button class="${cls}" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">${svg('check')}${esc(a.label)}</button>${j.apply_email ? `<span class="muted small approve-to">by email to ${esc(j.apply_email)}</span>` : ''}`;
+    case 'fill': return `<button class="${cls}" data-act="fillBrowser" data-job="${id}">${svg('open')}${esc(a.label)}</button>`;
+    case 'open': return `<button class="${cls}" data-act="open" data-job="${id}" data-what="${esc(a.what || 'posting')}">${svg('open')}${esc(a.label)}</button>`;
+    case 'follow_up': return `<button class="${cls}" data-act="followUp" data-job="${id}">${esc(a.label)}</button>`;
+    case 'stage': return `<button class="${cls}${a.to === 'dismissed' ? ' danger' : ''}" data-act="stage" ${on} data-status="${esc(a.to)}">${a.to === 'applied' ? svg('check') : ''}${esc(a.label)}</button>`;
+  }
+  return '';
+}
+/** Background work on this job that didn't finish, each with its reason and a way to try again. */
+const WORK_NAME = { tailor: 'Tailoring your CV', revise: 'Your change to the CV or letter', prep: 'The interview prep', contact: 'Finding who to write to', answers: 'The answers to the form\'s questions', followup: 'The follow-up', thanks: 'The thank-you note', review: 'The CV check', decline: 'The reply', offer: 'The offer advice' };
+const WORK_RETRY = { tailor: 'tailorAnyway', prep: 'prep', followup: 'followUp', thanks: 'thanks', review: 'review' };
+function workFailed(j, work) {
+  return Object.entries(work || {}).filter(([k, w]) => w.state === 'failed' && WORK_NAME[k]).map(([k, w]) => {
+    const why = (w.why || '').trim().replace(/[.\s]+$/, '');
+    return `<p class="small work-failed"><span><b>${WORK_NAME[k]} didn't finish</b>${why ? `: ${esc(why.length > 220 ? why.slice(0, 220) + '…' : why)}` : ''}.</span>${WORK_RETRY[k] ? `<button class="btn sm" data-act="${WORK_RETRY[k]}" data-job="${esc(j.id)}">Try again</button>` : ''}</p>`;
+  }).join('');
+}
+function jobActions(j, tailoring, progress, finding = false, looked = null, lc = null) {
   const id = esc(j.id), on = `data-job="${id}" data-from="${esc(j.status)}"`;
-  const enc = encodeURIComponent(j.id);
-  // What to do now, in a sentence, with its button (or two).
-  let next = '', main = [];
-  if (tailoring) next = 'Job Hunt is tailoring your CV and cover letter. This page updates by itself.';
-  else if (j.status === 'queued') { next = 'Read the posting and why it fits. Worth applying to? Job Hunt tailors your CV and writes a cover letter.'; main = [`<button class="btn primary" data-act="tailorPicked" data-job="${id}">Tailor my CV for this role</button>`]; }
-  else if (j.status === 'ready') { next = 'Read your tailored CV and cover letter below, change what you like, then approve.'; main = [`<button class="btn primary" data-act="approve" data-job="${id}" data-email="${esc(j.apply_email || '')}">${svg('check')}${j.apply_email ? 'Approve and send' : 'Approve and apply'}</button>${j.apply_email ? `<span class="muted small approve-to">by email to ${esc(j.apply_email)}</span>` : ''}`]; }
-  else if (j.status === 'approved') { next = 'Submit it on the company\'s site. Job Hunt fills in the form in your browser; you check it and press Submit.';
-    const fills = overview?.can_fill && j.url;
-    if (!fills) next = 'Submit it on the company\'s site. Your files are under CV & letter, and every detail a form asks for, ready to copy, is under Questions & contacts.';
-    main = [fills ? `<button class="btn primary" data-act="fillBrowser" data-job="${id}">${svg('open')}Fill it in my browser</button>`
-        : j.url || j.apply_url ? `<button class="btn primary" data-act="open" data-job="${id}" data-what="${j.apply_url ? 'company' : 'posting'}">${svg('open')}Open the application</button>` : '',
-      `<button class="btn" data-act="stage" ${on} data-status="applied">${svg('check')}Mark applied</button>`]; }
-  else if (j.status === 'saved') { next = 'Saved for later.'; main = [`<button class="btn primary" data-act="stage" ${on} data-status="${j.cv_path ? 'ready' : 'queued'}">Bring it back</button>`]; }
-  else if (['skipped', 'dismissed'].includes(j.status)) next = j.status === 'skipped' ? 'Set aside: its fit was below your minimum, or a filter caught it. You can still tailor it.' : 'You marked it Not interested. You can still tailor it.';
-  else if (progress && ['applied', 'interviewing', 'offer'].includes(j.status)) next = nextText(progress);
-  if (['skipped', 'dismissed'].includes(j.status) || (j.status === 'saved' && !j.cv_path)) main.push(`<button class="btn ${j.status === 'saved' ? '' : 'primary'}" data-act="tailorAnyway" data-job="${id}" ${tailoring ? 'disabled' : ''}>Tailor anyway</button>`);
+  // What to do now, in a sentence, with its button (or two): from the job's lifecycle, the same
+  // on every screen.
+  const nx = lc?.next || { text: '', actions: [] };
+  const after = ['applied', 'interviewing', 'offer', 'rejected', 'no_response'].includes(j.status);
+  const next = tailoring ? `${esc(nx.text)} This page updates by itself.`
+    : !after ? esc(nx.text)
+    : progress && !['rejected', 'no_response'].includes(j.status) ? nextText(progress) : '';
+  const main = after ? [] : nx.actions.filter(a => !a.quiet).map(a => nextButton(j, a, tailoring));
   // The rest: always there, never in the way.
   const b = [];
   if (j.apply_url) b.push(`<button class="btn ghost sm" data-act="open" data-job="${id}" data-what="company">${svg('open')}On the company's site</button>`);
@@ -36,9 +51,10 @@ function jobActions(j, tailoring, progress, finding = false, looked = null) {
   // Applying: the other ways to get to the form.
   if (finding) b.push('<span class="muted small"><span class="spin" data-kind="rating"></span>Looking for it on the company\'s site… (also under what Job Hunt is doing, bottom left, where you can stop it)</span>');
   else if (!j.apply_url && j.url && !['applied', 'interviewing', 'offer', 'rejected', 'no_response'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="findApply" data-job="${id}" data-web="${esc(webSearchFor(j))}" title="Looks for this job on ${esc(j.company)}'s own site (following the job board's link, then Claude's search). If it isn't found there, a web search for it opens.">${svg('search')}Find the real posting</button>`);
-  if (['ready', 'approved', 'queued'].includes(j.status)) b.push(`<button class="btn ghost sm" data-act="stage" ${on} data-status="saved">Save for later</button>`, `<button class="btn ghost sm danger" data-act="stage" ${on} data-status="dismissed">Not interested</button>`);
+  b.push(...nx.actions.filter(a => a.quiet).map(a => nextButton(j, a)));
   return `<section class="card next-step actions">
       <div class="next-main">${next ? `<p class="grow"><b>Next:</b> ${next}</p>` : '<span class="grow"></span>'}<div class="row">${main.filter(Boolean).join('')}</div></div>
+      ${workFailed(j, lc?.work)}
       ${b.length ? `<div class="row next-more">${b.join('')}</div>` : ''}
       ${looked && !finding && !j.apply_url ? `<p class="small" style="margin:8px 0 0;color:var(--warn)">Looked on the company's site ${esc(ago(looked.created_at))}: ${esc(looked.detail.replace(/^not found: /, ''))}${/[.!?]$/.test(looked.detail) ? '' : '.'} <a href="#" data-act="link" data-url="${esc(webSearchFor(j))}">Search the web for it</a>.</p>` : ''}</section>`;
 }
@@ -63,7 +79,7 @@ function whyBox(j, flags, note = '') {
 }
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, following, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_open, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, lifecycle, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, following, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_open, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const reviewBox = `<div class="ats-review"><header><h3>${sys ? `How ${esc(sys.name)}'s AI check would read your CV` : 'How an AI screen would read your CV'}</h3>
         ${reviewing ? '<span class="muted small"><span class="spin" data-kind="review"></span>Checking…</span>' : j.cv_path ? `<button class="btn" data-act="review">${review ? 'Check again' : 'Check my CV'}</button>` : ''}</header>
         ${review ? `<p><b>Meets ${review.met} of ${review.total}</b>${review.undecided ? `, ${review.undecided} it can't decide` : ''}${review.not ? `, ${review.not} not shown` : ''}. ${esc(review.note || '')}</p>
@@ -109,7 +125,7 @@ async function showJob(id) {
       </div>
     </div>
     ${betterHere(j, company_open)}
-    ${jobActions(j, tailoring, progress, finding, (history || []).find(e => e.kind === 'apply-link'))}
+    ${jobActions(j, tailoring, progress, finding, (history || []).find(e => e.kind === 'apply-link'), lifecycle)}
     ${decline || declining || j.status === 'rejected' ? `<section class="card">
       <header><h2>Reply to the rejection</h2>${declining ? '<span class="muted small"><span class="spin" data-kind="decline"></span>Writing…</span>' : `<button class="btn" data-act="decline">${decline ? 'Write again' : 'Draft a reply'}</button>`}</header>
       ${decline ? `<p class="small muted">${decline.draft ? `Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>${decline.in_thread ? ', as a reply to their email' : ''}` : 'Written'} ${esc(ago(decline.at))}${decline.to ? ` · to ${esc(decline.to)}` : ' · add the address of the person you dealt with before sending'}</p>

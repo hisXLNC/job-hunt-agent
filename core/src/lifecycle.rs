@@ -128,59 +128,75 @@ pub fn work(agent: &Agent, job_id: &str) -> Value {
 
 // --- what's next ------------------------------------------------------------------------------
 
-fn action(act: &str, label: &str, primary: bool) -> Value {
-    json!({ "act": act, "label": label, "primary": primary })
+fn action(act: &str, label: &str, short: &str, primary: bool) -> Value {
+    json!({ "act": act, "label": label, "short": short, "primary": primary })
 }
 
 fn stage_action(to: &str, label: &str, primary: bool) -> Value {
-    json!({ "act": "stage", "to": to, "label": label, "primary": primary })
+    json!({ "act": "stage", "to": to, "label": label, "short": label, "primary": primary })
 }
 
-/// What happens next for a job: a sentence, whose move it is ("you", "them", "later", "done" or
-/// "job_hunt"), and the actions that take it there, the main one first. `tracked` is the job's row
-/// from `Agent::tracker` (applied and after), `tailoring` whether its CV is being tailored now,
-/// `can_fill` whether Job Hunt can fill the form in a browser on this computer.
+/// What happens next for a job: a sentence (`text` for its own page, `short` for a row in a list),
+/// whose move it is ("you", "them", "later", "done" or "job_hunt"), and the actions that take it
+/// there, the main one first; `quiet` ones are the ways out (save it, not interested). `tracked` is
+/// the job's row from `Agent::tracker` (applied and after), `tailoring` whether its CV is being
+/// tailored now, `can_fill` whether Job Hunt can fill the form in a browser on this computer.
 pub fn next(job: &Job, tracked: Option<&Value>, tailoring: bool, can_fill: bool) -> Value {
     let t = |k: &str| tracked.and_then(|r| r[k].as_str()).unwrap_or("").to_string();
-    let has_link = !job.url.is_empty() || job.apply_url.as_deref().is_some_and(|u| !u.is_empty());
+    let company = job.apply_url.as_deref().is_some_and(|u| !u.is_empty());
     let by_email = job.apply_email.as_deref().is_some_and(|e| !e.is_empty());
-    let (text, who, mut actions): (String, &str, Vec<Value>) = if tailoring {
-        ("Job Hunt is tailoring your CV and cover letter.".into(), "job_hunt", vec![])
+    let fills = can_fill && !job.url.is_empty();
+    let s = |a: &str, b: &str| (a.to_string(), b.to_string());
+    let ((text, short), who, mut actions): ((String, String), &str, Vec<Value>) = if tailoring {
+        (s("Job Hunt is tailoring your CV and cover letter.", "Tailoring now"), "job_hunt", vec![])
     } else {
         match job.status.as_str() {
-            "queued" => ("Read the posting and why it fits. Worth applying to? Job Hunt tailors your CV and writes a cover letter.".into(), "you",
-                vec![action("tailor", "Tailor my CV for this role", true)]),
-            "ready" => ("Read your tailored CV and cover letter, change what you like, then approve.".into(), "you",
-                vec![action("approve", if by_email { "Approve and send" } else { "Approve and apply" }, true)]),
+            "queued" => (s("Read the posting and why it fits. Worth applying to? Job Hunt tailors your CV and writes a cover letter.", "Pick it to tailor"), "you",
+                vec![action("tailor", "Tailor my CV for this role", "Tailor", true)]),
+            "ready" => (s("Read your tailored CV and cover letter, change what you like, then approve.", "Check and approve the tailored CV and letter"), "you",
+                vec![action("approve", if by_email { "Approve and send" } else { "Approve and apply" }, "Approve", true)]),
             "approved" => {
                 let mut a = vec![];
-                if can_fill && !job.url.is_empty() {
-                    a.push(action("fill", "Fill it in my browser", true));
-                } else if has_link {
-                    a.push(action("open", "Open the application", true));
+                if fills {
+                    a.push(action("fill", "Fill it in my browser", "Apply", true));
+                } else if company || !job.url.is_empty() {
+                    let mut o = action("open", "Open the application", "Open", true);
+                    o["what"] = json!(if company { "company" } else { "posting" });
+                    a.push(o);
                 }
                 a.push(stage_action("applied", "Mark applied", false));
-                (if can_fill && !job.url.is_empty() { "Submit it on the company's site. Job Hunt fills in the form in your browser; you check it and press Submit." } else { "Submit it on the company's site, then mark it applied." }.into(), "you", a)
+                (s(if fills { "Submit it on the company's site. Job Hunt fills in the form in your browser; you check it and press Submit." }
+                    else { "Submit it on the company's site. Your files are under CV & letter, and every detail a form asks for, ready to copy, is under Questions & contacts." },
+                    "Submit it on the company's site, then mark it applied"), "you", a)
             }
-            "saved" => ("Saved for later.".into(), "later", vec![stage_action(if job.cv_path.is_some() { "ready" } else { "queued" }, "Bring it back", true)]),
-            "skipped" => ("Set aside: its fit was below your minimum, or a filter caught it. You can still tailor it.".into(), "done", vec![action("tailor", "Tailor anyway", true)]),
-            "dismissed" => ("You marked it Not interested. You can still tailor it.".into(), "done", vec![action("tailor", "Tailor anyway", true)]),
+            "saved" => {
+                let mut a = vec![stage_action(if job.cv_path.is_some() { "ready" } else { "queued" }, "Bring it back", true)];
+                if job.cv_path.is_none() {
+                    a.push(action("tailor_anyway", "Tailor anyway", "Tailor anyway", false));
+                }
+                (s("Saved for later.", "Saved for later"), "later", a)
+            }
+            "skipped" => (s("Set aside: its fit was below your minimum, or a filter caught it. You can still tailor it.", "Set aside"), "done", vec![action("tailor_anyway", "Tailor anyway", "Tailor anyway", true)]),
+            "dismissed" => (s("You marked it Not interested. You can still tailor it.", "Not interested"), "done", vec![action("tailor_anyway", "Tailor anyway", "Tailor anyway", true)]),
             "applied" | "interviewing" | "offer" | "rejected" | "no_response" => {
                 let who = match t("who").as_str() { "you" => "you", "them" => "them", "later" => "later", _ => "done" };
                 let mut a = vec![];
                 if tracked.is_some_and(|r| r["follow_up_due"] == true) {
-                    a.push(action("follow_up", "Write follow-up", true));
+                    a.push(action("follow_up", "Write follow-up", "Write follow-up", true));
                 }
-                (t("next"), who, a)
+                ((t("next"), t("next")), who, a)
             }
-            _ => (String::new(), "done", vec![]),
+            _ => (s("", ""), "done", vec![]),
         }
     };
-    if ["queued", "ready", "approved"].contains(&job.status.as_str()) && !tailoring {
-        actions.push(stage_action("saved", "Save for later", false));
-        actions.push(stage_action("dismissed", "Not interested", false));
+    if ["queued", "ready", "approved"].contains(&job.status.as_str()) {
+        for (to, label) in [("saved", "Save for later"), ("dismissed", "Not interested")] {
+            let mut a = stage_action(to, label, false);
+            a["quiet"] = json!(true);
+            actions.push(a);
+        }
     }
-    json!({ "text": text, "who": who, "actions": actions, "interview": tracked.map(|r| r["next_interview"].clone()).unwrap_or(Value::Null) })
+    json!({ "text": text, "short": short, "who": who, "actions": actions, "interview": tracked.map(|r| r["next_interview"].clone()).unwrap_or(Value::Null) })
 }
 
 /// A job's place in its lifecycle, for the screens, the assistant and the Claude Desktop tools:
