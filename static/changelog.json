@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.93.0",
+    "date": "2026-11-16",
+    "title": "One place for a job's stages",
+    "changes": [
+      "Behind the scenes: a job's stages, the moves between them, what is next and the state of the work on it now live in one place in the app. Nothing looks different yet; the screens switch to it over the next releases.",
+      "Claude Desktop tools now get what is next for an application and where it can move."
+    ]
+  },
+  {
     "version": "2.92.1",
     "date": "2026-11-16",
     "title": "Slimmer phone bar, keywords always there to tick",

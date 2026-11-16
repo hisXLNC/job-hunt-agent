@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.93.0] - 2026-11-16
+
+One place for a job's stages.
+
+### Changes
+
+- Behind the scenes: a job's stages, the moves between them, what is next and the state of the work on it now live in one place in the app. Nothing looks different yet; the screens switch to it over the next releases.
+- Claude Desktop tools now get what is next for an application and where it can move.
+
 ## [2.92.1] - 2026-11-16
 
 Slimmer phone bar, keywords always there to tick.
@@ -2482,6 +2491,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.93.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.93.0
 [2.92.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.92.1
 [2.92.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.92.0
 [2.91.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.91.0

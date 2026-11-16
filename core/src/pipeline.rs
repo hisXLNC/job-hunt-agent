@@ -890,6 +890,7 @@ impl Agent {
         if !r.insert(name.to_string()) {
             return err(format!("{name} is already running"));
         }
+        crate::lifecycle::started(name);
         crate::debug::note("work", &format!("{name}: started"));
         STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
         Ok(Running { agent: self, name: name.to_string(), _task: crate::claude_code::Task::enter(name) })
@@ -898,6 +899,7 @@ impl Agent {
     /// claim, for work handed to another thread.
     pub(crate) fn claim_owned(self: &Arc<Self>, name: &str) -> Option<OwnedRunning> {
         self.running.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string()).then(|| {
+            crate::lifecycle::started(name);
             crate::debug::note("work", &format!("{name}: started"));
             STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
             OwnedRunning { agent: self.clone(), name: name.to_string() }

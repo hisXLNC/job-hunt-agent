@@ -795,6 +795,13 @@ impl Db {
     }
 
     pub fn update_job(&self, id: &str, fields: &[(&str, Value)]) -> R<()> {
+        // Every change of stage passes here: the lifecycle sees it (and, for now, only notes a
+        // move it doesn't expect).
+        if let Some(to) = fields.iter().find(|f| f.0 == "status").and_then(|f| f.1.as_str()) {
+            if let Ok(Some(from)) = self.con.query_row("SELECT status FROM jobs WHERE id = ?1", [id], |r| r.get::<_, String>(0)).optional() {
+                crate::lifecycle::watch(id, &from, to);
+            }
+        }
         const ALLOWED: [&str; 23] = [
             "status", "score", "track", "reasoning", "red_flags", "keywords", "coverage_before", "coverage_after",
             "keyword_gaps", "cv_changes", "cv_path", "letter_path", "cover_letter", "email_subject", "applied_at",
@@ -902,6 +909,9 @@ impl Db {
             crate::debug::always("event", &format!("{kind}{}: {detail}", job_id.map(|j| format!(" ({j})")).unwrap_or_default()));
         } else {
             crate::debug::note("event", &format!("{kind}{}: {detail}", job_id.map(|j| format!(" ({j})")).unwrap_or_default()));
+        }
+        if let Some(j) = job_id {
+            crate::lifecycle::failed(j, kind, detail);
         }
         self.con.execute(
             "INSERT INTO events (job_id, kind, detail, created_at) VALUES (?1, ?2, ?3, ?4)",

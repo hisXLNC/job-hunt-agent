@@ -1070,3 +1070,25 @@ The ten screen changes the user approved ("do them all"):
   on each skill tag, lyte dropdowns (salutation, phone country code, the Duration months/years in
   Education and Experience rows). `diag.now` in Copy details records `skills-tag` and any open
   popover for that.
+
+## 2.93.0 (job lifecycle, steps 1 to 3 of 5; nothing visible)
+
+- New `core/src/lifecycle.rs`: the one place for a job's stages. `MOVES` (which stage leads where),
+  `allowed`, `expected`, `label`, `next(job, tracked, tailoring, can_fill)` (sentence, whose move,
+  actions), `work(agent, id)` (running / failed per kind of background work) and `state(...)`,
+  which bundles them.
+- Watching only: `Db::update_job` (so `set_status` and every direct write) calls
+  `lifecycle::watch(id, from, to)`. A move not in `MOVES` goes to the debug log as
+  `lifecycle: unexpected move a -> b (id)` and into `lifecycle::unexpected()` (last 50, in memory).
+  Nothing is refused. The table was checked against every core test: the only unexpected move left
+  is a test's deliberate queued -> offer.
+- The direct stage writes (scoring, filters, tailoring, closed postings) keep their own history
+  lines; no extra `status:` event was added for them (thousands of rows for filtered postings).
+- Failed work: `Db::log` hands `<kind>:error` events on a job to `lifecycle::failed`; `claim` /
+  `claim_owned` clear it (`lifecycle::started`). In memory, so a restart forgets failures.
+- `GET /api/jobs/<id>` adds `lifecycle: { stage, label, next: { text, who, actions, interview },
+  allowed: [{ stage, label }], work: { tailor: { state, why, at } … } }`. Old fields unchanged.
+  MCP `get_application` adds the same `lifecycle`; `set_stage` answers with where it can move next.
+- Still to do: step 4, the screens read `lifecycle.next` (job page, Queue, All jobs, assistant) in
+  place of `jobActions` / `queueItems` / the All jobs `next` / `nextText`; show failed work on the
+  job page; step 5, refuse moves outside `MOVES` (only after the user's debug logs show none).

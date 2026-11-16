@@ -761,6 +761,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
                     "effort": crate::fill::effort(&job),
+                    // The job's place in its lifecycle: what's next, where it can move, and the work running or failed on it.
+                    "lifecycle": crate::lifecycle::state(agent, &job, host.can_fill() && !req.remote),
                     "job": job_json,
                     "history": history, "progress": agent.tracker(Some(id))?.pop(),
                     "own": { "cv": agent.own_file(id, "cv"), "letter": agent.own_file(id, "letter") }, "prep": agent.prep(id), "preparing": agent.is_running(&format!("prep:{id}")), "thanks": agent.thank_you(id), "thanking": agent.is_running(&format!("thanks:{id}")), "system": crate::ats::of(&job).map(|a| json!({ "name": crate::ats::name(a), "tips": crate::ats::tips(a), "here": agent.applied_here(&job) })), "review": agent.criteria_review(id), "reviewing": agent.is_running(&format!("review:{id}")), "decline": agent.rejection_reply(id), "declining": agent.is_running(&format!("decline:{id}")), "finding_apply": agent.is_running(&format!("apply-link:{id}")),
