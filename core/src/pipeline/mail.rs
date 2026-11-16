@@ -118,6 +118,40 @@ impl Agent {
         Ok(Some(job.id))
     }
 
+    /// A confirmation ("we received your application") is surely about this job: the email names
+    /// its employer and its role, and either quotes the job's own posting number or no other job
+    /// you haven't applied to there has that role. A job added from this very email is sure.
+    pub(crate) fn sure_confirmation(&self, job: &Job, t: &Triage, msg: &Email) -> bool {
+        if job.source == "email" {
+            return true;
+        }
+        let words = |s: &str| -> Vec<String> { s.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect() };
+        let text = format!("{} {} {} {} {}", msg.from, msg.subject, msg.body.chars().take(6000).collect::<String>(), t.company.as_deref().unwrap_or(""), t.role.as_deref().unwrap_or(""));
+        let said = words(&text);
+        let has = |w: &str| said.iter().any(|x| x == w);
+        // The employer: a word of its name that isn't generic ("Fidelity", not "Canada").
+        const GENERIC: &[&str] = &["canada", "canadian", "inc", "ltd", "limited", "corp", "corporation", "group", "holdings", "holding", "company",
+            "co", "the", "of", "and", "services", "solutions", "technologies", "technology", "international", "global", "na", "llc", "plc", "lp", "llp"];
+        let employer = words(&job.company).into_iter().filter(|w| w.len() >= 3 && !GENERIC.contains(&w.as_str())).any(|w| has(&w));
+        if !employer {
+            return false;
+        }
+        // The job's own posting number in the email: sure, whatever else is open there.
+        let reqs: Vec<String> = [job.url.as_str(), job.apply_url.as_deref().unwrap_or("")].iter().filter_map(|l| crate::db::requisition(l)).map(|r| r.1).collect();
+        if reqs.iter().any(|r| r.len() >= 4 && text.to_lowercase().contains(r.as_str())) {
+            return true;
+        }
+        // The role: every word of the job's title is in the email.
+        let role_in = |title: &str| { let w = words(title); !w.is_empty() && w.iter().all(|x| has(x)) };
+        if !role_in(&job.title) {
+            return false;
+        }
+        // And no other job there, not yet applied to, has a title the email fits as well.
+        let key = crate::db::company_key(&job.company);
+        let others = self.db().open_at_company(&key).into_iter().filter(|o| o.0 != job.id && role_in(&o.1)).count();
+        others == 0
+    }
+
     pub(super) fn handle_email(&self, mail: &Arc<dyn Mail>, msg: &Email, t: &Triage, profile: &Profile) -> R<Option<String>> {
         if let Some(l) = label(&t.category) {
             mail.label(&msg.id, l)?;
@@ -131,11 +165,21 @@ impl Agent {
             let db = self.db();
             db.log(Some(&job.id), &format!("email:{}", t.category), &t.summary)?;
             let mut target = email_status(&t.category);
-            // "We received your application": you applied, even if you didn't tell Job Hunt.
+            // "We received your application": you applied, even if you didn't tell Job Hunt. Moved
+            // only when it's surely this job; otherwise you're asked which.
+            drop(db);
             if t.category == "application_received" && ["approved", "ready", "saved", "queued", "skipped", "dismissed"].contains(&job.status.as_str()) {
-                target = Some("applied");
-                now_applied = true;
+                if self.sure_confirmation(job, t, msg) {
+                    target = Some("applied");
+                    now_applied = true;
+                } else {
+                    target = None;
+                    let _ = self.db().log(Some(&job.id), "email:maybe-applied", &format!("a confirmation from {} may be about this job: {}", t.company.as_deref().unwrap_or(&job.company), msg.subject));
+                    self.note(&format!("Application confirmation from {}", t.company.as_deref().unwrap_or(&job.company)),
+                        &format!("Job Hunt couldn't tell for sure which job it's about ({}). If it's {} at {}, open it and press I already applied.", t.role.as_deref().unwrap_or(&msg.subject), job.title, job.company));
+                }
             }
+            let db = self.db();
             if let Some(target) = target {
                 if target != job.status {
                     db.set_status(&job.id, target, &format!("from email: {}", msg.subject))?;

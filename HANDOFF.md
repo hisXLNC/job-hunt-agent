@@ -1166,3 +1166,8 @@ The ten screen changes the user approved ("do them all"):
 - `lifecycle::next` adds a quiet "I already applied" (stage -> applied) for queued, ready, saved,
   skipped and dismissed; the job page draws it with the other quiet actions. User report: applied on
   their own to a job still at Pick to tailor, and nothing offered Applied.
+- Inbox: `Agent::sure_confirmation(job, triage, email)` gates the application_received -> applied
+  move (employer word, then the job's requisition number in the email, else every title word in the
+  email and no other open job at that company with a title it fits). Unsure: no move, an
+  `email:maybe-applied` event on the job and a notice that links to it. A job added from the email
+  itself (source "email") is sure. Test `a_confirmation_moves_a_job_to_applied_only_when_it_is_surely_that_job`.

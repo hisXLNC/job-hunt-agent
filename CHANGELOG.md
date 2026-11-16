@@ -11,6 +11,7 @@ Mark a job applied from any stage; All jobs fits its card.
 ### Changes
 
 - Applied by yourself? Every job not yet applied to has "I already applied" on its page, whatever its stage: it moves to Applied and Job Hunt reminds you to follow up.
+- A confirmation email ("we received your application") moves a job to Applied only when Job Hunt is sure which job it is: the email names the employer and the role, and either quotes the job's posting number or no other job there has that role. When it isn't sure, you get a notification asking you to mark the right one.
 - All jobs: the Age column no longer runs past the right edge of the card; long dates wrap instead.
 - A job's posting keywords sit centred in their tags.
 

@@ -1149,6 +1149,43 @@ fn applying_yourself_is_picked_up_and_your_own_cv_is_used() {
 }
 
 #[test]
+fn a_confirmation_moves_a_job_to_applied_only_when_it_is_surely_that_job() {
+    let s = setup();
+    *s.agent.cal.write().unwrap() = None;
+    let add = |id: &str, title: &str, url: &str| {
+        s.agent.db().insert_job(&crate::db::Job { id: id.into(), source: "workday".into(), company: "Fidelity Investments (Fidelity Canada)".into(), title: title.into(), url: url.into(), status: "queued".into(), ..Default::default() }).unwrap();
+    };
+    add("w:1", "Project Manager", "https://fil.wd3.myworkdayjobs.com/fidelitycanada/job/Toronto-Office/Project-Manager_J64186");
+    add("w:2", "Project Manager", "https://fil.wd3.myworkdayjobs.com/fidelitycanada/job/Toronto-Office/Project-Manager_J69324");
+    add("w:3", "Data Analyst", "https://fil.wd3.myworkdayjobs.com/fidelitycanada/job/Toronto-Office/Data-Analyst_J70001");
+    let email = |id: &str, subject: &str, body: &str| crate::google::Email { id: id.into(), thread_id: format!("t{id}"), from: "Fidelity Careers <careers@fidelity.example>".into(),
+        subject: subject.into(), body: body.into(), received_at: now(), ..Default::default() };
+    let sure = |job: &str, e: &crate::google::Email, role: &str| {
+        let j = s.agent.db().job(job).unwrap().unwrap();
+        s.agent.sure_confirmation(&j, &Triage { company: Some("Fidelity".into()), role: Some(role.into()), ..triage("application_received", Some(job)) }, e)
+    };
+    let two = email("a", "Thank you for applying: Project Manager", "We received your application for Project Manager in Toronto.");
+    assert!(!sure("w:1", &two, "Project Manager"), "two Project Manager jobs there: can't tell which");
+    let numbered = email("b", "Thank you for applying", "We received your application for Project Manager (J69324).");
+    assert!(sure("w:2", &numbered, "Project Manager") && !sure("w:1", &numbered, "Project Manager"), "its own posting number: sure, and only for that one");
+    let analyst = email("c", "Application received: Data Analyst", "Thanks for applying to the Data Analyst role.");
+    assert!(sure("w:3", &analyst, "Data Analyst"), "the only Data Analyst there");
+    let elsewhere = crate::google::Email { from: "Acme <jobs@acme.example>".into(), ..email("d", "Thanks for applying: Data Analyst", "Acme received your application.") };
+    let j3 = s.agent.db().job("w:3").unwrap().unwrap();
+    assert!(!s.agent.sure_confirmation(&j3, &Triage { company: Some("Acme".into()), role: Some("Data Analyst".into()), ..triage("application_received", Some("w:3")) }, &elsewhere), "another employer");
+    // Through the inbox: unsure stays where it is, with a notice; sure moves.
+    s.mail.messages.lock().unwrap().insert("a".into(), two.clone());
+    s.llm.triages.lock().unwrap().push(Triage { company: Some("Fidelity".into()), role: Some("Project Manager".into()), ..triage("application_received", Some("w:1")) });
+    s.agent.process_inbox(50).unwrap();
+    assert_eq!(s.agent.db().job("w:1").unwrap().unwrap().status, "queued");
+    assert!(s.notes.lock().unwrap().iter().any(|n| n.starts_with("Application confirmation from")));
+    s.mail.messages.lock().unwrap().insert("b".into(), numbered.clone());
+    s.llm.triages.lock().unwrap().push(Triage { company: Some("Fidelity".into()), role: Some("Project Manager".into()), ..triage("application_received", Some("w:2")) });
+    s.agent.process_inbox(50).unwrap();
+    assert_eq!(s.agent.db().job("w:2").unwrap().unwrap().status, "applied");
+}
+
+#[test]
 fn companies_rated_below_your_minimum_are_skipped() {
     let s = setup();
     let mut p = s.agent.profile();
