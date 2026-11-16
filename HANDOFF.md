@@ -1209,3 +1209,16 @@ The ten screen changes the user approved ("do them all"):
   stripe.com/careers/apply/... shows Greenhouse's form in a frame): it says so and opens the frame's
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
+
+## 2.96.7 (no invented conversations; auto-replies aren't recruiters you know)
+
+- User report: "Ask them to put you forward" wrote to fidelitycanadastaffing@fidelity.ca (an
+  application auto-reply) saying "we had a good conversation", and the draft carried Claude's
+  "Note:" and "Red flags:" lines.
+- `looks_personal`: an address containing a team word (staffing, recruiting, talent, career,
+  acquisition…) is a shared mailbox. `note_email` skips application_received. `for_company` and
+  `contact_for` ignore saved recruiters whose address isn't personal (old entries).
+- `write`: the contact note says only what happened ("it went as far as nothing more than that
+  email" when there's no stage, never "a conversation"); no earlier role named when none is known.
+  `outreach_system`: claim no call, meeting or conversation <contact> doesn't state; message only.
+  `message_only` cuts anything from "---", "Note:" or "Red flags:" on.

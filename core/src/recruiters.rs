@@ -132,7 +132,8 @@ pub fn for_company<'a>(list: &'a [Recruiter], company: &str) -> Option<&'a Recru
         let rk = company_key(&r.company);
         rk.len() >= 3 && (rk == k || (rk.len() >= 5 && k.starts_with(&format!("{rk} "))) || (k.len() >= 5 && rk.starts_with(&format!("{k} "))))
     };
-    list.iter().filter(|r| !r.hidden && same(r)).max_by(|a, b| (a.kind == "in-house", &a.last_at).cmp(&(b.kind == "in-house", &b.last_at)))
+    // A shared mailbox noted before Job Hunt knew better (a "staffing@" auto-reply) isn't someone you know.
+    list.iter().filter(|r| !r.hidden && same(r) && looks_personal(&r.email)).max_by(|a, b| (a.kind == "in-house", &a.last_at).cmp(&(b.kind == "in-house", &b.last_at)))
 }
 
 /// "Jane Smith <jane@acme.com>" as (name, address).
@@ -154,7 +155,9 @@ pub fn looks_personal(address: &str) -> bool {
         "eluta.ca", "monster.com", "google.com", "calendly.com", "zoom.us", "teams.microsoft.com", "bamboohr.com", "recruitee.com", "teamtailor-mail.com", "breezy.hr", "applytojob.com", "hirevue.com"];
     let u = user.to_lowercase();
     let d = domain.to_lowercase();
-    !automated(&u)
+    // A team's shared mailbox ("fidelitycanadastaffing@", "talentacquisition@"): nobody in particular.
+    const TEAM: &[&str] = &["staffing", "recruiting", "recruitment", "talent", "career", "hiring", "acquisition", "humanresources", "applicant", "application", "jobs", "people"];
+    !automated(&u) && !TEAM.iter().any(|w| u.contains(w))
         && !ROBOT.iter().any(|r| u == *r || u.starts_with(&format!("{r}.")) || u.starts_with(&format!("{r}-")) || u.starts_with(&format!("{r}+")))
         && !SYSTEMS.iter().any(|s| d == *s || d.ends_with(&format!(".{s}")))
 }
@@ -294,7 +297,7 @@ fn stage_of(category: &str) -> &'static str {
 /// recruiters database, with their phone and LinkedIn from the signature, and when the email is
 /// about one of your applications, saved with that application too.
 pub fn note_email(agent: &Agent, e: &Email, t: &Triage) {
-    if ["job_alert", "not_job"].contains(&t.category.as_str()) {
+    if ["job_alert", "not_job", "application_received"].contains(&t.category.as_str()) {
         return;
     }
     let (name, addr) = sender(&e.from);
@@ -480,7 +483,7 @@ pub fn apply_mode(agent: &Agent) -> String {
 /// Who to write to about an application: the recruiter on it, a recruiter you know at the company,
 /// or a person whose address is in the posting. (address, name, known to you)
 pub fn contact_for(agent: &Agent, job: &crate::db::Job) -> Option<(String, String, bool)> {
-    if let Some(l) = for_job(agent, &job.id).into_iter().next() {
+    if let Some(l) = for_job(agent, &job.id).into_iter().find(|l| l["email"].as_str().is_some_and(looks_personal)) {
         return Some((l["email"].as_str()?.to_string(), l["name"].as_str().unwrap_or("").to_string(), true));
     }
     let all = list(agent);
@@ -543,13 +546,15 @@ fn write(agent: &Agent, job: &crate::db::Job, to: &str, name: &str, known: bool,
     let applied = matches!(job.status.as_str(), "applied" | "interviewing");
     let contact = if known {
         let when = chrono::DateTime::parse_from_rfc3339(&r.last_at).map(|t| t.format("%B %Y").to_string()).unwrap_or_else(|_| "a while ago".into());
-        let earlier = if r.roles.is_empty() { "a role".to_string() } else { r.roles.join(", ") };
+        let earlier = if r.roles.is_empty() { "a role there (its title isn't known: don't name or guess one)".to_string() } else { r.roles.join(", ") };
+        // Only what happened: an email, and how far it went. Never a conversation nobody had.
+        let went = match r.stage.as_str() { "" | "outreach" => "nothing more than that email".to_string(), s => format!("the {s} stage") };
         format!(
-            "name: {}\nrole: {} recruiter at {}\nemail: {}\nnote: They emailed me about {earlier} (last in {when}; it got to: {}). {} \
-Ask them, warmly and in a few lines, to put me forward for it, like: \"I applied for {earlier} with you back in {when}. I've {} for this role and I'm really interested: could you put me forward?\" \
-Name the earlier role and this one. Don't ask for a call.",
-            r.name, if r.kind.is_empty() { "a" } else { &r.kind }, r.company, r.email, if r.stage.is_empty() { "a conversation" } else { &r.stage },
-            if applied { "I've just applied for this role." } else { "I'm applying for this role." }, if applied { "just applied" } else { "seen the posting" })
+            "name: {}\nrole: {} recruiter at {}\nemail: {}\nnote: They emailed me about {earlier} (last in {when}; it went as far as {went}). {} \
+Ask them, warmly and in a few lines, to put me forward for it, like: \"You emailed me in {when} about a role at {}. I've {} for this role and I'm really interested: could you put me forward?\" \
+Name this role, and the earlier one only if its title is given. Claim no call, meeting or conversation. Don't ask for a call.",
+            r.name, if r.kind.is_empty() { "a" } else { &r.kind }, r.company, r.email,
+            if applied { "I've just applied for this role." } else { "I'm applying for this role." }, r.company, if applied { "just applied" } else { "seen the posting" })
     } else {
         format!(
             "name: {}\nrole: named in the job posting as the contact\nemail: {to}\nnote: I've {} for this role. They're the contact the posting names.",
@@ -567,6 +572,7 @@ Name the earlier role and this one. Don't ask for a call.",
         }
         None => (format!("{} at {}", job.title, job.company), text.trim().to_string()),
     };
+    let body = message_only(&body);
     let mail = agent.mail.read().unwrap().clone();
     // Your tailored CV goes with a sent email, if you chose that.
     let attach: Vec<std::path::PathBuf> = if agent.secret("apply.recruiter_cv") == "1" {
@@ -611,6 +617,8 @@ mod tests {
     #[test]
     fn people_companies_and_board_names() {
         assert!(looks_personal("jane.smith@maplebank.com") && looks_personal("recruiter.jane@agency.ca"));
+        assert!(!looks_personal("fidelitycanadastaffing@fidelity.ca") && !looks_personal("talentacquisition@cclgroup.com"), "a team's mailbox");
+        assert_eq!(message_only("Hi Jane,\n\nI applied.\n\nThanks,\nIbrahim\n\n---\nNote: swap in the title.\n\nRed flags: none."), "Hi Jane,\n\nI applied.\n\nThanks,\nIbrahim");
         assert!(!looks_personal("no-reply@greenhouse.io") && !looks_personal("careers@maplebank.com") && !looks_personal("jane@hire.lever.co"));
         assert!(!looks_personal("talent+ca@maplebank.com") && !looks_personal("notifications@myworkday.com"));
         assert!(!person("WorkdaySystem_DoNotReply", "maplebank@myworkday.com") && !person("WorkdaySystem_DoNotReply", "workday_donotreply@maplebank.com"));
@@ -625,4 +633,17 @@ mod tests {
         assert!(for_company(&list, "Maple Leaf Foods").is_none() && for_company(&list, "Acmeville").is_none());
         assert_eq!(slugs("Maple Bank Inc."), vec!["maplebank".to_string(), "maple-bank".into(), "maple".into()]);
     }
+}
+
+/// The message alone: anything Claude added after it ("---", "Note: …", "Red flags: …") is cut.
+pub(crate) fn message_only(body: &str) -> String {
+    let mut out = vec![];
+    for line in body.lines() {
+        let t = line.trim();
+        if t == "---" || t == "--" || t.starts_with("Note:") || t.starts_with("Notes:") || t.to_lowercase().starts_with("red flags:") {
+            break;
+        }
+        out.push(line);
+    }
+    out.join("\n").trim().to_string()
 }

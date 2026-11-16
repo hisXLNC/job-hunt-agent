@@ -952,7 +952,9 @@ candidate's name, such as \"Senior Analyst application, Jane Doe\": a few words,
 then 40 to 90 words; \
 otherwise a LinkedIn note of at most the number of characters <brief> gives as the LinkedIn note limit (300 when it gives none): \
 count them, and cut words, never the name or the role, to fit. Warm, direct, no flattery or clichés. Sign with the \
-candidate's first name. Never invent facts.\n\
+candidate's first name. Never invent facts, above all about how the candidate knows this person: no call, \
+meeting or conversation that <contact> doesn't state. Reply with the message only: nothing after the signature \
+(no notes, no \"---\", no remarks about red flags or what you left out).\n\
 It must read like the candidate typed it themselves in a couple of minutes, not like a template or an AI:\n\
 - Start \"Hi <first name>,\" (no name known: \"Hi,\" or \"Hello,\"). Never \"Dear\", never \"I hope this message \
 finds you well\", \"I'm reaching out\", \"I came across\", \"I wanted to\" or \"I am writing\".\n\

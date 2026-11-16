@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.96.7] - 2026-11-16
+
+No invented conversations in emails to recruiters.
+
+### Changes
+
+- An automatic "we received your application" email no longer makes its sender a recruiter you know, and a team mailbox (like a company's staffing address) isn't treated as a person.
+- Emails asking a recruiter to put you forward say only what happened: no conversation or call that didn't take place, and nothing after your signature (no notes or red-flag remarks).
+
 ## [2.96.6] - 2026-11-16
 
 Forms shown inside another site's page.
@@ -2579,6 +2588,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.96.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.7
 [2.96.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.6
 [2.96.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.5
 [2.96.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.4

@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.96.7",
+    "date": "2026-11-16",
+    "title": "No invented conversations in emails to recruiters",
+    "changes": [
+      "An automatic \"we received your application\" email no longer makes its sender a recruiter you know, and a team mailbox (like a company's staffing address) isn't treated as a person.",
+      "Emails asking a recruiter to put you forward say only what happened: no conversation or call that didn't take place, and nothing after your signature (no notes or red-flag remarks)."
+    ]
+  },
+  {
     "version": "2.96.6",
     "date": "2026-11-16",
     "title": "Forms shown inside another site's page",
