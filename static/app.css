@@ -2370,3 +2370,9 @@ article.card.decision[data-swipe="skip"] { box-shadow: 0 0 0 3px var(--accent); 
 
 .ts-allow { margin: 10px 0 4px; padding: 10px 14px; border: 1px solid var(--line-2); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface-2); }
 .ts-allow ol { margin: 6px 0 0; }
+
+/* Written instructions (a numbered <ol>): plain numbered lines, each step's words kept together.
+   (The progress list of the same name lays its rows out in pieces; that must not reach these.) */
+ol.steps-list { display: block; list-style: decimal; padding-left: 24px; margin: 6px 0 10px; }
+ol.steps-list > li { display: list-item; margin: 0 0 8px; line-height: 1.5; }
+ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }

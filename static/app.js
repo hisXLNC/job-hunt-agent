@@ -19,7 +19,7 @@ async function copyText(text) {
 /** `here`: drawn on the phone itself (Job Hunt opened there), so nothing has to be sent to it. */
 function phoneCard(st, here) {
   const url = st.phone_url || '';
-  const sent = here ? '. It\'s copied on this phone, ready to paste' : ' and send it to yourself (a note or an email to yourself)';
+  const sent = here ? ' to this phone, ready to paste' : ' and send it to yourself (a note or an email to yourself)';
   return `<section class="card" id="phoneCard"><header><h2>Fill forms on your phone</h2>${url ? `<span class="pill ${st.phone_last ? 'good' : ''}">${st.phone_last ? 'Used ' + esc(fmtWhen(st.phone_last)) : 'Ready'}</span>` : ''}</header>
     <p class="muted">Apply from your phone's browser and Job Hunt fills in the form, from ${here ? 'your' : 'this'} PC (it has to be on, with Job Hunt running). Your phone reaches it through Tailscale, so only your own devices can.</p>
     ${url ? `<h3>From Safari's Share button (iPhone and iPad)</h3>
@@ -34,7 +34,7 @@ function phoneCard(st, here) {
       <li>On an application form in Safari: <b>Share</b> → <b>Fill with Job Hunt</b>. The first time, the iPhone asks whether the shortcut may run on that site: allow it.</li></ol>
       <h3 style="margin-top:18px">Or a bookmark (any browser, Android too)</h3>
       <ol class="small steps-list">
-      <li>${here ? '<button class="btn sm" data-act="copyPhone">Copy the bookmark</button>. It\'s copied on this phone.' : 'Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself. Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.'}</li>
+      <li>${here ? '<button class="btn sm" data-act="copyPhone">Copy the bookmark</button> to this phone.' : 'Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself. Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.'}</li>
       <li>On the phone, bookmark any page, then edit the bookmark: name it <b>Job Hunt Fill</b> and paste what you copied as its address (URL).</li>
       <li>On an application form, tap the address bar, type <b>Job Hunt Fill</b> and tap the bookmark (in Safari, open Bookmarks and tap it). A few sites block a bookmark from loading Job Hunt; the Share button's shortcut still works there.</li></ol>
       <p class="muted small">On the phone, Workday's skills are chosen as best Job Hunt can; tick any it missed. This PC has to be on, with Job Hunt running. Address: <code>${esc(url)}</code> <button class="btn ghost sm" data-act="phoneReset">Change</button></p>

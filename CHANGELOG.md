@@ -6,10 +6,11 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.90.4] - 2026-11-16
 
-Tailscale's one-time permission is a button.
+Readable phone steps, and Tailscale's permission as a button.
 
 ### Changes
 
+- Fixed: the numbered steps for filling forms on your phone were broken into scattered pieces. They are plain numbered lines again.
 - When Set up with Tailscale needs you to allow it once on Tailscale's site, the link now stays on the card as an Open Tailscale button, instead of a red message that disappears and can't be pressed.
 
 ## [2.90.3] - 2026-11-16

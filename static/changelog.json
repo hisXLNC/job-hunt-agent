@@ -2,8 +2,9 @@
   {
     "version": "2.90.4",
     "date": "2026-11-16",
-    "title": "Tailscale's one-time permission is a button",
+    "title": "Readable phone steps, and Tailscale's permission as a button",
     "changes": [
+      "Fixed: the numbered steps for filling forms on your phone were broken into scattered pieces. They are plain numbered lines again.",
       "When Set up with Tailscale needs you to allow it once on Tailscale's site, the link now stays on the card as an Open Tailscale button, instead of a red message that disappears and can't be pressed."
     ]
   },

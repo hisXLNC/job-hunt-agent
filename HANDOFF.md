@@ -945,6 +945,8 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
 
 - `phoneTailscale` (app-actions.js): when /api/phone answers with Tailscale's "allow this once" link
   (bridge.rs), the link is drawn on the card as `.ts-allow` with an "Open Tailscale" button, not a toast.
+- `ol.steps-list` (written instructions) had picked up the progress list's `.steps-list li { display: flex }`,
+  which split each step's words into columns. A later `ol.steps-list` rule makes them list items again.
 
 ## 2.90.3
 
