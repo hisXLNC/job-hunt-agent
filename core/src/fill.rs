@@ -433,6 +433,24 @@ pub fn profile_job(url: &str) -> crate::db::Job {
     }
 }
 
+/// The company a job board's address names, lower case without spaces: Greenhouse's embed
+/// ("job-boards.greenhouse.io/embed/job_app?for=stripe") or board ("boards.greenhouse.io/stripe"),
+/// Lever's and Ashby's ("jobs.lever.co/eqbank"). (Workday's site names, "External", say nothing.)
+pub(crate) fn page_company(url: &str) -> Option<String> {
+    let u = url::Url::parse(url).ok()?;
+    let host = u.host_str()?.to_lowercase();
+    let first = u.path_segments().and_then(|mut p| p.find(|x| !x.is_empty() && !["embed", "job_app", "en-us", "en-ca"].contains(&x.to_lowercase().as_str()))).map(|x| x.to_lowercase());
+    let name = if host.contains("greenhouse.io") {
+        u.query_pairs().find(|(k, _)| k == "for").map(|(_, v)| v.to_lowercase()).or(first)
+    } else if host == "jobs.lever.co" || host == "jobs.ashbyhq.com" {
+        first
+    } else {
+        None
+    }?;
+    let name: String = name.chars().filter(|c| c.is_alphanumeric()).collect();
+    (name.len() >= 3).then_some(name)
+}
+
 pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> {
     let jobs: Vec<crate::db::Job> = ["approved", "ready", "applied"].iter().flat_map(|s| agent.db().jobs(Some(s), 500).unwrap_or_default()).collect();
     let key = crate::db::url_key(url);
@@ -448,6 +466,20 @@ pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> 
     }).collect();
     if let [one] = named.as_slice() {
         return Ok((*one).clone());
+    }
+    // The page says whose form it is (Greenhouse's embed "for=stripe", a board's own name in its
+    // address): a job at that company, and never one you chose for another company (a Fidelity job
+    // chosen a few minutes before was given Stripe's form).
+    let hint = page_company(url);
+    if let Some(h) = &hint {
+        let at = |j: &&crate::db::Job| { let k = crate::db::company_key(&j.company).replace(' ', ""); !k.is_empty() && (k.contains(h.as_str()) || h.contains(&k)) };
+        let mut mine: Vec<crate::db::Job> = ["approved", "ready", "applied", "queued", "saved", "skipped"].iter().flat_map(|s| agent.db().jobs(Some(s), 2000).unwrap_or_default()).filter(|j| at(&j)).collect();
+        // The one you're furthest on, then the newest.
+        mine.sort_by_key(|j| (["approved", "ready", "applied", "queued", "saved", "skipped"].iter().position(|s| *s == j.status).unwrap_or(9), std::cmp::Reverse(j.found_at.clone())));
+        let page_words = question_key(title);
+        if let Some(j) = mine.iter().find(|j| !page_words.is_empty() && page_words.contains(&question_key(&j.title))).or(mine.first()) {
+            return Ok(j.clone());
+        }
     }
     // The one you chose (Fill in my browser, or from the extension's list) in the last two hours, on
     // the site you chose it on: not on another company's site.
@@ -588,9 +620,15 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
         if (reader(label) || reader(section)) && files_wanted.iter().any(|o| !std::ptr::eq(*o, *f) && { let l = o["label"].as_str().unwrap_or("").to_lowercase(); !reader(&l) && !reader(o["section"].as_str().unwrap_or("")) && (l.contains("resume") || l.contains("résumé") || l.contains("cv")) }) {
             continue;
         }
-        let which = if other_doc { None } else { file_for(label, false).or_else(|| file_for(section, files_wanted.len() == 1)) };
+        // The box's own id names it when its label doesn't (Greenhouse: "Attach" on both, ids
+        // "resume" and "cover_letter").
+        let id_of = |html: &str| html.split("id=\"").skip(1).filter_map(|x| x.split('"').next()).map(|x| x.replace(['_', '-'], " ")).collect::<Vec<_>>().join(" ");
+        let named = id_of(f["html"].as_str().unwrap_or("")) + " " + &id_of(&format!("id=\"{}\"", f["at"].as_str().unwrap_or("").split('#').nth(1).and_then(|x| x.split([' ', '[', '<']).next()).unwrap_or("")));
+        let which = if other_doc { None } else { file_for(label, false).or_else(|| file_for(&named, false)).or_else(|| file_for(section, files_wanted.len() == 1)) };
+        // Not tailored for this job: your own CV for its track, as it is.
+        let own_cv = || profile.track(job.track.as_deref()).or(profile.tracks.first()).map(|t| agent.cv_path(&t.name)).filter(|p| p.is_file()).map(|p| as_pdf(&p));
         let path = match which {
-            Some("cv") => job.cv_path.as_deref().map(|p| as_pdf(Path::new(p))),
+            Some("cv") => job.cv_path.as_deref().map(|p| as_pdf(Path::new(p))).or_else(own_cv),
             Some("letter") => job.letter_path.as_deref().map(|p| as_pdf(Path::new(p))),
             _ => None,
         };
@@ -1184,6 +1222,21 @@ pub fn submitted_with(agent: &Agent, job_id: &str, url: &str, auto: bool, fields
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_form_whose_address_names_its_company_is_that_companys_job() {
+        assert_eq!(page_company("https://job-boards.greenhouse.io/embed/job_app?for=stripe&token=8281536").as_deref(), Some("stripe"));
+        assert_eq!(page_company("https://jobs.lever.co/eqbank/abc").as_deref(), Some("eqbank"));
+        assert_eq!(page_company("https://fil.wd3.myworkdayjobs.com/fidelitycanada/job/x"), None);
+        let s = crate::testkit::setup();
+        for (id, co, title, st) in [("w:fid", "Fidelity Investments (Fidelity Canada)", "Project Manager", "approved"), ("g:stripe", "Stripe", "Implementation Consultant Professional Services (AI Companies)", "queued")] {
+            s.agent.db().insert_job(&crate::db::Job { id: id.into(), source: "t".into(), company: co.into(), title: title.into(), status: st.into(), found_at: crate::util::now(), ..Default::default() }).unwrap();
+        }
+        // Fidelity chosen in Job Hunt a minute ago; then Stripe's form, opened from Stripe's site.
+        s.agent.db().set("apply.browser", &format!("w:fid|{}", crate::util::now())).unwrap();
+        let j = job_for_page(&s.agent, "https://job-boards.greenhouse.io/embed/job_app?for=stripe&token=8281536", "Job Application for Implementation Consultant at Stripe").unwrap();
+        assert_eq!(j.id, "g:stripe");
+    }
+
     use super::*;
 
     #[test]

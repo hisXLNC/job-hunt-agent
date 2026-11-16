@@ -6,12 +6,16 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.96.7] - 2026-11-16
 
-No invented conversations in emails to recruiters.
+Honest emails to recruiters; Greenhouse forms filled better.
 
 ### Changes
 
 - An automatic "we received your application" email no longer makes its sender a recruiter you know, and a team mailbox (like a company's staffing address) isn't treated as a person.
 - Emails asking a recruiter to put you forward say only what happened: no conversation or call that didn't take place, and nothing after your signature (no notes or red-flag remarks).
+- Form filling knows whose form it is from its address: Stripe's Greenhouse form was being filled for a Fidelity job you'd picked a few minutes before.
+- Greenhouse's "Add another" under School and Degree adds schools, not one row per job you've held (it added five empty schools).
+- Your CV is attached to the Resume/CV box even when its label just says "Attach", and your own CV when the job isn't tailored yet.
+- Lists that suggest as you type are tried with shorter words when the full answer shows nothing (a school's full name, "Bachelor of Business Administration" for "Bachelor's Degree"), and "Canada +1" counts as Canada.
 
 ## [2.96.6] - 2026-11-16
 

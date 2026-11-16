@@ -402,6 +402,18 @@
       // a date picker's, doesn't count), or what the button says ("Add Another Work Experience").
       let sec = sectionOf(b);
       const aria = clean(b.getAttribute('aria-label') || '');
+      // What it adds, from the boxes just around it: Greenhouse's plain "Add another" under School
+      // and Degree sits under the form's "Apply for this job" heading, and passed for a job history
+      // (five schools were added for five jobs).
+      let around = '', aroundHave = 0;
+      for (let p = b.parentElement, i = 0; p && i < 4 && !around; p = p.parentElement, i++) {
+        const ins = [...p.querySelectorAll('input,select,textarea')].filter(x => !own(x) && x.type !== 'hidden' && x.getAttribute('aria-hidden') !== 'true');
+        const name = x => `${labelOf(x)} ${x.id || ''} ${x.name || ''}`;
+        const edu = ins.filter(x => /school|institution|university|college/i.test(name(x))), work = ins.filter(x => /employer|company name|job title|position title/i.test(name(x)));
+        if (edu.length && !work.length) { around = 'Education'; aroundHave = edu.length; }
+        else if (work.length && !edu.length) { around = 'Work experience'; aroundHave = work.length; }
+      }
+      if (around) sec = around;
       if (!HISTORY.test(sec + ' ' + t)) {
         const before = heads.filter(h => h.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).map(h => textOf(h).slice(0, 80));
         sec = [...before].reverse().find(x => HISTORY.test(x)) || (HISTORY.test(aria) ? aria.replace(ADD, '').replace(/^\s*another\s*/i, '') : '');
@@ -412,7 +424,7 @@
       seen.add(base.toLowerCase());
       // How many entries it has now: its numbered headings ("Work Experience 1", "2"…), else its title boxes.
       const numbered = new RegExp('^' + reEsc(base) + '\\s*\\d+$', 'i');
-      let have = heads.filter(h => numbered.test(textOf(h))).length;
+      let have = aroundHave || heads.filter(h => numbered.test(textOf(h))).length;
       if (!have) have = fields.filter(f => (f.section || '').toLowerCase().startsWith(base.toLowerCase()) && /title|position|degree|school|institution|employer|company/i.test(f.label)).length;
       const key = 'a' + n++;
       fields.push({ key, type: 'add', label: t, section: base, entries: have, value: '' });
@@ -655,6 +667,9 @@
       }
       const type = el.tagName === 'SELECT' ? 'select' : el.tagName === 'TEXTAREA' ? 'textarea' : (el.type || 'text').toLowerCase();
       if (['hidden', 'submit', 'button', 'reset', 'image', 'password'].includes(type)) continue;
+      // A list's stand-in that only carries "required" (react-select's, beside Greenhouse's every
+      // drop-down): hidden from people and keyboards, filled when the list is.
+      if (el.getAttribute('aria-hidden') === 'true' && el.tabIndex < 0 && !el.id && !el.name) continue;
       if (type === 'search' && !SKILLS.test(labelOf(el)) && !builtAsPrompt(el)) continue;
       const choice = type === 'radio' || type === 'checkbox';
       if (type !== 'file' && !choice && !shown(el)) continue;
@@ -938,13 +953,17 @@
     };
     const parts = want.split(/\s*(?:[,&/|–—]|\s-\s|\band\b)\s*/i).map(clean).filter(p => p.length > 2);
     const plain = t => t.replace(/^(senior|sr\.?|junior|jr\.?|lead|principal|staff|associate|assistant|chief|head of)\s+/i, '');
-    const queries = [...new Set([want, ...parts, ...parts.map(plain), plain(want)])].slice(0, 6);
+    // Then shorter: a list of schools may not have the full name typed, and a degree list says
+    // "Bachelor's Degree" for "Bachelor of Business Administration" (Greenhouse).
+    const words = want.split(/\s+/).filter(Boolean);
+    const shorter = [words.slice(0, 2).join(' '), words[0] && words[0].length >= 4 ? words[0].replace(/'s$/i, '') : ''].filter(q => q && q !== want);
+    const queries = [...new Set([want, ...parts, ...parts.map(plain), plain(want), ...shorter])].slice(0, 7);
     const from = new Map(); // a suggestion's words -> what was typed to get it
     let exact = '';
     for (const q of queries) {
       const list = await ask(q);
       if (!list.length && q === want && queries.length === 1) break;
-      for (const o of list) { const n = clean(o.textContent); if (!from.has(n)) from.set(n, q); if (!exact && same(n.replace(/\s*\(\d+\)\s*$/, ''), want)) exact = n; }
+      for (const o of list) { const n = clean(o.textContent); if (!from.has(n)) from.set(n, q); if (!exact && same(n.replace(/\s*\(\d+\)\s*$/, '').replace(/\s*\+\d[\d\s-]*$/, ''), want)) exact = n; }
       if (exact || from.size >= 60) break;
     }
     if (!from.size) { trace('a box that suggests showed nothing', { label: labelOf(el).slice(0, 60) }); return null; }

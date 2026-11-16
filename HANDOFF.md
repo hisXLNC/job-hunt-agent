@@ -1222,3 +1222,9 @@ The ten screen changes the user approved ("do them all"):
   email" when there's no stage, never "a conversation"); no earlier role named when none is known.
   `outreach_system`: claim no call, meeting or conversation <contact> doesn't state; message only.
   `message_only` cuts anything from "---", "Note:" or "Red flags:" on.
+- Greenhouse (Stripe embed) report, same release: `fill::page_company(url)` (Greenhouse `for=`
+  or board, Lever, Ashby) picks the job at that company before the remembered `apply.browser` one.
+  fill.js: an Add button's kind comes from the boxes around it (school/degree -> Education, with that
+  many entries); react-select's aria-hidden stand-in inputs are skipped; suggestion lists also try
+  the first two words and the first word; "Canada +1" matches "Canada". fill.rs: a file box's id
+  ("resume", "cover_letter") names it; an untailored job attaches the track's own CV (as PDF).
