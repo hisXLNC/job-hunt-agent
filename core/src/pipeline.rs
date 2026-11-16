@@ -3405,10 +3405,27 @@ replies and interviews, and a little lower for kinds that got none from several 
         json!({ "counted": by.iter().sum::<u32>(), "by_hour": by, "suggest": best.map(|(a, b)| json!([a, b])) })
     }
 
+    /// Jobs found on a known employer's Workday site before it had a name: named now
+    /// ("canadiantirecorporation" is Canadian Tire). Once.
+    pub fn name_workday_jobs(&self) {
+        if self.secret("workday.named") == "1" {
+            return;
+        }
+        let db = self.db();
+        for (name, _, link) in CANADA_EMPLOYERS.iter().filter(|e| e.1 == "workday") {
+            let Some(b) = crate::sources::workday_board(link) else { continue };
+            for j in db.jobs_light(100_000, false).unwrap_or_default().into_iter().filter(|j| j.source == "workday" && j.company.eq_ignore_ascii_case(&b.tenant) && j.id.starts_with(&format!("workday:{}-", b.tenant))) {
+                let _ = db.rename_company(&j.id, &j.title, name);
+            }
+        }
+        let _ = db.set("workday.named", "1");
+    }
+
     /// In Canada, the careers sites of the big employers, each added once: the steadiest
     /// employers, posting first on their own sites. Ones added to the list later reach those
     /// who already have the first ones. Ones you remove stay removed.
     pub fn canada_employers_once(&self) {
+        self.name_workday_jobs();
         if self.profile().sources.adzuna_country != "ca" {
             return;
         }
@@ -3430,6 +3447,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             }
         }
         offered.extend(new.iter().map(|(_, b, s)| key(b, s)));
+        self.name_workday_jobs();
         let _ = self.db().set("employers.ca.offered", &serde_json::to_string(&offered).unwrap_or_default());
         let _ = self.db().set("employers.ca.defaulted", "1");
     }

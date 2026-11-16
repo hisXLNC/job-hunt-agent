@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.96.3",
+    "date": "2026-11-16",
+    "title": "Employers by name; Tailor anyway in full",
+    "changes": [
+      "Jobs from Canadian Tire's careers site (and the other added employers) show the employer's name, not its site's code (\"canadiantirecorporation\"); ones already found are renamed.",
+      "All jobs: \"Tailor anyway\" shows in full in the Next step column, not cut to \"or anyway\"."
+    ]
+  },
+  {
     "version": "2.96.2",
     "date": "2026-11-16",
     "title": "Mark a job applied from any stage; All jobs fits its card",

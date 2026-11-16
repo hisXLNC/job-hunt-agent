@@ -1175,3 +1175,11 @@ The ten screen changes the user approved ("do them all"):
   stage counts, the last 60 applications sent, and up to 5 jobs the message (or the previous one)
   names by company/title words, matched with `edit_distance` <= 1 or a prefix (posting text up to
   2,500 characters, pay, history). Test `the_assistant_sees_any_job_the_question_names`.
+
+## 2.96.3 (Workday employers by name; "Tailor anyway" whole)
+
+- `sources::workday_name(board)`: a Workday site in `CANADA_EMPLOYERS` gives its postings that
+  employer's name (listed-only postings used the tenant code, "canadiantirecorporation").
+  `Agent::name_workday_jobs` renames jobs already stored that way, once (`workday.named`).
+- All jobs Next step: `.row-act > .btn.ghost` is 28px for the × beside a button; a lone
+  "Tailor anyway" link was first-child ghost and got clipped to "or anyway". It now sizes itself.

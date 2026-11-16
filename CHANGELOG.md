@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.96.3] - 2026-11-16
+
+Employers by name; Tailor anyway in full.
+
+### Changes
+
+- Jobs from Canadian Tire's careers site (and the other added employers) show the employer's name, not its site's code ("canadiantirecorporation"); ones already found are renamed.
+- All jobs: "Tailor anyway" shows in full in the Next step column, not cut to "or anyway".
+
 ## [2.96.2] - 2026-11-16
 
 Mark a job applied from any stage; All jobs fits its card.
@@ -2544,6 +2553,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.96.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.3
 [2.96.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.2
 [2.96.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.1
 [2.96.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.0

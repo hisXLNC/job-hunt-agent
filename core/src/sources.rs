@@ -561,12 +561,20 @@ pub fn parse_workday_list(body: &Value) -> (Vec<(String, String, String)>, u64) 
     (list, body.get("total").and_then(|x| x.as_u64()).unwrap_or(0))
 }
 
+/// The employer behind a Workday site, by name ("Canadian Tire", not "canadiantirecorporation"):
+/// from Job Hunt's list of employers when it's one of them, else the site's own code.
+pub fn workday_name(b: &WorkdayBoard) -> String {
+    crate::pipeline::CANADA_EMPLOYERS.iter().filter(|e| e.1 == "workday")
+        .find(|e| workday_board(e.2).is_some_and(|k| k.tenant.eq_ignore_ascii_case(&b.tenant) && k.site.eq_ignore_ascii_case(&b.site)))
+        .map(|e| e.0.to_string()).unwrap_or_else(|| b.tenant.clone())
+}
+
 fn workday_posting(b: &WorkdayBoard, path: &str, title: &str, location: &str) -> Posting {
     let tail = path.rsplit('/').next().unwrap_or(path);
     Posting {
         source: "workday".into(),
         external_id: format!("{}-{}", b.tenant, tail),
-        company: b.tenant.clone(),
+        company: workday_name(b),
         title: title.to_string(),
         remote: is_remote(&[location]),
         location: location.to_string(),
@@ -597,7 +605,7 @@ pub fn parse_workday_job(b: &WorkdayBoard, path: &str, body: &Value) -> Option<P
     places.extend(info.get("additionalLocations").and_then(|x| x.as_array()).into_iter().flatten().filter_map(|x| x.as_str()).map(String::from));
     let location = places.into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join("; ");
     let desc = html_to_text(&s(info, "jobDescription"));
-    let company = body.get("hiringOrganization").map(|o| s(o, "name")).filter(|x| !x.is_empty()).map(|n| tidy_company(&n)).unwrap_or_else(|| b.tenant.clone());
+    let company = body.get("hiringOrganization").map(|o| s(o, "name")).filter(|x| !x.is_empty()).map(|n| tidy_company(&n)).unwrap_or_else(|| workday_name(b));
     let mut p = workday_posting(b, path, &title, &location);
     p.company = company;
     p.remote = is_remote(&[&location, &s(info, "remoteType")]);
@@ -2645,6 +2653,15 @@ https://www.linkedin.com/comm/jobs/view/4012345678/ (again)\nhttps://www.linkedi
         assert_eq!(pay_max_in("Starting at $90,000"), None);
         assert_eq!(pay_max_in("Competitive pay and benefits"), None);
         assert_eq!(salary_range("Competitive"), None);
+    }
+
+    #[test]
+    fn a_known_workday_site_goes_by_its_employers_name() {
+        let b = workday_board("https://canadiantirecorporation.wd3.myworkdayjobs.com/Enterprise_External_Careers_Site").unwrap();
+        assert_eq!(workday_name(&b), "Canadian Tire");
+        assert_eq!(workday_posting(&b, "/job/Toronto-ON/Martech-Platform-Engineer_JR1", "Martech Platform Engineer", "Toronto, ON").company, "Canadian Tire");
+        let other = workday_board("https://acme.wd1.myworkdayjobs.com/Careers").unwrap();
+        assert_eq!(workday_name(&other), "acme");
     }
 
     #[test]

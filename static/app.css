@@ -2465,3 +2465,8 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
 /* A keyword without a remove button (a job's Posting keywords): the same space each side. The
    settings' removable keywords keep room for their ×. */
 .kw:not(:has(.kw-x)) { padding: 4px 10px; justify-content: center; }
+
+/* All jobs, Next step: "Tailor anyway" is a text link, not the narrow × beside a button (the
+   rule for that made it 28px wide, and it read "or anyway"). */
+#t-all td.next .row-act > .btn[data-act="tailorAnyway"] { width: auto; padding: 0 4px; white-space: normal; text-align: left; }
+#t-all td.next { overflow: visible; }
