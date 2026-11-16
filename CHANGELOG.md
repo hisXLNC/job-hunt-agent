@@ -6,10 +6,11 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.96.3] - 2026-11-16
 
-Employers by name; Tailor anyway in full.
+A company's postings are only its own; employers by name.
 
 ### Changes
 
+- Clicking a company to see all its postings shows only that company's: the search matches the start of words, so Artech no longer brings up Canadian Tire's "Martech" role.
 - Jobs from Canadian Tire's careers site (and the other added employers) show the employer's name, not its site's code ("canadiantirecorporation"); ones already found are renamed.
 - All jobs: "Tailor anyway" shows in full in the Next step column, not cut to "or anyway".
 

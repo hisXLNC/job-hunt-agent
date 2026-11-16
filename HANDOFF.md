@@ -1183,3 +1183,5 @@ The ten screen changes the user approved ("do them all"):
   `Agent::name_workday_jobs` renames jobs already stored that way, once (`workday.named`).
 - All jobs Next step: `.row-act > .btn.ghost` is 28px for the × beside a button; a lone
   "Tailor anyway" link was first-child ghost and got clipped to "or anyway". It now sizes itself.
+- All jobs search (`applyAllFilters` in app-pipeline.js): each word must start a word of the row's
+  text (`(^|[^\p{L}\p{N}])word`, unicode). Clicking Artech brought in "Martech Platform Engineer".

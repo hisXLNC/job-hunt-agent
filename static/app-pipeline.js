@@ -71,13 +71,15 @@ function applyAllFilters(save = true) {
   box.querySelectorAll('[data-allf]').forEach(el => { v[el.dataset.allf] = el.type === 'checkbox' ? el.checked : el.value; });
   if (save) try { localStorage.setItem('jh.allFilters', JSON.stringify(v)); } catch (e) {}
   const words = (v.q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const starts = words.map(w => new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'u'));
   const since = v.age ? Date.now() - Number(v.age) * 86400000 : 0;
   let shown = 0;
   table.querySelectorAll('tr.xrow').forEach(r => r.remove());
   for (const r of table.tBodies[0].rows) {
     const d = r.dataset;
     // What you said no to shows only when you ask for that stage.
-    const ok = words.every(w => d.text.includes(w))
+    // Each word at the start of a word in the row ("artech" finds Artech, not Martech).
+    const ok = starts.every(re => re.test(d.text))
       && (v.stage ? (v.stage === 'you' || v.stage === 'them' ? d.who === v.stage : d.status === v.stage) : d.status !== 'dismissed')
       && Number(d.fit) >= Number(v.fit || 0) && (!v.source || d.source === v.source)
       && (!since || Number(d.found) >= since) && (!v.pay || d.pay === '1') && (!v.emp || d.emp === v.emp);
