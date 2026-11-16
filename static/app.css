@@ -2329,7 +2329,27 @@ article.card.decision[data-swipe="skip"] { box-shadow: 0 0 0 3px var(--accent); 
 .list-head .queue-filters.inline { flex-wrap: nowrap; gap: 4px 14px; margin: 0 0 0 auto; width: auto; font-size: 13px; white-space: nowrap; }
 .list-head .queue-filters.inline label.check { margin: 0; }
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) and (max-height: 700px) {
-  .list-head.with-queuebar .list-sortby { width: 100%; }
-  .list-head.with-queuebar .list-sortby select { flex: 1; }
-  .list-head .queue-filters.inline { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  /* On a phone too it is one line: what doesn't fit slides sideways. */
+  .list-head.with-queuebar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; gap: 2px 4px; padding-right: 0; }
+  .list-head.with-queuebar::-webkit-scrollbar { display: none; }
+  .list-head.with-queuebar > * { flex: none; white-space: nowrap; }
+  .list-head.with-queuebar > .btn { margin-right: 6px; }
+  .list-head.with-queuebar .list-sortby select { max-width: 104px; min-height: 34px; }
+  .list-head .queue-filters.inline { margin-left: 6px; width: auto; flex-wrap: nowrap; gap: 4px 10px; }
+  .list-head.with-queuebar label.check { gap: 5px; }
+  .list-head.with-queuebar label.check input { width: 20px; height: 20px; margin: 0; }
+  .list-head.with-queuebar button[data-lsort] { padding: 3px 6px; }
+}
+/* A narrow phone: the menu and the two filters first, the columns after them. */
+@media (max-width: 600px) {
+  .list-head.with-queuebar > .btn { order: -3; }
+  .list-head.with-queuebar .list-sortby { order: -2; }
+  .list-head.with-queuebar .list-sortby { font-size: 0; gap: 0; margin-right: 2px; }
+  .list-head.with-queuebar .wide-only { display: none; }
+  .list-head.with-queuebar .list-sortby select { max-width: 74px; font-size: 13px; padding-left: 6px; padding-right: 18px; }
+  .list-head.with-queuebar .queue-filters.inline { gap: 4px 7px; font-size: 12.5px; }
+  .list-head.with-queuebar label.check { gap: 4px; }
+  .list-head.with-queuebar label.check input { width: 18px; height: 18px; }
+  .list-head.with-queuebar > .btn { margin-right: 2px; padding-left: 0; }
+  .list-head.with-queuebar .queue-filters.inline { order: -1; margin: 0 6px 0 0; }
 }

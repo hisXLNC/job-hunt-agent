@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.90.2",
+    "date": "2026-11-16",
+    "title": "Sort and filters on one line on phones",
+    "changes": [
+      "On a phone the Queue's Sort by menu, Shows pay and No red flags now share one line too. Upright, the column names (Role, Company, ...) are on the same line: slide it sideways to reach them."
+    ]
+  },
+  {
     "version": "2.90.1",
     "date": "2026-11-16",
     "title": "Sort and filters on one line",

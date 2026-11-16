@@ -941,6 +941,12 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.90.2
+
+- Phones: `.list-head.with-queuebar` is one line (nowrap, slides sideways). Under 600px the order is
+  Select all, menu (its "Sort by" word hidden), the two filters, then the columns (slide to reach them);
+  "No red flags" reads "No flags" there (`.wide-only`).
+
 ## 2.90.1
 
 - Queue: `seatQueueBar()` (app-steps.js) moves the Sort by menu (`[data-queuef=sort]`) into the first

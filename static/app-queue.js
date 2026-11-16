@@ -277,7 +277,7 @@ async function showOverview(arg) {
     const qbar = (step ? all.filter(x => x.step === step) : all).filter(x => x.j).length > 1 ? `<div class="queue-filters" data-queuebox>
         <label class="small" title="Recommended: each list in the order that suits it. Pick and Ready to approve: the best to apply to now first (fit, less for each day the posting has been up, for red flags and for pay under your minimum). Submit: the quickest to send first.">Sort by <select data-queuef="sort">${qopt('', 'Recommended order')}${qopt('now', 'Best to apply to now')}${qopt('fit', 'Best fit')}${qopt('new', 'Newest')}${qopt('pay', 'Highest pay')}${qopt('co', 'Company (A to Z)')}${qopt('role', 'Role (A to Z)')}${qopt('loc', 'Place (A to Z)')}</select></label>
         <label class="check small"><input type="checkbox" data-queuef="pay"> Shows pay</label>
-        <label class="check small"><input type="checkbox" data-queuef="flags"> No red flags</label>
+        <label class="check small"><input type="checkbox" data-queuef="flags"> <span>No <span class="wide-only">red </span>flags</span></label>
         <span class="muted small" data-queuecount></span></div>` : '';
     listing = `${qbar}${notes.some(x => x.h.level === 'problem') ? `<section class="card next-card">${notes.filter(x => x.h.level === 'problem').map(noteRow).join('')}</section>` : ''}
       ${order.map(s => `${s === 'pick' ? heldLine() : ''}${stepHtml(o, s, s === step ? tracked : [])}`).join('')}
