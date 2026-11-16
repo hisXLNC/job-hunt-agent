@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.95.0",
+    "date": "2026-11-16",
+    "title": "Two fit rings that always mean the same thing",
+    "changes": [
+      "The left ring is the fit now (your tailored CV's once there is one); the right, dashed ring is the fit it could still reach. After tailoring, the reachable fit is worked out again from the tailored CV."
+    ]
+  },
+  {
     "version": "2.94.0",
     "date": "2026-11-16",
     "title": "A smaller search card; a job says when work on it didn't finish",

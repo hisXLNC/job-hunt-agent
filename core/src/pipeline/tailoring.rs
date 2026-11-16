@@ -773,7 +773,9 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
             _ => s.score,
         };
         let db = self.db();
-        db.update_job(&job.id, &[("score_after", after.into())])?;
+        // What it could still reach, as the scorer sees it now (never below what it has).
+        let reach = s.potential.unwrap_or(after).max(after);
+        db.update_job(&job.id, &[("score_after", after.into()), ("score_potential", reach.into())])?;
         if let Some(a) = job.score {
             db.log(Some(&job.id), "rescored", &format!("fit {a} before tailoring, {after} after{}", if after != s.score { format!(" (scored {}: within the few points two scorings differ by)", s.score) } else { String::new() }))?;
         }

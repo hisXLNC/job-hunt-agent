@@ -1109,3 +1109,13 @@ The ten screen changes the user approved ("do them all"):
 - Fit rings (`reachTag`, `fitNote`, `stillReach` in app.js): tailored with `score_after === score`
   and `score_potential > score` shows `~potential` as the dashed second ring (phone: the score with
   "~85 possible" under it). A changed `score_after` still shows as before.
+
+## 2.95.0 (two fit rings, one meaning each)
+
+- `fitNow(j)` = `score_after ?? score`; `fitReach(j)` = max(now, `score_potential`). `fitPair(j)`
+  draws both rings everywhere (rows, All jobs, the job page's Why box): left the fit now, right
+  (dashed) the fit it could reach, "~" only when higher; always two rings (the user wants the pair
+  for consistency). Phone: one ring plus `fitNote` in words. `canReach` is unchanged and still
+  used for sorting and the "worth a look tailored" tag.
+- `score_tailored` now also stores the scorer's fresh `potential` (never below the after score) in
+  `score_potential`, so the right ring after tailoring is not the stale pre-tailoring forecast.

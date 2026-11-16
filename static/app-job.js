@@ -67,7 +67,7 @@ function whyBox(j, flags, note = '') {
   const gap = m ? m[2].replace(/\.$/, '') : '';
   const must = mustHaves(j), other = flags.filter(f => !/^must have:/i.test(f));
   return `<section class="card why-box">
-    ${j.score != null ? `<div class="why-score">${scoreBadge(j.score)}${reachTag(j)}</div>` : ''}
+    ${j.score != null ? `<div class="why-score">${fitPair(j)}</div>` : ''}
     <div class="grow">
       ${match ? `<p><span class="why-label good-text">Why it fits</span> ${esc(match)}</p>` : ''}
       ${gap ? `<p><span class="why-label warn-text">Biggest gap</span> ${esc(gap)}</p>` : ''}

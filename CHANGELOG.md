@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.95.0] - 2026-11-16
+
+Two fit rings that always mean the same thing.
+
+### Changes
+
+- The left ring is the fit now (your tailored CV's once there is one); the right, dashed ring is the fit it could still reach. After tailoring, the reachable fit is worked out again from the tailored CV.
+
 ## [2.94.0] - 2026-11-16
 
 A smaller search card; a job says when work on it didn't finish.
@@ -2502,6 +2510,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.95.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.95.0
 [2.94.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.94.0
 [2.93.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.93.0
 [2.92.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.92.1
