@@ -2367,3 +2367,6 @@ article.card.decision[data-swipe="skip"] { box-shadow: 0 0 0 3px var(--accent); 
   .jrow .jfit { min-width: 80px; justify-content: flex-start; }
   table.jobs .jfit { min-width: 80px; }
 }
+
+.ts-allow { margin: 10px 0 4px; padding: 10px 14px; border: 1px solid var(--line-2); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface-2); }
+.ts-allow ol { margin: 6px 0 0; }

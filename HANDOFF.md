@@ -941,6 +941,11 @@ page under the next click. `window.__jobhunt.details()` returns what Copy detail
   its skills suggestions are drawn, and its Duration (from/to) dropdowns in Education/Experience
   rows, which aren't read as boxes at all.
 
+## 2.90.4
+
+- `phoneTailscale` (app-actions.js): when /api/phone answers with Tailscale's "allow this once" link
+  (bridge.rs), the link is drawn on the card as `.ts-allow` with an "Open Tailscale" button, not a toast.
+
 ## 2.90.3
 
 - Phones: `PHONE_FILL` (app-steps.js), a `<details data-phonefill>` at the top of the Queue's "Submit on

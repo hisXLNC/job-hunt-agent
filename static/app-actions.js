@@ -645,7 +645,18 @@ async function act(el) {
     if (await copyText(`${st.phone_url}/m/add?k=${encodeURIComponent(st.ext_key)}&u=`)) toast('Copied, for the shortcut.'); else toast('Couldn\'t copy.', true);
     return;
   }
-  if (a === 'phoneTailscale') return busy(async () => { await api('/api/phone', { method: 'POST', body: { action: 'tailscale' } }); route(); }, 'Set up: Job Hunt can be reached from your phone through Tailscale.');
+  if (a === 'phoneTailscale') return busy(async () => {
+    try { await api('/api/phone', { method: 'POST', body: { action: 'tailscale' } }); }
+    catch (e) {
+      // Tailscale wants this allowed once on its site: the link stays on the card, to press.
+      const link = /https:\/\/login\.tailscale\.com\/\S+/.exec(e.message || '')?.[0], card = el.closest('.card');
+      if (!link || !card) throw e;
+      card.querySelector('.ts-allow')?.remove();
+      el.closest('.row').insertAdjacentHTML('afterend', `<div class="ts-allow"><b>One thing first.</b> Tailscale needs you to allow this once.<ol class="small steps-list"><li><a class="btn sm primary" href="${esc(link)}" target="_blank" rel="noopener">Open Tailscale</a> and press <b>Enable</b> (sign in if it asks).</li><li>Come back here and press <b>Set up with Tailscale</b> again.</li></ol></div>`);
+      return false;
+    }
+    route(); toast('Set up: Job Hunt can be reached from your phone through Tailscale.');
+  });
   if (a === 'phoneSave') return busy(async () => { await api('/api/phone', { method: 'POST', body: { url: $('#phoneUrl').value } }); route(); }, 'Saved.');
   if (a === 'phoneReset') return busy(async () => { await api('/api/phone', { method: 'POST', body: { url: '' } }); route(); });
   if (a === 'copyBookmarklet') {

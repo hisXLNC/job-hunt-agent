@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.90.4",
+    "date": "2026-11-16",
+    "title": "Tailscale's one-time permission is a button",
+    "changes": [
+      "When Set up with Tailscale needs you to allow it once on Tailscale's site, the link now stays on the card as an Open Tailscale button, instead of a red message that disappears and can't be pressed."
+    ]
+  },
+  {
     "version": "2.90.3",
     "date": "2026-11-16",
     "title": "Phone: form-filling steps under Submit",
