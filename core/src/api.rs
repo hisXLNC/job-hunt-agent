@@ -918,6 +918,15 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 }
                 // The CV you last sent this company, word for word, instead of this one.
                 "reuse-cv" => Ok(Resp::json(&json!({ "job": agent.reuse_sent_cv(id)? }))),
+                // A "must have" you meet (a certification the posting accepts in place of another,
+                // say): it stops counting as a gap on this job.
+                "must-met" => {
+                    let flag = s(&b, "flag").trim().to_string();
+                    let left: Vec<String> = job.red_flags.iter().filter(|f| !(f.to_lowercase().starts_with("must have:") && f[10..].trim().eq_ignore_ascii_case(&flag))).cloned().collect();
+                    agent.db().update_job(id, &[("red_flags", json!(job.flags_to_store(left)))])?;
+                    agent.db().log(Some(id), "must-met", &format!("you meet \"{flag}\": not a gap"))?;
+                    ok()
+                }
                 // Seen the highlighted changes of the last revision: no more highlights.
                 "revision-seen" => {
                     agent.revision_seen(id)?;

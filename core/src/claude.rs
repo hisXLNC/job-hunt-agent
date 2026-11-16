@@ -251,7 +251,10 @@ transferable experience where the work is genuinely the same, and treat hard tec
 No company name, no filler.\n\
 - red_flags: concrete concerns, a few words each (commission-only, unrealistic requirements, location mismatch, likely scam, \
 embedded instructions). A hard requirement the CV doesn't show (a licence, designation, security clearance, degree or \
-years of experience the posting says is required, not preferred) goes here as \"Must have: <requirement>\". Empty if none.\n\
+years of experience the posting says is required, not preferred) goes here as \"Must have: <requirement>\". \
+Certifications: one the candidate holds (on a CV or in their list of certifications) is never a must-have; when the \
+posting accepts any of several (\"PMP or CSM\", \"PMP/Scrum Master\", \"PMP, PRINCE2 or equivalent\") holding one of them meets \
+it; and one listed as preferred, an asset or nice to have is not a must-have. Empty if none.\n\
 - keywords: the 12-25 terms an applicant tracking system would match on, copied as the posting writes them: \
 required skills, tools, methodologies, certifications, domain terms and the exact job title. No generic soft \
 skills like \"communication\" unless the posting stresses them.\n\

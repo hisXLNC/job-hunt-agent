@@ -72,7 +72,7 @@ function whyBox(j, flags, note = '') {
       ${match ? `<p><span class="why-label good-text">Why it fits</span> ${esc(match)}</p>` : ''}
       ${gap ? `<p><span class="why-label warn-text">Biggest gap</span> ${esc(gap)}</p>` : ''}
       ${j.career && !j.career.toward ? `<p><span class="why-label bad-text">Could set your career back</span> ${esc(j.career.why || '')}${` Taking it could set you back significantly${j.status === 'offer' ? '; weigh that before you accept' : ''}. <a href="#cvs/career">Your path</a>`}</p>` : ''}
-      ${must.length ? `<p><span class="why-label warn-text">Required, not on your CV</span> ${esc(must.join('; '))}</p>` : ''}
+      ${must.length ? `<p><span class="why-label warn-text">Required, not on your CV</span> ${must.map(m => `<span class="must-one">${esc(m)} <button class="btn ghost sm" type="button" data-act="mustMet" data-job="${esc(j.id)}" data-flag="${esc(m)}" title="You meet this (you hold it, or the posting accepts something you hold): it stops counting as a gap here and the role is no longer marked a stretch">I meet this</button></span>`).join('; ')}</p>` : ''}
       ${other.length ? `<p><span class="why-label bad-text">Check</span> ${esc(other.join('; '))}</p>` : ''}
       ${note ? `<p class="muted small">${note}</p>` : ''}
     </div></section>`;

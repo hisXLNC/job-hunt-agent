@@ -709,6 +709,9 @@ async function act(el) {
   if (a === 'decline') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/decline`, { method: 'POST' }); setTimeout(route, 300); }, 'Writing the reply…');
   }
+  if (a === 'mustMet') {
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/must-met`, { method: 'POST', body: { flag: el.dataset.flag } }); toast('Noted: it no longer counts as a gap for this role.'); route(); });
+  }
   if (a === 'thanks') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/thanks`, { method: 'POST' }); setTimeout(route, 300); }, 'Writing the thank-you note…');
   }

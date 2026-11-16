@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.96.1",
+    "date": "2026-11-16",
+    "title": "A certification the posting accepts as an alternative isn't a gap",
+    "changes": [
+      "Fit scoring: when a posting accepts any of several certifications (\"PMP or Scrum Master\"), holding one meets it, and one it only prefers isn't counted as required.",
+      "On a job's page, each requirement it says you lack has an \"I meet this\" button: it stops counting as a gap and the role is no longer marked a stretch."
+    ]
+  },
+  {
     "version": "2.96.0",
     "date": "2026-11-16",
     "title": "Two openings with one title, clickable notifications, more employers",

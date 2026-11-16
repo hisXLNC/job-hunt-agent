@@ -2452,3 +2452,6 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
   .act-strip { left: 8px; right: 8px; width: auto; max-width: none; bottom: calc(66px + env(safe-area-inset-bottom)); }
   body:has(#main .card.next-step.actions) .act-strip { bottom: calc(124px + env(safe-area-inset-bottom)); }
 }
+
+/* A must-have with "I meet this" beside it. */
+.must-one .btn.sm { min-height: 22px; padding: 0 6px; font-size: 12px; margin-left: 2px; }

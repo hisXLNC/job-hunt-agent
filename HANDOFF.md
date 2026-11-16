@@ -1139,3 +1139,12 @@ The ten screen changes the user approved ("do them all"):
 - Bottom progress strip back (`actStrip`, `#actBar.act-strip`): one line for whatever runs, the
   search first; pressing it opens the status sheet. 2.90.0 had hidden `#actBar` with
   `display:none !important`, which is why nothing showed during a search.
+
+## 2.96.1 (a certification the posting accepts as an alternative isn't a gap)
+
+- Scoring prompt (`claude.rs`, red_flags): a certification the candidate holds is never a
+  must-have; "PMP or CSM" / "PMP/Scrum Master" / "or equivalent" is met by any one held; preferred
+  or asset isn't a must-have. User report: PMP holder, a PM role marked Stretch for no CSM.
+- Job page Why box: each must-have has "I meet this" (`mustMet` action ->
+  `POST /api/jobs/<id>/must-met {flag}`), which drops that "Must have:" red flag and logs
+  `must-met`; the Stretch tag goes with it. Postings scored before keep their flags until then.
