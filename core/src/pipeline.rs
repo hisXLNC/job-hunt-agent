@@ -33,19 +33,53 @@ const NEAR_MISS_BATCH: usize = 150;
 /// At most this many postings held over for the next search (see Agent::hold).
 const HELD_MAX: usize = 400;
 
-/// Canada's big pension funds, banks and insurers whose careers sites Job Hunt reads (all on
-/// Workday). CPP Investments (behind a bot check) and Scotiabank (SuccessFactors) can't be read.
-pub const CANADA_EMPLOYERS: &[(&str, &str)] = &[
-    ("Ontario Teachers'", "https://otppb.wd3.myworkdayjobs.com/OntarioTeachers_Careers"),
-    ("HOOPP", "https://hoopp.wd10.myworkdayjobs.com/HOOPP"),
-    ("OMERS", "https://omers.wd3.myworkdayjobs.com/OMERS_External"),
-    ("RBC", "https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1"),
-    ("TD", "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers"),
-    ("CIBC", "https://cibc.wd3.myworkdayjobs.com/search"),
-    ("BMO", "https://bmo.wd3.myworkdayjobs.com/External"),
-    ("Manulife", "https://manulife.wd3.myworkdayjobs.com/MFCJH_Jobs"),
-    ("Sun Life", "https://sunlife.wd3.myworkdayjobs.com/Experienced-Jobs"),
+/// Canada's big employers whose careers sites Job Hunt reads: (name, job board, its address or
+/// name there). Each was seen with live postings on that board. CPP Investments (behind a bot
+/// check), Scotiabank and Rogers (SuccessFactors), and Mackenzie (iCIMS) can't be read.
+/// The first nine were the original list (see canada_employers_once).
+pub const CANADA_EMPLOYERS: &[(&str, &str, &str)] = &[
+    ("Ontario Teachers'", "workday", "https://otppb.wd3.myworkdayjobs.com/OntarioTeachers_Careers"),
+    ("HOOPP", "workday", "https://hoopp.wd10.myworkdayjobs.com/HOOPP"),
+    ("OMERS", "workday", "https://omers.wd3.myworkdayjobs.com/OMERS_External"),
+    ("RBC", "workday", "https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1"),
+    ("TD", "workday", "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers"),
+    ("CIBC", "workday", "https://cibc.wd3.myworkdayjobs.com/search"),
+    ("BMO", "workday", "https://bmo.wd3.myworkdayjobs.com/External"),
+    ("Manulife", "workday", "https://manulife.wd3.myworkdayjobs.com/MFCJH_Jobs"),
+    ("Sun Life", "workday", "https://sunlife.wd3.myworkdayjobs.com/Experienced-Jobs"),
+    ("Fidelity Canada", "workday", "https://fil.wd3.myworkdayjobs.com/fidelitycanada"),
+    ("Intact", "workday", "https://intactfc.wd3.myworkdayjobs.com/intactfc"),
+    ("Aviva Canada", "workday", "https://aviva.wd1.myworkdayjobs.com/External"),
+    ("Desjardins", "workday", "https://desjardins.wd10.myworkdayjobs.com/Desjardins"),
+    ("CI Financial", "workday", "https://ci.wd3.myworkdayjobs.com/CI_FINANCIAL_EXTERNAL_CAREER-SITE"),
+    ("Brookfield", "workday", "https://brookfield.wd5.myworkdayjobs.com/brookfield"),
+    ("PSP Investments", "workday", "https://investpsp.wd3.myworkdayjobs.com/psp_careers"),
+    ("IMCO", "workday", "https://imcoinvest.wd3.myworkdayjobs.com/IMCO"),
+    ("OPTrust", "workday", "https://optrust.wd3.myworkdayjobs.com/OPTrust"),
+    ("CAAT Pension", "workday", "https://caatpension.wd10.myworkdayjobs.com/Careers"),
+    ("TMX Group", "workday", "https://tmx.wd3.myworkdayjobs.com/TMX_Careers"),
+    ("Moneris", "workday", "https://moneris.wd3.myworkdayjobs.com/Moneris"),
+    ("OSFI", "workday", "https://osfibsif.wd10.myworkdayjobs.com/OSFI"),
+    ("Thomson Reuters", "workday", "https://thomsonreuters.wd5.myworkdayjobs.com/External_Career_Site"),
+    ("Canadian Tire", "workday", "https://canadiantirecorporation.wd3.myworkdayjobs.com/Enterprise_External_Careers_Site"),
+    ("Loblaw", "workday", "https://myview.wd3.myworkdayjobs.com/careers"),
+    ("Enbridge", "workday", "https://enbridge.wd3.myworkdayjobs.com/enbridge_careers"),
+    ("Magna", "workday", "https://magna.wd3.myworkdayjobs.com/Magna"),
+    ("AtkinsRéalis", "workday", "https://slihrms.wd3.myworkdayjobs.com/Careers"),
+    ("TELUS Health", "workday", "https://lifeworks.wd3.myworkdayjobs.com/External"),
+    ("Northbridge Financial", "workday", "https://northbridgefinancial.wd3.myworkdayjobs.com/NBFC"),
+    ("Broadridge", "workday", "https://broadridge.wd5.myworkdayjobs.com/Careers"),
+    ("BDC", "workday", "https://bdc.wd10.myworkdayjobs.com/BDC_Careers"),
+    ("Capital One", "workday", "https://capitalone.wd12.myworkdayjobs.com/Capital_One"),
+    ("BDO Canada", "workday", "https://bdo.wd3.myworkdayjobs.com/BDO"),
+    ("NAV Canada", "workday", "https://navcanada.wd10.myworkdayjobs.com/NAV_Careers"),
+    ("Wealthsimple", "ashby", "wealthsimple"),
+    ("Neo Financial", "ashby", "neofinancial"),
+    ("EQ Bank", "lever", "eqbank"),
+    ("University Health Network", "smartrecruiters", "UniversityHealthNetwork"),
 ];
+/// How many of CANADA_EMPLOYERS the first version of the list had.
+const CANADA_EMPLOYERS_FIRST: usize = 9;
 /// Matches waiting this long to be picked are set aside as not interested.
 const UNPICKED_DAYS: i64 = 60;
 /// Job-alert emails from the big job sites, and Canada's Job Bank. Kept separate from the inbox
@@ -616,6 +650,11 @@ impl Agent {
             jsearch: some("jsearch.key").map(|k| (some("jsearch.provider").unwrap_or_else(|| "openwebninja".into()), k)),
             jooble: some("jooble.key"),
             apify: some("apify.key").map(|k| (k, some("apify.actor").unwrap_or_default())),
+            // Since the last LinkedIn search through Apify that worked, with two hours to spare;
+            // a week when there's none.
+            apify_since: some("last.apify_ok").and_then(|t| chrono::DateTime::parse_from_rfc3339(&t).ok())
+                .map(|t| ((Utc::now() - t.with_timezone(&Utc)).num_seconds().max(0) as u64 + 7_200).min(604_800)).unwrap_or(604_800),
+            apify_max: some("apify.max").and_then(|v| v.parse::<usize>().ok()).map(|n| n.clamp(20, 1_000)).unwrap_or(crate::sources::APIFY_MAX),
         }
     }
 
@@ -1224,12 +1263,47 @@ impl Agent {
 
     /// The last notices, newest first, for the app's own list (a pop-up missed isn't lost): [{at, title, body}].
     pub fn notices(&self) -> Vec<Value> {
-        serde_json::from_str(&self.secret("notices.log")).unwrap_or_default()
+        let mut all: Vec<Value> = serde_json::from_str(&self.secret("notices.log")).unwrap_or_default();
+        // Kept before notices had a link: worked out once, then saved with it.
+        if all.iter().any(|n| n.get("link").is_none()) {
+            for n in all.iter_mut().filter(|n| n.get("link").is_none()) {
+                n["link"] = json!(self.notice_link(n["title"].as_str().unwrap_or(""), n["body"].as_str().unwrap_or("")));
+            }
+            let _ = self.db().set("notices.log", &json!(all).to_string());
+        }
+        all
+    }
+
+    /// Where a notice leads when you click it: the job it names, or the page it's about.
+    /// Empty when it's about nothing you can open.
+    pub(crate) fn notice_link(&self, title: &str, body: &str) -> String {
+        let text = format!("{title}\n{body}").to_lowercase();
+        // The job it names ("<title> at <company>"), the newest first; else the company in its
+        // heading, for an application of yours there.
+        let jobs = self.db().jobs(None, 2000).unwrap_or_default();
+        let named = jobs.iter().find(|j| !j.title.is_empty() && !j.company.is_empty() && text.contains(&format!("{} at {}", j.title, j.company).to_lowercase()));
+        let tracked = || jobs.iter().filter(|j| ["ready", "approved", "applied", "interviewing", "offer", "rejected"].contains(&j.status.as_str()))
+            .find(|j| j.company.chars().count() >= 3 && title.to_lowercase().contains(&j.company.to_lowercase()));
+        if let Some(j) = named.or_else(tracked) {
+            return format!("#job/{}", url::form_urlencoded::byte_serialize(j.id.as_bytes()).collect::<String>());
+        }
+        let t = title.to_lowercase();
+        let has = |words: &[&str]| words.iter().any(|w| t.contains(w));
+        if has(&["ready"]) && has(&["application"]) { "#overview/approve" }
+        else if has(&["interview"]) { "#calendar" }
+        else if has(&["reply from", "offer", "email to", "emailed", "follow-up ready"]) { "#inbox" }
+        else if has(&["lead"]) { "#leads" }
+        else if has(&["career", "coach", "new cv"]) { "#cvs/career" }
+        else if has(&["recruiter"]) { "#people" }
+        else if has(&["google connected"]) { "#settings/connections" }
+        else if has(&["backup", "moved to"]) { "#settings/sync" }
+        else if has(&["today in job hunt", "your week", "scored", "match", "salaries", "added to", "saved to", "tailoring"]) { "#overview" }
+        else { "" }.to_string()
     }
 
     fn keep_notice(&self, title: &str, body: &str) {
         let mut all = self.notices();
-        all.insert(0, json!({ "at": now(), "title": title, "body": body }));
+        all.insert(0, json!({ "at": now(), "title": title, "body": body, "link": self.notice_link(title, body) }));
         all.truncate(30);
         let _ = self.db().set("notices.log", &json!(all).to_string());
     }
@@ -3331,19 +3405,32 @@ replies and interviews, and a little lower for kinds that got none from several 
         json!({ "counted": by.iter().sum::<u32>(), "by_hour": by, "suggest": best.map(|(a, b)| json!([a, b])) })
     }
 
-    /// In Canada, the careers sites of the big pension funds, banks and insurers, added once: the
-    /// steadiest employers, posting first on their own sites. Ones you remove stay removed.
+    /// In Canada, the careers sites of the big employers, each added once: the steadiest
+    /// employers, posting first on their own sites. Ones added to the list later reach those
+    /// who already have the first ones. Ones you remove stay removed.
     pub fn canada_employers_once(&self) {
-        if !self.secret("employers.ca.defaulted").is_empty() || self.profile().sources.adzuna_country != "ca" {
+        if self.profile().sources.adzuna_country != "ca" {
             return;
         }
-        let list: Vec<Value> = CANADA_EMPLOYERS.iter().map(|(_, link)| json!({ "board": "workday", "slug": link })).collect();
+        let key = |b: &str, slug: &str| format!("{b}:{}", slug.to_lowercase());
+        let mut offered: BTreeSet<String> = serde_json::from_str(&self.secret("employers.ca.offered")).unwrap_or_default();
+        // Set up before the list grew: the first ones were offered then.
+        if offered.is_empty() && !self.secret("employers.ca.defaulted").is_empty() {
+            offered.extend(CANADA_EMPLOYERS[..CANADA_EMPLOYERS_FIRST].iter().map(|(_, b, s)| key(b, s)));
+        }
+        let new: Vec<&(&str, &str, &str)> = CANADA_EMPLOYERS.iter().filter(|(_, b, s)| !offered.contains(&key(b, s))).collect();
+        if new.is_empty() {
+            return;
+        }
+        let list: Vec<Value> = new.iter().map(|(_, b, s)| json!({ "board": b, "slug": s })).collect();
         if let Ok(n) = self.add_boards(&list) {
             if n > 0 {
-                let names: Vec<&str> = CANADA_EMPLOYERS.iter().map(|(n, _)| *n).collect();
+                let names: Vec<&str> = new.iter().map(|(n, _, _)| *n).collect();
                 let _ = self.db().log(None, "sources", &format!("added the careers sites of {}", names.join(", ")));
             }
         }
+        offered.extend(new.iter().map(|(_, b, s)| key(b, s)));
+        let _ = self.db().set("employers.ca.offered", &serde_json::to_string(&offered).unwrap_or_default());
         let _ = self.db().set("employers.ca.defaulted", "1");
     }
 

@@ -1119,3 +1119,23 @@ The ten screen changes the user approved ("do them all"):
   used for sorting and the "worth a look tailored" tag.
 - `score_tailored` now also stores the scorer's fresh `potential` (never below the after score) in
   `score_potential`, so the right ring after tailoring is not the stale pre-tailoring forecast.
+
+## 2.96.0 (duplicates by requisition, clickable notifications, more employers, Apify, bottom bar)
+
+- `db::requisition(url)` reads the employer's own posting number (Workday `_J69324`, Greenhouse,
+  Lever/Ashby ids, SmartRecruiters, req query params; never job boards). `existing_job_at` /
+  `job_exists_at` (used by the search and Add a job) treat two postings with the same company and
+  title as different when their links name different requisitions on the same site; the in-run
+  `seen` key adds the requisition too. Purged rows (no link kept) match by role only when the new
+  posting names no requisition. Test `two_openings_with_one_title_are_two_jobs`.
+- Notices carry `link` (`Agent::notice_link`: the job named "<title> at <company>", else an
+  application at the company in the heading, else a page by keywords). Old notices get theirs on
+  first read. The bell sheet wraps each in `a.note-link`.
+- `CANADA_EMPLOYERS` is now (name, board, slug), 39 entries (agent-researched; each seen with live
+  postings, none fetched from this sandbox). `canada_employers_once` keeps `employers.ca.offered`
+  so later additions reach existing installs; removed ones stay removed.
+- Apify LinkedIn: asks for postings since the last run that worked (`last.apify_ok`, +2 h, at most
+  a week), newest first (`sortBy=DD`), up to `apify.max` (default `APIFY_MAX` = 150, was 20–100).
+- Bottom progress strip back (`actStrip`, `#actBar.act-strip`): one line for whatever runs, the
+  search first; pressing it opens the status sheet. 2.90.0 had hidden `#actBar` with
+  `display:none !important`, which is why nothing showed during a search.

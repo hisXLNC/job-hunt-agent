@@ -791,12 +791,23 @@ fn job_bank_is_turned_on_once_in_canada() {
 #[test]
 fn canadas_big_employers_are_added_once() {
     let s = setup();
+    let boards = |s: &crate::testkit::Setup| { let p = s.agent.profile().sources; p.workday.len() + p.ashby.len() + p.lever.len() + p.smartrecruiters.len() };
+    // The sample profile may list one of them already.
+    let had = |s: &crate::testkit::Setup, from: usize| { let p = s.agent.profile().sources; CANADA_EMPLOYERS[from..].iter().filter(|(_, b, slug)| match *b {
+        "workday" => &p.workday, "ashby" => &p.ashby, "lever" => &p.lever, _ => &p.smartrecruiters }.iter().any(|x| x.eq_ignore_ascii_case(slug))).count() };
+    let (before, already) = (boards(&s), had(&s, 0));
     s.agent.canada_employers_once();
-    assert_eq!(s.agent.profile().sources.workday.len(), CANADA_EMPLOYERS.len());
-    s.agent.remove_boards(&[json!({ "source": "workday", "name": CANADA_EMPLOYERS[4].1 })]).unwrap();
+    assert_eq!(boards(&s), before + CANADA_EMPLOYERS.len() - already);
+    s.agent.remove_boards(&[json!({ "source": "workday", "name": CANADA_EMPLOYERS[4].2 })]).unwrap();
     s.agent.canada_employers_once();
-    assert_eq!(s.agent.profile().sources.workday.len(), CANADA_EMPLOYERS.len() - 1, "removed by you: stays removed");
-    assert!(CANADA_EMPLOYERS.iter().all(|(_, l)| crate::sources::workday_board(l).is_some()));
+    assert_eq!(boards(&s), before + CANADA_EMPLOYERS.len() - already - 1, "removed by you: stays removed");
+    assert!(CANADA_EMPLOYERS.iter().filter(|e| e.1 == "workday").all(|(_, _, l)| crate::sources::workday_board(l).is_some()));
+    // Set up when the list had nine: the rest are added, the nine aren't added back.
+    let s = setup();
+    let (before, already) = (boards(&s), had(&s, 9));
+    s.agent.db().set("employers.ca.defaulted", "1").unwrap();
+    s.agent.canada_employers_once();
+    assert_eq!(boards(&s), before + CANADA_EMPLOYERS.len() - 9 - already);
 }
 
 #[test]

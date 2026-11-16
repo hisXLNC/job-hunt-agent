@@ -237,7 +237,7 @@ impl Agent {
         for p in found {
             let job = {
                 let db = self.db();
-                db.existing_job(&p.id(), &p.company, &p.title).and_then(|id| db.job(&id).ok().flatten())
+                db.existing_job_at(&p.id(), &p.company, &p.title, &[p.url.as_str(), p.apply_url.as_deref().unwrap_or("")]).and_then(|id| db.job(&id).ok().flatten())
             };
             // Two listings of one role: shown once.
             if !seen.insert(job.as_ref().map(|j| j.id.clone()).unwrap_or_else(|| p.id())) {
@@ -325,6 +325,7 @@ impl Agent {
             // here as it comes in, so matches show up from the first minutes, not at the end.
             None => {
                 let keys = self.search_keys();
+                let keys_apify = keys.apify.is_some();
                 let (tx, rx) = std::sync::mpsc::channel::<Vec<Posting>>();
                 let fetched = std::thread::scope(|scope| -> R<crate::sources::Fetched> {
                     let profile_ref = &profile;
@@ -356,6 +357,10 @@ impl Agent {
                 })?;
                 self.trace(&format!("job sites done: {} sources, {} problems", fetched.by_source.len(), fetched.problems.len()));
                 report.source_problems = fetched.problems;
+                // LinkedIn through Apify worked: the next one asks only for what's newer.
+                if keys_apify && fetched.by_source.iter().any(|(n, k, _, e)| n == "LinkedIn" && *k > 0 && *e == 0) {
+                    let _ = self.db().set("last.apify_ok", &crate::util::now());
+                }
                 report.by_source = fetched.by_source.iter().map(|(n, k, p, e)| json!({ "name": n, "searches": k, "found": p, "failed": e })).collect();
                 report.broken_boards = fetched.failed.iter().map(|(s, n)| json!({ "source": s, "name": n })).collect();
                 if profile.sources.auto_boards {
@@ -646,7 +651,7 @@ impl Agent {
                 let db = self.db();
                 waited += asked.elapsed();
                 for p in chunk {
-                    if db.job_exists(&p.id(), &p.company, &p.title).unwrap_or(false) || db.url_exists(&p.url).unwrap_or(false) {
+                    if db.job_exists_at(&p.id(), &p.company, &p.title, &[p.url.as_str(), p.apply_url.as_deref().unwrap_or("")]).unwrap_or(false) || db.url_exists(&p.url).unwrap_or(false) {
                         run.known_before.insert(p.id());
                     }
                 }
@@ -672,7 +677,7 @@ impl Agent {
                 }
             }
             let link = crate::db::url_key(&p.url);
-            if !run.seen.insert(crate::db::dupe_key(&p.company, &p.title)) || (!link.is_empty() && !run.seen.insert(format!("url:{link}"))) {
+            if !run.seen.insert(format!("{}{}", crate::db::dupe_key(&p.company, &p.title), [p.url.as_str(), p.apply_url.as_deref().unwrap_or("")].iter().find_map(|l| crate::db::requisition(l)).map(|r| format!("#{}", r.1)).unwrap_or_default())) || (!link.is_empty() && !run.seen.insert(format!("url:{link}"))) {
                 continue;
             }
             once.push(p);
@@ -697,9 +702,9 @@ impl Agent {
                             report.rechecked += 1;
                         }
                     }
-                    if db.job_exists(&p.id(), &p.company, &p.title)? || db.url_exists(&p.url)? {
+                    if db.job_exists_at(&p.id(), &p.company, &p.title, &[p.url.as_str(), p.apply_url.as_deref().unwrap_or("")])? || db.url_exists(&p.url)? {
                         // Found on the company's site this time: apply there rather than on the job board.
-                        if let Some(id) = db.existing_job(&p.id(), &p.company, &p.title) {
+                        if let Some(id) = db.existing_job_at(&p.id(), &p.company, &p.title, &[p.url.as_str(), p.apply_url.as_deref().unwrap_or("")]) {
                             if db.prefer_company_link(&id, &p.url)? {
                                 db.log(Some(&id), "company-site", &format!("found on the company's site: {}", p.url))?;
                             }
@@ -1164,12 +1169,12 @@ impl Agent {
             description: description.trim().into(),
             ..Posting::default()
         };
-        if self.db().job_exists(&p.id(), &p.company, &p.title)? {
+        if self.db().job_exists_at(&p.id(), &p.company, &p.title, &[p.url.as_str(), p.apply_url.as_deref().unwrap_or("")])? {
             let known = self.db().job(&p.id())?.map(|j| j.status).unwrap_or_default();
             if known != "skipped" {
                 // Sent again: note it on the job that's there, so it's one click away.
                 // Read first: an `if let` on self.db() would hold the lock through the log below.
-                let existing = self.db().existing_job(&p.id(), &p.company, &p.title);
+                let existing = self.db().existing_job_at(&p.id(), &p.company, &p.title, &[p.url.as_str(), p.apply_url.as_deref().unwrap_or("")]);
                 let mut earlier = String::new();
                 if let Some(id) = existing {
                     self.db().log(Some(&id), "added-again", "you sent this posting again; it's already in Job Hunt")?;

@@ -1031,7 +1031,15 @@ pub struct Keys {
     pub jooble: Option<String>,
     /// Apify: (API token, the LinkedIn jobs scraper to run, as "user/actor").
     pub apify: Option<(String, String)>,
+    /// Through Apify: postings at most this old (seconds; since the last run that worked, so
+    /// the results go to new ones), and at most this many in all. 0: a week, and the default.
+    pub apify_since: u64,
+    pub apify_max: usize,
 }
+
+/// Postings asked of Apify per search when you haven't chosen (about 15 cents with the default
+/// scraper's pricing).
+pub const APIFY_MAX: usize = 150;
 
 // --- LinkedIn ---------------------------------------------------------------------------------------
 
@@ -1052,8 +1060,16 @@ pub fn linkedin_searches(p: &Profile, max: usize) -> Vec<(String, String, bool)>
 
 /// The address of a LinkedIn job search for the last week.
 pub fn linkedin_search_url(title: &str, place: &str, remote: bool) -> String {
+    linkedin_search_since(title, place, remote, 604_800)
+}
+
+/// The same, for postings at most `secs` old (an hour to a week), newest first.
+pub fn linkedin_search_since(title: &str, place: &str, remote: bool, secs: u64) -> String {
     let mut u = url::Url::parse("https://www.linkedin.com/jobs/search/").unwrap();
-    u.query_pairs_mut().append_pair("keywords", title).append_pair("location", place).append_pair("f_TPR", "r604800");
+    u.query_pairs_mut().append_pair("keywords", title).append_pair("location", place).append_pair("f_TPR", &format!("r{}", secs.clamp(3_600, 604_800)));
+    if secs < 604_800 {
+        u.query_pairs_mut().append_pair("sortBy", "DD");
+    }
     if remote {
         u.query_pairs_mut().append_pair("f_WT", "2");
     }
@@ -1457,14 +1473,19 @@ pub fn jobbank_details(c: &reqwest::blocking::Client, postings: &mut [&mut Posti
 /// LinkedIn postings through a scraper on Apify (apify.com), paid per result after its free
 /// monthly credit. One run covers every search; it returns full descriptions.
 pub fn apify_linkedin(c: &reqwest::blocking::Client, token: &str, actor: &str, searches: &[(String, String, bool)], max: usize) -> Result<Vec<Posting>, String> {
+    apify_linkedin_since(c, token, actor, searches, max, 604_800)
+}
+
+/// apify_linkedin for postings at most `since` seconds old, newest first.
+pub fn apify_linkedin_since(c: &reqwest::blocking::Client, token: &str, actor: &str, searches: &[(String, String, bool)], max: usize, since: u64) -> Result<Vec<Posting>, String> {
     let actor = if actor.trim().is_empty() { APIFY_ACTOR } else { actor.trim() };
-    let urls: Vec<String> = searches.iter().map(|(t, w, r)| linkedin_search_url(t, w, *r)).collect();
+    let urls: Vec<String> = searches.iter().map(|(t, w, r)| linkedin_search_since(t, w, *r, since)).collect();
     // The inputs the common LinkedIn job scrapers take; each uses the ones it knows.
     let input = serde_json::json!({
         "urls": urls, "count": max, "scrapeCompany": false,
         "startUrls": urls.iter().map(|u| serde_json::json!({ "url": u })).collect::<Vec<_>>(),
         "title": searches.first().map(|s| s.0.clone()).unwrap_or_default(), "location": searches.first().map(|s| s.1.clone()).unwrap_or_default(),
-        "rows": max, "maxItems": max, "publishedAt": "r604800",
+        "rows": max, "maxItems": max, "publishedAt": format!("r{}", since.clamp(3_600, 604_800)),
     });
     let url = format!("https://api.apify.com/v2/acts/{}/run-sync-get-dataset-items", actor.replace('/', "~"));
     let r = reqwest::blocking::Client::builder().timeout(Duration::from_secs(320)).build().map_err(|e| e.to_string())?
@@ -2026,8 +2047,9 @@ pub fn fetch_noting(p: &Profile, keys: &Keys, only: Option<&str>, on_step: &dyn 
         let list = linkedin_searches(p, 16);
         if let Some((token, actor)) = &keys.apify {
             let (c, token, actor) = (c.clone(), token.clone(), actor.clone());
-            let max = p.max_scored_per_run.clamp(20, 100);
-            calls.push(("LinkedIn (through Apify)".into(), "LinkedIn".into(), None, Box::new(move || apify_linkedin(&c, &token, &actor, &list, max).map(|l| (l, false)))));
+            let max = if keys.apify_max > 0 { keys.apify_max } else { APIFY_MAX };
+            let since = if keys.apify_since > 0 { keys.apify_since } else { 604_800 };
+            calls.push(("LinkedIn (through Apify)".into(), "LinkedIn".into(), None, Box::new(move || apify_linkedin_since(&c, &token, &actor, &list, max, since).map(|l| (l, false)))));
         } else {
             // Once LinkedIn turns a search away, the rest wait for the next search.
             let refused = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -2516,6 +2538,8 @@ mod tests {
         assert_eq!((a[0].id().as_str(), a[0].salary_max), ("linkedin:4012345678", Some(145000.0)));
         assert_eq!((a[1].external_id.as_str(), a[1].company.as_str(), a[1].description.trim()), ("3998877665", "Northwind", "Hybrid role"));
         assert!(linkedin_search_url("Tax Manager", "Toronto, ON", true).contains("keywords=Tax+Manager&location=Toronto%2C+ON&f_TPR=r604800&f_WT=2"));
+        assert!(linkedin_search_since("Tax Manager", "Toronto, ON", false, 30_000).contains("f_TPR=r30000&sortBy=DD"), "since the last search, newest first");
+        assert!(linkedin_search_since("Tax Manager", "Toronto, ON", false, 10).contains("f_TPR=r3600&"), "never under an hour");
     }
 
     #[test]

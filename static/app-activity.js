@@ -11,10 +11,28 @@ const actTime = s => s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).
 
 function actDraw(list) {
   running.list = list || [];
-  document.getElementById('actBar')?.remove();
+  actStrip();
   // What stopped is no longer "stopping".
   for (const id of [...running.stopping]) if (!running.list.some(a => a.id === id)) running.stopping.delete(id);
   hubDraw();
+}
+
+/** At the bottom, while anything runs (a search you started too): what it is and how far along,
+ *  one line. Pressing it opens the status sheet, with Stop. */
+function actStrip() {
+  let bar = document.getElementById('actBar');
+  const list = running.list;
+  if (!list.length) { bar?.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('button'); bar.type = 'button'; bar.id = 'actBar'; bar.className = 'act-strip'; bar.setAttribute('data-hub', '');
+    document.body.appendChild(bar);
+  }
+  const a = list.find(x => x.id === 'search') || list[0];
+  const more = list.length > 1 ? ` <span class="muted">+${list.length - 1} more</span>` : '';
+  const html = `<span class="act-dot"></span><span class="act-s-t"><b>${esc(a.label)}</b>${a.detail ? ` <span class="muted">${esc(a.detail)}</span>` : ''}${more}</span>
+    <span class="pbar${a.estimated ? ' guess' : ''}"><i style="width:${Math.max(3, a.percent)}%"></i></span><span class="act-s-p">${a.estimated ? actTime(a.secs) : `${a.percent}%`}</span>`;
+  if (bar.innerHTML !== html) bar.innerHTML = html;
+  bar.title = `${list.map(x => x.label).join(', ')}. Press for details and Stop.`;
 }
 
 // ---- The status button ----
@@ -76,7 +94,11 @@ function hubSheetHtml() {
 }
 /** The bell's sheet: the notices Job Hunt sent (new ones marked), then the last things it did. */
 function bellSheetHtml() {
-  const notices = (running.notices || []).slice(0, 8).map(n => `<li class="${n.at > hub.seen ? 'new' : ''}"><div class="act-top"><b>${esc(n.title)}</b><span class="muted small nowrap" title="${esc(new Date(n.at).toLocaleString())}">${esc(ago(n.at))}</span></div><div class="muted small">${esc(n.body)}</div></li>`).join('');
+  // Each opens what it's about (the job, the Queue, the calendar…) when it names something.
+  const notices = (running.notices || []).slice(0, 8).map(n => {
+    const inner = `<div class="act-top"><b>${esc(n.title)}</b><span class="muted small nowrap" title="${esc(new Date(n.at).toLocaleString())}">${esc(ago(n.at))}</span></div><div class="muted small">${esc(n.body)}</div>`;
+    return `<li class="${n.at > hub.seen ? 'new' : ''}${n.link ? ' has-link' : ''}">${n.link ? `<a class="note-link" href="${esc(n.link)}">${inner}</a>` : inner}</li>`;
+  }).join('');
   const recent = running.recent.slice(0, 5).map(e => `<li><div class="act-top"><span>${jobLink(e)}${eventText(e)}</span><span class="muted small nowrap">${esc(ago(e.created_at))}</span></div></li>`).join('');
   return `<h3 class="hub-h bell-h">Notifications</h3>
     ${notices ? `<ul class="hub-notes">${notices}</ul>` : '<p class="muted small bell-none">Nothing yet. Job Hunt tells you here when a search finds new matches, a reply comes in or it finds a recruiter.</p>'}
@@ -85,7 +107,7 @@ function bellSheetHtml() {
 
 function hubPlace() {
   const sheet = document.getElementById('hubSheet');
-  const btn = [...document.querySelectorAll(hub.which === 'bell' ? '[data-bell]' : '[data-hub]')].find(b => b.getBoundingClientRect().width > 0);
+  const btn = [...document.querySelectorAll(hub.which === 'bell' ? '[data-bell]' : '[data-hub]:not(.act-strip)')].find(b => b.getBoundingClientRect().width > 0);
   if (!sheet || !btn) return;
   const r = btn.getBoundingClientRect();
   sheet.style.top = `${Math.round(r.bottom + 8)}px`;
@@ -102,7 +124,7 @@ function hubDraw() {
   const top = document.querySelector('.mtop'), ask = top?.querySelector('[data-act="askOpen"]');
   if (top && !top.querySelector('.hub')) (ask || top.lastElementChild).insertAdjacentHTML(ask ? 'beforebegin' : 'afterend', make('phone'));
   const st = hubState(), unread = hubUnread();
-  document.querySelectorAll('[data-hub]').forEach(b => {
+  document.querySelectorAll('[data-hub]:not(.act-strip)').forEach(b => {
     b.className = `hub ${b.classList.contains('desk') ? 'desk' : 'phone'} ${st.kind}`;
     b.querySelector('.dot').className = `dot ${st.kind === 'ok' ? 'on' : st.kind}`;
     const t = b.querySelector('.hub-t'); t.textContent = b.classList.contains('phone') ? st.short : st.text;

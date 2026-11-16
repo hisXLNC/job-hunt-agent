@@ -4,6 +4,18 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.96.0] - 2026-11-16
+
+Two openings with one title, clickable notifications, more employers.
+
+### Changes
+
+- Two postings with the same title at the same company are no longer taken for one when the company's own posting numbers differ (Fidelity's two Project Manager roles).
+- Notifications open what they're about: the job, the approvals, the calendar, the inbox.
+- 30 more Canadian employers' careers sites are searched, among them Fidelity, Intact, Aviva, Desjardins, Brookfield, TMX, Thomson Reuters, Canadian Tire, Wealthsimple and EQ Bank. Remove any you don't want under Settings → Job sites.
+- LinkedIn through Apify asks only for postings since the last search, newest first, and up to 150 of them.
+- The progress bar at the bottom is back while anything runs, a search included.
+
 ## [2.95.0] - 2026-11-16
 
 Two fit rings that always mean the same thing.
@@ -2510,6 +2522,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.96.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.0
 [2.95.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.95.0
 [2.94.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.94.0
 [2.93.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.93.0

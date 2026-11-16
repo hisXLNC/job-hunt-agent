@@ -323,6 +323,42 @@ pub fn url_key(url: &str) -> String {
     k
 }
 
+/// The employer's own number for a posting, from a link on its careers site: (site, number).
+/// Workday's "…/Project-Manager_J69324", Greenhouse's job number, Lever's and Ashby's job id,
+/// SmartRecruiters' number, or a requisition number in the query. None for job boards (LinkedIn,
+/// Indeed…), whose numbers change when a posting is put up again.
+pub fn requisition(url: &str) -> Option<(String, String)> {
+    let u = url::Url::parse(url.trim()).ok()?;
+    let host = u.host_str()?.to_lowercase();
+    if crate::sources::is_job_board(url) {
+        return None;
+    }
+    let parts: Vec<&str> = u.path_segments().map(|p| p.filter(|x| !x.is_empty()).collect()).unwrap_or_default();
+    let q = |k: &str| u.query_pairs().find(|(n, _)| n.eq_ignore_ascii_case(k)).map(|(_, v)| v.to_string()).filter(|v| !v.is_empty());
+    let id = if host.ends_with("myworkdayjobs.com") || host.ends_with("myworkdaysite.com") {
+        let last = parts.iter().rev().find(|p| **p != "apply" && **p != "login")?;
+        last.rsplit_once('_').map(|(_, id)| id.to_string()).filter(|id| id.chars().any(|c| c.is_ascii_digit()))
+    } else if host.contains("greenhouse.io") {
+        q("gh_jid").or_else(|| parts.iter().position(|p| *p == "jobs").and_then(|i| parts.get(i + 1)).map(|s| s.to_string()))
+    } else if host == "jobs.lever.co" || host == "jobs.ashbyhq.com" {
+        parts.get(1).map(|s| s.to_string())
+    } else if host.contains("smartrecruiters.com") {
+        parts.iter().find_map(|p| p.split('-').next().filter(|d| d.len() >= 6 && d.chars().all(|c| c.is_ascii_digit())).map(String::from))
+    } else {
+        ["gh_jid", "jobid", "job_id", "reqid", "requisitionid", "jobreqid", "posting_id"].iter().find_map(|k| q(k))
+    }?;
+    Some((host, id.to_lowercase()))
+}
+
+/// Two postings' links name different requisitions on the same careers site: two jobs, however
+/// alike their titles.
+pub fn different_requisitions(a: &[&str], b: &[&str]) -> bool {
+    let ra: Vec<(String, String)> = a.iter().filter_map(|l| requisition(l)).collect();
+    let rb: Vec<(String, String)> = b.iter().filter_map(|l| requisition(l)).collect();
+    let shared: Vec<&(String, String)> = ra.iter().filter(|x| rb.iter().any(|y| y.0 == x.0)).collect();
+    !shared.is_empty() && shared.iter().all(|x| !rb.iter().any(|y| y.0 == x.0 && y.1 == x.1))
+}
+
 /// An internal code like "USA018": two or more letters, then two or more digits.
 pub fn is_company_code(w: &str) -> bool {
     let letters = w.chars().take_while(|c| c.is_ascii_alphabetic()).count();
@@ -507,6 +543,29 @@ impl Db {
     // --- jobs ----------------------------------------------------------------------------
 
     /// True if this posting, or the same role at the same company from another source, is known.
+    /// The stored job that is this posting: the same id, or the same role at the same company,
+    /// unless the two links name different requisitions on the employer's site (two openings).
+    pub fn existing_job_at(&self, id: &str, company: &str, title: &str, links: &[&str]) -> Option<String> {
+        let mut st = self.con.prepare("SELECT id, url, apply_url FROM jobs WHERE id = ?1 OR dupe_key = ?2").ok()?;
+        let rows: Vec<(String, String, Option<String>)> = st.query_map(params![id, dupe_key(company, title)], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).ok()?.filter_map(Result::ok).collect();
+        if let Some(r) = rows.iter().find(|r| r.0 == id) {
+            return Some(r.0.clone());
+        }
+        rows.into_iter().find(|r| !different_requisitions(links, &[r.1.as_str(), r.2.as_deref().unwrap_or("")])).map(|r| r.0)
+    }
+
+    /// job_exists, telling apart two openings with the same title by their requisition numbers.
+    /// A posting removed earlier (only its id and role are kept) matches by role only when this
+    /// one names no requisition.
+    pub fn job_exists_at(&self, id: &str, company: &str, title: &str, links: &[&str]) -> R<bool> {
+        if self.existing_job_at(id, company, title, links).is_some() {
+            return Ok(true);
+        }
+        let has_req = links.iter().any(|l| requisition(l).is_some());
+        let n: i64 = self.con.query_row("SELECT COUNT(*) FROM purged WHERE id = ?1 OR (?3 = 0 AND dupe_key = ?2)", params![id, dupe_key(company, title), has_req as i64], |r| r.get(0))?;
+        Ok(n > 0)
+    }
+
     pub fn job_exists(&self, id: &str, company: &str, title: &str) -> R<bool> {
         let n: i64 = self.con.query_row(
             "SELECT (SELECT COUNT(*) FROM jobs WHERE id = ?1 OR dupe_key = ?2) + (SELECT COUNT(*) FROM purged WHERE id = ?1 OR dupe_key = ?2)",
@@ -1429,6 +1488,24 @@ mod tests {
 
     fn job(id: &str, company: &str, title: &str) -> Job {
         Job { id: id.into(), source: "t".into(), company: company.into(), title: title.into(), status: "ready".into(), ..Job::default() }
+    }
+
+    #[test]
+    fn two_openings_with_one_title_are_two_jobs() {
+        let a = "https://fil.wd3.myworkdayjobs.com/fidelitycanada/job/Toronto-Office/Project-Manager_J69324?source=LinkedIn";
+        let b = "https://fil.wd3.myworkdayjobs.com/fidelitycanada/job/Toronto-Office/Project-Manager_J64186?source=LinkedIn";
+        assert_eq!(requisition(a), Some(("fil.wd3.myworkdayjobs.com".into(), "j69324".into())));
+        assert!(different_requisitions(&[a], &[b]));
+        assert!(!different_requisitions(&[a], &[a]));
+        assert!(!different_requisitions(&[a], &["https://www.linkedin.com/jobs/view/4351296062/"]), "a job board's number says nothing");
+        assert_eq!(requisition("https://job-boards.greenhouse.io/leagueinc/jobs/4567890"), Some(("job-boards.greenhouse.io".into(), "4567890".into())));
+        let db = Db::memory().unwrap();
+        let mut j = job("workday:fil-1", "Fidelity Canada", "Project Manager");
+        j.url = b.into();
+        db.insert_job(&j).unwrap();
+        assert!(!db.job_exists_at("workday:fil-2", "Fidelity Canada", "Project Manager", &[a]).unwrap(), "another requisition: a new job");
+        assert!(db.job_exists_at("workday:fil-3", "Fidelity Canada", "Project Manager", &[b]).unwrap());
+        assert!(db.job_exists_at("linkedin:9", "Fidelity Canada", "Project Manager", &["https://www.linkedin.com/jobs/view/9/"]).unwrap(), "no requisition to tell them apart: the same role");
     }
 
     #[test]
