@@ -5,6 +5,15 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.2] - 2026-11-17
+
+Expected salary worked out for each job.
+
+### Changes
+
+- When a form asks what pay you expect, Job Hunt now answers for that job: a figure inside the range its posting states, placed by your experience against what the posting asks for, and never under your minimum. With no range in the posting, it uses what the role usually pays for your experience.
+- An expected-salary answer saved from one form is no longer reused on every other form.
+
 ## [26.11.1] - 2026-11-17
 
 The same job in several places, compared.
@@ -2739,6 +2748,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.2
 [26.11.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.1
 [26.11.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.0
 [2.99.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.4

@@ -80,6 +80,49 @@ pub fn question_key(label: &str) -> String {
     label.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ")
 }
 
+/// A question about the pay you expect for this job ("Salary expectations", "Desired compensation",
+/// "Expected hourly rate"). Not what you earn now or earned before: that's a fact about you.
+pub(crate) fn asks_pay(label: &str) -> bool {
+    let l = label.to_lowercase();
+    let pay = ["salary", "compensation", "remuneration", "expected pay", "desired pay", "pay expect", "pay requirement", "pay range", "expected rate", "desired rate", "rate expect",
+        "hourly rate", "daily rate", "day rate", "annual pay", "base pay", "expected ctc", "wage"];
+    pay.iter().any(|w| l.contains(w)) && !["current", "previous", "last ", "present", "most recent", "history"].iter().any(|w| l.contains(w))
+}
+
+/// What Claude is told about pay for one job: the range its posting states, and the least you'd take.
+fn pay_guide(job: &crate::db::Job, min_salary: Option<f64>) -> String {
+    let stated = job.salary.clone().filter(|t| !t.trim().is_empty()).or_else(|| crate::sources::salary_from_text(&job.description).map(|s| s.0));
+    let mut out = String::new();
+    match stated.as_deref().map(|t| (t, crate::sources::salary_range(t))) {
+        Some((t, Some((lo, hi)))) if hi > lo => out.push_str(&format!("\nPay range this posting states: {lo:.0} to {hi:.0} a year (as written: {t})")),
+        Some((t, Some((lo, _)))) => out.push_str(&format!("\nPay this posting states: {lo:.0} a year (as written: {t})")),
+        Some((t, None)) => out.push_str(&format!("\nPay this posting states: {t}")),
+        None => out.push_str("\nThis posting states no pay."),
+    }
+    if let Some(min) = min_salary {
+        out.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
+    }
+    out
+}
+
+/// A yearly figure given for the pay you expect, kept inside what the posting pays and at or above
+/// the least you'd take (which wins when it's above the posting's top). Other answers (words, a
+/// range, an hourly rate) are left as written.
+fn pay_in_range(answer: &str, job: &crate::db::Job, min_salary: Option<f64>) -> Option<String> {
+    let plain: String = answer.chars().filter(|c| !['$', ',', ' ', '\u{a0}'].contains(c)).collect();
+    let n: f64 = plain.parse().ok().filter(|n: &f64| *n >= 10_000.0 && plain.chars().all(|c| c.is_ascii_digit() || c == '.'))?;
+    let stated = job.salary.clone().filter(|t| !t.trim().is_empty()).or_else(|| crate::sources::salary_from_text(&job.description).map(|s| s.0));
+    let range = stated.as_deref().and_then(crate::sources::salary_range);
+    let mut want = n;
+    if let Some((lo, hi)) = range {
+        want = want.clamp(lo, hi);
+    }
+    if let Some(min) = min_salary {
+        want = want.max(min);
+    }
+    (want != n).then(|| format!("{want:.0}"))
+}
+
 /// Questions the bank never keeps: agreeing to terms and certifying (yours to tick each time),
 /// and anything that's about this one employer.
 #[cfg(test)]
@@ -91,6 +134,10 @@ fn personal_to_the_role(label: &str) -> bool {
 /// Address (your own) is kept like any answer; in a "Work Experience 2" entry it's that job's. A
 /// date in an entry is that entry's too.
 fn personal_in(label: &str, section: &str, kind: &str) -> bool {
+    // The pay you expect is this job's own answer (its range, your experience against what it asks).
+    if asks_pay(label) {
+        return true;
+    }
     let s = section.to_lowercase();
     let in_entry = ["experience", "employment", "work", "job", "position", "education", "school", "degree", "qualification", "language", "training", "certific"].iter().any(|w| s.contains(w));
     let yours = !s.is_empty() && !in_entry && ["city", "location", "town"].contains(&question_key(label).as_str());
@@ -699,8 +746,12 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     if !profile.email.trim().is_empty() {
         facts.push_str(&format!("\nEmail: {}", profile.email.trim()));
     }
-    if let Some(min) = profile.min_salary {
-        facts.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
+    if is_profile {
+        if let Some(min) = profile.min_salary {
+            facts.push_str(&format!("\nMinimum yearly salary they'd accept: {min:.0}"));
+        }
+    } else {
+        facts.push_str(&pay_guide(&job, profile.min_salary));
     }
     if let Some(prev) = agent.answers(job_id).filter(|_| !is_profile) {
         facts.push_str(&format!("\nAnswers already written for this application (use the same ones): {prev}"));
@@ -748,6 +799,11 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
                 let v = if fields.iter().any(|f| f["key"] == v.key.as_str() && f["type"] == "skills") {
                     crate::claude::FieldValue { value: skills_by_posting(&v.value, &job), key: v.key }
                 } else { v };
+                // The pay you expect, as one figure: inside what this posting pays, not under your minimum.
+                let v = match fields.iter().find(|f| f["key"] == v.key.as_str()).filter(|f| !is_profile && asks_pay(f["label"].as_str().unwrap_or(""))).and_then(|_| pay_in_range(&v.value, &job, profile.min_salary)) {
+                    Some(value) => crate::claude::FieldValue { value, key: v.key },
+                    None => v,
+                };
                 let long = v.value.chars().count() > 120;
                 written.push(v.key.clone());
                 values.insert(v.key, json!(if long { cv::humanize(&v.value, &own) } else { v.value }));
@@ -1039,6 +1095,8 @@ Rules:\n\
 - Where the form asks for my resume or cover letter as a file, tell me and I will attach them myself.\n");
     if let Some(j) = &job {
         out.push_str(&format!("\nThe job: {} at {}.\n", j.title, j.company));
+        // The pay to ask for is this job's own: its posting's range, and my experience against what it asks.
+        out.push_str(&format!("If the form asks what pay I expect: give one figure inside the range this posting states, placed by my experience against what it asks for (more than it asks: about four fifths of the way up; about what it asks: two thirds; less: one third), rounded to the nearest thousand, never under my minimum. With no range stated, what the role usually pays there for my experience, not under my minimum.{}\n", pay_guide(j, agent.profile().min_salary).replace("they'd accept", "I'd accept")));
     }
     // Taking over a form that's partly filled: what's there stays, and the boxes left are named.
     let left: Vec<(String, String)> = page["left"].as_array().map(|a| a.iter().filter_map(|x| {

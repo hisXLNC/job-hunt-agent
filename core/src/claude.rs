@@ -850,8 +850,20 @@ and <facts>. Split the name for first/last name fields. Links in full, starting 
 - select, radio: the value must be one of the options, copied exactly. checkboxes: matching options joined by \
 \"; \". A lone checkbox (checked: true when it's ticked now): \"yes\" to tick it, \"no\" to untick one that's ticked wrongly, else leave it out; never tick boxes that agree to terms, privacy \
 notices, or confirm the information is true: the candidate ticks those.\n\
-- Factual questions (work authorization, sponsorship, notice period, start date, salary, years of experience, \
+- Factual questions (work authorization, sponsorship, notice period, start date, current or past salary, years of experience, \
 willingness to relocate or travel): only from the facts and CV. If they don't say, leave the field out.\n\
+- The salary or pay the candidate expects (expected, desired, required; not what they earn now): an answer for this \
+job, worked out each time, not one figure for every form. When the facts give the pay range this posting states, \
+choose one figure inside it by the candidate's experience against what the posting asks for: clearly more years or a \
+more senior level than it asks, about four fifths of the way up the range; about what it asks, two thirds of the way \
+up; fewer years, or a step up in level for them, one third of the way up. Round a yearly figure to the nearest \
+thousand. Never above the top of the range, and never below the candidate's minimum when the facts give one (if \
+their minimum is above the top of the range, give the minimum). When the posting states one figure, give it, or the \
+minimum if that is higher. When the posting states no pay: what this role usually pays in that place for someone of \
+the candidate's experience, not below their minimum; if you can't judge that, the minimum; with neither, leave the \
+field out. A number box, or a question asking for a figure: digits only, for the period it asks (a year unless it \
+says hourly, daily or monthly; from a yearly figure, 2,080 hours, 260 days or 12 months a year). A box asking for a \
+range: from that figure to the top of the posting's range. A list of options: the option that contains the figure.\n\
 - Voluntary demographic questions (gender, race, disability, veteran status and the like): the option that \
 declines to answer, unless the facts say otherwise; leave the field out if there's no such option.\n\
 - \"How did you hear about us\": the job board it was found on, if it's an option, else leave it out.\n\

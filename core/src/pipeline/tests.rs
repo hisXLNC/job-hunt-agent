@@ -3186,3 +3186,31 @@ fn the_same_job_in_several_places_is_told_and_compared() {
     s.agent.db().delete_job("test:1").unwrap();
     assert!(s.agent.db().copy_counts().unwrap().is_empty());
 }
+
+#[test]
+fn expected_pay_is_answered_for_each_job() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.min_salary = Some(130000.0);
+    s.agent.save_profile(&p).unwrap();
+    let paid = Posting { salary: Some("$140,000 - $170,000 a year".into()), ..posting("Technical Program Manager", "1") };
+    s.agent.search(Some(vec![paid, posting("Senior Program Manager", "2")])).unwrap();
+    // An answer saved from an earlier form is not reused: each job has its own.
+    crate::fill::keep_answers(&s.agent, &[json!({ "q": "Expected salary", "a": "99000" })]).unwrap();
+    let fields = vec![
+        json!({ "key": "p1", "type": "text", "label": "Expected salary", "value": "" }),
+        json!({ "key": "p2", "type": "text", "label": "Current salary", "value": "" }),
+    ];
+    let a = crate::fill::answers(&s.agent, "test:1", &fields).unwrap();
+    // Claude is told this posting's range and your minimum; a figure outside the range is brought inside it.
+    let told = s.llm.calls.lock().unwrap().iter().rev().find(|c| c.starts_with("fill:")).cloned().unwrap();
+    assert!(told.contains("Pay range this posting states: 140000 to 170000 a year") && told.contains("Minimum yearly salary they'd accept: 130000"), "{told}");
+    assert_eq!(a["values"]["p1"], "170000");
+    assert!(a["values"].get("p2").is_none(), "what you earn now is not guessed");
+    // A posting with no pay: said so, and the figure is at least your minimum.
+    let a = crate::fill::answers(&s.agent, "test:2", &fields).unwrap();
+    let told = s.llm.calls.lock().unwrap().iter().rev().find(|c| c.starts_with("fill:")).cloned().unwrap();
+    assert!(told.contains("This posting states no pay."), "{told}");
+    assert_eq!(a["values"]["p1"], "250000");
+    assert!(crate::fill::asks_pay("Desired compensation") && crate::fill::asks_pay("What are your salary expectations?") && !crate::fill::asks_pay("Current salary") && !crate::fill::asks_pay("Payroll system used"));
+}

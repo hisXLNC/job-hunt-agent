@@ -1211,6 +1211,19 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.2 (expected pay answered for each job)
+
+The user asked that the expected salary Job Hunt fills in be based on their experience and that
+posting's range. Before: Claude was told only the minimum salary, and an "Expected salary" answer
+saved once (the bank) was reused on every form.
+- `core/src/fill.rs`: `asks_pay(label)` (expected/desired pay, not current or past); such a question
+  is never answered from or saved to the bank (`personal_in`); `pay_guide` puts the posting's range
+  (from `job.salary` or the text) and the minimum in the facts; `pay_in_range` brings a plain yearly
+  figure inside the range and up to the minimum. The Claude Desktop `brief` says the same.
+- `fill_system` in `core/src/claude.rs`: the rule (four fifths / two thirds / one third of the way up
+  the range by experience against what the posting asks; no range: market pay, not under the minimum).
+- Not tested with the real Claude: where in the range it puts the figure.
+
 ## 26.11.1 (the same job in several places: told, and compared)
 
 The user asked to be told when the same requisition shows up as several postings, and to compare

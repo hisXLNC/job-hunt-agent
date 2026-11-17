@@ -75,6 +75,8 @@ impl Llm for FakeLlm {
             let label = f["label"].as_str().unwrap_or("").to_lowercase();
             let value = if label.contains("first name") { c.split(' ').next().unwrap_or("").to_string() }
                 else if label.contains("email") { "me@example.com".to_string() }
+                // The pay expected: a figure far too high, to see it brought inside the posting's range.
+                else if label.contains("expected salary") { "250000".to_string() }
                 // One job at a time (a profile): the one the facts ask for, of a CV with two.
                 else if label.contains("job title") {
                     let n = facts.split("with number ").nth(1).and_then(|x| x.split(' ').next()).and_then(|x| x.parse::<u32>().ok()).unwrap_or(0);

@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.2",
+    "date": "2026-11-17",
+    "title": "Expected salary worked out for each job",
+    "changes": [
+      "When a form asks what pay you expect, Job Hunt now answers for that job: a figure inside the range its posting states, placed by your experience against what the posting asks for, and never under your minimum. With no range in the posting, it uses what the role usually pays for your experience.",
+      "An expected-salary answer saved from one form is no longer reused on every other form."
+    ]
+  },
+  {
     "version": "26.11.1",
     "date": "2026-11-17",
     "title": "The same job in several places, compared",
