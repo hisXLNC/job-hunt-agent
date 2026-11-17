@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.96.8] - 2026-11-17
+
+Greenhouse: CV attached, degree and school chosen.
+
+### Changes
+
+- Your CV goes into Greenhouse's "Attach" box: the box's own name (resume, cover letter) now reaches Job Hunt.
+- A degree is chosen by its level: Bachelor of Business Administration is the list's "Bachelor's Degree".
+- A school the list doesn't have is answered with its "Other", when it has one.
+
 ## [2.96.7] - 2026-11-16
 
 Honest emails to recruiters; Greenhouse forms filled better.
@@ -2592,6 +2602,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.96.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.8
 [2.96.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.7
 [2.96.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.6
 [2.96.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.5

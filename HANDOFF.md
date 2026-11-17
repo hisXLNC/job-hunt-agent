@@ -1210,6 +1210,15 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.96.8 (Greenhouse: CV, degree, school)
+
+- fill.js `collect` sends a file box's `id` (its id or name); fill.rs `which_file` reads label,
+  then id/html/at, then section. Greenhouse's "Attach" boxes are `resume` / `cover_letter`.
+- fill.js `fillSuggested`: a degree is matched by its level (`LEVELS`) to "Bachelor's Degree" etc.
+  without asking Claude (`chooseFrom` asks nothing with fewer than 2 choices); when nothing
+  matched and the want isn't a degree, "Other" is searched so it can be chosen.
+- Still left to the user on Stripe's form: remote preference, WhatsApp opt-in, Brighthire consent.
+
 ## 2.96.7 (no invented conversations; auto-replies aren't recruiters you know)
 
 - User report: "Ask them to put you forward" wrote to fidelitycanadastaffing@fidelity.ca (an

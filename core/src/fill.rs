@@ -556,6 +556,16 @@ fn file_for(label: &str, only_one: bool) -> Option<&'static str> {
     }
 }
 
+/// Which of your files a file box takes: by its label, else by its own id or name (Greenhouse:
+/// "Attach" on both, ids "resume" and "cover_letter"), else by the part of the form it's in.
+fn which_file(f: &Value, only_one: bool) -> Option<&'static str> {
+    let (label, section) = (f["label"].as_str().unwrap_or(""), f["section"].as_str().unwrap_or(""));
+    let id_of = |html: &str| html.split("id=\"").skip(1).filter_map(|x| x.split('"').next()).map(|x| x.replace(['_', '-'], " ")).collect::<Vec<_>>().join(" ");
+    let at = f["at"].as_str().unwrap_or("").split('#').nth(1).and_then(|x| x.split([' ', '[', '<']).next()).unwrap_or("").to_string();
+    let named = format!("{} {} {}", f["id"].as_str().unwrap_or("").replace(['_', '-'], " "), id_of(f["html"].as_str().unwrap_or("")), at.replace(['_', '-'], " "));
+    file_for(label, false).or_else(|| file_for(&named, false)).or_else(|| file_for(section, only_one))
+}
+
 /// The PDF of a Word file, made now if there isn't one or it's older than the Word file; the Word
 /// file if a PDF can't be made.
 fn as_pdf(docx: &Path) -> PathBuf {
@@ -620,11 +630,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
         if (reader(label) || reader(section)) && files_wanted.iter().any(|o| !std::ptr::eq(*o, *f) && { let l = o["label"].as_str().unwrap_or("").to_lowercase(); !reader(&l) && !reader(o["section"].as_str().unwrap_or("")) && (l.contains("resume") || l.contains("résumé") || l.contains("cv")) }) {
             continue;
         }
-        // The box's own id names it when its label doesn't (Greenhouse: "Attach" on both, ids
-        // "resume" and "cover_letter").
-        let id_of = |html: &str| html.split("id=\"").skip(1).filter_map(|x| x.split('"').next()).map(|x| x.replace(['_', '-'], " ")).collect::<Vec<_>>().join(" ");
-        let named = id_of(f["html"].as_str().unwrap_or("")) + " " + &id_of(&format!("id=\"{}\"", f["at"].as_str().unwrap_or("").split('#').nth(1).and_then(|x| x.split([' ', '[', '<']).next()).unwrap_or("")));
-        let which = if other_doc { None } else { file_for(label, false).or_else(|| file_for(&named, false)).or_else(|| file_for(section, files_wanted.len() == 1)) };
+        let which = if other_doc { None } else { which_file(f, files_wanted.len() == 1) };
         // Not tailored for this job: your own CV for its track, as it is.
         let own_cv = || profile.track(job.track.as_deref()).or(profile.tracks.first()).map(|t| agent.cv_path(&t.name)).filter(|p| p.is_file()).map(|p| as_pdf(&p));
         let path = match which {
@@ -1365,6 +1371,10 @@ mod tests {
         assert_eq!(v["c1"].as_str(), Some("2"));
         assert_eq!(file_for("Transcript", false), None);
         assert_eq!(file_for("Attach", true), Some("cv"));
+        // Greenhouse's two "Attach" boxes, told apart by their ids, under whatever heading came last.
+        assert_eq!(which_file(&json!({"label": "Attach", "type": "file", "section": "Phone", "id": "resume"}), false), Some("cv"));
+        assert_eq!(which_file(&json!({"label": "Attach", "type": "file", "section": "Phone", "id": "cover_letter"}), false), Some("letter"));
+        assert_eq!(which_file(&json!({"label": "Attach", "type": "file", "section": "Phone"}), false), None);
         let s = script(&tok, "Tax Manager", "Acme <b>");
         assert!(s.contains(&tok) && s.contains(r#""company":"Acme <b>""#) && !s.contains("__TOKEN__"));
     }

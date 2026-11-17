@@ -685,6 +685,9 @@
       const chosen = type === 'select' && el.selectedIndex >= 0 && el.value !== '' ? clean(el.options[el.selectedIndex].text) : '';
       const f = { key, type: isSkills(el, type) ? 'skills' : isPrompt(el, type) ? 'prompt' : el.getAttribute('role') === 'combobox' ? 'combobox' : type, label: labelOf(el), required: el.required || el.getAttribute('aria-required') === 'true', value: type === 'file' ? (el.files && el.files.length ? 'attached' : '') : choice ? '' : type === 'select' ? chosen : clean(el.value) };
       if (type === 'checkbox') f.checked = el.checked;
+      // A file box's own id or name says what it takes when its label doesn't (Greenhouse: "Attach"
+      // on both, ids "resume" and "cover_letter").
+      if (type === 'file' && (el.id || el.name)) f.id = String(el.id || el.name).slice(0, 60);
       if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text)).slice(0, 60);
       if (type === 'checkbox') f.context = question(el);
       const sec = sectionOf(el); if (sec) f.section = sec;
@@ -967,6 +970,15 @@
       if (exact || from.size >= 60) break;
     }
     if (!from.size) { trace('a box that suggests showed nothing', { label: labelOf(el).slice(0, 60) }); return null; }
+    // A degree's level: "Bachelor of Business Administration" is the list's "Bachelor's Degree"
+    // (Greenhouse offers only levels).
+    const LEVELS = [/^bachelor|^b\.?\s?(a|sc|s|com|ba|eng)\b|^bba\b/i, /^master|^m\.?\s?(a|sc|s|ba|eng)\b|^mba\b/i, /^(doctor|ph\.?\s?d)/i, /^associate/i];
+    const level = LEVELS.find(r => r.test(want));
+    if (!exact && level) exact = [...from.keys()].find(n => level.test(n) && /degree|^\w+'?s?$/i.test(n)) || '';
+    // A school, a company or a city the list doesn't have: its "Other", when it has one.
+    if (!exact && !level && [...from.keys()].every(n => !/^other\b/i.test(n))) {
+      for (const o of await ask('Other')) { const n = clean(o.textContent); if (!from.has(n)) from.set(n, 'Other'); }
+    }
     let name = exact;
     if (!name) {
       const picked = await chooseFrom(labelOf(el), [...from.keys()].slice(0, 80), want);
