@@ -1816,18 +1816,18 @@ fn a_new_minimum_salary_sets_jobs_aside_and_brings_them_back() {
     let mut p = s.agent.profile();
     p.min_salary = Some(95000.0);
     s.agent.save_profile(&p).unwrap();
-    let (below, back) = s.agent.salary_plan().unwrap();
-    assert_eq!((below.iter().map(|j| j.id.as_str()).collect::<Vec<_>>(), back.len()), (vec!["test:2"], 0));
-    let r = s.agent.apply_min_salary().unwrap();
+    let (below, back) = s.agent.wants_plan().unwrap();
+    assert_eq!((below.iter().map(|j| j.0.id.as_str()).collect::<Vec<_>>(), back.len()), (vec!["test:2"], 0));
+    let r = s.agent.apply_wants().unwrap();
     assert_eq!(r["set_aside"], 1);
     let j2 = s.agent.db().job("test:2").unwrap().unwrap();
     assert!(j2.status == "skipped" && j2.reasoning.as_deref().unwrap_or("").starts_with("Filtered out: salary"), "{:?}", j2.reasoning);
     // Lowered again: it goes back where it stood, with its score.
     p.min_salary = Some(85000.0);
     s.agent.save_profile(&p).unwrap();
-    let (below, back) = s.agent.salary_plan().unwrap();
+    let (below, back) = s.agent.wants_plan().unwrap();
     assert_eq!((below.len(), back.len()), (0, 1));
-    let r = s.agent.apply_min_salary().unwrap();
+    let r = s.agent.apply_wants().unwrap();
     assert_eq!(r["restored"], 1);
     let j2 = s.agent.db().job("test:2").unwrap().unwrap();
     assert!(j2.status != "skipped" && j2.score.is_some(), "{j2:?}");
@@ -1835,7 +1835,39 @@ fn a_new_minimum_salary_sets_jobs_aside_and_brings_them_back() {
     s.agent.db().set_status("test:1", "applied", "").unwrap();
     p.min_salary = Some(200000.0);
     s.agent.save_profile(&p).unwrap();
-    assert_eq!(s.agent.salary_plan().unwrap().0.len(), 1, "only the second, not your application");
+    assert_eq!(s.agent.wants_plan().unwrap().0.len(), 1, "only the second, not your application");
+}
+
+#[test]
+fn permanent_or_contract_sets_jobs_aside_and_brings_them_back() {
+    let s = setup();
+    let mut c = posting("Technical Program Manager", "1");
+    c.description.push_str("\nThis is a 12-month contract role.");
+    let mut f = posting("Senior Program Manager", "2");
+    f.description.push_str("\nFull-time, permanent position.");
+    s.agent.search(Some(vec![c, f])).unwrap();
+    // Permanent only: the contract role is set aside, the permanent one stays.
+    let mut p = s.agent.profile();
+    p.wants.work = "permanent".into();
+    s.agent.save_profile(&p).unwrap();
+    let (out, back) = s.agent.wants_plan().unwrap();
+    assert_eq!((out.iter().map(|x| x.0.id.as_str()).collect::<Vec<_>>(), back.len()), (vec!["test:1"], 0));
+    assert!(out[0].1.starts_with("not permanent: contract role"), "{}", out[0].1);
+    s.agent.apply_wants().unwrap();
+    assert_eq!(s.agent.db().job("test:1").unwrap().unwrap().status, "skipped");
+    // Contract only: the permanent one goes, the contract one comes back.
+    p.wants.work = "contract".into();
+    s.agent.save_profile(&p).unwrap();
+    let (out, back) = s.agent.wants_plan().unwrap();
+    assert_eq!((out.iter().map(|x| x.0.id.as_str()).collect::<Vec<_>>(), back.iter().map(|j| j.id.as_str()).collect::<Vec<_>>()), (vec!["test:2"], vec!["test:1"]));
+    assert_eq!(s.agent.apply_wants().unwrap()["restored"], 1);
+    assert_ne!(s.agent.db().job("test:1").unwrap().unwrap().status, "skipped");
+    // And a new search sets the wrong kind aside before scoring, using no Claude.
+    let mut perm = posting("Program Director", "3");
+    perm.description.push_str("\nThis is a permanent full-time role.");
+    s.agent.search(Some(vec![perm])).unwrap();
+    let j3 = s.agent.db().job("test:3").unwrap().unwrap();
+    assert!(j3.status == "skipped" && j3.score.is_none(), "{j3:?}");
 }
 
 #[test]

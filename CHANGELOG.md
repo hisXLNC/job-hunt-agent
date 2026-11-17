@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.97.0] - 2026-11-17
+
+Recruiter found at tailoring; apply a new salary or job type to jobs found already.
+
+### Changes
+
+- The recruiter or hiring team is looked for as soon as a job is tailored, in the background, so they're on its People tab before you apply. The note to them is still written once you've applied.
+- Change your minimum salary or permanent or contract, and Settings says how many jobs you haven't applied to no longer fit and how many set aside before now fit, with one button to set aside and bring back. Ones set aside go back where they stood; never-scored ones are scored.
+- Permanent or contract now also sets aside postings that plainly say they're the other kind before scoring, using no Claude.
+
 ## [2.96.8] - 2026-11-17
 
 Greenhouse: CV, degree and school; Claude reports what it did.
@@ -2604,6 +2614,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.97.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.0
 [2.96.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.8
 [2.96.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.7
 [2.96.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.6

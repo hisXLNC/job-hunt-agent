@@ -402,7 +402,7 @@ function reportHtml(r) {
     </div>
     <p class="muted small">Also set up daily job alerts on LinkedIn, Indeed or your country's job sites for your titles, sent to your Gmail: Job Hunt reads them on every email check. If many postings are set aside for their location or title, widen your locations or add titles in <a href="#cvs">Your CVs</a>.</p>
     <div id="moreIdeas" class="ideas"></div></details>` : '';
-  const WHY_FIX = { 'outside your locations': 'Change your places', 'title doesn\'t match your CVs': 'Add job titles', 'a title word you skip': 'Change the words you skip', 'salary below your minimum': 'Change your minimum salary', 'a company you skip': 'Change the companies you skip', 'company rated below your minimum': 'Change the minimum rating' };
+  const WHY_FIX = { 'outside your locations': 'Change your places', 'title doesn\'t match your CVs': 'Add job titles', 'a title word you skip': 'Change the words you skip', 'salary below your minimum': 'Change your minimum salary', 'not permanent or contract as you want': 'Change permanent or contract', 'a company you skip': 'Change the companies you skip', 'company rated below your minimum': 'Change the minimum rating' };
   const whyRows = Object.entries(r.why_filtered || {}).sort((a, b) => b[1] - a[1]);
   const aside = whyRows.length ? `<details class="more"><summary><b>Why ${r.filtered} ${r.filtered === 1 ? 'was' : 'were'} set aside before scoring</b></summary>
       <div class="why-rows">${whyRows.map(([k, n]) => `<div><b class="num">${n}</b><span class="grow">${esc(k)}</span>${WHY_FIX[k] ? `<a class="btn ghost sm" href="#search/what">${WHY_FIX[k]}</a>` : ''}</div>`).join('')}</div>

@@ -1269,6 +1269,8 @@ fn skipped_job(p: &Posting, why: &str, report: &mut Report) -> crate::db::Job {
         "a title word you skip"
     } else if why.starts_with("salary") {
         "salary below your minimum"
+    } else if why.starts_with("not permanent") || why.starts_with("not contract") {
+        "not permanent or contract as you want"
     } else if why.starts_with("excluded") {
         "a company you skip"
     } else if why.starts_with("rated") {

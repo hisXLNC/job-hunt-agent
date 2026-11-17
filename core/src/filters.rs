@@ -86,6 +86,9 @@ pub fn prefilter(p: &Posting, profile: &Profile) -> Option<String> {
     if let Some(why) = below_min_salary(p, profile) {
         return Some(why);
     }
+    if let Some(why) = wrong_work(p, profile) {
+        return Some(why);
+    }
 
     let head: String = p.description.chars().take(3000).collect::<String>().to_lowercase();
     let text = format!("{title}\n{head}");
@@ -109,6 +112,24 @@ pub fn below_min_salary(p: &Posting, profile: &Profile) -> Option<String> {
         .or_else(|| p.salary.as_deref().and_then(crate::sources::pay_max_in))
         .or_else(|| crate::sources::pay_max_in(&p.description.chars().take(20000).collect::<String>()))?;
     (max < min).then(|| format!("salary up to {max:.0} a year, below your minimum of {min:.0}"))
+}
+
+/// Why a posting isn't the kind of work you want (Me, What you want: permanent or contract), when
+/// the posting says plainly what it is. One that doesn't say is kept, and Claude weighs it.
+pub fn wrong_work(p: &Posting, profile: &Profile) -> Option<String> {
+    let want = profile.wants.work.as_str();
+    if want.is_empty() {
+        return None;
+    }
+    let kind = crate::sources::employment_type(&p.title, &p.description)?;
+    let k = kind.to_lowercase();
+    match want {
+        "permanent" if ["contract", "temporary", "freelance", "internship", "co-op"].iter().any(|w| k.starts_with(w)) =>
+            Some(format!("not permanent: {} role, and you want permanent roles only", kind.split(" · ").next().unwrap_or(&kind).to_lowercase())),
+        "contract" if k == "full-time" && has_words(&p.description.to_lowercase(), "permanent") =>
+            Some("not contract: a permanent role, and you want contract roles only".into()),
+        _ => None,
+    }
 }
 
 /// Whether `hay` has `words` as whole words: "uk" is in "London, UK" but not in "Milwaukee".

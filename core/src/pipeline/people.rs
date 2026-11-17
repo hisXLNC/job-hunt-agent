@@ -94,7 +94,8 @@ impl Agent {
     pub fn find_queued(&self) -> usize {
         let mut n = 0;
         while let Some(id) = self.people_queued().first().cloned() {
-            if self.limited().is_some() || !self.claude_ready() {
+            // (Whether Claude is set up at all is checked before this runs: see due_tasks.)
+            if self.limited().is_some() {
                 break;
             }
             let rest: Vec<String> = self.people_queued().into_iter().filter(|x| *x != id).collect();

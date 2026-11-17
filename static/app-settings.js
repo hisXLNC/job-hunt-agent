@@ -383,7 +383,7 @@ async function settingsCards(tab, sub, host, given) {
         <p class="muted small">The things that make you turn a role down, told to Job Hunt up front. Scoring weighs them for every new posting: a role that goes against one scores lower and says why.</p>
         <div class="form">
           <label class="field">The level you're going for<input type="text" name="want_level" value="${esc(p.wants?.level || '')}" placeholder="e.g. senior manager or director"></label>
-          <label class="field">Permanent or contract<select name="want_work">${[['', 'Either'], ['permanent', 'Permanent only'], ['contract', 'Contract only']].map(([v, n]) => `<option value="${v}" ${(p.wants?.work || '') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label class="field">Permanent or contract<select name="want_work">${[['', 'Either'], ['permanent', 'Permanent only'], ['contract', 'Contract only']].map(([v, n]) => `<option value="${v}" ${(p.wants?.work || '') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label><div class="wants-apply" data-wants-apply="want_work" hidden></div>
           <label class="field" style="grid-column:1/-1">The career path you're building<input type="text" name="want_path" value="${esc(p.wants?.path || '')}" placeholder="e.g. product leadership in fintech"><span class="hint">One path, or several with a semicolon between. Every role still shows up: Job Hunt only warns you (Could set you back) about one that would significantly set your career back. Me, Career maps the paths your CV supports.</span></label>
           <label class="field">Industries you want<textarea data-chips data-add="Add an industry" name="want_industries">${esc(lines(p.wants?.industries))}</textarea></label>
           <label class="field">Industries you don't want<textarea data-chips data-add="Add an industry" name="want_avoid">${esc(lines(p.wants?.avoid))}</textarea></label>
@@ -393,7 +393,7 @@ async function settingsCards(tab, sub, host, given) {
         <label class="field">Skip these companies<textarea data-chips data-add="Add a company" name="exclude_companies">${esc(lines(p.exclude_companies))}</textarea></label>
         <label class="field">Skip titles containing<textarea data-chips data-add="Add a word" name="exclude_title_keywords">${esc(lines(p.exclude_title_keywords))}</textarea></label>
         <label class="field">Don't score jobs older than<input type="number" name="max_age_days" min="0" step="1" value="${p.max_age_days ?? 30}"><span class="hint">Days since the job was posted (0: any age). Older ones are set aside before scoring, using no Claude. Jobs whose posting date isn't known are scored.</span></label>
-        <label class="field">Minimum yearly salary<input type="number" name="min_salary" min="0" step="1000" value="${p.min_salary ?? ''}" placeholder="No minimum, e.g. 120000"><span class="hint">Digits only. Jobs that pay less at most are skipped before scoring, so they use no Claude: the salary a job site gives, or the pay in the posting itself (hourly rates count as 2,080 hours a year). Jobs that don't say are kept. Job Hunt looks for missing salaries once a week. <a href="#" data-act="rescanSalaries">Look now</a></span></label><div class="salary-apply" id="salaryApply" hidden></div>
+        <label class="field">Minimum yearly salary<input type="number" name="min_salary" min="0" step="1000" value="${p.min_salary ?? ''}" placeholder="No minimum, e.g. 120000"><span class="hint">Digits only. Jobs that pay less at most are skipped before scoring, so they use no Claude: the salary a job site gives, or the pay in the posting itself (hourly rates count as 2,080 hours a year). Jobs that don't say are kept. Job Hunt looks for missing salaries once a week. <a href="#" data-act="rescanSalaries">Look now</a></span></label><div class="wants-apply" data-wants-apply="min_salary" hidden></div>
         <label class="field">Skip companies rated below<select name="min_rating">${[['', 'Any rating'], ['3', '3.0 out of 5'], ['3.5', '3.5 out of 5'], ['4', '4.0 out of 5']].map(([x, n]) => `<option value="${x}" ${String(p.min_rating ?? '') === x || (x && Number(x) === p.min_rating) ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint">From what employees say (Glassdoor and the like). Companies not rated yet are kept until they are.</span></label>
       </div>
         <label class="field" style="margin-top:14px">What matters to you<textarea name="guidance" placeholder="e.g. Prefer hybrid roles in fintech or government. Avoid pure sales roles. Open to contract roles.">${esc(p.guidance || '')}</textarea><span class="hint">Claude weighs this when scoring. Job titles and keywords for each CV are set in Me.</span></label>
@@ -1575,10 +1575,11 @@ async function autosave(form) {
     const body = readProfile(form, form.dataset.part);
     // The board lists as this page last saw them, so the server keeps boards changed elsewhere.
     body.seen_sources = settingsCache.profile.sources;
-    const minWas = settingsCache.profile.min_salary ?? null;
+    const minWas = settingsCache.profile.min_salary ?? null, workWas = settingsCache.profile.wants?.work || '';
     const r = await api('/api/settings/profile', { method: 'POST', body });
     delete body.seen_sources;
-    if ('min_salary' in body && (body.min_salary ?? null) !== minWas) salaryOffer();
+    if (form.elements.min_salary && (body.min_salary ?? null) !== minWas) wantsOffer('min_salary');
+    if (form.elements.want_work && (body.wants?.work || '') !== workWas) wantsOffer('want_work');
     settingsCache.profile = r.profile || body;
     showBoardFields();
     saveState('✓ All changes saved', 'ok');
@@ -1592,19 +1593,21 @@ async function autosave(form) {
   saveTimer = setTimeout(() => autosave(form), 800);
 }));
 
-// Your minimum salary changed: what it would set aside and bring back among the jobs found already,
-// with one button to do it.
-async function salaryOffer() {
-  const box = $('#salaryApply');
+// Your minimum salary, or permanent or contract, changed: what that would set aside and bring back
+// among the jobs found already, with one button to do it, under the box you changed.
+async function wantsOffer(field) {
+  const box = document.querySelector(`[data-wants-apply="${field}"]`);
   if (!box) return;
+  document.querySelectorAll('[data-wants-apply]').forEach(b => { if (b !== box) b.hidden = true; });
   let r;
-  try { r = await api('/api/salaries/plan'); } catch { return; }
+  try { r = await api('/api/wants/plan'); } catch { return; }
   if (!r.set_aside && !r.back) { box.hidden = true; return; }
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
-  const parts = [r.set_aside ? `${n(r.set_aside, 'job', 'jobs')} you haven't applied to ${r.set_aside === 1 ? 'pays' : 'pay'} less than ${money(r.minimum)}` : '',
-    r.back ? `${n(r.back, 'job', 'jobs')} set aside for ${r.back === 1 ? 'its' : 'their'} pay ${r.minimum ? `now ${r.back === 1 ? 'pays' : 'pay'} ${money(r.minimum)} or more` : `can come back, with no minimum`}` : ''].filter(Boolean);
+  const why = [r.pay ? `${r.pay} ${r.pay === 1 ? 'pays' : 'pay'} less than ${money(r.minimum)}` : '', r.work ? `${r.work} ${r.work === 1 ? "isn't" : "aren't"} ${r.want_work || 'the kind you want'}` : ''].filter(Boolean).join(', ');
+  const parts = [r.set_aside ? `${n(r.set_aside, "job you haven't applied to doesn't", "jobs you haven't applied to don't")} fit any more (${why})` : '',
+    r.back ? `${n(r.back, 'job', 'jobs')} set aside before now ${r.back === 1 ? 'fits' : 'fit'}` : ''].filter(Boolean);
   const label = [r.set_aside ? `Set aside ${r.set_aside}` : '', r.back ? `bring back ${r.back}` : ''].filter(Boolean).join(' and ');
-  box.innerHTML = `<span>${esc(parts.join('; '))}.</span><button type="button" class="btn sm primary" data-act="applySalary">${esc(label[0].toUpperCase() + label.slice(1))}</button>`;
+  box.innerHTML = `<span>${esc(parts.join('; '))}.</span><button type="button" class="btn sm primary" data-act="applyWants">${esc(label[0].toUpperCase() + label.slice(1))}</button>`;
   box.hidden = false;
 }
 

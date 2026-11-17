@@ -519,10 +519,10 @@ async function act(el) {
     const rows = bankRows().filter((_, i) => a !== 'bankDrop' || i !== Number(el.dataset.i));
     return busy(async () => { await api('/api/answer-bank', { method: 'POST', body: { answers: rows } }); renderBank(); }, a === 'bankDrop' ? 'Forgotten.' : 'Saved.');
   }
-  if (a === 'applySalary') {
+  if (a === 'applyWants') {
     return busy(async () => {
-      const r = await api('/api/salaries/apply', { method: 'POST' });
-      const box = $('#salaryApply'); if (box) box.hidden = true;
+      const r = await api('/api/wants/apply', { method: 'POST' });
+      document.querySelectorAll('[data-wants-apply]').forEach(b => { b.hidden = true; });
       toast([r.set_aside ? `${r.set_aside} set aside` : '', r.restored ? `${r.restored} brought back` : '', r.scoring ? `${r.scoring} being scored (a notice says how they did)` : ''].filter(Boolean).join(', ') + '.');
       await refreshOverview();
     });

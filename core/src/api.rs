@@ -1360,12 +1360,15 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.db().set("tailor.repeat", m)?;
             ok()
         }
-        // Your minimum salary changed: how many jobs it sets aside and brings back, and doing it.
-        ["api", "salaries", "plan"] => {
-            let (below, back) = agent.salary_plan()?;
-            Ok(Resp::json(&json!({ "set_aside": below.len(), "back": back.len(), "minimum": agent.profile().min_salary })))
+        // Your minimum salary, or permanent or contract, changed: how many jobs that sets aside (by
+        // why) and brings back, and doing it.
+        ["api", "wants", "plan"] => {
+            let (out, back) = agent.wants_plan()?;
+            let pay = out.iter().filter(|(_, why)| why.starts_with("salary")).count();
+            let p = agent.profile();
+            Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "minimum": p.min_salary, "want_work": p.wants.work })))
         }
-        ["api", "salaries", "apply"] => Ok(Resp::json(&agent.apply_min_salary()?)),
+        ["api", "wants", "apply"] => Ok(Resp::json(&agent.apply_wants()?)),
         // Look for the pay of every posting without one (in the background; a notice says what was found).
         ["api", "salaries", "rescan"] => {
             if agent.is_running("salaries") {

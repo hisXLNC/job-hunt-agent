@@ -1210,6 +1210,19 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.97.0 (recruiter at tailoring; apply what you want to jobs found already)
+
+- `tailor()` ends with `queue_people` (key `people.queue`); due task "people" runs `find_queued`
+  (claim "people"), which finds without writing (`find_people(id, false)`). `find_after_applying`
+  writes the note to someone found earlier, with a notice, else looks as before.
+- `filters::below_min_salary` and `filters::wrong_work` (permanent/contract by
+  `sources::employment_type`; unknown kept) are in `prefilter`. `wants_plan` / `apply_wants`
+  (tailoring.rs) set aside queued/ready jobs that no longer fit (old place kept in `wants.was:<id>`)
+  and bring back skipped ones set aside for pay or work, or scored down with a "Contract role" /
+  "Permanent role" red flag once you mind neither (those are scored again: `score_brought_back`).
+- API `/api/wants/plan`, `/api/wants/apply`. Settings: `wantsOffer(field)` shows
+  `[data-wants-apply]` under the box changed, button `applyWants`.
+
 ## 2.96.8 (Greenhouse: CV, degree, school)
 
 - fill.js `collect` sends a file box's `id` (its id or name); fill.rs `which_file` reads label,
