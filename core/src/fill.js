@@ -1922,6 +1922,9 @@
     try { v = JSON.parse(raw); } catch (e) { v = { at: Number(raw) }; }
     return v && v.at && Date.now() - v.at < 10 * 60 * 1000 ? v : null;
   };
+  // What the page said, and where it was, when you pressed: a polite line or a "success" in the
+  // address that was already there isn't the site confirming anything.
+  const before = () => (pressed() || {}).was || {};
   const pressedAt = () => (pressed() || {}).at || 0;
   let notSendAt = 0; // when a button that doesn't send the application (Add, Save, Next…) was last pressed
   let recorded = false;
@@ -1954,7 +1957,18 @@
     status(`${auto ? 'Submitted, but ' : ''}Job Hunt couldn't mark it as applied (${String(r.error || 'no answer').slice(0, 160)}). Press Mark as applied to try again, or mark it in Job Hunt.`);
   }
   const pageText = () => (document.body ? document.body.innerText : '').slice(0, 40000);
-  const confirmedHere = strict => DONE.test(pageText()) || (!strict && (DONE_AFTER_PRESS.test(pageText()) || DONE_URL.test(location.href)));
+  // The site's own words that it was sent count anywhere. The weaker signs (a polite line, an
+  // address with "confirmation" or "thanks" in it) count only when they weren't there before you
+  // pressed and the form is gone: "Apply now" on a posting that ends "Thank you for your interest"
+  // was read as an application sent.
+  const confirmedHere = strict => {
+    const text = pageText(), was = before();
+    if (DONE.test(text) && !was.done) return true;
+    if (strict) return false;
+    const weak = (DONE_AFTER_PRESS.test(text) && !was.polite) || (DONE_URL.test(location.href) && location.href.split('#')[0] !== was.url && !DONE_URL.test(was.url || ''));
+    if (!weak) return false;
+    try { return !formHere(); } catch (err) { return true; }
+  };
   function recordApplied() {
     if (recorded) return;
     recorded = true;
@@ -1974,7 +1988,9 @@
   function onPressed() {
     let fields = [];
     if (filled) { try { fields = collect().filter(f => f.type !== 'file').map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options, section: f.section })); } catch (err) { /* the form changed */ } }
-    try { window.name = MARK + JSON.stringify({ at: Date.now(), fields: fields.slice(0, 80) }); } catch (e) { window.name = MARK + JSON.stringify({ at: Date.now() }); }
+    const text = pageText();
+    const was = { done: DONE.test(text), polite: DONE_AFTER_PRESS.test(text), url: location.href.split('#')[0] };
+    try { window.name = MARK + JSON.stringify({ at: Date.now(), was, fields: fields.slice(0, 80) }); } catch (e) { window.name = MARK + JSON.stringify({ at: Date.now(), was }); }
     watchForConfirmation(120);
   }
   // A box you correct or fill in yourself is kept for next time as soon as you leave it (not only
@@ -2022,7 +2038,12 @@
       try { send('learn', { fields: collect().filter(f => !['file', 'add', 'skills'].includes(f.type) && f.value).map(f => ({ label: f.label, type: f.type, value: f.value, options: f.options, section: f.section })).slice(0, 200) }); } catch (err) { /* the form changed */ }
     }
     if (NOT_SEND.test(t)) { notSendAt = Date.now(); return; }
-    if ((b.type === 'submit' && b.form) || /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|apply now|complete application|finish application/i.test(b.textContent || b.value || '')) onPressed();
+    // Sending it: a button that says so, or the form's own submit button where there is an
+    // application form. ("Apply now" on a posting, a search box or a sign-in aren't.)
+    const says = /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|complete application|finish application/i.test(b.textContent || b.value || '');
+    let form = false;
+    try { form = filled || formHere(); } catch (err) { /* the page changed */ }
+    if (says || (form && ((b.type === 'submit' && b.form) || /apply now/i.test(b.textContent || b.value || '')))) onPressed();
   }, true);
   // (Not the form sent by Add, Save, Next…: Job Bank's "Add" on a work experience sends its form,
   // and the panel then waited for a confirmation of an application that hadn't been sent.)

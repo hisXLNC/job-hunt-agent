@@ -54,7 +54,13 @@ function buildExtension(dir) {
 const LANGS = ['English', 'Arabic', 'French'];
 // The variants run side by side, each in its own browser: what belongs to one is kept under its name.
 const fieldsOf = {};
-const briefs = [], reports = [], handovers = [];
+const briefs = [], reports = [], handovers = [], applied = [];
+// A posting that ends with a polite line and has an Apply now button (no form), and with ?form=1 an
+// application form whose Submit shows the site's confirmation.
+const pressHtml = form => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Product Manager - Mock</title></head><body><h1>Product Manager</h1>
+<p>We build things. Thank you for your interest in Mock.</p><button id="go">Apply now</button>
+${form ? `<form id="f"><label>Full name <input id="name" name="name"></label><label>Email <input id="email" type="email" name="email"></label><label>Phone <input id="phone" name="phone"></label><label>City <input id="city" name="city"></label><button type="submit" id="send">Submit application</button></form>
+<script>document.getElementById('f').addEventListener('submit', e => { e.preventDefault(); document.body.innerHTML = '<h1>Thank you for applying</h1><p>We have received your application.</p>'; });</script>` : ''}</body></html>`;
 function answers(fields, name) {
   const values = {}, files = {};
   fieldsOf[name] = fields || [];
@@ -89,7 +95,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
 (async () => {
   const only = process.argv.slice(2);
   const names = Object.keys(VARIANTS).filter(n => !only.length || only.includes(n));
-  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && n !== 'letter' && n !== 'zoho' && n !== 'one' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
+  if (only.some(n => n !== 'app' && n !== 'profile' && n !== 'posts' && n !== 'folded' && n !== 'letter' && n !== 'zoho' && n !== 'one' && n !== 'press' && VARIANTS[n] === undefined)) { console.log(`No such variant. Choose from: ${Object.keys(VARIANTS).join(', ')}, app, profile, posts`); process.exit(1); }
   // Job Hunt's side: says its version, and answers a form's questions.
   let picked = '';
   let leads = null;
@@ -110,6 +116,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
         if (req.url === '/ext/pick') { picked = JSON.parse(body || '{}').job_id || ''; return json(res, { ok: true }); }
         // Claude isn't set up on the test machine: the direct hand-over says so, and the panel falls back to the brief.
         if (req.url === '/ext/handover') { handovers.push(JSON.parse(body || '{}')); res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); return res.end(JSON.stringify({ error: "Claude Code isn't installed on this PC." })); }
+        if (req.url === '/ext/applied') { applied.push(JSON.parse(body || '{}')); return json(res, { ok: true }); }
         if (req.url === '/ext/report') { reports.push(JSON.parse(body || '{}')); return json(res, { ok: true }); }
         if (req.url === '/ext/brief') { briefs.push(JSON.parse(body || '{}')); return json(res, { text: 'Please fill in the application form on this page for me.' }); }
         if (req.url === '/ext/log') { logs.push(JSON.parse(body || '{}')); return json(res, { kept: 1 }); }
@@ -172,7 +179,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     + '<div id="up" style="display:none"><label for="doc">Upload a file</label><input id="doc" type="file"></div></div><button type="button">Submit your application</button></body></html>';
   const postsHtml = fs.readFileSync(path.join(__dirname, 'posts.html'));
   const zohoHtml = fs.readFileSync(path.join(__dirname, 'zoho.html'));
-  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/nothing') ? '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Careers - Mock</title></head><body><h1>Thanks for your interest</h1><p>Nothing to fill in here.</p></body></html>' : req.url.startsWith('/zoho') ? zohoHtml : req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/letter') ? letterHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
+  const site = await listen(http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(req.url.startsWith('/nothing') ? '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Careers - Mock</title></head><body><h1>Thanks for your interest</h1><p>Nothing to fill in here.</p></body></html>' : req.url.startsWith('/press') ? pressHtml(req.url.includes('form=1')) : req.url.startsWith('/zoho') ? zohoHtml : req.url.startsWith('/folded') ? foldedHtml : req.url.startsWith('/letter') ? letterHtml : req.url.startsWith('/match/profile/list') ? listHtml : req.url.startsWith('/match/profile') ? profileHtml : req.url.startsWith('/search/results/content') ? postsHtml : html); }), 0);
   const base = `http://127.0.0.1:${site.address().port}/apply`;
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jobhunt-ext-'));
@@ -495,11 +502,38 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (problems.length) { failed.push('posts'); for (const p of problems) console.log(`        ${p}`); }
     await page.close();
   }
+  // Apply now on a posting that ends "Thank you for your interest" isn't an application sent; the
+  // form's own Submit, then the site's "Thank you for applying", is.
+  if (!only.length || only.includes('press')) {
+    const t0 = Date.now(), problems = [];
+    const start = url => sw.evaluate(async url => { const [tab] = await chrome.tabs.query({ url: url + '*', active: true }); await startFill(tab.id); }, url);
+    const panelUp = async page => { for (let i = 0; i < 30; i++) { await page.waitForTimeout(300); if (await page.evaluate(() => !!document.querySelector('[data-jobhunt-panel]'))) return; } };
+    let page = await ctx.newPage();
+    let url = `http://127.0.0.1:${site.address().port}/press`;
+    await page.goto(url);
+    await start(url); await panelUp(page);
+    await page.click('#go');
+    await page.waitForTimeout(4000);
+    if (applied.some(a => /\/press$/.test(a.url || ''))) problems.push('Apply now on a posting with a polite line was marked as applied');
+    await page.close();
+    page = await ctx.newPage();
+    url = `http://127.0.0.1:${site.address().port}/press?form=1`;
+    await page.goto(url);
+    await start(url); await panelUp(page);
+    await page.click('#send');
+    let sent = null;
+    for (let i = 0; i < 20 && !sent; i++) { await page.waitForTimeout(500); sent = applied.find(a => /form=1/.test(a.url || '')); }
+    if (!sent) problems.push("the site's confirmation after Submit wasn't told to Job Hunt");
+    else if (!sent.auto) problems.push('the confirmation was sent as something you pressed, not the site confirming');
+    console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${'press'.padEnd(7)} ${Math.round((Date.now() - t0) / 1000)}s`);
+    if (problems.length) { failed.push('press'); for (const p of problems) console.log(`        ${p}`); }
+    await page.close();
+  }
   await ctx.close();
   };
   // Three browsers at a time (JOBS=1 for one after another, when reading a failure).
   const jobs = names.map(n => () => runVariant(n));
-  if (!only.length || ['app', 'profile', 'posts', 'folded', 'letter', 'zoho', 'one'].some(n => only.includes(n))) jobs.push(rest);
+  if (!only.length || ['app', 'profile', 'posts', 'folded', 'letter', 'zoho', 'one', 'press'].some(n => only.includes(n))) jobs.push(rest);
   const t0 = Date.now();
   await Promise.all(Array.from({ length: Math.max(1, Number(process.env.JOBS) || 3) }, async () => { while (jobs.length) await jobs.shift()(); }));
   console.log(`      (${Math.round((Date.now() - t0) / 1000)}s in all)`);

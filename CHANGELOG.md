@@ -5,6 +5,17 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.3] - 2026-11-17
+
+History says who made each change.
+
+### Changes
+
+- Each line in a job's history now says who made the change: You, Job Hunt or Claude. Lines from before this update say it only where it is certain.
+- Every change of stage is now written in the history, including the ones Job Hunt makes by itself after scoring, filtering or a closed posting.
+- Fixed: pressing Apply now on a posting that ends with Thank you for your interest could mark the job as applied. Job Hunt now marks it only after the application form itself is sent and the site confirms.
+- The history line for an application says whether Job Hunt read the site's confirmation or you pressed I submitted it.
+
 ## [26.11.2] - 2026-11-17
 
 Expected salary worked out for each job.
@@ -2748,6 +2759,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.3
 [26.11.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.2
 [26.11.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.1
 [26.11.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.0

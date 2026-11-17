@@ -503,7 +503,10 @@ function expiredWhy(j) {
 const closedTag = j => (expiredWhy(j) ? `<span class="pill crit expired" title="${esc(expiredWhy(j))}">Expired</span>` : '')
   + ((j.warnings || []).length ? ` <span class="pill warn" title="${esc(j.warnings.join('\n'))}">Check first</span>` : '')
   + (j.copies ? ` <span class="pill info" title="The same job is listed in ${j.copies + 1} places. Its page compares them.">${j.copies + 1} listings</span>` : '');
-function eventText(e) {
+/** Who made a change in the history: you, Job Hunt by itself, or Claude. (Lines from before this was kept say nothing.) */
+const byTag = e => { const w = { you: 'You', jobhunt: 'Job Hunt', claude: 'Claude' }[e.by]; return w ? ` <span class="by by-${esc(e.by)}" title="${e.by === 'you' ? 'You did this' : e.by === 'claude' ? 'Claude did this, asked from Claude' : 'Job Hunt did this by itself'}">${w}</span>` : ''; };
+function eventText(e) { return eventWords(e) + byTag(e); }
+function eventWords(e) {
   const k = e.kind;
   if (k.startsWith('status:')) return `Moved to <b>${esc(STAGES[k.slice(7)] || k.slice(7))}</b>${e.detail ? ` · ${esc(e.detail)}` : ''}`;
   if (k.startsWith('email:')) return `Email: ${esc((CATEGORY[k.slice(6)] || [k.slice(6)])[0])} · ${esc(e.detail)}`;

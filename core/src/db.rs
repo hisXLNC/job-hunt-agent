@@ -444,6 +444,29 @@ pub struct Event {
     pub created_at: String,
     pub company: Option<String>,
     pub title: Option<String>,
+    /// Who made the change: "you", "jobhunt", "claude"; empty on lines older than this was kept.
+    pub by: String,
+}
+
+thread_local! {
+    static ACTOR: std::cell::Cell<&'static str> = const { std::cell::Cell::new("") };
+}
+
+/// Who the history says did what this thread does next, until the returned value is dropped: "you"
+/// while something you pressed is carried out, "claude" for what Claude asks for. Anything else
+/// (searches, the email check, what runs by itself) is Job Hunt's.
+pub fn acting(who: &'static str) -> Acting {
+    Acting(ACTOR.with(|a| a.replace(who)))
+}
+pub struct Acting(&'static str);
+impl Drop for Acting {
+    fn drop(&mut self) {
+        ACTOR.with(|a| a.set(self.0));
+    }
+}
+pub fn actor() -> &'static str {
+    let a = ACTOR.with(|a| a.get());
+    if a.is_empty() { "jobhunt" } else { a }
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -542,6 +565,18 @@ impl Db {
             }
         }
         con.execute_batch("CREATE INDEX IF NOT EXISTS jobs_dupe ON jobs(dupe_key); CREATE INDEX IF NOT EXISTS jobs_url ON jobs(url_key)")?;
+        // Who made each change in the history: you, Job Hunt, or Claude. Older lines say who only
+        // where what they say settles it (an email moved it, the site confirmed, Claude changed it).
+        let by_there = con.prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'by_whom'")?.exists([])?;
+        if !by_there {
+            con.execute_batch(
+                "ALTER TABLE events ADD COLUMN by_whom TEXT NOT NULL DEFAULT '';
+                 UPDATE events SET by_whom = 'jobhunt' WHERE kind LIKE 'status:%' AND (detail LIKE 'from email:%' OR detail LIKE '%confirmed by the site%' OR detail LIKE 'applied by email%');
+                 UPDATE events SET by_whom = 'you' WHERE kind LIKE 'status:%' AND (detail LIKE '%(filled in by Job Hunt)%' OR detail = 'changed in Job Hunt' OR detail LIKE 'not interested (from your browser)%');
+                 UPDATE events SET by_whom = 'claude' WHERE kind LIKE 'status:%' AND detail = 'changed from Claude';
+                 UPDATE events SET by_whom = 'jobhunt' WHERE kind LIKE 'email:%' OR kind IN ('search', 'inbox', 'scored', 'rescored', 'check', 'backup', 'copies', 'weekly', 'care');",
+            )?;
+        }
         // What the Queue asks for every second or two (applications a week, the newest found, recent
         // errors) read the whole table without these: every row, long posting text included.
         con.execute_batch(
@@ -962,7 +997,36 @@ impl Db {
         Ok(())
     }
 
+    /// Change a job. A change of stage is written in its history, with why as far as the change
+    /// itself tells (set_status writes its own line, with the reason it's given).
     pub fn update_job(&self, id: &str, fields: &[(&str, Value)]) -> R<()> {
+        let to = fields.iter().find(|f| f.0 == "status").and_then(|f| f.1.as_str());
+        let from = match to {
+            Some(_) => self.con.query_row("SELECT status FROM jobs WHERE id = ?1", [id], |r| r.get::<_, String>(0)).optional().ok().flatten(),
+            None => None,
+        };
+        self.update_job_quiet(id, fields)?;
+        if let (Some(to), Some(from)) = (to, from) {
+            if to != from {
+                let has = |k: &str| fields.iter().find(|f| f.0 == k).map(|f| &f.1);
+                let why = if let Some(n) = has("score").and_then(|v| v.as_i64()) {
+                    format!("scored {n}")
+                } else if let Some(r) = has("reasoning").and_then(|v| v.as_str()).filter(|r| r.starts_with("Filtered out") || r.starts_with("Scored ")) {
+                    r.chars().take(200).collect()
+                } else if has("closed_at").is_some() {
+                    "the posting has closed".to_string()
+                } else if to == "ready" {
+                    "CV and letter written".to_string()
+                } else {
+                    String::new()
+                };
+                self.log(Some(id), &format!("status:{to}"), &why)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn update_job_quiet(&self, id: &str, fields: &[(&str, Value)]) -> R<()> {
         // Every change of stage passes here: the lifecycle sees it (and, for now, only notes a
         // move it doesn't expect).
         if let Some(to) = fields.iter().find(|f| f.0 == "status").and_then(|f| f.1.as_str()) {
@@ -1007,7 +1071,7 @@ impl Db {
         if status == "applied" {
             f.push(("applied_at", Value::from(now())));
         }
-        self.update_job(id, &f)?;
+        self.update_job_quiet(id, &f)?;
         self.log(Some(id), &format!("status:{status}"), detail)
     }
 
@@ -1082,15 +1146,15 @@ impl Db {
             crate::lifecycle::failed(j, kind, detail);
         }
         self.con.execute(
-            "INSERT INTO events (job_id, kind, detail, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![job_id, kind, detail, now()],
+            "INSERT INTO events (job_id, kind, detail, created_at, by_whom) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![job_id, kind, detail, now(), actor()],
         )?;
         Ok(())
     }
 
     fn events_where(&self, clause: &str, p: &[&dyn rusqlite::ToSql]) -> R<Vec<Event>> {
         let sql = format!(
-            "SELECT e.id, e.job_id, e.kind, e.detail, e.created_at, j.company, j.title
+            "SELECT e.id, e.job_id, e.kind, e.detail, e.created_at, j.company, j.title, e.by_whom
              FROM events e LEFT JOIN jobs j ON j.id = e.job_id {clause}"
         );
         let mut st = self.con.prepare(&sql)?;
@@ -1103,6 +1167,7 @@ impl Db {
                 created_at: r.get(4)?,
                 company: r.get(5)?,
                 title: r.get(6)?,
+                by: r.get(7)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)

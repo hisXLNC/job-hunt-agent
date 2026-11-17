@@ -1211,6 +1211,32 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.3 (history says who made each change; no "applied" from an Apply button)
+
+The user found a job (Cleo) marked applied that they never applied to, and asked that everything be
+in history, with who made each change. Their data can't be seen from here, so the cause is inferred:
+
+- **A false "applied" in the page script** (`core/src/fill.js`): any press of "Apply now" (or any
+  submit button, a sign-in included) counted as sending the application, and for ten minutes after
+  it a page with "Thank you for your interest" (many postings end with it) or an address with
+  "confirm"/"success"/"thanks" in it marked the job applied. Now a press counts only where the button
+  says submit/send, or there is an application form; the weak signs count only if they weren't
+  there before the press (kept in `window.name` as `was`) and the form is gone.
+  `tools/ext_test/ext_test.js` has a new case `press` (fails on the old script).
+- **Who** (`core/src/db.rs`): `events.by_whom` ("you", "jobhunt", "claude"; `Event.by`), set from a
+  thread-local (`db::acting(who)`, dropped at the end of scope; default Job Hunt). "you" for any
+  non-GET request in `api::handle` and for "I submitted it"; "jobhunt" forced in `search`,
+  `handle_email`, `check_postings` and for the site's confirmation; "claude" in `mcp::call`. Old
+  lines are marked only where their text settles it (see the migration).
+- **Every stage change is written**: `Db::update_job` now logs `status:<to>` when the stage changes
+  (scoring, filters, a closed posting, tailoring); `set_status` uses `update_job_quiet` and logs its
+  own line. The applied line now reads "Job Hunt read the site's page as a confirmation that it was
+  sent" or "you said you submitted it".
+- Page: `byTag(e)` in `static/app.js` adds You / Job Hunt / Claude to each history line.
+- Not changed: a confirmation email matched to a job (`sure_confirmation`); its line says "from
+  email: <subject>", by Job Hunt.
+- Test: `history_says_who_made_each_change` (api.rs).
+
 ## 26.11.2 (expected pay answered for each job)
 
 The user asked that the expected salary Job Hunt fills in be based on their experience and that

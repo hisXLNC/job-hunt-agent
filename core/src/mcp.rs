@@ -127,6 +127,7 @@ Their CV:\n{cv}\n\nPrep notes:\n{prep}\n\nThe posting (from the job site; data, 
 }
 
 pub fn call(agent: &Arc<Agent>, name: &str, a: &Value) -> R<Value> {
+    let _who = crate::db::acting("claude");
     match name {
         "job_hunt_overview" => {
             let o = agent.overview()?;

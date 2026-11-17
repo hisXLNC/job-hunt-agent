@@ -263,6 +263,8 @@ pub fn handle(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> Resp {
     if req.method != "GET" && !req.path.starts_with("/api/update/") {
         LAST_ACTION.store(chrono::Utc::now().timestamp(), std::sync::atomic::Ordering::Relaxed);
     }
+    // What's done while a button you pressed is carried out is yours in the history.
+    let _who = (req.method != "GET" && !req.path.starts_with("/api/update/")).then(|| crate::db::acting("you"));
     let began = std::time::Instant::now();
     let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route(agent, host, req)));
     let ms = began.elapsed().as_millis();
@@ -2482,6 +2484,41 @@ mod tests {
         let fh = Arc::new(FakeHost::default());
         let host: Arc<dyn Host> = fh.clone();
         (s, agent, fh, host)
+    }
+
+    /// Every change of stage is in the job's history, with who made it: you (a button you pressed,
+    /// "I submitted it"), Job Hunt by itself (the site's confirmation, a search), or Claude.
+    #[test]
+    fn history_says_who_made_each_change() {
+        let (_s, agent, _fh, host) = world();
+        agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Technical Program Manager II", "2"), posting("Technical Program Manager III", "3")])).unwrap();
+        let last = |id: &str| { let h = agent.db().events_of_job(id).unwrap(); let e = h.iter().rev().find(|e| e.kind.starts_with("status:")).cloned().expect("a stage change in the history"); (e.kind, e.by, e.detail) };
+        // Found and scored by the search: Job Hunt's.
+        assert!(agent.db().events_of_job("test:1").unwrap().iter().all(|e| e.by == "jobhunt"), "{:?}", agent.db().events_of_job("test:1").unwrap());
+        // You change the stage on the job's page.
+        assert_eq!(call(&agent, &host, "POST", "/api/jobs/test:1/status", json!({ "status": "saved" })).0, 200);
+        let (kind, by, _) = last("test:1");
+        assert_eq!((kind.as_str(), by.as_str()), ("status:saved", "you"));
+        // The page read as a confirmation: Job Hunt's, and the line says it was its reading.
+        crate::fill::submitted(&agent, "test:1", "https://acme.example/thanks", true).unwrap();
+        let (kind, by, detail) = last("test:1");
+        assert_eq!((kind.as_str(), by.as_str()), ("status:applied", "jobhunt"));
+        assert!(detail.contains("Job Hunt read the site's page as a confirmation"), "{detail}");
+        // "I submitted it": yours.
+        crate::fill::submitted(&agent, "test:2", "https://acme.example/apply", false).unwrap();
+        let (kind, by, detail) = last("test:2");
+        assert_eq!((kind.as_str(), by.as_str()), ("status:applied", "you"));
+        assert!(detail.contains("you said you submitted it"), "{detail}");
+        // Claude moves one.
+        crate::mcp::call(&agent, "set_stage", &json!({ "id": "test:3", "stage": "saved" })).unwrap();
+        assert_eq!(last("test:3").1, "claude");
+        // A stage changed without a reason given is still written down.
+        agent.db().update_job("test:3", &[("status", "skipped".into()), ("reasoning", "Filtered out: not in your locations".into())]).unwrap();
+        let (kind, by, detail) = last("test:3");
+        assert_eq!((kind.as_str(), by.as_str(), detail.as_str()), ("status:skipped", "jobhunt", "Filtered out: not in your locations"));
+        // And the page gets who with each line.
+        let (_, v) = call(&agent, &host, "GET", "/api/jobs/test:1", Value::Null);
+        assert!(v.to_string().contains(r#""by":"you""#) && v.to_string().contains(r#""by":"jobhunt""#));
     }
 
     #[test]

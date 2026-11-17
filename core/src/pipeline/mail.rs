@@ -179,6 +179,8 @@ impl Agent {
     }
 
     pub(super) fn handle_email(&self, mail: &Arc<dyn Mail>, msg: &Email, t: &Triage, profile: &Profile) -> R<Option<String>> {
+        // What this does by itself is Job Hunt's in the history, even when you pressed the button that began it.
+        let _who = crate::db::acting("jobhunt");
         if let Some(l) = label(&t.category) {
             mail.label(&msg.id, l)?;
         }

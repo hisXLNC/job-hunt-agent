@@ -1,5 +1,16 @@
 [
   {
+    "version": "26.11.3",
+    "date": "2026-11-17",
+    "title": "History says who made each change",
+    "changes": [
+      "Each line in a job's history now says who made the change: You, Job Hunt or Claude. Lines from before this update say it only where it is certain.",
+      "Every change of stage is now written in the history, including the ones Job Hunt makes by itself after scoring, filtering or a closed posting.",
+      "Fixed: pressing Apply now on a posting that ends with Thank you for your interest could mark the job as applied. Job Hunt now marks it only after the application form itself is sent and the site confirms.",
+      "The history line for an application says whether Job Hunt read the site's confirmation or you pressed I submitted it."
+    ]
+  },
+  {
     "version": "26.11.2",
     "date": "2026-11-17",
     "title": "Expected salary worked out for each job",

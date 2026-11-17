@@ -34,6 +34,8 @@ impl Agent {
 
     /// Search every source (or score the given postings), score what's new and tailor the best.
     pub fn search(&self, postings: Option<Vec<Posting>>) -> R<Report> {
+        // What this does by itself is Job Hunt's in the history, even when you pressed the button that began it.
+        let _who = crate::db::acting("jobhunt");
         self.search_with(postings, false, None)
     }
 

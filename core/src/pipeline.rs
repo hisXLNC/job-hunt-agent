@@ -2031,6 +2031,8 @@ replies and interviews, and a little lower for kinds that got none from several 
 
     /// Look at every posting still waiting on you and note the ones that have closed. Once a day.
     pub fn check_postings(&self) -> R<(usize, usize)> {
+        // What this does by itself is Job Hunt's in the history, even when you pressed the button that began it.
+        let _who = crate::db::acting("jobhunt");
         let _g = self.claim("check-postings")?;
         // The ones you're about to send first, then the Queue, a different stretch of it each day
         // (80 pages a day at most).

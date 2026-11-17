@@ -1279,6 +1279,8 @@ pub fn submitted(agent: &Agent, job_id: &str, url: &str, auto: bool) -> R<()> {
 /// submitted, with the form as you sent it (`fields`, with their values), so the answers you gave
 /// to questions forms often ask are kept for next time (see learn).
 pub fn submitted_with(agent: &Agent, job_id: &str, url: &str, auto: bool, fields: &[Value]) -> R<()> {
+    // The site's confirmation is Job Hunt's reading of the page; "I submitted it" is your word.
+    let _who = crate::db::acting(if auto { "jobhunt" } else { "you" });
     if !fields.is_empty() {
         if let Ok(n) = learn(agent, fields) {
             if n > 0 {
@@ -1291,7 +1293,7 @@ pub fn submitted_with(agent: &Agent, job_id: &str, url: &str, auto: bool, fields
         return Ok(());
     }
     let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or_default();
-    agent.db().set_status(job_id, "applied", &format!("submitted on {} (filled in by Job Hunt{}) {}", if host.is_empty() { "the company's site" } else { &host }, if auto { ", confirmed by the site" } else { "" }, now()))?;
+    agent.db().set_status(job_id, "applied", &format!("submitted on {} ({}) {}", if host.is_empty() { "the company's site" } else { &host }, if auto { "Job Hunt read the site's page as a confirmation that it was sent" } else { "you said you submitted it" }, now()))?;
     if auto {
         agent.note(&format!("Applied: {} at {}", job.title, job.company), "The site confirmed your application, so Job Hunt marked it as applied. It reminds you to follow up if there's no reply.");
     }
