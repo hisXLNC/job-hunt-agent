@@ -1210,6 +1210,22 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.97.1 (a review of 2.93.0 to 2.97.0, with fixes)
+
+- `filters::work_kind` (strict: title, "Employment type:" label, phrases about the job itself)
+  replaces `sources::employment_type` in `wrong_work`; test of false positives.
+- `apply_wants`: `BEING_SCORED` reasoning keeps an unscored job in `wants_plan`; `wants.rescored`
+  stops a second offer; a flag "Contract role" comes back when you take contracts. `page()` calls
+  `wantsOffer` when a `[data-wants-apply]` is on the page (count kept a minute in `wantsPlan`).
+- Apify `publishedAt` is only r86400 or r604800 (the links carry the exact `f_TPR`).
+- `db::requisition`: Workday "_R12345-1" is r12345.
+- people: `queue_people` skips companies already messaged; `find_queued` requeues (3 tries,
+  `people.tries:<id>`) and stops on an error that isn't "Couldn't find"; `find_after_applying`
+  writes only to a contact whose note says Job Hunt found them.
+- fill.rs `names_board`; a hinted board that isn't the remembered job's blocks it. fill.js
+  `newsForm` (3 boxes at most); LEVELS and "Other" only in degree/school boxes.
+- Not done: lifecycle step 4 remainder (Queue, All jobs next column, assistant on `lifecycle.next`).
+
 ## 2.97.0 (recruiter at tailoring; apply what you want to jobs found already)
 
 - `tailor()` ends with `queue_people` (key `people.queue`); due task "people" runs `find_queued`

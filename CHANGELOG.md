@@ -4,6 +4,20 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.97.1] - 2026-11-17
+
+A review of the last releases: fixes.
+
+### Changes
+
+- Permanent or contract sets a posting aside only when it plainly says what it is (its title, an "Employment type" line, "this is a 12-month contract"). "5 years of contract management" and "permanent resident" no longer count.
+- LinkedIn through Apify: the scraper is only ever sent a day or a week as its time window (a value in between could be refused and return nothing).
+- One Workday opening posted for two places (R12345 and R12345-1) is one job again.
+- A job brought back to be scored whose scoring doesn't finish is offered again; switching permanent to contract brings back the contract roles scored down before. The Settings line also shows when you open Settings with something waiting.
+- The recruiter search at tailoring skips companies you've already written to, tries again after Claude's limit, and never writes a note to someone you added yourself.
+- A job board's form for a company you have no job at is never filled for the job you chose last.
+- The form filler no longer mistakes an application that mentions a newsletter for a newsletter form; a degree's level and "Other" are tried only in degree and school boxes.
+
 ## [2.97.0] - 2026-11-17
 
 Recruiter found at tailoring; apply a new salary or job type to jobs found already.
@@ -2614,6 +2628,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.97.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.1
 [2.97.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.0
 [2.96.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.8
 [2.96.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.7

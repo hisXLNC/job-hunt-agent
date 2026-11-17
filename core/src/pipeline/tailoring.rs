@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// The reasoning of a job brought back by `apply_wants` until it has its score.
+const BEING_SCORED: &str = "Brought back by what you want: being scored";
+
 impl Agent {
     // --- CVs ----------------------------------------------------------------------------------
 
@@ -1206,11 +1209,13 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
     /// Set aside for its pay or its kind of work (by the filter, or scored low by Claude for being a
     /// contract or a permanent role): the ones that could come back when you change those.
     fn set_aside_for_wants(j: &Job) -> bool {
-        j.reasoning.as_deref().is_some_and(|r| ["Filtered out: salary", "Filtered out: not permanent", "Filtered out: not contract"].iter().any(|w| r.starts_with(w)))
-            || Self::scored_down_for_work(j)
+        // (The last: brought back before, and its scoring didn't finish.)
+        j.reasoning.as_deref().is_some_and(|r| ["Filtered out: salary", "Filtered out: not permanent", "Filtered out: not contract", BEING_SCORED].iter().any(|w| r.starts_with(w)))
+            || Self::scored_down_for_work(j).is_some()
     }
-    fn scored_down_for_work(j: &Job) -> bool {
-        j.red_flags.iter().any(|f| { let f = f.to_lowercase(); f.starts_with("contract role") || f.starts_with("permanent role") })
+    /// The kind of work Claude scored it down for being ("contract" or "permanent"), from its red flag.
+    fn scored_down_for_work(j: &Job) -> Option<&'static str> {
+        j.red_flags.iter().find_map(|f| { let f = f.to_lowercase(); if f.starts_with("contract role") { Some("contract") } else if f.starts_with("permanent role") { Some("permanent") } else { None } })
     }
 
     /// Your minimum salary, or permanent or contract, changed: the jobs you haven't acted on that no
@@ -1225,10 +1230,15 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
                 if let Some(why) = Self::misfit(&j, &profile) { out.push((j, why)); }
             }
         }
-        // Scored down by Claude for its kind of work: back only when you no longer mind which.
-        let back = self.db().jobs(Some("skipped"), 100_000)?.into_iter()
+        // Scored down by Claude for its kind of work: back once that kind is one you take (you chose
+        // it, or either).
+        let takes = |kind: &str| profile.wants.work.is_empty() || profile.wants.work == kind;
+        let skipped = self.db().jobs(Some("skipped"), 100_000)?;
+        // (One scored again since and still flagged isn't offered a second time.)
+        let again: std::collections::HashSet<String> = serde_json::from_str(&self.secret("wants.rescored")).unwrap_or_default();
+        let back = skipped.into_iter()
             .filter(|j| j.closed_at.is_none() && Self::set_aside_for_wants(j) && Self::misfit(j, &profile).is_none()
-                && (!Self::scored_down_for_work(j) || profile.wants.work.is_empty()))
+                && Self::scored_down_for_work(j).is_none_or(|k| takes(k) && !again.contains(&j.id)))
             .collect();
         Ok((out, back))
     }
@@ -1257,11 +1267,13 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
                 let was: Value = db.get(&format!("wants.was:{}", j.id))?.and_then(|v| serde_json::from_str(&v).ok()).unwrap_or(Value::Null);
                 if let Some(status) = was["status"].as_str() {
                     db.update_job(&j.id, &[("status", status.into()), ("reasoning", was["reasoning"].clone())])?;
-                } else if let (Some(score), false) = (j.score, Self::scored_down_for_work(j)) {
+                } else if let (Some(score), None) = (j.score, Self::scored_down_for_work(j)) {
                     let status = if score >= profile.score_threshold { "queued" } else { "skipped" };
                     db.update_job(&j.id, &[("status", status.into()), ("reasoning", format!("Scored {score} before it was set aside.").into())])?;
                 } else {
-                    db.update_job(&j.id, &[("reasoning", "Brought back by what you want: being scored.".into()), ("red_flags", json!([]))])?;
+                    // Its red flags stay until the new score replaces them: if the scoring doesn't
+                    // finish, the job is offered again the next time (see set_aside_for_wants).
+                    db.update_job(&j.id, &[("reasoning", format!("{BEING_SCORED}.").into())])?;
                     to_score.push(j.id.clone());
                     continue;
                 }
@@ -1278,8 +1290,10 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
                     return;
                 };
                 let n = a.score_brought_back(&ids);
-                if n.0 > 0 {
-                    a.note("Scored the jobs brought back", &format!("{} scored; {} clear your bar and are on the Queue.", n.0, n.1));
+                let left = ids.len() - n.0;
+                if n.0 > 0 || left > 0 {
+                    a.note("Scored the jobs brought back", &format!("{} scored; {} clear your bar and are on the Queue.{}", n.0, n.1,
+                        if left > 0 { format!(" {left} couldn't be scored now (Claude's limit, or an error): the button under the setting, in Settings, tries them again.") } else { String::new() }));
                 }
             });
         }
@@ -1310,6 +1324,11 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
                 ("reasoning", s.reasoning.into()), ("red_flags", json!(s.red_flags)), ("keywords", json!(s.keywords)),
             ]);
             let _ = db.log(Some(&j.id), "scored", &format!("{} on the {} track (brought back by what you want)", s.score, s.track));
+            drop(db);
+            let mut again: std::collections::BTreeSet<String> = serde_json::from_str(&self.secret("wants.rescored")).unwrap_or_default();
+            if again.insert(j.id.clone()) {
+                let _ = self.db().set("wants.rescored", &json!(again).to_string());
+            }
         }
         (scored, cleared)
     }

@@ -114,22 +114,62 @@ pub fn below_min_salary(p: &Posting, profile: &Profile) -> Option<String> {
     (max < min).then(|| format!("salary up to {max:.0} a year, below your minimum of {min:.0}"))
 }
 
+/// What kind of work a posting plainly says it is: "contract" (or temporary, freelance, an
+/// internship) or "permanent". Stricter than the label lists show (`sources::employment_type`),
+/// since a posting is set aside on it: its title, an "Employment type:" line, or a phrase that can
+/// only be about the job itself. "5 years of contract management" and "permanent resident" say
+/// nothing about it.
+pub fn work_kind(title: &str, text: &str) -> Option<(&'static str, String)> {
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+    static TITLE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(contract(?:or)?|temporary|temp|freelance|fixed[- ]term|intern(?:ship)?|co-?op)\b").unwrap());
+    static LABEL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(?:employment|job|position|work|contract|role) type\s*[:\-–]?\s*(full[- ]time|permanent|contract(?:or)?|temporary|temp|fixed[- ]term|internship|intern|co-?op|freelance)").unwrap());
+    static CONTRACT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bcontract(?:[- ]to[- ]hire)? (?:role|position|assignment|opportunity|basis|engagement)\b|\bthis is a (?:\d+[- ]?months? )?contract\b|\b\d+[- ]?(?:month|mo)s?[- ](?:(?:fixed[- ]term|full[- ]time|term|temporary|renewable) )?contract\b|\bfixed[- ]term (?:contract|role|position|appointment)\b|\b(?:maternity|parental|mat) leave (?:coverage|cover|contract|replacement)\b|\btemporary (?:full[- ]time |part[- ]time )?(?:role|position|assignment|contract)\b").unwrap());
+    static PERMANENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bpermanent,? (?:full[- ]time|part[- ]time|role|position|employment|job|opportunity)\b|\b(?:full[- ]time|regular),? permanent\b").unwrap());
+    // Words after "contract" that make it the subject of the work, not its terms.
+    const ABOUT: &[&str] = &["manage", "negotiat", "administrat", "law", "review", "draft", "lifecycle", "compliance", "specialist", "analyst", "officer", "counsel", "coordinator"];
+    let named = |w: &str| -> (&'static str, String) {
+        let w = w.to_lowercase();
+        if w.starts_with("full") || w.starts_with("perm") { ("permanent", "a permanent".into()) }
+        else if w.starts_with("intern") { ("contract", "an internship".into()) }
+        else if w.starts_with("co") && w.contains("op") { ("contract", "a co-op".into()) }
+        else if w.starts_with("temp") { ("contract", "a temporary".into()) }
+        else if w.starts_with("free") { ("contract", "a freelance".into()) }
+        else { ("contract", "a contract".into()) }
+    };
+    if let Some(m) = TITLE.find(title) {
+        let rest = title[m.end()..].trim_start().to_lowercase();
+        if !ABOUT.iter().any(|a| rest.starts_with(a)) && !m.as_str().eq_ignore_ascii_case("contracts") {
+            return Some(named(m.as_str()));
+        }
+    }
+    let head: String = text.chars().take(12_000).collect();
+    if let Some(c) = LABEL.captures(&head) {
+        // "Full-time" alone says nothing: contracts are full-time too.
+        let w = c[1].to_lowercase();
+        if !w.starts_with("full") {
+            return Some(named(&w));
+        }
+    }
+    if CONTRACT.is_match(&head) {
+        return Some(("contract", "a contract".into()));
+    }
+    if PERMANENT.is_match(&head) {
+        return Some(("permanent", "a permanent".into()));
+    }
+    None
+}
+
 /// Why a posting isn't the kind of work you want (Me, What you want: permanent or contract), when
-/// the posting says plainly what it is. One that doesn't say is kept, and Claude weighs it.
+/// the posting says plainly what it is (see `work_kind`). One that doesn't say is kept, and Claude
+/// weighs it.
 pub fn wrong_work(p: &Posting, profile: &Profile) -> Option<String> {
     let want = profile.wants.work.as_str();
-    if want.is_empty() {
+    if want != "permanent" && want != "contract" {
         return None;
     }
-    let kind = crate::sources::employment_type(&p.title, &p.description)?;
-    let k = kind.to_lowercase();
-    match want {
-        "permanent" if ["contract", "temporary", "freelance", "internship", "co-op"].iter().any(|w| k.starts_with(w)) =>
-            Some(format!("not permanent: {} role, and you want permanent roles only", kind.split(" · ").next().unwrap_or(&kind).to_lowercase())),
-        "contract" if k == "full-time" && has_words(&p.description.to_lowercase(), "permanent") =>
-            Some("not contract: a permanent role, and you want contract roles only".into()),
-        _ => None,
-    }
+    let (kind, a) = work_kind(&p.title, &p.description)?;
+    (kind != want).then(|| format!("not {want}: {a} role, and you want {want} roles only"))
 }
 
 /// Whether `hay` has `words` as whole words: "uk" is in "London, UK" but not in "Milwaukee".
@@ -219,6 +259,25 @@ pub const NO_TITLE_MATCH: &str = "no title or keyword match";
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_kind_of_work_only_when_the_posting_plainly_says() {
+        let k = |title: &str, text: &str| work_kind(title, text).map(|x| x.0);
+        assert_eq!(k("Project Manager (Contract)", ""), Some("contract"));
+        assert_eq!(k("Project Manager", "This is a 12-month contract with possible extension."), Some("contract"));
+        assert_eq!(k("Project Manager", "Employment Type: Contract"), Some("contract"));
+        assert_eq!(k("Project Manager", "Maternity leave coverage, 14 months."), Some("contract"));
+        assert_eq!(k("Project Manager", "A permanent, full-time position in Toronto."), Some("permanent"));
+        assert_eq!(k("Project Manager", "Job type: Permanent"), Some("permanent"));
+        // Talk of contracts as the work, residency, and a bare "full-time" say nothing.
+        assert_eq!(k("Contract Manager", "You negotiate vendor contracts."), None);
+        assert_eq!(k("Contracts Administrator", ""), None);
+        assert_eq!(k("Project Manager", "5 years of contract management. 3 years experience in contract negotiation."), None);
+        assert_eq!(k("Project Manager", "You manage contract employees and a 24-month vendor contract term."), None);
+        assert_eq!(k("Project Manager", "Must be a Canadian citizen or permanent resident. Full-time."), None);
+        assert_eq!(k("Project Manager", "Employment type: Full-time"), None);
+        assert_eq!(k("Internal Auditor", "Work with internal teams."), None);
+    }
+
     use super::*;
     use crate::profile::Track;
 

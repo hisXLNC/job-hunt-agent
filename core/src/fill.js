@@ -636,9 +636,17 @@
   // Not part of any application: a newsletter sign-up, or the site's own header, menu and footer
   // (Stripe's "Get industry insights" email box and its country picker were filled on a posting).
   const NEWS = /newsletter|subscribe|insights and updates|mailing list|sign up for (our )?(news|updates|emails?)/i;
+  // A form is a newsletter's when it says so at its start and has only a box or three (never an
+  // application that offers a newsletter tick-box among its questions). Worked out once a form.
+  const newsForms = new WeakMap();
+  const newsForm = form => {
+    if (!form) return false;
+    if (!newsForms.has(form)) newsForms.set(form, form.querySelectorAll('input:not([type=hidden]),select,textarea').length <= 3 && NEWS.test(textOf(form).slice(0, 300)));
+    return newsForms.get(form);
+  };
   const notTheForm = el => !!el.closest('footer,nav,header,[role=contentinfo],[role=navigation],[role=banner]')
     || NEWS.test(`${el.id || ''} ${el.name || ''} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('placeholder') || ''} ${labelOf(el)}`)
-    || NEWS.test(textOf(el.closest('form') || document.createElement('i')).slice(0, 300));
+    || newsForm(el.closest('form'));
   function collect() {
     fields = []; byKey = {};
     heads = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,[role=heading]')].filter(h => !own(h) && shown(h) && textOf(h).length > 1);
@@ -977,10 +985,13 @@
     // A degree's level: "Bachelor of Business Administration" is the list's "Bachelor's Degree"
     // (Greenhouse offers only levels).
     const LEVELS = [/^bachelor|^b\.?\s?(a|sc|s|com|ba|eng)\b|^bba\b/i, /^master|^m\.?\s?(a|sc|s|ba|eng)\b|^mba\b/i, /^(doctor|ph\.?\s?d)/i, /^associate/i];
-    const level = LEVELS.find(r => r.test(want));
+    // (Only in a box that asks for a degree, a school or the like: a job title that starts
+    // "Associate" or "Master" is no degree.)
+    const about = `${labelOf(el)} ${el.id || ''} ${el.name || ''}`;
+    const level = /degree|education|qualification|diploma/i.test(about) ? LEVELS.find(r => r.test(want)) : null;
     if (!exact && level) exact = [...from.keys()].find(n => level.test(n) && /degree|^\w+'?s?$/i.test(n)) || '';
     // A school, a company or a city the list doesn't have: its "Other", when it has one.
-    if (!exact && !level && [...from.keys()].every(n => !/^other\b/i.test(n))) {
+    if (!exact && !level && /school|universit|college|institution|degree|discipline|major|field of study/i.test(about) && [...from.keys()].every(n => !/^other\b/i.test(n))) {
       for (const o of await ask('Other')) { const n = clean(o.textContent); if (!from.has(n)) from.set(n, 'Other'); }
     }
     let name = exact;

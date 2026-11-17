@@ -523,6 +523,7 @@ async function act(el) {
     return busy(async () => {
       const r = await api('/api/wants/apply', { method: 'POST' });
       document.querySelectorAll('[data-wants-apply]').forEach(b => { b.hidden = true; });
+      wantsPlan = null;
       toast([r.set_aside ? `${r.set_aside} set aside` : '', r.restored ? `${r.restored} brought back` : '', r.scoring ? `${r.scoring} being scored (a notice says how they did)` : ''].filter(Boolean).join(', ') + '.');
       await refreshOverview();
     });

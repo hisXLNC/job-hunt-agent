@@ -74,7 +74,8 @@ impl Agent {
     /// once you've applied (see `find_after_applying`).
     pub fn queue_people(&self, job_id: &str) {
         let Ok(Some(job)) = self.db().job(job_id) else { return };
-        if !crate::playbook::kind(&job).reach_out() || self.contacts(job_id).iter().any(|c| c["name"] != "Recruiter") || self.skipped("reach", job_id) {
+        if !crate::playbook::kind(&job).reach_out() || self.contacts(job_id).iter().any(|c| c["name"] != "Recruiter") || self.skipped("reach", job_id)
+            || !self.messaged_at(&job.company).is_empty() {
             return;
         }
         let mut q: Vec<String> = serde_json::from_str(&self.secret("people.queue")).unwrap_or_default();
@@ -108,7 +109,18 @@ impl Agent {
             match self.find_people(&id, false) {
                 Ok(_) => {}
                 Err(e) if e.0.starts_with("Couldn't find") => { let _ = self.db().log(Some(&id), "contact", &format!("no recruiter or hiring team found at {} yet", job.company)); }
-                Err(e) => { let _ = self.db().log(Some(&id), "contact:error", &e.0); }
+                // Claude's limit, or no connection: back in line for the next turn, and no more now.
+                Err(e) => {
+                    let _ = self.db().log(Some(&id), "contact:error", &e.0);
+                    let mut q = self.people_queued();
+                    let tries = self.secret(&format!("people.tries:{id}")).parse::<u32>().unwrap_or(0) + 1;
+                    let _ = self.db().set(&format!("people.tries:{id}"), &tries.to_string());
+                    if tries < 3 && !q.contains(&id) {
+                        q.push(id.clone());
+                        let _ = self.db().set("people.queue", &json!(q).to_string());
+                    }
+                    break;
+                }
             }
         }
         n
@@ -164,12 +176,14 @@ impl Agent {
             return Ok(None);
         }
         // Found when the job was tailored (see `queue_people`), and not written to yet: the note now.
+        // Someone you added yourself is yours to write to, as before.
         let people = self.contacts(job_id);
         if people.iter().any(|c| c["name"] != "Recruiter") {
             if people.iter().any(|c| !c["message"].as_str().unwrap_or("").is_empty() || !c["sent_at"].as_str().unwrap_or("").is_empty()) {
                 return Ok(None);
             }
-            let Some(best) = people.iter().position(|c| c["name"] != "Recruiter") else { return Ok(None) };
+            let found_by_us = |c: &Value| c["name"] != "Recruiter" && c["note"].as_str().is_some_and(|n| n.starts_with("Found ") && n.contains("by Job Hunt"));
+            let Some(best) = people.iter().position(found_by_us) else { return Ok(None) };
             self.write_outreach(job_id, best)?;
             let name = people[best]["name"].as_str().unwrap_or("").to_string();
             self.note(&format!("A note to {name} is ready"), &format!("{name} at {}, found when the job was tailored. The note about your application for {} is on the job's People tab: read it and send it.", job.company, job.title));

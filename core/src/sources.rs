@@ -1499,7 +1499,9 @@ pub fn apify_linkedin_since(c: &reqwest::blocking::Client, token: &str, actor: &
         "urls": urls, "count": max, "scrapeCompany": false,
         "startUrls": urls.iter().map(|u| serde_json::json!({ "url": u })).collect::<Vec<_>>(),
         "title": searches.first().map(|s| s.0.clone()).unwrap_or_default(), "location": searches.first().map(|s| s.1.clone()).unwrap_or_default(),
-        "rows": max, "maxItems": max, "publishedAt": format!("r{}", since.clamp(3_600, 604_800)),
+        // (publishedAt: a scraper that takes it takes only a day, a week or a month, so the
+        // smallest of those that covers the time asked for; the links above carry the exact time.)
+        "rows": max, "maxItems": max, "publishedAt": if since <= 86_400 { "r86400" } else { "r604800" },
     });
     let url = format!("https://api.apify.com/v2/acts/{}/run-sync-get-dataset-items", actor.replace('/', "~"));
     let r = reqwest::blocking::Client::builder().timeout(Duration::from_secs(320)).build().map_err(|e| e.to_string())?

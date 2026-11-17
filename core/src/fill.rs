@@ -451,6 +451,15 @@ pub(crate) fn page_company(url: &str) -> Option<String> {
     (name.len() >= 3).then_some(name)
 }
 
+/// Whether a company is the one a job board's address names (see `page_company`): the same name,
+/// the board the start of the name ("Neo Financial" on the board "neo"), or the name with a
+/// company's usual ending ("League" on "leagueinc"). "Meta" isn't "metabase".
+fn names_board(company: &str, board: &str) -> bool {
+    const ENDINGS: &[&str] = &["inc", "hq", "careers", "jobs", "canada", "tech", "technologies", "io", "labs", "co", "corp", "group", "llc", "ltd", "global"];
+    let k: String = crate::db::company_key(company).chars().filter(|c| c.is_alphanumeric()).collect();
+    k.len() >= 3 && board.len() >= 3 && (k == board || k.starts_with(board) || board.strip_prefix(k.as_str()).is_some_and(|rest| ENDINGS.contains(&rest)))
+}
+
 pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> {
     let jobs: Vec<crate::db::Job> = ["approved", "ready", "applied"].iter().flat_map(|s| agent.db().jobs(Some(s), 500).unwrap_or_default()).collect();
     let key = crate::db::url_key(url);
@@ -472,7 +481,7 @@ pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> 
     // chosen a few minutes before was given Stripe's form).
     let hint = page_company(url);
     if let Some(h) = &hint {
-        let at = |j: &&crate::db::Job| { let k = crate::db::company_key(&j.company).replace(' ', ""); !k.is_empty() && (k.contains(h.as_str()) || h.contains(&k)) };
+        let at = |j: &&crate::db::Job| names_board(&j.company, h);
         let mut mine: Vec<crate::db::Job> = ["approved", "ready", "applied", "queued", "saved", "skipped"].iter().flat_map(|s| agent.db().jobs(Some(s), 2000).unwrap_or_default()).filter(|j| at(&j)).collect();
         // The one you're furthest on, then the newest.
         mine.sort_by_key(|j| (["approved", "ready", "applied", "queued", "saved", "skipped"].iter().position(|s| *s == j.status).unwrap_or(9), std::cmp::Reverse(j.found_at.clone())));
@@ -482,7 +491,10 @@ pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> 
         }
     }
     // The one you chose (Fill in my browser, or from the extension's list) in the last two hours, on
-    // the site you chose it on: not on another company's site.
+    // the site you chose it on: not on another company's site. A board that names its company and
+    // isn't that job's (by its employer, or by its own links) is another company's.
+    let others_board = |j: &crate::db::Job| hint.as_ref().is_some_and(|h| !names_board(&j.company, h)
+        && ![j.url.as_str(), j.apply_url.as_deref().unwrap_or("")].iter().any(|l| page_company(l).as_deref() == Some(h.as_str())));
     let recent = agent.secret("apply.browser");
     let mut parts = recent.splitn(3, '|');
     if let (Some(id), Some(at)) = (parts.next(), parts.next()) {
@@ -497,7 +509,7 @@ pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> 
         if id == PROFILE && fresh && sites.contains(&host.as_str()) {
             return Ok(profile_job(url));
         }
-        if let Some(j) = jobs.iter().find(|j| j.id == id).filter(|_| fresh) {
+        if let Some(j) = jobs.iter().find(|j| j.id == id).filter(|j| fresh && !others_board(j)) {
             // Chosen in Job Hunt (Fill in my browser), which doesn't know where the form is: the
             // sites this browser reaches in the next quarter of an hour are it (the posting, then
             // the company's own form), three at most. Never a job board the job didn't come from:
@@ -1241,6 +1253,9 @@ mod tests {
         s.agent.db().set("apply.browser", &format!("w:fid|{}", crate::util::now())).unwrap();
         let j = job_for_page(&s.agent, "https://job-boards.greenhouse.io/embed/job_app?for=stripe&token=8281536", "Job Application for Implementation Consultant at Stripe").unwrap();
         assert_eq!(j.id, "g:stripe");
+        // Another company's board, with no job of yours there: never the one chosen before.
+        assert!(job_for_page(&s.agent, "https://job-boards.greenhouse.io/embed/job_app?for=shopify&token=1", "Job Application for Analyst at Shopify").is_err());
+        assert!(names_board("EQ Bank", "eqbank") && names_board("Neo Financial", "neo") && !names_board("Stripe", "shopify") && !names_board("Meta", "metabase") && names_board("League", "leagueinc"));
     }
 
     use super::*;

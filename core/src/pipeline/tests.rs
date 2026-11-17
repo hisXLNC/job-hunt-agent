@@ -1852,7 +1852,7 @@ fn permanent_or_contract_sets_jobs_aside_and_brings_them_back() {
     s.agent.save_profile(&p).unwrap();
     let (out, back) = s.agent.wants_plan().unwrap();
     assert_eq!((out.iter().map(|x| x.0.id.as_str()).collect::<Vec<_>>(), back.len()), (vec!["test:1"], 0));
-    assert!(out[0].1.starts_with("not permanent: contract role"), "{}", out[0].1);
+    assert!(out[0].1.starts_with("not permanent: a contract role"), "{}", out[0].1);
     s.agent.apply_wants().unwrap();
     assert_eq!(s.agent.db().job("test:1").unwrap().unwrap().status, "skipped");
     // Contract only: the permanent one goes, the contract one comes back.
@@ -2572,6 +2572,12 @@ fn the_recruiter_is_found_when_the_job_is_tailored_and_written_to_once_you_apply
     assert_eq!(c.len(), 1);
     assert!(c[0]["message"].as_str().unwrap().starts_with("Hi"), "{c:?}");
     assert_eq!(s.agent.find_after_applying("test:1").unwrap(), None, "written once");
+    // Someone you added yourself is yours to write to: no note written for you, no notice.
+    s.agent.search(Some(vec![posting("Delivery Manager", "2")])).unwrap();
+    s.agent.save_contacts("test:2", &[json!({ "name": "Dana Lee", "role": "Director" })]).unwrap();
+    s.agent.db().set_status("test:2", "applied", "").unwrap();
+    assert_eq!(s.agent.find_after_applying("test:2").unwrap(), None);
+    assert!(s.agent.contacts("test:2")[0]["message"].as_str().unwrap_or("").is_empty());
 }
 
 #[test]

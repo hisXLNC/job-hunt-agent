@@ -1578,8 +1578,8 @@ async function autosave(form) {
     const minWas = settingsCache.profile.min_salary ?? null, workWas = settingsCache.profile.wants?.work || '';
     const r = await api('/api/settings/profile', { method: 'POST', body });
     delete body.seen_sources;
-    if (form.elements.min_salary && (body.min_salary ?? null) !== minWas) wantsOffer('min_salary');
-    if (form.elements.want_work && (body.wants?.work || '') !== workWas) wantsOffer('want_work');
+    if (form.elements.min_salary && (body.min_salary ?? null) !== minWas) wantsOffer('min_salary', true);
+    if (form.elements.want_work && (body.wants?.work || '') !== workWas) wantsOffer('want_work', true);
     settingsCache.profile = r.profile || body;
     showBoardFields();
     saveState('✓ All changes saved', 'ok');
@@ -1595,12 +1595,14 @@ async function autosave(form) {
 
 // Your minimum salary, or permanent or contract, changed: what that would set aside and bring back
 // among the jobs found already, with one button to do it, under the box you changed.
-async function wantsOffer(field) {
+let wantsPlan = null; // { at, r }: the last count, kept a minute (a page shown again doesn't ask again)
+async function wantsOffer(field, fresh = false) {
+  let r;
+  if (!fresh && wantsPlan && Date.now() - wantsPlan.at < 60000) r = wantsPlan.r;
+  else { try { r = await api('/api/wants/plan'); } catch { return; } wantsPlan = { at: Date.now(), r }; }
   const box = document.querySelector(`[data-wants-apply="${field}"]`);
   if (!box) return;
   document.querySelectorAll('[data-wants-apply]').forEach(b => { if (b !== box) b.hidden = true; });
-  let r;
-  try { r = await api('/api/wants/plan'); } catch { return; }
   if (!r.set_aside && !r.back) { box.hidden = true; return; }
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   const why = [r.pay ? `${r.pay} ${r.pay === 1 ? 'pays' : 'pay'} less than ${money(r.minimum)}` : '', r.work ? `${r.work} ${r.work === 1 ? "isn't" : "aren't"} ${r.want_work || 'the kind you want'}` : ''].filter(Boolean).join(', ');

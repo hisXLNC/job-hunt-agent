@@ -337,7 +337,9 @@ pub fn requisition(url: &str) -> Option<(String, String)> {
     let q = |k: &str| u.query_pairs().find(|(n, _)| n.eq_ignore_ascii_case(k)).map(|(_, v)| v.to_string()).filter(|v| !v.is_empty());
     let id = if host.ends_with("myworkdayjobs.com") || host.ends_with("myworkdaysite.com") {
         let last = parts.iter().rev().find(|p| **p != "apply" && **p != "login")?;
-        last.rsplit_once('_').map(|(_, id)| id.to_string()).filter(|id| id.chars().any(|c| c.is_ascii_digit()))
+        // ("…_R12345-1" is R12345 again, posted for a second place.)
+        last.rsplit_once('_').map(|(_, id)| match id.rsplit_once('-') { Some((a, n)) if !a.is_empty() && n.len() <= 2 && n.chars().all(|c| c.is_ascii_digit()) => a.to_string(), _ => id.to_string() })
+            .filter(|id| id.chars().any(|c| c.is_ascii_digit()))
     } else if host.contains("greenhouse.io") {
         q("gh_jid").or_else(|| parts.iter().position(|p| *p == "jobs").and_then(|i| parts.get(i + 1)).map(|s| s.to_string()))
     } else if host == "jobs.lever.co" || host == "jobs.ashbyhq.com" {
@@ -1496,6 +1498,7 @@ mod tests {
         let b = "https://fil.wd3.myworkdayjobs.com/fidelitycanada/job/Toronto-Office/Project-Manager_J64186?source=LinkedIn";
         assert_eq!(requisition(a), Some(("fil.wd3.myworkdayjobs.com".into(), "j69324".into())));
         assert!(different_requisitions(&[a], &[b]));
+        assert_eq!(requisition("https://acme.wd1.myworkdayjobs.com/Careers/job/Ottawa/Project-Manager_R12345-1").map(|r| r.1).as_deref(), Some("r12345"), "the same opening, posted for a second place");
         assert!(!different_requisitions(&[a], &[a]));
         assert!(!different_requisitions(&[a], &["https://www.linkedin.com/jobs/view/4351296062/"]), "a job board's number says nothing");
         assert_eq!(requisition("https://job-boards.greenhouse.io/leagueinc/jobs/4567890"), Some(("job-boards.greenhouse.io".into(), "4567890".into())));
