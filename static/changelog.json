@@ -1,12 +1,13 @@
 [
   {
-    "version": "2.100.0",
+    "version": "26.11.0",
     "date": "2026-11-17",
     "title": "Approve emails before they reach Gmail",
     "changes": [
       "Emails Job Hunt writes for you (follow-ups, thank-you notes, replies, emails to recruiters) now wait under Inbox, Drafts. Read each one, edit it, or ask Claude for a change, with the job posting, your tailored CV and the application's history beside it.",
       "Nothing is saved in your Gmail drafts, and nothing is sent, until you approve it. You can approve to Gmail drafts, or approve and send at once.",
-      "The setting that sent the recruiter email by itself when you applied is gone: that email waits for your approval too."
+      "The setting that sent the recruiter email by itself when you applied is gone: that email waits for your approval too.",
+      "Version numbers are dated from now on: 26.11.0 is the first release of November 2026. Earlier releases keep their numbers."
     ]
   },
   {

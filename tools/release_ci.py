@@ -1,9 +1,14 @@
-"""Versions and releases. Job Hunt follows Semantic Versioning (https://semver.org), MAJOR.MINOR.PATCH:
+"""Versions and releases. Job Hunt's versions are dated (Calendar Versioning, https://calver.org), YY.M.N:
 
-    MAJOR  a change that needs your action or can't be undone by going back a version: data an older
-           Job Hunt can't open, a removed feature, a sign-in or setup you must redo.
-    MINOR  new features, backward compatible (most releases).
-    PATCH  fixes only, nothing new.
+    YY  the year (26 is 2026)
+    M   the month (11 is November)
+    N   which release of that month it is, from 0
+
+So 26.11.3 is the fourth release of November 2026. Job Hunt is an app released often, with nothing
+built on top of it that a version has to promise compatibility to; counting features and fixes
+(Semantic Versioning, used up to 2.99.4) only grew a number nobody could read. The three parts are
+still plain numbers that only go up, so the updater, Cargo and the installer order them as before.
+Releases up to 2.99.4 keep the numbers they were published under.
 
 static/changelog.json is the single source of truth: its newest entry is the version. Every other
 place that carries a version (desktop/src-tauri/Cargo.toml and tauri.conf.json, core/Cargo.toml, the
@@ -12,8 +17,7 @@ when they disagree. The build tags each published release vX.Y.Z in this reposit
 
 To release:
 
-    python tools/release_ci.py bump minor "Title" "First change." "Second change."
-    python tools/release_ci.py bump patch "Fixes" "What was fixed."
+    python tools/release_ci.py bump "Title" "First change." "Second change."
     python tools/release_ci.py verify      # must pass; then commit and push to main
 
 `verify` runs what the builds depend on (the slow checks side by side) and stops at a failure: versions in step, the page
@@ -123,7 +127,8 @@ def changelog_md(entries):
         "# Changelog",
         "",
         "All notable changes to Job Hunt. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)",
-        "and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).",
+        "and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is the Nth release (from 0) of month M of year 20YY.",
+        "Releases up to 2.99.4 used Semantic Versioning and keep their numbers.",
         "This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.",
         "",
     ]
@@ -184,10 +189,18 @@ def sync():
     write(CHANGELOG_MD, changelog_md(entries))
 
 
-def bump(part, title, changes):
+def next_version(last, today):
+    """The version after `last`, released on `today`: this month's next release, or a new month's first."""
+    year, month, n = key(last)
+    yy, m = today.year % 100, today.month
+    return f"{yy}.{m}.{n + 1}" if (year, month) == (yy, m) else f"{yy}.{m}.0"
+
+
+def bump(title, changes):
     entries = log()
-    major, minor, patch = key(entries[0]["version"])
-    v = {"major": f"{major + 1}.0.0", "minor": f"{major}.{minor + 1}.0", "patch": f"{major}.{minor}.{patch + 1}"}[part]
+    v = next_version(entries[0]["version"], dt.date.today())
+    if key(v) <= key(entries[0]["version"]):
+        sys.exit(f"{v} would not be newer than {entries[0]['version']}: check this computer's date.")
     entry = {"version": v, "date": dt.date.today().isoformat(), "title": title, "changes": changes}
     text = read(CHANGELOG_JSON)
     # Keep the file's own layout: the new entry goes in at the top, written the same way.
@@ -319,9 +332,11 @@ def main():
         print(f"Set {log()[0]['version']} everywhere and regenerated CHANGELOG.md.")
         return
     if cmd == "bump":
-        if len(sys.argv) < 5 or sys.argv[2] not in ("major", "minor", "patch"):
-            sys.exit('usage: release_ci.py bump major|minor|patch "Title" "Change." ["Change." ...]')
-        print(bump(sys.argv[2], sys.argv[3], sys.argv[4:]))
+        # (An old "major", "minor" or "patch" before the title is ignored: the date decides now.)
+        args = sys.argv[3:] if len(sys.argv) > 2 and sys.argv[2] in ("major", "minor", "patch") else sys.argv[2:]
+        if len(args) < 2:
+            sys.exit('usage: release_ci.py bump "Title" "Change." ["Change." ...]')
+        print(bump(args[0], args[1:]))
         return
     top = log()[0]
     v = semver(top["version"])

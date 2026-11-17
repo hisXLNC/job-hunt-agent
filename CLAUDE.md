@@ -5,8 +5,9 @@ image is no longer built, see `archive/`). A broken push to main is a broken bui
 
 ## Before pushing to main
 
-1. Bump the version: `python tools/release_ci.py bump minor|patch "Title" "Change." …`
-   (Semantic Versioning; static/changelog.json is the source of truth).
+1. Bump the version: `python tools/release_ci.py bump "Title" "Change." …`
+   (dated versions, YY.M.N: the Nth release, from 0, of that month; the tool works the number out.
+   static/changelog.json is the source of truth).
 2. Run `python tools/release_ci.py verify`. It must end with "Ready to release". It checks versions,
    that the page scripts parse, every core test, and that the server and the Windows app compile,
    and stops at the first failure. Never chain it with `|| true`, `| tail` or `| grep` in a way that

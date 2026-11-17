@@ -590,7 +590,8 @@ and `DEVELOPING.md`.
 
 ## Releasing (every change the user reports is fixed and released without asking)
 
-1. `python tools/release_ci.py bump patch "Title" "Change." …` (minor for a new feature). To add to a
+1. `python tools/release_ci.py bump "Title" "Change." …` (versions are dated since 26.11.0: YY.M.N, the
+   Nth release of the month from 0; the tool works it out; the user found 2.100 silly). To add to a
    version not yet on `main`, edit its entry in `static/changelog.json`, then `python tools/release_ci.py sync`.
    Changelog text goes through the shell: write `$` amounts in single quotes or escape them
    (2.36.8's notes lost "$95" to `$9` expansion).
@@ -1210,7 +1211,7 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
-## 2.100.0 (emails held for approval: Inbox, Drafts)
+## 26.11.0 (emails held for approval: Inbox, Drafts; dated version numbers)
 
 The user asked to see and edit Job Hunt's email drafts inside Job Hunt (like tailored CVs), with the
 posting, the tailored CV and the history beside each, and to approve before anything is drafted in

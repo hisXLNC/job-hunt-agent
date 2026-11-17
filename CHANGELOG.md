@@ -1,10 +1,11 @@
 # Changelog
 
 All notable changes to Job Hunt. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is the Nth release (from 0) of month M of year 20YY.
+Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
-## [2.100.0] - 2026-11-17
+## [26.11.0] - 2026-11-17
 
 Approve emails before they reach Gmail.
 
@@ -13,6 +14,7 @@ Approve emails before they reach Gmail.
 - Emails Job Hunt writes for you (follow-ups, thank-you notes, replies, emails to recruiters) now wait under Inbox, Drafts. Read each one, edit it, or ask Claude for a change, with the job posting, your tailored CV and the application's history beside it.
 - Nothing is saved in your Gmail drafts, and nothing is sent, until you approve it. You can approve to Gmail drafts, or approve and send at once.
 - The setting that sent the recruiter email by itself when you applied is gone: that email waits for your approval too.
+- Version numbers are dated from now on: 26.11.0 is the first release of November 2026. Earlier releases keep their numbers.
 
 ## [2.99.4] - 2026-11-17
 
@@ -2728,7 +2730,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
-[2.100.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.100.0
+[26.11.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.0
 [2.99.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.4
 [2.99.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.3
 [2.99.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.2
