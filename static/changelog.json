@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.97.3",
+    "date": "2026-11-17",
+    "title": "The set-aside button now really shows",
+    "changes": [
+      "The line and button under Minimum yearly salary and Permanent or contract never appeared: the app refused the page's request for the count, and the page hid the failure. Fixed, with a test that asks the same way the page does.",
+      "The line now appears at once (Checking…) and says so if the count fails, with a Check again button."
+    ]
+  },
+  {
     "version": "2.97.2",
     "date": "2026-11-17",
     "title": "A set-aside button that is always there",

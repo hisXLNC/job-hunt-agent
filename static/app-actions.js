@@ -528,7 +528,7 @@ async function act(el) {
       await refreshOverview();
     });
   }
-  if (a === 'checkWants') return busy(() => wantsOffer(true), 'Checked.');
+  if (a === 'checkWants') return wantsOffer(true);
   if (a === 'rescanSalaries') {
     return busy(async () => { const r = await api('/api/salaries/rescan', { method: 'POST' }); if (!r.started) toast('Already looking.'); },
       'Looking for the pay of every posting without one: its text, its page and the company\'s own posting. A notice says what was found.');

@@ -478,6 +478,15 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             return host.asset(rel).map(|b| Resp::bytes(b, static_type(rel))).map_or_else(not_found, Ok);
         }
         match parts.as_slice() {
+            // Your minimum salary, and permanent or contract: how many jobs found already they would
+            // set aside (by why) and bring back.
+            ["api", "wants", "plan"] => {
+                let (out, back) = agent.wants_plan()?;
+                let pay = out.iter().filter(|(_, why)| why.starts_with("salary")).count();
+                let p = agent.profile();
+                let back_pay = back.iter().filter(|j| j.reasoning.as_deref().is_some_and(|r| r.starts_with("Filtered out: salary"))).count();
+                return Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "back_pay": back_pay, "back_work": back.len() - back_pay, "minimum": p.min_salary, "want_work": p.wants.work })));
+            }
             ["api", "overview"] => {
                 // The page asks for this every second or two, and putting it together reads thousands of
                 // rows. It's put together again only when something was saved since (or half a minute has
@@ -1360,15 +1369,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.db().set("tailor.repeat", m)?;
             ok()
         }
-        // Your minimum salary, or permanent or contract, changed: how many jobs that sets aside (by
-        // why) and brings back, and doing it.
-        ["api", "wants", "plan"] => {
-            let (out, back) = agent.wants_plan()?;
-            let pay = out.iter().filter(|(_, why)| why.starts_with("salary")).count();
-            let p = agent.profile();
-            let back_pay = back.iter().filter(|j| j.reasoning.as_deref().is_some_and(|r| r.starts_with("Filtered out: salary"))).count();
-            Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "back_pay": back_pay, "back_work": back.len() - back_pay, "minimum": p.min_salary, "want_work": p.wants.work })))
-        }
+        // Your minimum salary, or permanent or contract: setting aside and bringing back the jobs
+        // found already (the count is a GET, above).
         ["api", "wants", "apply"] => Ok(Resp::json(&agent.apply_wants()?)),
         // Look for the pay of every posting without one (in the background; a notice says what was found).
         ["api", "salaries", "rescan"] => {
@@ -2524,6 +2526,17 @@ mod tests {
         let (_, a) = call(&agent, &host, "POST", "/api/jobs/test:1/approve", Value::Null);
         assert_eq!(a["outcome"], "approved");
         assert_eq!(call(&agent, &host, "POST", "/api/open-url", json!({"url": "file:///etc/passwd"})).0, 400);
+    }
+
+    /// The page asks for the count with a GET and acts with a POST (2.97.0 to 2.97.2 answered the
+    /// count only to a POST, so the line under the boxes never showed).
+    #[test]
+    fn the_set_aside_count_answers_the_page() {
+        let (_s, agent, _fh, host) = world();
+        let (status, r) = call(&agent, &host, "GET", "/api/wants/plan", Value::Null);
+        assert_eq!(status, 200, "{r}");
+        assert!(r["set_aside"].is_number() && r["back_pay"].is_number() && r["back_work"].is_number(), "{r}");
+        assert_eq!(call(&agent, &host, "POST", "/api/wants/apply", Value::Null).0, 200);
     }
 
     #[test]

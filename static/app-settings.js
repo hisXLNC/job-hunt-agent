@@ -1602,7 +1602,19 @@ async function wantsOffer(fresh = false) {
   if (!document.querySelector('[data-wants-apply]')) return;
   let r;
   if (!fresh && wantsPlan && Date.now() - wantsPlan.at < 60000) r = wantsPlan.r;
-  else { try { r = await api('/api/wants/plan'); } catch { return; } wantsPlan = { at: Date.now(), r }; }
+  else {
+    // The line is there at once (counting reads every job found, which can take a while), and a
+    // count that fails says so instead of leaving nothing.
+    const say = (text, again) => document.querySelectorAll('[data-wants-apply]').forEach(box => {
+      const f = box.closest('form')?.elements[box.dataset.wantsApply];
+      if (!f || !f.value || (f.type === 'number' && !(Number(f.value) > 0))) return;
+      box.innerHTML = `<span>${esc(text)}</span>${again ? '<button type="button" class="btn sm" data-act="checkWants">Check again</button>' : ''}`;
+      box.hidden = false;
+    });
+    say('Checking the jobs you haven\'t applied to…');
+    try { r = await api('/api/wants/plan'); } catch (e) { say(`Couldn't check your jobs: ${e.message}`, true); return; }
+    wantsPlan = { at: Date.now(), r };
+  }
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   const fill = (field, set, out, back, why, none) => {
     const box = document.querySelector(`[data-wants-apply="${field}"]`);

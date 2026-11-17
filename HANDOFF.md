@@ -1210,6 +1210,16 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.97.3 (the set-aside line never showed: fixed)
+
+- Cause: `/api/wants/plan` sat in the POST half of `route_on` (core/src/api.rs) while the page
+  asks with a GET, so it answered "Not found", and `wantsOffer` swallowed the error. Every earlier
+  browser check mocked that call, which is why it was missed. The route is now in the GET half;
+  test `the_set_aside_count_answers_the_page` calls it as the page does.
+- `wantsOffer` shows "Checking…" at once under a box that is set, and shows a failure with a
+  "Check again" button instead of nothing.
+- Lesson: check new routes in the browser against the real dev server, not only with `pg.route`.
+
 ## 2.97.2 (the set-aside line is always there)
 
 - `wantsOffer(fresh)` (static/app-settings.js) fills both `[data-wants-apply]` boxes, each with its
