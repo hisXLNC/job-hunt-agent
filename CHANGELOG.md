@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.99.0] - 2026-11-17
+
+Your four decisions.
+
+### Changes
+
+- Old postings: a posting that was filtered out more than 30 days ago and that you never touched loses its long text, so the database stays small. Its title, company, link and reason stay. Anything you applied to, tailored, wrote notes on or chose yourself keeps its text, however old.
+- Job titles: TPM now means Technical Program Manager, and PM means Product, Program or Project Manager, whichever you search for. Neither lets every manager title through any more.
+- Restoring a backup keeps the sign-ins already on this PC (Claude, Google, job-board keys), so you don't have to connect everything again.
+- In the Ask panel, Claude's buttons to approve, mark applied or fill a form now ask you first.
+
 ## [2.98.0] - 2026-11-17
 
 A full code review, and the first 44 fixes.
@@ -2663,6 +2674,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.99.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.0
 [2.98.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.98.0
 [2.97.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.3
 [2.97.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.2

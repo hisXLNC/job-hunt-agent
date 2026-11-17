@@ -222,6 +222,20 @@ pub fn apply_pending(data: &Path) -> R<bool> {
         f.read_to_end(&mut buf)?;
         std::fs::write(&out, buf)?;
     }
+    // An ordinary backup carries no sign-ins: the ones this computer had are kept, so a restore
+    // doesn't sign you out of everything. (A copy that has its own, a sync copy say, keeps those.)
+    let (old, new) = (keep.join("jobhunt.db"), data.join("jobhunt.db"));
+    if old.is_file() && new.is_file() {
+        if let (Ok(old), Ok(new)) = (crate::db::Db::open(&old), crate::db::Db::open(&new)) {
+            for k in SECRET_KEYS.iter().chain(["other.key", "other.url", "other.model", "other.for", "ext.key"].iter()) {
+                if new.get(k)?.is_none_or(|v| v.is_empty()) {
+                    if let Some(v) = old.get(k)?.filter(|v| !v.is_empty()) {
+                        new.set(k, &v)?;
+                    }
+                }
+            }
+        }
+    }
     std::fs::remove_file(&pending)?;
     Ok(true)
 }
@@ -268,6 +282,15 @@ mod tests {
         apply_pending(again.path()).unwrap();
         let db2 = crate::db::Db::open(&again.path().join("jobhunt.db")).unwrap();
         assert_eq!(db2.get("claude.key").unwrap().as_deref(), Some("sk-secret"));
+
+        // An ordinary backup restored on a computer that is signed in: its sign-ins stay.
+        let here = tempfile::tempdir().unwrap();
+        crate::db::Db::open(&here.path().join("jobhunt.db")).unwrap().set("claude.key", "sk-this-pc").unwrap();
+        stage_restore(here.path(), &bytes).unwrap();
+        apply_pending(here.path()).unwrap();
+        let db3 = crate::db::Db::open(&here.path().join("jobhunt.db")).unwrap();
+        assert!(db3.job("test:1").unwrap().is_some(), "the jobs are the backup's");
+        assert_eq!(db3.get("claude.key").unwrap().as_deref(), Some("sk-this-pc"), "this computer's sign-in is kept");
     }
 
     #[test]

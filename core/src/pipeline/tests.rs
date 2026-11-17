@@ -1801,6 +1801,36 @@ fn deadlines_answers_offers_and_contacts() {
     assert_eq!(s.agent.playbook(&job)["kind"], "private");
 }
 
+/// A posting the filters left out loses its long text after a month; one you applied to, tailored
+/// or chose keeps it, however old.
+#[test]
+fn only_untouched_filtered_out_postings_lose_their_text() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2"), posting("Delivery Lead", "3"), posting("Program Manager", "4")])).unwrap();
+    let old = (Utc::now() - Duration::days(40)).to_rfc3339();
+    let db = s.agent.db();
+    // 1: filtered out and never touched. 2: filtered out, but you applied. 3: filtered out, chosen
+    // by you. 4: set aside by its score, not by a filter.
+    for id in ["test:1", "test:2", "test:3"] {
+        db.update_job(id, &[("status", "skipped".into()), ("reasoning", "Filtered out: salary up to 90000 a year, below your minimum of 150000".into()), ("cv_path", Value::Null), ("letter_path", Value::Null), ("cover_letter", Value::Null)]).unwrap();
+    }
+    // (The test search tailored them all; one that was tailored keeps its text, so 1 is made
+    // never-touched here, and 4 too, to show it's the filter reason that counts.)
+    db.con.execute("DELETE FROM events WHERE job_id IN ('test:1', 'test:4')", []).unwrap();
+    db.update_job("test:2", &[("applied_at", now().into())]).unwrap();
+    db.log(Some("test:3"), "chosen", "you sent it to Job Hunt").unwrap();
+    db.update_job("test:4", &[("status", "skipped".into()), ("reasoning", "Scored 40.".into()), ("cv_path", Value::Null), ("letter_path", Value::Null), ("cover_letter", Value::Null)]).unwrap();
+    assert_eq!(db.trim_filtered_text(30).unwrap(), 0, "not old enough yet");
+    db.con.execute("UPDATE jobs SET updated_at = ?1", [&old]).unwrap();
+    assert_eq!(db.trim_filtered_text(30).unwrap(), 1);
+    assert!(db.job("test:1").unwrap().unwrap().description.is_empty());
+    for id in ["test:2", "test:3", "test:4"] {
+        assert!(!db.job(id).unwrap().unwrap().description.is_empty(), "{id} keeps its text");
+    }
+    assert_eq!(db.job("test:1").unwrap().unwrap().title, "Technical Program Manager", "the rest of it stays");
+    db.compact().unwrap();
+}
+
 /// Postings handed in (a job alert email the inbox check read) aren't the day's search: the
 /// scheduled one still runs. A job you chose yourself is never set aside by your minimum salary.
 #[test]

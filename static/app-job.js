@@ -165,7 +165,7 @@ async function showJob(id) {
         <div class="stack">
           ${whyBox(j, flags, j.track ? `Matched to your <b>${esc((tracks.find(t => t.name === j.track) || {}).label || j.track)}</b> CV${j.score_after != null ? `; tailored, it scores <b>${j.score_after}</b> (${j.score_after >= j.score ? '+' : ''}${j.score_after - j.score})` : canReach(j) ? `; tailored, it could reach about <b>${canReach(j)}</b>` : ''}.` : '')}
           <section class="card posting-card"><header><h2>The posting</h2>${j.url ? `<button class="btn ghost sm" data-act="open" data-what="${j.apply_url ? 'company' : 'posting'}">${svg('open')}Open it on the site</button>` : ''}</header>
-            <div class="posting">${esc(j.description || 'The source gave no description. Open it on the site to read it.')}</div></section>
+            <div class="posting">${esc(j.description || (String(j.reasoning || '').startsWith('Filtered out') ? 'This posting was filtered out over a month ago, so its text was removed to save space. Open it on the site to read it.' : 'The source gave no description. Open it on the site to read it.'))}</div></section>
         </div>
         <div class="stack">
           ${ratingCard(rating, rating_busy, j.company)}

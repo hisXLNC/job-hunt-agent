@@ -305,6 +305,18 @@ impl Agent {
         if set_aside > 0 {
             self.db().log(None, "archive", &format!("set aside {set_aside} match{} not picked in {UNPICKED_DAYS} days (in All jobs under Not interested)", if set_aside == 1 { "" } else { "es" }))?;
         }
+        // The long text of postings filtered out a month ago and never touched goes (you chose
+        // this, 2.98.1): the database stays small. The file itself shrinks when enough has gone,
+        // at most once a week.
+        let trimmed = self.db().trim_filtered_text(TRIM_TEXT_DAYS)?;
+        if trimmed > 0 {
+            self.db().log(None, "purge", &format!("removed the text of {trimmed} posting{} filtered out over {TRIM_TEXT_DAYS} days ago", if trimmed == 1 { "" } else { "s" }))?;
+            let week = chrono::DateTime::parse_from_rfc3339(&self.secret("last.compact")).map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days() >= 7).unwrap_or(true);
+            if trimmed >= 200 && week {
+                let _ = self.db().compact();
+                self.db().set("last.compact", &crate::util::now())?;
+            }
+        }
         let purged = self.db().purge_older_than(profile.purge_after_days)?;
         if purged > 0 {
             self.db().log(None, "purge", &format!("removed {purged} old posting{} you never acted on", if purged == 1 { "" } else { "s" }))?;

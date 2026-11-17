@@ -1210,6 +1210,19 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.99.0 (four decisions the owner made)
+
+- Old postings: `Db::trim_filtered_text(30)` empties the description of jobs with status skipped,
+  reasoning "Filtered out:…", older than 30 days, and never touched (no CV, letter, notes,
+  applied date, and no chosen/tailored/applied/restored event). Run at the start of each search
+  (`TRIM_TEXT_DAYS`); `Db::compact` (VACUUM) when 200 or more were trimmed, at most weekly
+  (`last.compact`). The owner's rule: never remove the text of a job applied to or prepared.
+  `rescore_pool` and `wants_plan` leave out jobs with no text.
+- Titles: "tpm" is "technical program manager"; "pm" stands for product, program or project
+  manager, whichever the other title names (`title_matches`).
+- A restore keeps this computer's sign-ins when the backup has none (`backup::apply_pending`).
+- Ask panel: approve, mark applied and fill-with-Claude offers ask first (`SURE` in `askDo`).
+
 ## 2.98.0 (a full review; the first 44 fixes)
 
 - `REVIEW.md` (repo root) lists every finding of a seven-part review of all the code, each marked

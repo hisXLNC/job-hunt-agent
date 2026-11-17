@@ -1145,7 +1145,8 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
             _ => return err("Choose which postings to score again."),
         };
         let mut jobs = self.db().jobs(Some(status), 100_000)?;
-        jobs.retain(|j| j.closed_at.is_none());
+        // (Not one whose text was removed after a month filtered out: there's nothing to score.)
+        jobs.retain(|j| j.closed_at.is_none() && !j.description.trim().is_empty());
         jobs.sort_by(|a, b| b.found_at.cmp(&a.found_at)); // newest first
         Ok(jobs)
     }
@@ -1247,7 +1248,7 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
         // (One scored again since and still flagged isn't offered a second time.)
         let again: std::collections::HashSet<String> = serde_json::from_str(&self.secret("wants.rescored")).unwrap_or_default();
         let back = skipped.into_iter()
-            .filter(|j| j.closed_at.is_none() && Self::set_aside_for_wants(j) && Self::misfit(j, &profile).is_none()
+            .filter(|j| j.closed_at.is_none() && !j.description.trim().is_empty() && Self::set_aside_for_wants(j) && Self::misfit(j, &profile).is_none()
                 && Self::scored_down_for_work(j).is_none_or(|k| takes(k) && !again.contains(&j.id)))
             .collect();
         Ok((out, back))

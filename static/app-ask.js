@@ -244,6 +244,9 @@ async function askDo(at, which, btn) {
   if (!o || o.done || !jobs.length || !ASK_DOES[o.kind]) return;
   if (o.kind === 'set_aside' && !await ask('Set this job aside as Not interested?', 'Set it aside')) return;
   if (many && ASK_MANY[o.kind] && !await ask(ASK_MANY[o.kind](jobs.length), 'Do it')) return;
+  // The ones that commit you ask first, whatever Claude called the button.
+  const SURE = { approve: ['Approve this application?', 'Approve'], mark_applied: ['Mark this job as applied?', 'Mark applied'], fill_with_claude: ['Let Claude open the form in your browser and fill it in? It stops before Submit.', 'Fill it in'] };
+  if (SURE[o.kind] && !await ask(...SURE[o.kind])) return;
   const [[path, body], said] = ASK_DOES[o.kind](o);
   btn.disabled = true;
   try {

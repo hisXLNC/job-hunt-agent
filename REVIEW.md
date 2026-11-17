@@ -33,7 +33,7 @@ Line numbers are as of 2.97.3.
 15. `claude_code.rs:599`: copies of CVs stay in the temp folder after a crash. open
 16. `fill.js:1934`: answers stay in the tab after a submit that wasn't confirmed. unverified
 17. `app.js:249`: one posting link is a plain link, not routed through the checked opener. open
-18. `app-ask.js:207`: some of Claude's offer buttons (approve, mark applied, fill) act on one click. decide
+18. `app-ask.js:207`: some of Claude's offer buttons (approve, mark applied, fill) act on one click. fixed 2.99.0 (approve, mark applied and fill ask first)
 
 ## B. Wrong outcomes (jobs, applications, email)
 
@@ -130,7 +130,7 @@ Line numbers are as of 2.97.3.
 80. `sources.rs:421`: Greenhouse "posted" uses the last-edited date. open
 81. `sites.rs:257`: two postings whose links contain "2026" get the same id; one is dropped. open
 82. `filters.rs:140`: "Contract and Procurement Manager" read as a contract role. fixed 2.98.0
-83. `filters.rs:15`: "TPM" and "PM" both become "manager". decide
+83. `filters.rs:15`: "TPM" and "PM" both become "manager". fixed 2.99.0 (spelled out)
 84. `filters.rs:44`: an 8-digit date would be read as 1970. open
 85. `usage.rs:155`, `pipeline.rs:783`: the usage-limit pause is never cleared when you switch to
     another AI or a key. fixed 2.98.0
@@ -161,7 +161,7 @@ Line numbers are as of 2.97.3.
 107. `google.rs:531`: a reply to a name with accents can get a broken address. unverified
 108. `backup.rs:204`, `lib.rs:1001`: a restore that fails half-way leaves an empty app, silently,
      on every start. open
-109. `backup.rs:192`: restoring an ordinary backup removes every sign-in. decide
+109. `backup.rs:192`: restoring an ordinary backup removes every sign-in. fixed 2.99.0 (this PC's are kept)
 110. `sync.rs:301,316,334`: sync orders copies by each computer's clock; changes made during the
      copy count as synced; the copy and its label can arrive mismatched. open
 111. `web.rs:165`, `api.rs:443`: a job whose id contains "/" can't be opened. unverified

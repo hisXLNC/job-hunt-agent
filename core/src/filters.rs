@@ -12,14 +12,17 @@ fn title_words(t: &str) -> Vec<String> {
             "sr" => "senior",
             "jr" => "junior",
             "mgr" => "manager",
-            "pm" => "manager",
-            "tpm" => "manager",
+            // (Spelled out below: "tpm" is three words, and "pm" is whichever manager you search for.)
             "mngr" => "manager",
             "dir" => "director",
             "eng" => "engineering",
             "tech" => "technical",
             "programme" => "program",
             w => w,
+        })
+        .flat_map(|w| match w {
+            "tpm" => vec!["technical", "program", "manager"],
+            w => vec![w],
         })
         .map(String::from)
         .collect()
@@ -34,7 +37,11 @@ const LOOSE: &[&str] = &["senior", "lead", "principal", "staff", "head", "chief"
 pub fn title_matches(posting: &str, target: &str) -> bool {
     let have = title_words(posting);
     let need: Vec<String> = title_words(target).into_iter().filter(|w| !LOOSE.contains(&w.as_str())).collect();
-    !need.is_empty() && need.iter().all(|w| have.contains(w))
+    // "PM" in a posting is a product, program or project manager: whichever of those the target is.
+    // ("Senior PM, Payments" is your "Product Manager"; it isn't your "Engineering Manager".)
+    let pm = have.iter().any(|w| w == "pm") && need.iter().any(|w| w == "manager") && need.iter().any(|w| ["product", "program", "project"].contains(&w.as_str()));
+    let has = |w: &String| have.contains(w) || (pm && ["manager", "product", "program", "project"].contains(&w.as_str())) || (w == "pm" && have.iter().any(|h| h == "manager") && have.iter().any(|h| ["product", "program", "project"].contains(&h.as_str())));
+    !need.is_empty() && need.iter().all(has)
 }
 
 /// When a posting went up, as a date: "2026-10-14", "2026-10-14T09:00:00Z" or a timestamp in
@@ -343,6 +350,12 @@ mod tests {
         assert!(title_matches("Programme Manager", "Program Manager"));
         assert!(!title_matches("Product Manager", "Program Manager"));
         assert!(!title_matches("Software Engineer", "Technical Program Manager"));
+        // The short forms spelled out: TPM is a technical program manager, and PM is whichever of
+        // product, program or project manager you search for; neither is any manager at all.
+        assert!(title_matches("Senior TPM, Payments", "Technical Program Manager") && title_matches("Technical Program Manager", "TPM"));
+        assert!(!title_matches("Restaurant Manager", "TPM") && !title_matches("Engineering Manager", "PM"));
+        assert!(title_matches("Senior PM, Payments", "Product Manager") && title_matches("Product Manager", "PM"));
+        assert!(!title_matches("Senior PM, Payments", "Engineering Manager"));
         assert!(!title_matches("Anything", "Senior"), "a target of only filler words matches nothing");
         for t in ["Senior Business Analyst", "Sr. Business Analyst", "Lead Business Analyst", "Business Analyst II", "Principal Business Analyst"] {
             assert!(title_matches(t, "Business Analyst"), "{t}");

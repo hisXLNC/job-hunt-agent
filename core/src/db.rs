@@ -707,6 +707,24 @@ impl Db {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
+    /// Drop the long text of postings the filters left out more than `days` days ago and that you
+    /// never touched: not tailored, not applied to, no letter, no notes, not chosen by you. The
+    /// title, company, link and reason stay. Anything you applied to or prepared keeps its text.
+    /// Returns how many were trimmed.
+    pub fn trim_filtered_text(&self, days: i64) -> R<usize> {
+        let before = (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339();
+        Ok(self.con.execute(
+            "UPDATE jobs SET description = '' WHERE status = 'skipped' AND reasoning LIKE 'Filtered out:%' AND description != '' AND updated_at < ?1
+               AND cv_path IS NULL AND letter_path IS NULL AND cover_letter IS NULL AND applied_at IS NULL AND notes = ''
+               AND id NOT IN (SELECT job_id FROM events WHERE job_id IS NOT NULL AND kind IN ('chosen', 'tailored', 'applied', 'restored'))",
+            params![before])?)
+    }
+
+    /// Give the space freed by deleted and trimmed postings back to the disk.
+    pub fn compact(&self) -> R<()> {
+        Ok(self.con.execute_batch("VACUUM")?)
+    }
+
     pub fn purge_older_than(&self, days: u32) -> R<usize> {
         if days == 0 {
             return Ok(0);

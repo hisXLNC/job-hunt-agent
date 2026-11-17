@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.99.0",
+    "date": "2026-11-17",
+    "title": "Your four decisions",
+    "changes": [
+      "Old postings: a posting that was filtered out more than 30 days ago and that you never touched loses its long text, so the database stays small. Its title, company, link and reason stay. Anything you applied to, tailored, wrote notes on or chose yourself keeps its text, however old.",
+      "Job titles: TPM now means Technical Program Manager, and PM means Product, Program or Project Manager, whichever you search for. Neither lets every manager title through any more.",
+      "Restoring a backup keeps the sign-ins already on this PC (Claude, Google, job-board keys), so you don't have to connect everything again.",
+      "In the Ask panel, Claude's buttons to approve, mark applied or fill a form now ask you first."
+    ]
+  },
+  {
     "version": "2.98.0",
     "date": "2026-11-17",
     "title": "A full code review, and the first 44 fixes",

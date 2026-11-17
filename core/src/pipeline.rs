@@ -82,6 +82,8 @@ pub const CANADA_EMPLOYERS: &[(&str, &str, &str)] = &[
 const CANADA_EMPLOYERS_FIRST: usize = 9;
 /// Matches waiting this long to be picked are set aside as not interested.
 const UNPICKED_DAYS: i64 = 60;
+/// How long a posting the filters left out keeps its long text (see `Db::trim_filtered_text`).
+const TRIM_TEXT_DAYS: i64 = 30;
 /// Job-alert emails from the big job sites, and Canada's Job Bank. Kept separate from the inbox
 /// check, which skips promotions.
 pub const ALERTS_QUERY: &str = "newer_than:7d from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com OR alert@indeed.com OR jobalert.indeed.com OR noreply@glassdoor.com OR jobbank.gc.ca OR guichetemplois.gc.ca OR eluta.ca OR workopolis.com OR bayt.com OR naukrigulf.com OR gulftalent.com OR monstergulf.com OR reed.co.uk OR totaljobs.com OR seek.com.au OR stepstone OR ziprecruiter.com OR naukri.com OR randstad.ca OR randstad.com OR adecco.ca OR adecco.com OR hays.ca OR hays.com OR roberthalf.com OR roberthalf.ca OR michaelpage.ca OR michaelpage.com OR altis.com OR lrostaffing.com OR peoplefirsthr.com OR techtalent.ca OR jobs.ca OR aplin.com)";
