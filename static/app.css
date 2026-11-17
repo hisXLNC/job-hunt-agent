@@ -2470,3 +2470,6 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
    rule for that made it 28px wide, and it read "or anyway"). */
 #t-all td.next .row-act > .btn[data-act="tailorAnyway"] { width: auto; padding: 0 4px; white-space: normal; text-align: left; }
 #t-all td.next { overflow: visible; }
+
+/* A notice of several lines (what Claude did on a form) keeps its lines. */
+.hub-notes .note-body { white-space: pre-line; }

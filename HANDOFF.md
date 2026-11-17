@@ -1217,6 +1217,9 @@ The ten screen changes the user approved ("do them all"):
 - fill.js `fillSuggested`: a degree is matched by its level (`LEVELS`) to "Bachelor's Degree" etc.
   without asking Claude (`chooseFrom` asks nothing with fewer than 2 choices); when nothing
   matched and the want isn't a degree, "Other" is searched so it can be chosen.
+- Claude take-over (`claude_fill_start`): the task asks for five lines (Result, Filled, Attached,
+  Left for me, Submitted); the state keeps `files` (what Job Hunt gave Claude, now with your own CV
+  when the job isn't tailored); the panel shows it all (`.s.long`), the notice carries the summary.
 - Still left to the user on Stripe's form: remote preference, WhatsApp opt-in, Brighthire consent.
 
 ## 2.96.7 (no invented conversations; auto-replies aren't recruiters you know)

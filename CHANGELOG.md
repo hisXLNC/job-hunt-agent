@@ -6,13 +6,15 @@ This file is generated from `static/changelog.json` by `python tools/release_ci.
 
 ## [2.96.8] - 2026-11-17
 
-Greenhouse: CV attached, degree and school chosen.
+Greenhouse: CV, degree and school; Claude reports what it did.
 
 ### Changes
 
 - Your CV goes into Greenhouse's "Attach" box: the box's own name (resume, cover letter) now reaches Job Hunt.
 - A degree is chosen by its level: Bachelor of Business Administration is the list's "Bachelor's Degree".
 - A school the list doesn't have is answered with its "Other", when it has one.
+- When Claude takes over a form, it reports back: the result, what it filled, which files it attached and where, and what's left for you. It shows in the form's panel, in full, with the files Job Hunt gave it, and in the notification.
+- A job that isn't tailored yet hands Claude your own CV to attach (it had no file before).
 
 ## [2.96.7] - 2026-11-16
 

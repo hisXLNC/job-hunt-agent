@@ -1732,7 +1732,13 @@ pub fn claude_fill_task(brief: &str, url: &str, files: &[String]) -> String {
     format!("Do this in my browser with the Claude in Chrome browser tools. Open a new tab at {url} and fill in the job application form there. If the page shows the posting first, use its Apply button to reach the form.\n\n\
 {attach}\n\
 If a sign-in page, a CAPTCHA or a question only I can answer stops you, stop there and say so. Never press the final Submit or Send application button, and never tick a box that agrees to terms or declares something for me.\n\
-When you finish, reply with a short plain summary: what you filled in, what is left for me, and that nothing was submitted. If the browser tools are not available to you, reply with exactly what went wrong.\n\n\
+When you finish, reply with a short plain summary in exactly these five lines, nothing before or after them:\n\
+Result: one sentence: the form is filled and waiting for me, or where you stopped and why.\n\
+Filled: the boxes you filled or changed, briefly.\n\
+Attached: each file you attached and the box it went in, or \"nothing\".\n\
+Left for me: what is empty or needs my decision, or \"nothing\".\n\
+Submitted: nothing.\n\
+If the browser tools are not available to you, reply with exactly what went wrong.\n\n\
 {brief}")
 }
 
@@ -1753,8 +1759,12 @@ pub fn claude_fill_start(agent: &std::sync::Arc<Agent>, job_id: &str, url: &str,
     let stem = |what: &str| if who.is_empty() { what.to_string() } else { format!("{who} - {what}") };
     let mut files: Vec<(String, PathBuf)> = vec![];
     if let Some(j) = &job {
-        for (path, what) in [(j.cv_path.as_deref(), "CV"), (j.letter_path.as_deref(), "Cover letter")] {
-            if let Some(p) = path.map(|p| as_pdf(Path::new(p))).filter(|p| p.is_file()) {
+        // Not tailored yet: your own CV for its track, as the form filler attaches.
+        let profile = agent.profile();
+        let own = profile.track(j.track.as_deref()).or(profile.tracks.first()).map(|t| agent.cv_path(&t.name)).filter(|p| p.is_file());
+        let cv = j.cv_path.as_deref().map(PathBuf::from).or(own);
+        for (path, what) in [(cv, "CV"), (j.letter_path.as_deref().map(PathBuf::from), "Cover letter")] {
+            if let Some(p) = path.map(|p| as_pdf(&p)).filter(|p| p.is_file()) {
                 let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("pdf").to_lowercase();
                 files.push((format!("{}.{ext}", stem(what)), p));
             }
@@ -1762,7 +1772,8 @@ pub fn claude_fill_start(agent: &std::sync::Arc<Agent>, job_id: &str, url: &str,
     }
     let task = claude_fill_task(&text, url, &files.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>());
     let key = format!("claudefill:{job_id}");
-    agent.db().set(&key, &json!({ "running": true, "at": now() }).to_string())?;
+    let given: Vec<String> = files.iter().map(|(n, _)| n.clone()).collect();
+    agent.db().set(&key, &json!({ "running": true, "at": now(), "files": given }).to_string())?;
     agent.db().set("claudefill:current", &job.as_ref().map(|j| format!("{} at {}", j.title, j.company)).unwrap_or_else(|| "your profile".into()))?;
     let (a, id, title) = (agent.clone(), job_id.to_string(), job.as_ref().map(|j| format!("{} at {}", j.title, j.company)).unwrap_or_else(|| "your profile".into()));
     std::thread::spawn(move || {
@@ -1770,13 +1781,13 @@ pub fn claude_fill_start(agent: &std::sync::Arc<Agent>, job_id: &str, url: &str,
         let r = crate::claude_code::browse(&cc, &task, &files, std::time::Duration::from_secs(15 * 60));
         let at = a.secret(&key).parse::<Value>().ok().and_then(|v| v["at"].as_str().map(String::from)).unwrap_or_default();
         let state = match &r {
-            Ok(said) => json!({ "running": false, "at": at, "done": now(), "said": said }),
-            Err(e) => json!({ "running": false, "at": at, "done": now(), "error": e.0 }),
+            Ok(said) => json!({ "running": false, "at": at, "done": now(), "said": said.trim(), "files": given }),
+            Err(e) => json!({ "running": false, "at": at, "done": now(), "error": e.0, "files": given }),
         };
         let _ = a.db().set(&key, &state.to_string());
-        let _ = a.db().log((id != PROFILE).then_some(id.as_str()), if r.is_ok() { "claude-fill" } else { "claude-fill:error" }, &match &r { Ok(s) => s.chars().take(600).collect::<String>(), Err(e) => e.0.clone() });
+        let _ = a.db().log((id != PROFILE).then_some(id.as_str()), if r.is_ok() { "claude-fill" } else { "claude-fill:error" }, &match &r { Ok(s) => s.trim().chars().take(2000).collect::<String>(), Err(e) => e.0.clone() });
         match r {
-            Ok(_) => a.note("Claude filled in the form", &format!("{title}: read it over in your browser, then press Submit yourself.")),
+            Ok(said) => a.note("Claude filled in the form", &format!("{title}: read it over in your browser, then press Submit yourself.\n\n{}", said.trim().chars().take(1500).collect::<String>())),
             Err(e) => a.note("Claude couldn't fill in the form", &format!("{title}: {}", e.0)),
         }
     });

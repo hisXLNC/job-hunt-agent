@@ -1033,6 +1033,8 @@ fn the_brief_for_another_assistant_says_what_is_left() {
     // Handed to Claude in the browser: where to go, the files to attach by name, and never Submit.
     let task = crate::fill::claude_fill_task(&whole, "https://acme.example/jobs/1", &["Sam - CV.pdf".to_string()]);
     assert!(task.contains("https://acme.example/jobs/1") && task.contains("\"Sam - CV.pdf\"") && task.contains("Never press the final Submit") && !task.contains("I will attach them myself"), "{task}");
+    // And it reports back what it did, which files it attached, and what's left for you.
+    assert!(task.contains("Attached: each file you attached") && task.contains("Left for me:") && task.contains("Submitted: nothing."), "{task}");
     assert!(crate::fill::claude_fill_task(&whole, "https://x.example", &[]).contains("I will attach them myself"));
     assert_eq!(crate::fill::claude_fill_state(&s.agent, "test:1"), json!({}));
     let part = crate::fill::brief(&s.agent, "test:1", &json!({ "done": 4, "left": [{ "label": "Province/Territory/State", "want": "Ontario" }, { "label": "Address", "want": "" }], "missed": ["Jira"] })).unwrap();

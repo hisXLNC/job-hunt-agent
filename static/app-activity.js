@@ -96,7 +96,7 @@ function hubSheetHtml() {
 function bellSheetHtml() {
   // Each opens what it's about (the job, the Queue, the calendar…) when it names something.
   const notices = (running.notices || []).slice(0, 8).map(n => {
-    const inner = `<div class="act-top"><b>${esc(n.title)}</b><span class="muted small nowrap" title="${esc(new Date(n.at).toLocaleString())}">${esc(ago(n.at))}</span></div><div class="muted small">${esc(n.body)}</div>`;
+    const inner = `<div class="act-top"><b>${esc(n.title)}</b><span class="muted small nowrap" title="${esc(new Date(n.at).toLocaleString())}">${esc(ago(n.at))}</span></div><div class="muted small note-body">${esc(n.body)}</div>`;
     return `<li class="${n.at > hub.seen ? 'new' : ''}${n.link ? ' has-link' : ''}">${n.link ? `<a class="note-link" href="${esc(n.link)}">${inner}</a>` : inner}</li>`;
   }).join('');
   const recent = running.recent.slice(0, 5).map(e => `<li><div class="act-top"><span>${jobLink(e)}${eventText(e)}</span><span class="muted small nowrap">${esc(ago(e.created_at))}</span></div></li>`).join('');

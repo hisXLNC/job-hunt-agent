@@ -155,7 +155,7 @@
       .h{display:flex;align-items:center;gap:9px;font-weight:650;margin-bottom:8px;letter-spacing:-.01em}.h .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .m{width:24px;height:24px;flex:none;display:block}
       .x{border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:#6b7180;padding:2px 6px;border-radius:7px}.x:hover{background:#f1f0eb}
-      .s{color:#454a57;margin:0 0 10px}.r{display:flex;flex-wrap:wrap;gap:6px}
+      .s{color:#454a57;margin:0 0 10px}.s.long{white-space:pre-line;max-height:min(50vh,360px);overflow:auto;font-size:13px}.r{display:flex;flex-wrap:wrap;gap:6px}
       button.b{font:inherit;font-weight:560;border:1px solid #deddd6;background:#fff;color:#16181d;border-radius:10px;padding:8px 12px;cursor:pointer;flex:1 1 auto}
       button.b:hover{border-color:#6b7180}
       button.b.pr{background:#2d55e8;border-color:#2d55e8;color:#fff;flex:1 1 100%;padding:10px 14px;font-size:15px}button.b[hidden]{display:none}button.b:disabled{opacity:.55;cursor:default}
@@ -251,7 +251,11 @@
             if (st.ok && st.v && st.v.running === false) {
               trace('Claude finished', { error: !!st.v.error });
               flush();
-              status(st.v.error ? `Claude couldn't finish: ${String(st.v.error).slice(0, 400)}` : `Claude: ${String(st.v.said || 'done.').slice(0, 500)} Read the form over in its tab, then press Submit yourself.`);
+              // What Claude did, in its own five lines (Result, Filled, Attached, Left for me,
+              // Submitted), and the files Job Hunt gave it.
+              const given = (st.v.files || []).length ? `Files Job Hunt gave Claude: ${st.v.files.join(', ')}` : 'Job Hunt had no CV or cover letter file to give Claude.';
+              status(st.v.error ? `Claude couldn't finish: ${String(st.v.error).slice(0, 400)}\n\n${given}` : `Claude has finished.\n\n${String(st.v.said || 'Result: done.').slice(0, 1800)}\n\n${given}\n\nRead the form over in Claude's tab, then press Submit yourself.`);
+              statusEl.classList.add('long');
               if (st.v.error) { b.hidden = false; buttons.brief.hidden = false; }
               return;
             }
@@ -287,7 +291,7 @@
   // boxes that got stuck, never an answer.
   const report = r => { if (EXT) rpc('/ext/report', { url: location.href, title: document.title, ...r }).catch(() => {}); };
   let failSaid = 0;
-  const status = t => { panel(); statusEl.textContent = t; if (EXT && buttons.hand && /can't find a form|tripped on this page|^Couldn't|No answers|didn't take/i.test(t) && !/brief for Claude:/.test(t)) buttons.hand.hidden = false;
+  const status = t => { panel(); statusEl.classList.remove('long'); statusEl.textContent = t; if (EXT && buttons.hand && /can't find a form|tripped on this page|^Couldn't|No answers|didn't take/i.test(t) && !/brief for Claude:/.test(t)) buttons.hand.hidden = false;
     if (/can't find a form|tripped on this page/i.test(t) && Date.now() - failSaid > 60000) { failSaid = Date.now(); report({ failed: true, boxes: 0, filled: 0, refused: 0 }); } };
   // The progress bar: while Claude writes the answers it creeps towards `to` (most of the way by
   // the time it usually takes), then filling in takes it to the end. null hides it.
