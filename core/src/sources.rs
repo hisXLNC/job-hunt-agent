@@ -845,7 +845,7 @@ pub fn http() -> reqwest::blocking::Client {
 }
 
 fn get_json(client: &reqwest::blocking::Client, url: &str, query: &[(&str, String)]) -> Result<Value, String> {
-    let r = client.get(url).query(query).send().map_err(|e| format!("couldn't connect ({e})"))?;
+    let r = client.get(url).query(query).send().map_err(|e| format!("couldn't connect ({})", e.without_url()))?;
     let status = r.status();
     if status.as_u16() == 404 {
         return Err("not found (board name wrong or removed?)".into());
@@ -853,11 +853,11 @@ fn get_json(client: &reqwest::blocking::Client, url: &str, query: &[(&str, Strin
     if !status.is_success() {
         return Err(format!("HTTP {status}"));
     }
-    r.json::<Value>().map_err(|e| format!("unexpected response ({e})"))
+    r.json::<Value>().map_err(|e| format!("unexpected response ({})", e.without_url()))
 }
 
 fn post_json(client: &reqwest::blocking::Client, url: &str, body: &Value) -> Result<Value, String> {
-    let r = client.post(url).header("Accept", "application/json").json(body).send().map_err(|e| format!("couldn't connect ({e})"))?;
+    let r = client.post(url).header("Accept", "application/json").json(body).send().map_err(|e| format!("couldn't connect ({})", e.without_url()))?;
     let status = r.status();
     if status.as_u16() == 404 || status.as_u16() == 422 {
         return Err("not found (check the careers link)".into());
@@ -865,7 +865,7 @@ fn post_json(client: &reqwest::blocking::Client, url: &str, body: &Value) -> Res
     if !status.is_success() {
         return Err(format!("HTTP {status}"));
     }
-    r.json::<Value>().map_err(|e| format!("unexpected response ({e})"))
+    r.json::<Value>().map_err(|e| format!("unexpected response ({})", e.without_url()))
 }
 
 /// Postings read in full per board, at most; the rest keep a one-line description.
@@ -1158,9 +1158,9 @@ fn linkedin_get(c: &reqwest::blocking::Client, url: &str) -> Result<String, Stri
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
         .header("Accept", "text/html,application/xhtml+xml")
         .header("Accept-Language", "en;q=0.9")
-        .send().map_err(|e| format!("couldn't connect ({e})"))?;
+        .send().map_err(|e| format!("couldn't connect ({})", e.without_url()))?;
     match r.status().as_u16() {
-        200 => r.text().map_err(|e| format!("unreadable page ({e})")),
+        200 => r.text().map_err(|e| format!("unreadable page ({})", e.without_url())),
         429 | 999 => Err("LinkedIn is limiting requests from this connection for now; the next search tries again".into()),
         404 => Err("not found".into()),
         s => Err(format!("HTTP {s}")),
@@ -1429,9 +1429,9 @@ fn jobbank_get(c: &reqwest::blocking::Client, url: &str) -> Result<String, Strin
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
         .header("Accept", "text/html,application/xhtml+xml")
         .header("Accept-Language", "en;q=0.9")
-        .send().map_err(|e| format!("couldn't connect ({e})"))?;
+        .send().map_err(|e| format!("couldn't connect ({})", e.without_url()))?;
     match r.status().as_u16() {
-        200 => r.text().map_err(|e| format!("unreadable page ({e})")),
+        200 => r.text().map_err(|e| format!("unreadable page ({})", e.without_url())),
         404 | 410 => Err("not found".into()),
         403 | 429 | 503 => Err("Job Bank is limiting requests from this connection for now; the next search tries again".into()),
         s => Err(format!("Job Bank said {s}")),
@@ -1568,7 +1568,7 @@ pub fn apify_linkedin_since(c: &reqwest::blocking::Client, token: &str, actor: &
     let url = format!("https://api.apify.com/v2/acts/{}/run-sync-get-dataset-items", actor.replace('/', "~"));
     let r = reqwest::blocking::Client::builder().timeout(Duration::from_secs(320)).build().map_err(|e| e.to_string())?
         .post(url).query(&[("timeout", "300"), ("clean", "true")]).bearer_auth(token.trim()).json(&input)
-        .send().map_err(|e| format!("couldn't connect ({e})"))?;
+        .send().map_err(|e| format!("couldn't connect ({})", e.without_url()))?;
     let _ = c;
     match r.status().as_u16() {
         200 | 201 => {}
@@ -1578,7 +1578,7 @@ pub fn apify_linkedin_since(c: &reqwest::blocking::Client, token: &str, actor: &
         408 => return Err("the Apify scraper took too long; the next search tries again".into()),
         s => return Err(format!("Apify answered HTTP {s}")),
     }
-    let v: Value = r.json().map_err(|e| format!("unexpected response ({e})"))?;
+    let v: Value = r.json().map_err(|e| format!("unexpected response ({})", e.without_url()))?;
     let list = parse_apify_linkedin(&v);
     let items = v.as_array().map(|a| a.len()).unwrap_or(0);
     if list.is_empty() && items > 0 {
@@ -1694,14 +1694,14 @@ pub fn jsearch(c: &reqwest::blocking::Client, provider: &str, key: &str, query: 
     } else {
         c.get("https://api.openwebninja.com/jsearch/search").header("x-api-key", key)
     };
-    let r = req.query(&params).send().map_err(|e| format!("couldn't connect ({e})"))?;
+    let r = req.query(&params).send().map_err(|e| format!("couldn't connect ({})", e.without_url()))?;
     match r.status().as_u16() {
         200 => {}
         401 | 403 => return Err("the key was refused. Check it, and which site it's from, in Settings → Job search".into()),
         429 => return Err("this month's requests are used up (your plan's limit), or too many at once".into()),
         s => return Err(format!("HTTP {s}")),
     }
-    let v: Value = r.json().map_err(|e| format!("unexpected response ({e})"))?;
+    let v: Value = r.json().map_err(|e| format!("unexpected response ({})", e.without_url()))?;
     Ok(parse_jsearch(&v))
 }
 
@@ -1738,13 +1738,13 @@ pub fn jooble(c: &reqwest::blocking::Client, key: &str, keywords: &str, location
     let r = c.post(format!("https://jooble.org/api/{key}"))
         // Jooble takes a radius of 0, 8, 16, 24, 40 or 80 km.
         .json(&if location.is_empty() { serde_json::json!({ "keywords": keywords }) } else { serde_json::json!({ "keywords": keywords, "location": location, "radius": "40" }) })
-        .send().map_err(|e| format!("couldn't connect ({e})"))?;
+        .send().map_err(|e| format!("couldn't connect ({})", e.without_url()))?;
     match r.status().as_u16() {
         200 => {}
         401 | 403 | 404 => return Err("the key was refused. Check it in Settings → Job search".into()),
         s => return Err(format!("HTTP {s}")),
     }
-    let v: Value = r.json().map_err(|e| format!("unexpected response ({e})"))?;
+    let v: Value = r.json().map_err(|e| format!("unexpected response ({})", e.without_url()))?;
     Ok(parse_jooble(&v))
 }
 
@@ -1758,7 +1758,7 @@ pub fn check_key(service: &str, key: &str, extra: &str) -> Result<(), String> {
         return if key.starts_with("bad") { Err("the key was refused".into()) } else { Ok(()) };
     }
     let c = reqwest::blocking::Client::builder().timeout(Duration::from_secs(25)).build().map_err(|e| e.to_string())?;
-    let sent = |r: reqwest::Result<reqwest::blocking::Response>| r.map(|r| r.status().as_u16()).map_err(|e| format!("it couldn't be tested, as the service wasn't reached ({e}). Nothing was changed; try again when you're online"));
+    let sent = |r: reqwest::Result<reqwest::blocking::Response>| r.map(|r| r.status().as_u16()).map_err(|e| format!("it couldn't be tested, as the service wasn't reached ({}). Nothing was changed; try again when you're online", e.without_url()));
     let refused = "the service refused it. Copy it again from the service's website";
     match service {
         "adzuna" => {

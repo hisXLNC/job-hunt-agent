@@ -545,6 +545,7 @@ pub fn browser_args() -> Vec<String> {
 /// browser and signed in to the same Claude account as Claude Code (an API key won't do).
 pub fn browse(cc: &ClaudeCode, task: &str, files: &[(String, std::path::PathBuf)], limit: Duration) -> R<String> {
     let dir = std::env::temp_dir().join("JobHunt").join(format!("browser-{}", crate::util::short_hash(&format!("{:?}{}", Instant::now(), rand::random::<u64>()))));
+    clear_leftovers();
     std::fs::create_dir_all(&dir)?;
     let result = (|| {
         for (name, path) in files {
@@ -596,10 +597,24 @@ pub fn chrome_setup_script(custom: &str) -> String {
     s
 }
 
+/// Folders left in the temp folder by a request that never finished (Job Hunt closed or crashed
+/// part-way): they hold copies of your CV, so any older than six hours is removed.
+fn clear_leftovers() {
+    let Ok(entries) = std::fs::read_dir(std::env::temp_dir().join("JobHunt")) else { return };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let old = e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > Duration::from_secs(6 * 3600));
+        if old && (name.starts_with("claude-") || name.starts_with("browser-")) && e.path().is_dir() {
+            let _ = std::fs::remove_dir_all(e.path());
+        }
+    }
+}
+
 /// One request through Claude Code.
 pub fn ask(cc: &ClaudeCode, ask: &Ask) -> R<Value> {
     // A fresh, empty folder per request: no project settings, hooks or MCP servers apply.
     let dir = std::env::temp_dir().join("JobHunt").join(format!("claude-{}", crate::util::short_hash(&format!("{:?}{}", Instant::now(), rand::random::<u64>()))));
+    clear_leftovers();
     std::fs::create_dir_all(&dir)?;
     let result = (|| {
         let system_file = dir.join("instructions.txt");

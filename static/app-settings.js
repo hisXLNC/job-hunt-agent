@@ -1620,7 +1620,7 @@ async function wantsOffer(fresh = false, quiet = false) {
   }
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   let said = false; // the scoring line is said once, under the first box showing
-  const fill = (field, set, out, back, why, none) => {
+  const fill = (field, set, out, back, why, none, misread = 0) => {
     const box = document.querySelector(`[data-wants-apply="${field}"]`);
     if (!box) return;
     const scoring = r.scoring && !said;
@@ -1629,7 +1629,9 @@ async function wantsOffer(fresh = false, quiet = false) {
     if (!out && !back && scoring) { said = true; box.innerHTML = `<span><span class="spin"></span>Scoring ${n(r.scoring, 'job', 'jobs')} brought back. The ones that clear your bar go to your Queue, and a notice says how they did.</span>`; }
     else if (!out && !back) box.innerHTML = `<span>${esc(none)}</span><button type="button" class="btn sm" data-act="checkWants">Check again</button>`;
     else {
-      const parts = [out ? `${n(out, "job you haven't applied to", "jobs you haven't applied to")} ${why}` : '', back ? `${n(back, 'job', 'jobs')} set aside before now ${back === 1 ? 'fits' : 'fit'}` : ''].filter(Boolean);
+      const parts = [out ? `${n(out, "job you haven't applied to", "jobs you haven't applied to")} ${why}` : '', back - misread > 0 ? `${n(back - misread, 'job', 'jobs')} set aside before now ${back - misread === 1 ? 'fits' : 'fit'}` : '',
+        // Why jobs come back when the minimum hasn't come down: their pay was read wrongly before.
+        misread ? `${n(misread, 'job was', 'jobs were')} set aside for pay that was misread before (an hourly rate, or another number taken for the yearly salary) and can be scored properly now` : ''].filter(Boolean);
       const label = [out ? `Set aside ${out}` : '', back ? `bring back ${back}` : ''].filter(Boolean).join(' and ');
       box.innerHTML = `<span>${esc(parts.join('; '))}.</span><button type="button" class="btn sm primary" data-act="applyWants">${esc(label[0].toUpperCase() + label.slice(1))}</button>`;
     }
@@ -1639,7 +1641,7 @@ async function wantsOffer(fresh = false, quiet = false) {
   fill('want_work', !!r.want_work, r.work, r.back_work, `${r.work === 1 ? 'says it is' : 'say they are'} ${other}`,
     `No job you haven't applied to plainly says it is ${other}. Jobs that don't say are kept, and Claude weighs them.`);
   fill('min_salary', r.minimum > 0, r.pay, r.back_pay, `${r.pay === 1 ? 'pays' : 'pay'} less than ${money(r.minimum)}`,
-    `No job you haven't applied to says it pays less than ${money(r.minimum)}. Jobs that don't give their pay are kept.`);
+    `No job you haven't applied to says it pays less than ${money(r.minimum)}. Jobs that don't give their pay are kept.`, r.back_misread || 0);
   clearTimeout(wantsTimer);
   if (r.scoring) wantsTimer = setTimeout(() => wantsOffer(true, true), 10000);
 }

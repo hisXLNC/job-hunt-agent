@@ -4,6 +4,21 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.99.2] - 2026-11-17
+
+Safety fixes from the review.
+
+### Changes
+
+- Raising your minimum salary no longer offers back jobs Claude had read as paying less than it. Jobs offered back because an older version misread their pay (an hourly rate, or another number taken for the yearly salary) now say so.
+- A job site open in the Apply window or a reader window can no longer talk to Job Hunt itself; only Job Hunt's own window can.
+- The Apply window's pass-token is kept where the page's own scripts can't read it.
+- A backup can no longer be restored over Remote access, only on the PC.
+- A backup made without sign-ins now also leaves out the other AI's key, the browser extension's key and your phone's notification channel, and no deleted value stays in the file.
+- A failed Adzuna or Jooble search no longer shows the key in its error.
+- A device on your network can't dodge the wrong-password lockout any more.
+- CV copies left in the temp folder by a crash are removed.
+
 ## [2.99.1] - 2026-11-17
 
 The Bring back button no longer stays while jobs are scored.
@@ -2684,6 +2699,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.99.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.2
 [2.99.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.1
 [2.99.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.0
 [2.98.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.98.0

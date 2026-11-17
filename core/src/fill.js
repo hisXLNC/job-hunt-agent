@@ -5,6 +5,12 @@
 (() => {
   if (window.top !== window || window.__jobhunt) return;
   const TOKEN = '__TOKEN__';
+  // The browser's own tools, kept from before any of the page's scripts could replace them.
+  const PURE = (() => {
+    const call = Function.prototype.call, enc = new TextEncoder();
+    const swap = call.bind(String.prototype.replace), cut = call.bind(String.prototype.slice);
+    return { json: JSON.stringify, bytes: enc.encode.bind(enc), chr: String.fromCharCode, b64: window.btoa.bind(window), swap, rest: s => cut(s, 1) };
+  })();
   const JOB = __JOB__;
   // In the browser extension (no token): messages go through the extension, which asks Job Hunt.
   const EXT = !TOKEN && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id;
@@ -121,10 +127,15 @@
   const send = (PHONE || EXT) ? (kind, data) => { remoteSend(kind, { ...data, url: location.href, title: document.title }).catch(e => { trace('error: ' + (e && e.stack || e)); flush('error'); window.__jobhunt.failed('Something went wrong talking to Job Hunt. Press Fill in this form again.'); }); }
  : (kind, data) => {
     sending = Date.now();
-    const json = JSON.stringify({ t: TOKEN, ...data });
+    // Put together with the browser's own tools as they were before the page's scripts ran (see
+    // PURE), and the token joined on as plain text: a page that swaps JSON, btoa or a text method
+    // for its own never gets to see the token.
+    const body = PURE.json(data || {});
+    const json = '{"t":"' + TOKEN + '"' + (body === '{}' ? '}' : ',' + PURE.rest(body));
+    const bytes = PURE.bytes(json);
     let bin = '';
-    for (const b of new TextEncoder().encode(json)) bin += String.fromCharCode(b);
-    const b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    for (let i = 0; i < bytes.length; i++) bin += PURE.chr(bytes[i]);
+    const b64 = PURE.swap(PURE.swap(PURE.swap(PURE.b64(bin), /\+/g, '-'), /\//g, '_'), /=+$/, '');
     location.href = 'https://jobhunt.invalid/' + kind + '/' + b64;
   };
   const clean = s => (s || '').replace(/\s+/g, ' ').replace(/\s*\*\s*$/, '').trim().slice(0, 300);

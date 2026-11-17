@@ -9,14 +9,14 @@ Line numbers are as of 2.97.3.
 
 1. `desktop/src-tauri/src/lib.rs:986`, `core/src/api.rs:261`: the app's own address answers every
    window, not only the main one, so a job site open in the Apply or reader window may be able to
-   call the app (change settings, send the other-AI key elsewhere, restore a backup). unverified
+   call the app (change settings, send the other-AI key elsewhere, restore a backup). fixed 2.99.2 (only the main window is answered)
 2. `api.rs:2101`, `api.rs:1764`, `backup.rs:210`: over Remote access, restoring a backup and
    setting the backup folder are not refused; a crafted backup can plant a program the app later
-   runs. open
+   runs. fixed 2.99.2 (restore is refused over Remote access; the folder already was)
 3. `bridge.rs:124`, `fill.js:12`: the phone bookmark leaves the key readable by the page it runs
    on; that page can then ask for your CV and answers. open
 4. `fill.js:7,121`, `lib.rs:581`: in the Apply window a hostile page can read the token and mark a
-   job applied or change saved answers. open
+   job applied or change saved answers. fixed 2.99.2 (the token is put together out of the page's reach)
 5. `claude_code.rs:537`: Claude driving the browser may Read any file on the PC; a page could try
    to talk it into reading one. open
 6. `claude_code.rs:399`, `claude.rs:2283,2633`: web look-ups carry your CV and can fetch any
@@ -24,15 +24,15 @@ Line numbers are as of 2.97.3.
 7. `claude_code.rs:403`: Indeed requests leave your other Claude connectors and settings active. open
 8. `fill.rs:1036,1740`: box labels from the page sit among the instructions given to Claude. open
 9. `backup.rs:14,63`: a backup "without sign-ins" still holds the other-AI key, the extension key
-   and the phone topic; deleted values can remain in the file. open
+   and the phone topic; deleted values can remain in the file. fixed 2.99.2 (all three left out, and the file is rewritten so deleted values are gone)
 10. `web.rs:33`, `sync.rs:330`: the remote password is weakly hashed and travels in the sync copy. open
-11. `web.rs:224`: a device on your network can dodge the wrong-password lockout. open
-12. `bridge.rs:80`, `web.rs:136,272`: large or endless requests are read before the key is checked. open
-13. `sources.rs:786,1013`: a failing Jooble or Adzuna search can show its key in the error text. unverified
-14. `claude.rs:2029`: the other-AI address is not checked for https at the point of use. open
-15. `claude_code.rs:599`: copies of CVs stay in the temp folder after a crash. open
+11. `web.rs:224`: a device on your network can dodge the wrong-password lockout. fixed 2.99.2
+12. `bridge.rs:80`, `web.rs:136,272`: large or endless requests are read before the key is checked. fixed 2.99.2 (the bridge too; the remote server already did)
+13. `sources.rs:786,1013`: a failing Jooble or Adzuna search can show its key in the error text. fixed 2.99.2 (the address is left out of the error)
+14. `claude.rs:2029`: the other-AI address is not checked for https at the point of use. fixed 2.99.2
+15. `claude_code.rs:599`: copies of CVs stay in the temp folder after a crash. fixed 2.99.2 (left-over folders older than six hours are removed)
 16. `fill.js:1934`: answers stay in the tab after a submit that wasn't confirmed. unverified
-17. `app.js:249`: one posting link is a plain link, not routed through the checked opener. open
+17. `app.js:249`: one posting link is a plain link, not routed through the checked opener. fixed 2.99.2
 18. `app-ask.js:207`: some of Claude's offer buttons (approve, mark applied, fill) act on one click. fixed 2.99.0 (approve, mark applied and fill ask first)
 
 ## B. Wrong outcomes (jobs, applications, email)

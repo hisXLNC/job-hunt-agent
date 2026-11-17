@@ -2030,6 +2030,7 @@ fn ask_other<T: DeserializeOwned>(http: &reqwest::blocking::Client, o: &OtherAi,
     if o.url.trim().is_empty() || o.model.trim().is_empty() {
         return Err(Error("The other AI isn't set up: choose its service and model in Settings → Accounts.".into()));
     }
+    safe_address(o.url.trim())?;
     let url = format!("{}/chat/completions", o.url.trim().trim_end_matches('/'));
     let mut strict = true;
     let mut wait = Duration::from_secs(2);
@@ -2076,12 +2077,20 @@ fn ask_other<T: DeserializeOwned>(http: &reqwest::blocking::Client, o: &OtherAi,
     }
 }
 
+/// Your CV and key go to this address, so it must be encrypted (https) or a model on this PC. A
+/// look-alike such as http://localhost.example.com is refused.
+fn safe_address(url: &str) -> R<()> {
+    let local = ["http://localhost", "http://127.0.0.1"].iter().any(|p| url.strip_prefix(p).is_some_and(|rest| rest.is_empty() || rest.starts_with(':') || rest.starts_with('/')));
+    if url.starts_with("https://") || local {
+        return Ok(());
+    }
+    Err(Error("The other AI's address must start with https:// (or be a model on this PC, http://localhost…).".into()))
+}
+
 /// Check another AI's address and key without spending anything: the models it offers.
 pub fn other_models(url: &str, key: &str) -> R<Vec<String>> {
     let url = url.trim().trim_end_matches('/');
-    if !(url.starts_with("https://") || url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1")) {
-        return Err(Error("The address must start with https:// (or be a model on this PC, http://localhost…).".into()));
-    }
+    safe_address(url)?;
     let mut req = reqwest::blocking::Client::builder().timeout(Duration::from_secs(20)).build()?.get(format!("{url}/models"));
     if !key.trim().is_empty() {
         req = req.bearer_auth(key.trim());

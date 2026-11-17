@@ -484,8 +484,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let (out, back) = agent.wants_plan()?;
                 let pay = out.iter().filter(|(_, why)| why.starts_with("salary")).count();
                 let p = agent.profile();
-                let back_pay = back.iter().filter(|j| j.reasoning.as_deref().is_some_and(|r| r.starts_with("Filtered out: salary"))).count();
-                return Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "back_pay": back_pay, "back_work": back.len() - back_pay, "scoring": agent.wants_scoring(), "minimum": p.min_salary, "want_work": p.wants.work })));
+                let back_pay = back.iter().filter(|j| j.reasoning.as_deref().is_some_and(|r| r.starts_with("Filtered out: salary")) || j.red_flags.iter().any(|f| f.starts_with("Pays up to"))).count();
+                return Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "back_pay": back_pay, "back_work": back.len() - back_pay, "back_misread": back.iter().filter(|j| Agent::pay_was_misread(j, &p)).count(), "scoring": agent.wants_scoring(), "minimum": p.min_salary, "want_work": p.wants.work })));
             }
             ["api", "overview"] => {
                 // The page asks for this every second or two, and putting it together reads thousands of
@@ -1444,6 +1444,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         ["api", "settings", "backup"] if req.remote && b.get("dir").is_some() && s(&b, "dir").trim() != agent.secret("backup.dir") => Err(Error(
             "The backup folder can only be changed on the computer running Job Hunt.".into(),
         )),
+        // A backup replaces everything Job Hunt knows, settings that name programs included.
+        ["api", "backup", "restore"] if req.remote => Err(Error("A backup can only be restored on the computer running Job Hunt.".into())),
         ["api", "sync", "continue"] | ["api", "settings", "claude-desktop"] if req.remote && host.kind() != "server" => Err(Error("Do this on the computer running Job Hunt.".into())),
         ["api", "settings", "files-folder"] if req.remote || host.kind() == "server" => Err(Error("Your files' folder can only be changed in the Job Hunt app on your PC.".into())),
         ["api", "settings", "files-folder"] => {
@@ -2535,7 +2537,7 @@ mod tests {
         let (_s, agent, _fh, host) = world();
         let (status, r) = call(&agent, &host, "GET", "/api/wants/plan", Value::Null);
         assert_eq!(status, 200, "{r}");
-        assert!(r["set_aside"].is_number() && r["back_pay"].is_number() && r["back_work"].is_number(), "{r}");
+        assert!(r["set_aside"].is_number() && r["back_pay"].is_number() && r["back_work"].is_number() && r["back_misread"].is_number(), "{r}");
         assert_eq!(call(&agent, &host, "POST", "/api/wants/apply", Value::Null).0, 200);
     }
 

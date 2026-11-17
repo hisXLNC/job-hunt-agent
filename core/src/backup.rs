@@ -13,6 +13,10 @@ use std::path::{Path, PathBuf};
 /// Settings that are secrets: kept out of backups unless you choose to include them.
 pub const SECRET_KEYS: [&str; 9] = ["claude.key", "google.token", "google.client", "adzuna.key", "jsearch.key", "jooble.key", "apify.key", "remote.password", "remote.sessions"];
 
+/// Other keys to this PC's sign-ins (the other AI's key, the browser extension's, your phone's
+/// notification channel): left out of a backup with the rest, and kept through a restore.
+pub const ALSO_SECRET: [&str; 3] = ["other.key", "ext.key", "phone.topic"];
+
 /// Files in the data folder that belong to this computer only and are never replaced by a restore.
 pub const LOCAL_ONLY: [&str; 3] = ["device.json", "sync-state.json", crate::util::FILES_POINTER];
 
@@ -61,9 +65,11 @@ pub fn write_snapshot(agent: &Agent, out: &Path, secrets: bool) -> R<()> {
     let result = (|| {
         if !secrets {
             let snap = crate::db::Db::open(&tmp_db)?;
-            for k in SECRET_KEYS {
+            for k in SECRET_KEYS.iter().chain(ALSO_SECRET.iter()) {
                 snap.delete(k)?;
             }
+            // Deleting leaves the old values in the file's unused pages; rewriting it removes them.
+            snap.compact()?;
         }
         let file = std::fs::File::create(&tmp_zip)?;
         let mut zip = zip::ZipWriter::new(file);
@@ -227,7 +233,7 @@ pub fn apply_pending(data: &Path) -> R<bool> {
     let (old, new) = (keep.join("jobhunt.db"), data.join("jobhunt.db"));
     if old.is_file() && new.is_file() {
         if let (Ok(old), Ok(new)) = (crate::db::Db::open(&old), crate::db::Db::open(&new)) {
-            for k in SECRET_KEYS.iter().chain(["other.key", "other.url", "other.model", "other.for", "ext.key"].iter()) {
+            for k in SECRET_KEYS.iter().chain(["other.key", "other.url", "other.model", "other.for", "ext.key", "phone.topic"].iter()) {
                 if new.get(k)?.is_none_or(|v| v.is_empty()) {
                     if let Some(v) = old.get(k)?.filter(|v| !v.is_empty()) {
                         new.set(k, &v)?;
@@ -251,6 +257,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         s.agent.db().set("backup.dir", &dir.path().to_string_lossy()).unwrap();
         s.agent.db().set("claude.key", "sk-secret").unwrap();
+        s.agent.db().set("other.key", "other-ai-secret").unwrap();
+        s.agent.db().set("phone.topic", "phone-topic-secret").unwrap();
         s.agent.search(Some(vec![crate::testkit::posting("Technical Program Manager", "1")])).unwrap();
         assert!(due(&s.agent));
 
@@ -259,7 +267,12 @@ mod tests {
         assert_eq!(list(dir.path()).len(), 1);
         let bytes = std::fs::read(&zip).unwrap();
         let mut z = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
-        assert!(z.by_name("jobhunt.db").is_ok());
+        // Without sign-ins, none of the keys is anywhere in the file, not even as a deleted value.
+        let mut raw = Vec::new();
+        z.by_name("jobhunt.db").unwrap().read_to_end(&mut raw).unwrap();
+        for secret in ["sk-secret", "other-ai-secret", "phone-topic-secret"] {
+            assert!(!raw.windows(secret.len()).any(|w| w == secret.as_bytes()), "{secret} is still in the backup");
+        }
         assert!((0..z.len()).any(|i| z.by_index(i).unwrap().name().starts_with("cv/")));
         assert!((0..z.len()).any(|i| z.by_index(i).unwrap().name().starts_with("applications/")), "tailored files are in it");
 

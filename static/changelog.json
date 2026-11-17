@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.99.2",
+    "date": "2026-11-17",
+    "title": "Safety fixes from the review",
+    "changes": [
+      "Raising your minimum salary no longer offers back jobs Claude had read as paying less than it. Jobs offered back because an older version misread their pay (an hourly rate, or another number taken for the yearly salary) now say so.",
+      "A job site open in the Apply window or a reader window can no longer talk to Job Hunt itself; only Job Hunt's own window can.",
+      "The Apply window's pass-token is kept where the page's own scripts can't read it.",
+      "A backup can no longer be restored over Remote access, only on the PC.",
+      "A backup made without sign-ins now also leaves out the other AI's key, the browser extension's key and your phone's notification channel, and no deleted value stays in the file.",
+      "A failed Adzuna or Jooble search no longer shows the key in its error.",
+      "A device on your network can't dodge the wrong-password lockout any more.",
+      "CV copies left in the temp folder by a crash are removed."
+    ]
+  },
+  {
     "version": "2.99.1",
     "date": "2026-11-17",
     "title": "The Bring back button no longer stays while jobs are scored",

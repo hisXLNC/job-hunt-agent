@@ -4,7 +4,7 @@
 //! to put in its fields, and the CV and letter to attach; and it hears when you've submitted.
 
 use crate::pipeline::Agent;
-use crate::web::{read_request, write};
+use crate::web::{read_request_if, write};
 use crate::api::Resp;
 use serde_json::{json, Value};
 use regex::Regex;
@@ -77,7 +77,11 @@ pub fn start(agent: Arc<Agent>) {
         for stream in listener.incoming().flatten() {
             let agent = agent.clone();
             std::thread::spawn(move || {
-                let Ok(Some(req)) = read_request(&stream) else { return };
+                // A stalled sender is dropped after a minute, and anything large is read only when
+                // the key came with it.
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(60)));
+                let want = key(&agent);
+                let Ok(Some(req)) = read_request_if(&stream, &|h| h.get("x-job-hunt-key").is_some_and(|k| *k == want)) else { return };
                 let sent = req.headers.get("x-job-hunt-key").cloned().or_else(|| req.query.get("k").cloned()).unwrap_or_default();
                 let mut reply = if req.method == "OPTIONS" {
                     Resp { status: 204, ctype: "text/plain".into(), body: vec![], headers: vec![] }

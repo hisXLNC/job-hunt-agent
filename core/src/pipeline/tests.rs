@@ -1903,6 +1903,17 @@ fn a_new_minimum_salary_sets_jobs_aside_and_brings_them_back() {
         assert_eq!(s.agent.wants_scoring(), 1);
     }
     assert_eq!((s.agent.wants_plan().unwrap().1.len(), s.agent.wants_scoring()), (1, 0));
+    // Set aside on Claude's reading of the pay (the posting's own fields don't give it): raising
+    // your minimum doesn't offer it back, lowering it under that pay does.
+    s.agent.db().update_job("test:2", &[("status", "skipped".into()), ("reasoning", "Scored 40.".into()), ("salary", "".into()),
+        ("red_flags", json!(["Pays up to $120,000, below your minimum of $130,000"]))]).unwrap();
+    s.agent.db().con.execute("UPDATE jobs SET description = 'A good job.' WHERE id = 'test:2'", []).unwrap();
+    p.min_salary = Some(150000.0);
+    s.agent.save_profile(&p).unwrap();
+    assert_eq!(s.agent.wants_plan().unwrap().1.len(), 0, "it still pays under your minimum");
+    p.min_salary = Some(110000.0);
+    s.agent.save_profile(&p).unwrap();
+    assert_eq!(s.agent.wants_plan().unwrap().1.len(), 1);
 }
 
 #[test]

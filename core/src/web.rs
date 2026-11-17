@@ -122,14 +122,10 @@ pub(crate) struct Request {
     pub(crate) body: Vec<u8>,
 }
 
-pub(crate) fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request>> {
-    read_request_if(stream, &|_| true)
-}
-
 /// A request body larger than this is read only from someone signed in (see `connection`).
 const UNSIGNED_BODY: usize = 64 * 1024;
 
-/// read_request; `big_ok` is asked, with the headers, before a body over UNSIGNED_BODY is read:
+/// Read one request. `big_ok` is asked, with the headers, before a body over UNSIGNED_BODY is read:
 /// when it says no, nothing more is read and the connection is dropped. Over Remote access, a
 /// stranger could otherwise send up to 200 MB a connection before being asked for the password.
 pub(crate) fn read_request_if(stream: &TcpStream, big_ok: &dyn Fn(&HashMap<String, String>) -> bool) -> std::io::Result<Option<Request>> {
@@ -228,6 +224,17 @@ fn is_local(ip: &str) -> bool {
     })
 }
 
+/// Whether a connection can be the Cloudflare tunnel, whose word on the visitor's address is taken.
+/// On a PC the tunnel runs on the PC itself; another device on your network that claims a new
+/// address with every wrong password would otherwise never be locked out. (In Docker the tunnel is
+/// a neighbour on the private network.)
+fn from_tunnel(peer: &str, server: bool) -> bool {
+    if server {
+        return is_local(peer);
+    }
+    peer.parse::<std::net::IpAddr>().is_ok_and(|a| a.is_loopback())
+}
+
 fn connection(stream: TcpStream, agent: &Arc<Agent>, host: &Arc<dyn Host>, enabled: &(dyn Fn() -> bool + Send + Sync)) -> std::io::Result<()> {
     let peer = stream.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
     let Some(req) = read_request_if(&stream, &|headers| enabled() && signed_in(agent, cookie_in(headers, COOKIE)))? else { return Ok(()) };
@@ -237,7 +244,7 @@ fn connection(stream: TcpStream, agent: &Arc<Agent>, host: &Arc<dyn Host>, enabl
     let token = cookie(&req, COOKIE).map(|s| s.to_string());
     // Behind Cloudflare Tunnel every visit arrives from the tunnel: count wrong passwords by the
     // visitor's own address, which Cloudflare passes on (Job Hunt then listens only to the tunnel).
-    let peer = req.headers.get("cf-connecting-ip").filter(|ip| ip.parse::<std::net::IpAddr>().is_ok() && is_local(&peer)).cloned().unwrap_or(peer);
+    let peer = req.headers.get("cf-connecting-ip").filter(|ip| ip.parse::<std::net::IpAddr>().is_ok() && from_tunnel(&peer, host.kind() == "server")).cloned().unwrap_or(peer);
     // Reached over HTTPS (through Cloudflare): the sign-in cookie only ever goes over HTTPS.
     let https = req.headers.get("x-forwarded-proto").is_some_and(|p| p == "https") || req.headers.get("cf-visitor").is_some_and(|v| v.contains("https"));
     let secure = if https { "; Secure" } else { "" };
@@ -307,6 +314,14 @@ fn connection(stream: TcpStream, agent: &Arc<Agent>, host: &Arc<dyn Host>, enabl
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_tunnel_may_name_the_visitor() {
+        assert!(from_tunnel("127.0.0.1", false) && from_tunnel("::1", false));
+        assert!(!from_tunnel("192.168.1.20", false), "a device on your network is counted by its own address");
+        assert!(!from_tunnel("100.101.102.103", false));
+        assert!(from_tunnel("172.18.0.3", true), "in Docker the tunnel is a neighbour");
+    }
     use crate::testkit::setup;
 
     struct NoHost;

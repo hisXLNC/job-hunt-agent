@@ -1224,6 +1224,27 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
             // Set aside by Claude's reading of the pay (see search.rs: "Pays up to …").
             || j.red_flags.iter().any(|f| f.starts_with("Pays up to"))
     }
+    /// The yearly pay a job was set aside for, as written down then: Claude's reading (its "Pays up
+    /// to $120,000…" flag) or the filter's ("salary up to 120000 a year…").
+    fn pay_it_was_set_aside_for(j: &Job) -> (Option<f64>, Option<f64>) {
+        let number = |t: &str| t.chars().take_while(|c| c.is_ascii_digit() || *c == ',').filter(|c| *c != ',').collect::<String>().parse::<f64>().ok();
+        let claude = j.red_flags.iter().find_map(|f| f.strip_prefix("Pays up to $").and_then(number));
+        let filter = j.reasoning.as_deref().and_then(|r| r.strip_prefix("Filtered out: salary up to ")).and_then(number);
+        (claude, filter)
+    }
+    /// Set aside by the filter for a pay figure that today's reading of the posting no longer finds
+    /// (an hourly rate, or a number that wasn't the pay, taken for the yearly salary by an older
+    /// version): the reason it's offered back although your minimum hasn't come down.
+    pub fn pay_was_misread(j: &Job, profile: &crate::profile::Profile) -> bool {
+        let min = profile.min_salary.unwrap_or(0.0);
+        Self::pay_it_was_set_aside_for(j).1.is_some_and(|x| x < min)
+    }
+    /// Claude read its pay, and that is still under your minimum: it stays set aside. (The posting's
+    /// own fields don't give the figure, so the filter alone would call it a fit.)
+    fn still_pays_too_little(j: &Job, profile: &crate::profile::Profile) -> bool {
+        let min = profile.min_salary.unwrap_or(0.0);
+        Self::pay_it_was_set_aside_for(j).0.is_some_and(|x| x < min)
+    }
     /// The kind of work Claude scored it down for being ("contract" or "permanent"), from its red flag.
     fn scored_down_for_work(j: &Job) -> Option<&'static str> {
         j.red_flags.iter().find_map(|f| { let f = f.to_lowercase(); if f.starts_with("contract role") { Some("contract") } else if f.starts_with("permanent role") { Some("permanent") } else { None } })
@@ -1254,7 +1275,7 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
         let scoring = self.is_running(WANTS_SCORING);
         let back = skipped.into_iter()
             .filter(|j| !(scoring && j.reasoning.as_deref().is_some_and(|r| r.starts_with(BEING_SCORED))))
-            .filter(|j| j.closed_at.is_none() && !j.description.trim().is_empty() && Self::set_aside_for_wants(j) && Self::misfit(j, &profile).is_none()
+            .filter(|j| j.closed_at.is_none() && !j.description.trim().is_empty() && Self::set_aside_for_wants(j) && Self::misfit(j, &profile).is_none() && !Self::still_pays_too_little(j, &profile)
                 && Self::scored_down_for_work(j).is_none_or(|k| takes(k) && !again.contains(&j.id)))
             .collect();
         Ok((out, back))

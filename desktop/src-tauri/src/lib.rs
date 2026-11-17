@@ -985,9 +985,13 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .register_asynchronous_uri_scheme_protocol("jobhunt", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
+            // Only Job Hunt's own window may talk to the app. A job site open in the Apply window
+            // or a reader window gets nothing, whatever its page tries.
+            let own = ctx.webview_label() == "main";
             std::thread::spawn(move || {
                 let req = to_req(&request);
                 let resp = match app.try_state::<Arc<Ctx>>() {
+                    _ if !own => api::Resp::error(403, "Not allowed from this window"),
                     Some(state) => api::handle(&state.agent, &state.host, &req),
                     None => api::Resp::error(503, "Job Hunt is still starting"),
                 };

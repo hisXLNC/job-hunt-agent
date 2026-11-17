@@ -1210,6 +1210,26 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.99.2 (safety items from REVIEW.md, section A)
+
+Fixed: A1 (the `jobhunt` scheme handler in `desktop/src-tauri/src/lib.rs` answers only the webview
+labelled "main"), A2 (`/api/backup/restore` refused when `req.remote`), A4 (`fill.js` `PURE`: the
+browser's own JSON/btoa/TextEncoder/replace captured before page scripts run, the token joined on as
+plain text), A9 (`backup::ALSO_SECRET` + `compact()` on the snapshot; test reads the raw file),
+A11 (`web::from_tunnel`: cf-connecting-ip trusted only from loopback on a PC), A12 (bridge uses
+`read_request_if` with the key header and a 60 s read timeout), A13 (`without_url()` on search
+errors), A14 (`claude::safe_address` at the point of use), A15 (`claude_code::clear_leftovers`),
+A17 (waiting postings link only http/https).
+Also: the user raised the minimum (130k to 150k) and went permanent-only, and was offered 33 jobs
+back. `wants_plan` judged "fits now" with `misfit`, which can't see pay that only Claude read (the
+"Pays up to $X" red flag), so those looked like fits: now `still_pays_too_little` keeps them out.
+Jobs the filter set aside for a figure today's reader no longer finds are still offered, counted as
+`back_misread` and worded as misread pay. Pay brought back by Claude's flag now counts under the
+pay box, not the work box.
+Still open in A: 3, 5, 6, 7, 8, 10, 16. A5 (Claude's Read in the browser task) was left alone on
+purpose: narrowing it needs a real Claude Code run to check form filling still attaches files.
+Not tested on Windows; the window check (A1) could not be run here at all, only compiled.
+
 ## 2.99.1 (Bring back stayed while scoring)
 
 - Cause: jobs being scored keep the reasoning "Brought back by what you want: being scored", which
