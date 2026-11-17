@@ -157,7 +157,7 @@ pub fn looks_personal(address: &str) -> bool {
     let d = domain.to_lowercase();
     // A team's shared mailbox ("fidelitycanadastaffing@", "talentacquisition@"): nobody in particular.
     const TEAM: &[&str] = &["staffing", "recruiting", "recruitment", "talent", "career", "hiring", "acquisition", "humanresources", "applicant", "application", "jobs", "people"];
-    !automated(&u) && !TEAM.iter().any(|w| u.contains(w))
+    !automated(&u) && !TEAM.iter().any(|w| u.contains(w)) && !crate::sources::not_for_applying(address)
         && !ROBOT.iter().any(|r| u == *r || u.starts_with(&format!("{r}.")) || u.starts_with(&format!("{r}-")) || u.starts_with(&format!("{r}+")))
         && !SYSTEMS.iter().any(|s| d == *s || d.ends_with(&format!(".{s}")))
 }

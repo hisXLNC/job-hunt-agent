@@ -40,7 +40,15 @@ pub fn is_job_board(url: &str) -> bool {
      "jobbi", "whatjobs.", "jobsora.", "jobleads.", "trovit.", "jora.", "learn4good.", "recruit.net", "bebee.", "grabjobs.", "jobilize.",
      "appcast.", "jobs2careers.", "talentify.", "jobtome.", "jobisjob.", "jobg8.", "myjobhelper.", "jobget.", "jobvertise.", "careerbeacon.",
      "jobillico.", "jobboom.", "allthetopbananas.", "tiptopjob.", "joblift.", "jobsinnetwork.", "snagajob.", "nexxt.", "jobcase."]
-        .iter().any(|b| host.contains(b))
+        .iter().any(|b| match b.strip_suffix('.') {
+            // "google.": Google's search, not careers.google.com.
+            Some("google") => host.starts_with("google.") || host.starts_with("www.google."),
+            // "linkedin.": one of the host's own parts ("ca.linkedin.com").
+            Some(name) => host.split('.').any(|l| l == name),
+            // "jobs.ca": that site or a part of it, not "jobs.canadiantire.ca".
+            None if b.contains('.') => host == *b || host.ends_with(&format!(".{b}")),
+            None => host.split('.').any(|l| l.starts_with(b)),
+        })
 }
 
 /// Where a job board's link ends up, when that is the employer's own page (their site or the
@@ -115,15 +123,38 @@ pub fn find_apply_email(text: &str) -> Option<String> {
     for m in HINT.find_iter(text) {
         let lo = text.floor_char_boundary(m.start().saturating_sub(200));
         let hi = text.ceil_char_boundary((m.end() + 200).min(text.len()));
-        if let Some(e) = EMAIL.find(&text[lo..hi]) {
+        // The address nearest the words that ask for it, and never a mailbox for something else
+        // (accommodation requests, privacy, support): an application sent there goes nowhere.
+        let at = m.start() - lo;
+        let near = EMAIL.find_iter(&text[lo..hi])
+            .filter(|e| !not_for_applying(e.as_str()))
+            .min_by_key(|e| if e.start() >= at { e.start() - at } else { (at - e.end()) * 2 });
+        if let Some(e) = near {
             return Some(e.as_str().trim_end_matches('.').to_string());
         }
     }
     None
 }
 
+/// A mailbox that is for something other than applying or a person: accommodation requests,
+/// privacy, support, the press.
+pub fn not_for_applying(address: &str) -> bool {
+    let user = address.split('@').next().unwrap_or("").to_lowercase();
+    ["accommod", "accessib", "privacy", "legal", "dpo", "support", "helpdesk", "press", "media", "sales", "abuse", "reply", "ethics", "compliance", "security", "eeo", "billing", "marketing", "webmaster", "feedback"]
+        .iter().any(|w| user.contains(w)) || ["ada", "office", "admin", "contact", "help"].contains(&user.as_str())
+}
+
+/// "Remote" as a place: a word of its own, not "Remote Sensing Analyst" or "not remote".
 pub(crate) fn is_remote(parts: &[&str]) -> bool {
-    parts.iter().any(|p| p.to_lowercase().contains("remote"))
+    parts.iter().any(|p| {
+        let t = p.to_lowercase();
+        t.match_indices("remote").any(|(i, _)| {
+            let (before, after) = (&t[..i], &t[i + 6..]);
+            !before.chars().next_back().is_some_and(|c| c.is_alphanumeric()) && !after.chars().next().is_some_and(|c| c.is_alphanumeric())
+                && !["sensing", "control", "site", "monitoring", "support technician"].iter().any(|w| after.trim_start().starts_with(w))
+                && !before.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).rev().take(2).any(|w| ["not", "non", "no", "isn"].contains(&w))
+        })
+    })
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -178,7 +209,7 @@ pub fn salary_from_text(text: &str) -> Option<(String, Option<f64>)> {
         if (20_000.0..=2_000_000.0).contains(&hi) && lo >= 10_000.0 {
             return Some((format!("${}–${}", fmt(lo), fmt(hi)), Some(hi)));
         }
-        if hi < 500.0 && (after.contains("hour") || after.contains("/hr") || after.contains("hr")) {
+        if hi < 500.0 && (after.contains("hour") || after.contains("/hr") || after.contains(" hr")) {
             return Some((format!("${}–${}/hour", lo, hi), None));
         }
     }
@@ -188,7 +219,8 @@ pub fn salary_from_text(text: &str) -> Option<(String, Option<f64>)> {
 /// Pay in other currencies, before or after the numbers: "KWD 800 – 1,200 per month", "£45,000 - £55,000",
 /// "AED 15k-20k monthly". Monthly pay counts twelve times for the yearly maximum.
 fn other_currency(text: &str) -> Option<(String, Option<f64>)> {
-    const CUR: &str = r"(KWD|KD|AED|SAR|QAR|BHD|OMR|EGP|JOD|GBP|EUR|CHF|AUD|NZD|SGD|INR|ZAR|£|€)";
+    // (Codes in capitals and as words of their own: "Eur" in "European" and "aud" in "audience" aren't.)
+    const CUR: &str = r"((?-i:\b(?:KWD|KD|AED|SAR|QAR|BHD|OMR|EGP|JOD|GBP|EUR|CHF|AUD|NZD|SGD|INR|ZAR)\b)|£|€)";
     static RANGE: Lazy<Regex> = Lazy::new(|| {
         Regex::new(&format!(r"(?i)(?:{CUR}\s?)?(\d{{1,3}}(?:,\d{{3}})+|\d+(?:\.\d+)?)\s?(k)?\s*(?:-|–|—|to)\s*(?:{CUR}\s?)?(\d{{1,3}}(?:,\d{{3}})+|\d+(?:\.\d+)?)\s?(k)?\s*{CUR}?([^.\n]{{0,30}})")).unwrap()
     });
@@ -297,6 +329,16 @@ pub fn employment_type_cached(id: &str, title: &str, text: &str) -> Option<Strin
     v
 }
 
+/// A source's top pay as a yearly amount, from the period it names ("per-hour-wage", "MONTH",
+/// "year", or nothing: a year). None for a period it doesn't know, or a "yearly" amount too small
+/// to be one (an hourly rate without its label).
+pub fn yearly_top(top: Option<f64>, period: &str) -> Option<f64> {
+    let p = period.to_lowercase();
+    let v = top?;
+    let yearly = if p.contains("hour") { v * 2080.0 } else if p.contains("day") || p.contains("daily") { v * 260.0 } else if p.contains("week") { v * 52.0 } else if p.contains("month") { v * 12.0 } else if p.is_empty() || p.contains("year") || p.contains("annual") { v } else { return None };
+    (yearly >= 10_000.0).then_some(yearly)
+}
+
 /// The most a role pays a year, for your minimum-salary filter: the top of its range. None when it
 /// doesn't say: no yearly figure, or only a starting point ("From $90,000", "$90,000+", "starting
 /// at…"), which mustn't count as the most it pays.
@@ -316,6 +358,7 @@ pub fn pay_max_in(text: &str) -> Option<f64> {
     static PAY: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)(?:CA\$|C\$|CAD\s*\$?|US\$|USD\s*\$?|\$)\s?\d[\d,]*(?:\.\d+)?\s?[kK]?(?:\s*(?:-|\u{2013}|\u{2014}|to|and)\s*(?:CA\$|C\$|CAD\s*\$?|US\$|USD\s*\$?|\$)?\s?\d[\d,]*(?:\.\d+)?\s?[kK]?)?").unwrap());
     static HOURLY: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*(?:/\s*h(?:ou)?r|per\s+hour|an\s+hour|hourly|/\s*hour|\s*hr\b)").unwrap());
     static NUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d[\d,]*(?:\.\d+)?").unwrap());
+    static MONTHLY: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^\s*(?:/\s*mo(?:nth)?\b|per\s+month|a\s+month|monthly)").unwrap());
     for m in PAY.find_iter(text) {
         let after: String = text[m.end()..].chars().take(20).collect();
         let before: String = text[..m.start()].chars().rev().take(40).collect::<String>().chars().rev().collect::<String>().to_lowercase();
@@ -328,7 +371,23 @@ pub fn pay_max_in(text: &str) -> Option<f64> {
         }
         // A bonus, a budget or revenue isn't the pay: only amounts a salary could be.
         let near = format!("{} {}", before.chars().rev().take(15).collect::<String>().chars().rev().collect::<String>(), after.to_lowercase());
-        if ["bonus", "revenue", "budget", "million", "portfolio", "spend", "funding", "contract", "savings"].iter().any(|w| near.contains(w)) {
+        let wide = format!("{} {}", before.chars().rev().take(30).collect::<String>().chars().rev().collect::<String>(), after.to_lowercase());
+        if ["bonus", "revenue", "budget", "million", "portfolio", "spend", "funding", "contract", "savings"].iter().any(|w| near.contains(w))
+            || ["relocation", "allowance", "stipend", "tuition", "reimburs", "referral", "equity", "billion", "sign-on", "signing", "grant", "credit", "scholarship", "401", "rrsp", "discount", "voucher"].iter().any(|w| wide.contains(w)) {
+            continue;
+        }
+        // One amount on its own is the pay only when the words around it say so ("salary of
+        // $95,000", "$95,000 a year"); a range is taken as it is.
+        static CUE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)salar|\bpay\b|\bpays\b|\bpaid\b|compensation|\bbase\b|\bwage|\bearn|\brate\b|annual|per year|a year|/\s?ye?a?r|yearly|per annum|\bote\b|\brange\b").unwrap());
+        let lone = NUM.find_iter(m.as_str()).count() < 2;
+        if lone && !CUE.is_match(&format!("{before} {after}")) {
+            continue;
+        }
+        if MONTHLY.is_match(&after) {
+            let top = NUM.find_iter(m.as_str()).filter_map(|n| n.as_str().replace(',', "").parse::<f64>().ok()).filter(|v| (500.0..=100_000.0).contains(v)).fold(None, |a: Option<f64>, v| Some(a.map_or(v, |a| a.max(v))));
+            if let Some(mo) = top {
+                return Some(mo * 12.0);
+            }
             continue;
         }
         // With the words just before it: "From $90,000" is where pay starts, not the most it pays.
@@ -348,7 +407,9 @@ pub fn salary_range(text: &str) -> Option<(f64, f64)> {
     if t.contains("hour") || t.contains("/hr") || t.contains(" hr") {
         return None;
     }
-    let k_all = t.contains('k') && !t.contains(',');
+    // "120–150K": the K on one number counts for the other too. A k elsewhere ("weekly") doesn't.
+    static K: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d\s?k\b").unwrap());
+    let k_all = K.is_match(&t) && !t.contains(',');
     let nums: Vec<f64> = NUM.captures_iter(&t)
         .filter_map(|c| {
             let v = c[1].replace(',', "").parse::<f64>().ok()?;
@@ -373,7 +434,7 @@ pub fn deadline_from_text(text: &str, today: chrono::NaiveDate) -> Option<chrono
         Regex::new(r"(?i)(apply by|apply before|applications? (?:close|due|deadline)|closing date|closes on|close date|posting (?:end|close)s?(?: date)?|deadline(?: to apply| for applications)?|accepting applications until|open until)").unwrap()
     });
     static ISO: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(20\d\d)-(\d{1,2})-(\d{1,2})\b").unwrap());
-    static MDY: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(20\d\d))?").unwrap());
+    static MDY: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(20\d\d))?").unwrap());
     static DMY: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?(?:\s+(20\d\d))?").unwrap());
     let month = |m: &str| ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].iter().position(|x| m.to_lowercase().starts_with(x)).map(|i| i as u32 + 1);
     let fits = |d: NaiveDate| d >= today - chrono::Duration::days(7) && d <= today + chrono::Duration::days(365);
@@ -457,7 +518,7 @@ pub fn parse_lever(company: &str, body: &Value) -> Vec<Posting> {
             description: desc.trim().to_string(),
             posted_at: created,
             salary: fmt_salary(lo, hi, &s(&sal, "currency")),
-            salary_max: hi,
+            salary_max: yearly_top(hi, &s(&sal, "interval")),
         });
     }
     out
@@ -504,21 +565,22 @@ pub fn parse_adzuna(body: &Value, currency: &str) -> Vec<Posting> {
         let title = html_to_text(&s(j, "title"));
         let (lo, hi) = (j.get("salary_min").and_then(|x| x.as_f64()), j.get("salary_max").and_then(|x| x.as_f64()));
         let company = j.get("company").map(|c| s(c, "display_name")).filter(|x| !x.is_empty()).unwrap_or_else(|| "Unknown".into());
-        let head: String = desc.chars().take(300).collect();
+        let predicted = j.get("salary_is_predicted").is_some_and(|x| x.as_str() == Some("1") || x.as_i64() == Some(1) || x.as_bool() == Some(true));
         out.push(Posting {
             apply_url: None,
             source: "adzuna".into(),
             external_id: id_str(j).trim_matches('"').to_string(),
             company: unescape(&company),
-            remote: is_remote(&[&loc, &title, &head]),
+            remote: is_remote(&[&loc, &title]),
             title,
             location: loc,
             url: s(j, "redirect_url"),
             apply_email: find_apply_email(&desc),
             description: desc,
             posted_at: Some(s(j, "created")).filter(|x| !x.is_empty()),
-            salary: fmt_salary(lo, hi, currency),
-            salary_max: hi,
+            // Adzuna's own estimate isn't the posting's pay: not shown as it, and never filtered on.
+            salary: if predicted { None } else { fmt_salary(lo, hi, currency) },
+            salary_max: if predicted { None } else { yearly_top(hi, "") },
         });
     }
     out
@@ -1763,7 +1825,7 @@ pub fn parse_freehire(body: &Value) -> Vec<Posting> {
             apply_email: find_apply_email(&desc),
             description: desc.trim().to_string(),
             salary,
-            salary_max: hi,
+            salary_max: yearly_top(hi, &s(&e, "salary_period")),
             posted_at: Some(s(j, "posted_at")).filter(|x| !x.is_empty()),
             title,
             company,
@@ -2660,6 +2722,38 @@ https://www.linkedin.com/comm/jobs/view/4012345678/ (again)\nhttps://www.linkedi
         assert_eq!(pay_max_in("Manage a $2,000,000 budget. Salary: CAD 120K–150K"), Some(150000.0));
         assert_eq!(pay_max_in("Starting at $90,000"), None);
         assert_eq!(pay_max_in("Competitive pay and benefits"), None);
+        // An amount that isn't the pay isn't taken for it, and a k elsewhere doesn't make thousands.
+        assert_eq!(pay_max_in("Benefits include a $50 weekly lunch credit."), None);
+        assert_eq!(pay_max_in("Tuition reimbursement up to $10,000 per year."), None);
+        assert_eq!(pay_max_in("We offer a $15,000 relocation allowance."), None);
+        assert_eq!(pay_max_in("A $500 work-from-home stipend."), None);
+        assert_eq!(pay_max_in("Join a $40 billion bank."), None);
+        assert_eq!(pay_max_in("You'll manage 12 people. We raised $95,000 for charity."), None, "one amount with no word about pay");
+        assert_eq!(pay_max_in("The salary for this role is $95,000."), Some(95000.0));
+        assert_eq!(pay_max_in("Pay: $8,000 - $9,500 per month"), Some(9500.0 * 12.0));
+        assert_eq!(salary_range("up to $50 weekly"), None);
+        assert_eq!(salary_range("120–150K"), Some((120000.0, 150000.0)));
+        // Currency codes are words in capitals: not the start of "European" or "audience".
+        assert_eq!(salary_from_text("We serve 10,000 to 50,000 European customers"), None);
+        assert_eq!(salary_from_text("EUR 45,000 - 55,000").unwrap().1, Some(55000.0));
+        // A source's top pay by its period; an unlabelled small "yearly" amount isn't one.
+        assert_eq!(yearly_top(Some(55.0), "per-hour-wage"), Some(55.0 * 2080.0));
+        assert_eq!(yearly_top(Some(9000.0), "MONTH"), Some(108000.0));
+        assert_eq!(yearly_top(Some(120000.0), ""), Some(120000.0));
+        assert_eq!(yearly_top(Some(55.0), ""), None);
+        // The last day to apply, day first.
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        assert_eq!(deadline_from_text("Applications close 31 Oct 2026", today), chrono::NaiveDate::from_ymd_opt(2026, 10, 31));
+        assert_eq!(deadline_from_text("Apply by October 31, 2026", today), chrono::NaiveDate::from_ymd_opt(2026, 10, 31));
+        // A company's own careers site isn't a job board because its address starts like one.
+        assert!(is_job_board("https://www.jobs.ca/x") && is_job_board("https://ca.linkedin.com/jobs/view/1") && is_job_board("https://www.google.com/search?q=jobs"));
+        assert!(!is_job_board("https://jobs.canadiantire.ca/job/1") && !is_job_board("https://careers.google.com/jobs/1") && !is_job_board("https://jobs.toptalent.com/1"));
+        // Remote as a place.
+        assert!(is_remote(&["Remote - Canada"]) && is_remote(&["Toronto (Remote)"]));
+        assert!(!is_remote(&["Remote Sensing Analyst"]) && !is_remote(&["This is not a remote position"]));
+        // Where to send an application: never the accommodation or privacy mailbox.
+        assert_eq!(find_apply_email("Please submit your application through our careers portal. If you need accommodation, contact accessibility@acme.com."), None);
+        assert_eq!(find_apply_email("Questions? privacy@acme.com. To apply, email your resume to jane.doe@acme.com today."), Some("jane.doe@acme.com".into()));
         assert_eq!(salary_range("Competitive"), None);
     }
 

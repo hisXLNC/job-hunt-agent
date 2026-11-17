@@ -1801,6 +1801,24 @@ fn deadlines_answers_offers_and_contacts() {
     assert_eq!(s.agent.playbook(&job)["kind"], "private");
 }
 
+/// Postings handed in (a job alert email the inbox check read) aren't the day's search: the
+/// scheduled one still runs. A job you chose yourself is never set aside by your minimum salary.
+#[test]
+fn handed_in_postings_are_not_the_days_search_and_chosen_jobs_stay() {
+    let s = setup();
+    let mut a = posting("Technical Program Manager", "1");
+    a.description.push_str("\nThe salary range for this role is $80,000 - $90,000 a year.");
+    s.agent.search(Some(vec![a, posting("Senior Program Manager", "2")])).unwrap();
+    assert_eq!(s.agent.secret("last.search"), "", "no search of your sources has run");
+    assert!(!s.agent.secret("last.report").is_empty(), "what it scored is still shown");
+    let mut p = s.agent.profile();
+    p.min_salary = Some(150_000.0);
+    s.agent.save_profile(&p).unwrap();
+    assert_eq!(s.agent.wants_plan().unwrap().0.len(), 1);
+    s.agent.db().log(Some("test:1"), "chosen", "you sent it to Job Hunt").unwrap();
+    assert_eq!(s.agent.wants_plan().unwrap().0.len(), 0, "one you chose stays");
+}
+
 #[test]
 fn a_new_minimum_salary_sets_jobs_aside_and_brings_them_back() {
     let s = setup();

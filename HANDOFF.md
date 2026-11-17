@@ -1210,6 +1210,39 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.98.0 (a full review; the first 44 fixes)
+
+- `REVIEW.md` (repo root) lists every finding of a seven-part review of all the code, each marked
+  `fixed 2.98.0`, `open`, `unverified` or `decide`. Work from it; update the status when one is fixed.
+  Nothing in sections A (safety), D (release tools) or E (speed) is fixed yet.
+- Lock order: `lifecycle::work` copies `FAILED` and lets go before `is_running`; `claim` and
+  `claim_owned` let go of `running` before `lifecycle::started`.
+- Pay: `sources::yearly_top(top, period)` for Lever (`interval`), FreeHire, page data and Adzuna
+  (`salary_is_predicted` ignored); `pay_max_in` skips amounts near relocation/tuition/stipend etc.,
+  needs a pay word for a lone amount, converts monthly; `salary_range` takes K only from a number;
+  currency codes are whole words in capitals; `below_min_salary` ignores a "yearly" top under 10,000.
+- `filters::has_word_from` for skip words; `work_kind` skips "Contract and …" titles.
+- `sources::not_for_applying` (accommodation, privacy, support… mailboxes) used by
+  `find_apply_email` and `recruiters::looks_personal`; `is_remote`, `is_job_board`, the deadline
+  regex.
+- Email: `email_failed` (three tries, key `inbox.fail:<id>`); no backwards moves from an offer.
+  `search.failed` / `inbox.failed` back-off in `due_tasks`, set in `run_in_background`, with the
+  same error said once in six hours (`*.failed.said`).
+- `last.search` is written only by a search of your sources; `last.report` by every run.
+- `check_postings`: approved, ready, saved first, then the Queue from `check.from`, 80 a day.
+  `mark_closed` re-reads the status. `approve` claims `approve:<id>`.
+- Status is re-read after a wait for Claude in `rescore_jobs`, `score_brought_back`,
+  `score_anyway` and the CV update's re-tailoring. `wants_plan` leaves `chosen` jobs; `add_found`
+  always logs "chosen". "Pays up to" red flags count as set aside for pay.
+- `merge_duplicates` skips different requisitions. `connect` clears the limit when the engine
+  changes (`engine.was`); an answer clears it; `is_limit` matches the limit's phrases only.
+- `fill::job_for_page`: whole words, not any company's usual first word, never another's board.
+- Screens: per-form autosave timers and one save at a time; job page and Queue redraws skip while
+  you type or tick; filters don't set `pageDirty`; `fmtDate` and `deadlineTag` use local days.
+- Tested: 267 core tests (new: pay, skip words, limit phrases, the wrong-bank form, alert search
+  and chosen jobs), every screen opened in a browser with no errors. Not tested: the lock-order fix
+  under real load, real email, real boards.
+
 ## 2.97.3 (the set-aside line never showed: fixed)
 
 - Cause: `/api/wants/plan` sat in the POST half of `route_on` (core/src/api.rs) while the page

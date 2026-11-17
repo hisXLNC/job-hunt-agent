@@ -87,7 +87,7 @@ function applyAllFilters(save = true) {
     if (ok) shown++;
   }
   const total = [...table.tBodies[0].rows].filter(r => r.dataset.status !== 'dismissed').length;
-  $('#allCount').textContent = v.stage === 'dismissed' ? `${shown} not interested` : `${shown < total ? `${shown} of ` : ''}${total} jobs`;
+  $('#allCount').textContent = v.stage === 'dismissed' ? `${shown} not interested` : `${shown < total ? `${shown} of ` : ''}${total} ${total === 1 ? 'job' : 'jobs'}`;
   const col = Number(v.sort || 5);
   if (!sortState['t-all'] || sortState['t-all'].col !== col || save) {
     sortState['t-all'] = { col, dir: [0, 5].includes(col) ? 'asc' : 'desc' };

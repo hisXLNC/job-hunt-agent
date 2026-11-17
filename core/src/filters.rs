@@ -62,7 +62,7 @@ pub fn prefilter(p: &Posting, profile: &Profile) -> Option<String> {
         return Some("excluded company".into());
     }
     for kw in &profile.exclude_title_keywords {
-        if !kw.trim().is_empty() && title.contains(&kw.trim().to_lowercase()) {
+        if !kw.trim().is_empty() && has_word_from(&title, &kw.trim().to_lowercase()) {
             return Some(format!("title contains “{}”", kw.trim()));
         }
     }
@@ -108,7 +108,8 @@ pub fn prefilter(p: &Posting, profile: &Profile) -> Option<String> {
 /// low-paid job isn't scored just because the job site didn't fill in the salary field.
 pub fn below_min_salary(p: &Posting, profile: &Profile) -> Option<String> {
     let min = profile.min_salary.filter(|m| *m > 0.0)?;
-    let max = p.salary_max
+    // (A "yearly" top under 10,000 is an hourly or monthly rate that lost its label: not counted.)
+    let max = p.salary_max.filter(|m| *m >= 10_000.0)
         .or_else(|| p.salary.as_deref().and_then(crate::sources::pay_max_in))
         .or_else(|| crate::sources::pay_max_in(&p.description.chars().take(20000).collect::<String>()))?;
     (max < min).then(|| format!("salary up to {max:.0} a year, below your minimum of {min:.0}"))
@@ -139,7 +140,9 @@ pub fn work_kind(title: &str, text: &str) -> Option<(&'static str, String)> {
     };
     if let Some(m) = TITLE.find(title) {
         let rest = title[m.end()..].trim_start().to_lowercase();
-        if !ABOUT.iter().any(|a| rest.starts_with(a)) && !m.as_str().eq_ignore_ascii_case("contracts") {
+        // ("Contract and Procurement Manager": one of two things the role looks after.)
+        let listed = ["and ", "& ", ", ", "/"].iter().any(|a| rest.starts_with(a)) && m.as_str().to_lowercase().starts_with("contract");
+        if !listed && !ABOUT.iter().any(|a| rest.starts_with(a)) && !m.as_str().eq_ignore_ascii_case("contracts") {
             return Some(named(m.as_str()));
         }
     }
@@ -170,6 +173,17 @@ pub fn wrong_work(p: &Posting, profile: &Profile) -> Option<String> {
     }
     let (kind, a) = work_kind(&p.title, &p.description)?;
     (kind != want).then(|| format!("not {want}: {a} role, and you want {want} roles only"))
+}
+
+/// Whether `hay` has `word` as a word of its own, or with a usual ending: "intern" is in "Summer
+/// Intern", "Interns" and "Internship", not in "Internal Audit" or "International Tax".
+pub fn has_word_from(hay: &str, word: &str) -> bool {
+    let w = |c: char| c.is_alphanumeric();
+    hay.match_indices(word).any(|(i, _)| {
+        if hay[..i].chars().next_back().is_some_and(w) { return false; }
+        let rest: String = hay[i + word.len()..].chars().take_while(|c| w(*c)).collect();
+        matches!(rest.as_str(), "" | "s" | "es" | "ship" | "ships")
+    })
 }
 
 /// Whether `hay` has `words` as whole words: "uk" is in "London, UK" but not in "Milwaukee".
@@ -262,6 +276,11 @@ mod tests {
     #[test]
     fn the_kind_of_work_only_when_the_posting_plainly_says() {
         let k = |title: &str, text: &str| work_kind(title, text).map(|x| x.0);
+        assert_eq!(k("Contract and Procurement Manager", ""), None, "contracts are what the role looks after");
+        // A skip word is a word of its own (with its usual endings), not the start of another.
+        assert!(has_word_from("summer intern", "intern") && has_word_from("internship, finance", "intern") && has_word_from("interns", "intern"));
+        assert!(!has_word_from("internal audit manager", "intern") && !has_word_from("international tax manager", "intern"));
+        assert!(has_word_from("entry level analyst", "entry level") && !has_word_from("re-entry levelling", "entry level"));
         assert_eq!(k("Project Manager (Contract)", ""), Some("contract"));
         assert_eq!(k("Project Manager", "This is a 12-month contract with possible extension."), Some("contract"));
         assert_eq!(k("Project Manager", "Employment Type: Contract"), Some("contract"));

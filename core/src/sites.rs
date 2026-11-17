@@ -251,7 +251,11 @@ fn ld_pay(j: &Value) -> Option<(String, Option<f64>)> {
     let max = max?;
     let money = |x: f64| format!("${}", crate::util::thousands(x.round() as i64));
     let t = match min.filter(|m| *m != max) { Some(m) => format!("{}–{}", money(m), money(max)), None => money(max) };
-    if unit == "HOUR" { Some((format!("{t}/hour"), None)) } else { Some((t, Some(max))) }
+    match unit.as_str() {
+        "HOUR" => Some((format!("{t}/hour"), None)),
+        "MONTH" | "WEEK" | "DAY" => Some((format!("{t}/{}", unit.to_lowercase()), crate::sources::yearly_top(Some(max), &unit))),
+        _ => Some((t, crate::sources::yearly_top(Some(max), ""))),
+    }
 }
 
 fn id_from_url(u: &str) -> String {

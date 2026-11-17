@@ -255,22 +255,22 @@ function stepHtml(o, step, tracked) {
      <button class="btn ghost sm" data-act="stage" data-status="applied" data-job="${id(j)}" data-from="approved" title="Already submitted it">Mark applied</button>
      <button class="btn ghost sm icon-only" data-act="stage" data-status="dismissed" data-job="${id(j)}" data-from="approved" title="Not interested after all (the pay, say)">${svg('close')}</button>`)).join('')]);
   if (o.quiet?.length) groups.push([`Quiet for 4+ weeks <button class="btn sm" data-act="closeQuiet" data-ids="${esc(JSON.stringify(o.quiet.map(j => j.id)))}" style="margin-left:8px">Close ${o.quiet.length === 1 ? 'it' : `all ${o.quiet.length}`} as No response</button>`,
-    o.quiet.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}, no reply`,
+    o.quiet.map(j => row(j, `applied ${esc(ago(j.applied_at))}, no reply`,
       `<button class="btn sm" data-act="stage" data-status="no_response" data-job="${id(j)}" data-from="applied">No response</button>`)).join('')]);
-  if (o.reach_out?.length) groups.push(['Message the recruiter or hiring team', o.reach_out.slice(0, 6).map(j => row(j, j.applied_at ? `applied ${esc(ago(j.applied_at))}. A short note within 1 to 3 days helps` : 'you know who to write to there: a short note the day you apply helps most',
+  if (o.reach_out?.length) groups.push(['Message the recruiter or hiring team', o.reach_out.map(j => row(j, j.applied_at ? `applied ${esc(ago(j.applied_at))}. A short note within 1 to 3 days helps` : 'you know who to write to there: a short note the day you apply helps most',
     `${j.finding ? '<span class="muted small"><span class="spin" data-kind="outreach"></span>Finding them…</span>' : j.people ? `<a class="btn sm" href="#job/${encodeURIComponent(j.id)}" data-tab-to="people">Write a note</a>`
       : `<button class="btn sm" data-act="findPeople" data-job="${id(j)}" title="Job Hunt looks on the posting, LinkedIn and the company's site for the recruiter or hiring manager, and writes the note for you to read and send">Find them and write</button>`}
      <button class="btn ghost sm" data-act="seen" data-what="reach" data-job="${id(j)}" data-done="Skipped." title="No note for this one: take it off this list">Skip</button>`)).join('')]);
-  if (o.turned_down?.length) groups.push(['Turned down: read it, reply if a person wrote', o.turned_down.slice(0, 8).map(t => row(t.job, `they said no ${esc(ago(t.at))}${t.said ? `: ${esc(t.said)}` : ''}${t.stale_follow_up ? ' <span style="color:var(--warn)">A follow-up drafted before this is still in your Gmail drafts: delete it.</span>' : ''}`,
+  if (o.turned_down?.length) groups.push(['Turned down: read it, reply if a person wrote', o.turned_down.map(t => row(t.job, `they said no ${esc(ago(t.at))}${t.said ? `: ${esc(t.said)}` : ''}${t.stale_follow_up ? ' <span style="color:var(--warn)">A follow-up drafted before this is still in your Gmail drafts: delete it.</span>' : ''}`,
     `<a class="btn sm" href="#job/${encodeURIComponent(t.job.id)}">Draft a reply</a>
      <button class="btn ghost sm" data-act="seen" data-what="turned" data-job="${id(t.job)}" title="Take it off this list">Got it</button>`)).join('')]);
-  if (o.drafts_waiting?.length) groups.push(['In your Gmail drafts: read and send', o.drafts_waiting.slice(0, 8).map(d => row(d.job, `follow-up written ${esc(ago(d.at))}${d.to ? `, to ${esc(d.to)}` : ''}. Nothing is sent until you send it`,
+  if (o.drafts_waiting?.length) groups.push(['In your Gmail drafts: read and send', o.drafts_waiting.map(d => row(d.job, `follow-up written ${esc(ago(d.at))}${d.to ? `, to ${esc(d.to)}` : ''}. Nothing is sent until you send it`,
     `<a class="btn sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Open Gmail drafts</a>
      <button class="btn ghost sm" data-act="seen" data-what="draft" data-job="${id(d.job)}" title="Sent or deleted: take it off this list">Done</button>`)).join('')]);
-  if (o.contact_follow_ups?.length) groups.push(['No reply from the recruiter: follow up once', o.contact_follow_ups.slice(0, 6).map(f => row(f.job, `messaged ${esc(f.name)} ${esc(ago(f.sent_at))}${f.late ? '. Follow up now or let it go' : ''}`,
+  if (o.contact_follow_ups?.length) groups.push(['No reply from the recruiter: follow up once', o.contact_follow_ups.map(f => row(f.job, `messaged ${esc(f.name)} ${esc(ago(f.sent_at))}${f.late ? '. Follow up now or let it go' : ''}`,
     `<a class="btn sm" href="#job/${encodeURIComponent(f.job.id)}" data-tab-to="people">Write the follow-up</a>
      <button class="btn ghost sm" data-act="seen" data-what="contact" data-job="${id(f.job)}" data-done="Skipped." title="No follow-up for this one: take it off this list">Skip</button>`)).join('')]);
-  if (o.follow_ups?.length) groups.push([`No reply yet: follow up${o.follow_ups.length > 1 ? ` <button class="btn primary sm" data-act="followUpAll" data-ids="${esc(JSON.stringify(o.follow_ups.slice(0, 6).map(j => j.id)))}" style="margin-left:8px" title="Job Hunt writes a short follow-up for each; they're saved as Gmail drafts (or on each job) for you to read and send">Write all ${Math.min(6, o.follow_ups.length)}</button>` : ''}`, o.follow_ups.slice(0, 6).map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
+  if (o.follow_ups?.length) groups.push([`No reply yet: follow up${o.follow_ups.length > 1 ? ` <button class="btn primary sm" data-act="followUpAll" data-ids="${esc(JSON.stringify(o.follow_ups.slice(0, 6).map(j => j.id)))}" style="margin-left:8px" title="Job Hunt writes a short follow-up for each; they're saved as Gmail drafts (or on each job) for you to read and send">Write all ${Math.min(6, o.follow_ups.length)}</button>` : ''}`, o.follow_ups.map(j => row(j, `applied ${esc(ago(j.applied_at))}`,
     `<button class="btn sm" data-act="followUp" data-job="${id(j)}">Write follow-up</button>
      <button class="btn ghost sm" data-act="seen" data-what="followup" data-job="${id(j)}" data-done="Skipped." title="No follow-up for this one: take it off this list">Skip</button>`)).join('')]);
   // Each step's groups; the ones above were made for all of them.
@@ -422,7 +422,7 @@ setInterval(async () => {
   updateSearchCtl();
   const card = $('#progressCard');
   if (card && overview.progress) card.outerHTML = progressHtml(overview.progress);
-  else if (card || !overview.progress) { if (location.hash === '' || location.hash.startsWith('#overview')) route(); }
+  else if (card || !overview.progress) { if ((location.hash === '' || location.hash.startsWith('#overview')) && !pageDirty && !$('.modal-back') && !document.querySelector('.page [data-pick]:checked, .page [data-appr]:checked')) route(); } // (what you've ticked or typed stays)
 }, 1500);
 
 /** A little Markdown: ## headings, - bullets, **bold**. */

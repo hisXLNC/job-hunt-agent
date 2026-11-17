@@ -59,6 +59,7 @@ function leadHtml(l, ready) {
     </section>`;
 }
 
+let leadsTimer;
 async function showLeads() {
   const d = await api('/api/leads');
   const open = d.leads.filter(l => l.status !== 'aside' && !l.wrote), wrote = d.leads.filter(l => l.status !== 'aside' && l.wrote), aside = d.leads.filter(l => l.status === 'aside');
@@ -90,7 +91,8 @@ async function showLeads() {
       ${unread && d.ready ? `<span class="grow"></span><button class="btn sm" data-act="leadsRead">Read ${unread} against my CV</button>` : ''}</div>` : ''}
     ${list.map(l => leadHtml(l, d.ready)).join('') || `<section class="card decision done"><div class="dtop"><span class="bigicon good">${svg('check')}</span><div class="grow"><p class="kicker">${d.leads.length ? 'Nothing here' : 'No leads yet'}</p>
       <h2>${d.leads.length ? 'No leads waiting for you' : 'Start with a LinkedIn search above'}</h2><div class="facts"><span>${d.leads.length ? 'New ones come in when you send posts from your browser or look on the web.' : 'Each post that says someone is hiring comes here with how well you fit, where you\'d help, and who to write to.'}</span></div></div></div></section>`}`);
-  if (d.searching) setTimeout(() => { if (location.hash === '#leads' && !pageDirty) route(); }, 8000);
+  clearTimeout(leadsTimer); // one at a time: each draw used to add another, for good
+  if (d.searching) leadsTimer = setTimeout(() => { if (location.hash === '#leads' && !pageDirty) route(); }, 8000);
 }
 
 /** What the Leads tab's buttons do. */

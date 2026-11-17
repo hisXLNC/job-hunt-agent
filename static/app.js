@@ -118,7 +118,8 @@ function dialog({ title, text = '', input, placeholder = '', buttons }) {
     const pick = i => done(buttons[i].value == null ? null : { value: buttons[i].value, text: field ? field.value.trim() : '' });
     const key = e => {
       if (e.key === 'Escape') done(null);
-      if (e.key === 'Enter') { const d = buttons.findIndex(b => b.kind === 'primary'); if (d >= 0) pick(d); }
+      // Enter on one of the dialog's own buttons presses that one (Cancel, say), not the main one.
+      if (e.key === 'Enter') { if (e.target.closest?.('[data-i]') && back.contains(e.target)) return; e.preventDefault(); const d = buttons.findIndex(b => b.kind === 'primary'); if (d >= 0) pick(d); }
     };
     back.addEventListener('click', e => { if (e.target === back) done(null); const b = e.target.closest('[data-i]'); if (b) pick(Number(b.dataset.i)); });
     document.addEventListener('keydown', key);
@@ -293,7 +294,7 @@ const CATEGORY = {
 let overview = null;
 
 // ---- formatting ----
-const fmtDate = iso => iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+const fmtDate = iso => iso ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + 'T12:00:00' : iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 /** A posting's date as the source gave it (ISO time, Unix time, or words), shown like Found. */
 /** When the job site says the posting went up, as { at, dateOnly }, or null when it doesn't say.
  *  Mirrors posted_date on the server: Unix times, ISO times, and dates (2026-10-16 or 20261016). */
@@ -475,7 +476,9 @@ const stagePill = s => `<span class="pill ${esc(s)}">${esc(STAGES[s] || s)}</spa
 /** When the posting stops taking applications, if it says; red when it's two days or less away. */
 function deadlineTag(j) {
   if (!j.deadline || j.closed_at || expiredWhy(j) || !['queued', 'ready', 'approved', 'skipped', 'saved'].includes(j.status)) return '';
-  const days = Math.round((new Date(j.deadline + 'T23:59:59') - Date.now()) / 86400000);
+  // In calendar days: on the last day it's "today" from the morning on.
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(j.deadline + 'T00:00:00') - today) / 86400000);
   if (days < 0 || days > 21) return '';
   return `<span class="pill ${days <= 2 ? 'crit' : 'warn'}" title="Last day to apply: ${esc(j.deadline)}">Closes ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : esc(fmtDate(j.deadline + 'T12:00:00'))}</span>`;
 }
@@ -649,7 +652,7 @@ const main = () => $('#main');
 // Something typed, ticked or chosen on this page that isn't saved yet: the background refresh
 // leaves the page alone until it's redrawn by your own action.
 let pageDirty = false;
-document.addEventListener('input', e => { if (e.target.closest?.('#main') && !e.target.dataset.act && e.target.type !== 'search') pageDirty = true; });
+document.addEventListener('input', e => { if (e.target.closest?.('#main') && !e.target.dataset.act && e.target.type !== 'search' && !e.target.matches('[data-queuef],[data-pickf],[data-allf]')) pageDirty = true; /* a filter isn't something unsaved */ });
 /** A list kept as lines in a text box, shown as chips: type and press Enter (or a comma) to add one,
  *  × to take one away. The text box stays the value, so saving works as it did. */
 function chipify(root) {

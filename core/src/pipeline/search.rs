@@ -70,6 +70,10 @@ impl Agent {
         struct Done<'a>(&'a Mutex<Option<(usize, usize)>>);
         impl Drop for Done<'_> { fn drop(&mut self) { *self.0.lock().unwrap() = None; } }
         let _done = Done(&self.scoring_all);
+        // A stop left over from a search that has ended isn't a stop of this.
+        if !self.is_running("search") {
+            self.stop.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
         for _ in 0..200 {
             if self.held_count() == 0 || self.stopping() || self.limited().is_some() {
                 break;
@@ -471,7 +475,11 @@ impl Agent {
         {
             let db = self.db();
             db.log(None, "search", &report.to_string())?;
-            db.set("last.search", &crate::util::now())?;
+            // Only a search of your sources counts as the day's search: postings handed in (a job
+            // alert email read by the inbox check) mustn't stop the scheduled one from running.
+            if searched {
+                db.set("last.search", &crate::util::now())?;
+            }
             db.set("last.report", &serde_json::to_string(&report).unwrap_or_default())?;
         }
         self.note_followed(&run.followed);
@@ -921,7 +929,8 @@ impl Agent {
         let s = self.llm().score(&cvs, &self.scoring_guidance(&profile), &job)?;
         // One you saved (added without Claude, say) stays saved when it scores below your bar.
         // One you chose (sent from the browser, say) stays where it is, and so does one you saved.
-        let status = if s.score >= profile.score_threshold { "queued" } else if job.status == "saved" { "saved" } else if self.chosen(job_id) && job.status == "queued" { "queued" } else { "skipped" };
+        // (One already further along, applied to say, keeps its place and only gets the score.)
+        let status = if !["queued", "skipped", "saved"].contains(&job.status.as_str()) { job.status.as_str() } else if s.score >= profile.score_threshold { "queued" } else if job.status == "saved" { "saved" } else if self.chosen(job_id) && job.status == "queued" { "queued" } else { "skipped" };
         {
             let db = self.db();
             db.update_job(job_id, &[
@@ -1242,10 +1251,9 @@ impl Agent {
             let db = self.db();
             db.insert_job(&job)?;
             db.log(Some(&job.id), "added", how)?;
-            if !tailor {
-                // Yours to pick on the Overview, kept there whatever the filters say.
-                db.log(Some(&job.id), "chosen", "you sent it to Job Hunt")?;
-            }
+            // Yours, kept whatever the filters say (the location filter, your minimum salary):
+            // to pick on the Overview, or tailored straight away.
+            db.log(Some(&job.id), "chosen", "you sent it to Job Hunt")?;
         }
         // Scored and kept even if tailoring fails now (a usage limit, say): it waits to be picked.
         if tailor {

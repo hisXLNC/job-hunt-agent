@@ -157,6 +157,9 @@ impl Metered {
             // Claude Code says when it resets; otherwise try again in an hour.
             let resets = limit.filter(|t| *t > now.timestamp()).unwrap_or(now.timestamp() + 3600);
             log.limited_until = Some(resets);
+        } else if out.is_ok() {
+            // An answer: whatever limit was noted before is over.
+            log.limited_until = None;
         }
         out
     }

@@ -467,11 +467,17 @@ pub fn job_for_page(agent: &Agent, url: &str, title: &str) -> R<crate::db::Job> 
         return Ok(j.clone());
     }
     // The page names one approved job's company (bmo.wd3.myworkdayjobs.com, "Careers at BMO"): that one.
-    let page = format!("{} {}", host_of(url), title).to_lowercase();
+    // By whole words: "Bank of Montreal" isn't named by National Bank's page because both say
+    // "bank", nor "Meta" by metabase. A first word alone counts only when it's a name, not a word
+    // any company might start with. And a board that says whose it is, and isn't theirs, never is.
+    const ANYONES: &[&str] = &["the", "bank", "national", "royal", "first", "canada", "canadian", "american", "united", "global", "international", "general", "new", "city", "group", "north", "great", "one", "pacific", "atlantic", "capital", "blue", "open", "data", "digital", "health", "life", "home", "air", "sun", "west", "east", "central", "university", "government"];
+    let page = question_key(&format!("{} {}", host_of(url), title));
+    let whose = page_company(url);
     let named: Vec<&crate::db::Job> = jobs.iter().filter(|j| j.status == "approved").filter(|j| {
+        if whose.as_ref().is_some_and(|h| !names_board(&j.company, h)) { return false; }
         let co = question_key(&j.company);
         let first = co.split(' ').next().unwrap_or("");
-        first.len() >= 3 && (page.contains(&co) || page.contains(first))
+        first.len() >= 3 && (crate::filters::has_words(&page, &co) || (!ANYONES.contains(&first) && crate::filters::has_words(&page, first)))
     }).collect();
     if let [one] = named.as_slice() {
         return Ok((*one).clone());
@@ -1533,6 +1539,15 @@ mod tests {
         s.agent.db().set("apply.browser", &format!("test:2|{}|trcareers.wd5.myworkdayjobs.com", now())).unwrap();
         assert_eq!(job_for_page(&s.agent, "https://trcareers.wd5.myworkdayjobs.com/apply", "Apply").unwrap().id, "test:2");
         assert!(job_for_page(&s.agent, "https://bmo.wd3.myworkdayjobs.com/apply", "Careers at BMO").is_err(), "BMO's site isn't the job chosen on Thomson Reuters'");
+        // A company is named by whole words: "Bank of Montreal" isn't National Bank because both
+        // say "bank" (its tailored CV went to the other bank's form).
+        s.agent.db().delete("apply.browser").unwrap();
+        let mut bmo = crate::testkit::posting("Delivery Lead", "3");
+        bmo.company = "Bank of Montreal".into();
+        s.agent.search(Some(vec![bmo])).unwrap();
+        s.agent.db().set_status("test:3", "approved", "").unwrap();
+        assert!(job_for_page(&s.agent, "https://forms.example/apply/1", "Job Application for Analyst at National Bank").is_err());
+        assert_eq!(job_for_page(&s.agent, "https://forms.example/apply/1", "Careers at Bank of Montreal").unwrap().id, "test:3");
         // Chosen in Job Hunt: the first sites it's used on are it; a job board it didn't come from never
         // is (Job Bank an hour after an Interac form); and a quarter of an hour on, no new site is.
         s.agent.db().set("apply.browser", &format!("test:2|{}", now())).unwrap();

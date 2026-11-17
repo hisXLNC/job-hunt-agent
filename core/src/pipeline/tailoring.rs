@@ -467,6 +467,8 @@ impl Agent {
             let (mut redone, mut held) = (0, vec![]);
             for id in &c.approved {
                 if stopped() { break; }
+                // Still approved and not sent: what's gone out stays as it went.
+                if !a.db().job(id).ok().flatten().is_some_and(|j| j.status == "approved" && j.applied_at.is_none()) { continue; }
                 let Ok(_t) = a.claim(&format!("tailor:{id}")) else { continue };
                 match a.tailor_anyway(id, None) {
                     Ok(_) => {
@@ -490,8 +492,10 @@ impl Agent {
             if !held.is_empty() {
                 let _ = a.defer(json!({ "kind": "tailor", "ids": held }));
             }
-            if !c.retailor.is_empty() {
-                let _ = a.tailor_picked(&c.retailor);
+            // (Only the ones still waiting for your approval: not one you approved or set aside since.)
+            let retailor: Vec<String> = c.retailor.iter().filter(|id| a.db().job(id).ok().flatten().is_some_and(|j| j.status == "ready")).cloned().collect();
+            if !retailor.is_empty() {
+                let _ = a.tailor_picked(&retailor);
             }
             // (4) Career paths and the coach.
             put(json!({ "step": "career" }));
@@ -582,7 +586,9 @@ impl Agent {
                 Err(e) if e.0.contains("usage limit") || e.0.contains("signed in") || e.0.contains("API key") => break,
                 Err(_) => continue,
             };
-            let keep = j.status == "saved" || j.status == "dismissed" || self.chosen(id);
+            // (As it stands now: one you applied to or tailored while this waited for Claude stays.)
+            let j = Job { status: self.db().job(id).ok().flatten().map(|x| x.status).unwrap_or(j.status.clone()), ..j };
+            let keep = !["queued", "skipped"].contains(&j.status.as_str()) || self.chosen(id);
             let status = if keep { j.status.clone() } else if s.score >= profile.score_threshold { "queued".into() } else { "skipped".into() };
             // A known salary below your minimum stays flagged.
             let mut flags = s.red_flags.clone();
@@ -1212,6 +1218,8 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
         // (The last: brought back before, and its scoring didn't finish.)
         j.reasoning.as_deref().is_some_and(|r| ["Filtered out: salary", "Filtered out: not permanent", "Filtered out: not contract", BEING_SCORED].iter().any(|w| r.starts_with(w)))
             || Self::scored_down_for_work(j).is_some()
+            // Set aside by Claude's reading of the pay (see search.rs: "Pays up to …").
+            || j.red_flags.iter().any(|f| f.starts_with("Pays up to"))
     }
     /// The kind of work Claude scored it down for being ("contract" or "permanent"), from its red flag.
     fn scored_down_for_work(j: &Job) -> Option<&'static str> {
@@ -1230,6 +1238,8 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
                 if let Some(why) = Self::misfit(&j, &profile) { out.push((j, why)); }
             }
         }
+        // One you chose yourself (Tailor anyway, added by hand) stays, whatever the filters say.
+        out.retain(|(j, _)| !self.chosen(&j.id));
         // Scored down by Claude for its kind of work: back once that kind is one you take (you chose
         // it, or either).
         let takes = |kind: &str| profile.wants.work.is_empty() || profile.wants.work == kind;
@@ -1315,7 +1325,10 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
                 break;
             }
             let Ok(s) = self.llm().score(&cvs, &guidance, &j) else { continue };
-            let status = if s.score >= profile.score_threshold { "queued" } else { "skipped" };
+            // Where it stands now, after the wait for Claude: one you moved on meanwhile (applied
+            // to, tailored) keeps its place and only gets the score.
+            let moved = self.db().job(id).ok().flatten().map(|x| x.status).filter(|st| st != "skipped" && st != "queued");
+            let status = match &moved { Some(st) => st.as_str(), None if s.score >= profile.score_threshold => "queued", None => "skipped" };
             scored += 1;
             cleared += (status == "queued") as usize;
             let db = self.db();

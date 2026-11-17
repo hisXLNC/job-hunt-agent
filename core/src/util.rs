@@ -88,7 +88,9 @@ pub fn unescape(s: &str) -> String {
 
 /// Escape text for an XML text node.
 pub fn escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    // (Without the control characters XML 1.0 doesn't allow, a form feed from a PDF say: Word
+    // refuses a file that has one.)
+    s.chars().filter(|c| !c.is_control() || matches!(c, '\t' | '\n' | '\r')).collect::<String>().replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
 /// "Senior TPM, Payments" at "Big Bank" -> "big-bank-senior-tpm-payments"

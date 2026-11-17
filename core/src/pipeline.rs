@@ -719,6 +719,12 @@ impl Agent {
 
     /// (Re)build the Claude client and the Google connection from saved settings.
     pub fn connect(&self) {
+        // Another engine, or another key: a usage limit the old one hit isn't this one's.
+        let which = format!("{}|{}|{}|{}", self.engine_name(), self.secret("other.for"), self.secret("other.url"), self.secret("claude.key").len());
+        if self.secret("engine.was") != which {
+            let _ = self.db().set("engine.was", &which);
+            self.usage.lock().unwrap().limited_until = None;
+        }
         let model = self.secret("claude.model");
         let engine = match self.engine_name().as_str() {
             "api" => Engine::Api(self.secret("claude.key")),
@@ -925,8 +931,8 @@ impl Agent {
     }
 
     pub fn claim(&self, name: &str) -> R<Running<'_>> {
-        let mut r = self.running.lock().unwrap_or_else(|e| e.into_inner());
-        if !r.insert(name.to_string()) {
+        // (The lock is let go before `lifecycle::started` takes its own: see `lifecycle::work`.)
+        if !self.running.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string()) {
             return err(format!("{name} is already running"));
         }
         crate::lifecycle::started(name);
@@ -937,7 +943,8 @@ impl Agent {
 
     /// claim, for work handed to another thread.
     pub(crate) fn claim_owned(self: &Arc<Self>, name: &str) -> Option<OwnedRunning> {
-        self.running.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string()).then(|| {
+        let mine = self.running.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string());
+        mine.then(|| {
             crate::lifecycle::started(name);
             crate::debug::note("work", &format!("{name}: started"));
             STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
@@ -1977,10 +1984,11 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Note that a posting has closed. One still waiting to be tailored is skipped.
     pub fn mark_closed(&self, job: &Job, why: &str) -> R<()> {
         let mut f = vec![("closed_at", Value::from(now()))];
-        if job.status == "queued" {
+        let db = self.db();
+        // As it stands now, not as it was when the check began: one you tailored since stays.
+        if db.job(&job.id)?.is_some_and(|j| j.status == "queued") {
             f.push(("status", "skipped".into()));
         }
-        let db = self.db();
         db.update_job(&job.id, &f)?;
         db.log(Some(&job.id), "closed", &format!("the posting has closed: {why}"))
     }
@@ -2014,12 +2022,23 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Look at every posting still waiting on you and note the ones that have closed. Once a day.
     pub fn check_postings(&self) -> R<(usize, usize)> {
         let _g = self.claim("check-postings")?;
+        // The ones you're about to send first, then the Queue, a different stretch of it each day
+        // (80 pages a day at most).
+        let open = |j: &Job| j.closed_at.is_none() && j.url.starts_with("http");
         let mut list = vec![];
-        for s in ["queued", "ready", "approved", "saved"] {
-            list.extend(self.db().jobs(Some(s), 500)?);
+        for s in ["approved", "ready", "saved"] {
+            list.extend(self.db().jobs(Some(s), 500)?.into_iter().filter(open));
+        }
+        let mut queued: Vec<Job> = self.db().jobs(Some("queued"), 5000)?.into_iter().filter(open).collect();
+        let room = 80usize.saturating_sub(list.len());
+        if !queued.is_empty() && room > 0 {
+            let from = self.secret("check.from").parse::<usize>().unwrap_or(0) % queued.len();
+            queued.rotate_left(from);
+            let _ = self.db().set("check.from", &(from + room.min(queued.len())).to_string());
+            list.extend(queued.into_iter().take(room));
         }
         let (mut checked, mut closed) = (0, 0);
-        for j in list.into_iter().filter(|j| j.closed_at.is_none() && j.url.starts_with("http")).take(80) {
+        for j in list.into_iter().take(80) {
             if crate::sources::posting_closed(&j.url) == Some(true) {
                 self.mark_closed(&j, "the posting says it's closed")?;
                 closed += 1;
@@ -3480,6 +3499,8 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Your go-ahead. Email applications are sent from your Gmail; anything else waits for you to
     /// submit on the company's site and mark it applied.
     pub fn approve(&self, job_id: &str) -> R<&'static str> {
+        // One at a time: a second press while the first is sending mustn't email it twice.
+        let _one = self.claim(&format!("approve:{job_id}"))?;
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         if job.status != "ready" {
             return err("Only applications waiting for approval can be approved.");
@@ -3623,10 +3644,14 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     // Paused or off: only a search you ask for runs.
     let last = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.search")).ok().map(|t| t.with_timezone(&tz).naive_local());
     let scheduled = agent.search_paused().is_empty() && p.search_due(local.naive_local(), last);
-    if ready && (requested || scheduled) && !agent.is_running("search") && !agent.search_ending() {
+    // One that failed isn't tried again the next minute (and the minute after, with a notice each
+    // time): half an hour later for a search, a quarter of an hour for the email check.
+    let failed_lately = |what: &str, minutes: i64| chrono::DateTime::parse_from_rfc3339(&agent.secret(&format!("{what}.failed")))
+        .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < minutes).unwrap_or(false);
+    if ready && (requested || scheduled) && !failed_lately("search", 30) && !agent.is_running("search") && !agent.search_ending() {
         out.push("search");
     }
-    if ready && agent.mail.read().map(|m| m.is_some()).unwrap_or(false) && !agent.is_running("inbox") {
+    if ready && agent.mail.read().map(|m| m.is_some()).unwrap_or(false) && !failed_lately("inbox", 15) && !agent.is_running("inbox") {
         let due = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.inbox"))
             .map(|t| (now - t.with_timezone(&Utc)).num_minutes() >= p.inbox_minutes as i64)
             .unwrap_or(true);
@@ -4118,7 +4143,16 @@ pub fn run_in_background(agent: &Arc<Agent>, task: &str) -> bool {
             if !e.0.contains("already running") {
                 let _ = agent.db().log(None, &format!("{task}:error"), &e.0);
                 let what = if task.starts_with("search") { "Job search" } else if task == "score-held" { "Scoring" } else { "Email check" };
-                agent.note(&format!("{what} didn't finish"), &e.0);
+                // When it failed (see `due_tasks`), and why: the same failure is said once in six
+                // hours, not at every try.
+                let base = if task.starts_with("search") { "search" } else { task.as_str() };
+                let said = agent.secret(&format!("{base}.failed.said"));
+                let again = said.split_once('|').is_some_and(|(at, why)| why == e.0 && chrono::DateTime::parse_from_rfc3339(at).is_ok_and(|t| (Utc::now() - t.with_timezone(&Utc)).num_hours() < 6));
+                let _ = agent.db().set(&format!("{base}.failed"), &crate::util::now());
+                if !again {
+                    let _ = agent.db().set(&format!("{base}.failed.said"), &format!("{}|{}", crate::util::now(), e.0));
+                    agent.note(&format!("{what} didn't finish"), &e.0);
+                }
             }
         }
     });

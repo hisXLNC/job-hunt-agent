@@ -1028,7 +1028,7 @@ function readProfile(form, part) {
   if (has('auto_tailor_mode')) { p.auto_tailor = v('auto_tailor_mode') === 'all'; p.auto_tailor_min = v('auto_tailor_mode') === 'strong' ? 85 : 0; }
   // What you want from a role (Me, Looking for): told to the scorer.
   if (has('want_level')) p.wants = { level: v('want_level').trim(), work: v('want_work'), industries: fromLines(v('want_industries')), avoid: fromLines(v('want_avoid')), dealbreakers: fromLines(v('want_dealbreakers')), path: has('want_path') ? v('want_path').trim() : (p.wants?.path || '') };
-  for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'max_age_days', 'search_hour', 'search_hour_2', 'searches_per_day', 'linkedin_note', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k)) p[k] = Number(v(k) || 0);
+  for (const k of ['score_threshold', 'max_per_run', 'max_scored_per_run', 'purge_after_days', 'max_age_days', 'search_hour', 'search_hour_2', 'searches_per_day', 'linkedin_note', 'inbox_minutes', 'follow_up_after', 'weekly_goal']) if (has(k) && String(v(k)).trim() !== '') p[k] = Number(v(k)); // (a box emptied to retype it keeps what was stored, not 0)
   for (const k of ['locations', 'exclude_companies', 'exclude_title_keywords']) if (has(k)) p[k] = fromLines(v(k));
   if (has('min_salary')) p.min_salary = v('min_salary') ? Number(v('min_salary')) : null;
   if (has('min_rating')) p.min_rating = v('min_rating') ? Number(v('min_rating')) : null;
@@ -1565,7 +1565,10 @@ async function renderConnStatus() {
 }
 
 // ---- Settings save themselves ----
-let saveTimer;
+// One timer for each form (About me has four), and one save at a time: a second form edited within
+// the wait, or while a save is on its way, is saved after it, from what the first one stored.
+const saveTimers = new Map();
+let saveChain = Promise.resolve();
 function saveState(text, cls) {
   const el = $('#saveState');
   if (el) { el.textContent = text; el.className = `save-state ${cls || ''}`; }
@@ -1589,8 +1592,8 @@ async function autosave(form) {
   const form = e.target.closest?.('form[data-form=profile]');
   if (!form || e.target.type === 'file') return;
   saveState('Saving…');
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => autosave(form), 800);
+  clearTimeout(saveTimers.get(form));
+  saveTimers.set(form, setTimeout(() => { saveTimers.delete(form); saveChain = saveChain.then(() => autosave(form)).catch(() => {}); }, 800));
 }));
 
 // Your minimum salary, and permanent or contract: under each box, what it would set aside and bring

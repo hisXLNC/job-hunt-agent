@@ -765,6 +765,11 @@ impl Db {
             let mut g: Vec<&(String, String, String, String)> = group.iter().collect();
             g.sort_by_key(|r| (rank(&r.2), crate::sources::is_job_board(&r.3)));
             for r in &g[1..] {
+                // Two openings the search keeps apart (same title, different requisition numbers)
+                // aren't copies: merged here, the next search found and scored the other again.
+                if different_requisitions(&[&g[0].3, &g[0].1], &[&r.3, &r.1]) {
+                    continue;
+                }
                 if r.2 == "queued" || r.2 == "skipped" {
                     // The kept copy came from a job board: apply on the company's site instead.
                     self.prefer_company_link(&g[0].1, &r.3)?;

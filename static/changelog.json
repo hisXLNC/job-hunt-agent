@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.98.0",
+    "date": "2026-11-17",
+    "title": "A full code review, and the first 44 fixes",
+    "changes": [
+      "Every file was reviewed; about 150 findings are listed in REVIEW.md, each marked fixed or still open. This release fixes the 44 most harmful.",
+      "Pay is read more carefully, so fewer jobs are wrongly set aside under your minimum: a lunch credit, relocation allowance, tuition or stipend is no longer taken for the salary, hourly and monthly pay are converted, and Adzuna's guessed salary is ignored.",
+      "A skip word matches whole words only: \"intern\" no longer hides Internal Audit Manager or International Tax Manager.",
+      "Fixed a way the whole app could freeze when a job page refreshed just as work started.",
+      "Forms: a job is matched to a page by the company's whole name, so one bank's tailored CV can't go to another bank's form.",
+      "Email: one email that can't be handled no longer stalls the inbox; an email can't move an offer backwards or turn down a job you haven't sent; a failed search or email check waits before trying again and says so once.",
+      "Applying: an application is never emailed to an accommodation or privacy mailbox; a double press on Approve can't send it twice; a CV update no longer re-tailors an application you already sent.",
+      "A job you chose yourself is never set aside by your minimum salary or permanent/contract; jobs Claude set aside for pay come back when you lower the minimum.",
+      "Screens: the job page and Queue no longer wipe what you type or tick; two edits made quickly are both saved; Enter on Cancel cancels; Follow up shows every application; dates no longer show a day early.",
+      "Also: a usage-limit pause clears when you switch AI; a job-alert email no longer counts as the day's search; the daily still-open check covers tailored and approved jobs first."
+    ]
+  },
+  {
     "version": "2.97.3",
     "date": "2026-11-17",
     "title": "The set-aside button now really shows",

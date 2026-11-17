@@ -113,7 +113,10 @@ pub fn started(name: &str) {
 /// The state of each piece of background work on a job that is running or failed:
 /// `{ "tailor": { "state": "running" }, "prep": { "state": "failed", "why": "…", "at": "…" } }`.
 pub fn work(agent: &Agent, job_id: &str) -> Value {
-    let failed = FAILED.lock().unwrap_or_else(|e| e.into_inner());
+    // A copy, and the lock let go: `is_running` takes the agent's own lock, and `claim` takes the
+    // two in the other order (held together, a job page and the start of any work could each wait
+    // on the other for good).
+    let failed = FAILED.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let mut out = serde_json::Map::new();
     for (w, _) in WORK {
         let name = format!("{w}:{job_id}");

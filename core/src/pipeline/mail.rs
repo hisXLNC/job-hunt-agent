@@ -55,6 +55,11 @@ impl Agent {
                 Err(e) if e.0.contains("usage limit") => break,
                 Err(e) => {
                     self.db().log(None, "inbox:error", &format!("{}: {e}", msg.subject))?;
+                    // Tried at the next check; after three failures it's filed, so one email Claude
+                    // can't sort doesn't cost a request at every check for days.
+                    if self.email_failed(&msg.id) {
+                        self.db().record_email(&msg.id, &msg.thread_id, None, &msg.from, &msg.subject, "other_job_related", "Job Hunt couldn't read this one.", None, &msg.received_at)?;
+                    }
                     continue;
                 }
             };
@@ -64,7 +69,20 @@ impl Agent {
             if t.category == "application_received" && t.job_id.is_none() {
                 t.job_id = self.job_from_confirmation(&t)?;
             }
-            let draft = self.handle_email(&mail, &msg, &t, &profile)?;
+            // One email that can't be handled (an interview time that can't be read, a calendar that
+            // won't answer) mustn't stop the ones behind it: tried again at the next two checks,
+            // then filed as it was sorted, with a notice.
+            let draft = match self.handle_email(&mail, &msg, &t, &profile) {
+                Ok(d) => d,
+                Err(e) => {
+                    self.db().log(t.job_id.as_deref(), "inbox:error", &format!("{}: {e}", msg.subject))?;
+                    if !self.email_failed(&msg.id) {
+                        continue;
+                    }
+                    self.note("An email needs you", &format!("Job Hunt sorted \"{}\" as {} but couldn't finish with it ({e}). Open it in your mail.", msg.subject, t.category.replace('_', " ")));
+                    None
+                }
+            };
             // A recruiter who wrote to you personally: kept in your recruiters list.
             crate::recruiters::note_email(self, &msg, &t);
             if ["interview_request", "interview_confirmed", "assessment", "rejection", "offer", "recruiter_outreach"].contains(&t.category.as_str())
@@ -116,6 +134,14 @@ impl Agent {
         db.insert_job(&job)?;
         db.log(Some(&job.id), "added", "you applied yourself; added from the confirmation email")?;
         Ok(Some(job.id))
+    }
+
+    /// One more failure with this email: true once it has failed three times (give up on it).
+    fn email_failed(&self, id: &str) -> bool {
+        let key = format!("inbox.fail:{id}");
+        let n = self.db().get(&key).ok().flatten().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0) + 1;
+        let _ = self.db().set(&key, &n.to_string());
+        n >= 3
     }
 
     /// A confirmation ("we received your application") is surely about this job: the email names
@@ -181,7 +207,9 @@ impl Agent {
             }
             let db = self.db();
             if let Some(target) = target {
-                if target != job.status {
+                // Never backwards from an offer, and no "turned down" for one you haven't sent.
+                let backwards = (job.status == "offer" && target == "interviewing") || (target == "rejected" && ["queued", "ready", "approved", "saved", "skipped"].contains(&job.status.as_str()));
+                if target != job.status && !backwards {
                     db.set_status(&job.id, target, &format!("from email: {}", msg.subject))?;
                     // A no is said out loud, not just filed.
                     if target == "rejected" {

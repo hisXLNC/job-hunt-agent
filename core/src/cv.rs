@@ -582,7 +582,8 @@ pub fn apply_own_edits(doc: &Doc, edits: &BTreeMap<usize, String>) -> R<Applied>
 
 fn apply_checked(doc: &Doc, edits: &BTreeMap<usize, String>, check: bool) -> R<Applied> {
     let full: String = doc.paras.iter().map(|p| p.plain()).collect::<Vec<_>>().join("\n");
-    let known: HashSet<String> = NUMBER.find_iter(&full).map(|m| m.as_str().to_string()).collect();
+    // (Each as written and without the full stop or comma that ended it: "$500,000." is 500,000.)
+    let known: HashSet<String> = NUMBER.find_iter(&full).flat_map(|m| [m.as_str().to_string(), m.as_str().trim_end_matches(['.', ',']).to_string()]).collect();
     let mut changes = vec![];
     let mut rejected = vec![];
     let mut replace: Vec<(usize, usize, String)> = vec![];

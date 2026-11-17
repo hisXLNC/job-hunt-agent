@@ -480,8 +480,11 @@ pub fn parse_output(ok: bool, stdout: &str, stderr: &str) -> R<Value> {
 
 /// Is this Claude's usage limit (the 5-hour session, the weekly one, or an older "usage limit reached")?
 pub fn is_limit(text: &str) -> bool {
-    let low = text.to_lowercase();
-    low.contains("limit") && ["usage", "reached", "rate", "session", "weekly", "hit your", "resets"].iter().any(|w| low.contains(w))
+    // The limit's own phrases, as whole words: "exceeded the token limit … generated" has "limit"
+    // and "rate" in it and is no usage limit (taking it for one paused everything for an hour).
+    static LIMIT: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| regex::Regex::new(
+        r"(?i)\b(?:usage|rate|session|weekly|5-hour|five-hour|hourly|daily|plan) limits?\b|\blimit (?:reached|resets|will reset|exceeded)\b|\b(?:hit|reached) your\b[^.]{0,40}\blimit\b|\blimit\b[^.]{0,60}\bresets\b").unwrap());
+    LIMIT.is_match(text)
 }
 
 /// When a limit message says it resets ("resets 10:50am (Asia/Dubai)", "resets Oct 24, 9am (Europe/London)"),
@@ -674,6 +677,8 @@ mod tests {
         assert_eq!(at("resets 8am (Asia/Dubai)").as_deref(), Some("2026-10-22T04:00:00+00:00"), "already past today: tomorrow");
         assert_eq!(at("You've hit your weekly limit · resets Oct 24, 9am (Asia/Dubai)").as_deref(), Some("2026-10-24T05:00:00+00:00"));
         assert!(is_limit("You've hit your weekly limit") && !is_limit("Invalid API key"));
+        assert!(is_limit("Claude usage limit reached. Your limit will reset at 3pm") && is_limit("5-hour limit reached ∙ resets 10:50am"));
+        assert!(!is_limit("The output exceeded the token limit before it was generated"), "an ordinary error isn't a usage limit");
         let login = r#"{"type":"result","is_error":true,"result":"Invalid API key · Please run /login"}"#;
         assert!(parse_output(false, login, "").unwrap_err().0.contains("isn't signed in"));
         assert!(parse_output(false, "", "command not found").unwrap_err().0.contains("command not found"));

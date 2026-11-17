@@ -344,7 +344,7 @@ async function showJob(id) {
     if (j.apply_url) toast('Found it on the company\'s site: Apply goes there now.');
     else { toast('Not found on the company\'s site. Opening a web search for it.'); api('/api/open-url', { method: 'POST', body: { url: webSearchFor(j) } }).then(follow).catch(e => toast(e.message, true)); }
   }
-  if (tailoring || finding || preparing || revising || following_up || answering || advising || writing_to || thanking) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { refreshOverview().then(route); } }, 4000);
+  if (tailoring || finding || preparing || revising || following_up || answering || advising || writing_to || thanking) jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) { const el = document.activeElement; /* what you're typing isn't redrawn away: looked at again in 4 s */ if (pageDirty || $('.modal-back') || (el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && el.closest('#main'))) { jobPoll = setTimeout(() => { if (location.hash === `#job/${encodeURIComponent(id)}`) route(); }, 4000); return; } refreshOverview().then(route); } }, 4000);
 }
 
 /** The copy-and-paste kit on a job's Apply tab: each detail with its own Copy button. */
