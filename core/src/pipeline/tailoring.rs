@@ -755,6 +755,8 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
         let _ = self.score_tailored(&job, &t.name, &tailored_text);
         // An employer whose system checks CVs criterion by criterion: check this one the same way.
         self.review_after_tailoring(&job);
+        // Its recruiter or hiring team, looked for in the background (see queue_people).
+        self.queue_people(job_id);
         self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
     }
 
@@ -1193,6 +1195,102 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
             self.note("Scored again with your certifications", &format!("{n} posting{} scored again{}.", if n == 1 { "" } else { "s" }, if cleared > 0 { format!("; {cleared} now clear your bar") } else { String::new() }));
         }
         Ok(n)
+    }
+
+    /// Your minimum salary changed: the jobs you haven't acted on that now pay too little (waiting on
+    /// the Queue or tailored for your approval), and those set aside for their pay that now meet it.
+    pub fn salary_plan(&self) -> R<(Vec<Job>, Vec<Job>)> {
+        let profile = self.profile();
+        let mut below = vec![];
+        for status in ["queued", "ready"] {
+            below.extend(self.db().jobs(Some(status), 100_000)?.into_iter().filter(|j| j.closed_at.is_none() && crate::filters::below_min_salary(&posting_of(j), &profile).is_some()));
+        }
+        let back = self.db().jobs(Some("skipped"), 100_000)?.into_iter()
+            .filter(|j| j.closed_at.is_none() && j.reasoning.as_deref().is_some_and(|r| r.starts_with("Filtered out: salary")) && crate::filters::below_min_salary(&posting_of(j), &profile).is_none())
+            .collect();
+        Ok((below, back))
+    }
+
+    /// Act on `salary_plan`: the ones below your minimum are set aside (where each stood is kept, to
+    /// put it back if you lower it again); the ones that now meet it go back where they stood, or,
+    /// never scored, are scored now (in the background, see `score_these`). Another filter that
+    /// still leaves a job out keeps it out.
+    pub fn apply_min_salary(self: &Arc<Self>) -> R<Value> {
+        let profile = self.profile();
+        let (below, back) = self.salary_plan()?;
+        let mut to_score = vec![];
+        let mut restored = 0;
+        {
+            let db = self.db();
+            for j in &below {
+                let why = crate::filters::below_min_salary(&posting_of(j), &profile).unwrap_or_default();
+                db.set(&format!("salary.was:{}", j.id), &json!({ "status": j.status, "reasoning": j.reasoning }).to_string())?;
+                db.update_job(&j.id, &[("status", "skipped".into()), ("reasoning", format!("Filtered out: {why}").into())])?;
+                db.log(Some(&j.id), "skipped", &format!("your new minimum salary: {why}"))?;
+            }
+            for j in &back {
+                if let Some(why) = prefilter(&posting_of(j), &profile) {
+                    db.update_job(&j.id, &[("reasoning", format!("Filtered out: {why}").into())])?;
+                    continue;
+                }
+                let was: Value = db.get(&format!("salary.was:{}", j.id))?.and_then(|v| serde_json::from_str(&v).ok()).unwrap_or(Value::Null);
+                if let Some(status) = was["status"].as_str() {
+                    db.update_job(&j.id, &[("status", status.into()), ("reasoning", was["reasoning"].clone())])?;
+                } else if let Some(score) = j.score {
+                    let status = if score >= profile.score_threshold as i64 { "queued" } else { "skipped" };
+                    db.update_job(&j.id, &[("status", status.into()), ("reasoning", format!("Scored {score} before it was set aside for its pay.").into())])?;
+                } else {
+                    db.update_job(&j.id, &[("reasoning", "Brought back by your new minimum salary: being scored.".into())])?;
+                    to_score.push(j.id.clone());
+                    continue;
+                }
+                db.delete(&format!("salary.was:{}", j.id))?;
+                db.log(Some(&j.id), "restored", "pays enough for your new minimum salary")?;
+                restored += 1;
+            }
+        }
+        if !to_score.is_empty() {
+            let (a, ids) = (self.clone(), to_score.clone());
+            std::thread::spawn(move || {
+                let Ok(_g) = a.claim("rescore") else {
+                    let _ = a.db().log(None, "rescore:error", "brought back by your minimum salary, not scored: a scoring was already running. Score them from Skipped.");
+                    return;
+                };
+                let n = a.score_these(&ids);
+                if n.0 > 0 {
+                    a.note("Scored the jobs your minimum salary brought back", &format!("{} scored; {} clear your bar and are on the Queue.", n.0, n.1));
+                }
+            });
+        }
+        self.db().log(None, "salary", &format!("minimum salary applied: {} set aside, {restored} brought back, {} to score", below.len(), to_score.len()))?;
+        Ok(json!({ "set_aside": below.len(), "restored": restored, "scoring": to_score.len() }))
+    }
+
+    /// Score these jobs (never scored before): on the Queue if they clear your bar, else set aside.
+    /// Returns (scored, cleared).
+    pub fn score_these(&self, ids: &[String]) -> (usize, usize) {
+        let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_WORK);
+        let profile = self.profile();
+        let cvs = self.cv_texts(&profile);
+        let guidance = self.scoring_guidance(&profile);
+        let (mut scored, mut cleared) = (0, 0);
+        for id in ids {
+            let Ok(Some(j)) = self.db().job(id) else { continue };
+            if cvs.is_empty() || self.limited().is_some() {
+                break;
+            }
+            let Ok(s) = self.llm().score(&cvs, &guidance, &j) else { continue };
+            let status = if s.score >= profile.score_threshold { "queued" } else { "skipped" };
+            scored += 1;
+            cleared += (status == "queued") as usize;
+            let db = self.db();
+            let _ = db.update_job(&j.id, &[
+                ("status", status.into()), ("score", s.score.into()), ("score_potential", json!(s.potential)), ("track", s.track.clone().into()),
+                ("reasoning", s.reasoning.into()), ("red_flags", json!(s.red_flags)), ("keywords", json!(s.keywords)),
+            ]);
+            let _ = db.log(Some(&j.id), "scored", &format!("{} on the {} track (brought back by your minimum salary)", s.score, s.track));
+        }
+        (scored, cleared)
     }
 
     /// How a rescore would go, without running it: postings in the group, how many the filters

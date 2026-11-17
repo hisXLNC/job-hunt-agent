@@ -1802,6 +1802,43 @@ fn deadlines_answers_offers_and_contacts() {
 }
 
 #[test]
+fn a_new_minimum_salary_sets_jobs_aside_and_brings_them_back() {
+    let s = setup();
+    // Found with no minimum: a job paying up to $100K, and one paying up to $90K, both on the Queue.
+    let mut a = posting("Technical Program Manager", "1");
+    a.description.push_str("\nSalary note: $90K~$100K a year");
+    let mut b = posting("Senior Program Manager", "2");
+    b.description.push_str("\nSalary note: $80K~$90K a year");
+    s.agent.search(Some(vec![a, b])).unwrap();
+    let was1 = s.agent.db().job("test:1").unwrap().unwrap().status;
+    assert_ne!(was1, "skipped");
+    // A minimum of $95K: the second is offered to be set aside, not the first.
+    let mut p = s.agent.profile();
+    p.min_salary = Some(95000.0);
+    s.agent.save_profile(&p).unwrap();
+    let (below, back) = s.agent.salary_plan().unwrap();
+    assert_eq!((below.iter().map(|j| j.id.as_str()).collect::<Vec<_>>(), back.len()), (vec!["test:2"], 0));
+    let r = s.agent.apply_min_salary().unwrap();
+    assert_eq!(r["set_aside"], 1);
+    let j2 = s.agent.db().job("test:2").unwrap().unwrap();
+    assert!(j2.status == "skipped" && j2.reasoning.as_deref().unwrap_or("").starts_with("Filtered out: salary"), "{:?}", j2.reasoning);
+    // Lowered again: it goes back where it stood, with its score.
+    p.min_salary = Some(85000.0);
+    s.agent.save_profile(&p).unwrap();
+    let (below, back) = s.agent.salary_plan().unwrap();
+    assert_eq!((below.len(), back.len()), (0, 1));
+    let r = s.agent.apply_min_salary().unwrap();
+    assert_eq!(r["restored"], 1);
+    let j2 = s.agent.db().job("test:2").unwrap().unwrap();
+    assert!(j2.status != "skipped" && j2.score.is_some(), "{j2:?}");
+    // Your applications are never touched: only the Queue and those waiting for your approval.
+    s.agent.db().set_status("test:1", "applied", "").unwrap();
+    p.min_salary = Some(200000.0);
+    s.agent.save_profile(&p).unwrap();
+    assert_eq!(s.agent.salary_plan().unwrap().0.len(), 1, "only the second, not your application");
+}
+
+#[test]
 fn salary_read_by_claude_and_found_later() {
     let s = setup();
     assert_eq!(salary_parts("$95K–$110K a year"), Some(("$95,000–$110,000".to_string(), Some(110000.0))));
@@ -2480,6 +2517,29 @@ fn finds_the_recruiter_on_linkedin_and_writes_the_note() {
     // Again: she isn't added twice.
     s.agent.find_recruiter("test:1").unwrap();
     assert_eq!(s.agent.contacts("test:1").len(), 1);
+}
+
+#[test]
+fn the_recruiter_is_found_when_the_job_is_tailored_and_written_to_once_you_apply() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    s.agent.tailor("test:1", None).unwrap();
+    assert_eq!(s.agent.people_queued(), vec!["test:1".to_string()], "tailored: in line for its people");
+    assert_eq!(s.agent.find_queued(), 1);
+    assert!(s.agent.people_queued().is_empty());
+    let c = s.agent.contacts("test:1");
+    assert_eq!(c[0]["name"], "Priya Shah");
+    assert!(c[0]["message"].as_str().unwrap_or("").is_empty(), "no note before you've applied");
+    // Tailored again: she's known, so no second look.
+    s.agent.tailor("test:1", None).unwrap();
+    assert!(s.agent.people_queued().is_empty());
+    // Applied: the note to her is written now, without looking again.
+    s.agent.db().set_status("test:1", "applied", "").unwrap();
+    assert_eq!(s.agent.find_after_applying("test:1").unwrap(), Some(1));
+    let c = s.agent.contacts("test:1");
+    assert_eq!(c.len(), 1);
+    assert!(c[0]["message"].as_str().unwrap().starts_with("Hi"), "{c:?}");
+    assert_eq!(s.agent.find_after_applying("test:1").unwrap(), None, "written once");
 }
 
 #[test]

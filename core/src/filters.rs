@@ -83,13 +83,8 @@ pub fn prefilter(p: &Posting, profile: &Profile) -> Option<String> {
     // The most it pays: the source's figure, else its salary text or its own description (hourly
     // rates as a year of 2,080 hours), so a low-paid job isn't scored just because the job site
     // didn't fill in the salary field.
-    if let Some(min) = profile.min_salary {
-        let max = p.salary_max
-            .or_else(|| p.salary.as_deref().and_then(crate::sources::pay_max_in))
-            .or_else(|| crate::sources::pay_max_in(&p.description.chars().take(20000).collect::<String>()));
-        if let Some(max) = max.filter(|m| *m < min) {
-            return Some(format!("salary up to {max:.0} a year, below your minimum of {min:.0}"));
-        }
+    if let Some(why) = below_min_salary(p, profile) {
+        return Some(why);
     }
 
     let head: String = p.description.chars().take(3000).collect::<String>().to_lowercase();
@@ -103,6 +98,17 @@ pub fn prefilter(p: &Posting, profile: &Profile) -> Option<String> {
         }
     }
     Some(NO_TITLE_MATCH.into())
+}
+
+/// Why a posting pays too little for your minimum, if it does. The most it pays: the source's figure,
+/// else its salary text or its own description (hourly rates as a year of 2,080 hours), so a
+/// low-paid job isn't scored just because the job site didn't fill in the salary field.
+pub fn below_min_salary(p: &Posting, profile: &Profile) -> Option<String> {
+    let min = profile.min_salary.filter(|m| *m > 0.0)?;
+    let max = p.salary_max
+        .or_else(|| p.salary.as_deref().and_then(crate::sources::pay_max_in))
+        .or_else(|| crate::sources::pay_max_in(&p.description.chars().take(20000).collect::<String>()))?;
+    (max < min).then(|| format!("salary up to {max:.0} a year, below your minimum of {min:.0}"))
 }
 
 /// Whether `hay` has `words` as whole words: "uk" is in "London, UK" but not in "Milwaukee".

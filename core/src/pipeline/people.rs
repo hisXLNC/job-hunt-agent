@@ -66,6 +66,55 @@ impl Agent {
     /// Find the recruiter (and likely hiring manager) on LinkedIn, add them to the job's people, and
     /// write the note to the best one. Ok(how many were found).
     pub fn find_recruiter(&self, job_id: &str) -> R<usize> {
+        self.find_people(job_id, true)
+    }
+
+    /// A job just tailored: put it in line to look for its recruiter or hiring team (see
+    /// `find_queued`), so they're on its People tab before you apply. The note to them is written
+    /// once you've applied (see `find_after_applying`).
+    pub fn queue_people(&self, job_id: &str) {
+        let Ok(Some(job)) = self.db().job(job_id) else { return };
+        if !crate::playbook::kind(&job).reach_out() || self.contacts(job_id).iter().any(|c| c["name"] != "Recruiter") || self.skipped("reach", job_id) {
+            return;
+        }
+        let mut q: Vec<String> = serde_json::from_str(&self.secret("people.queue")).unwrap_or_default();
+        if !q.iter().any(|x| x == job_id) {
+            q.push(job_id.to_string());
+            let _ = self.db().set("people.queue", &json!(q).to_string());
+        }
+    }
+
+    /// The jobs waiting for a look for their people (see `queue_people`).
+    pub fn people_queued(&self) -> Vec<String> {
+        serde_json::from_str(&self.secret("people.queue")).unwrap_or_default()
+    }
+
+    /// Look for the people of each job in line, one at a time, without writing to them yet. Stops at
+    /// Claude's limit (what's left waits for the next turn). Returns how many jobs were looked at.
+    pub fn find_queued(&self) -> usize {
+        let mut n = 0;
+        while let Some(id) = self.people_queued().first().cloned() {
+            if self.limited().is_some() || !self.claude_ready() {
+                break;
+            }
+            let rest: Vec<String> = self.people_queued().into_iter().filter(|x| *x != id).collect();
+            let _ = self.db().set("people.queue", &json!(rest).to_string());
+            let Ok(Some(job)) = self.db().job(&id) else { continue };
+            if self.contacts(&id).iter().any(|c| c["name"] != "Recruiter") || self.skipped("reach", &id) {
+                continue;
+            }
+            n += 1;
+            match self.find_people(&id, false) {
+                Ok(_) => {}
+                Err(e) if e.0.starts_with("Couldn't find") => { let _ = self.db().log(Some(&id), "contact", &format!("no recruiter or hiring team found at {} yet", job.company)); }
+                Err(e) => { let _ = self.db().log(Some(&id), "contact:error", &e.0); }
+            }
+        }
+        n
+    }
+
+    /// Find the people and, when `write`, write the note to the best one.
+    fn find_people(&self, job_id: &str, write: bool) -> R<usize> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
         let found = self.llm().find_recruiters(&job)?;
         if found.is_empty() {
@@ -98,7 +147,7 @@ impl Agent {
         let best = found.first().and_then(|p| list.iter().position(|c| c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(p.name.trim())))).or(first_new).unwrap_or(0);
         self.db().log(Some(job_id), "contact", &format!("found {} (the posting, LinkedIn and the web)", found.iter().map(|p| p.name.trim()).collect::<Vec<_>>().join(", ")))?;
         // Already messaged them: no new note.
-        if list.get(best).is_some_and(|c| c["sent_at"].as_str().unwrap_or("").is_empty()) {
+        if write && list.get(best).is_some_and(|c| c["sent_at"].as_str().unwrap_or("").is_empty()) {
             self.write_outreach(job_id, best)?;
         }
         Ok(found.len())
@@ -110,10 +159,24 @@ impl Agent {
     /// note you skipped. Some(how many were found).
     pub fn find_after_applying(&self, job_id: &str) -> R<Option<usize>> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
-        if !crate::playbook::kind(&job).reach_out() || self.contacts(job_id).iter().any(|c| c["name"] != "Recruiter")
-            || !self.messaged_at(&job.company).is_empty() || self.skipped("reach", job_id) {
+        if !crate::playbook::kind(&job).reach_out() || !self.messaged_at(&job.company).is_empty() || self.skipped("reach", job_id) {
             return Ok(None);
         }
+        // Found when the job was tailored (see `queue_people`), and not written to yet: the note now.
+        let people = self.contacts(job_id);
+        if people.iter().any(|c| c["name"] != "Recruiter") {
+            if people.iter().any(|c| !c["message"].as_str().unwrap_or("").is_empty() || !c["sent_at"].as_str().unwrap_or("").is_empty()) {
+                return Ok(None);
+            }
+            let Some(best) = people.iter().position(|c| c["name"] != "Recruiter") else { return Ok(None) };
+            self.write_outreach(job_id, best)?;
+            let name = people[best]["name"].as_str().unwrap_or("").to_string();
+            self.note(&format!("A note to {name} is ready"), &format!("{name} at {}, found when the job was tailored. The note about your application for {} is on the job's People tab: read it and send it.", job.company, job.title));
+            return Ok(Some(people.len()));
+        }
+        // Waiting in line still: no need to look again later.
+        let rest: Vec<String> = self.people_queued().into_iter().filter(|x| x != job_id).collect();
+        let _ = self.db().set("people.queue", &json!(rest).to_string());
         let found = match self.find_recruiter(job_id) {
             Ok(n) => n,
             // Nobody found is a result too; anything else (Claude's limit, say) is left for the Queue's button.

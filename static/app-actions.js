@@ -519,6 +519,14 @@ async function act(el) {
     const rows = bankRows().filter((_, i) => a !== 'bankDrop' || i !== Number(el.dataset.i));
     return busy(async () => { await api('/api/answer-bank', { method: 'POST', body: { answers: rows } }); renderBank(); }, a === 'bankDrop' ? 'Forgotten.' : 'Saved.');
   }
+  if (a === 'applySalary') {
+    return busy(async () => {
+      const r = await api('/api/salaries/apply', { method: 'POST' });
+      const box = $('#salaryApply'); if (box) box.hidden = true;
+      toast([r.set_aside ? `${r.set_aside} set aside` : '', r.restored ? `${r.restored} brought back` : '', r.scoring ? `${r.scoring} being scored (a notice says how they did)` : ''].filter(Boolean).join(', ') + '.');
+      await refreshOverview();
+    });
+  }
   if (a === 'rescanSalaries') {
     return busy(async () => { const r = await api('/api/salaries/rescan', { method: 'POST' }); if (!r.started) toast('Already looking.'); },
       'Looking for the pay of every posting without one: its text, its page and the company\'s own posting. A notice says what was found.');

@@ -2473,3 +2473,7 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
 
 /* A notice of several lines (what Claude did on a form) keeps its lines. */
 .hub-notes .note-body { white-space: pre-line; }
+
+/* Settings: what a new minimum salary would do to the jobs found already, and the button to do it. */
+.salary-apply { grid-column: 1/-1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 13.5px; }
+.salary-apply[hidden] { display: none; }

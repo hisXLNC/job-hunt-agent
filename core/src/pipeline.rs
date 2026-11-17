@@ -3704,6 +3704,10 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
             out.push("cvwork");
         }
     }
+    // The recruiter or hiring team of each job tailored since (see Agent::queue_people).
+    if ready && agent.limited().is_none() && !agent.is_running("people") && !agent.people_queued().is_empty() {
+        out.push("people");
+    }
     // Recruiters in your Gmail: once Gmail is connected, then monthly.
     let recruiters_due = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.recruiters"))
         .map(|t| (now - t.with_timezone(&Utc)).num_days() >= 30)
@@ -3824,6 +3828,14 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                         if !e.0.contains("already running") {
                             let _ = a.db().log(None, "discover:error", &e.0);
                         }
+                    }
+                });
+            }
+            "people" => {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    if let Ok(_g) = a.claim("people") {
+                        a.find_queued();
                     }
                 });
             }
