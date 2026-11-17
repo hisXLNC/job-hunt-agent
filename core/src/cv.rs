@@ -766,6 +766,122 @@ pub fn cover_letter(doc: &Doc, text: &str, signature: Option<&[u8]>) -> R<Vec<u8
     doc.with_image(&new_xml, Some((&format!("image9001.{ext}"), bytes, SIGNATURE_REL)))
 }
 
+/// One Word file with the cover letter first and the CV after it, on a new page: for forms with a
+/// single upload box. Built on the CV's file (its styles, numbering, margins and header stay), with
+/// the letter's paragraphs put in front, and whatever they point at (the signature, links in the
+/// letterhead) brought along.
+pub fn letter_then_cv(letter: &Doc, cv: &Doc) -> R<Vec<u8>> {
+    let body = |xml: &str| -> (usize, usize) {
+        let at = xml.find("<w:body").unwrap_or(0);
+        let start = at + xml[at..].find('>').map(|i| i + 1).unwrap_or(0);
+        let end = xml.rfind("</w:body>").unwrap_or(xml.len());
+        (start, xml[start..end].rfind("<w:sectPr").map(|i| start + i).unwrap_or(end))
+    };
+    let (ls, le) = body(&letter.xml);
+    let mut front = letter.xml[ls..le].to_string();
+    let entry = |zip: &[u8], name: &str| -> Option<Vec<u8>> {
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(zip)).ok()?;
+        let mut f = z.by_name(name).ok()?;
+        let mut buf = vec![];
+        f.read_to_end(&mut buf).ok()?;
+        Some(buf)
+    };
+    const RELS: &str = "word/_rels/document.xml.rels";
+    static REL: Lazy<Regex> = Lazy::new(|| Regex::new(r"<Relationship\b[^>]*/>").unwrap());
+    let attr = |tag: &str, name: &str| -> String {
+        Regex::new(&format!(r#"\b{name}="([^"]*)""#)).ok().and_then(|r| r.captures(tag).map(|c| c[1].to_string())).unwrap_or_default()
+    };
+    let theirs = entry(&letter.zip_bytes, RELS).map(|b| String::from_utf8_lossy(&b).to_string()).unwrap_or_default();
+    let ours = entry(&cv.zip_bytes, RELS).map(|b| String::from_utf8_lossy(&b).to_string()).unwrap_or_default();
+    let mine: Vec<(String, String)> = REL.find_iter(&ours).map(|m| (attr(m.as_str(), "Id"), attr(m.as_str(), "Target"))).collect();
+    // What the letter's paragraphs point at, added to the CV's list (under a new name where the CV
+    // uses that name for something else), with the picture files themselves.
+    let (mut added, mut media): (String, Vec<(String, Vec<u8>)>) = (String::new(), vec![]);
+    for (n, m) in REL.find_iter(&theirs).enumerate() {
+        let (id, target) = (attr(m.as_str(), "Id"), attr(m.as_str(), "Target"));
+        let used = [format!(r#"r:id="{id}""#), format!(r#"r:embed="{id}""#), format!(r#"r:link="{id}""#)];
+        if id.is_empty() || !used.iter().any(|u| front.contains(u.as_str())) {
+            continue;
+        }
+        match mine.iter().find(|(i, _)| *i == id) {
+            Some((_, t)) if *t == target => continue,
+            Some(_) => {
+                let fresh = format!("rIdL{}", 9100 + n);
+                for kind in ["id", "embed", "link"] {
+                    front = front.replace(&format!(r#"r:{kind}="{id}""#), &format!(r#"r:{kind}="{fresh}""#));
+                }
+                added.push_str(&m.as_str().replacen(&format!(r#"Id="{id}""#), &format!(r#"Id="{fresh}""#), 1));
+            }
+            None => added.push_str(m.as_str()),
+        }
+        if !m.as_str().contains("TargetMode=\"External\"") {
+            let name = format!("word/{}", target.trim_start_matches('/').trim_start_matches("word/"));
+            if let Some(bytes) = entry(&letter.zip_bytes, &name) {
+                media.push((name, bytes));
+            }
+        }
+    }
+    let (cs, _) = body(&cv.xml);
+    let mut head = cv.xml[..cs].to_string();
+    if let Some(open) = head.find("<w:document") {
+        let end = open + head[open..].find('>').unwrap_or(0);
+        for (prefix, uri) in [
+            ("wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"),
+            ("r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships"),
+        ] {
+            if !head[open..end].contains(&format!("xmlns:{prefix}=")) {
+                head.insert_str(end, &format!(r#" xmlns:{prefix}="{uri}""#));
+            }
+        }
+    }
+    let xml = format!(r#"{head}{front}<w:p><w:r><w:br w:type="page"/></w:r></w:p>{}"#, &cv.xml[cs..]);
+
+    let mut src = zip::ZipArchive::new(std::io::Cursor::new(&cv.zip_bytes))?;
+    let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let (mut has_rels, mut names) = (false, vec![]);
+    for i in 0..src.len() {
+        let mut f = src.by_index(i)?;
+        let name = f.name().to_string();
+        names.push(name.clone());
+        if f.is_dir() {
+            out.add_directory(name, opts)?;
+            continue;
+        }
+        let mut buf = vec![];
+        f.read_to_end(&mut buf)?;
+        if name == "word/document.xml" {
+            buf = xml.clone().into_bytes();
+        } else if name == RELS {
+            has_rels = true;
+            buf = String::from_utf8_lossy(&buf).replace("</Relationships>", &format!("{added}</Relationships>")).into_bytes();
+        } else if name == "[Content_Types].xml" {
+            let mut t = String::from_utf8_lossy(&buf).to_string();
+            for (file, _) in &media {
+                let ext = file.rsplit('.').next().unwrap_or("png").to_lowercase();
+                if !t.to_lowercase().contains(&format!("extension=\"{ext}\"")) {
+                    let ctype = match ext.as_str() { "png" => "image/png", "gif" => "image/gif", _ => "image/jpeg" };
+                    t = t.replacen("<Default ", &format!(r#"<Default Extension="{ext}" ContentType="{ctype}"/><Default "#), 1);
+                }
+            }
+            buf = t.into_bytes();
+        }
+        out.start_file(name, opts)?;
+        out.write_all(&buf)?;
+    }
+    for (file, bytes) in &media {
+        if !names.contains(file) {
+            out.start_file(file.clone(), opts)?;
+            out.write_all(bytes)?;
+        }
+    }
+    if !has_rels && !added.is_empty() {
+        out.start_file(RELS, opts)?;
+        out.write_all(format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{added}</Relationships>"#).as_bytes())?;
+    }
+    Ok(out.finish()?.into_inner())
+}
+
 pub(crate) fn norm(s: &str) -> String {
     let t: String = s.to_lowercase().chars().map(|c| if c.is_alphanumeric() || "+#&".contains(c) { c } else { ' ' }).collect();
     t.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -1080,6 +1196,28 @@ mod tests {
         assert_eq!(blocks.len(), d.paras.len());
         assert!(blocks.iter().any(|b| b["kind"] == "heading"));
         assert!(blocks.iter().any(|b| b["kind"] == "bullet"));
+    }
+
+    /// One file: the letter (with its signature), a page break, then the whole CV, still a Word
+    /// file Job Hunt can read.
+    #[test]
+    fn letter_and_cv_in_one_file() {
+        let d = from_bytes(sample_docx()).unwrap();
+        let letter = from_bytes(cover_letter(&d, "Dear Hiring Team,\n\nHello from the letter.\n\nAll the best,\nJane Candidate", Some(&png(400, 100))).unwrap()).unwrap();
+        let both = from_bytes(letter_then_cv(&letter, &d).unwrap()).unwrap();
+        let text = both.plain_text();
+        let (hello, brk) = (both.xml.find("Hello from the letter.").unwrap(), both.xml.find(r#"<w:br w:type="page"/>"#).unwrap());
+        assert!(hello < brk, "the letter comes first, then a new page");
+        assert!(text.ends_with(d.plain_text().trim_end()) || text.contains(d.plain_text().trim()), "the whole CV follows");
+        assert_eq!(both.xml.matches("<w:sectPr").count(), d.xml.matches("<w:sectPr").count(), "one page setup, the CV's");
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(&both.zip_bytes)).unwrap();
+        assert!(z.by_name("word/media/image9001.png").is_ok(), "the signature's picture came along");
+        let mut rels = String::new();
+        z.by_name("word/_rels/document.xml.rels").unwrap().read_to_string(&mut rels).unwrap();
+        assert_eq!(rels.matches(SIGNATURE_REL).count(), 1);
+        let mut types = String::new();
+        z.by_name("[Content_Types].xml").unwrap().read_to_string(&mut types).unwrap();
+        assert!(types.to_lowercase().contains("extension=\"png\""));
     }
 
     #[test]

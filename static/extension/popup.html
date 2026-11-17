@@ -17,6 +17,14 @@ body { font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-ser
 .bad .kicker { color: var(--crit); }
 #what { display: block; font-size: 15.5px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 3px; }
 #more { margin: 0; color: var(--ink-2); font-size: 13px; }
+/* An application: the company's logo, the role large, the company under it. */
+.job { display: flex; align-items: center; gap: 12px; margin: 6px 0 9px; }
+.job #what { font-size: 17px; line-height: 1.25; font-weight: 700; margin: 0; }
+.job #co { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink-2); margin-top: 2px; }
+.logo { width: 44px; height: 44px; border-radius: 11px; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 18px; overflow: hidden; }
+.logo.img { background: #fff; border: 1px solid var(--line-2); }
+.logo img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.todo .av { overflow: hidden; } .todo .av.img { background: #fff; border: 1px solid var(--line-2); } .todo .av img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
 button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 9px 12px; cursor: pointer; width: 100%; margin-top: 8px; text-align: left; display: flex; align-items: center; gap: 8px; font-weight: 560; }
 button:hover { border-color: var(--muted); }
 button.pr { background: var(--accent); border-color: var(--accent); color: #fff; font-size: 15px; padding: 11px 14px; }
@@ -45,7 +53,7 @@ a { color: var(--accent); text-decoration: none; }
 
 <div class="card" id="page">
   <p class="kicker" id="kicker">This page</p>
-  <b id="what">Job Hunt</b><p id="more"></p>
+  <div id="head"><span id="logo" hidden></span><div><b id="what">Job Hunt</b><span id="co" hidden></span></div></div><p id="more"></p>
   <div id="acts">
     <button class="pr" id="fill">Fill this form<span class="k" id="key-hint"></span></button>
     <button id="company" hidden>Apply on the company's own site instead</button>

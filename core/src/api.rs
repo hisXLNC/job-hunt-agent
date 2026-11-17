@@ -188,6 +188,25 @@ fn job_file(agent: &Agent, job: &crate::db::Job, what: &str) -> R<PathBuf> {
             // Made now when there's none yet, or again when you changed the Word file since.
             crate::util::pdf_of(&docx).map_err(|e| Error(format!("Couldn't make the PDF from the Word file: {} Close it in Word and try again.", e.0)))?
         }
+        // The cover letter and the CV in one file (for a form with one upload box): put together
+        // now, from the two files as they are, so your own edits in Word are in it.
+        "both" | "both-pdf" => {
+            let (cv, letter) = (need(&job.cv_path)?, need(&job.letter_path)?);
+            let word = |p: &Path| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("docx"));
+            if !word(&cv) || !word(&letter) {
+                return Err(Error("One file can be made only from Word files: the CV or the letter here is a PDF of your own.".into()));
+            }
+            let joined = crate::cv::letter_then_cv(&crate::cv::open(&letter)?, &crate::cv::open(&cv)?)?;
+            let stem = cv.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "CV".into());
+            let path = cv.with_file_name(format!("{stem} - Cover Letter and CV.docx"));
+            if std::fs::read(&path).ok().as_deref() != Some(joined.as_slice()) {
+                std::fs::write(&path, &joined).map_err(|e| Error(format!("Couldn't save the file ({e}). Close it in Word and try again.")))?;
+            }
+            if what == "both" {
+                return Ok(path);
+            }
+            crate::util::pdf_of(&path).map_err(|e| Error(format!("Couldn't make the PDF from the Word file: {} Close it in Word and try again.", e.0)))?
+        }
         "prep" => agent.application_dir(job).join("Interview prep.md"),
         _ => return Err(Error("Nothing to open.".into())),
     })
@@ -2519,6 +2538,20 @@ mod tests {
         // And the page gets who with each line.
         let (_, v) = call(&agent, &host, "GET", "/api/jobs/test:1", Value::Null);
         assert!(v.to_string().contains(r#""by":"you""#) && v.to_string().contains(r#""by":"jobhunt""#));
+    }
+
+    /// The cover letter and CV as one file: made on request, next to the other two.
+    #[test]
+    fn letter_and_cv_as_one_file() {
+        let (_s, agent, _fh, host) = world();
+        agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        let job = agent.tailor("test:1", None).unwrap();
+        assert_eq!(call(&agent, &host, "GET", "/api/jobs/test:1/download/both", Value::Null).0, 200);
+        let cv = PathBuf::from(job.cv_path.unwrap());
+        let both = cv.with_file_name(format!("{} - Cover Letter and CV.docx", cv.file_stem().unwrap().to_string_lossy()));
+        let text = crate::cv::open(&both).unwrap().plain_text();
+        assert!(text.contains(crate::cv::open(&cv).unwrap().plain_text().trim()), "the CV is in it");
+        assert!(text.len() > crate::cv::open(&cv).unwrap().plain_text().len() + 40, "and the letter before it");
     }
 
     #[test]

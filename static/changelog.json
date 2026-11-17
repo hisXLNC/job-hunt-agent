@@ -2,12 +2,16 @@
   {
     "version": "26.11.3",
     "date": "2026-11-17",
-    "title": "History says who made each change",
+    "title": "History says who made each change, one file for letter and CV",
     "changes": [
       "Each line in a job's history now says who made the change: You, Job Hunt or Claude. Lines from before this update say it only where it is certain.",
       "Every change of stage is now written in the history, including the ones Job Hunt makes by itself after scoring, filtering or a closed posting.",
-      "Fixed: pressing Apply now on a posting that ends with Thank you for your interest could mark the job as applied. Job Hunt now marks it only after the application form itself is sent and the site confirms.",
-      "The history line for an application says whether Job Hunt read the site's confirmation or you pressed I submitted it."
+      "Fixed: a job could be marked as applied when you had not sent it. Answering a Yes or No button on a form, or pressing Apply now on a posting, was taken as sending it, and minutes later words in the posting itself were read as the site's confirmation. Job Hunt now marks it only when the form's own Submit is pressed and the site confirms within moments.",
+      "The history line for an application says whether Job Hunt read the site's confirmation or you pressed I submitted it.",
+      "New: Letter + CV in one file, on a job's page beside the CV and letter buttons. One Word file (or one PDF) with the cover letter first and the CV after it, for forms with a single upload box. It is made from the two files as they are, so your own edits are in it.",
+      "The browser extension's popup shows the company's logo, the role in larger type and the company on its own line; the approved applications in its list have logos too.",
+      "Form filling: an answer of Male or Female now matches a list that says Man or Woman, and is no longer replaced by Prefer not to respond.",
+      "Copy details now includes the page's Add a document buttons, so uploads Job Hunt could not reach can be fixed."
     ]
   },
   {

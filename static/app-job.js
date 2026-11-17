@@ -214,6 +214,7 @@ async function showJob(id) {
     ${j.cv_path || j.cover_letter ? `<section class="card">
       <div class="row file-row">${j.cv_path ? `<button class="btn" data-act="open" data-what="cv">${svg('doc')}${own?.cv ? 'Open your CV' : 'Open tailored CV'}</button><button class="btn" data-act="open" data-what="letter">${svg('doc')}Open cover letter</button>
         <button class="btn ghost" data-act="open" data-what="cv-pdf" title="${cv_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">CV PDF</button><button class="btn ghost" data-act="open" data-what="letter-pdf" title="${letter_pdf ? 'Open the PDF copy' : 'Make a PDF copy (needs Word or LibreOffice)'}">Letter PDF</button>
+        <button class="btn ghost" data-act="open" data-what="both" title="One Word file with the cover letter first and the CV after it, for forms with a single upload box. Made from the two files as they are now.">Letter + CV in one file</button><button class="btn ghost" data-act="open" data-what="both-pdf" title="The same as a PDF (needs Word or LibreOffice)">One PDF</button>
         <button class="btn" data-act="open" data-what="folder">${svg('folder')}Show files</button>` : ''}</div>
       <div class="row file-row own-row">
         ${['cv', 'letter'].map(w => own?.[w]

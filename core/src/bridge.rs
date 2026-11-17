@@ -274,7 +274,7 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
         // reloads itself from the folder (background.js).
         ("GET", "/ext/ping") => Ok(json!({ "app": "Job Hunt", "version": agent.secret("app.version"), "folder": extension_dir(agent).to_string_lossy() })),
         // Which application a page is, and its company's own posting if this is a job board's copy.
-        ("POST", "/ext/which") => crate::fill::job_for_page(agent, url, title).map(|j| page_job(&j, url)),
+        ("POST", "/ext/which") => crate::fill::job_for_page(agent, url, title).map(|j| with_logo(agent, page_job(&j, url))),
         // The answers in one request, held open until Claude has written them (the phone's bookmark,
         // and extensions from before 2.58.2).
         ("POST", "/ext/fill") => fill_job(agent, url, title).and_then(|j| fill_answers(agent, &j, url, &fields)),
@@ -319,7 +319,14 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
         }
         // You chose which application this page is (when Job Hunt couldn't tell): it stays chosen for
         // the next two hours, through the form's other pages (see fill::job_for_page).
-        ("GET", "/ext/jobs") => Ok(json!({ "jobs": pick_list(agent) })),
+        ("GET", "/ext/jobs") => {
+            // With each approved one's logo: the popup lists those to open and submit.
+            let mut jobs = pick_list(agent);
+            for j in jobs.iter_mut().filter(|j| j["status"] == "approved").take(6) {
+                j["logo"] = logo(agent, j["company"].as_str().unwrap_or("")).into();
+            }
+            Ok(json!({ "jobs": jobs }))
+        }
         ("POST", "/ext/pick") => {
             let site = url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default();
             // Not an application: a profile on this site, filled in from your CV.
@@ -330,11 +337,12 @@ pub fn handle(agent: &Arc<Agent>, method: &str, path: &str, sent_key: &str, body
                 };
             }
             let job = agent.db().job(b["job_id"].as_str().unwrap_or(""));
-            match job {
+            let chosen = match job {
                 Ok(Some(j)) => agent.db().set("apply.browser", &format!("{}|{}|{}", j.id, crate::util::now(), url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default())).map(|_| page_job(&j, url)),
                 Ok(None) => Err(crate::Error("That job is no longer in Job Hunt.".into())),
                 Err(e) => Err(e),
-            }
+            };
+            chosen.map(|v| with_logo(agent, v))
         }
         // A profile isn't a job: nothing to note, set aside or mark applied.
         ("POST", "/ext/salary" | "/ext/dismiss" | "/ext/applied") if crate::fill::job_for_page(agent, url, title).is_ok_and(|j| j.id == crate::fill::PROFILE) => Ok(json!({ "ok": true, "profile": true })),
@@ -385,6 +393,35 @@ fn pick_list(agent: &Agent) -> Vec<Value> {
     ["approved", "ready"].iter().flat_map(|s| agent.db().jobs(Some(s), 60).unwrap_or_default())
         // With where to apply (the company's own page when Job Hunt found it): the extension opens it.
         .map(|j| json!({ "id": j.id, "title": j.title, "company": j.company, "status": j.status, "url": j.apply_url.clone().filter(|u| !u.is_empty()).unwrap_or_else(|| j.url.clone()) })).collect()
+}
+
+/// A company's logo for the extension's popup, as an image it can show without asking again (it
+/// can't send the key with a picture). None until Job Hunt has one: it starts looking.
+fn logo(agent: &Arc<Agent>, company: &str) -> Option<String> {
+    use base64::Engine;
+    if company.trim().is_empty() {
+        return None;
+    }
+    match crate::logos::kept(agent, company) {
+        Some(Some((ctype, bytes))) if bytes.len() < 200_000 => Some(format!("data:{ctype};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))),
+        Some(_) => None,
+        None => {
+            crate::logos::want(agent, company);
+            None
+        }
+    }
+}
+
+/// page_job with the company's logo.
+fn with_logo(agent: &Arc<Agent>, mut v: Value) -> Value {
+    // (A profile on a job site isn't a company.)
+    if v["job"]["id"] == crate::fill::PROFILE {
+        return v;
+    }
+    if let Some(l) = v["job"]["company"].as_str().and_then(|c| logo(agent, c)) {
+        v["job"]["logo"] = l.into();
+    }
+    v
 }
 
 /// The job, as the extension shows it, with the company's own link when the page isn't it.

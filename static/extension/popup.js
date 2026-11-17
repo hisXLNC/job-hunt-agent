@@ -2,7 +2,14 @@
 // background.js), send the posting you're on to Job Hunt (through the clipboard, as the bookmark
 // does), and open the applications you've approved, one by one, to submit them.
 const $ = id => document.getElementById(id);
-const say = (what, more, bad, kicker) => { $('what').textContent = what; $('more').textContent = more || ''; $('page').className = bad ? 'card bad' : 'card'; if (kicker) $('kicker').textContent = kicker; };
+// What the card says. With `job` it's an application: the company's logo (or its initial on a
+// tile), the role, and the company on its own line.
+const say = (what, more, bad, kicker, job) => {
+  $('what').textContent = what; $('more').textContent = more || ''; $('page').className = bad ? 'card bad' : 'card'; if (kicker) $('kicker').textContent = kicker;
+  $('head').className = job ? 'job' : '';
+  $('logo').hidden = !job; $('co').hidden = !job;
+  if (job) { $('co').textContent = job.company || ''; $('logo').replaceWith(Object.assign(tile(job.company, job.logo), { id: 'logo' })); $('logo').classList.replace('av', 'logo'); }
+};
 const ask = (path, body) => new Promise(ok => chrome.runtime.sendMessage({ popup: path, body }, ok));
 const conn = (state, text) => { $('conn').className = `conn ${state}`; $('connText').textContent = text; };
 let tab;
@@ -42,12 +49,18 @@ async function posts(chosen) {
     `${seen} post${seen === 1 ? '' : 's'} read, ${hiring} about hiring${hiring > added ? `, ${hiring - added} already seen or not really hiring` : ''}. ${added ? 'They\'re under Leads in Job Hunt\'s Queue.' : 'Scroll down for more posts and press again.'}${note ? ' ' + note : ''}`, false, 'Done');
 }
 // A company's initial on a tile whose colour comes from its name, as in Job Hunt.
-function tile(name) {
+function tile(name, logo) {
   const s = String(name || '?').trim(); let h = 0;
   for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360;
   const el = document.createElement('span');
   el.className = 'av'; el.textContent = ((s.match(/[A-Za-z0-9]/) || ['?'])[0]).toUpperCase();
   el.style.background = `hsl(${h} 60% 92%)`; el.style.color = `hsl(${h} 45% 32%)`;
+  if (logo) {
+    const img = document.createElement('img'); img.alt = '';
+    // A picture that won't load leaves the initial.
+    img.onload = () => { el.textContent = ''; el.style.background = ''; el.classList.add('img'); el.appendChild(img); };
+    img.src = logo;
+  }
   return el;
 }
 // The applications you've approved: open each one's form, told to Job Hunt first so Fill this form
@@ -71,7 +84,7 @@ function submitList(jobs) {
       chrome.tabs.create({ url: j.url });
       window.close();
     };
-    row.append(tile(j.company), g, open);
+    row.append(tile(j.company, j.logo), g, open);
     box.appendChild(row);
   }
 }
@@ -146,13 +159,13 @@ function submitList(jobs) {
     $('other').onclick = e => { e.preventDefault(); $('choose').hidden = false; $('otherline').hidden = true; };
     $('pick').onclick = async () => {
       const p = await ask('/ext/pick', { job_id: $('jobs').value, url: tab.url, title: tab.title });
-      if (p && p.ok) { $('choose').hidden = true; say(`${p.v.job.title}`, `${p.v.job.company}. Chosen for this site: get to the application form, then press Fill this form.`, false, 'This application'); }
+      if (p && p.ok) { $('choose').hidden = true; say(p.v.job.title, 'Chosen for this site: get to the application form, then press Fill this form.', false, 'This application', p.v.job); }
       else say("Couldn't choose it", p ? p.error : '', true);
     };
   }
   if (r && r.ok) {
     const j = r.v.job;
-    say(j.title, r.v.company_link ? `${j.company}. Job Hunt found this job on the company's own site: applying there goes straight to them.` : `${j.company}. Get to the application form, then press Fill this form.`, false, 'This application');
+    say(j.title, r.v.company_link ? "Job Hunt found this job on the company's own site: applying there goes straight to them." : 'Get to the application form, then press Fill this form.', false, 'This application', j);
     if (r.v.company_link) { $('company').hidden = false; $('company').onclick = () => { chrome.tabs.update(tab.id, { url: r.v.company_link }); window.close(); }; }
   } else say(...(postsPage ? ['Hiring posts on this page', 'Job Hunt keeps the posts where someone says they\'re hiring, with how well you fit and who to write to. Scroll first to read more of them.'] : ['A job posting or a form?', 'Send the posting to Job Hunt, or fill in the application form on this page.']), false, 'This page');
 })();

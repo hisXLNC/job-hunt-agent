@@ -769,6 +769,9 @@
   // "5 - Fluent" is "Fluent": the numbering in front of an option doesn't have to be in the answer.
   const core = t => clean(t).toLowerCase().replace(/^\d+\s*[-\u2013.:)]\s*/, '');
   const near = (a, b) => { a = clean(a).toLowerCase(); b = clean(b).toLowerCase(); if (!a || !b) return false; if (a === b || a.startsWith(b) || b.startsWith(a)) return true; const x = core(a), y = core(b); return !!x && !!y && (x === y || x.startsWith(y) || y.startsWith(x)); };
+  // The same answer in a site's other word: "Male" where the list says "Man" (or "Man (he/him)").
+  const KIN = [['male', 'man'], ['female', 'woman']];
+  const kin = (option, want) => { const first = t => (core(t).match(/^[a-z]+/) || [''])[0]; const a = first(option), b = first(want); return !!a && !!b && a !== b && KIN.some(g => g.includes(a) && g.includes(b)); };
   const mark = (el, ok) => {
     let box = ['radio', 'checkbox'].includes(el.type) ? (el.closest('fieldset,[role=radiogroup],[role=group]') || el.parentElement) : el;
     // A hidden upload box (behind an Attach button): mark what you can see around it.
@@ -931,7 +934,7 @@
   // for you)? Returns the choice, or '' when there's no answer in half a minute.
   async function chooseFrom(label, names, want) {
     if (!EXT || names.length < 2) return '';
-    const field = { key: 'pick0', type: 'select', label: `${String(label).slice(0, 160)} (the answer meant: ${String(want).slice(0, 80)}; choose the closest of the options, or Other / Not listed when none fits. For a job title, match the kind of work, the role, not the subject it was about: "Business Systems Analyst, Tax System" is a business systems analyst, not a tax collector)`, required: true, options: names };
+    const field = { key: 'pick0', type: 'select', label: `${String(label).slice(0, 160)} (the answer meant: ${String(want).slice(0, 80)}; choose the option that means the same, or the closest, or Other / Not listed when none fits. The answer is already decided: an option that declines to answer only if that is what the answer meant. For a job title, match the kind of work, the role, not the subject it was about: "Business Systems Analyst, Tax System" is a business systems analyst, not a tax collector)`, required: true, options: names };
     const r = await rpc('/ext/fill/start', { url: location.href, title: document.title, fields: [field] });
     if (!r.ok || !r.v || !r.v.ticket) return '';
     for (let i = 0; i < 25; i++) {
@@ -1037,7 +1040,7 @@
       // The innermost of each (an li around an a is one option, not two).
       return all.filter(o => !all.some(x => x !== o && o.contains(x)));
     };
-    const choose = list => { const names = list.map(o => clean(o.textContent)); let i = names.findIndex(n => same(n, v)); if (i < 0) i = names.findIndex(n => near(n, v)); return i < 0 ? null : list[i]; };
+    const choose = list => { const names = list.map(o => clean(o.textContent)); let i = names.findIndex(n => same(n, v)); if (i < 0) i = names.findIndex(n => near(n, v)); if (i < 0) i = names.findIndex(n => kin(n, v)); return i < 0 ? null : list[i]; };
     const was = el.value;
     let list = [];
     // Opened by a click on the box; if that shows nothing, by its arrow; then by typing the answer.
@@ -1502,7 +1505,7 @@
       // Your CV has more jobs or schools than the form shows: press its Add buttons first, then read
       // the form again and fill every entry at once (a redraw after filling could empty the boxes).
       if (round < 1) diag = { version: ME, adds: fields.filter(f => f.type === 'add').map(f => ({ label: f.label, section: f.section, entries: f.entries, answer: answer.values && answer.values[f.key] })), roles: answer.roles,
-        addButtons: [...document.querySelectorAll('button,[role=button],a')].filter(b => !own(b) && /^\s*\+?\s*add\b/i.test(clean(b.textContent || b.getAttribute('aria-label') || ''))).slice(0, 12).map(b => ({ text: clean(b.textContent || '').slice(0, 50), aria: b.getAttribute('aria-label'), shown: shown(b), section: sectionOf(b), at: where(b) })),
+        addButtons: [...document.querySelectorAll('button,[role=button],a')].filter(b => !own(b) && /^\s*\+?\s*add\b/i.test(clean(b.textContent || b.getAttribute('aria-label') || ''))).slice(0, 12).map(b => ({ text: clean(b.textContent || '').slice(0, 50), aria: b.getAttribute('aria-label'), shown: shown(b), section: sectionOf(b), at: where(b), html: /document|resume|r\u00e9sum\u00e9|cv|attach|file|letter/i.test(clean(b.textContent || '')) ? htmlOf((b.parentElement && b.parentElement.parentElement && b.parentElement.parentElement.parentElement) || b, 1500) : undefined })),
         headings: heads.map(h => textOf(h).slice(0, 50)).slice(0, 40),
         files: Object.keys(answer.files || {}).map(k => ({ key: k, name: answer.files[k] && (answer.files[k].name || answer.files[k].kind) })), note: answer.note, job: answer.job && `${answer.job.title} at ${answer.job.company}`,
         // Where files go on this page (an upload area can be a drop zone with its file box hidden).
@@ -1962,9 +1965,12 @@
   // pressed and the form is gone: "Apply now" on a posting that ends "Thank you for your interest"
   // was read as an application sent.
   const confirmedHere = strict => {
-    const text = pageText(), was = before();
-    if (DONE.test(text) && !was.done) return true;
-    if (strict) return false;
+    const text = pageText(), was = before(), ago = Date.now() - pressedAt();
+    // The site answers a sent form within moments. Minutes later, the same words are the posting
+    // itself ("once your application is received…", read on Ashby's Overview tab after answering a
+    // Yes/No on its form: Cleo was marked applied that way).
+    if (DONE.test(text) && !was.done && (strict || ago < 3 * 60 * 1000)) return true;
+    if (strict || ago > 30 * 1000) return false;
     const weak = (DONE_AFTER_PRESS.test(text) && !was.polite) || (DONE_URL.test(location.href) && location.href.split('#')[0] !== was.url && !DONE_URL.test(was.url || ''));
     if (!weak) return false;
     try { return !formHere(); } catch (err) { return true; }
@@ -2043,7 +2049,8 @@
     const says = /^\s*(submit|send)\b|submit (my |your )?application|send (my |your )?application|complete application|finish application/i.test(b.textContent || b.value || '');
     let form = false;
     try { form = filled || formHere(); } catch (err) { /* the page changed */ }
-    if (says || (form && ((b.type === 'submit' && b.form) || /apply now/i.test(b.textContent || b.value || '')))) onPressed();
+    // (A button with no type is "submit" to the browser: a form's Yes and No buttons are. Only one the page itself made a submit button counts.)
+    if (says || (form && ((b.getAttribute('type') === 'submit' && b.form) || /apply now/i.test(b.textContent || b.value || '')))) onPressed();
   }, true);
   // (Not the form sent by Add, Save, Next…: Job Bank's "Add" on a work experience sends its form,
   // and the panel then waited for a confirmation of an application that hadn't been sent.)

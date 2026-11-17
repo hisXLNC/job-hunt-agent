@@ -1237,6 +1237,27 @@ in history, with who made each change. Their data can't be seen from here, so th
   email: <subject>", by Job Hunt.
 - Test: `history_says_who_made_each_change` (api.rs).
 
+Added to the same release after the user pasted Copy details from Scotiabank (SuccessFactors) whose
+log also showed the Cleo case (Ashby: filled 19:53, "marked as applied" auto 19:59, never sent):
+
+- `fill.js` again: a button counts as the form's submit only with an explicit `type="submit"`
+  (Ashby's Yes/No buttons are type-less buttons in the form); the site's own words count for 3
+  minutes after the press, the weak signs for 30 seconds. `KIN` (male/man, female/woman) in the
+  list match, and the second ask to Claude says the answer is already decided (it had turned
+  "Male" into "Prefer not to respond" by the demographic rule).
+- **Not fixed: SuccessFactors uploads.** "Add a Document" there is a `div[role=button]`
+  (`…_attachDownloadLabel`, reported not shown) with no file input on the page; nothing was attached.
+  Copy details now carries those buttons' HTML (`addButtons[].html`); ask for a new paste.
+- **One file** (user request): `cv::letter_then_cv(letter, cv)` builds on the CV's package and puts
+  the letter's body in front with a page break, carrying over the relationships it uses (signature
+  `rId9001`, links). `api::job_file` kinds `both` / `both-pdf` write `<CV name> - Cover Letter and
+  CV.docx` in the application folder on request (always from the current files). Buttons in
+  `static/app-job.js`. Tests `letter_and_cv_in_one_file` (cv.rs), `letter_and_cv_as_one_file` (api.rs).
+  Checked by converting a demo one with LibreOffice. Not done: the form filler doesn't attach it.
+- **Extension popup** (user request, screenshot sent): `/ext/which`, `/ext/pick` and approved rows of
+  `/ext/jobs` carry `logo` as a data URL (`bridge::logo`, from `logos::kept`; starts a look-up when
+  none). `popup.js` `say(..., job)` and `tile(name, logo)`.
+
 ## 26.11.2 (expected pay answered for each job)
 
 The user asked that the expected salary Job Hunt fills in be based on their experience and that
