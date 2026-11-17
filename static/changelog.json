@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.99.1",
+    "date": "2026-11-17",
+    "title": "The Bring back button no longer stays while jobs are scored",
+    "changes": [
+      "After you press Bring back, the button used to stay while the jobs were being scored, so it could be pressed again and again. It is now replaced by a line saying how many are being scored, and comes back only if some could not be scored.",
+      "If another scoring is already running, the jobs brought back wait for it instead of being dropped.",
+      "Checked and pinned by a test: a job you marked Not interested is never brought back."
+    ]
+  },
+  {
     "version": "2.99.0",
     "date": "2026-11-17",
     "title": "Your four decisions",

@@ -1210,6 +1210,17 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.99.1 (Bring back stayed while scoring)
+
+- Cause: jobs being scored keep the reasoning "Brought back by what you want: being scored", which
+  `set_aside_for_wants` counts as able to come back (so an unfinished scoring is offered again).
+  `apply_wants` now holds the claim "wants-score" (`WANTS_SCORING`) from before it answers until
+  the scoring ends; `wants_plan` leaves those jobs out while it is held; `/api/wants/plan` gives
+  `scoring` (`Agent::wants_scoring`), and `wantsOffer` shows "Scoring N jobs brought back" with no
+  button, looking again every 10 s.
+- The scoring thread waits up to half an hour for the "rescore" claim instead of giving up.
+- Only status "skipped" is ever brought back: "dismissed" (Not interested) never is (test added).
+
 ## 2.99.0 (four decisions the owner made)
 
 - Old postings: `Db::trim_filtered_text(30)` empties the description of jobs with status skipped,

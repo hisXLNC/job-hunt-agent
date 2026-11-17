@@ -485,7 +485,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let pay = out.iter().filter(|(_, why)| why.starts_with("salary")).count();
                 let p = agent.profile();
                 let back_pay = back.iter().filter(|j| j.reasoning.as_deref().is_some_and(|r| r.starts_with("Filtered out: salary"))).count();
-                return Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "back_pay": back_pay, "back_work": back.len() - back_pay, "minimum": p.min_salary, "want_work": p.wants.work })));
+                return Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "back_pay": back_pay, "back_work": back.len() - back_pay, "scoring": agent.wants_scoring(), "minimum": p.min_salary, "want_work": p.wants.work })));
             }
             ["api", "overview"] => {
                 // The page asks for this every second or two, and putting it together reads thousands of

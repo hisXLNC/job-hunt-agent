@@ -1884,6 +1884,25 @@ fn a_new_minimum_salary_sets_jobs_aside_and_brings_them_back() {
     p.min_salary = Some(200000.0);
     s.agent.save_profile(&p).unwrap();
     assert_eq!(s.agent.wants_plan().unwrap().0.len(), 1, "only the second, not your application");
+    // One you said you're not interested in never comes back, whatever you change.
+    s.agent.apply_wants().unwrap();
+    assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().status, "skipped");
+    s.agent.db().set_status("test:2", "dismissed", "not interested").unwrap();
+    p.min_salary = Some(85000.0);
+    s.agent.save_profile(&p).unwrap();
+    assert_eq!(s.agent.wants_plan().unwrap().1.len(), 0, "not interested stays not interested");
+    assert_eq!(s.agent.apply_wants().unwrap()["restored"], 0);
+    assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().status, "dismissed");
+    // While jobs brought back are being scored they aren't offered again (the button kept
+    // showing); once that has ended, one whose scoring didn't finish is.
+    s.agent.db().update_job("test:2", &[("status", "skipped".into()), ("reasoning", "Brought back by what you want: being scored.".into())]).unwrap();
+    assert_eq!(s.agent.wants_plan().unwrap().1.len(), 1);
+    {
+        let _scoring = s.agent.claim("wants-score").unwrap();
+        assert_eq!(s.agent.wants_plan().unwrap().1.len(), 0);
+        assert_eq!(s.agent.wants_scoring(), 1);
+    }
+    assert_eq!((s.agent.wants_plan().unwrap().1.len(), s.agent.wants_scoring()), (1, 0));
 }
 
 #[test]

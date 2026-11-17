@@ -3,6 +3,8 @@
 use super::*;
 
 /// The reasoning of a job brought back by `apply_wants` until it has its score.
+/// The claim held while jobs brought back are scored.
+const WANTS_SCORING: &str = "wants-score";
 const BEING_SCORED: &str = "Brought back by what you want: being scored";
 
 impl Agent {
@@ -1247,11 +1249,23 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
         let skipped = self.db().jobs(Some("skipped"), 100_000)?;
         // (One scored again since and still flagged isn't offered a second time.)
         let again: std::collections::HashSet<String> = serde_json::from_str(&self.secret("wants.rescored")).unwrap_or_default();
+        // (While the ones brought back are being scored they aren't offered again: the button
+        // kept showing, to be pressed over and over. One whose scoring didn't finish is, after.)
+        let scoring = self.is_running(WANTS_SCORING);
         let back = skipped.into_iter()
+            .filter(|j| !(scoring && j.reasoning.as_deref().is_some_and(|r| r.starts_with(BEING_SCORED))))
             .filter(|j| j.closed_at.is_none() && !j.description.trim().is_empty() && Self::set_aside_for_wants(j) && Self::misfit(j, &profile).is_none()
                 && Self::scored_down_for_work(j).is_none_or(|k| takes(k) && !again.contains(&j.id)))
             .collect();
         Ok((out, back))
+    }
+
+    /// How many jobs brought back are being scored right now.
+    pub fn wants_scoring(&self) -> usize {
+        if !self.is_running(WANTS_SCORING) {
+            return 0;
+        }
+        self.db().jobs(Some("skipped"), 100_000).map(|l| l.iter().filter(|j| j.reasoning.as_deref().is_some_and(|r| r.starts_with(BEING_SCORED))).count()).unwrap_or(0)
     }
 
     /// Act on `wants_plan`: the ones that don't fit are set aside (where each stood is kept, to put it
@@ -1293,11 +1307,21 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
                 restored += 1;
             }
         }
-        if !to_score.is_empty() {
+        // Claimed here, before answering, so the count asked for next already leaves them out.
+        if let Some(mine) = (!to_score.is_empty()).then(|| self.claim_owned(WANTS_SCORING)).flatten() {
             let (a, ids) = (self.clone(), to_score.clone());
             std::thread::spawn(move || {
-                let Ok(_g) = a.claim("rescore") else {
-                    let _ = a.db().log(None, "rescore:error", "brought back by what you want, not scored: a scoring was already running. Score them from Skipped.");
+                let _mine = mine;
+                // Another scoring (a CV update's) may be running: waited for, up to half an hour.
+                let mut guard = None;
+                for _ in 0..90 {
+                    match a.claim("rescore") {
+                        Ok(g) => { guard = Some(g); break; }
+                        Err(_) => std::thread::sleep(std::time::Duration::from_secs(if cfg!(test) { 0 } else { 20 })),
+                    }
+                }
+                let Some(_g) = guard else {
+                    let _ = a.db().log(None, "rescore:error", "brought back by what you want, not scored: another scoring was running for half an hour. The button under the setting tries them again.");
                     return;
                 };
                 let n = a.score_brought_back(&ids);

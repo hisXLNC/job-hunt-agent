@@ -108,7 +108,7 @@ Line numbers are as of 2.97.3.
 63. `tailoring.rs:1211`, `search.rs:883`: jobs Claude set aside for pay ("Pays up to …") never
     come back when you lower the minimum. fixed 2.98.0
 64. `tailoring.rs:1287`: bring-back scoring can fail silently if a re-score is already running,
-    and has no cap. open
+    and has no cap. fixed 2.99.1 (it waits for the other scoring; still no cap)
 65. `tailoring.rs:1238`: the "already re-scored" list never clears. open
 66. `tailoring.rs:350`: a letter you edited can be overwritten by a held re-tailoring. open
 67. `tailoring.rs:757`: the after-tailoring score is rarely retried after a failure. open

@@ -4,6 +4,16 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.99.1] - 2026-11-17
+
+The Bring back button no longer stays while jobs are scored.
+
+### Changes
+
+- After you press Bring back, the button used to stay while the jobs were being scored, so it could be pressed again and again. It is now replaced by a line saying how many are being scored, and comes back only if some could not be scored.
+- If another scoring is already running, the jobs brought back wait for it instead of being dropped.
+- Checked and pinned by a test: a job you marked Not interested is never brought back.
+
 ## [2.99.0] - 2026-11-17
 
 Your four decisions.
@@ -2674,6 +2684,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.99.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.1
 [2.99.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.0
 [2.98.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.98.0
 [2.97.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.3

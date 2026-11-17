@@ -1601,7 +1601,7 @@ async function autosave(form) {
 // box is set (a change made before this existed, or on another day, can still be acted on); with
 // nothing to do it says so, with a button to look again.
 let wantsPlan = null; // { at, r }: the last count, kept a minute (a page shown again doesn't ask again)
-async function wantsOffer(fresh = false) {
+async function wantsOffer(fresh = false, quiet = false) {
   if (!document.querySelector('[data-wants-apply]')) return;
   let r;
   if (!fresh && wantsPlan && Date.now() - wantsPlan.at < 60000) r = wantsPlan.r;
@@ -1614,16 +1614,20 @@ async function wantsOffer(fresh = false) {
       box.innerHTML = `<span>${esc(text)}</span>${again ? '<button type="button" class="btn sm" data-act="checkWants">Check again</button>' : ''}`;
       box.hidden = false;
     });
-    say('Checking the jobs you haven\'t applied to…');
+    if (!quiet) say('Checking the jobs you haven\'t applied to…');
     try { r = await api('/api/wants/plan'); } catch (e) { say(`Couldn't check your jobs: ${e.message}`, true); return; }
     wantsPlan = { at: Date.now(), r };
   }
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  let said = false; // the scoring line is said once, under the first box showing
   const fill = (field, set, out, back, why, none) => {
     const box = document.querySelector(`[data-wants-apply="${field}"]`);
     if (!box) return;
-    if (!set && !back) { box.hidden = true; return; }
-    if (!out && !back) box.innerHTML = `<span>${esc(none)}</span><button type="button" class="btn sm" data-act="checkWants">Check again</button>`;
+    const scoring = r.scoring && !said;
+    if (!set && !back && !scoring) { box.hidden = true; return; }
+    // Being scored: said, with no button to press again; looked at again as they're scored.
+    if (!out && !back && scoring) { said = true; box.innerHTML = `<span><span class="spin"></span>Scoring ${n(r.scoring, 'job', 'jobs')} brought back. The ones that clear your bar go to your Queue, and a notice says how they did.</span>`; }
+    else if (!out && !back) box.innerHTML = `<span>${esc(none)}</span><button type="button" class="btn sm" data-act="checkWants">Check again</button>`;
     else {
       const parts = [out ? `${n(out, "job you haven't applied to", "jobs you haven't applied to")} ${why}` : '', back ? `${n(back, 'job', 'jobs')} set aside before now ${back === 1 ? 'fits' : 'fit'}` : ''].filter(Boolean);
       const label = [out ? `Set aside ${out}` : '', back ? `bring back ${back}` : ''].filter(Boolean).join(' and ');
@@ -1632,11 +1636,14 @@ async function wantsOffer(fresh = false) {
     box.hidden = false;
   };
   const other = r.want_work === 'contract' ? 'permanent' : 'contract';
-  fill('min_salary', r.minimum > 0, r.pay, r.back_pay, `${r.pay === 1 ? 'pays' : 'pay'} less than ${money(r.minimum)}`,
-    `No job you haven't applied to says it pays less than ${money(r.minimum)}. Jobs that don't give their pay are kept.`);
   fill('want_work', !!r.want_work, r.work, r.back_work, `${r.work === 1 ? 'says it is' : 'say they are'} ${other}`,
     `No job you haven't applied to plainly says it is ${other}. Jobs that don't say are kept, and Claude weighs them.`);
+  fill('min_salary', r.minimum > 0, r.pay, r.back_pay, `${r.pay === 1 ? 'pays' : 'pay'} less than ${money(r.minimum)}`,
+    `No job you haven't applied to says it pays less than ${money(r.minimum)}. Jobs that don't give their pay are kept.`);
+  clearTimeout(wantsTimer);
+  if (r.scoring) wantsTimer = setTimeout(() => wantsOffer(true, true), 10000);
 }
+let wantsTimer;
 
 // ---- Find any job (Ctrl+K) ----
 /** A search over every job, company first, grouped by where it stands; Enter opens the first. */
