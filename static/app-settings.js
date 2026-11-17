@@ -118,7 +118,7 @@ function modelsLine(c) {
 function followedHtml(list) {
   list = list || [];
   return `<header><h2>Companies you follow</h2>${list.length ? `<span class="muted small">${list.length}</span>` : ''}</header>
-    <p class="muted">Job Hunt tells you (here, and on your phone if notices are on) whenever a search finds a new posting from one of these companies, even one that doesn't match your job titles. It can only tell you about postings its searches find: for a company with its own careers site, add that under Employers' own sites above too.</p>
+    <p class="muted">Job Hunt tells you (here, and on your phone if notices are on) whenever a search finds a new posting from one of these companies that passes your filters (your job titles, places, pay and kind of work). Their other openings are not announced; click the company's name on any job to see them all. It can only tell you about postings its searches find: for a company with its own careers site, add that under Employers' own sites above too.</p>
     <div class="chips">${list.map(c => `<span class="chip">${coName(c)}<button type="button" data-act="followCompany" data-company="${esc(c)}" data-on="0" title="Stop following ${esc(c)}" aria-label="Stop following ${esc(c)}">×</button></span>`).join('') || '<span class="muted small">None yet. Add one here, or press Follow on any job\'s page.</span>'}</div>
     <form class="row" data-follow-add><input type="text" name="company" placeholder="Company name" maxlength="80" aria-label="Company to follow" style="max-width:280px"><button class="btn" type="submit">Follow</button></form>`;
 }

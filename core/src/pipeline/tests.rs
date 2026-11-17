@@ -3012,7 +3012,9 @@ fn a_new_posting_from_a_followed_company_gets_its_own_notice() {
     other.company = "Elsewhere".into();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Night Baker", "2"), other])).unwrap();
     let notes = s.notes.lock().unwrap().clone();
-    assert!(notes.iter().any(|n| n == "2 new openings at Acme"), "{notes:?}");
+    // Only the one for you: the baker's job doesn't pass your filters, so it isn't announced.
+    assert!(notes.iter().any(|n| n == "New opening at Acme"), "{notes:?}");
+    assert!(!notes.iter().any(|n| n.contains("new openings at Acme")), "{notes:?}");
     assert!(!notes.iter().any(|n| n.contains("Elsewhere")), "{notes:?}");
     // The same postings found again are not new: no second notice. Nor once you stop following.
     s.notes.lock().unwrap().clear();

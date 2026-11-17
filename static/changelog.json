@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.99.3",
+    "date": "2026-11-17",
+    "title": "Followed companies: only postings for you",
+    "changes": [
+      "A company you follow now gets a notice only for new postings that pass your filters (your job titles, places, pay and kind of work), not for every opening it has. Click the company's name on any job to see all its postings."
+    ]
+  },
+  {
     "version": "2.99.2",
     "date": "2026-11-17",
     "title": "Safety fixes from the review",

@@ -742,9 +742,6 @@ impl Agent {
             // the page reading alongside, each turn could wait a second: 1,664 postings took 17 minutes.
             report.new += fresh.len();
             let watched: Vec<String> = self.followed_companies().iter().map(|c| crate::db::company_key(c)).collect();
-            if !watched.is_empty() {
-                run.followed.extend(fresh.iter().filter(|p| watched.contains(&crate::db::company_key(&p.company))).map(|p| (p.company.clone(), p.title.clone())));
-            }
             let mut out: Vec<crate::db::Job> = vec![];
             {
                 let asked = std::time::Instant::now();
@@ -758,7 +755,15 @@ impl Agent {
                         (got < min).then(|| format!("rated {got:.1} by employees, below your minimum of {min:.1}"))
                     });
                     match low.or_else(|| prefilter(&p, profile)) {
-                        None => candidates.push(p),
+                        None => {
+                            // From a company you follow, and one for you (it passed your filters:
+                            // titles, place, pay, kind of work): it gets its own notice. The ones
+                            // filtered out don't, or every opening at a large company would.
+                            if watched.contains(&crate::db::company_key(&p.company)) {
+                                run.followed.push((p.company.clone(), p.title.clone()));
+                            }
+                            candidates.push(p)
+                        }
                         Some(why) if why == NO_TITLE_MATCH => run.near.push(p),
                         Some(why) => out.push(skipped_job(&p, &why, report)),
                     }

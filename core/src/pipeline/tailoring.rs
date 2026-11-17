@@ -894,7 +894,7 @@ own wording, and don't list them in keyword_gaps. Add the keyword only: no emplo
             let more = if n > 3 { format!(", and {} more", n - 3) } else { String::new() };
             self.note(
                 &if n == 1 { format!("New opening at {company}") } else { format!("{n} new openings at {company}") },
-                &format!("{}{more}. Click the company's name in Job Hunt to see them all.", titles.iter().take(3).copied().collect::<Vec<_>>().join("; ")),
+                &format!("{}{more}. They passed your filters and are being scored. Click the company's name in Job Hunt to see every opening there.", titles.iter().take(3).copied().collect::<Vec<_>>().join("; ")),
             );
         }
     }

@@ -4,6 +4,14 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.99.3] - 2026-11-17
+
+Followed companies: only postings for you.
+
+### Changes
+
+- A company you follow now gets a notice only for new postings that pass your filters (your job titles, places, pay and kind of work), not for every opening it has. Click the company's name on any job to see all its postings.
+
 ## [2.99.2] - 2026-11-17
 
 Safety fixes from the review.
@@ -2699,6 +2707,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.99.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.3
 [2.99.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.2
 [2.99.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.1
 [2.99.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.0

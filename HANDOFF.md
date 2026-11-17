@@ -1210,6 +1210,16 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.99.3 (followed companies: only postings for you)
+
+The user: "make following a company show postings that apply to me not just all of them".
+`search.rs`: `run.followed` is now filled in the `None` arm of the prefilter match (postings that
+become candidates), not from every fresh posting. Near-miss titles and filtered-out ones get no
+notice. Test `a_new_posting_from_a_followed_company_gets_its_own_notice` changed on purpose (the
+baker's job is no longer announced). The earlier design ("even one that doesn't match your job
+titles") is gone from the Settings text. A posting that passes the filters but then scores low is
+still announced: the notice goes out before scoring.
+
 ## 2.99.2 (safety items from REVIEW.md, section A)
 
 Fixed: A1 (the `jobhunt` scheme handler in `desktop/src-tauri/src/lib.rs` answers only the webview

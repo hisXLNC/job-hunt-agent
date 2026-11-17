@@ -623,7 +623,7 @@ async function act(el) {
       const card = $('#followedCard');
       if (card) card.innerHTML = followedHtml(r.followed);
       document.querySelectorAll('.follow-btn').forEach(b => { if (b.dataset.company === company) b.outerHTML = followBtn(company, on); });
-    }, on ? `Following ${company}. You'll be told about each new posting.` : `No longer following ${company}.`);
+    }, on ? `Following ${company}. You'll be told about each new posting that passes your filters.` : `No longer following ${company}.`);
   }
   if (a === 'companyJobs') {
     // All jobs, showing only this company (whatever was filtered before).
