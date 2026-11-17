@@ -694,7 +694,7 @@ function page(html) {
   chipify(main());
   // Settings: jobs found already that your minimum salary or permanent/contract would set aside or
   // bring back, if any are waiting (see wantsOffer).
-  { const w = main().querySelector('[data-wants-apply]'); if (w && typeof wantsOffer === 'function') wantsOffer(w.dataset.wantsApply); }
+  if (main().querySelector('[data-wants-apply]') && typeof wantsOffer === 'function') wantsOffer();
   requestAnimationFrame(fitTabs);
   // Only the job page sets these; elsewhere actions name their job themselves.
   delete main().dataset.job;

@@ -4,6 +4,15 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.97.2] - 2026-11-17
+
+A set-aside button that is always there.
+
+### Changes
+
+- Under Minimum yearly salary and Permanent or contract (Me, Looking for) there is now always a line saying how many jobs you haven't applied to no longer fit, with a button to set them aside or bring others back. It no longer needs you to change the box first, so a change made before this update can be acted on.
+- When nothing needs setting aside the line says so, with a Check again button.
+
 ## [2.97.1] - 2026-11-17
 
 A review of the last releases: fixes.
@@ -2628,6 +2637,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.97.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.2
 [2.97.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.1
 [2.97.0]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.97.0
 [2.96.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.96.8

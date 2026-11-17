@@ -1578,8 +1578,8 @@ async function autosave(form) {
     const minWas = settingsCache.profile.min_salary ?? null, workWas = settingsCache.profile.wants?.work || '';
     const r = await api('/api/settings/profile', { method: 'POST', body });
     delete body.seen_sources;
-    if (form.elements.min_salary && (body.min_salary ?? null) !== minWas) wantsOffer('min_salary', true);
-    if (form.elements.want_work && (body.wants?.work || '') !== workWas) wantsOffer('want_work', true);
+    if (form.elements.min_salary && (body.min_salary ?? null) !== minWas) wantsOffer(true);
+    if (form.elements.want_work && (body.wants?.work || '') !== workWas) wantsOffer(true);
     settingsCache.profile = r.profile || body;
     showBoardFields();
     saveState('✓ All changes saved', 'ok');
@@ -1593,24 +1593,34 @@ async function autosave(form) {
   saveTimer = setTimeout(() => autosave(form), 800);
 }));
 
-// Your minimum salary, or permanent or contract, changed: what that would set aside and bring back
-// among the jobs found already, with one button to do it, under the box you changed.
+// Your minimum salary, and permanent or contract: under each box, what it would set aside and bring
+// back among the jobs found already, with one button to do it. The line is always there once the
+// box is set (a change made before this existed, or on another day, can still be acted on); with
+// nothing to do it says so, with a button to look again.
 let wantsPlan = null; // { at, r }: the last count, kept a minute (a page shown again doesn't ask again)
-async function wantsOffer(field, fresh = false) {
+async function wantsOffer(fresh = false) {
+  if (!document.querySelector('[data-wants-apply]')) return;
   let r;
   if (!fresh && wantsPlan && Date.now() - wantsPlan.at < 60000) r = wantsPlan.r;
   else { try { r = await api('/api/wants/plan'); } catch { return; } wantsPlan = { at: Date.now(), r }; }
-  const box = document.querySelector(`[data-wants-apply="${field}"]`);
-  if (!box) return;
-  document.querySelectorAll('[data-wants-apply]').forEach(b => { if (b !== box) b.hidden = true; });
-  if (!r.set_aside && !r.back) { box.hidden = true; return; }
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
-  const why = [r.pay ? `${r.pay} ${r.pay === 1 ? 'pays' : 'pay'} less than ${money(r.minimum)}` : '', r.work ? `${r.work} ${r.work === 1 ? "isn't" : "aren't"} ${r.want_work || 'the kind you want'}` : ''].filter(Boolean).join(', ');
-  const parts = [r.set_aside ? `${n(r.set_aside, "job you haven't applied to doesn't", "jobs you haven't applied to don't")} fit any more (${why})` : '',
-    r.back ? `${n(r.back, 'job', 'jobs')} set aside before now ${r.back === 1 ? 'fits' : 'fit'}` : ''].filter(Boolean);
-  const label = [r.set_aside ? `Set aside ${r.set_aside}` : '', r.back ? `bring back ${r.back}` : ''].filter(Boolean).join(' and ');
-  box.innerHTML = `<span>${esc(parts.join('; '))}.</span><button type="button" class="btn sm primary" data-act="applyWants">${esc(label[0].toUpperCase() + label.slice(1))}</button>`;
-  box.hidden = false;
+  const fill = (field, set, out, back, why, none) => {
+    const box = document.querySelector(`[data-wants-apply="${field}"]`);
+    if (!box) return;
+    if (!set && !back) { box.hidden = true; return; }
+    if (!out && !back) box.innerHTML = `<span>${esc(none)}</span><button type="button" class="btn sm" data-act="checkWants">Check again</button>`;
+    else {
+      const parts = [out ? `${n(out, "job you haven't applied to", "jobs you haven't applied to")} ${why}` : '', back ? `${n(back, 'job', 'jobs')} set aside before now ${back === 1 ? 'fits' : 'fit'}` : ''].filter(Boolean);
+      const label = [out ? `Set aside ${out}` : '', back ? `bring back ${back}` : ''].filter(Boolean).join(' and ');
+      box.innerHTML = `<span>${esc(parts.join('; '))}.</span><button type="button" class="btn sm primary" data-act="applyWants">${esc(label[0].toUpperCase() + label.slice(1))}</button>`;
+    }
+    box.hidden = false;
+  };
+  const other = r.want_work === 'contract' ? 'permanent' : 'contract';
+  fill('min_salary', r.minimum > 0, r.pay, r.back_pay, `${r.pay === 1 ? 'pays' : 'pay'} less than ${money(r.minimum)}`,
+    `No job you haven't applied to says it pays less than ${money(r.minimum)}. Jobs that don't give their pay are kept.`);
+  fill('want_work', !!r.want_work, r.work, r.back_work, `${r.work === 1 ? 'says it is' : 'say they are'} ${other}`,
+    `No job you haven't applied to plainly says it is ${other}. Jobs that don't say are kept, and Claude weighs them.`);
 }
 
 // ---- Find any job (Ctrl+K) ----

@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.97.2",
+    "date": "2026-11-17",
+    "title": "A set-aside button that is always there",
+    "changes": [
+      "Under Minimum yearly salary and Permanent or contract (Me, Looking for) there is now always a line saying how many jobs you haven't applied to no longer fit, with a button to set them aside or bring others back. It no longer needs you to change the box first, so a change made before this update can be acted on.",
+      "When nothing needs setting aside the line says so, with a Check again button."
+    ]
+  },
+  {
     "version": "2.97.1",
     "date": "2026-11-17",
     "title": "A review of the last releases: fixes",

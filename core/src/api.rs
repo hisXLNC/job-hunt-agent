@@ -1366,7 +1366,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             let (out, back) = agent.wants_plan()?;
             let pay = out.iter().filter(|(_, why)| why.starts_with("salary")).count();
             let p = agent.profile();
-            Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "minimum": p.min_salary, "want_work": p.wants.work })))
+            let back_pay = back.iter().filter(|j| j.reasoning.as_deref().is_some_and(|r| r.starts_with("Filtered out: salary"))).count();
+            Ok(Resp::json(&json!({ "set_aside": out.len(), "pay": pay, "work": out.len() - pay, "back": back.len(), "back_pay": back_pay, "back_work": back.len() - back_pay, "minimum": p.min_salary, "want_work": p.wants.work })))
         }
         ["api", "wants", "apply"] => Ok(Resp::json(&agent.apply_wants()?)),
         // Look for the pay of every posting without one (in the background; a notice says what was found).

@@ -522,12 +522,13 @@ async function act(el) {
   if (a === 'applyWants') {
     return busy(async () => {
       const r = await api('/api/wants/apply', { method: 'POST' });
-      document.querySelectorAll('[data-wants-apply]').forEach(b => { b.hidden = true; });
       wantsPlan = null;
+      await wantsOffer(true);
       toast([r.set_aside ? `${r.set_aside} set aside` : '', r.restored ? `${r.restored} brought back` : '', r.scoring ? `${r.scoring} being scored (a notice says how they did)` : ''].filter(Boolean).join(', ') + '.');
       await refreshOverview();
     });
   }
+  if (a === 'checkWants') return busy(() => wantsOffer(true), 'Checked.');
   if (a === 'rescanSalaries') {
     return busy(async () => { const r = await api('/api/salaries/rescan', { method: 'POST' }); if (!r.started) toast('Already looking.'); },
       'Looking for the pay of every posting without one: its text, its page and the company\'s own posting. A notice says what was found.');

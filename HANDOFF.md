@@ -1210,6 +1210,15 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.97.2 (the set-aside line is always there)
+
+- `wantsOffer(fresh)` (static/app-settings.js) fills both `[data-wants-apply]` boxes, each with its
+  own count: pay under Minimum yearly salary, kind of work under Permanent or contract. A box shows
+  whenever its setting is set (or something set aside for it can come back); with nothing to do it
+  says so with a "Check again" button (`checkWants`). After `applyWants` the boxes are filled again.
+- `/api/wants/plan` also gives `back_pay` and `back_work`.
+- Checked in a browser with the plan mocked; not tested against a real database of jobs.
+
 ## 2.97.1 (a review of 2.93.0 to 2.97.0, with fixes)
 
 - `filters::work_kind` (strict: title, "Employment type:" label, phrases about the job itself)
