@@ -324,7 +324,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`); i
   const on = async () => `${(await text('#nav a.on')).replace(/\s*\d+\s*$/, '').trim()} / ${(await text('.place-tabs a.on, .pipe-tabs a.on')).replace(/\s*\d+\s*$/, '').trim()}`;
   await at('calendar'); check((await text('#nav a.on')).trim() === 'Calendar', 'The calendar is its own place');
   await at('inbox'); check((await text('#nav a.on')).replace(/\s*\d+\s*$/, '').trim() === 'Inbox' && /^\s*Email\s*Drafts/.test(await text('.place-tabs')) && (await text('.place-tabs a.on')).trim() === 'Email', 'Inbox has two views: the email, and the drafts waiting for your approval');
-  await at('inbox/drafts'); check((await text('.place-tabs a.on')).trim().startsWith('Drafts') && /Nothing is waiting/.test(await text('.page')), 'Inbox, Drafts: emails Job Hunt wrote wait here; with none, it says so');
+  await at('inbox/drafts'); check((await text('.place-tabs a.on')).trim().startsWith('Drafts') && /Nothing is waiting|Read and approve/.test(await text('.page')) && /until you approve/.test(await text('.page')), 'Inbox, Drafts: emails Job Hunt wrote wait here to be read and approved (or it says none are waiting)');
   await at('inbox');
   check(await page.evaluate(() => { const row = [...document.querySelectorAll('.inbox-list tr')].find(r => /Rejection/.test(r.textContent)); return !!row && /Draft a reply/.test(row.textContent) && /Open in Gmail/.test(row.textContent) && !!row.querySelector('a[href^="#job/"], a[href*="job"]'); }), 'Inbox: a rejection offers a reply and a link to its application');
   await at('results'); check((await text('#nav a.on')).trim() === 'Insights', 'Insights is its own place');
