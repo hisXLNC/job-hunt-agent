@@ -1211,6 +1211,25 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.1 (the same job in several places: told, and compared)
+
+The user asked to be told when the same requisition shows up as several postings, and to compare
+them. Before, a posting that matched a stored job was dropped (only counted).
+- Store: table `copies` (job_id, posting_id, first_at, last_at, data = the whole `Posting`, text cut
+  at 12,000 letters); `Db::copy_put` (not for skipped/dismissed jobs, not the job's own link, not a
+  link already kept, eight a job, `last_at` touched once a day), `copies_of`, `copy_counts`.
+- `core/src/pipeline/search.rs` `take_in`: a known posting goes to `copy_put`; the second listing of
+  a role within one search waits in `run.spare` and is filed at the end of the search.
+  `merge_duplicates` keeps what it removes as a copy of the one kept.
+- `core/src/pipeline/copies.rs`: `copies_view(job)` (listings, what differs: pay, place, title,
+  dates 14+ days apart, lines only one listing has) and `note_copies` (one notice a job, three a
+  search, only for jobs still being decided on or applied to; an event `copies` on the job).
+- Job API: `copies`; briefs: `copies` (count) for the "3 listings" pill (`closedTag` in app.js).
+  Card `copiesCard` in `static/app-job.js`, above the posting.
+- Dev server: `JH_DEV_COPIES=1` seeds a job with three listings.
+- Test changed on purpose: `search_scores_filters_and_tailors` now also expects the notice for its
+  fourth posting (the first one's role on another page).
+
 ## 26.11.0 (emails held for approval: Inbox, Drafts; dated version numbers)
 
 The user asked to see and edit Job Hunt's email drafts inside Job Hunt (like tailored CVs), with the

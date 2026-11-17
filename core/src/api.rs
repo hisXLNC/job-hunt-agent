@@ -672,6 +672,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let status = req.query.get("status").map(|s| s.as_str()).filter(|s| !s.is_empty());
                 let pdf = |p: &Option<String>| p.as_deref().map(|p| Path::new(p).with_extension("pdf").exists()).unwrap_or(false);
                 let (now, reposts) = (chrono::Utc::now(), agent.db().reposts()?);
+                let copies = agent.db().copy_counts()?;
                 let mut list = agent.db().jobs(status, 2000)?;
                 // Every job: the newest 2,000 found, and whatever their age, each one you did
                 // something with (an application found long ago is still an application).
@@ -699,6 +700,9 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                         b["rating"] = r.clone();
                     }
                     b["warnings"] = json!(crate::pipeline::posting_warnings(j, reposts.get(&j.id).copied().unwrap_or(0), now));
+                    if let Some(n) = copies.get(&j.id) {
+                        b["copies"] = json!(n);
+                    }
                     // Postings found before salaries were read from the text.
                     if j.salary.is_none() {
                         b["salary"] = json!(crate::sources::salary_from_text(&j.description).map(|(t, _)| t));
@@ -769,6 +773,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 job_json["keywords_have"] = json!(job.keyword_gaps.iter().filter(|k| known.contains(&crate::cv::norm(k))).collect::<Vec<_>>());
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
+                    // The same job's other listings (the company's site, job boards, posted again), compared.
+                    "copies": agent.copies_view(&job),
                     "effort": crate::fill::effort(&job),
                     // The job's place in its lifecycle: what's next, where it can move, and the work running or failed on it.
                     "lifecycle": crate::lifecycle::state(agent, &job, host.can_fill() && !req.remote),

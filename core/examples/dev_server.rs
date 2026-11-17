@@ -387,6 +387,17 @@ fn main() {
             "text": "We're hiring a Senior Program Manager at Brightloop to run our platform rebuild. We just closed our seed round and need someone who has shipped under regulation. DM me!",
             "url": "https://www.linkedin.com/feed/update/urn:li:activity:7001/" })], false);
     }
+    // A job found in three places, for the listings card on its page (with JH_DEV_COPIES=1).
+    if std::env::var("JH_DEV_COPIES").is_ok() {
+        let picked = agent.db().jobs(Some("queued"), 1).unwrap_or_default();
+        if let Some(j) = picked.first() {
+            let base = Posting { source: "linkedin".into(), external_id: "77".into(), company: j.company.clone(), title: j.title.clone(), location: "Greater Toronto Area".into(),
+                url: "https://www.linkedin.com/jobs/view/77/".into(), salary: Some("CAD 135,000 - 160,000".into()), posted_at: Some((chrono::Utc::now() - chrono::Duration::days(20)).to_rfc3339()),
+                description: format!("{}\nThis is a twelve-month contract with a possible extension.\nYou must hold a secret-level security clearance.\nThe role is on site four days every week.", j.description), ..Default::default() };
+            let indeed = Posting { source: "indeed".into(), external_id: "abc".into(), url: "https://ca.indeed.com/viewjob?jk=abc".into(), location: j.location.clone(), salary: None, posted_at: None, description: j.description.clone(), ..base.clone() };
+            let _ = agent.search(Some(vec![base, indeed]));
+        }
+    }
     // For the pages about held emails: a stand-in Gmail, and two emails waiting for approval.
     if std::env::var("JH_DEV_MAIL").is_ok() {
         *agent.mail.write().unwrap() = Some(Arc::new(DevMail));

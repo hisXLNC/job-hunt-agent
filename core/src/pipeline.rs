@@ -27,6 +27,7 @@ mod reports;
 mod tailoring;
 pub(crate) use tailoring::cert_mime;
 mod mail;
+mod copies;
 mod drafts;
 pub use drafts::held_kind;
 
@@ -454,6 +455,11 @@ struct SearchRun {
     followed: Vec<(String, String)>,
     found_here: Vec<Posting>,
     known_before: HashSet<String>,
+    /// The same role listed twice in this search: the second listing, set beside the first once
+    /// that one is stored.
+    spare: Vec<Posting>,
+    /// Jobs that got another listing in this search (see pipeline/copies.rs): told at the end.
+    copies: Vec<String>,
 }
 
 /// What every batch of a search is scored against.
@@ -4224,9 +4230,13 @@ impl Agent {
         let last_week = weeks.iter().rev().nth(1).map(|w| w.1).unwrap_or(0);
         // With what to check before putting time in, for the "Check first" tag.
         let (reposts, at) = (db.reposts()?, Utc::now());
+        let copies = db.copy_counts()?;
         let with_warnings = |j: &Job| {
             let mut b = j.brief();
             b["warnings"] = json!(posting_warnings(j, reposts.get(&j.id).copied().unwrap_or(0), at));
+            if let Some(n) = copies.get(&j.id) {
+                b["copies"] = json!(n);
+            }
             if let Some(r) = crate::recruiters::for_company(&recruiters, &j.company) {
                 b["recruiter"] = json!(r.name);
             }

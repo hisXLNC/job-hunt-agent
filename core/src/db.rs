@@ -118,6 +118,9 @@ CREATE TABLE IF NOT EXISTS purged (id TEXT PRIMARY KEY, dupe_key TEXT NOT NULL, 
 CREATE INDEX IF NOT EXISTS purged_dupe ON purged(dupe_key);
 -- The same role posted again later under another listing: a sign it's hard to fill, or not real.
 CREATE TABLE IF NOT EXISTS reposts (job_id TEXT NOT NULL, posting_id TEXT NOT NULL, seen_at TEXT NOT NULL, PRIMARY KEY (job_id, posting_id));
+-- Other listings of a job that's stored already (the same role on another site, or posted again),
+-- kept whole to set beside the first one (see pipeline/copies.rs).
+CREATE TABLE IF NOT EXISTS copies (job_id TEXT NOT NULL, posting_id TEXT NOT NULL, first_at TEXT NOT NULL, last_at TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (job_id, posting_id));
 -- Links in tailored CVs and letters that note when they're opened (see links.rs).
 CREATE TABLE IF NOT EXISTS links (token TEXT PRIMARY KEY, job_id TEXT NOT NULL, target TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS clicks (token TEXT NOT NULL, at TEXT NOT NULL, bot INTEGER NOT NULL DEFAULT 0);
@@ -727,6 +730,54 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// Another listing of a job that's stored: kept (up to eight a job) to compare with it. Not for
+    /// jobs set aside, nor a listing with the job's own link (the same page from another source).
+    /// True when it's one not seen before.
+    pub fn copy_put(&self, job_id: &str, p: &crate::sources::Posting) -> R<bool> {
+        let pid = p.id();
+        if pid == job_id {
+            return Ok(false);
+        }
+        let at = now();
+        let known: Option<String> = self.con.query_row("SELECT last_at FROM copies WHERE job_id = ?1 AND posting_id = ?2", params![job_id, pid], |r| r.get(0)).optional()?;
+        if let Some(last) = known {
+            // Still listed: noted once a day, not on every search.
+            if last.get(..10) != at.get(..10) {
+                self.con.execute("UPDATE copies SET last_at = ?3 WHERE job_id = ?1 AND posting_id = ?2", params![job_id, pid, at])?;
+            }
+            return Ok(false);
+        }
+        let Some((status, url)) = self.con.query_row("SELECT status, url FROM jobs WHERE id = ?1", [job_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).optional()? else { return Ok(false) };
+        let link = url_key(&p.url);
+        if ["skipped", "dismissed"].contains(&status.as_str()) || (!link.is_empty() && link == url_key(&url)) {
+            return Ok(false);
+        }
+        let others = self.copies_of(job_id)?;
+        if others.len() >= 8 || (!link.is_empty() && others.iter().any(|c| url_key(&c.2.url) == link)) {
+            return Ok(false);
+        }
+        let mut kept = p.clone();
+        if kept.description.chars().count() > 12000 {
+            kept.description = kept.description.chars().take(12000).collect();
+        }
+        self.con.execute("INSERT INTO copies (job_id, posting_id, first_at, last_at, data) VALUES (?1, ?2, ?3, ?3, ?4)", params![job_id, pid, at, serde_json::to_string(&kept).unwrap_or_default()])?;
+        Ok(true)
+    }
+
+    /// A job's other listings, in the order they were found: (first seen, last seen, the listing).
+    pub fn copies_of(&self, job_id: &str) -> R<Vec<(String, String, crate::sources::Posting)>> {
+        let mut st = self.con.prepare("SELECT first_at, last_at, data FROM copies WHERE job_id = ?1 ORDER BY first_at, posting_id")?;
+        let rows = st.query_map([job_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))?;
+        Ok(rows.filter_map(|r| r.ok()).filter_map(|(a, b, d)| Some((a, b, serde_json::from_str(&d).ok()?))).collect())
+    }
+
+    /// How many other listings each job has.
+    pub fn copy_counts(&self) -> R<std::collections::HashMap<String, i64>> {
+        let mut st = self.con.prepare("SELECT job_id, COUNT(*) FROM copies GROUP BY job_id")?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
     /// How many times each role was posted again.
     pub fn reposts(&self) -> R<std::collections::HashMap<String, i64>> {
         let mut st = self.con.prepare("SELECT job_id, COUNT(*) FROM reposts GROUP BY job_id")?;
@@ -818,6 +869,11 @@ impl Db {
                 if r.2 == "queued" || r.2 == "skipped" {
                     // The kept copy came from a job board: apply on the company's site instead.
                     self.prefer_company_link(&g[0].1, &r.3)?;
+                    // What the copy said stays, to compare with the one kept.
+                    if let (Some(j), Some((source, ext))) = (self.job(&r.1)?, r.1.split_once(':')) {
+                        self.copy_put(&g[0].1, &crate::sources::Posting { source: source.into(), external_id: ext.into(), company: j.company, title: j.title, location: j.location,
+                            url: j.url, description: j.description, posted_at: j.posted_at, salary: j.salary, apply_url: j.apply_url, ..Default::default() })?;
+                    }
                     self.con.execute("DELETE FROM jobs WHERE id = ?1", [&r.1])?;
                     n += 1;
                 }
@@ -843,6 +899,7 @@ impl Db {
     pub fn delete_job(&self, id: &str) -> R<()> {
         self.con.execute("DELETE FROM jobs WHERE id = ?1", [id])?;
         self.con.execute("DELETE FROM recruiter_jobs WHERE job_id = ?1", [id])?;
+        self.con.execute("DELETE FROM copies WHERE job_id = ?1", [id])?;
         Ok(())
     }
 

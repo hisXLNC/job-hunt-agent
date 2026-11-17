@@ -77,9 +77,26 @@ function whyBox(j, flags, note = '') {
       ${note ? `<p class="muted small">${note}</p>` : ''}
     </div></section>`;
 }
+/** The same job's listings side by side (the first one found, then the others), with what differs. */
+function copiesCard(c) {
+  if (!c?.listings?.length) return '';
+  const name = l => l.company_site ? 'The company\'s site' : sourceName(l.source) || l.site || 'Another site';
+  const day = t => { const d = t && new Date(/^\d+$/.test(t) ? Number(t) : t); return d && !isNaN(d) ? fmtDate(d.toISOString()) : ''; };
+  const rows = c.listings.map(l => `<li class="copy-row2">
+      <div class="row" style="gap:6px;flex-wrap:wrap"><b>${esc(name(l))}</b>${l.site && !l.company_site && (sourceName(l.source) || '').toLowerCase() !== l.site.split('.')[0] ? `<span class="muted small">${esc(l.site)}</span>` : ''}${l.first ? '<span class="pill">First found</span>' : ''}${l.company_site ? '<span class="pill ready">Apply here</span>' : ''}<span class="grow"></span>${l.url ? `<button class="btn ghost sm" data-act="link" data-url="${esc(l.url)}">${svg('open')}Open</button>` : ''}</div>
+      <div class="facts small">${[['Title', l.title], ['Place', l.location], ['Pay', l.salary || 'not shown'], ['Posted', day(l.posted_at) || 'no date'], ['Found', day(l.found_at)]].map(([k, v]) => `<span><b>${k}:</b> ${esc(v || '')}</span>`).join('')}</div>
+      ${l.first ? '' : `<p class="small muted" style="margin:4px 0 0">${l.same == null ? 'It came with no text to compare.' : l.same >= 95 ? 'The text is the same as the first listing\'s.' : `${l.same}% of its text is in the first listing too.`}</p>
+      ${l.only_here?.length ? `<details class="small" style="margin-top:4px"><summary>What only this listing says (${l.only_count} line${l.only_count === 1 ? '' : 's'})</summary><ul class="flags" style="color:inherit">${l.only_here.map(t => `<li>${esc(t)}</li>`).join('')}</ul>${l.only_count > l.only_here.length ? '<p class="muted">Open it to read the rest.</p>' : ''}</details>` : ''}`}
+    </li>`).join('');
+  return `<section class="card" id="copiesCard"><header><h2>Same job, ${c.listings.length} listings</h2></header>
+    <p class="muted small">Job Hunt found this job in more than one place and keeps it as one. Here they are side by side.</p>
+    <ul class="small" style="margin:0 0 4px;padding-left:18px">${c.differences.map(d => `<li>${esc(d)}</li>`).join('')}</ul>
+    <ul class="copy-list">${rows}</ul></section>`;
+}
+
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, lifecycle, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, following, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_open, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, lifecycle, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, following, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_open, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here, copies }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const reviewBox = `<div class="ats-review"><header><h3>${sys ? `How ${esc(sys.name)}'s AI check would read your CV` : 'How an AI screen would read your CV'}</h3>
         ${reviewing ? '<span class="muted small"><span class="spin" data-kind="review"></span>Checking…</span>' : j.cv_path ? `<button class="btn" data-act="review">${review ? 'Check again' : 'Check my CV'}</button>` : ''}</header>
         ${review ? `<p><b>Meets ${review.met} of ${review.total}</b>${review.undecided ? `, ${review.undecided} it can't decide` : ''}${review.not ? `, ${review.not} not shown` : ''}. ${esc(review.note || '')}</p>
@@ -164,6 +181,7 @@ async function showJob(id) {
       <div class="job-grid">
         <div class="stack">
           ${whyBox(j, flags, j.track ? `Matched to your <b>${esc((tracks.find(t => t.name === j.track) || {}).label || j.track)}</b> CV${j.score_after != null ? `; tailored, it scores <b>${j.score_after}</b> (${j.score_after >= j.score ? '+' : ''}${j.score_after - j.score})` : canReach(j) ? `; tailored, it could reach about <b>${canReach(j)}</b>` : ''}.` : '')}
+          ${copiesCard(copies)}
           <section class="card posting-card"><header><h2>The posting</h2>${j.url ? `<button class="btn ghost sm" data-act="open" data-what="${j.apply_url ? 'company' : 'posting'}">${svg('open')}Open it on the site</button>` : ''}</header>
             <div class="posting">${esc(j.description || (String(j.reasoning || '').startsWith('Filtered out') ? 'This posting was filtered out over a month ago, so its text was removed to save space. Open it on the site to read it.' : 'The source gave no description. Open it on the site to read it.'))}</div></section>
         </div>

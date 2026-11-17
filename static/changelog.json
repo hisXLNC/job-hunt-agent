@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.1",
+    "date": "2026-11-17",
+    "title": "The same job in several places, compared",
+    "changes": [
+      "When a job you're deciding on or have applied to turns up in another place (the company's site, LinkedIn, Indeed, or posted again), Job Hunt tells you.",
+      "The job's page sets the listings side by side and says what differs: pay shown on one and not another, a different place or title, dates weeks apart, and lines only one listing has. Lists show how many listings a job has."
+    ]
+  },
+  {
     "version": "26.11.0",
     "date": "2026-11-17",
     "title": "Approve emails before they reach Gmail",

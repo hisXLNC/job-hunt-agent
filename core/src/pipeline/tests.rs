@@ -677,7 +677,8 @@ fn search_scores_filters_and_tailors() {
     assert!(job.cv_path.unwrap().ends_with("Jane Candidate - Acme.docx"));
     assert_eq!(s.agent.db().job("test:2").unwrap().unwrap().status, "skipped");
     assert!(s.agent.db().job("test:3").unwrap().unwrap().reasoning.unwrap().starts_with("Filtered out: location"));
-    assert_eq!(*s.notes.lock().unwrap(), vec!["1 application ready"]);
+    // (The fourth posting is the first one's role on another page: one job, and you're told it has two listings.)
+    assert_eq!(*s.notes.lock().unwrap(), vec!["Same job, 2 listings: Technical Program Manager at Acme", "1 application ready"]);
     // Again: nothing new, nothing re-scored.
     let calls = s.llm.calls.lock().unwrap().len();
     assert_eq!(s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap().new, 0);
@@ -3142,4 +3143,46 @@ fn emails_wait_for_your_approval() {
     s.agent.save_draft(&id4, "dana@acme.example", "Checking in", "Hello again").unwrap();
     assert!(s.agent.approve_draft(&id4, false).unwrap_err().0.contains("Gmail isn't connected"));
     assert_eq!(s.agent.drafts_held_count(), 1);
+}
+
+#[test]
+fn the_same_job_in_several_places_is_told_and_compared() {
+    let s = setup();
+    let text = "Lead program delivery, UAT, vendor management.\nOwn the release calendar for the payments platform.\nWork with the steering committee every month.";
+    let first = Posting { description: text.into(), ..posting("Technical Program Manager", "1") };
+    s.agent.search(Some(vec![first.clone()])).unwrap();
+    let job = s.agent.db().job("test:1").unwrap().unwrap();
+    assert!(s.agent.copies_view(&job).is_null(), "one listing: nothing to compare");
+    // The next search finds it on two job boards: one shows pay and says more, one is the same.
+    let li = Posting { source: "linkedin".into(), external_id: "77".into(), url: "https://www.linkedin.com/jobs/view/77/".into(), salary: Some("$140,000 - $165,000".into()), location: "Toronto, Ontario".into(),
+        description: format!("{text}\nThis is a twelve-month contract with a possible extension.\nYou must hold a secret-level security clearance.\nThe role is on site four days every week."), ..first.clone() };
+    let indeed = Posting { source: "indeed".into(), external_id: "abc".into(), url: "https://ca.indeed.com/viewjob?jk=abc".into(), ..first.clone() };
+    let same_page = Posting { source: "jooble".into(), external_id: "x".into(), ..first.clone() };
+    let before = s.notes.lock().unwrap().len();
+    s.agent.search(Some(vec![li.clone(), indeed.clone(), same_page])).unwrap();
+    assert_eq!(s.agent.db().jobs(None, 50).unwrap().len(), 1, "still one job");
+    let v = s.agent.copies_view(&job);
+    let l = v["listings"].as_array().unwrap();
+    assert_eq!(l.len(), 3, "the job's own link from another source is the same page, not another listing: {v}");
+    assert_eq!((l[0]["first"].as_bool(), l[0]["company_site"].as_bool(), v["apply_at"].as_str()), (Some(true), Some(true), Some("https://acme.example/jobs/1")));
+    let on_li = l.iter().find(|x| x["source"] == "linkedin").unwrap();
+    assert_eq!((on_li["only_count"].as_i64(), on_li["same"].as_i64()), (Some(3), Some(50)));
+    assert!(on_li["only_here"].as_array().unwrap().iter().any(|t| t.as_str().unwrap().contains("security clearance")));
+    assert_eq!(l.iter().find(|x| x["source"] == "indeed").unwrap()["same"], 100);
+    let d: Vec<&str> = v["differences"].as_array().unwrap().iter().filter_map(|x| x.as_str()).collect();
+    assert!(d.iter().any(|x| *x == "Pay is shown on LinkedIn ($140,000 - $165,000) but not on the company's site and Indeed."), "{d:?}");
+    assert!(d.iter().any(|x| x.starts_with("The place differs")) && d.iter().any(|x| x.contains("says things the first listing doesn't")), "{d:?}");
+    // Told once, and written in the job's history; the lists show how many.
+    let notes = s.notes.lock().unwrap()[before..].to_vec();
+    assert!(notes.iter().any(|n| n == "Same job, 3 listings: Technical Program Manager at Acme"), "{notes:?}");
+    assert!(s.agent.db().events_of_job("test:1").unwrap().iter().any(|e| e.kind == "copies"));
+    assert_eq!(s.agent.db().copy_counts().unwrap().get("test:1"), Some(&2));
+    // Seen again on the next search: nothing new to say.
+    let before = s.notes.lock().unwrap().len();
+    s.agent.search(Some(vec![li, indeed])).unwrap();
+    assert!(!s.notes.lock().unwrap()[before..].iter().any(|n| n.starts_with("Same job")));
+    assert_eq!(s.agent.db().copy_counts().unwrap().get("test:1"), Some(&2));
+    // A job you set aside keeps no listings; removing a job removes its listings.
+    s.agent.db().delete_job("test:1").unwrap();
+    assert!(s.agent.db().copy_counts().unwrap().is_empty());
 }

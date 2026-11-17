@@ -494,6 +494,18 @@ impl Agent {
             }
             db.set("last.report", &serde_json::to_string(&report).unwrap_or_default())?;
         }
+        // The second listings of roles first found in this search, now that those are stored.
+        {
+            let db = self.db();
+            for p in std::mem::take(&mut run.spare) {
+                if let Some(id) = db.existing_job_at(&p.id(), &p.company, &p.title, &[p.url.as_str(), p.apply_url.as_deref().unwrap_or("")]) {
+                    if db.copy_put(&id, &p)? {
+                        run.copies.push(id);
+                    }
+                }
+            }
+        }
+        self.note_copies(&run.copies);
         self.note_followed(&run.followed);
         if report.tailored > 0 {
             let n = report.tailored;
@@ -698,6 +710,10 @@ impl Agent {
             }
             let link = crate::db::url_key(&p.url);
             if !run.seen.insert(format!("{}{}", crate::db::dupe_key(&p.company, &p.title), [p.url.as_str(), p.apply_url.as_deref().unwrap_or("")].iter().find_map(|l| crate::db::requisition(l)).map(|r| format!("#{}", r.1)).unwrap_or_default())) || (!link.is_empty() && !run.seen.insert(format!("url:{link}"))) {
+                // Another listing of a role in this same search: set beside the first at the end.
+                if run.spare.len() < 400 {
+                    run.spare.push(p);
+                }
                 continue;
             }
             once.push(p);
@@ -727,6 +743,10 @@ impl Agent {
                         if let Some(id) = db.existing_job_at(&p.id(), &p.company, &p.title, &[p.url.as_str(), p.apply_url.as_deref().unwrap_or("")]) {
                             if db.prefer_company_link(&id, &p.url)? {
                                 db.log(Some(&id), "company-site", &format!("found on the company's site: {}", p.url))?;
+                            }
+                            // Another listing of that job: kept to compare with it.
+                            if db.copy_put(&id, &p)? {
+                                run.copies.push(id);
                             }
                         }
                         let posted = p.posted_at.as_deref().and_then(posted_date);

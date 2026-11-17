@@ -501,14 +501,15 @@ function expiredWhy(j) {
 }
 /** A tag for postings that are no longer open, and for ones to check before putting time in. */
 const closedTag = j => (expiredWhy(j) ? `<span class="pill crit expired" title="${esc(expiredWhy(j))}">Expired</span>` : '')
-  + ((j.warnings || []).length ? ` <span class="pill warn" title="${esc(j.warnings.join('\n'))}">Check first</span>` : '');
+  + ((j.warnings || []).length ? ` <span class="pill warn" title="${esc(j.warnings.join('\n'))}">Check first</span>` : '')
+  + (j.copies ? ` <span class="pill info" title="The same job is listed in ${j.copies + 1} places. Its page compares them.">${j.copies + 1} listings</span>` : '');
 function eventText(e) {
   const k = e.kind;
   if (k.startsWith('status:')) return `Moved to <b>${esc(STAGES[k.slice(7)] || k.slice(7))}</b>${e.detail ? ` · ${esc(e.detail)}` : ''}`;
   if (k.startsWith('email:')) return `Email: ${esc((CATEGORY[k.slice(6)] || [k.slice(6)])[0])} · ${esc(e.detail)}`;
   if (k.endsWith(':error')) return `<span style="color:var(--crit)">Problem</span> · ${esc(e.detail)}`;
   if (k === 'backup' && e.detail.startsWith('saved ')) return 'Backup saved';
-  const names = { scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', coach: 'Career coach', care: 'Interview reminders', 'apply-link': 'Company site', ratings: 'Company ratings', 'added-again': 'Sent again', forecast: 'Fit forecast' };
+  const names = { copies: 'Another listing', scored: 'Scored', tailored: 'Tailored', rescored: 'Fit re-checked', skipped: 'Skipped', search: 'Job search', inbox: 'Email check', added: 'Added', calendar: 'Calendar', revised: 'Changed', followup: 'Follow-up', closed: 'Closed', check: 'Postings checked', prep: 'Interview prep', answers: 'Application questions', offer: 'Offer', contact: 'Contact', insights: 'Insights', weekly: 'Weekly summary', discover: 'Employers', thanks: 'Thank-you note', career: 'Career paths', coach: 'Career coach', care: 'Interview reminders', 'apply-link': 'Company site', ratings: 'Company ratings', 'added-again': 'Sent again', forecast: 'Fit forecast' };
   return `${esc(names[k] || k)} · ${esc(e.detail)}`;
 }
 const jobLink = e => e.job_id ? `<a href="#job/${encodeURIComponent(e.job_id)}">${esc(e.company)} – ${esc(e.title)}</a> · ` : '';
