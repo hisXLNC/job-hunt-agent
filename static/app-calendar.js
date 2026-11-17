@@ -340,7 +340,7 @@ async function showResults() {
 }
 
 async function showInbox() {
-  const { emails, seen } = await api('/api/emails');
+  const { emails, seen, held = {} } = await api('/api/emails');
   const google = !!overview?.setup?.google;
   const quiet = ['job_alert', 'not_job', 'application_received'];
   const since = seen ? new Date(seen) : new Date(Date.now() - 3 * 86400000);
@@ -351,23 +351,122 @@ async function showInbox() {
     const main = !job ? '' : m.category === 'rejection' ? `<a class="btn sm" href="${job}">Draft a reply</a>`
       : ['interview_request', 'interview_confirmed', 'assessment'].includes(m.category) ? `<a class="btn sm" href="${job}" data-tab-to="interview">Prepare</a>`
       : m.category === 'offer' ? `<a class="btn sm" href="${job}">Weigh the offer</a>` : `<a class="btn sm" href="${job}">Open application</a>`;
-    const reply = m.draft_id ? `<a class="btn sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts" title="A reply is waiting in your Gmail drafts">Open the draft</a>`
-      : google && !quiet.includes(m.category) && m.category !== 'rejection' ? `<button class="btn sm" data-act="emailReply" data-id="${esc(m.gmail_id)}" title="Claude writes a short reply and saves it in your Gmail drafts, in this email's thread. Nothing is sent.">Write a reply</button>` : '';
+    // A reply Job Hunt wrote: held here until you approve it (older ones went straight to Gmail).
+    const mine = held[m.draft_id];
+    const reply = mine === 'waiting' ? `<a class="btn sm" href="#inbox/drafts/${encodeURIComponent(m.draft_id)}" title="A reply is written and waits for your approval">Open the draft</a>`
+      : mine === 'sent' ? '' : m.draft_id && mine !== 'discarded' ? `<a class="btn sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts" title="A reply is in your Gmail drafts">Open Gmail drafts</a>`
+      : google && !quiet.includes(m.category) && m.category !== 'rejection' ? `<button class="btn sm" data-act="emailReply" data-id="${esc(m.gmail_id)}" title="Claude writes a short reply. It waits under Drafts for your approval: nothing is sent, or put in Gmail, before that.">Write a reply</button>` : '';
     const gmail = m.thread_id ? `<a class="btn ghost sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(m.thread_id)}">Open in Gmail</a>` : '';
     return `${main}${reply}${gmail}`;
   };
-  page(`${inboxHead('email', 'Job email Job Hunt has read. Replies are saved as Gmail drafts for you to check and send.',
+  page(`${inboxHead('email', 'Job email Job Hunt has read. Replies it writes wait under Drafts for your approval.',
       `<a class="btn ghost set-btn" href="#settings/inbox">${svg('settings')}Email settings</a>${google ? `<button class="btn primary" data-act="run" data-task="inbox">${svg('mail')}Check email now</button>` : '<a class="btn primary" href="#settings/connections">Connect Gmail</a>'}`)}
     <section class="card" style="padding:6px 10px">${emails.length ? `<table class="inbox-list"><thead><tr><th>Received</th><th>Type</th><th>Email</th><th>Application</th><th>What you can do</th></tr></thead><tbody>
     ${emails.map(m => { const [name, cls] = CATEGORY[m.category] || [m.category, '']; return `<tr class="${fresh(m) ? 'fresh' : ''}">
       <td class="small muted" style="white-space:nowrap">${fresh(m) ? '<span class="pill info">New</span><br>' : ''}${esc(fmtWhen(m.received_at))}</td>
-      <td><span class="pill ${cls}">${esc(name)}</span>${m.draft_id ? '<br><span class="small muted">Draft reply ready</span>' : ''}</td>
+      <td><span class="pill ${cls}">${esc(name)}</span>${m.draft_id && held[m.draft_id] !== 'discarded' ? `<br><span class="small muted">${{ waiting: 'Reply waits for your approval', sent: 'Reply sent', gmail: 'Reply in your Gmail drafts' }[held[m.draft_id]] || 'Draft reply ready'}</span>` : ''}</td>
       <td><b>${esc(m.subject)}</b><br><span class="small muted">${esc(m.sender)}</span><p class="small" style="margin-top:4px">${esc(m.summary)}</p></td>
       <td class="small">${m.job_id ? `<a href="#job/${encodeURIComponent(m.job_id)}">${esc(m.company)} – ${esc(m.title)}</a>` : ''}</td>
       <td><div class="row inbox-acts">${acts(m)}</div></td></tr>`; }).join('')}
     </tbody></table>` : `<p class="empty">${google ? 'No job email yet.' : 'Connect Google and Job Hunt sorts your job email by itself. <a href="#settings/connections">Connect Google</a>'}</p>`}</section>`);
   // Seen now: the count on Inbox clears (the New marks stay until you come back).
   if (overview?.inbox_new) api('/api/emails/seen', { method: 'POST' }).then(refreshOverview).then(renderNav).catch(() => {});
+}
+
+// ---- Inbox, Drafts: the emails Job Hunt wrote, held here until you approve them ----
+const DRAFT_STATE = { waiting: ['Waiting for your approval', 'warn'], gmail: ['Approved: in your Gmail drafts', 'info'], sent: ['Sent', 'ready'], discarded: ['Discarded', ''] };
+let draftSide = 'posting', draftEdit = null, draftPoll = 0;
+/** Save what's typed in the open draft now (before anything else is done with it, or on leaving). */
+async function draftFlush() {
+  const d = draftEdit;
+  if (!d) return;
+  clearTimeout(d.timer);
+  if (!d.dirty) return;
+  d.dirty = false;
+  await api(`/api/drafts/${encodeURIComponent(d.id)}/save`, { method: 'POST', body: d.now });
+}
+window.addEventListener('hashchange', () => { draftFlush().catch(() => {}); clearTimeout(draftPoll); });
+window.addEventListener('beforeunload', () => { draftFlush().catch(() => {}); });
+
+async function showDrafts(id) {
+  if (id) return showDraft(id);
+  draftEdit = null;
+  const { drafts, gmail } = await api('/api/drafts');
+  if (overview && overview.drafts_held !== drafts.length) { overview.drafts_held = drafts.length; renderNav(); }
+  page(`${inboxHead('drafts', 'Emails Job Hunt has written for you. Nothing goes to Gmail, and nothing is sent, until you approve it here.',
+      gmail ? '' : '<a class="btn primary" href="#settings/connections">Connect Gmail</a>')}
+    <section class="card" style="padding:6px 10px">${drafts.length ? `<table class="inbox-list"><thead><tr><th>Kind</th><th>Email</th><th>Application</th><th>To</th><th>Written</th><th></th></tr></thead><tbody>
+    ${drafts.map(d => `<tr>
+      <td><span class="pill info">${esc(d.kind_name)}</span></td>
+      <td><a href="#inbox/drafts/${encodeURIComponent(d.id)}"><b>${esc(d.subject || '(no subject)')}</b></a><p class="small muted" style="margin-top:4px">${esc(d.start)}${d.start.length >= 140 ? '…' : ''}</p></td>
+      <td class="small">${d.job_id ? `<a href="#job/${encodeURIComponent(d.job_id)}">${esc(d.company || '')} – ${esc(d.job_title || '')}</a>` : ''}</td>
+      <td class="small">${d.to ? esc(d.to) : '<span style="color:var(--warn)">No address yet</span>'}</td>
+      <td class="small muted" style="white-space:nowrap">${esc(ago(d.at))}</td>
+      <td><a class="btn primary sm" href="#inbox/drafts/${encodeURIComponent(d.id)}">Read and approve</a></td></tr>`).join('')}
+    </tbody></table>` : '<p class="empty">Nothing is waiting. When Job Hunt writes a follow-up, a thank-you, a reply or an email to a recruiter, it appears here first, for you to read, change and approve.</p>'}</section>`);
+}
+
+/** What has happened with the application, oldest first: what was done, the emails in and out, and this email's earlier versions. */
+function draftHistory(v) {
+  const long = (label, text) => text ? `<details class="small" style="margin-top:4px"><summary>${label}</summary><div class="posting" style="max-height:none;margin-top:4px">${esc(text)}</div></details>` : '';
+  const rows = v.history.map(h => {
+    const when = `<b>${esc(fmtDate(h.at))}</b> · `;
+    if (h.what === 'in') return `<li>${when}<span class="pill info">Email in</span> ${h.from ? `${esc(h.from)}: ` : ''}“${esc(h.subject || '')}”${h.answered ? ' <span class="pill warn">This draft answers it</span>' : ''}${h.text ? `<br><span class="muted">${esc(h.text)}</span>` : ''}${h.thread ? ` <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(h.thread)}">Read in Gmail</a>` : ''}</li>`;
+    if (h.what === 'out') return `<li>${when}<span class="pill">Email out</span> To ${esc(h.to || '')}${h.subject ? `: “${esc(h.subject)}”` : ''}${h.state ? ` <span class="muted">(${esc(h.state)})</span>` : ''}${long('Read', h.text)}</li>`;
+    if (h.what === 'version') return `<li>${when}Version ${h.n} of this email <span class="muted">(${esc(h.note || 'earlier')})</span>${long('See it', `${h.subject ? `Subject: ${h.subject}\n\n` : ''}${h.text || ''}`)}</li>`;
+    return `<li>${when}${esc(h.text || h.kind || '')}</li>`;
+  });
+  return rows.length ? `<ul class="small" style="list-style:none;padding:0;margin:0;display:grid;gap:10px">${rows.join('')}</ul>` : '<p class="muted small">Nothing has happened with it yet.</p>';
+}
+
+async function showDraft(id) {
+  let v;
+  try { v = await api(`/api/drafts/${encodeURIComponent(id)}`); } catch (e) { toast(e.message, true); location.replace('#inbox/drafts'); return; }
+  const d = v.draft, j = v.job, waiting = d.status === 'waiting', off = !waiting || v.revising ? 'disabled' : '';
+  const [state, cls] = DRAFT_STATE[d.status] || [d.status, ''];
+  const sides = [['posting', 'Posting'], ['cv', 'Tailored CV'], ['history', 'History']];
+  if (!j && draftSide !== 'history') draftSide = 'history';
+  const pane = {
+    posting: () => `<p class="small muted">${[j.company, j.location, j.salary, j.posted_at ? `posted ${fmtDate(j.posted_at)}` : ''].filter(Boolean).map(esc).join(' · ')}</p>
+      <div class="posting" style="max-height:none">${j.description ? esc(j.description) : '<span class="muted">The posting\'s text wasn\'t kept.</span>'}</div>
+      <div class="row" style="margin-top:8px">${j.url ? `<button class="btn ghost sm" data-act="link" data-url="${esc(j.url)}">Open posting on the site</button>` : ''}<a class="btn ghost sm" href="#job/${encodeURIComponent(j.id)}">Open the application</a></div>`,
+    cv: () => `${v.cv_text ? `<p class="small muted">The CV tailored for this job${j.applied_at ? ` · applied ${esc(fmtDate(j.applied_at))}` : ''}</p><div class="posting" style="max-height:none">${esc(v.cv_text)}</div>` : '<p class="muted small">No CV was tailored for this job.</p>'}
+      <div class="row" style="margin-top:8px">${j.has_cv ? `<button class="btn ghost sm" data-act="open" data-what="cv" data-job="${esc(j.id)}">Open CV in Word</button>` : ''}${j.has_letter ? `<button class="btn ghost sm" data-act="open" data-what="letter" data-job="${esc(j.id)}">Open cover letter</button>` : ''}</div>`,
+    history: () => draftHistory(v),
+  };
+  const files = (d.attach || []).map(p => p.split(/[\\/]/).pop());
+  page(`${inboxHead('drafts', 'Emails Job Hunt has written for you. Nothing goes to Gmail, and nothing is sent, until you approve it here.', '')}
+    <p class="small"><a href="#inbox/drafts">← All drafts</a></p>
+    <div class="draft-two">
+    <section class="card" id="draftCard" data-id="${esc(d.id)}">
+      <header><h2><span class="pill info">${esc(v.kind_name)}</span> ${j ? `${esc(j.title)} <span class="muted">· ${esc(j.company)}</span>` : esc(d.subject || 'Email')}</h2></header>
+      <p class="small"><span class="pill ${cls}">${esc(state)}</span> <span class="muted">${v.revising ? 'Claude is changing it…' : waiting ? `Last changed ${esc(ago(d.updated_at))} · not in Gmail yet` : esc(ago(d.updated_at))}</span> <span class="muted" id="draftSaved" aria-live="polite"></span></p>
+      <label class="field">To<input type="text" id="draftTo" value="${esc(d.to)}" placeholder="name@company.com" ${off}></label>
+      <label class="field">Subject<input type="text" id="draftSubject" value="${esc(d.subject)}" ${off}></label>
+      <label class="field">Message<textarea id="draftBody" rows="14" style="width:100%" ${off}>${esc(d.body)}</textarea></label>
+      ${files.length ? `<p class="small muted">Goes with it: ${files.map(esc).join(', ')}</p>` : ''}
+      ${d.reply_to ? '<p class="small muted">It answers an email, and goes in that email\'s thread.</p>' : ''}
+      ${waiting ? `<label class="field">Ask Claude for a change<span class="row" style="flex-wrap:nowrap;gap:6px"><input type="text" id="draftChange" style="flex:1" placeholder="e.g. shorter, warmer, mention I'm available from January" ${off}><button class="btn" data-act="draftRevise" ${off}>${v.revising ? 'Changing it…' : 'Make the change'}</button></span></label>
+      <div class="row">${v.gmail ? `<button class="btn primary" data-act="draftApprove" ${off}>Approve: save to Gmail drafts</button><button class="btn" data-act="draftApprove" data-send="1" ${off}>Approve and send now</button>` : '<a class="btn primary" href="#settings/connections">Connect Gmail to approve it</a><button class="btn" data-act="draftCopy">Copy the text</button>'}<span class="grow"></span>${d.versions?.length ? `<button class="btn ghost" data-act="draftUndo" ${off}>Undo last change</button>` : ''}<button class="btn ghost danger" data-act="draftDiscard" ${off}>Discard</button></div>
+      <p class="muted small" style="margin-top:6px">Your edits save here by themselves. Nothing reaches Gmail, and nothing is sent, until you approve.</p>`
+      : `<div class="row">${d.status === 'gmail' ? '<button class="btn primary" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Open Gmail drafts</button>' : ''}<button class="btn" data-act="draftCopy">Copy the text</button></div>
+      <p class="muted small" style="margin-top:6px">${{ gmail: 'You approved it. It is in your Gmail drafts as it reads here: change or send it there.', sent: 'It was sent from your Gmail as it reads here.', discarded: 'You discarded it. It never reached Gmail.' }[d.status] || ''}</p>`}
+    </section>
+    <section class="card"><header><h2>${j ? 'About this application' : 'What it answers'}</h2>${j ? `<span class="seg" role="group">${sides.map(([k, n]) => `<button type="button" class="${k === draftSide ? 'on' : ''}" data-act="draftSide" data-side="${k}">${n}</button>`).join('')}</span>` : ''}</header><div id="draftPane">${pane[draftSide]()}</div></section></div>`);
+  // What you type is kept as you go (a moment after you stop).
+  draftEdit = waiting && !v.revising ? { id: d.id, dirty: false, timer: 0, now: { to: d.to, subject: d.subject, body: d.body } } : null;
+  if (draftEdit) {
+    const e = draftEdit, note = t => { const s = $('#draftSaved'); if (s) s.textContent = t; };
+    ['draftTo', 'draftSubject', 'draftBody'].forEach(k => $(`#${k}`)?.addEventListener('input', () => {
+      e.now = { to: $('#draftTo').value, subject: $('#draftSubject').value, body: $('#draftBody').value };
+      e.dirty = true;
+      note('');
+      clearTimeout(e.timer);
+      e.timer = setTimeout(() => draftFlush().then(() => note('· saved')).catch(err => { e.dirty = true; note(`· not saved: ${err.message}`); }), 700);
+    }));
+  }
+  clearTimeout(draftPoll);
+  if (v.revising) draftPoll = setTimeout(() => { if (location.hash.startsWith('#inbox/drafts/')) route(); }, 2000);
 }
 
 // ---- Add a job ----

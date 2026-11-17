@@ -200,6 +200,10 @@ impl Llm for FakeLlm {
         self.calls.lock().unwrap().push("follow_up".into());
         Ok(FollowUp { subject: format!("Following up: {} application", job.title), body: format!("Hello, I applied on {applied_on}. {c}") })
     }
+    fn revise_email(&self, _c: &str, subject: &str, body: &str, change: &str, _about: &str) -> R<FollowUp> {
+        self.calls.lock().unwrap().push("revise_email".into());
+        Ok(FollowUp { subject: subject.into(), body: format!("{body}\n[changed: {change}]") })
+    }
     fn email_reply(&self, c: &str, email: &crate::claude::EmailIn, about: &str) -> R<String> {
         self.calls.lock().unwrap().push("email_reply".into());
         Ok(format!("Thanks for writing about {about}. Re: {}. {c}", email.subject))
@@ -325,6 +329,8 @@ pub struct FakeMail {
     pub labels: M<Vec<(String, String)>>,
     pub drafts: M<Vec<(String, String)>>,
     pub sent: M<Vec<(String, Vec<PathBuf>)>>,
+    /// Drafts made as approved: (to, files), in the order of `drafts`... of those made that way.
+    pub full: M<Vec<(String, Vec<PathBuf>)>>,
 }
 
 impl Mail for FakeMail {
@@ -352,6 +358,18 @@ impl Mail for FakeMail {
     fn send(&self, to: &str, _s: &str, _b: &str, a: &[PathBuf]) -> R<String> {
         self.sent.lock().unwrap().push((to.into(), a.to_vec()));
         Ok("sent-1".into())
+    }
+    fn draft_full(&self, to: &str, _s: &str, body: &str, reply_to: Option<&Email>, files: &[PathBuf]) -> R<String> {
+        let mut d = self.drafts.lock().unwrap();
+        d.push((reply_to.map(|o| o.id.clone()).unwrap_or_else(|| format!("to:{to}")), body.into()));
+        self.full.lock().unwrap().push((to.into(), files.to_vec()));
+        Ok(format!("gdraft-{}", d.len()))
+    }
+    fn send_draft(&self, id: &str) -> R<String> {
+        let n: usize = id.trim_start_matches("gdraft-").parse().unwrap_or(0);
+        let (to, files) = self.full.lock().unwrap().get(n.saturating_sub(1)).cloned().unwrap_or_default();
+        self.sent.lock().unwrap().push((to, files));
+        Ok("sent-draft".into())
     }
 }
 

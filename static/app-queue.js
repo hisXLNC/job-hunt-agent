@@ -95,7 +95,7 @@ function queueItems(o) {
   (o.to_tailor || []).filter(j => !(o.running || []).includes(`tailor:${j.id}`)).sort((a, b) => applyRank(b) - applyRank(a)).forEach(j => add('pick', 'pick', j.id, { j }));
   // A no, and drafts Job Hunt left in Gmail: said here, not only in a notice that's gone in a moment.
   (o.turned_down || []).forEach(t => add('waiting', 'turned', t.job.id, { j: t.job, t }));
-  (o.drafts_waiting || []).forEach(d => add('waiting', 'draft', d.job.id, { j: d.job, d }));
+  (o.drafts_waiting || []).forEach(d => add('waiting', 'draft', d.held || d.job.id, { j: d.job, d }));
   (o.contact_follow_ups || []).forEach(f => add('waiting', 'contact', f.job.id, { j: f.job, f }));
   (o.follow_ups || []).forEach(j => add('waiting', 'follow', j.id, { j }));
   (o.reach_out || []).forEach(j => add('waiting', 'reach', j.id, { j }));
@@ -107,7 +107,7 @@ function queueItems(o) {
 /** How many decisions are waiting: everything but the notes that are merely worth a look. */
 // (Not the postings still waiting to be scored: 12 of those showed as "1 new match to pick from".)
 const queueCount = items => items.filter(x => x.kind !== 'held' && (x.kind !== 'health' || x.h.level === 'problem')).length;
-const QUEUE_KIND = { pick: 'Pick', approve: 'Approve', submit: 'Submit', filled: 'Submit', ask: 'Ask a recruiter', turned: 'Turned down', draft: 'Draft to send', contact: 'Follow up', follow: 'Follow up', reach: 'Say hello', quiet: 'Tidy up', interview: 'Interview', health: 'Needs attention', held: 'Waiting to be scored' };
+const QUEUE_KIND = { pick: 'Pick', approve: 'Approve', submit: 'Submit', filled: 'Submit', ask: 'Ask a recruiter', turned: 'Turned down', draft: 'Email to approve', contact: 'Follow up', follow: 'Follow up', reach: 'Say hello', quiet: 'Tidy up', interview: 'Interview', health: 'Needs attention', held: 'Waiting to be scored' };
 let queueSkipped = new Set(), queueAt = '';
 /** How the Queue is shown: every listing at once ('list', unless you choose otherwise) or one decision at a time ('one'). Remembered on this device. */
 const queueView = () => { try { return localStorage.getItem('jh.queueView') === 'one' ? 'one' : 'list'; } catch (e) { return 'list'; } };
@@ -174,6 +174,10 @@ function decisionHtml(x, at, of) {
       ${dbar(`<button class="btn quiet" data-act="seen" data-what="turned" data-job="${id}">Got it</button>`, `<a class="btn primary big" data-primary href="#job/${enc}">Draft a reply${key('Enter')}</a>`)}</article>`;
   }
   if (x.kind === 'draft') {
+    // Held in Job Hunt until you approve it (older follow-ups went straight to Gmail: below).
+    if (x.d.held) return `<article class="card decision" data-kind="draft">${decisionTop(j, where)}
+      <div class="dbody"><div class="why blue"><b>${esc(x.d.kind_name || 'An email')} waits for your approval</b>Job Hunt wrote it ${esc(ago(x.d.at))}${x.d.to ? `, to ${esc(x.d.to)}` : ''}: “${esc(x.d.subject || '')}”. Nothing reaches Gmail, and nothing is sent, until you approve it.</div></div>
+      ${dbar('', `<a class="btn primary big" data-primary href="#inbox/drafts/${encodeURIComponent(x.d.held)}">Read and approve${key('Enter')}</a>`)}</article>`;
     return `<article class="card decision" data-kind="draft">${decisionTop(j, where)}
       <div class="dbody"><div class="why blue"><b>A follow-up is in your Gmail drafts</b>Job Hunt wrote it ${esc(ago(x.d.at))}${x.d.to ? `, to ${esc(x.d.to)}` : ''}: “${esc(x.d.subject || '')}”. Nothing is sent until you send it.</div></div>
       ${dbar(`<button class="btn quiet" data-act="seen" data-what="draft" data-job="${id}">Done (sent or deleted)</button>`, `<a class="btn primary big" data-primary href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Open Gmail drafts${key('Enter')}</a>`)}</article>`;

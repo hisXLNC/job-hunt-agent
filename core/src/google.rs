@@ -633,6 +633,18 @@ pub trait Mail: Send + Sync {
     fn send(&self, to: &str, subject: &str, body: &str, attachments: &[PathBuf]) -> R<String>;
     /// A new email saved as a draft for you to check and send. `to` may be empty.
     fn draft(&self, to: &str, subject: &str, body: &str) -> R<String>;
+    /// A draft exactly as you approved it: to whom, the subject, the text, in the thread of the
+    /// email it answers (when it's a reply), with its files. Returns the Gmail draft's id.
+    fn draft_full(&self, to: &str, subject: &str, body: &str, reply_to: Option<&Email>, _files: &[PathBuf]) -> R<String> {
+        match reply_to {
+            Some(o) => self.draft_reply(o, body),
+            None => self.draft(to, subject, body),
+        }
+    }
+    /// Send a draft that's in Gmail. Returns the sent message's id.
+    fn send_draft(&self, _draft_id: &str) -> R<String> {
+        Err(crate::Error("Sending isn't available.".into()))
+    }
 }
 
 impl Mail for Google {
@@ -684,6 +696,28 @@ impl Mail for Google {
         let raw = build_mime("", to, subject, body, &[], &[]);
         let v = self.call(reqwest::Method::POST, "https://gmail.googleapis.com/gmail/v1/users/me/drafts",
             Some(json!({"message": {"raw": URL_SAFE_NO_PAD.encode(raw)}})))?;
+        Ok(v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string())
+    }
+
+    fn draft_full(&self, to: &str, subject: &str, body: &str, reply_to: Option<&Email>, attachments: &[PathBuf]) -> R<String> {
+        let mut files = vec![];
+        for p in attachments {
+            files.push((p.file_name().unwrap_or_default().to_string_lossy().to_string(), std::fs::read(p)?));
+        }
+        let message = match reply_to {
+            Some(o) => {
+                let refs = format!("{} {}", o.references, o.message_id).trim().to_string();
+                let raw = build_mime("", to, subject, body, &[("In-Reply-To", &o.message_id), ("References", &refs)], &files);
+                json!({"raw": URL_SAFE_NO_PAD.encode(raw), "threadId": o.thread_id})
+            }
+            None => json!({"raw": URL_SAFE_NO_PAD.encode(build_mime("", to, subject, body, &[], &files))}),
+        };
+        let v = self.call(reqwest::Method::POST, "https://gmail.googleapis.com/gmail/v1/users/me/drafts", Some(json!({"message": message})))?;
+        Ok(v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string())
+    }
+
+    fn send_draft(&self, draft_id: &str) -> R<String> {
+        let v = self.call(reqwest::Method::POST, "https://gmail.googleapis.com/gmail/v1/users/me/drafts/send", Some(json!({"id": draft_id})))?;
         Ok(v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string())
     }
 

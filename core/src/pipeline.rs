@@ -27,6 +27,8 @@ mod reports;
 mod tailoring;
 pub(crate) use tailoring::cert_mime;
 mod mail;
+mod drafts;
+pub use drafts::held_kind;
 
 /// Near-miss titles Claude looks at per search; the rest wait for the next one.
 const NEAR_MISS_BATCH: usize = 150;
@@ -2370,7 +2372,8 @@ replies and interviews, and a little lower for kinds that got none from several 
 
     /// The follow-up written for an application: {at, to, subject, body, draft}.
     pub fn follow_up(&self, job_id: &str) -> Option<Value> {
-        serde_json::from_str(&self.secret(&format!("followup:{job_id}"))).ok()
+        let kept = self.secret(&format!("followup:{job_id}"));
+        serde_json::from_str(&kept).ok().map(|v| self.with_held(v))
     }
 
     /// Applications sent long enough ago with no reply (an automatic acknowledgement doesn't count)
@@ -2443,20 +2446,20 @@ replies and interviews, and a little lower for kinds that got none from several 
         let own = self.own_words(&job, &profile);
         (f.subject, f.body) = (cv::humanize(&f.subject, &own), cv::humanize(&f.body, &own));
         let to = self.follow_up_to(&job)?;
-        let mail = self.mail.read().unwrap().clone();
-        let draft = match mail {
-            Some(m) => Some(m.draft(&to, &f.subject, &f.body)?),
-            None => None,
-        };
+        // Held for your approval (Inbox, Drafts): nothing reaches Gmail before that.
+        let draft = self.hold_draft("follow-up", Some(job_id), &to, &f.subject, &f.body, None, &[])?;
         let v = json!({ "at": now(), "to": to, "subject": f.subject, "body": f.body, "draft": draft });
         let db = self.db();
         db.set(&format!("followup:{job_id}"), &v.to_string())?;
-        db.log(Some(job_id), "followup", if draft.is_some() { "follow-up email saved in your Gmail drafts" } else { "follow-up email written" })?;
+        db.delete(&format!("seen:draft:{job_id}"))?;
+        db.log(Some(job_id), "followup", "follow-up email written: it waits for your approval")?;
         Ok(v)
     }
 
     pub fn thank_you(&self, job_id: &str) -> Option<Value> {
-        self.db().get(&format!("thanks:{job_id}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
+        // (The database is let go before the draft's state is read: that takes it again.)
+        let kept = self.db().get(&format!("thanks:{job_id}")).ok().flatten();
+        kept.and_then(|s| serde_json::from_str(&s).ok()).map(|v| self.with_held(v))
     }
 
     /// Your other applications to this job's company in the last 90 days: [{title, status, applied}].
@@ -2600,7 +2603,9 @@ replies and interviews, and a little lower for kinds that got none from several 
     }
 
     pub fn rejection_reply(&self, job_id: &str) -> Option<Value> {
-        self.db().get(&format!("decline:{job_id}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok())
+        // (The database is let go before the draft's state is read: that takes it again.)
+        let kept = self.db().get(&format!("decline:{job_id}")).ok().flatten();
+        kept.and_then(|s| serde_json::from_str(&s).ok()).map(|v| self.with_held(v))
     }
 
     /// A short reply to a rejection, saved as a Gmail draft when Gmail is connected: in the thread of
@@ -2627,30 +2632,27 @@ replies and interviews, and a little lower for kinds that got none from several 
         let own = self.own_words(&job, &profile);
         (f.subject, f.body) = (cv::humanize(&f.subject, &own), cv::humanize(&f.body, &own));
         let person = said.as_ref().and_then(|e| e.sender.as_deref()).map(google::address).filter(|a| crate::recruiters::looks_personal(a));
-        let mail = self.mail.read().unwrap().clone();
-        let (to, draft, in_thread) = match (&mail, &said, &person) {
-            (Some(m), Some(e), Some(p)) => {
-                let original = m.get(&e.gmail_id)?;
-                (p.clone(), Some(m.draft_reply(&original, &f.body)?), true)
+        // Held for your approval; a reply to a person goes in their email's thread once approved.
+        let (to, draft, in_thread) = match (&said, &person) {
+            (Some(e), Some(p)) => {
+                let subject = e.subject.as_deref().map(|s| if s.to_lowercase().starts_with("re:") { s.to_string() } else { format!("Re: {s}") }).unwrap_or_else(|| f.subject.clone());
+                (p.clone(), self.hold_draft("decline", Some(job_id), p, &subject, &f.body, Some(&e.gmail_id), &[])?, true)
             }
             _ => {
                 let to = match &person {
                     Some(p) => p.clone(),
                     None => self.follow_up_to(&job)?,
                 };
-                let draft = match &mail {
-                    Some(m) => Some(m.draft(&to, &f.subject, &f.body)?),
-                    None => None,
-                };
+                let draft = self.hold_draft("decline", Some(job_id), &to, &f.subject, &f.body, None, &[])?;
                 (to, draft, false)
             }
         };
         // Their email came from an address nobody reads: say so, so it isn't sent into the void.
         let robot = said.is_some() && person.is_none();
-        let v = json!({ "at": now(), "to": to, "subject": f.subject, "body": f.body, "draft": draft, "in_thread": in_thread, "robot": robot, "interviewed": interviewed, "redrafted": before.is_some() && draft.is_some() });
+        let v = json!({ "at": now(), "to": to, "subject": f.subject, "body": f.body, "draft": draft, "in_thread": in_thread, "robot": robot, "interviewed": interviewed, "redrafted": false });
         let db = self.db();
         db.set(&format!("decline:{job_id}"), &v.to_string())?;
-        db.log(Some(job_id), "decline", if draft.is_some() { "reply to the rejection saved in your Gmail drafts" } else { "reply to the rejection written" })?;
+        db.log(Some(job_id), "decline", "reply to the rejection written: it waits for your approval")?;
         Ok(v)
     }
 
@@ -2662,15 +2664,11 @@ replies and interviews, and a little lower for kinds that got none from several 
         let own = self.own_words(&job, &profile);
         (f.subject, f.body) = (cv::humanize(&f.subject, &own), cv::humanize(&f.body, &own));
         let to = self.follow_up_to(&job)?;
-        let mail = self.mail.read().unwrap().clone();
-        let draft = match mail {
-            Some(m) => Some(m.draft(&to, &f.subject, &f.body)?),
-            None => None,
-        };
+        let draft = self.hold_draft("thank-you", Some(job_id), &to, &f.subject, &f.body, None, &[])?;
         let v = json!({ "at": now(), "to": to, "subject": f.subject, "body": f.body, "draft": draft });
         let db = self.db();
         db.set(&format!("thanks:{job_id}"), &v.to_string())?;
-        db.log(Some(job_id), "thanks", if draft.is_some() { "thank-you email saved in your Gmail drafts" } else { "thank-you email written" })?;
+        db.log(Some(job_id), "thanks", "thank-you email written: it waits for your approval")?;
         Ok(v)
     }
 
@@ -2723,7 +2721,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 }
                 match result {
                     Ok(v) => {
-                        let where_ = if v["draft"].is_string() { "It's in your Gmail drafts" } else { "It's on the application's Interview tab" };
+                        let where_ = if v["draft"].is_string() { "It waits for your approval in Inbox, Drafts" } else { "It's on the application's Interview tab" };
                         self.note(&format!("Thank-you note for {company}"), &format!("{where_}. Add one detail from the conversation, then send it today."));
                         done.push(format!("thanks:{job_id}"));
                     }
@@ -2750,7 +2748,7 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// rejection reply when it's a no about a known application, else a short answer to what they wrote.
     pub fn reply_to_email(&self, gmail_id: &str) -> R<Value> {
         let row = self.db().emails(5000)?.into_iter().find(|e| e.gmail_id == gmail_id).ok_or_else(|| Error("That email is no longer in the list.".into()))?;
-        let Some(mail) = self.mail.read().unwrap().clone() else { return err("Connect Gmail first: the reply is saved in your Gmail drafts.") };
+        let Some(mail) = self.mail.read().unwrap().clone() else { return err("Connect Gmail first: Job Hunt reads the whole email there to answer it.") };
         if !crate::recruiters::looks_personal(&google::address(row.sender.as_deref().unwrap_or(""))) {
             return err("That email came from an address that doesn't take replies. Open the application to write to a person there.");
         }
@@ -2773,10 +2771,11 @@ replies and interviews, and a little lower for kinds that got none from several 
         if let Some(j) = &job {
             body = cv::humanize(&body, &self.own_words(j, &profile));
         }
-        let draft = mail.draft_reply(&original, &body)?;
+        let subject = if original.subject.to_lowercase().starts_with("re:") { original.subject.clone() } else { format!("Re: {}", original.subject) };
+        let draft = self.hold_draft("reply", row.job_id.as_deref(), &google::address(&original.from), &subject, &body, Some(gmail_id), &[])?;
         let db = self.db();
         db.set_email_draft(gmail_id, &draft)?;
-        db.log(row.job_id.as_deref(), "reply", &format!("reply to \u{201c}{}\u{201d} saved in your Gmail drafts", original.subject))?;
+        db.log(row.job_id.as_deref(), "reply", &format!("reply to \u{201c}{}\u{201d} written: it waits for your approval", original.subject))?;
         Ok(json!({ "draft": draft, "body": body, "in_thread": true }))
     }
 
@@ -2844,17 +2843,24 @@ replies and interviews, and a little lower for kinds that got none from several 
             }).collect()
     }
 
-    /// Follow-ups Job Hunt saved in your Gmail drafts in the last two weeks, for applications still
-    /// waiting, that you haven't said you've dealt with.
+    /// Emails waiting on you, for the Queue: each one held for your approval that's about a job, and
+    /// (from before emails were held) follow-ups left in your Gmail drafts in the last two weeks
+    /// that you haven't said you've dealt with.
     pub fn drafts_waiting(&self) -> Vec<Value> {
+        let held = self.db().held_with("waiting").unwrap_or_default();
+        let mut out: Vec<Value> = held.iter().filter_map(|h| {
+            let j = self.db().job(h.job_id.as_deref()?).ok().flatten()?;
+            Some(json!({ "job": j.brief(), "at": h.updated_at, "to": h.to, "subject": h.subject, "held": h.id, "kind_name": held_kind(&h.kind) }))
+        }).collect();
         let since = (Utc::now() - chrono::Duration::days(14)).to_rfc3339();
         // (Read first: each job's follow-up takes the database again.)
         let applied = self.db().jobs(Some("applied"), 2000).unwrap_or_default();
-        applied.into_iter().filter_map(|j| {
+        out.extend(applied.into_iter().filter_map(|j| {
             let f = self.follow_up(&j.id)?;
-            (!f["draft"].is_null() && f["at"].as_str().is_some_and(|a| a >= since.as_str()) && self.db().get(&format!("seen:draft:{}", j.id)).ok().flatten().is_none())
+            (f["draft"].as_str().is_some_and(|d| !d.starts_with("jh:")) && f["at"].as_str().is_some_and(|a| a >= since.as_str()) && self.db().get(&format!("seen:draft:{}", j.id)).ok().flatten().is_none())
                 .then(|| json!({ "job": j.brief(), "at": f["at"], "to": f["to"], "subject": f["subject"] }))
-        }).collect()
+        }));
+        out
     }
 
     /// Draft follow-ups for applications that are due one (a few per email check).
@@ -2873,7 +2879,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         if n > 0 {
             self.note(
                 &format!("{n} follow-up{} ready", if n == 1 { "" } else { "s" }),
-                "Applications with no reply yet have a short follow-up email waiting in your Gmail drafts. Check it and send.",
+                "Applications with no reply yet have a short follow-up email written. Each waits for your approval in Inbox, Drafts.",
             );
         }
         n
@@ -4176,7 +4182,7 @@ impl Agent {
         // before the database is held for the rest.)
         let leads_open = crate::leads::open_count(self);
         let follow_ups: Vec<Value> = self.follow_ups_due().unwrap_or_default().iter().map(|j| j.brief()).collect();
-        let (turned_down, drafts_waiting, inbox_new) = (self.turned_down(), self.drafts_waiting(), self.inbox_new());
+        let (turned_down, drafts_waiting, inbox_new, drafts_held) = (self.turned_down(), self.drafts_waiting(), self.inbox_new(), self.drafts_held_count());
         // Companies you've applied to: for "Applied here before" on the roles in your lists.
         let mut sent_to: BTreeMap<String, Vec<Value>> = BTreeMap::new();
         for s in SENT {
@@ -4293,6 +4299,7 @@ impl Agent {
             "turned_down": turned_down,
             "inbox_new": inbox_new,
             "drafts_waiting": drafts_waiting,
+            "drafts_held": drafts_held,
             "reach_out": reach_out,
             "filled_unconfirmed": filled_unconfirmed,
             "contact_follow_ups": contact_follow_ups,

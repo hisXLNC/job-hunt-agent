@@ -41,7 +41,7 @@ pub fn tools() -> Vec<Value> {
             json!({ "id": id_prop(), "notes": { "type": "string" } }), &["id", "notes"]),
         tool("revise_document", "Change the tailored CV or cover letter as the user asks (\"make it shorter\", \"lead with the ERP rollout\"). Runs in the background; never adds facts that aren't in their CV.",
             json!({ "id": id_prop(), "what": { "type": "string", "enum": ["cv", "letter"] }, "request": { "type": "string" } }), &["id", "what", "request"]),
-        tool("write_follow_up", "Write a short follow-up email for an application with no reply, saved in the user's Gmail drafts when Gmail is connected. Runs in the background.",
+        tool("write_follow_up", "Write a short follow-up email for an application with no reply, held in Job Hunt (Inbox, Drafts) until the user approves it; nothing is sent. Runs in the background.",
             json!({ "id": id_prop() }), &["id"]),
         tool("interview_prep", "The interview prep sheet for an application (likely questions, answers from the CV, the company now, questions to ask). Returns it if written; otherwise starts writing it.",
             json!({ "id": id_prop() }), &["id"]),
@@ -209,7 +209,7 @@ pub fn call(agent: &Arc<Agent>, name: &str, a: &Value) -> R<Value> {
             let j = job(agent, a)?;
             let id = j.id.clone();
             background(agent, format!("followup:{id}"), id.clone(), move |ag| ag.write_follow_up(&id).map(|_| ()))?;
-            Ok(text("Writing the follow-up. It'll be in Gmail drafts (if Gmail is connected) and on the application's page in about a minute."))
+            Ok(text("Writing the follow-up. It will wait for approval in Inbox, Drafts (nothing is sent before that) in about a minute."))
         }
         "interview_prep" => {
             let j = job(agent, a)?;

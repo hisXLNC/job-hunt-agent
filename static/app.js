@@ -183,7 +183,8 @@ const NAV_HOME = { job: 'overview', apply: 'overview', add: 'overview', applicat
 const placeOf = () => { const [page, arg] = (location.hash.slice(1) || 'overview').split('/'); return page === 'search' ? (arg === 'what' ? 'cvs' : 'settings') : page === 'applications' && arg === 'files' ? 'cvs' : NAV_HOME[page] || page; };
 /** Each place's views, as the same row of tabs wherever you are in it. */
 const placeTabs = (tabs, on) => `<nav class="tabs place-tabs">${tabs.map(([href, name, id]) => `<a href="${href}" class="${id === on ? 'on' : ''}">${name}</a>`).join('')}</nav>`;
-const inboxTabs = () => ''; // one view now: Recruiters moved to the Queue's People tab
+/** Inbox: the email Job Hunt has read, and the emails it wrote that wait for your approval. */
+const inboxTabs = on => { const n = overview?.drafts_held || 0; return placeTabs([['#inbox', 'Email', 'email'], ['#inbox/drafts', `Drafts${n ? ` (${n})` : ''}`, 'drafts']], on); };
 /** Me: what you're looking for, then what Job Hunt knows about you. */
 const meTabs = (on, n) => placeTabs([['#search/what', 'Looking for', 'what'], ['#cvs', `CVs${n ? ` (${n})` : ''}`, 'cvs'], ['#cvs/details', 'About me', 'details'], ['#cvs/career', 'Career', 'career'], ['#applications/files', 'Tailored files', 'files']], on);
 /** Career's two views, on the one tab: the paths your CV supports, and the skills that would help most. */
@@ -203,7 +204,11 @@ const VIEWS = [['tracker', 'All jobs'], ['postings', 'All jobs'], ['skipped', 'A
 const INBOX_TABS = [['email', 'Email'], ['recruiters', 'Recruiters'], ['settings', `${svg('settings')}Settings`, 'tab-end']];
 /** Inbox's top: its name, what the view is, its buttons, and its tabs. */
 const inboxHead = (on, about, actions) => `<div class="head"><div class="grow"><h1>Inbox</h1><p class="muted">${about}</p></div><div class="row">${actions || ''}</div></div>${inboxTabs(on)}`;
-const INBOX_ABOUT = 'Job email Job Hunt has read. Replies are saved as Gmail drafts for you to check and send, and messages are labelled under JobHunt/ in Gmail.';
+/** Where an email Job Hunt wrote stands: held for your approval (Inbox, Drafts), approved, sent; older ones went straight to Gmail. */
+const emailState = x => x.held === 'waiting' ? `<span class="pill warn">Waiting for your approval</span> <a href="#inbox/drafts/${encodeURIComponent(x.draft)}">Read, change and approve it</a> · written`
+  : x.held === 'gmail' ? 'Approved: in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a> ·'
+  : x.held === 'sent' ? 'Sent' : x.held === 'discarded' ? 'Discarded' : x.draft ? 'Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>' : 'Written';
+const INBOX_ABOUT = 'Job email Job Hunt has read. Replies it writes wait under Drafts for your approval, and messages are labelled under JobHunt/ in Gmail.';
 /** Where Job Hunt keeps your files, and a way to choose another folder (setup and Settings). */
 const filesCard = (st, setup) => `<section class="card"><header><h2>${setup ? 'Where to keep your files' : 'Your files'}</h2></header>
   <p class="muted">Your CVs, every tailored CV and cover letter, and backups go here${setup ? '. Most people keep them in Documents' : ''}. Job Hunt's own database stays in its program data, so a sync app like OneDrive can't damage it.</p>
@@ -553,8 +558,9 @@ function renderNav() {
   // The badge: what's waiting on you. New matches to pick from aren't counted, or it would never clear.
   const waiting = overview ? queueCount(queueItems(overview).filter(x => x.step !== 'pick')) : 0;
   const mailNew = overview?.inbox_new || 0;
+  const heldN = overview?.drafts_held || 0;
   $('#nav').innerHTML = NAV.map(([id, name, group]) =>
-    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && waiting ? `<span class="badge" title="${waiting} decision${waiting === 1 ? '' : 's'} waiting (new matches to pick from aren't counted)">${waiting}</span>` : ''}${id === 'inbox' && mailNew ? `<span class="badge" title="${mailNew} new email${mailNew === 1 ? '' : 's'} about your applications (job alerts and receipts aren't counted)">${mailNew}</span>` : ''}</a>`).join('');
+    `<a href="#${id}" class="${id === active ? 'on' : ''}">${svg(id)}${name}${id === 'overview' && waiting ? `<span class="badge" title="${waiting} decision${waiting === 1 ? '' : 's'} waiting (new matches to pick from aren't counted)">${waiting}</span>` : ''}${id === 'inbox' && mailNew + heldN ? `<span class="badge" title="${[mailNew ? `${mailNew} new email${mailNew === 1 ? '' : 's'} about your applications (job alerts and receipts aren't counted)` : '', heldN ? `${heldN} email${heldN === 1 ? '' : 's'} Job Hunt wrote waiting for your approval` : ''].filter(Boolean).join('; ')}">${mailNew + heldN}</span>` : ''}</a>`).join('');
   const running = overview?.running || [];
   const busy = running.includes('search') ? (overview?.progress?.scoring ? `${overview.progress.paused ? 'Scoring paused' : 'Scoring waiting postings…'} ${overview.progress.done ?? 0} of ${overview.progress.total ?? 0}` : `${overview?.progress?.paused ? 'Search paused' : 'Searching for jobs…'} ${overview?.progress?.percent ?? 0}%`) : running.includes('inbox') ? 'Checking email…'
     : running.some(r => r.startsWith('tailor') || r === 'add') ? 'Tailoring…' : '';
@@ -776,6 +782,7 @@ async function showRoute() {
     else if (name === 'search') await showSearch(arg);
     else if (name === 'inbox' && arg === 'recruiters' || name === 'recruiters') { location.replace('#people'); return; }
     else if (name === 'people') { if (!overview) await refreshOverview(); await showRecruiters(); }
+    else if (name === 'inbox' && arg.startsWith('drafts')) { if (!overview) await refreshOverview(); await showDrafts(arg.slice(7)); }
     else if (name === 'inbox') await showInbox();
     else if (name === 'add') showAdd();
     else if (name === 'settings' && ['search', 'preferences', 'sources'].includes(arg)) { location.replace(arg === 'sources' ? '#search/setup' : '#search/what'); return; }

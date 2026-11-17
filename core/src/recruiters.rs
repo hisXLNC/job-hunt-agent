@@ -526,7 +526,7 @@ pub fn on_applied(agent: &Agent, job_id: &str) -> R<Option<Value>> {
     if v["sent"] == true {
         agent.note(&format!("Emailed {who} at {}", job.company), &format!("To say you applied for {} and ask them to put you forward. It's in your Gmail Sent folder.", job.title));
     } else if v["drafted"] == true {
-        agent.note(&format!("Email to {who} ready"), &format!("About your application for {} at {}: it's in your Gmail drafts. Read it over and send it.", job.title, job.company));
+        agent.note(&format!("Email to {who} ready"), &format!("About your application for {} at {}: it waits for your approval in Inbox, Drafts.", job.title, job.company));
     }
     Ok(Some(v))
 }
@@ -578,15 +578,11 @@ Name this role, and the earlier one only if its title is given. Claim no call, m
     let attach: Vec<std::path::PathBuf> = if agent.secret("apply.recruiter_cv") == "1" {
         job.cv_path.as_deref().map(std::path::PathBuf::from).map(|p| crate::util::pdf_of(&p).unwrap_or(p)).into_iter().collect()
     } else { vec![] };
-    let (mut sent, mut drafted) = (false, false);
-    if let Some(m) = &mail {
-        if send {
-            sent = m.send(to, &subject, &body, &attach).is_ok();
-        }
-        if !sent {
-            drafted = m.draft(to, &subject, &body).is_ok();
-        }
-    }
+    // Held for your approval (Inbox, Drafts), whatever Settings said before about sending it by
+    // itself: nothing goes out, or into Gmail, until you've read it.
+    let _ = (send, &mail);
+    let sent = false;
+    let drafted = agent.hold_draft("recruiter", Some(&job.id), to, &subject, &body, None, &attach).is_ok();
     if let Some(x) = all.iter_mut().find(|x| x.email == to) {
         x.asked.retain(|a| a.job_id != job.id);
         x.asked.push(Asked { job_id: job.id.clone(), at: now() });

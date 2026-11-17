@@ -264,7 +264,10 @@ function stepHtml(o, step, tracked) {
   if (o.turned_down?.length) groups.push(['Turned down: read it, reply if a person wrote', o.turned_down.map(t => row(t.job, `they said no ${esc(ago(t.at))}${t.said ? `: ${esc(t.said)}` : ''}${t.stale_follow_up ? ' <span style="color:var(--warn)">A follow-up drafted before this is still in your Gmail drafts: delete it.</span>' : ''}`,
     `<a class="btn sm" href="#job/${encodeURIComponent(t.job.id)}">Draft a reply</a>
      <button class="btn ghost sm" data-act="seen" data-what="turned" data-job="${id(t.job)}" title="Take it off this list">Got it</button>`)).join('')]);
-  if (o.drafts_waiting?.length) groups.push(['In your Gmail drafts: read and send', o.drafts_waiting.map(d => row(d.job, `follow-up written ${esc(ago(d.at))}${d.to ? `, to ${esc(d.to)}` : ''}. Nothing is sent until you send it`,
+  // Emails Job Hunt wrote: held until you approve them (older follow-ups went straight to Gmail).
+  if (o.drafts_waiting?.length) groups.push(['Emails written for you: read and approve', o.drafts_waiting.map(d => d.held
+    ? row(d.job, `${esc((d.kind_name || 'email').toLowerCase())} written ${esc(ago(d.at))}${d.to ? `, to ${esc(d.to)}` : ''}. Nothing is sent until you approve it`, `<a class="btn sm" href="#inbox/drafts/${encodeURIComponent(d.held)}">Read and approve</a>`)
+    : row(d.job, `follow-up written ${esc(ago(d.at))}${d.to ? `, to ${esc(d.to)}` : ''}. Nothing is sent until you send it`,
     `<a class="btn sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Open Gmail drafts</a>
      <button class="btn ghost sm" data-act="seen" data-what="draft" data-job="${id(d.job)}" title="Sent or deleted: take it off this list">Done</button>`)).join('')]);
   if (o.contact_follow_ups?.length) groups.push(['No reply from the recruiter: follow up once', o.contact_follow_ups.map(f => row(f.job, `messaged ${esc(f.name)} ${esc(ago(f.sent_at))}${f.late ? '. Follow up now or let it go' : ''}`,
@@ -284,7 +287,7 @@ function stepHtml(o, step, tracked) {
     pick: [has('<span data-pickhead'), has('Tailoring')].filter(Boolean),
     approve: ready,
     submit: [has('Filled in by Job Hunt'), has('Ask your recruiters'), has('Submit')].filter(Boolean),
-    waiting: [has('Turned down'), has('In your Gmail drafts'), has('Message the recruiter'), has('No reply from the recruiter'), has('No reply yet'), has('Quiet'), ...rest('Everything else you applied to', r => r.status === 'applied')].filter(Boolean),
+    waiting: [has('Turned down'), has('Emails written for you'), has('Message the recruiter'), has('No reply from the recruiter'), has('No reply yet'), has('Quiet'), ...rest('Everything else you applied to', r => r.status === 'applied')].filter(Boolean),
     interviews: [has('Interviews in the next'), ...rest('Interviewing and offers', r => ['interviewing', 'offer'].includes(r.status))].filter(Boolean),
   }[step];
   const empty = {

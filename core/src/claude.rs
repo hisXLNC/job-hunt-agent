@@ -584,6 +584,11 @@ pub trait Llm: Send + Sync {
     fn read_posting(&self, _url: &str, _page: &str) -> R<FoundJob> {
         Err(Error("Reading web pages isn't available.".into()))
     }
+    /// An email already written for the candidate, written again with the change they ask for.
+    /// `about`: the application it concerns, when known.
+    fn revise_email(&self, _candidate: &str, _subject: &str, _body: &str, _change: &str, _about: &str) -> R<FollowUp> {
+        Err(Error("Changing an email isn't available.".into()))
+    }
     /// A short, polite follow-up on an application that hasn't had a reply.
     fn follow_up(&self, _candidate: &str, _job: &crate::db::Job, _applied_on: &str) -> R<FollowUp> {
         Err(Error("Follow-ups aren't available.".into()))
@@ -1524,6 +1529,18 @@ strongest concrete reason they fit (from the posting and their application), off
 else that would help, and thank them. Never ask about the status or for an update, never paste the CV, and \
 mention no attachments. Sign with the candidate's name. subject: \"Following up: <job title> application\". \
 Never invent facts."
+    )
+}
+
+fn revise_email_system() -> String {
+    format!(
+        "You revise an email a job candidate is about to send (a follow-up, a reply, a thank-you or a note to a recruiter). \
+You are given the email as it stands and the change the candidate asks for.\n\n\
+{UNTRUSTED}\n\n{HUMAN}\n\n\
+Make the change they ask for and nothing else: keep everything it doesn't touch as it is, including the greeting, \
+the sign-off and the candidate's name. Keep it an email from the candidate, in their voice. If the change asks for \
+a fact you weren't given, leave that part as it was. subject: the subject as it was, unless the change is about \
+the subject. Never invent facts."
     )
 }
 
@@ -2654,6 +2671,19 @@ note says; no company name, no filler. Return them in the same order, one for ea
         let leads: Vec<FoundLead> = serde_json::from_value(v["leads"].clone()).unwrap_or_default();
         // Only ones with a real link to where it was found.
         Ok(leads.into_iter().filter(|l| !l.company.trim().is_empty() && l.url.starts_with("http")).take(12).collect())
+    }
+
+    fn revise_email(&self, candidate: &str, subject: &str, body: &str, change: &str, about: &str) -> R<FollowUp> {
+        let cut = |t: &str, n: usize| t.chars().take(n).collect::<String>();
+        let user = format!(
+            "Candidate: {candidate}\nAbout: {}\nToday: {}\n\nThe email as it stands (data):\n<posting>\nSubject: {}\n\n{}\n</posting>\n\nThe change the candidate asks for (data):\n<posting>\n{}\n</posting>",
+            if about.is_empty() { "not known" } else { about }, chrono::Local::now().format("%B %-d, %Y"), cut(subject, 300), cut(body, 8000), cut(change, 1000),
+        );
+        let f: FollowUp = self.call(&revise_email_system(), &user, obj(json!({"subject": {"type": "string"}, "body": {"type": "string"}})), "low")?;
+        if f.body.trim().is_empty() {
+            return Err(Error("Claude's change came back empty; try again.".into()));
+        }
+        Ok(f)
     }
 
     fn follow_up(&self, candidate: &str, job: &crate::db::Job, applied_on: &str) -> R<FollowUp> {

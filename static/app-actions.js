@@ -579,7 +579,7 @@ async function act(el) {
     return busy(async () => {
       const r = await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/ask-recruiter`, { method: 'POST' });
       await refreshOverview(); route();
-      toast(r.drafted ? `The email to ${r.name} is in your Gmail drafts. Read it over, then send it.` : `Written: it's on the application's Apply tab under People, to copy into an email to ${r.to}.`);
+      toast(r.drafted ? `The email to ${r.name} is written. It waits for your approval in Inbox, Drafts.` : `Written: it's on the application's Apply tab under People, to copy into an email to ${r.to}.`);
     }, `Writing to ${el.dataset.name || 'them'}…`);
   }
   if (a === 'recruiterScan') {
@@ -708,7 +708,35 @@ async function act(el) {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/undo`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Put back as it was.');
   }
   if (a === 'emailReply') {
-    return busy(async () => { await api(`/api/emails/${encodeURIComponent(el.dataset.id)}/reply`, { method: 'POST' }); toast('The reply is in your Gmail drafts, in that email\'s thread. Read it, change what you like, and send it from Gmail.'); route(); }, 'Writing the reply…');
+    return busy(async () => { const r = await api(`/api/emails/${encodeURIComponent(el.dataset.id)}/reply`, { method: 'POST' }); await refreshOverview(); if (r.draft) location.hash = `#inbox/drafts/${encodeURIComponent(r.draft)}`; else route(); }, 'The reply is written. Read it, change what you like, then approve it.');
+  }
+  // A held email (Inbox, Drafts): what you typed is saved first, then the thing asked for.
+  if (a === 'draftSide') { draftSide = el.dataset.side; return draftFlush().catch(() => {}).then(route); }
+  if (a.startsWith('draft') && $('#draftCard')) {
+    const id = $('#draftCard').dataset.id, at = `/api/drafts/${encodeURIComponent(id)}`;
+    if (a === 'draftCopy') return navigator.clipboard.writeText(`${$('#draftSubject').value}\n\n${$('#draftBody').value}`).then(() => toast('Copied.'), () => toast('It couldn\'t be copied.', true));
+    if (a === 'draftRevise') {
+      const change = $('#draftChange').value.trim();
+      if (!change) { toast('Say what should change first.', true); return; }
+      return busy(async () => { await draftFlush(); await api(`${at}/revise`, { method: 'POST', body: { change } }); await route(); });
+    }
+    if (a === 'draftUndo') return busy(async () => { await draftFlush(); await api(`${at}/undo`, { method: 'POST' }); await route(); }, 'Put back as it was before the last change.');
+    if (a === 'draftDiscard') {
+      if (!await ask('Discard this email? It was never in Gmail, and nothing is sent.', 'Discard', true)) return;
+      return busy(async () => { if (draftEdit) draftEdit.dirty = false; await api(`${at}/discard`, { method: 'POST' }); await refreshOverview(); location.hash = '#inbox/drafts'; }, 'Discarded.');
+    }
+    if (a === 'draftApprove') {
+      const send = el.dataset.send === '1', to = $('#draftTo').value.trim();
+      if (send && !await ask(`Send this email to ${to || 'nobody yet'} from your Gmail now?`, 'Send it')) return;
+      return busy(async () => {
+        await draftFlush();
+        const r = await api(`${at}/approve`, { method: 'POST', body: { send } });
+        await refreshOverview();
+        if (r.error) toast(`It's in your Gmail drafts, but it wasn't sent: ${r.error}`, true);
+        else toast(r.status === 'sent' ? `Sent to ${to}.` : 'Approved: it\'s in your Gmail drafts now. Send it from Gmail when you like.');
+        await route();
+      });
+    }
   }
   if (a === 'seen') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(el.dataset.job || jobId)}/seen`, { method: 'POST', body: { what: el.dataset.what } }); await refreshOverview(); route(); }, el.dataset.done || '');
@@ -1359,7 +1387,7 @@ document.addEventListener('change', async e => {
   if (el.dataset.act === 'applyMode' || el.dataset.act === 'applyCv') {
     const body = el.dataset.act === 'applyMode' ? { mode: el.value } : { attach_cv: el.checked };
     await api('/api/recruiters/settings', { method: 'POST', body }).then(() => toast(el.dataset.act === 'applyCv' ? (el.checked ? 'Your tailored CV goes with emails Job Hunt sends.' : 'No CV attached.')
-      : { draft: 'When you apply, the email waits in your Gmail drafts.', send: 'When you apply, Job Hunt sends the email for you.', off: 'No emails when you apply.' }[el.value])).catch(err => toast(err.message, true));
+      : { draft: 'When you apply, the email is written and waits for your approval in Inbox, Drafts.', send: 'When you apply, the email is written and waits for your approval in Inbox, Drafts.', off: 'No emails when you apply.' }[el.value])).catch(err => toast(err.message, true));
     return;
   }
   if (el.dataset.act === 'debugOn') {

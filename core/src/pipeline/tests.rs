@@ -269,11 +269,12 @@ fn emailing_the_recruiter_when_you_apply() {
     *s.agent.cal.write().unwrap() = None;
     s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
     crate::recruiters::edit(&s.agent, &json!({ "email": "jane@acme.example", "name": "Jane Smith", "company": "Acme" })).unwrap();
-    // Draft (the default): in Gmail drafts, once.
+    // Written (the default) and held for your approval, once: nothing is in Gmail yet.
     s.agent.db().set_status("test:1", "applied", "").unwrap();
     let v = crate::recruiters::on_applied(&s.agent, "test:1").unwrap().unwrap();
     assert_eq!((v["to"].as_str(), v["drafted"].as_bool(), v["sent"].as_bool()), (Some("jane@acme.example"), Some(true), Some(false)));
-    assert!(s.mail.drafts.lock().unwrap().iter().any(|(to, _)| to == "to:jane@acme.example"));
+    assert!(waiting(&s).iter().any(|h| h.kind == "recruiter" && h.to == "jane@acme.example" && h.job_id.as_deref() == Some("test:1")));
+    assert!(s.mail.drafts.lock().unwrap().is_empty() && s.mail.sent.lock().unwrap().is_empty());
     assert!(crate::recruiters::on_applied(&s.agent, "test:1").unwrap().is_none(), "not twice for one application");
     // Another application the same week: not again to her.
     s.agent.db().set_status("test:2", "applied", "").unwrap();
@@ -294,11 +295,15 @@ fn emailing_the_person_named_in_the_posting() {
     s.agent.db().set_status("test:1", "applied", "").unwrap();
     let job = s.agent.db().job("test:1").unwrap().unwrap();
     assert_eq!(crate::recruiters::contact_for(&s.agent, &job), Some(("maria.lopez@acme.example".into(), String::new(), false)), "not the careers@ inbox");
-    // Sent, with the CV, when you chose that.
+    // Even where Settings said "send it for me" (from before emails were held), it waits for your
+    // approval; approved with "send now", it goes out with the CV.
     s.agent.db().set("apply.recruiter", "send").unwrap();
     s.agent.db().set("apply.recruiter_cv", "1").unwrap();
     let v = crate::recruiters::on_applied(&s.agent, "test:1").unwrap().unwrap();
-    assert_eq!(v["sent"], true);
+    assert_eq!((v["sent"].as_bool(), v["drafted"].as_bool()), (Some(false), Some(true)));
+    assert!(s.mail.sent.lock().unwrap().is_empty(), "nothing goes out by itself");
+    let held = waiting(&s);
+    assert_eq!(s.agent.approve_draft(&held[0].id, true).unwrap()["status"], "sent");
     let sent = s.mail.sent.lock().unwrap();
     assert_eq!(sent[0].0, "maria.lopez@acme.example");
     assert_eq!(sent[0].1.len(), if job.cv_path.is_some() { 1 } else { 0 }, "the tailored CV attached");
@@ -376,7 +381,7 @@ fn recruiters_you_know_and_asking_them() {
     assert_eq!(s.agent.overview().unwrap()["recruiter_asks"].as_array().unwrap().len(), 1, "a reminder to ask her");
     let a = crate::recruiters::ask(&s.agent, "test:1").unwrap();
     assert_eq!((a["to"].as_str(), a["drafted"].as_bool()), (Some("jane@acme.example"), Some(true)));
-    assert!(s.mail.drafts.lock().unwrap().iter().any(|(to, _)| to == "to:jane@acme.example"));
+    assert!(waiting(&s).iter().any(|h| h.to == "jane@acme.example"), "held for your approval");
     assert!(s.agent.overview().unwrap()["recruiter_asks"].as_array().unwrap().is_empty(), "asked: not reminded again");
     assert!(s.agent.contacts("test:1").iter().any(|c| c["email"] == "jane@acme.example"));
     // Hidden: not used.
@@ -1345,6 +1350,11 @@ fn interview_request_drafts_reply_accepting_a_free_slot() {
     s.llm.triages.lock().unwrap().push(Triage { offered_times: vec![busy_slot, free_slot.clone()], ..triage("interview_request", Some("test:1")) });
     s.agent.process_inbox(50).unwrap();
     assert_eq!(*s.llm.accepted.lock().unwrap(), Some(Some(free_slot)));
+    // The answer waits for your approval; approved, it's a draft in that email's thread.
+    assert!(s.mail.drafts.lock().unwrap().is_empty());
+    let held = waiting(&s);
+    assert_eq!((held.len(), held[0].kind.as_str(), held[0].reply_to.as_deref(), held[0].body.as_str()), (1, "reply", Some("m1"), "Tuesday works, thanks. Jane"));
+    assert_eq!(s.agent.approve_draft(&held[0].id, false).unwrap()["status"], "gmail");
     assert_eq!(*s.mail.drafts.lock().unwrap(), vec![("m1".to_string(), "Tuesday works, thanks. Jane".to_string())]);
     assert!(s.cal.created.lock().unwrap().is_empty());
 }
@@ -1686,11 +1696,13 @@ fn quiet_applications_get_a_follow_up_draft() {
     let due: Vec<String> = s.agent.follow_ups_due().unwrap().into_iter().map(|j| j.id).collect();
     assert_eq!(due, vec!["test:1", "test:2"]);
     assert_eq!(s.agent.overview().unwrap()["follow_ups"].as_array().unwrap().len(), 2);
-    // The email check drafts them in Gmail, once.
+    // The email check writes them, once; they wait for your approval, and nothing is in Gmail.
     s.agent.process_inbox(50).unwrap();
-    let drafts = s.mail.drafts.lock().unwrap().clone();
-    assert!(drafts.contains(&("to:jobs@acme.example".to_string(), "Hello, I applied on ".to_string() + &drafts[0].1["Hello, I applied on ".len()..])));
-    assert!(drafts.iter().any(|(to, _)| to == "to:"), "no address for test:2: the draft has no recipient yet");
+    let held = waiting(&s);
+    assert!(held.iter().any(|h| h.kind == "follow-up" && h.to == "jobs@acme.example" && h.body.starts_with("Hello, I applied on ")), "{held:?}");
+    assert!(held.iter().any(|h| h.to.is_empty()), "no address for test:2: the draft has no recipient yet");
+    assert!(s.mail.drafts.lock().unwrap().is_empty());
+    assert_eq!(s.agent.overview().unwrap()["drafts_waiting"].as_array().unwrap().len(), 2, "both are in the Queue to approve");
     assert!(s.agent.follow_up("test:1").unwrap()["draft"].is_string());
     assert!(s.agent.follow_ups_due().unwrap().is_empty());
     assert!(s.notes.lock().unwrap().contains(&"2 follow-ups ready".to_string()));
@@ -2711,13 +2723,14 @@ fn a_reply_to_a_rejection() {
     let v = s.agent.write_rejection_reply(&a).unwrap();
     assert_eq!((v["to"].as_str().unwrap(), v["in_thread"].as_bool(), v["robot"].as_bool()), ("priya.shah@acme.example", Some(true), Some(false)));
     assert!(v["body"].as_str().unwrap().contains("We went with another candidate") && !v["body"].as_str().unwrap().contains("feedback"), "what they wrote reaches Claude; no feedback asked without an interview");
-    assert_eq!(s.mail.drafts.lock().unwrap().last().unwrap().0, "r1");
-    assert_eq!(s.agent.rejection_reply(&a).unwrap()["subject"], v["subject"]);
+    assert!(waiting(&s).iter().any(|h| h.kind == "decline" && h.reply_to.as_deref() == Some("r1") && h.subject == "Re: Your application"), "held, to go in their thread");
+    assert_eq!(s.agent.rejection_reply(&a).unwrap()["held"], "waiting");
     // From an address nobody reads: a new draft, flagged, never a reply into the void.
     s.agent.db().record_email("r2", "t2", Some(&b), "no-reply@greenhouse.io", "Update", "rejection", "Not moving forward", None, "2026-01-03T00:00:00Z").unwrap();
     let v = s.agent.write_rejection_reply(&b).unwrap();
     assert_eq!((v["in_thread"].as_bool(), v["robot"].as_bool()), (Some(false), Some(true)));
-    assert!(s.mail.drafts.lock().unwrap().last().unwrap().0.starts_with("to:"));
+    assert!(waiting(&s).iter().any(|h| h.job_id.as_deref() == Some(b.as_str()) && h.reply_to.is_none()));
+    assert!(s.mail.drafts.lock().unwrap().is_empty(), "nothing reaches Gmail before you approve");
 }
 
 #[test]
@@ -2839,8 +2852,8 @@ fn the_inbox_counts_new_mail_and_replies_from_it() {
     // A reply is drafted in the email's own thread, and the email shows it has one.
     let v = s.agent.reply_to_email("q1").unwrap();
     assert!(v["body"].as_str().unwrap().contains("Technical Program Manager at Acme"));
-    assert_eq!(s.mail.drafts.lock().unwrap().last().unwrap().0, "q1");
-    assert!(s.agent.db().emails(10).unwrap().iter().find(|e| e.gmail_id == "q1").unwrap().draft_id.is_some());
+    assert!(waiting(&s).iter().any(|h| h.reply_to.as_deref() == Some("q1") && h.id == v["draft"].as_str().unwrap()), "held, to go in that thread");
+    assert_eq!(s.agent.db().emails(10).unwrap().iter().find(|e| e.gmail_id == "q1").unwrap().draft_id.as_deref(), v["draft"].as_str());
     // Nobody reads a no-reply address.
     assert!(s.agent.reply_to_email("q3").is_err());
 }
@@ -3060,4 +3073,73 @@ fn applying_looks_for_the_recruiter_and_says_who_it_found() {
     // The notice is kept for the app's own list too.
     assert_eq!(s.agent.notices()[0]["title"], "Found Priya Shah at Acme");
     assert_eq!(s.agent.find_after_applying("test:1").unwrap(), None);
+}
+
+/// The emails Job Hunt wrote that wait for your approval.
+fn waiting(s: &Setup) -> Vec<crate::db::Held> {
+    s.agent.db().held_with("waiting").unwrap()
+}
+
+#[test]
+fn emails_wait_for_your_approval() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    s.agent.db().set_status("test:1", "applied", "").unwrap();
+    s.agent.db().con.execute("UPDATE jobs SET apply_email = 'jobs@acme.example' WHERE id = 'test:1'", []).unwrap();
+    s.agent.db().record_email("e1", "t1", Some("test:1"), "Dana <dana@acme.example>", "Thanks for applying", "other_job_related", "We're reviewing this week", None, "2026-01-02T00:00:00Z").unwrap();
+    let id = s.agent.write_follow_up("test:1").unwrap()["draft"].as_str().unwrap().to_string();
+    // Held here: on the list, in the Queue, and nothing in Gmail.
+    assert!(id.starts_with("jh:"));
+    assert_eq!(s.agent.drafts_held_count(), 1);
+    assert_eq!(s.agent.overview().unwrap()["drafts_waiting"][0]["held"], id.as_str());
+    assert!(s.mail.drafts.lock().unwrap().is_empty() && s.mail.sent.lock().unwrap().is_empty());
+    // With it: the posting, and what has happened (the email about the application).
+    let v = s.agent.draft_view(&id).unwrap();
+    assert_eq!((v["kind_name"].as_str(), v["job"]["id"].as_str(), v["gmail"].as_bool()), (Some("Follow-up"), Some("test:1"), Some(true)));
+    assert!(!v["job"]["description"].as_str().unwrap().is_empty());
+    assert!(v["history"].as_array().unwrap().iter().any(|h| h["what"] == "in" && h["subject"] == "Thanks for applying"), "{}", v["history"]);
+    // Your own edits are kept, and the job's page follows them.
+    s.agent.save_draft(&id, "dana@acme.example", "Checking in", "Hello Dana, my own words.").unwrap();
+    assert_eq!(s.agent.follow_up("test:1").unwrap()["body"], "Hello Dana, my own words.");
+    assert_eq!(s.agent.follow_up("test:1").unwrap()["held"], "waiting");
+    // Claude changes it as asked; the version before can be put back.
+    s.agent.revise_draft(&id, "shorter").unwrap();
+    let h = s.agent.db().held(&id).unwrap().unwrap();
+    assert!(h.body.ends_with("[changed: shorter]") && h.versions.len() == 1, "{}", h.body);
+    assert!(s.agent.revise_draft(&id, " ").is_err(), "a change has to say something");
+    s.agent.undo_draft(&id).unwrap();
+    assert_eq!(s.agent.db().held(&id).unwrap().unwrap().body, "Hello Dana, my own words.");
+    assert!(s.agent.undo_draft(&id).is_err(), "nothing earlier to go back to");
+    // Approved: only now is it a Gmail draft, as it reads here.
+    assert_eq!(s.agent.approve_draft(&id, false).unwrap()["status"], "gmail");
+    assert_eq!(*s.mail.drafts.lock().unwrap(), vec![("to:dana@acme.example".to_string(), "Hello Dana, my own words.".to_string())]);
+    assert!(s.mail.sent.lock().unwrap().is_empty());
+    assert_eq!(s.agent.drafts_held_count(), 0);
+    assert!(s.agent.overview().unwrap()["drafts_waiting"].as_array().unwrap().is_empty(), "off the Queue");
+    assert!(s.agent.save_draft(&id, "x@y.example", "s", "b").is_err() && s.agent.approve_draft(&id, true).is_err(), "approved once: it's Gmail's now");
+    // Written again, it's a new one to approve. Sending needs an address a person reads.
+    let id2 = s.agent.write_follow_up("test:1").unwrap()["draft"].as_str().unwrap().to_string();
+    assert_ne!(id, id2);
+    s.agent.save_draft(&id2, "", "Checking in", "Hello").unwrap();
+    assert!(s.agent.approve_draft(&id2, true).is_err(), "no address: not sent");
+    s.agent.save_draft(&id2, "no-reply@acme.example", "Checking in", "Hello").unwrap();
+    assert!(s.agent.approve_draft(&id2, true).is_err(), "nobody reads that address");
+    s.agent.save_draft(&id2, "dana@acme.example", "Checking in", "Hello").unwrap();
+    assert_eq!(s.agent.approve_draft(&id2, true).unwrap()["status"], "sent");
+    assert_eq!(s.mail.sent.lock().unwrap().last().unwrap().0, "dana@acme.example");
+    // Earlier emails about the job show in the next one's history.
+    let id3 = s.agent.write_follow_up("test:1").unwrap()["draft"].as_str().unwrap().to_string();
+    let v = s.agent.draft_view(&id3).unwrap();
+    assert_eq!(v["history"].as_array().unwrap().iter().filter(|h| h["what"] == "out").count(), 2, "{}", v["history"]);
+    // Discarded: gone from the list, never in Gmail.
+    let before = s.mail.drafts.lock().unwrap().len();
+    s.agent.discard_draft(&id3).unwrap();
+    assert_eq!((s.agent.drafts_held_count(), s.mail.drafts.lock().unwrap().len()), (0, before));
+    assert_eq!(s.agent.follow_up("test:1").unwrap()["held"], "discarded");
+    // Without Gmail it can still be written, read and changed; approving says what's missing.
+    *s.agent.mail.write().unwrap() = None;
+    let id4 = s.agent.write_follow_up("test:1").unwrap()["draft"].as_str().unwrap().to_string();
+    s.agent.save_draft(&id4, "dana@acme.example", "Checking in", "Hello again").unwrap();
+    assert!(s.agent.approve_draft(&id4, false).unwrap_err().0.contains("Gmail isn't connected"));
+    assert_eq!(s.agent.drafts_held_count(), 1);
 }

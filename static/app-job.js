@@ -128,7 +128,7 @@ async function showJob(id) {
     ${jobActions(j, tailoring, progress, finding, (history || []).find(e => e.kind === 'apply-link'), lifecycle)}
     ${decline || declining || j.status === 'rejected' ? `<section class="card">
       <header><h2>Reply to the rejection</h2>${declining ? '<span class="muted small"><span class="spin" data-kind="decline"></span>Writing…</span>' : `<button class="btn" data-act="decline">${decline ? 'Write again' : 'Draft a reply'}</button>`}</header>
-      ${decline ? `<p class="small muted">${decline.draft ? `Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>${decline.in_thread ? ', as a reply to their email' : ''}` : 'Written'} ${esc(ago(decline.at))}${decline.to ? ` · to ${esc(decline.to)}` : ' · add the address of the person you dealt with before sending'}</p>
+      ${decline ? `<p class="small muted">${emailState(decline)}${decline.draft && decline.in_thread ? ' (a reply to their email)' : ''} ${esc(ago(decline.at))}${decline.to ? ` · to ${esc(decline.to)}` : ' · add the address of the person you dealt with before sending'}</p>
         ${decline.robot ? '<p class="small" style="color:var(--warn)">Their email came from an address that doesn\'t take replies. Send this to the recruiter or interviewer you dealt with, or leave it.</p>' : ''}
         <p><b>${esc(decline.subject)}</b></p><div class="posting">${esc(decline.body)}</div>
         ${decline.redrafted ? '<p class="small" style="color:var(--warn)">This is a new draft. The one before is still in your Gmail drafts: delete it there.</p>' : ''}
@@ -272,7 +272,7 @@ async function showJob(id) {
     </section>` : ''}
     ${fu || following_up || j.status === 'applied' ? `<section class="card">
       <header><h2>Follow-up</h2>${following_up ? '<span class="muted small"><span class="spin" data-kind="followup"></span>Writing…</span>' : `<button class="btn" data-act="followUp" data-job="${esc(j.id)}">${fu ? 'Write again' : 'Write follow-up'}</button>`}</header>
-      ${fu ? `<p class="small muted">${fu.draft ? 'Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>' : 'Written'} ${esc(ago(fu.at))}${fu.to ? ` · to ${esc(fu.to)}` : ' · add the recruiter\'s address before sending'}</p>
+      ${fu ? `<p class="small muted">${emailState(fu)} ${esc(ago(fu.at))}${fu.to ? ` · to ${esc(fu.to)}` : ' · add the recruiter\'s address before sending'}</p>
         <p><b>${esc(fu.subject)}</b></p><div class="posting" id="fuBody">${esc(fu.body)}</div>
         <div class="row"><button class="btn ghost" data-act="copy" data-from="fuBody">Copy</button></div>`
         : `<p class="muted">${following_up ? 'Claude is writing a short, polite note asking about the timeline.' : `No reply yet? Job Hunt drafts a short follow-up ${st.profile.follow_up_after ? `${st.profile.follow_up_after} days after you apply` : 'when you ask'}.`}</p>`}
@@ -298,7 +298,7 @@ async function showJob(id) {
     </section>
     ${thanks || thanking || ['interviewing', 'offer'].includes(j.status) ? `<section class="card">
       <header><h2>Thank-you note</h2>${thanking ? '<span class="muted small"><span class="spin" data-kind="thanks"></span>Writing…</span>' : `<button class="btn" data-act="thanks">${thanks ? 'Write again' : 'Write it now'}</button>`}</header>
-      ${thanks ? `<p class="small muted">${thanks.draft ? 'Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>' : 'Written'} ${esc(ago(thanks.at))}${thanks.to ? ` · to ${esc(thanks.to)}` : ' · add the interviewer\'s address before sending'}</p>
+      ${thanks ? `<p class="small muted">${emailState(thanks)} ${esc(ago(thanks.at))}${thanks.to ? ` · to ${esc(thanks.to)}` : ' · add the interviewer\'s address before sending'}</p>
         <p><b>${esc(thanks.subject)}</b></p><div class="posting">${esc(thanks.body)}</div>
         <p class="muted small">Fill in the [bracketed] detail from your conversation, then send it the same day.</p>` : '<p class="muted">Job Hunt drafts one about an hour and a half after each interview on your calendar starts, so you can send it the same day.</p>'}
     </section>` : ''}

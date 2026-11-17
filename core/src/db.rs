@@ -122,6 +122,8 @@ CREATE TABLE IF NOT EXISTS reposts (job_id TEXT NOT NULL, posting_id TEXT NOT NU
 CREATE TABLE IF NOT EXISTS links (token TEXT PRIMARY KEY, job_id TEXT NOT NULL, target TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS clicks (token TEXT NOT NULL, at TEXT NOT NULL, bot INTEGER NOT NULL DEFAULT 0);
 -- Which sources listed each role (by company and title), to show how much they overlap.
+-- Emails Job Hunt wrote that wait for your approval before they reach Gmail (see pipeline/drafts.rs).
+CREATE TABLE IF NOT EXISTS held_drafts (id TEXT PRIMARY KEY, status TEXT NOT NULL, job_id TEXT, updated_at TEXT NOT NULL, data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sightings (dupe_key TEXT NOT NULL, source TEXT NOT NULL, first_at TEXT NOT NULL, last_at TEXT NOT NULL, PRIMARY KEY (dupe_key, source));
 ";
 
@@ -454,6 +456,31 @@ pub struct EmailRow {
     pub received_at: Option<String>,
     pub company: Option<String>,
     pub title: Option<String>,
+}
+
+/// An email Job Hunt wrote, held until you approve it. `status`: waiting (only in Job Hunt), gmail
+/// (approved: in your Gmail drafts), sent, discarded.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct Held {
+    pub id: String,
+    /// follow-up, thank-you, decline, reply, recruiter.
+    pub kind: String,
+    pub job_id: Option<String>,
+    pub to: String,
+    pub subject: String,
+    pub body: String,
+    /// The Gmail message it answers (kept in that thread), when it's a reply.
+    pub reply_to: Option<String>,
+    /// Files that go with it (your tailored CV, to a recruiter).
+    pub attach: Vec<String>,
+    pub status: String,
+    /// The Gmail draft (or sent message) it became.
+    pub gmail_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    /// What it said before each change, oldest first: {at, subject, body, note}.
+    pub versions: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -1071,6 +1098,41 @@ impl Db {
     pub fn thread_linked(&self, thread_id: &str) -> R<bool> {
         let n: i64 = self.con.query_row("SELECT COUNT(*) FROM emails WHERE thread_id = ?1 AND job_id IS NOT NULL", [thread_id], |r| r.get(0))?;
         Ok(n > 0)
+    }
+
+    pub fn held_put(&self, h: &Held) -> R<()> {
+        self.con.execute("INSERT OR REPLACE INTO held_drafts (id, status, job_id, updated_at, data) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![h.id, h.status, h.job_id, h.updated_at, serde_json::to_string(h).unwrap_or_default()])?;
+        Ok(())
+    }
+
+    pub fn held(&self, id: &str) -> R<Option<Held>> {
+        Ok(self.con.query_row("SELECT data FROM held_drafts WHERE id = ?1", params![id], |r| r.get::<_, String>(0)).optional()?
+            .and_then(|d| serde_json::from_str(&d).ok()))
+    }
+
+    /// Held emails of one status, newest first.
+    pub fn held_with(&self, status: &str) -> R<Vec<Held>> {
+        let mut st = self.con.prepare("SELECT data FROM held_drafts WHERE status = ?1 ORDER BY updated_at DESC")?;
+        let rows = st.query_map(params![status], |r| r.get::<_, String>(0))?;
+        Ok(rows.filter_map(|d| d.ok()).filter_map(|d| serde_json::from_str(&d).ok()).collect())
+    }
+
+    /// Every held email about one job, whatever became of it, oldest first.
+    pub fn held_of_job(&self, job_id: &str) -> R<Vec<Held>> {
+        let mut st = self.con.prepare("SELECT data FROM held_drafts WHERE job_id = ?1 ORDER BY updated_at")?;
+        let rows = st.query_map(params![job_id], |r| r.get::<_, String>(0))?;
+        Ok(rows.filter_map(|d| d.ok()).filter_map(|d| serde_json::from_str(&d).ok()).collect())
+    }
+
+    /// What happened to one job, oldest first.
+    pub fn events_of_job(&self, job_id: &str) -> R<Vec<Event>> {
+        self.events_where("WHERE e.job_id = ?1 ORDER BY e.id LIMIT 400", &[&job_id])
+    }
+
+    /// The emails kept about one job, oldest first.
+    pub fn emails_of_job(&self, job_id: &str) -> R<Vec<EmailRow>> {
+        Ok(self.emails(5000)?.into_iter().filter(|e| e.job_id.as_deref() == Some(job_id)).rev().collect())
     }
 
     /// The draft reply now waiting for an email already kept.

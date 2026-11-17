@@ -235,6 +235,45 @@ impl Llm for DemoLlm {
     fn scheduling_reply(&self, _c: &str, _tz: &str, _e: &EmailIn, _a: Option<&TimeSlot>, _f: &[TimeSlot]) -> R<String> {
         Ok(String::new())
     }
+    fn follow_up(&self, candidate: &str, job: &jobhunt_core::db::Job, applied_on: &str) -> R<jobhunt_core::claude::FollowUp> {
+        Ok(jobhunt_core::claude::FollowUp { subject: format!("Following up: {}", job.title),
+            body: format!("Hello,\n\nI applied for the {} role at {} on {applied_on} and wanted to check where things stand. I led a payments platform migration for 2 million customers and would be glad to walk you through it.\n\nIs there a timeline for next steps?\n\nBest regards,\n{candidate}", job.title, job.company) })
+    }
+    fn revise_email(&self, _c: &str, subject: &str, body: &str, change: &str, _about: &str) -> R<jobhunt_core::claude::FollowUp> {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let short: Vec<&str> = body.split("\n\n").collect();
+        Ok(jobhunt_core::claude::FollowUp { subject: subject.to_string(), body: format!("{}\n\n(Changed as you asked: {change}.)\n\n{}", short[..short.len().min(2)].join("\n\n"), short.last().copied().unwrap_or("")) })
+    }
+}
+
+/// A stand-in Gmail (with JH_DEV_MAIL=1): it keeps nothing, and says what it was asked to do.
+struct DevMail;
+impl jobhunt_core::google::Mail for DevMail {
+    fn recent(&self, _q: &str, _l: usize) -> R<Vec<String>> {
+        Ok(vec![])
+    }
+    fn get(&self, id: &str) -> R<jobhunt_core::google::Email> {
+        Ok(jobhunt_core::google::Email { id: id.into(), thread_id: "t1".into(), from: "Recruiter <talent@insurer.example>".into(), subject: "Interview invitation".into(), ..Default::default() })
+    }
+    fn label(&self, _id: &str, _n: &str) -> R<()> {
+        Ok(())
+    }
+    fn draft_reply(&self, _o: &jobhunt_core::google::Email, _b: &str) -> R<String> {
+        println!("gmail: draft reply");
+        Ok("gd1".into())
+    }
+    fn send(&self, to: &str, _s: &str, _b: &str, _a: &[PathBuf]) -> R<String> {
+        println!("gmail: sent to {to}");
+        Ok("gs1".into())
+    }
+    fn draft(&self, to: &str, _s: &str, _b: &str) -> R<String> {
+        println!("gmail: draft to {to}");
+        Ok("gd2".into())
+    }
+    fn send_draft(&self, id: &str) -> R<String> {
+        println!("gmail: sent draft {id}");
+        Ok("gs2".into())
+    }
 }
 
 struct DevHost {
@@ -347,6 +386,23 @@ fn main() {
         let _ = jobhunt_core::leads::add_posts(&agent, &[serde_json::json!({ "author": "Dana Okafor", "headline": "Co-founder at Brightloop", "link": "https://www.linkedin.com/in/dana-okafor",
             "text": "We're hiring a Senior Program Manager at Brightloop to run our platform rebuild. We just closed our seed round and need someone who has shipped under regulation. DM me!",
             "url": "https://www.linkedin.com/feed/update/urn:li:activity:7001/" })], false);
+    }
+    // For the pages about held emails: a stand-in Gmail, and two emails waiting for approval.
+    if std::env::var("JH_DEV_MAIL").is_ok() {
+        *agent.mail.write().unwrap() = Some(Arc::new(DevMail));
+        // An application to follow up on: a match, tailored, sent ten days ago, with an email about it.
+        let picked = agent.db().jobs(Some("queued"), 1).unwrap_or_default();
+        if let Some(j) = picked.first() {
+            if let Err(e) = agent.tailor(&j.id, None) {
+                println!("tailor: {}", e.0);
+            }
+            let _ = agent.db().set_status(&j.id, "applied", "submitted on the company site");
+            let _ = agent.db().record_email("m9", "t9", Some(&j.id), "Dana Okafor <dana@bigbank.example>", "Thanks for applying", "other", "Dana says the team is reviewing applications this week.", None, &(chrono::Utc::now() - chrono::Duration::days(4)).to_rfc3339());
+            if let Err(e) = agent.write_follow_up(&j.id) {
+                println!("follow-up: {}", e.0);
+            }
+        }
+        let _ = agent.hold_draft("reply", None, "talent@insurer.example", "Re: Interview invitation", "Hello,\n\nThank you for the invitation. Tuesday afternoon works well for me.\n\nBest regards,\nSam", Some("m1"), &[]);
     }
     let host: Arc<dyn Host> = Arc::new(DevHost { static_dir: Path::new(env!("CARGO_MANIFEST_DIR")).join("../static") });
     let listener = TcpListener::bind("127.0.0.1:8790").unwrap();

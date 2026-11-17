@@ -239,13 +239,13 @@ impl Agent {
                 Ok(None)
             }
             "interview_request" => match self.scheduling_reply(msg, t, profile)? {
-                Some(body) => Ok(Some(mail.draft_reply(msg, &body)?)),
+                Some(body) => Ok(Some(self.hold_reply(msg, job.as_ref().map(|j| j.id.as_str()), &body)?)),
                 None => Ok(None),
             },
             _ if t.needs_reply && t.reply_draft.as_deref().is_some_and(|d| !d.trim().is_empty()) => {
-                let id = mail.draft_reply(msg, t.reply_draft.as_deref().unwrap())?;
+                let id = self.hold_reply(msg, job.as_ref().map(|j| j.id.as_str()), t.reply_draft.as_deref().unwrap())?;
                 let from = t.company.clone().filter(|c| !c.is_empty()).or_else(|| job.as_ref().map(|j| j.company.clone())).unwrap_or_else(|| google::address(&msg.from));
-                self.note(&format!("Reply from {from}"), &format!("An answer is waiting in your Gmail drafts: {}", msg.subject));
+                self.note(&format!("Reply from {from}"), &format!("An answer is written and waits for your approval (Inbox, Drafts): {}", msg.subject));
                 Ok(Some(id))
             }
             "offer" => {
@@ -280,7 +280,7 @@ impl Agent {
         };
         let input = EmailIn { from: &msg.from, to: &msg.to, date: &msg.date, subject: &msg.subject, body: &msg.body };
         let body = self.llm().scheduling_reply(&profile.name, &profile.timezone, &input, accept, &free)?;
-        self.note("Interview request", &format!("A reply proposing times is waiting in your Gmail drafts: {}", msg.subject));
+        self.note("Interview request", &format!("A reply proposing times is written and waits for your approval (Inbox, Drafts): {}", msg.subject));
         Ok(Some(body))
     }
 

@@ -1210,6 +1210,31 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.100.0 (emails held for approval: Inbox, Drafts)
+
+The user asked to see and edit Job Hunt's email drafts inside Job Hunt (like tailored CVs), with the
+posting, the tailored CV and the history beside each, and to approve before anything is drafted in
+Gmail. Design approved from mock-ups first.
+- Store: table `held_drafts` and `db::Held` (`core/src/db.rs`); ids start `jh:`; status waiting,
+  gmail (approved: a Gmail draft), sent, discarded; earlier versions kept in `versions`.
+- `core/src/pipeline/drafts.rs`: `hold_draft` (every written email goes here: follow-up, thank-you,
+  reply to a no, reply to an email, the automatic interview/needs-reply answers, the email to a
+  recruiter on applying), `draft_view` (job, CV text, history), `save_draft`, `revise_draft`
+  (`Llm::revise_email`), `undo_draft`, `approve_draft(id, send)` (the only place that calls Gmail:
+  `Mail::draft_full`, then `Mail::send_draft`), `discard_draft`. The job's own record
+  (`followup:`/`thanks:`/`decline:`) keeps the held id in `draft` and follows edits; the getters add
+  `held` (the status).
+- Settings' "Send it for me" for the recruiter email is gone: it waits for approval like the rest
+  (`recruiters::write` ignores `send`). Applying by email (the user's own Approve) still sends.
+- Routes: GET `/api/drafts`, `/api/drafts/<id>`; POST `.../save|revise|undo|approve|discard`.
+  Overview: `drafts_held` (count), `drafts_waiting` (held ones with a job, plus old Gmail ones).
+- UI: Inbox tabs Email / Drafts (n) (`inboxTabs`), `showDrafts`/`showDraft` in
+  `static/app-calendar.js`, actions `draft*` in `static/app-actions.js`, `emailState` in app.js.
+- Two database double-locks were found on the way (`with_held` inside a `self.db()` chain;
+  a count inside the overview's `json!`): read first, then call.
+- Dev server: `JH_DEV_MAIL=1` gives a stand-in Gmail and two held emails.
+- Not tested against real Gmail: `Google::draft_full` (thread, attachments) and `send_draft`.
+
 ## 2.99.4 (Ryan's Workday form, from Copy details)
 
 The log showed: Work Experience add "8" for 7 roles (an empty eighth entry); Languages add "3" where

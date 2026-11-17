@@ -815,7 +815,10 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "claude_desktop": crate::mcp::claude_desktop_config().as_deref().map(crate::mcp::in_claude_desktop).unwrap_or(false),
                 })));
             }
-            ["api", "emails"] => return Ok(Resp::json(&json!({ "emails": agent.db().emails(200)?, "seen": agent.secret("inbox.seen") }))),
+            ["api", "emails"] => return Ok(Resp::json(&json!({ "emails": agent.db().emails(200)?, "seen": agent.secret("inbox.seen"), "held": agent.held_states(), "drafts": agent.drafts_held_count() }))),
+            // Emails Job Hunt wrote that wait for your approval; nothing of them is in Gmail yet.
+            ["api", "drafts"] => return Ok(Resp::json(&json!({ "drafts": agent.drafts_held(), "gmail": agent.mail.read().unwrap().is_some() }))),
+            ["api", "drafts", id] => return Ok(Resp::json(&agent.draft_view(id)?)),
             ["api", "calendar"] => {
                 let n = |k: &str, d: i64| req.query.get(k).and_then(|v| v.parse::<i64>().ok()).unwrap_or(d).clamp(0, 400);
                 let items = agent.calendar(n("back", 14), n("ahead", 60))?;
@@ -1204,7 +1207,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     std::thread::spawn(move || {
                         let Ok(_g) = a.claim(&key) else { return };
                         match a.write_follow_up(&id) {
-                            Ok(v) if v["draft"].is_string() => a.note("Follow-up ready", "It's waiting in your Gmail drafts. Check it and send."),
+                            Ok(v) if v["draft"].is_string() => a.note("Follow-up ready", "It waits for your approval in Inbox, Drafts."),
                             Ok(_) => {}
                             Err(e) => {
                                 let _ = a.db().log(Some(&id), "followup:error", &e.0);
@@ -1842,6 +1845,40 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ok()
         }
         ["api", "emails", id, "reply"] => Ok(Resp::json(&agent.reply_to_email(id)?)),
+        // A held email: your edits, a change by Claude, the version before, your approval, or the bin.
+        ["api", "drafts", id, "save"] => {
+            agent.save_draft(id, s(&b, "to"), s(&b, "subject"), s(&b, "body"))?;
+            ok()
+        }
+        ["api", "drafts", id, "revise"] => {
+            let key = format!("draft:{id}");
+            if agent.is_running(&key) {
+                return Err(Error("Claude is changing it already.".into()));
+            }
+            let change = s(&b, "change").trim().to_string();
+            if change.is_empty() {
+                return Err(Error("Say what should change first.".into()));
+            }
+            // (Claimed here, not in the thread: the page asks at once whether it's still being changed.)
+            let Some(g) = agent.claim_owned(&key) else { return Err(Error("Claude is changing it already.".into())) };
+            let (a, id) = (agent.clone(), id.to_string());
+            std::thread::spawn(move || {
+                let _g = g;
+                if let Err(e) = a.revise_draft(&id, &change) {
+                    a.note("The email wasn't changed", &e.0);
+                }
+            });
+            Ok(Resp::json(&json!({ "started": true })))
+        }
+        ["api", "drafts", id, "undo"] => {
+            agent.undo_draft(id)?;
+            ok()
+        }
+        ["api", "drafts", id, "approve"] => Ok(Resp::json(&agent.approve_draft(id, b["send"].as_bool() == Some(true))?)),
+        ["api", "drafts", id, "discard"] => {
+            agent.discard_draft(id)?;
+            ok()
+        }
         ["api", "results", "lessons"] => {
             if agent.is_running("lessons") {
                 return Ok(Resp::json(&json!({ "started": false })));
@@ -2439,6 +2476,42 @@ mod tests {
         let fh = Arc::new(FakeHost::default());
         let host: Arc<dyn Host> = fh.clone();
         (s, agent, fh, host)
+    }
+
+    #[test]
+    fn held_emails_over_the_routes() {
+        let (s, agent, _fh, host) = world();
+        agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+        agent.db().set_status("test:1", "applied", "").unwrap();
+        let id = agent.write_follow_up("test:1").unwrap()["draft"].as_str().unwrap().to_string();
+        let (code, l) = call(&agent, &host, "GET", "/api/drafts", Value::Null);
+        assert_eq!((code, l["drafts"].as_array().unwrap().len(), l["drafts"][0]["id"].as_str()), (200, 1, Some(id.as_str())));
+        assert_eq!(call(&agent, &host, "GET", "/api/overview", Value::Null).1["drafts_held"], 1);
+        assert_eq!(call(&agent, &host, "GET", "/api/emails", Value::Null).1["drafts"], 1);
+        let at = format!("/api/drafts/{id}");
+        let (code, v) = call(&agent, &host, "GET", &at, Value::Null);
+        assert_eq!((code, v["draft"]["status"].as_str(), v["job"]["id"].as_str()), (200, Some("waiting"), Some("test:1")));
+        assert_ne!(call(&agent, &host, "GET", "/api/drafts/jh:none", Value::Null).0, 200);
+        // Your edits, a change by Claude (in the background), and back again.
+        assert_eq!(call(&agent, &host, "POST", &format!("{at}/save"), json!({ "to": "dana@acme.example", "subject": "Checking in", "body": "My words." })).0, 200);
+        assert_ne!(call(&agent, &host, "POST", &format!("{at}/revise"), json!({ "change": " " })).0, 200);
+        assert_eq!(call(&agent, &host, "POST", &format!("{at}/revise"), json!({ "change": "warmer" })).1["started"], true);
+        for _ in 0..100 {
+            if !agent.is_running(&format!("draft:{id}")) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let (_, v) = call(&agent, &host, "GET", &at, Value::Null);
+        assert_eq!((v["draft"]["body"].as_str(), v["revising"].as_bool()), (Some("My words.\n[changed: warmer]"), Some(false)));
+        assert_eq!(call(&agent, &host, "POST", &format!("{at}/undo"), Value::Null).0, 200);
+        assert_eq!(call(&agent, &host, "GET", "/api/jobs/test:1", Value::Null).1["follow_up"]["held"], "waiting");
+        // Approved: in Gmail now, as it read; and it can't be approved or dropped twice.
+        assert!(s.mail.drafts.lock().unwrap().is_empty());
+        assert_eq!(call(&agent, &host, "POST", &format!("{at}/approve"), json!({ "send": false })).1["status"], "gmail");
+        assert_eq!(*s.mail.drafts.lock().unwrap(), vec![("to:dana@acme.example".to_string(), "My words.".to_string())]);
+        assert_ne!(call(&agent, &host, "POST", &format!("{at}/discard"), Value::Null).0, 200);
+        assert!(call(&agent, &host, "GET", "/api/drafts", Value::Null).1["drafts"].as_array().unwrap().is_empty());
     }
 
     #[test]
