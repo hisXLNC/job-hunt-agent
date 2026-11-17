@@ -28,6 +28,7 @@ const VARIANTS = {
   slow: 'slow=4000',             // a search takes four seconds
   zoom: '',                      // the browser zoomed to 80%
   issuer: 'certs=issuer',        // certificates listed as "Issuer - Name" without short forms: PMP is still found
+  ryan: 'certs=name&langs=few',  // certificates as "Name - Issuer", and a language list without two of your three languages
   heal: '',                      // Job Hunt forgets the form once (a restart) and drops three requests: the extension recovers by itself
 };
 
@@ -64,6 +65,8 @@ function answers(fields, name) {
     else if (f.type === 'skills') values[f.key] = SKILLS;
     else if (/^Work Duration: /.test(f.label)) values[f.key] = { 'from (month)': 'March', 'from (year)': '2019', 'to (month)': 'June', 'to (year)': '2023' }[f.label.replace('Work Duration: ', '')] || '';
     else if (f.type === 'prompt') values[f.key] = /school|university/i.test(f.label) ? 'American University of Kuwait' : /certif/i.test(f.label) ? (nth === 1 ? 'PMP' : 'PMI-CPMAI') : 'Computer Science';
+    // (A short list: only the languages it has get an entry's answers, as Job Hunt answers.)
+    else if (name === 'ryan' && /language/i.test(sec)) { if (nth === 1) { if (/^language$/i.test(f.label)) values[f.key] = 'French'; else if (/comprehension/i.test(f.label)) values[f.key] = 'Beginner'; else if (/fluent/i.test(f.label)) values[f.key] = 'no'; } }
     else if (/^language$/i.test(f.label)) values[f.key] = LANGS[nth - 1] || '';
     else if (/comprehension/i.test(f.label)) values[f.key] = nth === 3 ? 'Beginner' : 'Fluent';
     else if (/fluent/i.test(f.label)) values[f.key] = nth === 3 ? 'no' : 'yes';
@@ -200,6 +203,15 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     // What the OSC Workday form got wrong (2.57.0).
     const st = got.state || {}, eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     if (!eq(st.school, ['Other'])) problems.push(`School or University is ${JSON.stringify(st.school)}, not Other (the list doesn't have the school; "American University" is a different one)`);
+    if (running === 'ryan') {
+      // Ryan's form (2.99.2): PMP is the list's "Name - Issuer"; a certificate the list doesn't have
+      // is left for you, not made a "Licensed Accountant - Other"; the two entries added for
+      // languages the list doesn't have are taken off again.
+      if (!eq(st.certs, ['Project Management Professional - Project Management Institute', ''])) problems.push(`the certifications are ${JSON.stringify(st.certs)}`);
+      if (!eq(st.languages, ['French'])) problems.push(`the languages are ${JSON.stringify(st.languages)}, not French alone (the empty entries should be removed)`);
+      if (!/PMI-CPMAI/.test(s)) problems.push("the certificate the site doesn't have wasn't reported");
+      return problems;
+    }
     const certs = running === 'issuer' ? ['Project Management Institute - Project Management Professional', 'Not Applicable - Not Applicable'] : ['Project Management Professional (PMP)', 'Other'];
     if (!eq(st.certs, certs)) problems.push(`the certifications are ${JSON.stringify(st.certs)}, not ${JSON.stringify(certs)}`);
     if (!eq(st.languages, LANGS)) problems.push(`the languages are ${JSON.stringify(st.languages)}, not ${LANGS.join(', ')}`);

@@ -393,7 +393,7 @@
     const best = cands.find(x => x.matches('label,legend')) || cands[0];
     return best ? textOf(best).replace(/\s*\*\s*$/, '') : '';
   }
-  let addNote = '', otherChosen = [], skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
+  let addNote = '', addedTo = [], spareGone = [], otherChosen = [], skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
@@ -1159,7 +1159,13 @@
     const full = skill => FULL[skill.toLowerCase().replace(/[®™.]/g, '').replace(/\s+/g, ' ').trim()] || '';
     // The name after who issues it: "Project Management Professional" of "Project Management Institute - Project Management Professional".
     const tail = x => x.includes(' - ') ? x.slice(x.lastIndexOf(' - ') + 3).trim() : '';
-    const fit = (o, skill) => Math.max(fit1(label(o), skill), tail(label(o)) ? fit1(tail(label(o)), skill) : 0, full(skill) ? Math.max(fit1(label(o), full(skill)), tail(label(o)) ? fit1(tail(label(o)), full(skill)) : 0) : 0);
+    // …or before it: "Project Management Professional - Project Management Institute" (Ryan's Workday).
+    const head = x => x.includes(' - ') ? x.slice(0, x.indexOf(' - ')).trim() : '';
+    // The skill as it may be listed: itself, without its short form in brackets ("Project Management
+    // Professional (PMP)" is listed without the "(PMP)"), and its short form spelled out.
+    const forms = skill => { const plain = skill.replace(/\s*\([^)]{2,12}\)\s*$/, '').trim(), ab = (skill.match(/\(([^)]{2,12})\)\s*$/) || [])[1] || ''; return [...new Set([skill, plain, full(skill), full(plain), ab && full(ab)].filter(Boolean))]; };
+    const fitName = (x, skill) => Math.max(...[x, tail(x), head(x)].filter(Boolean).flatMap(y => forms(skill).map(k => fit1(y, k))));
+    const fit = (o, skill) => fitName(label(o), skill);
     const fit1 = (x, skill) => {
       const s = skill.toLowerCase();
       if (!x || /^(search results|no (items|results|matches)|searching|loading)/.test(x)) return 0;
@@ -1348,7 +1354,7 @@
         shownBefore = shownNow;
         const p = tookItself(had);
         if (p) {
-          const f = Math.max(fit1(p.toLowerCase(), skill), full(skill) ? fit1(p.toLowerCase(), full(skill)) : 0, tail(p.toLowerCase()) ? fit1(tail(p.toLowerCase()), skill) : 0);
+          const f = fitName(p.toLowerCase(), skill);
           if (strict ? f >= 95 : f >= 45) { itself = p; break; }
           // Not what was meant: taken off again (a box of one is simply chosen over).
           diag.skills.push({ skill, tookItself: p, q, wrong: true });
@@ -1380,7 +1386,7 @@
             break;
           }
           const a = alt.toLowerCase();
-          best = list.find(o => label(o) === a) || list.find(o => tail(label(o)) === a) || list.find(o => new RegExp('^' + alt + '\\b', 'i').test(label(o)) && label(o).length < 30) || null;
+          best = list.find(o => label(o) === a) || list.find(o => tail(label(o)) === a && (!head(label(o)) || head(label(o)) === a)) || list.find(o => new RegExp('^' + alt + '\\b', 'i').test(label(o)) && label(o).length < 30) || null;
           if (best) { other = alt; score = 100; break; }
         }
       }
@@ -1523,6 +1529,7 @@
             await wait(900);
           }
           if (added > was) what.push(`${added - was} ${f.section}`);
+          if (added > was) addedTo.push(String(f.section || '').toLowerCase());
         }
         if (added) {
           addNote = `Added ${what.join(', ')} from your CV.`;
@@ -1539,6 +1546,31 @@
         if (work && answer.roles > (work.entries || 0)) addNote = `Your CV has ${answer.roles} jobs, but Workday's ${work.label} for ${work.section} didn't add any.`;
         else if (!work && /work experience|employment/i.test(document.body.innerText || '') && answer.roles) addNote = `Job Hunt didn't find the Add button for your jobs on this page.`;
       }
+      // An entry Job Hunt added and has nothing to put in (a third language the site's list doesn't
+      // have, one job more than your CV lists): taken off again with its own Delete button, last
+      // first. Left there, its required boxes stopped the page from going on.
+      if (addedTo.length) {
+        const blank = f => { const e = (byKey[f.key] || [])[0]; return !e || !e.isConnected || (e.type === 'checkbox' || e.type === 'radio' ? !e.checked : e.type === 'file' ? !(e.files && e.files.length) : e.tagName === 'BUTTON' ? true : !clean(e.value || '')); };
+        const wanted = f => { const v = answer.values && answer.values[f.key]; return (v != null && String(v).trim() !== '') || !!(answer.files && answer.files[f.key]); };
+        const numbered = [...new Set(fields.filter(f => f.type !== 'add' && /\s\d+$/.test(f.section || '') && addedTo.includes(f.section.replace(/\s*\d+\s*$/, '').toLowerCase())).map(f => f.section))]
+          .sort((x, y) => parseInt(y.match(/\d+$/)[0], 10) - parseInt(x.match(/\d+$/)[0], 10));
+        for (const sec of numbered) {
+          const mine = fields.filter(f => f.section === sec);
+          if (!mine.some(f => f.required) || mine.some(f => wanted(f) || !blank(f) || (f.value && f.type !== 'checkbox' && f.type !== 'radio'))) continue;
+          const els = mine.map(f => (byKey[f.key] || [])[0]).filter(e => e && e.isConnected);
+          const others = fields.filter(f => f.section !== sec).flatMap(f => byKey[f.key] || []);
+          let del = null;
+          for (let box = els[0] && els[0].parentElement; box && box !== document.body && !del; box = box.parentElement) {
+            if (others.some(o => box.contains(o))) break; // past this entry: its Delete isn't in there
+            del = [...box.querySelectorAll('button,[role=button]')].find(b => !own(b) && shown(b) && (b.getAttribute('data-automation-id') === 'panel-set-delete-button' || /^(delete|remove)$/i.test(clean(b.textContent || b.getAttribute('aria-label') || '')))) || null;
+          }
+          if (!del) continue;
+          ownClick = true; del.click(); ownClick = false;
+          spareGone.push(sec);
+          await wait(700);
+        }
+        if (spareGone.length) trace('spare entries removed', { sections: spareGone.slice() });
+      }
       amber = []; amberAt = 0; toggled = false; replaceAsk = []; if (askEl) askEl.hidden = true;
       let ok = 0, todo = 0, i = 0;
       const base = barAt(), total = fields.length || 1;
@@ -1546,7 +1578,7 @@
       status('Filling in the form…');
       for (const f of fields) {
         progress(base + (100 - base) * (i++ / total));
-        if (f.type === 'add') continue;
+        if (f.type === 'add' || spareGone.includes(f.section)) continue;
         if (onlyKeys && !onlyKeys.has(f.key)) continue;
         const file = answer.files && answer.files[f.key];
         const v = answer.values && answer.values[f.key];
@@ -1751,7 +1783,7 @@
     }
   }
   async function startNow(more, dates) {
-    if (!more) { round = 0; reveals = 0; addNote = ''; skillMiss = []; skillUnsure = []; otherChosen = []; }
+    if (!more) { round = 0; reveals = 0; addNote = ''; addedTo = []; spareGone = []; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
     if (retired) return;
     if (!more && buttons.hand) buttons.hand.hidden = true;

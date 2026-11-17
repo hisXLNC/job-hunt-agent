@@ -1210,6 +1210,22 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 2.99.4 (Ryan's Workday form, from Copy details)
+
+The log showed: Work Experience add "8" for 7 roles (an empty eighth entry); Languages add "3" where
+the site's list had only French of the CV's three (two empty required entries); PMP chosen by the
+widget itself as "Project Management Professional - Project Management Institute", judged wrong
+(the name is before the issuer there, `tail` only read after it) and removed four times; then both
+certifications set to "Licensed Accountant - Other" by the "Other" fallback (fit 100).
+Fixes in `core/src/fill.js`: `head`/`forms`/`fitName` (name before or after the issuer, the skill
+with and without its bracketed short form); the "Other" fallback takes "X - Other" only when X is
+itself Other; `addedTo`/`spareGone`: before filling, a numbered entry in a section Job Hunt added
+to, with a required box, no answers and nothing in it, is removed with its Delete button
+(`panel-set-delete-button`, or a button named Delete/Remove inside that entry only). `fill.rs`
+`tidy_answers`: with Claude's own list of roles, the add count is exactly list minus entries.
+Test: `tools/ext_test` variant `ryan` (`certs=name&langs=few`). Not checked on the real site: that
+Workday's Delete button sits inside the entry's own group as assumed.
+
 ## 2.99.3 (followed companies: only postings for you)
 
 The user: "make following a company show postings that apply to me not just all of them".

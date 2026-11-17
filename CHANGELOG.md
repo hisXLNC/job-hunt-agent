@@ -4,6 +4,17 @@ All notable changes to Job Hunt. The format follows [Keep a Changelog](https://k
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [2.99.4] - 2026-11-17
+
+Workday forms: no empty entries, the right certification.
+
+### Changes
+
+- An entry Job Hunt added and has nothing to put in (a language the site's list doesn't have, one job more than your CV lists) is taken off again, so its required boxes no longer stop the page.
+- A certification listed as "Name - Issuer" ("Project Management Professional - Project Management Institute") is now recognised as yours instead of being removed.
+- A certification the site's list doesn't have is left for you and said in the panel; it is no longer set to an unrelated "Licensed Accountant - Other".
+- Job entries are added for exactly the roles on your CV, not one more.
+
 ## [2.99.3] - 2026-11-17
 
 Followed companies: only postings for you.
@@ -2707,6 +2718,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[2.99.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.4
 [2.99.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.3
 [2.99.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.2
 [2.99.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v2.99.1

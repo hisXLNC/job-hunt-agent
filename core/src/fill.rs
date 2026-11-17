@@ -853,8 +853,10 @@ fn tidy_answers(fields: &[Value], values: &mut serde_json::Map<String, Value>, c
                 // a career break, a degree's dates), else the CV's date lines.
                 let roles = if roles_listed > 0 { roles_listed } else { cv_roles(cv_text) };
                 let more = roles as i64 - have;
-                if more > given {
-                    values.insert(key.to_string(), json!(more.min(12).to_string()));
+                // Exactly as many as Claude's own list of the roles, when it gave one: its number has been one more
+                // than its list (an eighth, empty entry whose required boxes stopped the page).
+                if more > given || (roles_listed > 0 && given > more) {
+                    values.insert(key.to_string(), json!(more.clamp(0, 12).to_string()));
                 }
             }
             continue;
@@ -1280,6 +1282,11 @@ mod tests {
         let mut v = serde_json::Map::new();
         tidy_answers(&fields, &mut v, "Jane\nno dates here", "", 5, cv_listed("Jane\nno dates here", "cert"));
         assert_eq!(v["a1"], "4");
+        // Claude's number of entries is one more than its own list of roles: the list counts.
+        let mut v = serde_json::Map::new();
+        v.insert("a1".into(), json!("8"));
+        tidy_answers(&[json!({"key": "a1", "type": "add", "section": "Work Experience", "entries": 0})], &mut v, "Jane\nno dates here", "", 7, 0);
+        assert_eq!(v["a1"], "7");
         // Headings in markdown or capitals, and a CV with no Experience heading at all.
         assert_eq!(cv_roles("## PROFESSIONAL EXPERIENCE\n**Lead**, X | Jul 2023 \u{2013} Present\nB, Y | 2019 - 2023\n## EDUCATION\nBSc 2005 - 2009"), 2);
         assert_eq!(cv_roles("Jane\nLead, X | 2023 \u{2013} Present\nB, Y | 2019 - 2023\nEducation\nBSc 2005 - 2009"), 2);

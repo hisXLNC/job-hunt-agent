@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.99.4",
+    "date": "2026-11-17",
+    "title": "Workday forms: no empty entries, the right certification",
+    "changes": [
+      "An entry Job Hunt added and has nothing to put in (a language the site's list doesn't have, one job more than your CV lists) is taken off again, so its required boxes no longer stop the page.",
+      "A certification listed as \"Name - Issuer\" (\"Project Management Professional - Project Management Institute\") is now recognised as yours instead of being removed.",
+      "A certification the site's list doesn't have is left for you and said in the panel; it is no longer set to an unrelated \"Licensed Accountant - Other\".",
+      "Job entries are added for exactly the roles on your CV, not one more."
+    ]
+  },
+  {
     "version": "2.99.3",
     "date": "2026-11-17",
     "title": "Followed companies: only postings for you",
