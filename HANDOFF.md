@@ -1215,8 +1215,13 @@ The ten screen changes the user approved ("do them all"):
 
 The user's iPad Shortcut said "A server with the specified hostname could not be found": that is
 Shortcuts failing to resolve the PC's Tailscale name (Tailscale off on the iPad, or the PC's name
-changed) before Job Hunt is reached; nothing in the code can answer it. The phone card
-(`phoneCard`, `static/app.js`) now explains that message. Then "do the rest" of the list given:
+changed) before Job Hunt is reached. The user then said everything was on and connected, so the
+phone card (`phoneCard`, `static/app.js`) has a Check the connection button: `POST /api/phone/check`
+-> `bridge::phone_check` runs `tailscale status --json` and `serve status --json`, and
+`bridge::phone_report` (pure, test `phone_check_names_the_cause`) says which it is: name changed
+(new `phone.url` saved), Serve off (turned on again), MagicDNS off, phone not seen, or all fine
+here (then "Use Tailscale DNS" on the phone). Not tried against a real Tailscale. Then "do the
+rest" of the list given:
 
 - **Put back**: `Agent::applied_by_itself(job)` / `not_applied(id)` (`core/src/pipeline/copies.rs`):
   when the job's last stage line is `status:applied` by Job Hunt, the job page shows why and an

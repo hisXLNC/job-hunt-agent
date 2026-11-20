@@ -1413,7 +1413,10 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
         }
         // Fill forms on your phone: share Job Hunt with your own devices through Tailscale, or keep the
         // address you typed (another way to reach this computer).
-        ["api", "phone"] if host.kind() == "server" => Err(Error("Set this up in Job Hunt on your PC.".into())),
+        ["api", "phone"] | ["api", "phone", "check"] if host.kind() == "server" => Err(Error("Set this up in Job Hunt on your PC.".into())),
+        // Why the phone can't reach this PC, as far as Tailscale here can tell; Serve is turned on
+        // again and a changed address saved.
+        ["api", "phone", "check"] => Ok(Resp::json(&crate::bridge::phone_check(agent)?)),
         ["api", "phone"] => {
             let url = if s(&b, "action") == "tailscale" {
                 crate::bridge::tailscale_serve()?

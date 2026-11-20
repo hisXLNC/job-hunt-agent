@@ -2502,3 +2502,7 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
 .usual-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .usual-row span { flex: 1; min-width: 0; }
 .usual-row select { width: auto; min-width: 170px; }
+
+/* The phone card's connection check: one line a finding. */
+.check-list { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; font-size: 13.5px; }
+.check-list li.ok { color: var(--muted); } .check-list li.bad { color: var(--crit); font-weight: 600; }

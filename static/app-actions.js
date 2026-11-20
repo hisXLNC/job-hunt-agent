@@ -658,6 +658,13 @@ async function act(el) {
     if (await copyText(`${st.phone_url}/m/add?k=${encodeURIComponent(st.ext_key)}&u=`)) toast('Copied, for the shortcut.'); else toast('Couldn\'t copy.', true);
     return;
   }
+  if (a === 'phoneCheck') return busy(async () => {
+    const r = await api('/api/phone/check', { method: 'POST' });
+    const box = $('#phoneCheck');
+    if (box) box.innerHTML = `<ul class="check-list">${r.lines.map(l => `<li class="${l.ok ? 'ok' : 'bad'}">${l.ok ? '✓' : '✗'} ${esc(l.text)}</li>`).join('')}</ul>${r.changed ? '<div class="row"><button class="btn primary" data-act="copyFillLink">Copy the link for the shortcut</button></div>' : ''}`;
+    settingsCache = null;
+    return false;
+  });
   if (a === 'phoneTailscale') return busy(async () => {
     try { await api('/api/phone', { method: 'POST', body: { action: 'tailscale' } }); }
     catch (e) {

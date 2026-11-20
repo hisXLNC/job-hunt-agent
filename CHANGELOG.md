@@ -18,7 +18,7 @@ Put back a wrong Applied, usual answers, letter and CV in one upload.
 - A confirmation email now has to name the same role to mark a job as applied.
 - The note to a recruiter never goes to the address the application itself was sent to.
 - Sorting by pay: monthly, weekly and daily pay is compared as a yearly amount, and 401k is no longer read as pay.
-- Fill forms on your phone: the card now explains what to do when the shortcut says a server with the specified hostname could not be found (Tailscale is off on the phone, or the PC's name changed).
+- Fill forms on your phone: a new Check the connection button. When the shortcut says a server with the specified hostname could not be found, Job Hunt asks Tailscale on the PC what is wrong and says it in plain words: the PC's name changed (it saves the new address, copy the link into the shortcut again), sharing was switched off (it turns it back on), or the phone isn't connected.
 
 ## [26.11.4] - 2026-11-20
 

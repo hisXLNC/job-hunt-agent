@@ -229,6 +229,84 @@ pub fn tailscale_serve() -> crate::R<String> {
     }
 }
 
+/// Why the phone can't reach Job Hunt, as far as this computer can tell: what Tailscale says here
+/// (`status --json`, `serve status --json`) against the address the phone was given.
+/// {ok, lines: [{ok, text}], url (the address as it is now), changed (it differs from the saved one)}
+pub fn phone_report(status: &Value, serve: &str, saved: &str) -> Value {
+    let mut lines: Vec<Value> = vec![];
+    let mut say = |ok: bool, text: String| lines.push(json!({ "ok": ok, "text": text }));
+    let saved_host = url::Url::parse(saved).ok().and_then(|u| u.host_str().map(|h| h.to_lowercase())).unwrap_or_default();
+    let dns = status["Self"]["DNSName"].as_str().unwrap_or("").trim_end_matches('.').to_lowercase();
+    let running = status["BackendState"].as_str() == Some("Running");
+    if dns.is_empty() || !running {
+        say(false, format!("Tailscale isn't connected on this PC{}. Open Tailscale here and connect.", status["BackendState"].as_str().map(|s| format!(" (it says: {s})")).unwrap_or_default()));
+        return json!({ "ok": false, "lines": lines, "url": "", "changed": false });
+    }
+    say(true, format!("Tailscale is connected on this PC, as {dns}."));
+    let changed = !saved_host.is_empty() && saved_host != dns;
+    if changed {
+        say(false, format!("This PC's Tailscale name has changed: your shortcut and bookmark still point at {saved_host}, which no longer exists. That is exactly what \"a server with the specified hostname could not be found\" means. Job Hunt has saved the new address: press Copy the link and paste it into the shortcut again."));
+    } else {
+        say(true, "The link in your shortcut should start with that same name. If it starts with anything else, copy the link again and paste it into the shortcut.".to_string());
+    }
+    let shared = serve.contains(&PORT.to_string());
+    if shared {
+        say(true, "Job Hunt is shared with your devices (Tailscale Serve is on).".into());
+    } else {
+        say(false, "Job Hunt isn't shared through Tailscale any more (Tailscale Serve is off: it can be lost after a Tailscale update). Job Hunt has turned it on again.".into());
+    }
+    if status["CurrentTailnet"]["MagicDNSEnabled"].as_bool() == Some(false) {
+        say(false, "MagicDNS is off for your Tailscale account, so devices can't find each other by name. Turn it on at login.tailscale.com, under DNS.".into());
+    }
+    // The phones and tablets on your account, and whether Tailscale sees them now.
+    let phones: Vec<(String, bool)> = status["Peer"].as_object().map(|m| m.values().filter(|p| ["ios", "ipados", "android"].contains(&p["OS"].as_str().unwrap_or("").to_lowercase().as_str()))
+        .map(|p| (p["HostName"].as_str().unwrap_or("a phone").to_string(), p["Online"].as_bool().unwrap_or(false))).collect()).unwrap_or_default();
+    if phones.is_empty() {
+        say(false, "No phone or tablet is signed in to the same Tailscale account as this PC. Sign in to Tailscale on it with the same account.".into());
+    } else {
+        for (name, online) in &phones {
+            if *online {
+                say(true, format!("{name} is connected to Tailscale now."));
+            } else {
+                say(false, format!("{name} is not connected to Tailscale right now, as this PC sees it. Open the Tailscale app on it and connect."));
+            }
+        }
+        if phones.iter().any(|p| p.1) && !changed && shared {
+            say(true, format!("Everything this PC can check is fine. On the phone: in the Tailscale app, make sure \"Use Tailscale DNS\" is on (without it the phone is connected but can't find {dns} by name), and turn off any other VPN or iCloud Private Relay for a test. Then open https://{dns} in the phone's browser: Job Hunt's page should appear."));
+        }
+    }
+    let ok = lines.iter().all(|l| l["ok"] == true);
+    json!({ "ok": ok, "lines": lines, "url": format!("https://{dns}"), "changed": changed })
+}
+
+/// phone_report for this computer, putting right what it can: Serve turned on again, and the new
+/// address saved when the PC's name changed.
+pub fn phone_check(agent: &Agent) -> crate::R<Value> {
+    use std::process::{Command, Stdio};
+    let exe = ["C:\\Program Files\\Tailscale\\tailscale.exe", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"].iter().find(|p| std::path::Path::new(p).exists()).map(|p| p.to_string()).unwrap_or_else(|| "tailscale".into());
+    let run = |args: &[&str]| -> crate::R<Vec<u8>> {
+        let mut c = Command::new(&exe);
+        c.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            c.creation_flags(0x0800_0000); // no console window
+        }
+        Ok(c.output().map_err(|e| crate::Error(format!("Couldn't run Tailscale on this computer ({e}). Is it installed?")))?.stdout)
+    };
+    let status: Value = serde_json::from_slice(&run(&["status", "--json"])?).unwrap_or(Value::Null);
+    let serve = String::from_utf8_lossy(&run(&["serve", "status", "--json"]).unwrap_or_default()).to_string();
+    let saved = agent.secret("phone.url");
+    let report = phone_report(&status, &serve, &saved);
+    let running = !report["url"].as_str().unwrap_or("").is_empty();
+    if running && (!serve.contains(&PORT.to_string()) || report["changed"] == true) {
+        if let Ok(url) = tailscale_serve() {
+            agent.db().set("phone.url", &url)?;
+        }
+    }
+    Ok(report)
+}
+
 /// An answer being written for a form (see /ext/fill/start): when it started, and the result once there.
 struct Fill {
     started: std::time::Instant,
@@ -433,6 +511,25 @@ fn page_job(j: &crate::db::Job, url: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// What the phone card's check says: a changed name is the "hostname could not be found".
+    #[test]
+    fn phone_check_names_the_cause() {
+        let status = |dns: &str, phone_on: bool| json!({ "BackendState": "Running", "Self": { "DNSName": format!("{dns}.") }, "CurrentTailnet": { "MagicDNSEnabled": true },
+            "Peer": { "k1": { "OS": "iOS", "HostName": "iPad", "Online": phone_on }, "k2": { "OS": "windows", "HostName": "other-pc", "Online": true } } });
+        let serve = format!(r#"{{"Web":{{"pc.tail1.ts.net:443":{{"Handlers":{{"/":{{"Proxy":"http://127.0.0.1:{PORT}"}}}}}}}}}}"#);
+        let all = |v: &Value| v["lines"].as_array().unwrap().iter().map(|l| l["text"].as_str().unwrap().to_string()).collect::<Vec<_>>().join("\n");
+        let good = phone_report(&status("pc.tail1.ts.net", true), &serve, "https://pc.tail1.ts.net");
+        assert_eq!((good["ok"].as_bool(), good["changed"].as_bool(), good["url"].as_str()), (Some(true), Some(false), Some("https://pc.tail1.ts.net")));
+        assert!(all(&good).contains("Use Tailscale DNS"), "{}", all(&good));
+        let renamed = phone_report(&status("pc-2.tail1.ts.net", true), &serve, "https://pc.tail1.ts.net");
+        assert_eq!((renamed["ok"].as_bool(), renamed["changed"].as_bool()), (Some(false), Some(true)));
+        assert!(all(&renamed).contains("name has changed") && all(&renamed).contains("pc.tail1.ts.net"));
+        let off = phone_report(&status("pc.tail1.ts.net", false), "{}", "https://pc.tail1.ts.net");
+        assert!(all(&off).contains("iPad is not connected") && all(&off).contains("Serve is off"), "{}", all(&off));
+        let stopped = phone_report(&json!({ "BackendState": "Stopped" }), "", "https://pc.tail1.ts.net");
+        assert!(stopped["ok"] == false && all(&stopped).contains("isn't connected on this PC"));
+    }
 
     #[test]
     fn needs_the_key() {
