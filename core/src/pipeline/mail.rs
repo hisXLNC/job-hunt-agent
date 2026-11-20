@@ -167,8 +167,10 @@ impl Agent {
         if reqs.iter().any(|r| r.len() >= 4 && text.to_lowercase().contains(r.as_str())) {
             return true;
         }
-        // The role: every word of the job's title is in the email.
-        let role_in = |title: &str| { let w = words(title); !w.is_empty() && w.iter().all(|x| has(x)) };
+        // The role: every word of the job's title is in the email; when the email names the role,
+        // in that name (a title's words scattered through a long email aren't the role it's about).
+        let named = words(t.role.as_deref().unwrap_or(""));
+        let role_in = |title: &str| { let w = words(title); !w.is_empty() && w.iter().all(|x| if named.is_empty() { has(x) } else { named.contains(x) }) };
         if !role_in(&job.title) {
             return false;
         }
@@ -223,6 +225,7 @@ impl Agent {
         }
         // Just applied: write to the recruiter, as you chose (Settings on the Recruiters page).
         if let (true, Some(job)) = (now_applied, &job) {
+            self.note(&format!("Applied: {} at {}", job.title, job.company), &format!("An email confirmed an application ({}), so Job Hunt marked this one as applied. Not this job? Open it and press I didn't send it.", msg.subject));
             if let Err(e) = crate::recruiters::on_applied(self, &job.id) {
                 self.db().log(Some(&job.id), "recruiter:error", &e.0)?;
             }

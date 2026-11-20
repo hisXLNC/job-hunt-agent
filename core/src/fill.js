@@ -768,7 +768,11 @@
   const same = (a, b) => clean(a).toLowerCase() === clean(b).toLowerCase();
   // "5 - Fluent" is "Fluent": the numbering in front of an option doesn't have to be in the answer.
   const core = t => clean(t).toLowerCase().replace(/^\d+\s*[-\u2013.:)]\s*/, '');
-  const near = (a, b) => { a = clean(a).toLowerCase(); b = clean(b).toLowerCase(); if (!a || !b) return false; if (a === b || a.startsWith(b) || b.startsWith(a)) return true; const x = core(a), y = core(b); return !!x && !!y && (x === y || x.startsWith(y) || y.startsWith(x)); };
+  // One begins with the other, whole words only: "No" is "No, I am not" and not "Non-binary";
+  // "Yes" is not "Yesterday".
+  // (A plural is the same word: "Job Board", "Job Boards".)
+  const begins = (a, b) => a.startsWith(b) && (/^(e?s)?($|[^a-z0-9])/i.test(a.slice(b.length)) || /[^a-z0-9]$/i.test(b));
+  const near = (a, b) => { a = clean(a).toLowerCase(); b = clean(b).toLowerCase(); if (!a || !b) return false; if (a === b || begins(a, b) || begins(b, a)) return true; const x = core(a), y = core(b); return !!x && !!y && (x === y || begins(x, y) || begins(y, x)); };
   // The same answer in a site's other word: "Male" where the list says "Man" (or "Man (he/him)").
   const KIN = [['male', 'man'], ['female', 'woman']];
   const kin = (option, want) => { const first = t => (core(t).match(/^[a-z]+/) || [''])[0]; const a = first(option), b = first(want); return !!a && !!b && a !== b && KIN.some(g => g.includes(a) && g.includes(b)); };

@@ -191,17 +191,7 @@ fn job_file(agent: &Agent, job: &crate::db::Job, what: &str) -> R<PathBuf> {
         // The cover letter and the CV in one file (for a form with one upload box): put together
         // now, from the two files as they are, so your own edits in Word are in it.
         "both" | "both-pdf" => {
-            let (cv, letter) = (need(&job.cv_path)?, need(&job.letter_path)?);
-            let word = |p: &Path| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("docx"));
-            if !word(&cv) || !word(&letter) {
-                return Err(Error("One file can be made only from Word files: the CV or the letter here is a PDF of your own.".into()));
-            }
-            let joined = crate::cv::letter_then_cv(&crate::cv::open(&letter)?, &crate::cv::open(&cv)?)?;
-            let stem = cv.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "CV".into());
-            let path = cv.with_file_name(format!("{stem} - Cover Letter and CV.docx"));
-            if std::fs::read(&path).ok().as_deref() != Some(joined.as_slice()) {
-                std::fs::write(&path, &joined).map_err(|e| Error(format!("Couldn't save the file ({e}). Close it in Word and try again.")))?;
-            }
+            let path = agent.one_file(job)?;
             if what == "both" {
                 return Ok(path);
             }
@@ -674,7 +664,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             }
             ["api", "keywords"] => return Ok(Resp::json(&json!({ "keywords": agent.known_keywords() }))),
             ["api", "held"] => return Ok(Resp::json(&json!({ "held": agent.held_list() }))),
-            ["api", "answer-bank"] => return Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent) }))),
+            ["api", "answer-bank"] => return Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent), "usual": crate::fill::usual(agent), "usual_questions": crate::fill::USUAL.iter().map(|(k, q, _, o)| json!({ "key": k, "q": q, "options": o })).collect::<Vec<_>>() }))),
             ["api", "tracker"] => return Ok(Resp::json(&json!({ "rows": agent.tracker(None)? }))),
             ["api", "connections"] => {
                 let testing = agent.is_running("test-sources");
@@ -796,6 +786,8 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
                     // The same job's other listings (the company's site, job boards, posted again), compared.
                     "copies": agent.copies_view(&job),
+                    // Marked applied by Job Hunt itself: why, and where it was, to put it back in one press.
+                    "applied_by_itself": agent.applied_by_itself(&job),
                     "effort": crate::fill::effort(&job),
                     // The job's place in its lifecycle: what's next, where it can move, and the work running or failed on it.
                     "lifecycle": crate::lifecycle::state(agent, &job, host.can_fill() && !req.remote),
@@ -966,6 +958,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     agent.db().log(Some(id), "must-met", &format!("you meet \"{flag}\": not a gap"))?;
                     ok()
                 }
+                "not-applied" => Ok(Resp::json(&json!({ "status": agent.not_applied(id)? }))),
                 // Seen the highlighted changes of the last revision: no more highlights.
                 "revision-seen" => {
                     agent.revision_seen(id)?;
@@ -1381,10 +1374,13 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             if let Some(list) = b.get("answers").and_then(|v| v.as_array()) {
                 crate::fill::save_bank(agent, list)?;
             }
+            if b.get("usual").is_some_and(|u| u.is_object()) {
+                crate::fill::save_usual(agent, &b["usual"])?;
+            }
             if let Some(on) = b["auto_submit"].as_bool() {
                 agent.db().set("apply.auto_submit", if on { "1" } else { "0" })?;
             }
-            Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent) })))
+            Ok(Resp::json(&json!({ "answers": crate::fill::bank(agent), "auto_submit": crate::fill::auto_submit_on(agent), "usual": crate::fill::usual(agent), "usual_questions": crate::fill::USUAL.iter().map(|(k, q, _, o)| json!({ "key": k, "q": q, "options": o })).collect::<Vec<_>>() })))
         }
         // Your notes on a company, and how companies you've applied to before are tailored for.
         ["api", "company-notes"] => {
@@ -2542,6 +2538,30 @@ mod tests {
         // And the page gets who with each line.
         let (_, v) = call(&agent, &host, "GET", "/api/jobs/test:1", Value::Null);
         assert!(v.to_string().contains(r#""by":"you""#) && v.to_string().contains(r#""by":"jobhunt""#));
+    }
+
+    /// Marked applied by Job Hunt itself: the job's page says so, and one press puts it back.
+    /// Your usual answers are kept, and only the choices offered.
+    #[test]
+    fn applied_by_itself_can_be_put_back() {
+        let (_s, agent, _fh, host) = world();
+        agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Technical Program Manager II", "2")])).unwrap();
+        assert_eq!(call(&agent, &host, "POST", "/api/jobs/test:1/status", json!({ "status": "approved" })).0, 200);
+        crate::fill::submitted(&agent, "test:1", "https://acme.example/thanks", true).unwrap();
+        let (_, v) = call(&agent, &host, "GET", "/api/jobs/test:1", Value::Null);
+        assert_eq!(v["applied_by_itself"]["was"], "approved", "{}", v["applied_by_itself"]);
+        assert_eq!(call(&agent, &host, "POST", "/api/jobs/test:1/not-applied", Value::Null).0, 200);
+        let j = agent.db().job("test:1").unwrap().unwrap();
+        assert_eq!((j.status.as_str(), j.applied_at), ("approved", None));
+        assert!(call(&agent, &host, "GET", "/api/jobs/test:1", Value::Null).1["applied_by_itself"].is_null());
+        // One you marked yourself has nothing to put back.
+        crate::fill::submitted(&agent, "test:2", "https://acme.example/apply", false).unwrap();
+        assert!(call(&agent, &host, "GET", "/api/jobs/test:2", Value::Null).1["applied_by_itself"].is_null());
+        assert_ne!(call(&agent, &host, "POST", "/api/jobs/test:2/not-applied", Value::Null).0, 200);
+
+        let (code, v) = call(&agent, &host, "POST", "/api/answer-bank", json!({ "usual": { "family": "No", "gender": "Man", "veteran": "Maybe", "nonsense": "Yes" } }));
+        assert_eq!((code, v["usual"].as_object().unwrap().len(), v["usual"]["gender"].as_str()), (200, 2, Some("Man")));
+        assert_eq!(v["usual_questions"].as_array().unwrap().len(), crate::fill::USUAL.len());
     }
 
     /// The cover letter and CV as one file: made on request, next to the other two.

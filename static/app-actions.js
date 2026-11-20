@@ -147,6 +147,9 @@ async function act(el) {
       route();
     }, a === 'chgPutBack' ? 'Put back as in your CV. Undo is at the top of CV & letter.' : 'Saved in the tailored CV.');
   }
+  if (a === 'notApplied') {
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/not-applied`, { method: 'POST' }); await refreshOverview(); route(); }, 'Put back. It no longer counts as an application.');
+  }
   if (a === 'ownOff') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/own-file-off`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Back to Job Hunt\'s version.');
   }
@@ -1333,6 +1336,12 @@ document.addEventListener('change', async e => {
   if (el.dataset.act === 'smallSources') { smallSources = el.checked; route(); return; }
   if (el.dataset.act === 'repeatMode') {
     try { await api('/api/settings/repeat', { method: 'POST', body: { mode: el.value } }); settingsCache = null; toast({ light: 'Companies you applied to before: the same headline and a few changes.', same: 'Companies you applied to before: the same CV as before.', usual: 'Companies you applied to before: tailored as usual.' }[el.value]); }
+    catch (e) { toast(e.message, true); }
+    return;
+  }
+  if (el.dataset.act === 'usualSet') {
+    const usual = Object.fromEntries([...document.querySelectorAll('.usual select')].map(x => [x.dataset.key, x.value]));
+    try { await api('/api/answer-bank', { method: 'POST', body: { usual } }); toast(el.value ? 'Saved. Job Hunt gives this answer on every form.' : 'Cleared. Job Hunt leaves this one for you.'); }
     catch (e) { toast(e.message, true); }
     return;
   }

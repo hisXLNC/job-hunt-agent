@@ -2492,3 +2492,13 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
 /* Who made a change in the history. */
 .by { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 17px; white-space: nowrap; vertical-align: 1px; border: 1px solid var(--line); color: var(--muted); }
 .by-you { border-color: var(--accent); color: var(--accent); }
+
+/* A job Job Hunt marked applied by itself: say so, with one press to put it back. */
+.self-applied { display: flex; align-items: center; gap: 14px; border-color: var(--warn); }
+.self-applied p { margin: 2px 0 0; }
+
+/* Settings: the questions most forms ask, each with your answer. */
+.usual { display: grid; gap: 6px; margin: 8px 0 16px; }
+.usual-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.usual-row span { flex: 1; min-width: 0; }
+.usual-row select { width: auto; min-width: 170px; }

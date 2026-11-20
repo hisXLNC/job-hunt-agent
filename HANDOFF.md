@@ -1211,6 +1211,33 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.5 (put back a wrong "applied", usual answers, one file attached, smaller fixes)
+
+The user's iPad Shortcut said "A server with the specified hostname could not be found": that is
+Shortcuts failing to resolve the PC's Tailscale name (Tailscale off on the iPad, or the PC's name
+changed) before Job Hunt is reached; nothing in the code can answer it. The phone card
+(`phoneCard`, `static/app.js`) now explains that message. Then "do the rest" of the list given:
+
+- **Put back**: `Agent::applied_by_itself(job)` / `not_applied(id)` (`core/src/pipeline/copies.rs`):
+  when the job's last stage line is `status:applied` by Job Hunt, the job page shows why and an
+  "I didn't send it" button (`POST /api/jobs/<id>/not-applied`), back to the stage before, with
+  `applied_at` cleared. An email that marks a job applied now sends a notice too.
+- **Confirmation emails**: `sure_confirmation` looks for the title's words in the role the email
+  names (when it names one), not anywhere in the email.
+- **Usual answers**: `fill::USUAL` (11 questions), `usual`, `save_usual`, `usual_lines` (facts for
+  Claude); `/api/answer-bank` returns `usual`, `usual_questions` and takes `usual`. Card
+  "Questions most forms ask" in Me → About me → For application forms (`renderBank`).
+- **One file attached**: `fill::wants_both(label)`; a box asking for CV and letter, with no box of
+  its own for either, gets `Agent::one_file(job)` (moved from api.rs to `pipeline/tailoring.rs`).
+- `fill.js` `begins`: a match by beginning is whole words only ("No" isn't "Non-binary"; a plural
+  still matches). `personal_in`: referee / emergency contact / referrer details are never kept.
+- `recruiters::contact_for`: never the address the application went to (all three ways).
+- `salaryValue` (`static/app-pipeline.js`): monthly, weekly, daily pay made yearly; "401k" ignored.
+- Still open from the list: answers shifting when the page changes (35), a dropdown that ignored
+  the click (40), the remote password hash (10), page text among Claude's instructions (8), file
+  reads while Claude drives the browser (5), SuccessFactors uploads (needs a new Copy details).
+- Tests: `applied_by_itself_can_be_put_back` (api.rs), `wants_both` cases (fill.rs).
+
 ## 26.11.4 (replies are written only when asked)
 
 The user: "dont auto draft replies ask for approval first". Before, an email that seemed to want an

@@ -37,7 +37,10 @@ async function renderBank() {
   const box = $('#bankCard'); if (!box) return;
   let b;
   try { b = await api('/api/answer-bank'); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
-  box.innerHTML = `<h3 class="sub">Your saved answers ${b.answers.length ? `<span class="pill">${b.answers.length}</span>` : ''}</h3>
+  const usual = (b.usual_questions || []).length ? `<h3 class="sub">Questions most forms ask</h3>
+    <p class="muted">Answer these once and Job Hunt gives the same answer on every form, however the form words it, the first time it's asked. Leave one empty and Job Hunt leaves it for you (for the questions about who you are, it chooses the option that declines).</p>
+    <div class="usual">${b.usual_questions.map(u => `<label class="usual-row"><span>${esc(u.q)}</span><select data-act="usualSet" data-key="${esc(u.key)}" aria-label="${esc(u.q)}"><option value="">No answer</option>${u.options.map(o => `<option ${b.usual?.[u.key] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`).join('')}</div>` : '';
+  box.innerHTML = `${usual}<h3 class="sub">Your saved answers ${b.answers.length ? `<span class="pill">${b.answers.length}</span>` : ''}</h3>
     <p class="muted">When you submit a form, Job Hunt keeps your answers to the questions forms keep asking (work authorization, notice period, salary, how you heard about the job…) and fills them in next time without asking Claude: faster, the same answer everywhere, and less of your plan. Answers about one employer (why this role, your cover letter) aren't kept.</p>
     ${b.answers.length ? `<div class="bank">${b.answers.map((x, i) => `<div class="bank-row" data-i="${i}"><input type="text" class="bank-q" value="${esc(x.q)}" aria-label="Question"><input type="text" class="bank-a" value="${esc(x.a)}" aria-label="Your answer"><span class="muted small" title="Times used">${x.uses ? `used ${x.uses}×` : ''}</span><button class="btn ghost sm icon-only" data-act="bankDrop" data-i="${i}" title="Forget this answer">${svg('close')}</button></div>`).join('')}</div>` : '<p class="empty small">None yet: they appear after your first form.</p>'}
     <div class="row"><button class="btn" data-act="bankAdd">Add one</button>${b.answers.length ? '<button class="btn primary" data-act="bankSave">Save changes</button>' : ''}</div>

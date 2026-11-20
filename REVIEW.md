@@ -48,13 +48,13 @@ Line numbers are as of 2.97.3.
     page data treated as yearly. fixed 2.98.0
 24. `sources.rs:191`: currency codes match inside words ("European", "audience"). fixed 2.98.0
 25. `sources.rs:505`: Adzuna's estimated salary used as the real one. fixed 2.98.0
-26. `app-pipeline.js:196`: on the screens, monthly pay reads as yearly and "401k" as 401,000. open
+26. `app-pipeline.js:196`: on the screens, monthly pay reads as yearly and "401k" as 401,000. fixed 26.11.5
 27. `sources.rs:112`: the "apply by email" address can be the accommodation or privacy mailbox;
     approving then emails your CV there. fixed 2.98.0
 28. `recruiters.rs:493,149`: the same mailboxes can be taken for a recruiter and written to. fixed 2.98.0
-29. `recruiters.rs:485`: the recruiter note can go to the address the application went to. open
+29. `recruiters.rs:485`: the recruiter note can go to the address the application went to. fixed 26.11.5
 30. `fill.js:1970`, `fill.rs:1228`: pressing Submit can mark the job applied when the site refused
-    the form. open
+    the form. part fixed 26.11.3 and 26.11.5 (stricter confirmation; one press puts it back)
 31. `fill.rs:470`: a page is matched to a job by the first word of a company name anywhere in the
     page ("Bank" of Montreal on National Bank's form): the wrong CV is uploaded. fixed 2.98.0
 32. `fill.rs:485`, `db.rs:288`: two jobs at one company: the first is used silently; Greenhouse
@@ -65,9 +65,9 @@ Line numbers are as of 2.97.3.
     saved link's site, not the page's. open
 35. `fill.js:1482`: answers shift by one box when the page changes while Claude is writing. open
 36. `fill.js:760,876`: "No" can pick "Non-binary"; a tick-box answer also ticks a longer option
-    that starts the same. open
-37. `fill.rs:169,347`: a referee's email saved under "Email" fills your own email next time. open
-38. `fill.rs:560`, `fill.js:1794`: "Resume and cover letter" box gets only the letter. open
+    that starts the same. part fixed 26.11.5 ("No" no longer picks "Non-binary"; tick boxes unchanged)
+37. `fill.rs:169,347`: a referee's email saved under "Email" fills your own email next time. fixed 26.11.5 (details of a referee, an emergency contact or a referrer are never kept)
+38. `fill.rs:560`, `fill.js:1794`: "Resume and cover letter" box gets only the letter. fixed 26.11.5 (the letter and CV in one file)
 39. `fill.js:783,824`: "(.pdf, .docx)" hint read as an attached file; Replace can press other
     Remove buttons. unverified
 40. `fill.js:590`: a dropdown that ignored the click shows as filled. open

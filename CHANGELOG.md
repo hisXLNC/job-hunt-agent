@@ -5,6 +5,21 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.5] - 2026-11-20
+
+Put back a wrong Applied, usual answers, letter and CV in one upload.
+
+### Changes
+
+- A job that Job Hunt marked as applied by itself now says so on its page, with why, and an I didn't send it button that puts it back where it was. An email that marks a job applied now sends a notice as well.
+- New in Me, About me, For application forms: Questions most forms ask. Answer them once (worked there before, family at the company, outside business, gender, and so on) and Job Hunt gives the same answer on every form, the first time it is asked.
+- A single upload box that asks for both the resume and the cover letter now gets both in one file. It used to get only the letter.
+- Form filling: No no longer picks Non-binary from a list. A referee's or emergency contact's details are no longer kept as your own.
+- A confirmation email now has to name the same role to mark a job as applied.
+- The note to a recruiter never goes to the address the application itself was sent to.
+- Sorting by pay: monthly, weekly and daily pay is compared as a yearly amount, and 401k is no longer read as pay.
+- Fill forms on your phone: the card now explains what to do when the shortcut says a server with the specified hostname could not be found (Tailscale is off on the phone, or the PC's name changed).
+
 ## [26.11.4] - 2026-11-20
 
 Replies are written only when you ask.
@@ -2772,6 +2787,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.5
 [26.11.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.4
 [26.11.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.3
 [26.11.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.2

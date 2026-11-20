@@ -139,6 +139,12 @@ fn personal_in(label: &str, section: &str, kind: &str) -> bool {
         return true;
     }
     let s = section.to_lowercase();
+    // Someone else's details (a referee, an emergency contact, the person who referred you): never
+    // kept, or their email would be put in your own Email box on the next form.
+    let l = label.to_lowercase();
+    if ["referee", "reference", "emergency contact", "referr", "next of kin", "supervisor", "manager's"].iter().any(|w| s.contains(w) || l.contains(w)) {
+        return true;
+    }
     let in_entry = ["experience", "employment", "work", "job", "position", "education", "school", "degree", "qualification", "language", "training", "certific"].iter().any(|w| s.contains(w));
     let yours = !s.is_empty() && !in_entry && ["city", "location", "town"].contains(&question_key(label).as_str());
     if yours {
@@ -182,6 +188,48 @@ fn work_history(label: &str) -> bool {
         "discipline", "i currently work here", "currently work here", "current job"];
     let k = question_key(label);
     KEYS.contains(&k.as_str())
+}
+
+/// Questions nearly every form asks in its own words, about you and not about one job: answered
+/// once in Settings, and told to Claude as facts so a form's first sight of them is answered too.
+/// (key, the question as Settings asks it, how it's told to Claude, the choices)
+pub const USUAL: [(&str, &str, &str, &[&str]); 11] = [
+    ("worked_here", "Have you worked for the company you're applying to before?", "Has worked for this employer (or its subsidiaries) before", &["No", "Yes"]),
+    ("family", "Does a family member or relative work at the company?", "Has a family member or relative working at this employer", &["No", "Yes"]),
+    ("conflict", "Any outside business activities, directorships, or relationships with the company's clients, auditors or regulators?", "Has outside business activities, directorships or relationships (with the employer's clients, auditors, regulators or officials) to declare", &["No", "Yes"]),
+    ("noncompete", "Are you bound by a non-compete or other agreement that limits where you can work?", "Is bound by a non-compete or similar restrictive agreement", &["No", "Yes"]),
+    ("checks", "Will you take background, reference and credit checks?", "Agrees to background, reference and credit checks", &["Yes", "No"]),
+    ("adult", "Are you 18 or older?", "Is 18 or older (of legal working age)", &["Yes", "No"]),
+    ("gender", "Gender", "Gender", &["Man", "Woman", "Non-binary", "Prefer not to say"]),
+    ("indigenous", "Do you identify as an Indigenous person?", "Identifies as an Indigenous person (First Nations, Inuit, Métis)", &["No", "Yes", "Prefer not to say"]),
+    ("minority", "Do you identify as a member of a visible minority?", "Identifies as a member of a visible minority (racialized person)", &["No", "Yes", "Prefer not to say"]),
+    ("disability", "Do you identify as a person with a disability?", "Identifies as a person with a disability", &["No", "Yes", "Prefer not to say"]),
+    ("veteran", "Are you a veteran?", "Is a veteran (has served in the armed forces)", &["No", "Yes", "Prefer not to say"]),
+];
+
+/// Your answers to USUAL, by key (only the ones you've chosen).
+pub fn usual(agent: &Agent) -> serde_json::Map<String, Value> {
+    serde_json::from_str(&agent.secret("answers.usual")).unwrap_or_default()
+}
+
+pub fn save_usual(agent: &Agent, v: &Value) -> R<()> {
+    let mut out = serde_json::Map::new();
+    for (key, _, _, options) in USUAL {
+        if let Some(a) = v[key].as_str().filter(|a| options.contains(a)) {
+            out.insert(key.to_string(), a.into());
+        }
+    }
+    agent.db().set("answers.usual", &Value::Object(out).to_string())
+}
+
+/// usual, as facts for Claude.
+fn usual_lines(agent: &Agent) -> String {
+    let mine = usual(agent);
+    let lines: Vec<String> = USUAL.iter().filter_map(|(key, _, told, _)| mine.get(*key).and_then(|a| a.as_str()).map(|a| format!("- {told}: {a}"))).collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!("\nThe candidate's own answers to questions forms ask in many wordings (give them wherever a question asks this; from a list, the option that means the same; \"Prefer not to say\" is the option that declines):\n{}", lines.join("\n"))
 }
 
 /// Your answers to questions forms ask again and again (work authorization, notice, salary…):
@@ -621,6 +669,12 @@ fn file_for(label: &str, only_one: bool) -> Option<&'static str> {
     }
 }
 
+/// A file box that asks for the CV and the cover letter together.
+fn wants_both(label: &str) -> bool {
+    let l = label.to_lowercase();
+    (l.contains("cover") || l.contains("letter")) && (l.contains("resume") || l.contains("résumé") || l.contains("curriculum") || l.split(|c: char| !c.is_alphabetic()).any(|w| w == "cv"))
+}
+
 /// Which of your files a file box takes: by its label, else by its own id or name (Greenhouse:
 /// "Attach" on both, ids "resume" and "cover_letter"), else by the part of the form it's in.
 fn which_file(f: &Value, only_one: bool) -> Option<&'static str> {
@@ -696,14 +750,19 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
             continue;
         }
         let which = if other_doc { None } else { which_file(f, files_wanted.len() == 1) };
+        // One box for both ("Resume and cover letter"), and no box of its own for either: the
+        // letter and the CV in one file. (It used to get the letter alone.)
+        let which = if which.is_some() && wants_both(label) && !files_wanted.iter().any(|o| !std::ptr::eq(*o, *f) && { let l = o["label"].as_str().unwrap_or(""); !wants_both(l) && file_for(l, false).is_some() }) { Some("both") } else { which };
         // Not tailored for this job: your own CV for its track, as it is.
         let own_cv = || profile.track(job.track.as_deref()).or(profile.tracks.first()).map(|t| agent.cv_path(&t.name)).filter(|p| p.is_file()).map(|p| as_pdf(&p));
         let path = match which {
             Some("cv") => job.cv_path.as_deref().map(|p| as_pdf(Path::new(p))).or_else(own_cv),
             Some("letter") => job.letter_path.as_deref().map(|p| as_pdf(Path::new(p))),
+            // (Not tailored, or a PDF of your own: the CV alone, as a box for one file gets.)
+            Some("both") => agent.one_file(&job).ok().map(|p| as_pdf(&p)).or_else(|| job.cv_path.as_deref().map(|p| as_pdf(Path::new(p)))).or_else(own_cv),
             _ => None,
         };
-        if let Some(a) = path.and_then(|p| attachment(&p, &stem(if which == Some("cv") { "CV" } else { "Cover letter" }))) {
+        if let Some(a) = path.and_then(|p| attachment(&p, &stem(match which { Some("cv") => "CV", Some("both") => "Cover letter and CV", _ => "Cover letter" }))) {
             files.insert(f["key"].as_str().unwrap_or("").to_string(), a);
         }
         // A box for certificates or licences: the copies you keep under Me, About me, Certifications,
@@ -742,6 +801,7 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
         facts.push_str(&format!("\n{}", crate::ats::answers(a)));
     }
     facts.push_str(&profile.cert_lines());
+    facts.push_str(&usual_lines(agent));
     facts.push_str(&entry_lines(agent));
     if !profile.email.trim().is_empty() {
         facts.push_str(&format!("\nEmail: {}", profile.email.trim()));
@@ -1295,7 +1355,7 @@ pub fn submitted_with(agent: &Agent, job_id: &str, url: &str, auto: bool, fields
     let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or_default();
     agent.db().set_status(job_id, "applied", &format!("submitted on {} ({}) {}", if host.is_empty() { "the company's site" } else { &host }, if auto { "Job Hunt read the site's page as a confirmation that it was sent" } else { "you said you submitted it" }, now()))?;
     if auto {
-        agent.note(&format!("Applied: {} at {}", job.title, job.company), "The site confirmed your application, so Job Hunt marked it as applied. It reminds you to follow up if there's no reply.");
+        agent.note(&format!("Applied: {} at {}", job.title, job.company), "The site confirmed your application, so Job Hunt marked it as applied. It reminds you to follow up if there's no reply. Not sent? Open the job and press I didn't send it.");
     }
     // And the email to the recruiter there, as you chose.
     if agent.claude_ready() {
@@ -1447,6 +1507,7 @@ mod tests {
         assert_eq!((v["g"].as_str(), v["y"].as_str(), v["r"].as_str(), v["w"].as_str()), (Some("3.4"), Some("2005"), Some("2 - Classroom Study"), Some("2 - Classroom Study")));
         assert_eq!((v["o"].as_str(), v["e"].as_str()), (Some("Basic"), Some("3 - Intermediate")), "a list without the kept level, and another language's entry, stay as answered");
         assert_eq!(file_for("Cover Letter", false), Some("letter"));
+        assert!(wants_both("Resume and cover letter") && wants_both("Upload your CV / Cover Letter") && !wants_both("Cover Letter") && !wants_both("Resume/CV") && !wants_both("Service letter"));
         // A box to paste the letter into is the letter's; a question that mentions one is not.
         assert!(is_letter_box(&json!({"type": "textarea", "label": "Cover letter", "value": ""})));
         assert!(!is_letter_box(&json!({"type": "textarea", "label": "Cover letter", "value": "Dear team"})));

@@ -642,6 +642,25 @@ impl Agent {
 
     /// "Ibrahim Al-Taha - Acme.docx" and "Ibrahim Al-Taha - Acme - Cover Letter.docx": what an
     /// employer sees when they download them.
+    /// The cover letter and the CV in one Word file, next to the other two: put together now from
+    /// the two files as they are (your own edits in Word are in it), and written only when it differs.
+    pub fn one_file(&self, job: &Job) -> R<std::path::PathBuf> {
+        let need = |p: &Option<String>| p.as_deref().map(std::path::PathBuf::from).ok_or_else(|| Error("Not tailored yet.".into()));
+        let (cv, letter) = (need(&job.cv_path)?, need(&job.letter_path)?);
+        let word = |p: &Path| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("docx"));
+        if !word(&cv) || !word(&letter) {
+            return Err(Error("One file can be made only from Word files: the CV or the letter here is a PDF of your own.".into()));
+        }
+        let joined = cv::letter_then_cv(&cv::open(&letter)?, &cv::open(&cv)?)?;
+        let stem = cv.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "CV".into());
+        let path = cv.with_file_name(format!("{stem} - Cover Letter and CV.docx"));
+        let same = cv::open(&path).ok().is_some_and(|d| cv::from_bytes(joined.clone()).is_ok_and(|n| n.xml == d.xml));
+        if !same {
+            std::fs::write(&path, &joined).map_err(|e| Error(format!("Couldn't save the file ({e}). Close it in Word and try again.")))?;
+        }
+        Ok(path)
+    }
+
     pub(super) fn file_names(&self, job: &Job) -> (String, String) {
         let name = crate::util::file_words(&self.profile().name);
         let company = crate::util::file_words(&job.company);

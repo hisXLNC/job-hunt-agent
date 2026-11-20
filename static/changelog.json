@@ -1,5 +1,20 @@
 [
   {
+    "version": "26.11.5",
+    "date": "2026-11-20",
+    "title": "Put back a wrong Applied, usual answers, letter and CV in one upload",
+    "changes": [
+      "A job that Job Hunt marked as applied by itself now says so on its page, with why, and an I didn't send it button that puts it back where it was. An email that marks a job applied now sends a notice as well.",
+      "New in Me, About me, For application forms: Questions most forms ask. Answer them once (worked there before, family at the company, outside business, gender, and so on) and Job Hunt gives the same answer on every form, the first time it is asked.",
+      "A single upload box that asks for both the resume and the cover letter now gets both in one file. It used to get only the letter.",
+      "Form filling: No no longer picks Non-binary from a list. A referee's or emergency contact's details are no longer kept as your own.",
+      "A confirmation email now has to name the same role to mark a job as applied.",
+      "The note to a recruiter never goes to the address the application itself was sent to.",
+      "Sorting by pay: monthly, weekly and daily pay is compared as a yearly amount, and 401k is no longer read as pay.",
+      "Fill forms on your phone: the card now explains what to do when the shortcut says a server with the specified hostname could not be found (Tailscale is off on the phone, or the PC's name changed)."
+    ]
+  },
+  {
     "version": "26.11.4",
     "date": "2026-11-20",
     "title": "Replies are written only when you ask",

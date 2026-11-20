@@ -190,3 +190,32 @@ fn list(items: &[String]) -> String {
         n => format!("{} and {}", seen[..n - 1].join(", "), seen[n - 1]),
     }
 }
+
+impl Agent {
+    /// Marked applied by Job Hunt itself (it read a page or an email as a confirmation), and still
+    /// there: why, and the stage it was at before, so one press puts it back. Null otherwise.
+    pub fn applied_by_itself(&self, job: &Job) -> Value {
+        if job.status != "applied" {
+            return Value::Null;
+        }
+        let stages: Vec<crate::db::Event> = self.db().events_of_job(&job.id).unwrap_or_default().into_iter().filter(|e| e.kind.starts_with("status:")).collect();
+        let Some(last) = stages.last() else { return Value::Null };
+        if last.kind != "status:applied" || last.by != "jobhunt" {
+            return Value::Null;
+        }
+        let was = stages.iter().rev().skip(1).map(|e| e.kind[7..].to_string()).find(|k| k != "applied")
+            .unwrap_or_else(|| if job.cv_path.is_some() { "ready".into() } else { "queued".into() });
+        json!({ "why": last.detail, "at": last.created_at, "was": was })
+    }
+
+    /// "Not sent": back to the stage it was at, and no longer counted as an application.
+    pub fn not_applied(&self, job_id: &str) -> R<String> {
+        let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;
+        let v = self.applied_by_itself(&job);
+        let Some(was) = v["was"].as_str() else { return err("This one wasn't marked as applied by Job Hunt itself. Use Change stage.") };
+        let db = self.db();
+        db.set_status(job_id, was, "you said it wasn't sent: Job Hunt had marked it applied by itself")?;
+        db.update_job(job_id, &[("applied_at", Value::Null)])?;
+        Ok(was.to_string())
+    }
+}

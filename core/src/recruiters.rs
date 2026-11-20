@@ -483,11 +483,14 @@ pub fn apply_mode(agent: &Agent) -> String {
 /// Who to write to about an application: the recruiter on it, a recruiter you know at the company,
 /// or a person whose address is in the posting. (address, name, known to you)
 pub fn contact_for(agent: &Agent, job: &crate::db::Job) -> Option<(String, String, bool)> {
-    if let Some(l) = for_job(agent, &job.id).into_iter().find(|l| l["email"].as_str().is_some_and(looks_personal)) {
+    // Never the address the application itself went to: they have it already.
+    let sent_to = job.apply_email.clone().unwrap_or_default().trim().to_lowercase();
+    let other = |e: &str| sent_to.is_empty() || e.trim().to_lowercase() != sent_to;
+    if let Some(l) = for_job(agent, &job.id).into_iter().find(|l| l["email"].as_str().is_some_and(|e| looks_personal(e) && other(e))) {
         return Some((l["email"].as_str()?.to_string(), l["name"].as_str().unwrap_or("").to_string(), true));
     }
     let all = list(agent);
-    if let Some(r) = for_company(&all, &job.company) {
+    if let Some(r) = for_company(&all, &job.company).filter(|r| other(&r.email)) {
         return Some((r.email.clone(), r.name.clone(), true));
     }
     use once_cell::sync::Lazy;

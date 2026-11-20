@@ -96,7 +96,7 @@ function copiesCard(c) {
 
 async function showJob(id) {
   clearTimeout(jobPoll);
-  const [{ job: j, lifecycle, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, following, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_open, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here, copies }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
+  const [{ job: j, applied_by_itself: selfApplied, lifecycle, effort, warnings, history, progress, own, prep, preparing, rating, rating_busy, following, cv_pdf, letter_pdf, revising, undo, follow_up: fu, following_up, finding, thanks, thanking, decline, declining, system: sys, review, reviewing, answers, answering, offer, advising, contacts, playbook, revision, company_history, company_open, company_notes, sent_compare, repeat_mode, know, links, writing_to, ats, claude_desktop, recruiter, recruiters_here, copies }, st] = await Promise.all([api(`/api/jobs/${encodeURIComponent(id)}`), api('/api/settings')]);
   const reviewBox = `<div class="ats-review"><header><h3>${sys ? `How ${esc(sys.name)}'s AI check would read your CV` : 'How an AI screen would read your CV'}</h3>
         ${reviewing ? '<span class="muted small"><span class="spin" data-kind="review"></span>Checking…</span>' : j.cv_path ? `<button class="btn" data-act="review">${review ? 'Check again' : 'Check my CV'}</button>` : ''}</header>
         ${review ? `<p><b>Meets ${review.met} of ${review.total}</b>${review.undecided ? `, ${review.undecided} it can't decide` : ''}${review.not ? `, ${review.not} not shown` : ''}. ${esc(review.note || '')}</p>
@@ -167,6 +167,7 @@ async function showJob(id) {
       <h3>What else to know</h3>
       <ul>${sys.tips.map(t => `<li><b>${esc(t.title)}.</b> ${esc(t.text)}</li>`).join('')}</ul>
       <p class="muted small">From ${esc(sys.name)}'s own published help pages. Employers choose which of these they switch on, so not all of it applies to every company.</p></details>` : ''}
+      ${selfApplied ? `<section class="card self-applied"><div class="grow"><b>Job Hunt marked this as applied by itself</b><p class="muted small">${esc(selfApplied.why || 'It read a page or an email as a confirmation.')} If you didn't send it, put it back to ${esc(STAGES[selfApplied.was] || selfApplied.was)}.</p></div><button class="btn" data-act="notApplied">I didn't send it</button></section>` : ''}
       <section class="card progress-main${early ? ' slim' : ''}">
         <header><h2>${progress ? 'Progress' : 'Stage'}</h2>${progress ? `<span class="who ${esc(progress.who)}">${{ you: 'Your move', them: 'Waiting on them', later: 'Saved', done: 'Done' }[progress.who] || ''}</span>` : ''}</header>
         ${progress ? stepsHtml(progress) : ''}

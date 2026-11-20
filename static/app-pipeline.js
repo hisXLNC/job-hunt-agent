@@ -196,10 +196,14 @@ const salaryCell = j => {
 function salaryValue(s) {
   if (!s) return -1;
   const t = String(s).split(/\s+[•·|]\s+/)[0];
-  const nums = [...t.replace(/,/g, '').matchAll(/(\d+(?:\.\d+)?)\s*([kK])?/g)].map(m => Number(m[1]) * (m[2] ? 1000 : 1));
+  // (Not a retirement plan's name: "401k", "401(k)", "403b".)
+  const nums = [...t.replace(/,/g, '').replace(/\b40[13]\s*\(?[kb]\)?/gi, ' ').matchAll(/(\d+(?:\.\d+)?)\s*([kK])?(?![a-zA-Z])/g)].map(m => Number(m[1]) * (m[2] ? 1000 : 1));
   if (!nums.length) return -1;
   let top = Math.max(...nums);
-  if (/hour|\/hr/i.test(t)) top *= 2080;
+  if (/hour|\/\s*hr\b|hourly/i.test(t)) top *= 2080;
+  else if (/\bdaily\b|per day|\/\s*day\b|a day\b/i.test(t)) top *= 260;
+  else if (/\bweekly\b|per week|\/\s*(week|wk)\b|a week\b/i.test(t)) top *= 52;
+  else if (/\bmonthly\b|per month|\/\s*(month|mo)\b|a month\b/i.test(t)) top *= 12;
   return Math.round(top);
 }
 const stageOrder = s => ['ready', 'approved', 'queued', 'applied', 'interviewing', 'offer', 'rejected', 'no_response', 'saved', 'skipped', 'dismissed'].indexOf(s);
