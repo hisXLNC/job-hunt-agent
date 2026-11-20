@@ -12,7 +12,11 @@
       "The note to a recruiter never goes to the address the application itself was sent to.",
       "Sorting by pay: monthly, weekly and daily pay is compared as a yearly amount, and 401k is no longer read as pay.",
       "Fill forms on your phone: a new Check the connection button. When the shortcut says a server with the specified hostname could not be found, Job Hunt asks Tailscale on the PC what is wrong and says it in plain words: the PC's name changed (it saves the new address, copy the link into the shortcut again), sharing was switched off (it turns it back on), or the phone isn't connected.",
-      "The iPhone shortcut: the script now reaches Shortcuts as plain text, the steps say it works in Safari only (Edge and Chrome use the bookmark) and what to do when it reports Invalid JavaScript, and the address opened by itself says the device reaches Job Hunt."
+      "The iPhone shortcut: the script now reaches Shortcuts as plain text, the steps say it works in Safari only (Edge and Chrome use the bookmark) and what to do when it reports Invalid JavaScript, and the address opened by itself says the device reaches Job Hunt.",
+      "Form filling, from RBC's form: a date or a list that the site puts back to what it had is tried again as typing, and shown as not filled when it still won't take (it used to be shown as filled).",
+      "A skills box that says to separate skills with a comma is typed into as plain text. It used to be searched skill by skill for two minutes and left empty.",
+      "Long lists (a certificate's issuer) are now sent whole, so the answer can be chosen from them, and a list that only gets its choices after the one before it is chosen is filled in a second pass.",
+      "Two certificates under one heading each get their own number and dates, and a language entry the form starts with is counted, so one too many isn't added."
     ]
   },
   {

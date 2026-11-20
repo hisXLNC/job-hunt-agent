@@ -393,7 +393,7 @@
     const best = cands.find(x => x.matches('label,legend')) || cands[0];
     return best ? textOf(best).replace(/\s*\*\s*$/, '') : '';
   }
-  let addNote = '', addedTo = [], spareGone = [], otherChosen = [], skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0;
+  let addNote = '', addedTo = [], spareGone = [], otherChosen = [], skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0, depends = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
@@ -441,6 +441,9 @@
       const numbered = new RegExp('^' + reEsc(base) + '\\s*\\d+$', 'i');
       let have = aroundHave || heads.filter(h => numbered.test(textOf(h))).length;
       if (!have) have = fields.filter(f => (f.section || '').toLowerCase().startsWith(base.toLowerCase()) && /title|position|degree|school|institution|employer|company/i.test(f.label)).length;
+      // Else how often its first box comes round ("Language" three times is three languages; RBC's
+      // one empty language to start with wasn't counted, and one too many was added).
+      if (!have) { const mine = fields.filter(f => f.type !== 'add' && f.type !== 'file' && (f.section || '').toLowerCase().replace(/\s*\d+\s*$/, '') === base.toLowerCase()); if (mine.length) have = mine.filter(f => f.label === mine[0].label).length; }
       const key = 'a' + n++;
       fields.push({ key, type: 'add', label: t, section: base, entries: have, value: '' });
       adders[key] = b;
@@ -711,7 +714,7 @@
       // A file box's own id or name says what it takes when its label doesn't (Greenhouse: "Attach"
       // on both, ids "resume" and "cover_letter").
       if (type === 'file' && (el.id || el.name)) f.id = String(el.id || el.name).slice(0, 60);
-      if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text)).slice(0, 60);
+      if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text).slice(0, 70)).slice(0, 300);
       if (type === 'checkbox') f.context = question(el);
       const sec = sectionOf(el); if (sec) f.section = sec;
       fields.push(f); byKey[key] = [el];
@@ -882,8 +885,20 @@
       const opts = [...el.options];
       const i = pick(opts.map(o => o.text), v);
       if (i < 0) return false;
-      setter(el, opts[i].value);
-      return true;
+      // By its place in the list as well as its value (options that share a value, or have none, all
+      // read as the first of them), and checked once the site has had a moment: a list the site put
+      // back to "Please Select" isn't passed off as filled (RBC's Degree and language levels).
+      for (let go = 0; go < 2; go++) {
+        if (go) await wait(400);
+        const at = [...el.options].findIndex(o => o.text === opts[i].text);
+        if (at < 0) return false;
+        setter(el, el.options[at].value);
+        if (el.selectedIndex !== at) { el.selectedIndex = at; for (const e of ['input', 'change']) el.dispatchEvent(new Event(e, { bubbles: true })); el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); }
+        await wait(120);
+        if (el.isConnected && el.selectedIndex === at) return true;
+        if (!el.isConnected) return true; // redrawn: read again by the next round
+      }
+      return false;
     }
     if (f.type === 'radio') {
       const i = pick(f.options, v);
@@ -918,6 +933,9 @@
     // (a site's CV reader often cuts a job title short or puts it in the wrong box).
     if (f.value && same(f.value, v)) return true;
     // Boxes that choose from the site's own list are searched, never typed into as text.
+    // "Separate each skill with a comma": a plain box to type into, not a list to search (RBC's:
+    // each skill was searched for, none found, and the box left empty).
+    if (f.type === 'skills' && /comma/i.test(`${f.label} ${el.getAttribute('placeholder') || ''}`)) { el.focus(); setter(el, String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean).join(', ')); await wait(120); return !!clean(el.value); }
     if (f.type === 'skills') return fillSkills(el, v);
     if (f.type === 'prompt') return fillSkills(el, String(v).split(/\s*[;\n]\s*/)[0], true);
     // A box that opens a list of its own, named by the box (SuccessFactors: "No Selection", its
@@ -925,7 +943,22 @@
     if (f.type === 'combobox' && await fillOwned(el, v)) return true;
     if (suggests(el)) { const done = await fillSuggested(el, v, f); if (done !== null) return done; }
     el.focus();
+    const was = el.value;
     setter(el, String(v));
+    // A box that put back what it had (a date box with its own format: RBC's From and To kept the
+    // dates its CV reader guessed): typed in as the keyboard would, and said plainly when even that
+    // doesn't take.
+    if (f.type !== 'combobox' && was && !same(was, v)) {
+      await wait(150);
+      if (el.isConnected && el.value === was) {
+        el.focus();
+        try { el.select(); document.execCommand('insertText', false, String(v)); } catch (e) { /* not a box that takes typing */ }
+        for (const e of ['change']) el.dispatchEvent(new Event(e, { bubbles: true }));
+        el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        await wait(200);
+        if (el.isConnected && el.value === was) return false;
+      }
+    }
     if (f.type === 'combobox') {
       await wait(500);
       const opt = [...document.querySelectorAll('[role=option]')].find(o => near(o.textContent, v));
@@ -1623,6 +1656,11 @@
         const appeared = collect().some(f => f.type !== 'add' && f.type !== 'file' && !f.value && !(byKey[f.key] || []).some(e => had.has(e)));
         if (appeared) { reveals++; round = Math.max(round, 1); status('Unticked "I currently work here" on past jobs; filling in their end dates…'); start(true, true); return; }
       }
+      // A list that had no choices until the one before it was chosen (a certificate's name, once
+      // its issuer is): read the form again once and fill it.
+      if (!onlyKeys && depends < 1 && fields.some(f => f.type === 'select' && !(f.options || []).length && (((byKey[f.key] || [])[0] || {}).options || []).length > 1)) {
+        depends++; round = Math.max(round, 1); status('Some lists have their choices now; filling those in…'); await wait(500); start(true, true); return;
+      }
       // One box was asked for: say how it went, and leave the rest of the form as it is.
       if (onlyKeys) {
         const mine = (diag.fields || []).filter(f => onlyKeys.has(f.key)).slice(-onlyKeys.size);
@@ -1790,7 +1828,7 @@
     }
   }
   async function startNow(more, dates) {
-    if (!more) { round = 0; reveals = 0; addNote = ''; addedTo = []; spareGone = []; skillMiss = []; skillUnsure = []; otherChosen = []; }
+    if (!more) { round = 0; reveals = 0; depends = 0; addNote = ''; addedTo = []; spareGone = []; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
     if (retired) return;
     if (!more && buttons.hand) buttons.hand.hidden = true;

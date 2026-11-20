@@ -284,6 +284,25 @@ const ENTRY_KINDS: [(&str, &[&str], &[&str]); 3] = [
     ("Language", &["language"], &["language"]),
 ];
 
+/// A section's boxes, one list an entry: forms that don't number their entries ("Certificates" over
+/// two certificates, RBC's) repeat the same boxes, and a new entry starts where the first box's
+/// label comes round again. Each with its place (1, 2…), 0 when the section is a single entry.
+fn entries_of<'a>(mine: Vec<&'a Value>) -> Vec<(usize, Vec<&'a Value>)> {
+    let label = |f: &Value| f["label"].as_str().unwrap_or("").trim().to_lowercase();
+    let first = mine.iter().find(|f| f["type"] != "add").map(|f| label(f)).unwrap_or_default();
+    if first.is_empty() || mine.iter().filter(|f| f["type"] != "add" && label(f) == first).count() < 2 {
+        return vec![(0, mine)];
+    }
+    let mut out: Vec<(usize, Vec<&Value>)> = vec![];
+    for f in mine {
+        if f["type"] != "add" && label(f) == first || out.is_empty() {
+            out.push((out.len() + 1, vec![]));
+        }
+        out.last_mut().unwrap().1.push(f);
+    }
+    out
+}
+
 /// From a form as you left it: the details of each school, certificate and language that are worth
 /// keeping, as (what it's about and which detail, what you put). "Education (American University
 /// of Kuwait): Overall Result (GPA)" → "3.4"; "Language (French): Reading" → "2 - Classroom Study".
@@ -301,13 +320,15 @@ pub fn entry_details(fields: &[Value]) -> Vec<(String, String)> {
     for section in sections {
         let low = section.to_lowercase();
         let Some((kind, _, names)) = ENTRY_KINDS.iter().find(|(_, heads, _)| heads.iter().any(|h| low.contains(h))) else { continue };
-        let mine: Vec<&Value> = fields.iter().filter(|f| text(f, "section") == section).collect();
-        let is_name = |f: &Value| { let l = text(f, "label").to_lowercase(); let l = l.trim_start_matches('*').trim(); names.iter().any(|n| l == *n || l.starts_with(&format!("{n} ")) || l.ends_with(&format!(" {n}")) || (*kind == "Education" && l.contains(n))) && !l.contains("number") && !l.contains("date") };
+        let all: Vec<&Value> = fields.iter().filter(|f| text(f, "section") == section).collect();
+        for (nth, mine) in entries_of(all) {
+        let is_name = |f: &Value| { let l = text(f, "label").to_lowercase(); let l = l.trim_start_matches('*').trim(); names.iter().any(|n| l == *n || l.starts_with(&format!("{n} ")) || l.ends_with(&format!(" {n}")) || (*kind == "Education" && l.contains(n))) && !l.contains("number") && !l.contains("date") && !l.contains("issuer") };
         let who = mine.iter().find(|f| is_name(f)).map(|f| text(f, "value")).filter(|v| !v.is_empty() && v.len() < 90);
         let place: String = section.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>().chars().rev().collect();
+        let place = if place.is_empty() { nth.max(1).to_string() } else { place };
         let about = match &who {
             Some(w) => format!("{kind} ({w})"),
-            None => format!("{kind} entry {}", if place.is_empty() { "1" } else { &place }),
+            None => format!("{kind} entry {place}"),
         };
         for f in mine {
             let (label, value, typ) = (text(f, "label"), text(f, "value"), text(f, "type"));
@@ -329,6 +350,7 @@ pub fn entry_details(fields: &[Value]) -> Vec<(String, String)> {
             if wanted {
                 out.push((format!("{about}: {}", label.trim_start_matches('*').trim()), value));
             }
+        }
         }
     }
     out
@@ -379,12 +401,13 @@ fn apply_entry_details(bank: &[Value], fields: &[Value], values: &mut serde_json
     for section in sections {
         let low = section.to_lowercase();
         let Some((kind, _, names)) = ENTRY_KINDS.iter().find(|(_, heads, _)| heads.iter().any(|h| low.contains(h))) else { continue };
-        let mine: Vec<&Value> = fields.iter().filter(|f| text(f, "section") == section).collect();
-        let is_name = |f: &Value| { let l = text(f, "label").to_lowercase(); let l = l.trim_start_matches('*').trim(); names.iter().any(|n| l == *n || l.starts_with(&format!("{n} ")) || l.ends_with(&format!(" {n}")) || (*kind == "Education" && l.contains(n))) && !l.contains("number") && !l.contains("date") };
+        let all: Vec<&Value> = fields.iter().filter(|f| text(f, "section") == section).collect();
+        for (nth, mine) in entries_of(all) {
+        let is_name = |f: &Value| { let l = text(f, "label").to_lowercase(); let l = l.trim_start_matches('*').trim(); names.iter().any(|n| l == *n || l.starts_with(&format!("{n} ")) || l.ends_with(&format!(" {n}")) || (*kind == "Education" && l.contains(n))) && !l.contains("number") && !l.contains("date") && !l.contains("issuer") };
         let answered = |f: &Value| f["key"].as_str().and_then(|k| values.get(k)).and_then(|v| v.as_str()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).unwrap_or_else(|| text(f, "value"));
         let who = mine.iter().find(|f| is_name(f)).map(|f| question_key(&answered(f))).filter(|w| !w.is_empty());
         let place: String = section.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>().chars().rev().collect();
-        let place = format!("entry {}", if place.is_empty() { "1" } else { &place });
+        let place = format!("entry {}", if place.is_empty() { nth.max(1).to_string() } else { place });
         // This entry's kept details: by its name (either may be the longer form of the other), else by its place.
         let about = |w: &str| who.as_deref().is_some_and(|me| w == me || (w.len() > 5 && me.contains(w)) || (me.len() > 5 && w.contains(me)));
         // (By name first; a detail kept only by the entry's place, from a form that didn't say which
@@ -421,6 +444,7 @@ fn apply_entry_details(bank: &[Value], fields: &[Value], values: &mut serde_json
                     n += 1;
                 }
             }
+        }
         }
     }
     n
@@ -1486,6 +1510,15 @@ mod tests {
             ("Certification entry 2: Certification Number".to_string(), "PMP-123".to_string()),
             ("Language (French): Reading".to_string(), "2 - Classroom Study".to_string()),
         ], "the degree, an empty date's placeholder, a tick box and a job's title aren't details to keep");
+        // Two certificates under one heading (RBC's "Certificates"): each entry's own number, not the first's on both.
+        let cert = |k: &str, label: &str, v: &str| json!({"key": k, "label": label, "type": "text", "section": "Certificates", "value": v});
+        let two = vec![cert("i1", "Certification Issuer", ""), cert("n1", "Certificate Number", "111"), cert("i2", "Certification Issuer", ""), cert("n2", "Certificate Number", "222")];
+        assert_eq!(entry_details(&two), vec![("Certification entry 1: Certificate Number".to_string(), "111".to_string()), ("Certification entry 2: Certificate Number".to_string(), "222".to_string())]);
+        let bank2: Vec<Value> = entry_details(&two).into_iter().map(|(q, a)| json!({"q": q, "a": a})).collect();
+        let empty = vec![cert("i1", "Certification Issuer", ""), cert("n1", "Certificate Number", ""), cert("i2", "Certification Issuer", ""), cert("n2", "Certificate Number", "")];
+        let mut got = serde_json::Map::new();
+        apply_entry_details(&bank2, &empty, &mut got);
+        assert_eq!((got.get("n1").and_then(|v| v.as_str()), got.get("n2").and_then(|v| v.as_str())), (Some("111"), Some("222")));
         // And on the next form they're put back, whatever Claude answered and whatever the boxes are called.
         let bank: Vec<Value> = kept.iter().map(|(q, a)| json!({"q": q, "a": a})).collect();
         let levels = json!(["1 - Beginner", "2 - Classroom Study", "3 - Intermediate"]);

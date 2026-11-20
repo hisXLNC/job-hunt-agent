@@ -1221,7 +1221,19 @@ phone card (`phoneCard`, `static/app.js`) has a Check the connection button: `PO
 `bridge::phone_report` (pure, test `phone_check_names_the_cause`) says which it is: name changed
 (new `phone.url` saved), Serve off (turned on again), MagicDNS off, phone not seen, or all fine
 here (then "Use Tailscale DNS" on the phone). Not tried against a real Tailscale. Then "do the
-rest" of the list given:
+rest" of the list given (below). The shortcut then worked once MagicDNS was on, the red
+Contents of URL variable re-chosen, and Safari used instead of Edge (the card says all three now;
+`/m/fill.js?s=1` is served as text/plain, and GET / on the bridge says the device reaches Job
+Hunt). The first Copy details from the phone (jobs.rbc.com, un-numbered repeated entries) gave:
+`fillOne` selects are set by index and checked; a text box that puts back its old value is retried
+with execCommand insertText and returns false if it still holds it; a "separate with a comma"
+skills box is plain text; select options go up to 300 (were 60: PMI was past the cut in the
+issuer list); `depends` re-reads once for a select that got its options late; an Add button's
+`entries` falls back to how often the section's first label repeats; `entries_of` (fill.rs) splits
+an un-numbered section into entries so kept details go to the right one. None of this was tried on
+RBC itself. Not done: RBC's CV reader made 9 jobs for a CV of 7 and the 2 spare ones stay (spare
+removal only knows numbered sections). The ext test case "profile (from its list)" failed twice
+in about ten full runs (31s: the panel's choice never appeared) and never alone: cause unknown.
 
 - **Put back**: `Agent::applied_by_itself(job)` / `not_applied(id)` (`core/src/pipeline/copies.rs`):
   when the job's last stage line is `status:applied` by Job Hunt, the job page shows why and an
