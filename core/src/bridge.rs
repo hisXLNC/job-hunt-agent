@@ -121,7 +121,7 @@ fn phone_script(agent: &Agent, sent: &str, shortcut: bool) -> Resp {
     if sent.len() != want.len() || !sent.bytes().zip(want.bytes()).fold(true, |ok, (a, b)| ok & (a == b)) {
         let body = if shortcut { "completion('Job Hunt: the key in this shortcut is old. Copy the link again from Job Hunt on your PC (Settings, Browser extension, Fill forms on your phone) and paste it into the shortcut.');" }
             else { "alert('Job Hunt: this bookmark has an old key. Copy the bookmark again from Job Hunt on your PC: Settings, Browser extension, Fill forms on your phone.');" };
-        return Resp { status: 200, ctype: "application/javascript; charset=utf-8".into(), body: body.as_bytes().to_vec(), headers: vec![("Cache-Control".into(), "no-store".into())] };
+        return Resp { status: 200, ctype: if shortcut { "text/plain; charset=utf-8" } else { "application/javascript; charset=utf-8" }.into(), body: body.as_bytes().to_vec(), headers: vec![("Cache-Control".into(), "no-store".into())] };
     }
     let _ = agent.db().set("phone.last", &crate::util::now());
     if shortcut {
@@ -131,7 +131,8 @@ fn phone_script(agent: &Agent, sent: &str, shortcut: bool) -> Resp {
             json!(want),
             crate::fill::extension_script()
         );
-        return Resp { status: 200, ctype: "application/javascript; charset=utf-8".into(), body: script.into_bytes(), headers: vec![("Cache-Control".into(), "no-store".into())] };
+        // Plain text, so Shortcuts hands it on as text (the script itself) and not as a file named fill.js.
+        return Resp { status: 200, ctype: "text/plain; charset=utf-8".into(), body: script.into_bytes(), headers: vec![("Cache-Control".into(), "no-store".into())] };
     }
     let script = format!(
         "if (!window.__jobhunt) {{\nwindow.__jobhuntRemote = {{ base: new URL(document.currentScript.src).origin, key: {} }};\n{}\n}} else window.__jobhunt.start();\n",
@@ -549,6 +550,7 @@ mod tests {
         assert!(js.contains(r#"base: "https://pc.tail.example""#) && !js.contains("currentScript.src).origin, key") && js.trim_end().ends_with("}") && js.contains("completion('Job Hunt is on the page.')"));
         let bad = String::from_utf8(phone_script(&s.agent, "nope", true).body).unwrap();
         assert!(bad.starts_with("completion(") && !bad.contains(&k));
+        assert!(phone_script(&s.agent, &k, true).ctype.starts_with("text/plain") && phone_script(&s.agent, &k, false).ctype.contains("javascript"), "Shortcuts gets text, a bookmark's script tag gets a script");
         // A job shared from the phone: only with the key, and only with a link in it.
         assert_eq!(phone_add(&s.agent, "nope", "https://www.linkedin.com/jobs/view/123456789").status, 401);
         assert_eq!(phone_add(&s.agent, &k, "Look at this job!").status, 400);

@@ -31,7 +31,7 @@ function phoneCard(st, here) {
       <li>In the iPhone's <b>Settings</b> → <b>Apps</b> → <b>Shortcuts</b> → <b>Advanced</b>, turn on <b>Allow Running Scripts</b>.</li>
       <li>In <b>Shortcuts</b>, press <b>+</b> and name it <b>Fill with Job Hunt</b>. Press the <b>ⓘ</b>, turn on <b>Show in Share Sheet</b>, and under what it receives leave only <b>Safari web pages</b> ticked.</li>
       <li>Add the action <b>Get Contents of URL</b> and paste the link as its address.</li>
-      <li>Add the action <b>Run JavaScript on Web Page</b>. Its page is the <b>Shortcut Input</b>. Delete the sample script in its box, then tap the box and choose the variable <b>Contents of URL</b>, so that is the whole script.</li>
+      <li>Add the action <b>Run JavaScript on Web Page</b>. Its page is the <b>Shortcut Input</b>. Delete the sample script in its box, then tap the box and choose the variable <b>Contents of URL</b>, so that is the whole script. If the shortcut says <b>Invalid JavaScript: the script must call completion</b>, that box has lost its variable (it shows in red after the action above it was replaced): delete it and choose <b>Contents of URL</b> again.</li>
       <li>On an application form in Safari: <b>Share</b> → <b>Fill with Job Hunt</b>. The first time, the iPhone asks whether the shortcut may run on that site: allow it.</li></ol>
       <h3 style="margin-top:18px">Or a bookmark (any browser, Android too)</h3>
       <ol class="small steps-list">
