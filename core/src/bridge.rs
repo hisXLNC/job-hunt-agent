@@ -69,6 +69,9 @@ pub fn write_extension(agent: &Agent, host: &dyn crate::api::Host) -> crate::R<s
     Ok(dir)
 }
 
+/// What the address shows when opened by itself: the phone has reached this PC.
+const HELLO: &str = r#"<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Job Hunt</title><body style="font:17px/1.5 -apple-system,system-ui,sans-serif;max-width:34em;margin:12vh auto;padding:0 20px"><h1 style="font-size:22px">This device reaches Job Hunt on your PC.</h1><p>The connection works. To fill a form, use the Fill with Job Hunt shortcut or bookmark on the application page: this address by itself does nothing more.</p></body>"#;
+
 /// Start listening, once, in the background. Quietly does nothing when the port is taken (another
 /// copy of Job Hunt has it).
 pub fn start(agent: Arc<Agent>) {
@@ -87,6 +90,9 @@ pub fn start(agent: Arc<Agent>) {
                     Resp { status: 204, ctype: "text/plain".into(), body: vec![], headers: vec![] }
                 } else if req.method == "GET" && req.path == "/m/fill.js" {
                     phone_script(&agent, &sent, req.query.get("s").is_some_and(|s| s == "1"))
+                } else if req.method == "GET" && req.path == "/" {
+                    // The address opened by itself in a phone's browser: a test that the phone reaches this PC.
+                    Resp { status: 200, ctype: "text/html; charset=utf-8".into(), headers: vec![], body: HELLO.as_bytes().to_vec() }
                 } else if req.path == "/m/add" {
                     // A job shared from your phone (the LinkedIn app's Share → Send to Job Hunt): the
                     // link as ?u=, or the shared text as the body.
@@ -273,7 +279,7 @@ pub fn phone_report(status: &Value, serve: &str, saved: &str) -> Value {
             }
         }
         if phones.iter().any(|p| p.1) && !changed && shared {
-            say(true, format!("Everything this PC can check is fine. On the phone: in the Tailscale app, make sure \"Use Tailscale DNS\" is on (without it the phone is connected but can't find {dns} by name), and turn off any other VPN or iCloud Private Relay for a test. Then open https://{dns} in the phone's browser: Job Hunt's page should appear."));
+            say(true, format!("Everything this PC can check is fine. On the phone: in the Tailscale app, make sure \"Use Tailscale DNS\" is on (without it the phone is connected but can't find {dns} by name), and turn off any other VPN or iCloud Private Relay for a test. Then open https://{dns} in the phone's browser: it should say that the device reaches Job Hunt."));
         }
     }
     let ok = lines.iter().all(|l| l["ok"] == true);
