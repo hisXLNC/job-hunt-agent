@@ -240,15 +240,17 @@ impl Agent {
                 self.book_interview(job.as_ref(), t, msg, profile)?;
                 Ok(None)
             }
-            "interview_request" => match self.scheduling_reply(msg, t, profile)? {
-                Some(body) => Ok(Some(self.hold_reply(msg, job.as_ref().map(|j| j.id.as_str()), &body)?)),
-                None => Ok(None),
-            },
+            // An email that looks like it wants an answer: nothing is written to Drafts by itself.
+            // You're asked (Inbox, "Write a reply"), and it's written when you say so.
+            "interview_request" => {
+                if let Some(body) = self.scheduling_reply(msg, t, profile)? {
+                    self.ask_about_reply(msg, t, job.as_ref(), &body)?;
+                }
+                Ok(None)
+            }
             _ if t.needs_reply && t.reply_draft.as_deref().is_some_and(|d| !d.trim().is_empty()) => {
-                let id = self.hold_reply(msg, job.as_ref().map(|j| j.id.as_str()), t.reply_draft.as_deref().unwrap())?;
-                let from = t.company.clone().filter(|c| !c.is_empty()).or_else(|| job.as_ref().map(|j| j.company.clone())).unwrap_or_else(|| google::address(&msg.from));
-                self.note(&format!("Reply from {from}"), &format!("An answer is written and waits for your approval (Inbox, Drafts): {}", msg.subject));
-                Ok(Some(id))
+                self.ask_about_reply(msg, t, job.as_ref(), t.reply_draft.as_deref().unwrap())?;
+                Ok(None)
             }
             "offer" => {
                 self.note("You have an offer", &format!("{}: {}", t.company.clone().unwrap_or_default(), t.summary));
@@ -259,6 +261,28 @@ impl Agent {
     }
 
     // --- calendar -----------------------------------------------------------------------------------
+
+    /// An email may want an answer: say so and ask, and keep what the answer would say (worked
+    /// out while the email was read) for when you press Write a reply. Nothing goes to Drafts.
+    fn ask_about_reply(&self, msg: &Email, t: &Triage, job: Option<&Job>, body: &str) -> R<()> {
+        self.db().set(&format!("reply.wanted:{}", msg.id), body)?;
+        let from = t.company.clone().filter(|c| !c.is_empty()).or_else(|| job.map(|j| j.company.clone())).unwrap_or_else(|| google::address(&msg.from));
+        self.note(&format!("Reply from {from}"), &format!("This email may want an answer: {}. Job Hunt hasn't written one. To have it write one for your approval, open Inbox and press Write a reply.", msg.subject));
+        Ok(())
+    }
+
+    /// The emails (of the newest 200) that may want an answer you haven't asked for or declined yet.
+    pub fn replies_wanted(&self) -> Vec<String> {
+        let db = self.db();
+        db.emails(200).unwrap_or_default().into_iter()
+            .filter(|e| e.draft_id.is_none() && db.get(&format!("reply.wanted:{}", e.gmail_id)).ok().flatten().is_some_and(|v| !v.is_empty()))
+            .map(|e| e.gmail_id).collect()
+    }
+
+    /// "No reply needed": stop asking about this email.
+    pub fn no_reply(&self, gmail_id: &str) -> R<()> {
+        self.db().set(&format!("reply.wanted:{gmail_id}"), "")
+    }
 
     pub(super) fn scheduling_reply(&self, msg: &Email, t: &Triage, profile: &Profile) -> R<Option<String>> {
         let Some(cal) = self.cal.read().unwrap().clone() else { return Ok(None) };

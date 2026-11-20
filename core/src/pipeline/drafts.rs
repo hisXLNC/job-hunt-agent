@@ -49,12 +49,6 @@ impl Agent {
         Ok(h.id)
     }
 
-    /// An answer to an email, held for your approval: to its sender, in its thread.
-    pub(super) fn hold_reply(&self, msg: &google::Email, job_id: Option<&str>, body: &str) -> R<String> {
-        let subject = if msg.subject.to_lowercase().starts_with("re:") { msg.subject.clone() } else { format!("Re: {}", msg.subject) };
-        self.hold_draft("reply", job_id, &google::address(&msg.from), &subject, body, Some(&msg.id), &[])
-    }
-
     /// The emails waiting for your approval, newest first, each with the job it's about.
     pub fn drafts_held(&self) -> Vec<Value> {
         let list = self.db().held_with("waiting").unwrap_or_default();

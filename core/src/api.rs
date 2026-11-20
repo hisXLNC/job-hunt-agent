@@ -842,7 +842,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     "claude_desktop": crate::mcp::claude_desktop_config().as_deref().map(crate::mcp::in_claude_desktop).unwrap_or(false),
                 })));
             }
-            ["api", "emails"] => return Ok(Resp::json(&json!({ "emails": agent.db().emails(200)?, "seen": agent.secret("inbox.seen"), "held": agent.held_states(), "drafts": agent.drafts_held_count() }))),
+            ["api", "emails"] => return Ok(Resp::json(&json!({ "emails": agent.db().emails(200)?, "seen": agent.secret("inbox.seen"), "held": agent.held_states(), "drafts": agent.drafts_held_count(), "reply_wanted": agent.replies_wanted() }))),
             // Emails Job Hunt wrote that wait for your approval; nothing of them is in Gmail yet.
             ["api", "drafts"] => return Ok(Resp::json(&json!({ "drafts": agent.drafts_held(), "gmail": agent.mail.read().unwrap().is_some() }))),
             ["api", "drafts", id] => return Ok(Resp::json(&agent.draft_view(id)?)),
@@ -1872,6 +1872,10 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             ok()
         }
         ["api", "emails", id, "reply"] => Ok(Resp::json(&agent.reply_to_email(id)?)),
+        ["api", "emails", id, "no-reply"] => {
+            agent.no_reply(id)?;
+            ok()
+        }
         // A held email: your edits, a change by Claude, the version before, your approval, or the bin.
         ["api", "drafts", id, "save"] => {
             agent.save_draft(id, s(&b, "to"), s(&b, "subject"), s(&b, "body"))?;

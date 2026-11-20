@@ -208,7 +208,7 @@ const inboxHead = (on, about, actions) => `<div class="head"><div class="grow"><
 const emailState = x => x.held === 'waiting' ? `<span class="pill warn">Waiting for your approval</span> <a href="#inbox/drafts/${encodeURIComponent(x.draft)}">Read, change and approve it</a> · written`
   : x.held === 'gmail' ? 'Approved: in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a> ·'
   : x.held === 'sent' ? 'Sent' : x.held === 'discarded' ? 'Discarded' : x.draft ? 'Saved in your <a href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts">Gmail drafts</a>' : 'Written';
-const INBOX_ABOUT = 'Job email Job Hunt has read. Replies it writes wait under Drafts for your approval, and messages are labelled under JobHunt/ in Gmail.';
+const INBOX_ABOUT = 'Job email Job Hunt has read. It writes a reply only when you ask, and that reply waits under Drafts for your approval; messages are labelled under JobHunt/ in Gmail.';
 /** Where Job Hunt keeps your files, and a way to choose another folder (setup and Settings). */
 const filesCard = (st, setup) => `<section class="card"><header><h2>${setup ? 'Where to keep your files' : 'Your files'}</h2></header>
   <p class="muted">Your CVs, every tailored CV and cover letter, and backups go here${setup ? '. Most people keep them in Documents' : ''}. Job Hunt's own database stays in its program data, so a sync app like OneDrive can't damage it.</p>

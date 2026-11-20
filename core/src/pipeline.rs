@@ -2775,7 +2775,13 @@ replies and interviews, and a little lower for kinds that got none from several 
         };
         let about = job.as_ref().map(|j| format!("{} at {}", j.title, j.company)).unwrap_or_default();
         let input = crate::claude::EmailIn { from: &original.from, to: &original.to, date: &original.date, subject: &original.subject, body: &original.body };
-        let mut body = self.llm().email_reply(&profile.name, &input, &about)?;
+        // What the answer would say was worked out when the email was read (times from your
+        // calendar for an interview request, say): used now that you've asked for it.
+        let ready = self.db().get(&format!("reply.wanted:{gmail_id}")).ok().flatten().filter(|b| !b.trim().is_empty());
+        let mut body = match ready {
+            Some(b) => b,
+            None => self.llm().email_reply(&profile.name, &input, &about)?,
+        };
         if let Some(j) = &job {
             body = cv::humanize(&body, &self.own_words(j, &profile));
         }
@@ -2783,6 +2789,7 @@ replies and interviews, and a little lower for kinds that got none from several 
         let draft = self.hold_draft("reply", row.job_id.as_deref(), &google::address(&original.from), &subject, &body, Some(gmail_id), &[])?;
         let db = self.db();
         db.set_email_draft(gmail_id, &draft)?;
+        db.set(&format!("reply.wanted:{gmail_id}"), "")?;
         db.log(row.job_id.as_deref(), "reply", &format!("reply to \u{201c}{}\u{201d} written: it waits for your approval", original.subject))?;
         Ok(json!({ "draft": draft, "body": body, "in_thread": true }))
     }

@@ -1211,6 +1211,19 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.4 (replies are written only when asked)
+
+The user: "dont auto draft replies ask for approval first". Before, an email that seemed to want an
+answer (and an interview request, with times from the calendar) got a reply written to Drafts by
+itself. Now `handle_email` calls `ask_about_reply` (`core/src/pipeline/mail.rs`): it keeps what the
+answer would say under `reply.wanted:<gmail id>` (kv), sends a notice, and writes nothing to Drafts.
+`replies_wanted()` lists those emails (`/api/emails` → `reply_wanted`); the Inbox shows "May want a
+reply", a primary Write a reply and "No reply needed" (`POST /api/emails/<id>/no-reply`).
+`reply_to_email` uses the kept text when there is one, else asks Claude as before. `hold_reply` is
+gone. Test `interview_request_asks_before_writing_a_reply` (was `..._drafts_reply_...`, changed on
+purpose). Not changed: follow-ups, thank-you notes and recruiter emails are still written by
+themselves and held for approval.
+
 ## 26.11.3 (history says who made each change; no "applied" from an Apply button)
 
 The user found a job (Cleo) marked applied that they never applied to, and asked that everything be

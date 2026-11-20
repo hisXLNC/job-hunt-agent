@@ -1340,7 +1340,7 @@ fn confirmed_interview_books_calendar_once() {
 }
 
 #[test]
-fn interview_request_drafts_reply_accepting_a_free_slot() {
+fn interview_request_asks_before_writing_a_reply() {
     let s = setup();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
     let future = Utc::now() + Duration::days(3);
@@ -1351,8 +1351,14 @@ fn interview_request_drafts_reply_accepting_a_free_slot() {
     s.llm.triages.lock().unwrap().push(Triage { offered_times: vec![busy_slot, free_slot.clone()], ..triage("interview_request", Some("test:1")) });
     s.agent.process_inbox(50).unwrap();
     assert_eq!(*s.llm.accepted.lock().unwrap(), Some(Some(free_slot)));
-    // The answer waits for your approval; approved, it's a draft in that email's thread.
-    assert!(s.mail.drafts.lock().unwrap().is_empty());
+    // Nothing is written by itself: you're asked, and the email is marked as one that may want an answer.
+    assert!(s.mail.drafts.lock().unwrap().is_empty() && waiting(&s).is_empty(), "no reply without your say-so");
+    assert_eq!(s.agent.replies_wanted(), vec!["m1".to_string()]);
+    assert!(s.notes.lock().unwrap().iter().any(|n| n.starts_with("Reply from")));
+    // You ask for it: the answer worked out from your calendar waits for your approval; approved,
+    // it's a draft in that email's thread.
+    s.agent.reply_to_email("m1").unwrap();
+    assert!(s.agent.replies_wanted().is_empty());
     let held = waiting(&s);
     assert_eq!((held.len(), held[0].kind.as_str(), held[0].reply_to.as_deref(), held[0].body.as_str()), (1, "reply", Some("m1"), "Tuesday works, thanks. Jane"));
     assert_eq!(s.agent.approve_draft(&held[0].id, false).unwrap()["status"], "gmail");

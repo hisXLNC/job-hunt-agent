@@ -5,6 +5,15 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.4] - 2026-11-20
+
+Replies are written only when you ask.
+
+### Changes
+
+- Job Hunt no longer writes a reply to an email by itself. An email that may want an answer is marked May want a reply in the Inbox, with Write a reply and No reply needed. The reply is written when you press Write a reply, and still waits under Drafts for your approval.
+- The notice for such an email now says no reply has been written.
+
 ## [26.11.3] - 2026-11-17
 
 History says who made each change, one file for letter and CV.
@@ -2763,6 +2772,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.4
 [26.11.3]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.3
 [26.11.2]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.2
 [26.11.1]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.1

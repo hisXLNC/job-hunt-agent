@@ -340,7 +340,7 @@ async function showResults() {
 }
 
 async function showInbox() {
-  const { emails, seen, held = {} } = await api('/api/emails');
+  const { emails, seen, held = {}, reply_wanted: wanted = [] } = await api('/api/emails');
   const google = !!overview?.setup?.google;
   const quiet = ['job_alert', 'not_job', 'application_received'];
   const since = seen ? new Date(seen) : new Date(Date.now() - 3 * 86400000);
@@ -355,16 +355,16 @@ async function showInbox() {
     const mine = held[m.draft_id];
     const reply = mine === 'waiting' ? `<a class="btn sm" href="#inbox/drafts/${encodeURIComponent(m.draft_id)}" title="A reply is written and waits for your approval">Open the draft</a>`
       : mine === 'sent' ? '' : m.draft_id && mine !== 'discarded' ? `<a class="btn sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#drafts" title="A reply is in your Gmail drafts">Open Gmail drafts</a>`
-      : google && !quiet.includes(m.category) && m.category !== 'rejection' ? `<button class="btn sm" data-act="emailReply" data-id="${esc(m.gmail_id)}" title="Claude writes a short reply. It waits under Drafts for your approval: nothing is sent, or put in Gmail, before that.">Write a reply</button>` : '';
+      : google && !quiet.includes(m.category) && m.category !== 'rejection' ? `<button class="btn sm${wanted.includes(m.gmail_id) ? ' primary' : ''}" data-act="emailReply" data-id="${esc(m.gmail_id)}" title="Claude writes a short reply. It waits under Drafts for your approval: nothing is sent, or put in Gmail, before that.">Write a reply</button>${wanted.includes(m.gmail_id) ? `<button class="btn ghost sm" data-act="emailNoReply" data-id="${esc(m.gmail_id)}" title="Job Hunt stops asking about this email">No reply needed</button>` : ''}` : '';
     const gmail = m.thread_id ? `<a class="btn ghost sm" href="#" data-act="link" data-url="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(m.thread_id)}">Open in Gmail</a>` : '';
     return `${main}${reply}${gmail}`;
   };
-  page(`${inboxHead('email', 'Job email Job Hunt has read. Replies it writes wait under Drafts for your approval.',
+  page(`${inboxHead('email', 'Job email Job Hunt has read. It writes a reply only when you ask, and that reply waits under Drafts for your approval.',
       `<a class="btn ghost set-btn" href="#settings/inbox">${svg('settings')}Email settings</a>${google ? `<button class="btn primary" data-act="run" data-task="inbox">${svg('mail')}Check email now</button>` : '<a class="btn primary" href="#settings/connections">Connect Gmail</a>'}`)}
     <section class="card" style="padding:6px 10px">${emails.length ? `<table class="inbox-list"><thead><tr><th>Received</th><th>Type</th><th>Email</th><th>Application</th><th>What you can do</th></tr></thead><tbody>
     ${emails.map(m => { const [name, cls] = CATEGORY[m.category] || [m.category, '']; return `<tr class="${fresh(m) ? 'fresh' : ''}">
       <td class="small muted" style="white-space:nowrap">${fresh(m) ? '<span class="pill info">New</span><br>' : ''}${esc(fmtWhen(m.received_at))}</td>
-      <td><span class="pill ${cls}">${esc(name)}</span>${m.draft_id && held[m.draft_id] !== 'discarded' ? `<br><span class="small muted">${{ waiting: 'Reply waits for your approval', sent: 'Reply sent', gmail: 'Reply in your Gmail drafts' }[held[m.draft_id]] || 'Draft reply ready'}</span>` : ''}</td>
+      <td><span class="pill ${cls}">${esc(name)}</span>${m.draft_id && held[m.draft_id] !== 'discarded' ? `<br><span class="small muted">${{ waiting: 'Reply waits for your approval', sent: 'Reply sent', gmail: 'Reply in your Gmail drafts' }[held[m.draft_id]] || 'Draft reply ready'}</span>` : wanted.includes(m.gmail_id) ? '<br><span class="pill warn">May want a reply</span>' : ''}</td>
       <td><b>${esc(m.subject)}</b><br><span class="small muted">${esc(m.sender)}</span><p class="small" style="margin-top:4px">${esc(m.summary)}</p></td>
       <td class="small">${m.job_id ? `<a href="#job/${encodeURIComponent(m.job_id)}">${esc(m.company)} – ${esc(m.title)}</a>` : ''}</td>
       <td><div class="row inbox-acts">${acts(m)}</div></td></tr>`; }).join('')}

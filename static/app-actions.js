@@ -707,6 +707,9 @@ async function act(el) {
   if (a === 'undoRevision') {
     return busy(async () => { await api(`/api/jobs/${encodeURIComponent(jobId)}/undo`, { method: 'POST', body: { what: el.dataset.what } }); route(); }, 'Put back as it was.');
   }
+  if (a === 'emailNoReply') {
+    return busy(async () => { await api(`/api/emails/${encodeURIComponent(el.dataset.id)}/no-reply`, { method: 'POST' }); route(); }, 'Job Hunt won\'t ask about that email again.');
+  }
   if (a === 'emailReply') {
     return busy(async () => { const r = await api(`/api/emails/${encodeURIComponent(el.dataset.id)}/reply`, { method: 'POST' }); await refreshOverview(); if (r.draft) location.hash = `#inbox/drafts/${encodeURIComponent(r.draft)}`; else route(); }, 'The reply is written. Read it, change what you like, then approve it.');
   }

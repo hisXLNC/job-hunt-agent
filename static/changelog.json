@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.4",
+    "date": "2026-11-20",
+    "title": "Replies are written only when you ask",
+    "changes": [
+      "Job Hunt no longer writes a reply to an email by itself. An email that may want an answer is marked May want a reply in the Inbox, with Write a reply and No reply needed. The reply is written when you press Write a reply, and still waits under Drafts for your approval.",
+      "The notice for such an email now says no reply has been written."
+    ]
+  },
+  {
     "version": "26.11.3",
     "date": "2026-11-17",
     "title": "History says who made each change, one file for letter and CV",
