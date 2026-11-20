@@ -24,7 +24,7 @@ function phoneCard(st, here) {
     <p class="muted">Apply from your phone's browser and Job Hunt fills in the form, from ${here ? 'your' : 'this'} PC (it has to be on, with Job Hunt running). Your phone reaches it through Tailscale, so only your own devices can.</p>
     ${url && !here ? `<div class="row"><button class="btn" data-act="phoneCheck">Check the connection</button><span class="muted small">When the phone says "A server with the specified hostname could not be found", or nothing happens: Job Hunt asks Tailscale on this PC what's wrong, and puts right what it can.</span></div><div id="phoneCheck"></div>` : ''}
     ${url ? `<h3>From Safari's Share button (iPhone and iPad)</h3>
-      <p class="muted small">A shortcut you make once. After that: on an application form, <b>Share</b> → <b>Fill with Job Hunt</b>, and the Job Hunt panel appears on the page and fills it in. Nothing to install: Shortcuts comes with the iPhone.</p>
+      <p class="muted small">A shortcut you make once. After that: on an application form, <b>Share</b> → <b>Fill with Job Hunt</b>, and the Job Hunt panel appears on the page and fills it in. Nothing to install: Shortcuts comes with the iPhone. <b>It works in Safari only</b>: Apple lets a shortcut run on a page in no other browser, so in Edge or Chrome it doesn't show in the Share menu (use the bookmark below there).</p>
       <ol class="small steps-list">
       <li>On your phone, turn on Tailscale.</li>
       <li>${here ? '' : 'Get this link onto your phone: '}<button class="btn sm" data-act="copyFillLink">Copy the link</button>${sent}. It holds your key: keep it to yourself.</li>
@@ -32,7 +32,7 @@ function phoneCard(st, here) {
       <li>In <b>Shortcuts</b>, press <b>+</b> and name it <b>Fill with Job Hunt</b>. Press the <b>ⓘ</b>, turn on <b>Show in Share Sheet</b>, and under what it receives leave only <b>Safari web pages</b> ticked.</li>
       <li>Add the action <b>Get Contents of URL</b> and paste the link as its address.</li>
       <li>Add the action <b>Run JavaScript on Web Page</b>. Its page is the <b>Shortcut Input</b>. Delete the sample script in its box, then tap the box and choose the variable <b>Contents of URL</b>, so that is the whole script. If the shortcut says <b>Invalid JavaScript: the script must call completion</b>, that box has lost its variable (it shows in red after the action above it was replaced): delete it and choose <b>Contents of URL</b> again.</li>
-      <li>On an application form in Safari: <b>Share</b> → <b>Fill with Job Hunt</b>. The first time, the iPhone asks whether the shortcut may run on that site: allow it.</li></ol>
+      <li>On an application form in Safari: <b>Share</b> → <b>Fill with Job Hunt</b> (not the play button inside Shortcuts: there is no page there to run on). The first time, the iPhone asks whether the shortcut may run on that site: allow it.</li></ol>
       <h3 style="margin-top:18px">Or a bookmark (any browser, Android too)</h3>
       <ol class="small steps-list">
       <li>${here ? '<button class="btn sm" data-act="copyPhone">Copy the bookmark</button> to this phone.' : 'Get this bookmark onto your phone: <button class="btn sm" data-act="copyPhone">Copy the bookmark</button> and send it to yourself. Or add it as a favourite in Edge here: with sync on it shows up in Edge on your phone.'}</li>
