@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.11",
+    "date": "2026-11-21",
+    "title": "Workday skills: no look-alikes",
+    "changes": [
+      "A skill is no longer matched to a longer word that starts the same (Hybridoma was chosen for Hybrid Delivery).",
+      "Software Development Life Cycle (SDLC) is chosen for Software Development Lifecycle, not Secure Software Development Lifecycle."
+    ]
+  },
+  {
     "version": "26.11.10",
     "date": "2026-11-21",
     "title": "Workday: How did you hear about us, and a form that redraws",

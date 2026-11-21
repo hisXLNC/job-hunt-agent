@@ -5,6 +5,15 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.11] - 2026-11-21
+
+Workday skills: no look-alikes.
+
+### Changes
+
+- A skill is no longer matched to a longer word that starts the same (Hybridoma was chosen for Hybrid Delivery).
+- Software Development Life Cycle (SDLC) is chosen for Software Development Lifecycle, not Secure Software Development Lifecycle.
+
 ## [26.11.10] - 2026-11-21
 
 Workday: How did you hear about us, and a form that redraws.
@@ -2841,6 +2850,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.11]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.11
 [26.11.10]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.10
 [26.11.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.9
 [26.11.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.8

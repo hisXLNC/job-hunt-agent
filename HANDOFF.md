@@ -1217,6 +1217,16 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.11 (Workday skills: no look-alikes)
+
+From a Copy details of Ontario Health's My Experience page (still on 26.11.9).
+- `fill.js` skill matching: words are compared whole (`sameWord`: plurals, and words of 7+ letters
+  sharing six), not cut to six letters, so "Hybridoma" no longer fits "Hybrid Delivery"; `squash`
+  makes "Software Development Life Cycle (SDLC)" the same name as "Software Development Lifecycle"
+  (it lost to "Secure Software Development Lifecycle").
+- Not looked into: "Contract Negotiations" found (fit 85) but "not taken" by the click; the skills
+  took over three minutes with the tab behind another.
+
 ## 26.11.10 (Workday: the source list, and a redrawn form)
 
 From a Copy details of oh.wd3.myworkdayjobs.com (Ontario Health), My Information page.

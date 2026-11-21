@@ -1267,7 +1267,12 @@
     const sig = () => options().map(o => clean(o.textContent)).join('|');
     const label = o => optName(o).toLowerCase();
     const bare = x => x.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
-    const words = x => x.toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9+#]+/).filter(w => w.length > 1 && !['and', 'the', 'for', 'of', '&'].includes(w)).map(w => w.slice(0, 6));
+    const words = x => x.toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9+#]+/).filter(w => w.length > 1 && !['and', 'the', 'for', 'of', '&'].includes(w));
+    // The same word in another form ("negotiation", "negotiations"; "management", "manager"), not a
+    // longer word that starts the same ("Hybridoma" was chosen for "Hybrid Delivery").
+    const sameWord = (a, b) => a === b || a + 's' === b || b + 's' === a || a + 'es' === b || b + 'es' === a || (Math.min(a.length, b.length) >= 7 && a.slice(0, 6) === b.slice(0, 6));
+    // Written as one word or two ("Lifecycle", "Life Cycle"): the same name.
+    const squash = x => bare(x).replace(/[^a-z0-9+#]/g, '');
     // How well an option fits a skill: the same name best, then one that starts with it or holds it,
     // then the share of their words they have in common (both ways, so "Management" alone doesn't
     // pass for "Vendor Management").
@@ -1294,13 +1299,13 @@
     const fit1 = (x, skill) => {
       const s = skill.toLowerCase();
       if (!x || /^(search results|no (items|results|matches)|searching|loading)/.test(x)) return 0;
-      if (x === s || bare(x) === bare(s)) return 100;
+      if (x === s || bare(x) === bare(s) || (squash(s).length > 5 && squash(x) === squash(s))) return 100;
       // Its short form in brackets, either way round: "PMP" is "Project Management Professional (PMP)".
       const abbrs = t => [...t.matchAll(/\(([^)]{2,12})\)/g)].map(m => m[1].trim());
       const abbr = t => abbrs(t)[0] || '';
       if (abbrs(x).some(a => a === s || (abbr(s) && a === abbr(s))) || (abbr(s) && abbr(s) === x)) return 95;
       const a = words(s), b = words(x);
-      const common = a.filter(w => b.includes(w)).length;
+      const common = a.filter(w => b.some(v => sameWord(w, v))).length;
       let n = a.length && b.length ? 60 * common / Math.max(a.length, b.length) : 0;
       if (x.startsWith(s)) n += 25; else if (x.includes(s)) n += 20; else if (s.includes(x) && b.length > 1) n += 10;
       return n;
@@ -1308,7 +1313,7 @@
     // Close enough to choose: a good fit, or a plainer name for the same thing (every word of the
     // option is in the skill: "Payments" for "Payments Integration"). Not a different thing that
     // shares a word ("Vendor Relations" for "Vendor Management").
-    const closeEnough = (o, skill, score) => score >= 45 || (score >= 30 && words(label(o)).every(w => words(skill).includes(w)));
+    const closeEnough = (o, skill, score) => score >= 45 || (score >= 30 && words(label(o)).every(w => words(skill).some(v => sameWord(w, v))));
     // The chosen items, as far as they can be seen: named pills, and how many items the box's own
     // list of chosen ones holds (Workday's selectedItemList), whatever they look like.
     const names = () => skillPills(box());
@@ -1351,7 +1356,7 @@
       if (trusted) { el.focus(); await ext('type', { text: query }); await wait(250); if (!zoho) await ext('key', { key: 'Enter' }); }
       else { typeIn(el, query); await wait(300); if (!zoho) pressKey(el, 'Enter'); }
       const key = words(query);
-      const ours = l => l.some(o => key.some(w => label(o).includes(w)));
+      const ours = l => l.some(o => key.some(w => label(o).includes(w.slice(0, 6))));
       let list = [], none = 0, reacted = true;
       // A list that never says "No items" is waited on in full once; after that, five seconds.
       const looks = zoho ? 24 : silent ? 30 : 70;
