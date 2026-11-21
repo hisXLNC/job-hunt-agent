@@ -3238,3 +3238,15 @@ fn watch_takes_only_what_is_new() {
     let old = crate::sources::parse_linkedin_list(&card.replace("2 hours ago", "3 days ago"));
     assert_eq!(old[0].posted_at.as_deref(), Some("2026-11-20"));
 }
+
+/// Titles on a career path you chose are searched first, and stretches last.
+#[test]
+fn titles_on_your_path_are_searched_first() {
+    let mut p = Profile::default();
+    p.tracks = vec![crate::profile::Track { titles: vec!["Data Platform Director".into(), "Business Analyst".into(), "Technical Program Manager".into(), "Product Owner".into()], ..Default::default() }];
+    p.wants.path = "program management; product leadership".into();
+    assert_eq!(crate::sources::title_rank(&p, "Technical Program Manager"), 0);
+    assert_eq!(crate::sources::title_rank(&p, "Product Owner"), 0, "leadership is too general a word to go by; product is not");
+    assert_eq!(crate::sources::title_rank(&p, "Business Analyst"), 1);
+    assert_eq!(crate::sources::search_titles(&p), vec!["Technical Program Manager", "Product Owner", "Data Platform Director", "Business Analyst"]);
+}

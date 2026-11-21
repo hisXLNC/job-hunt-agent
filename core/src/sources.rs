@@ -1896,6 +1896,27 @@ pub fn searches_on(p: &Profile, max: usize, day: usize) -> Vec<(String, String)>
     out
 }
 
+/// Titles Claude's career paths call a step up or a change of direction (see Agent::stretch_titles):
+/// searched after the rest. Set by the agent before it searches.
+static STRETCH: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
+pub fn set_stretch_titles(titles: Vec<String>) {
+    *STRETCH.write().unwrap_or_else(|e| e.into_inner()) = titles;
+}
+
+/// Where a title of yours stands: 0 on a career path you chose (Me, Career: "program management"
+/// takes in "Technical Program Manager"), 2 a stretch (a step up or a change of direction among
+/// Claude's career paths, and not on a path you chose), 1 the rest. The lower, the sooner it is
+/// searched and scored.
+pub fn title_rank(p: &Profile, title: &str) -> u8 {
+    const GENERIC: [&str; 24] = ["manage", "senior", "leader", "lead", "direct", "head", "and", "the", "for", "with", "role", "roles", "career", "path", "level", "princi", "staff", "chief", "office", "specia", "associ", "junior", "vice", "presid"];
+    let stems = |x: &str| -> Vec<String> { x.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 2).map(|w| w.chars().take(6).collect::<String>()).filter(|w| !GENERIC.contains(&w.as_str())).collect() };
+    let mine = stems(title);
+    if p.wants.path.split([';', '\n']).any(|path| stems(path).iter().any(|w| mine.contains(w))) {
+        return 0;
+    }
+    if STRETCH.read().unwrap_or_else(|e| e.into_inner()).iter().any(|x| x.trim().eq_ignore_ascii_case(title.trim())) { 2 } else { 1 }
+}
+
 /// Every job title of every CV, the CVs taking turns (each one's first title, then each one's
 /// second...), so a second CV's roles aren't left until the first CV's twenty titles have run.
 /// Titles a broader one already finds come last: a search for "Program Manager" also finds
@@ -1914,7 +1935,10 @@ pub fn search_titles(p: &Profile) -> Vec<String> {
     }
     let covered = |t: &String| titles.iter().any(|b| !b.eq_ignore_ascii_case(t) && crate::filters::title_matches(t, b) && !crate::filters::title_matches(b, t));
     let (broad, narrow): (Vec<String>, Vec<String>) = titles.iter().cloned().partition(|t| !covered(t));
-    broad.into_iter().chain(narrow).collect()
+    // Titles on a career path you chose first, stretches last (see title_rank); otherwise as they were.
+    let mut out: Vec<String> = broad.into_iter().chain(narrow).collect();
+    out.sort_by_key(|t| title_rank(p, t));
+    out
 }
 
 /// At most `max` of your titles (see search_titles) for a source searched by title alone: the first

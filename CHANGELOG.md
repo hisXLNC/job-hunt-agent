@@ -14,6 +14,7 @@ A watch for new postings, so you can apply among the first.
 - New: between the day's searches, Job Hunt looks every 30 minutes (7:00 to 22:00) at LinkedIn's newest postings for your titles and at your company boards, and scores only what it hasn't seen, at once. A match is in your Queue, with a notice, within about half an hour of going up instead of up to a day later. Settings, Job search, When Job Hunt searches: Watch for new postings (15 minutes to 2 hours, or off).
 - LinkedIn postings from the last day now keep the time they went up (2 hours ago), not only the day.
 - If LinkedIn starts turning the PC away, the watch leaves it alone for two hours so the day's search isn't refused too.
+- Titles on a career path you chose (Me, Career) are searched and scored first. Titles that are a step up or a change of direction come last, so when there is more than a search can cover, the stretches are what waits.
 
 ## [26.11.5] - 2026-11-20
 

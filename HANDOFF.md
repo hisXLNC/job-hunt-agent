@@ -1223,7 +1223,10 @@ boards, keeps what `unseen` says Job Hunt never stored or removed, and hands tho
 `search(Some(..))` like a job alert's (the day's `last.report` is put back after). LinkedIn
 refusing sets `watch.linkedin.wait` for two hours. `parse_linkedin_list` keeps "N minutes/hours
 ago" as an RFC 3339 time in `posted_at`. Test `watch_takes_only_what_is_new`. Not tried against
-LinkedIn itself (blocked from the build machine). Not done: age and applicant count shown in the
+LinkedIn itself (blocked from the build machine). `sources::title_rank` (0 on a path in `wants.path`, by shared
+words; 2 a stretch/switch title of the kv `career` paths, handed over with `set_stretch_titles`; 1
+the rest) orders `search_titles` and, after newest and a title of yours, `score_these`; test
+`titles_on_your_path_are_searched_first`. Not done: age and applicant count shown in the
 Queue, a notice that names the job (the usual "N roles worth applying to" is sent), making up a
 missed daily search.
 

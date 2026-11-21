@@ -56,6 +56,7 @@ impl Agent {
             db.set("last.watch", &crate::util::now())?;
             db.set("watch.turn", &(turn + 1).to_string())?;
         }
+        crate::sources::set_stretch_titles(self.stretch_titles());
         let c = crate::sources::http();
         let mut found: Vec<Posting> = vec![];
         let waiting = chrono::DateTime::parse_from_rfc3339(&self.secret("watch.linkedin.wait")).map(|t| t.with_timezone(&Utc) > now).unwrap_or(false);
@@ -110,6 +111,12 @@ impl Agent {
             self.db().set("last.report", &report)?;
         }
         r.map(|_| n)
+    }
+
+    /// The titles among Claude's career paths that are a step up or a change of direction.
+    pub(super) fn stretch_titles(&self) -> Vec<String> {
+        serde_json::from_str::<Value>(&self.secret("career")).ok().and_then(|v| v["paths"].as_array().cloned()).unwrap_or_default().iter()
+            .filter(|c| matches!(c["kind"].as_str(), Some("stretch") | Some("switch"))).filter_map(|c| c["title"].as_str().map(|t| t.trim().to_string())).filter(|t| !t.is_empty()).collect()
     }
 
     /// Those of `found` that Job Hunt has never stored or removed, each once.
@@ -377,6 +384,7 @@ impl Agent {
         self.trace(&format!("database: {}", self.db_facts()));
         self.trace(&format!("search started{}{}", only.map(|o| format!(" ({o} only)")).unwrap_or_default(), if postings.is_some() { " (postings handed in)" } else { "" }));
         let profile = self.profile();
+        crate::sources::set_stretch_titles(self.stretch_titles());
         let cvs = self.cv_texts(&profile);
         if cvs.is_empty() {
             return err("No CV uploaded yet. Add one in CV & Career.");
@@ -911,7 +919,9 @@ impl Agent {
         let wanted_title = |p: &Posting| profile.tracks.iter().flat_map(|t| t.titles.iter()).any(|t| crate::filters::title_matches(&p.title, t));
         // Newest first (what's just been posted is what's worth applying to now), then titles of yours.
         let day = |p: &Posting| p.posted_at.as_deref().and_then(crate::filters::posted_date).unwrap_or(chrono::NaiveDate::MIN);
-        candidates.sort_by_key(|p| (std::cmp::Reverse(day(p)), !wanted_title(p)));
+        // (Among those, titles on a career path you chose before the rest, and stretches last.)
+        let rank = |p: &Posting| profile.tracks.iter().flat_map(|t| t.titles.iter()).filter(|t| crate::filters::title_matches(&p.title, t)).map(|t| crate::sources::title_rank(profile, t)).min().unwrap_or(3);
+        candidates.sort_by_key(|p| (std::cmp::Reverse(day(p)), !wanted_title(p), rank(p)));
         let room = run.cap.saturating_sub(run.scored);
         if run.halted || room == 0 || self.stopping() {
             report.deferred += candidates.len();
