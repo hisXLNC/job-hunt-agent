@@ -535,7 +535,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
   const jobs = names.map(n => () => runVariant(n));
   if (!only.length || ['app', 'profile', 'posts', 'folded', 'letter', 'zoho', 'one', 'press'].some(n => only.includes(n))) jobs.push(rest);
   const t0 = Date.now();
-  await Promise.all(Array.from({ length: Math.max(1, Number(process.env.JOBS) || 3) }, async () => { while (jobs.length) await jobs.shift()(); }));
+  await Promise.all(Array.from({ length: Math.max(1, Number(process.env.JOBS) || 5) }, async () => { while (jobs.length) await jobs.shift()(); }));
   console.log(`      (${Math.round((Date.now() - t0) / 1000)}s in all)`);
   bridge.close(); site.close();
   fs.rmSync(tmp, { recursive: true, force: true });

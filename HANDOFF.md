@@ -595,14 +595,20 @@ and `DEVELOPING.md`.
    version not yet on `main`, edit its entry in `static/changelog.json`, then `python tools/release_ci.py sync`.
    Changelog text goes through the shell: write `$` amounts in single quotes or escape them
    (2.36.8's notes lost "$95" to `$9` expansion).
-2. Verify, in the background (it takes ~20 min; 40 after a `cargo clean`):
+2. Verify, in the background. Measured 2026-11-21 with warm build folders: about 4 minutes (the
+   extension test is the longest part; it runs five cases side by side, `JOBS` changes that). Much
+   longer only after a `cargo clean`. Before it: `pkill -f dev_server; pkill -f ext_test` and
+   `rm -rf /tmp/jh-* /tmp/jobhunt-ext-*` (a leftover from a cancelled run holds port 47613 and the
+   extension test is then skipped, which is not a pass). Don't cancel a run to fold in a new
+   request: let it finish, release, and put the request in the next version.
    `PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node22 | paste -sd:) timeout 2400 python tools/release_ci.py verify`
    It must end "Ready to release X".
 3. Commit (with the session's attribution trailers),
    push the branch, then `git push origin HEAD:main --no-verify`.
 4. A newer push to `main` cancels a build still running (fine when the new version includes it).
    GitHub minutes are limited (Windows counts double): batch changes.
-5. ~12 minutes later check `get_release_by_tag hisXLNC/job-hunt-releases vX`; rerun failed jobs if the
+5. GitHub's build takes 7 to 9 minutes (plan 1.5, Windows build 5 to 7.5): 9 minutes later check
+   `git ls-remote --tags https://github.com/hisXLNC/job-hunt-releases.git refs/tags/vX`; rerun failed jobs if the
    publish step 502s or hangs. Then send the user the release link and what to do (reload form pages,
    click the extension's button once).
 
