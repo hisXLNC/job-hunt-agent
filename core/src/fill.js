@@ -394,6 +394,7 @@
     return best ? textOf(best).replace(/\s*\*\s*$/, '') : '';
   }
   let addNote = '', addedTo = [], spareGone = [], otherChosen = [], skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0, depends = 0;
+  let dupesDone = false;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
@@ -714,7 +715,7 @@
       // A file box's own id or name says what it takes when its label doesn't (Greenhouse: "Attach"
       // on both, ids "resume" and "cover_letter").
       if (type === 'file' && (el.id || el.name)) f.id = String(el.id || el.name).slice(0, 60);
-      if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text).slice(0, 70)).slice(0, 300);
+      if (type === 'select') f.options = [...el.options].filter(o => o.value !== '' && !/^\s*(select|choose|--|please)/i.test(o.text)).map(o => clean(o.text).slice(0, 70)).slice(0, 1500);
       if (type === 'checkbox') f.context = question(el);
       const sec = sectionOf(el); if (sec) f.section = sec;
       fields.push(f); byKey[key] = [el];
@@ -859,6 +860,88 @@
     replaceAsk = [];
     return done;
   }
+  // Typed in key by key, as a keyboard would: for boxes that take no notice of a value put in
+  // whole (a masked date box, a box that only listens for keys).
+  const typeKeys = (el, text) => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    el.focus();
+    try { el.select(); } catch (e) { /* not a text box */ }
+    let sofar = '';
+    for (const ch of String(text)) {
+      const n = ch.charCodeAt(0), k = { key: ch, keyCode: n, which: n, bubbles: true, cancelable: true };
+      el.dispatchEvent(new KeyboardEvent('keydown', k));
+      el.dispatchEvent(new KeyboardEvent('keypress', { ...k, charCode: n }));
+      el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ch, bubbles: true, cancelable: true }));
+      sofar += ch;
+      set.call(el, sofar);
+      el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ch, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', k));
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+  };
+  // A month and year ("07/2023") chosen from the box's own calendar, for a date box that takes no
+  // typing at all (RBC's From and To): open it, step to the year, press the month.
+  const monthYear = v => { const m = String(v).trim().match(/^(\d{1,2})\s*[\/.\-]\s*(\d{4})$/) || []; const mo = +m[1], y = +m[2]; return mo >= 1 && mo <= 12 && y > 1900 ? { mo, y } : null; };
+  const sameMonth = (a, b) => { const x = monthYear(a), y = monthYear(b); return !!x && !!y && x.mo === y.mo && x.y === y.y; };
+  async function pickMonth(el, v) {
+    const want = monthYear(v);
+    if (!want) return false;
+    const press = async x => { ownClick = true; for (const t of ['mousedown', 'mouseup', 'click']) x.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })); ownClick = false; await wait(90); };
+    const leaves = root => [...root.querySelectorAll('*')].filter(x => !x.children.length && shown(x));
+    const monthsIn = root => leaves(root).filter(x => MONTHS.includes(clean(x.textContent).toLowerCase().slice(0, 3)) && clean(x.textContent).length <= 9);
+    const before = new Set(document.querySelectorAll('*'));
+    el.focus();
+    await press(el);
+    await wait(350);
+    // The calendar: what appeared, else what's beside the box, with the months of a year in it.
+    let root = [...document.querySelectorAll('*')].find(x => !before.has(x) && !own(x) && shown(x) && monthsIn(x).length >= 12);
+    for (let box = el.parentElement, i = 0; !root && box && i < 5; box = box.parentElement, i++) if (monthsIn(box).length >= 12) root = box;
+    const shut = () => { pressKey(el, 'Escape'); el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); };
+    if (!root) { if (!diag.picker) diag.picker = { none: true, box: (el.parentElement && el.parentElement.parentElement || el).outerHTML.replace(/\svalue="[^"]*"/g, '').slice(0, 900) }; shut(); return false; }
+    const raw = () => root.outerHTML.replace(/\s(style|d|viewBox|fill|xmlns)="[^"]*"/g, '').slice(0, 2500);
+    const html = raw();
+    const yearNow = () => { const sel = [...root.querySelectorAll('select')].find(x => [...x.options].some(o => /^(19|20)\d{2}$/.test(clean(o.text)))); if (sel) return { sel, y: +clean((sel.options[sel.selectedIndex] || {}).text) };
+      const t = leaves(root).map(x => clean(x.textContent)).find(t => /^(19|20)\d{2}$/.test(t)) || (clean(root.textContent).match(/\b(19|20)\d{2}\b/) || [])[0]; return { y: +t || 0 }; };
+    const words = x => [x.getAttribute('aria-label'), x.getAttribute('title'), x.className && x.className.baseVal === undefined ? x.className : '', clean(x.textContent)].join(' ');
+    const nav = re => [...root.querySelectorAll('button,[role=button],a,span,i,div')].filter(x => shown(x) && clean(x.textContent).length <= 16 && re.test(words(x))).sort((a, b) => (/year/i.test(words(b)) ? 1 : 0) - (/year/i.test(words(a)) ? 1 : 0))[0];
+    for (let i = 0; i < 90; i++) {
+      const now = yearNow();
+      if (!now.y) break;
+      if (now.y === want.y) break;
+      if (now.sel) { const o = [...now.sel.options].find(o => +clean(o.text) === want.y); if (!o) break; setter(now.sel, o.value); await wait(120); continue; }
+      const b = nav(now.y > want.y ? /prev|back|left|earlier|‹|«|^\s*<\s*$/i : /next|forward|right|later|›|»|^\s*>\s*$/i);
+      if (!b) break;
+      await press(b);
+      if (!root.isConnected) break;
+    }
+    if (yearNow().y !== want.y) { if (!diag.picker) diag.picker = { year: yearNow().y, want: want.y, html }; shut(); return false; }
+    const cell = monthsIn(root).find(x => clean(x.textContent).toLowerCase().startsWith(MONTHS[want.mo - 1]));
+    if (!cell) { if (!diag.picker) diag.picker = { months: monthsIn(root).length, html }; shut(); return false; }
+    await press(cell);
+    await wait(250);
+    if (!sameMonth(el.value, v) && cell.isConnected) { await realClick(cell, true); await wait(300); }
+    const done = sameMonth(el.value, v);
+    if (!done && !diag.picker) diag.picker = { pressed: clean(cell.textContent), value: el.value, html };
+    if (root.isConnected && shown(root)) shut();
+    return done;
+  }
+  // A text box that put back what it had when given its answer whole: the keyboard's ways, then (a
+  // month and year) its calendar. True once the box holds something else.
+  async function insist(el, v, was) {
+    const kept = () => el.isConnected && el.value === was;
+    el.focus();
+    try { el.select(); document.execCommand('insertText', false, String(v)); } catch (e) { /* not a box that takes typing */ }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    await wait(200);
+    if (!kept()) return true;
+    typeKeys(el, v);
+    await wait(250);
+    if (!kept()) return true;
+    if (monthYear(v) && await pickMonth(el, v)) return true;
+    return !kept();
+  }
   async function fillOne(f, v, file) {
     const els = byKey[f.key] || [];
     const el = els[0];
@@ -935,7 +1018,14 @@
     // Boxes that choose from the site's own list are searched, never typed into as text.
     // "Separate each skill with a comma": a plain box to type into, not a list to search (RBC's:
     // each skill was searched for, none found, and the box left empty).
-    if (f.type === 'skills' && /comma/i.test(`${f.label} ${el.getAttribute('placeholder') || ''}`)) { el.focus(); setter(el, String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean).join(', ')); await wait(120); return !!clean(el.value); }
+    if (f.type === 'skills' && /comma/i.test(`${f.label} ${el.getAttribute('placeholder') || ''}`)) {
+      // (Checked by its first skill: a box that put its old list back isn't passed off as filled.)
+      const list = String(v).split(/\s*[;\n]\s*/).map(clean).filter(Boolean), text = list.join(', '), was = el.value;
+      const has = () => !!list.length && el.isConnected && el.value.toLowerCase().includes(list[0].toLowerCase());
+      el.focus(); setter(el, text); await wait(150);
+      if (!has() && el.value === was) { await insist(el, text, was); await wait(150); }
+      return has();
+    }
     if (f.type === 'skills') return fillSkills(el, v);
     if (f.type === 'prompt') return fillSkills(el, String(v).split(/\s*[;\n]\s*/)[0], true);
     // A box that opens a list of its own, named by the box (SuccessFactors: "No Selection", its
@@ -945,19 +1035,12 @@
     el.focus();
     const was = el.value;
     setter(el, String(v));
-    // A box that put back what it had (a date box with its own format: RBC's From and To kept the
-    // dates its CV reader guessed): typed in as the keyboard would, and said plainly when even that
-    // doesn't take.
-    if (f.type !== 'combobox' && was && !same(was, v)) {
-      await wait(150);
-      if (el.isConnected && el.value === was) {
-        el.focus();
-        try { el.select(); document.execCommand('insertText', false, String(v)); } catch (e) { /* not a box that takes typing */ }
-        for (const e of ['change']) el.dispatchEvent(new Event(e, { bubbles: true }));
-        el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-        await wait(200);
-        if (el.isConnected && el.value === was) return false;
-      }
+    // A box that put back what it had (a date box with its own format or its own calendar: RBC's
+    // From and To kept the dates its CV reader guessed): typed in as the keyboard would, then chosen
+    // from its calendar, and said plainly when even that doesn't take.
+    if (f.type !== 'combobox' && !same(was, v)) {
+      if (was) await wait(150);
+      if (el.isConnected && el.value === was && !(await insist(el, v, was))) return false;
     }
     if (f.type === 'combobox') {
       await wait(500);
@@ -1632,7 +1715,7 @@
           (diag.fields ||= []).push({ key: f.key, label: String(f.label || '').slice(0, 60), type: f.type, section: f.section, required: f.required || undefined, had: f.value ? String(f.value).slice(0, 60) : '', want: file ? `file: ${file.name || file.kind || 'yes'}` : v == null ? null : String(v).slice(0, 80), now: String(now).slice(0, 80), filled: !!done,
             options: f.options ? f.options.slice(0, 15) : undefined, at: live ? where(e) : undefined,
             html: live && NO_NAME.test(String(f.label || '')) ? htmlOf(e.closest('[id^="rec-form_"]')?.parentElement?.parentElement || e.parentElement?.parentElement || e, 1500)
-              : live && (f.type === 'file' || (!done && (v != null && v !== '' || file))) ? htmlOf(e.closest('[data-automation-id^="formField"],[data-automation-id*="attachments" i],fieldset,li,section') || e.parentElement, 1500) : undefined }); }
+              : live && (f.type === 'file' || (!done && (v != null && v !== '' || file))) ? htmlOf(f.type === 'file' ? e.closest('[data-automation-id^="formField"],[data-automation-id*="attachments" i],fieldset,li,section') || e.parentElement : (e.parentElement && e.parentElement.parentElement && e.parentElement.parentElement.parentElement) || e.closest('[data-automation-id^="formField"],fieldset,li,section') || e.parentElement, 1500) : undefined }); }
         // Green is what Job Hunt filled; a box the site (or you) had filled already isn't marked.
         const theirs = f.value !== '' && f.type !== 'file' && (v == null || v === '' || same(f.value, v));
         if (theirs && done) continue;
@@ -1647,6 +1730,47 @@
         if (!matters) continue;
         mark((byKey[f.key] || [])[0], done);
         if (done) ok++; else todo++;
+      }
+      // More jobs on the form than on your CV (a site's CV reader made one job twice: RBC's had 9 for
+      // a CV of 7): the entries past your CV's last that repeat a job filled in above (same title
+      // and employer), or are blank, are taken off with their own Delete button, last first.
+      if (!onlyKeys && !dupesDone && answer.roles > 0) {
+        dupesDone = true;
+        const head = fields.find(f => f.type !== 'add' && isWork(f));
+        const work = head ? fields.filter(f => f.section === head.section && f.type !== 'add') : [];
+        const groups = [];
+        for (const f of work) { if (f.label === head.label) groups.push([]); if (groups.length) groups[groups.length - 1].push(f); }
+        if (groups.length > answer.roles && !/\s\d+$/.test(head.section || '')) {
+          const elOf = f => (byKey[f.key] || [])[0];
+          const val = f => { const e = elOf(f); return e && e.isConnected && !['checkbox', 'radio', 'file'].includes(e.type) ? clean(e.value || '').toLowerCase() : ''; };
+          const sig = g => g.filter(f => /title|position|company|employer|organi[sz]ation/i.test(f.label || '')).map(val).join('|');
+          const given = f => { const v = answer.values && answer.values[f.key]; return v != null && String(v).trim() !== ''; };
+          const mine = groups.slice(0, answer.roles).map(sig);
+          let spare = 0, gone = 0, seen = '';
+          for (let i = groups.length - 1; i >= answer.roles; i--) {
+            const g = groups[i], s0 = sig(g);
+            if (g.some(given) || !(g.every(f => !val(f)) || (s0.replace(/\|/g, '') && mine.includes(s0)))) continue;
+            spare++;
+            const first = g.map(elOf).find(e => e && e.isConnected), others = groups.filter(x => x !== g).flatMap(x => x.map(elOf)).filter(Boolean);
+            let del = null, box = first && first.parentElement, last = null;
+            for (; box && box !== document.body && !del; box = box.parentElement) {
+              if (others.some(o => box.contains(o))) break; // past this entry: its Delete isn't in there
+              last = box;
+              del = [...box.querySelectorAll('button,[role=button],a')].find(b => !own(b) && shown(b) && !b.closest('[id*="file" i]')
+                && /delete|remove|trash|\bbin\b/i.test([b.getAttribute('aria-label'), b.getAttribute('title'), b.id, b.getAttribute('class'), ...[...b.querySelectorAll('i,svg,span')].map(x => x.getAttribute('class')), clean(b.textContent).slice(0, 30)].join(' '))) || null;
+            }
+            if (!del) { if (!seen && last) seen = [...last.querySelectorAll('button,[role=button],a')].map(b => b.outerHTML.replace(/\sd="[^"]*"/g, '').slice(0, 300)).join(' ').slice(0, 1200); continue; }
+            ownClick = true; del.click(); ownClick = false;
+            await wait(600);
+            const yes = [...document.querySelectorAll('button')].find(b => !own(b) && shown(b) && /^(ok|yes|delete|remove|confirm)\b/i.test(clean(b.textContent)) && b.closest('[role=dialog],[role=alertdialog]'));
+            if (yes) { ownClick = true; yes.click(); ownClick = false; await wait(600); }
+            if (!first.isConnected || !del.isConnected) gone++;
+          }
+          diag.spare = { entries: groups.length, roles: answer.roles, spare, gone, buttons: seen || undefined };
+          trace('repeated jobs', { entries: groups.length, roles: answer.roles, spare, gone });
+          if (gone) addNote += ` Took off ${gone} job ${gone === 1 ? 'entry' : 'entries'} the site had made twice from your CV.`;
+          if (spare > gone) addNote += ` The form has ${spare - gone} job ${spare - gone === 1 ? 'entry' : 'entries'} more than your CV, repeated at the bottom of its list: delete ${spare - gone === 1 ? 'it' : 'them'} with the form's own button.`;
+        }
       }
       // Unticking "I currently work here" shows that job's end date: read the form again once and
       // fill the boxes that appeared.
@@ -1828,7 +1952,7 @@
     }
   }
   async function startNow(more, dates) {
-    if (!more) { round = 0; reveals = 0; depends = 0; addNote = ''; addedTo = []; spareGone = []; skillMiss = []; skillUnsure = []; otherChosen = []; }
+    if (!more) { round = 0; reveals = 0; depends = 0; dupesDone = false; addNote = ''; addedTo = []; spareGone = []; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
     if (retired) return;
     if (!more && buttons.hand) buttons.hand.hidden = true;

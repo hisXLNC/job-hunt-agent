@@ -1217,6 +1217,26 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.8 (RBC's form again: dates, certificates, repeated jobs)
+
+From a Copy details of jobs.rbc.com on the extension (26.11.7). RBC's site can't be reached from the
+build machine, so none of this was tried on RBC itself.
+
+- `core/src/fill.js`: a text box that puts back its old value goes through `insist` (insertText, then
+  `typeKeys` key by key, then `pickMonth` for "MM/YYYY": opens the box's calendar, steps to the year,
+  presses the month). Tried here on a real react-datepicker month box that refuses typing, and on a
+  box that only listens for keys. What RBC's date box actually is isn't known: a refused box's own
+  markup (three levels up) and `diag.picker` are in Copy details now.
+- Comma-separated skills box: checked by its first skill; no longer "filled" when the old list is back.
+- Repeated jobs: after filling, un-numbered work entries past the CV's count that repeat an entry
+  above (title and employer) or are blank are removed with their Delete button (`diag.spare`; the
+  buttons' markup is kept when none matched, and the user is told to delete them).
+- `core/src/fill.rs`: `cert_answers` (issuer, name, number per entry from the profile's certificates,
+  matched by the attached copy's file name, else place), `option_for`, `name_forms`, `no_choice`
+  ("Please Select" is neither a name nor an answer). A list sends up to 1500 choices; the model gets 400.
+- Not done: the certificate dates (both entries got the same; likely a kept answer saved before
+  26.11.5 under "Certification entry 1", which the user can remove under saved answers).
+
 ## 26.11.7 (a step up keeps its place)
 
 The user: "Keep step up". `Agent::stretch_titles` now gives only the `switch` titles of the kv

@@ -5,6 +5,18 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.8] - 2026-11-21
+
+Dates, certificates and repeated jobs on forms like RBC's.
+
+### Changes
+
+- A date box that takes no typing (RBC's From and To) has its month and year chosen from its own calendar.
+- A certificate's issuer, name and number come from Me, About me, each entry its own (by the copy attached to it); a list on Please Select no longer counts as its name or answer.
+- Job entries a site's CV reader made twice are taken off after filling, or named if the form's Delete button can't be found.
+- A comma-separated skills box that puts its old list back is typed key by key, and is no longer shown as filled when it isn't.
+- Copy details shows a refused box's own markup and its calendar.
+
 ## [26.11.7] - 2026-11-21
 
 A step up is searched like your other titles.
@@ -2812,6 +2824,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.8
 [26.11.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.7
 [26.11.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.6
 [26.11.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.5

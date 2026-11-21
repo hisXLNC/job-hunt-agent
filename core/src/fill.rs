@@ -284,6 +284,108 @@ const ENTRY_KINDS: [(&str, &[&str], &[&str]); 3] = [
     ("Language", &["language"], &["language"]),
 ];
 
+/// What a list shows before anything is chosen ("Please Select"): not an answer, and not a name.
+fn no_choice(v: &str) -> bool {
+    let v = v.trim().trim_matches(|c: char| c == '-' || c == '.' || c == ':').trim().to_lowercase();
+    v.is_empty() || ["please select", "select", "select one", "select an option", "choose", "choose one", "please choose", "no selection", "none selected"].contains(&v.as_str())
+}
+
+/// Which of a list's choices says one of these names: the same words, else one inside the other as
+/// whole words ("PMI" in "Project Management Institute (PMI)"). The shortest such choice.
+fn option_for<'a>(options: &[&'a str], names: &[String]) -> Option<&'a str> {
+    let norm = |t: &str| t.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { ' ' }).collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ");
+    let names: Vec<String> = names.iter().map(|n| norm(n)).filter(|n| n.len() >= 2).collect();
+    let mut best: Option<(u8, usize, &str)> = None;
+    for o in options {
+        let on = norm(o);
+        if on.is_empty() { continue; }
+        let score = names.iter().map(|n| if *n == on { 3 } else if (n.len() >= 3 && format!(" {on} ").contains(&format!(" {n} "))) || (on.len() >= 3 && format!(" {n} ").contains(&format!(" {on} "))) { 2 } else { 0 }).max().unwrap_or(0);
+        if score > 0 && best.is_none_or(|(s, l, _)| score > s || (score == s && on.len() < l)) {
+            best = Some((score, on.len(), o));
+        }
+    }
+    best.map(|b| b.2)
+}
+
+/// A name in the ways a form may list it: whole, without its bracket, the bracket alone, its initials.
+fn name_forms(name: &str) -> Vec<String> {
+    let name = name.trim();
+    let mut out = vec![name.to_string()];
+    if let (Some(a), Some(b)) = (name.find('('), name.rfind(')')) {
+        if a < b {
+            out.push(name[..a].trim().to_string());
+            out.push(name[a + 1..b].trim().to_string());
+        }
+    }
+    let words: Vec<&str> = name.split(|c: char| !c.is_alphanumeric()).filter(|w| w.chars().next().is_some_and(|c| c.is_uppercase())).collect();
+    if words.len() >= 2 && !name.contains('(') {
+        out.push(words.iter().filter_map(|w| w.chars().next()).collect());
+    }
+    out.retain(|n| !n.is_empty());
+    out
+}
+
+/// A form's certificate entries from the certificates under Me, About me: each entry's issuer, name
+/// and number from the certificate it is (the one whose copy was attached to that entry, else by
+/// its place). The model left RBC's issuer list alone and gave both entries the first's number.
+fn cert_answers(certs: &[crate::profile::Certification], fields: &[Value], files: &serde_json::Map<String, Value>, values: &mut serde_json::Map<String, Value>) -> usize {
+    let certs: Vec<&crate::profile::Certification> = certs.iter().filter(|c| !c.name.trim().is_empty()).collect();
+    if certs.is_empty() {
+        return 0;
+    }
+    let text = |f: &Value, k: &str| f[k].as_str().unwrap_or("").trim().to_string();
+    let mut sections: Vec<String> = vec![];
+    for f in fields {
+        let s = text(f, "section");
+        let low = s.to_lowercase();
+        if (low.contains("certific") || low.contains("licen")) && !sections.contains(&s) {
+            sections.push(s);
+        }
+    }
+    let norm = |t: &str| format!(" {} ", t.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { ' ' }).collect::<String>().split_whitespace().collect::<Vec<_>>().join(" "));
+    let mut n = 0;
+    let mut used: Vec<usize> = vec![];
+    for section in sections {
+        let all: Vec<&Value> = fields.iter().filter(|f| text(f, "section") == section).collect();
+        let place: String = section.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>().chars().rev().collect();
+        for (nth, mine) in entries_of(all) {
+            // Which certificate: the one named in the file attached here, else the next not yet used.
+            let file = mine.iter().filter(|f| f["type"] == "file").find_map(|f| files.get(f["key"].as_str()?)?.get("name")?.as_str()).map(norm);
+            let by_file = file.as_deref().and_then(|file| certs.iter().position(|c| name_forms(&c.name).iter().any(|form| form.len() >= 3 && file.contains(&norm(form)))));
+            let at = by_file.filter(|i| !used.contains(i)).or_else(|| { let i = place.parse::<usize>().ok().unwrap_or(nth.max(1)) - 1; (0..certs.len()).find(|j| *j >= i && !used.contains(j)).or_else(|| (0..certs.len()).find(|j| !used.contains(j))) });
+            let Some(at) = at else { continue };
+            used.push(at);
+            let c = certs[at];
+            for f in mine {
+                let (Some(key), label, typ) = (f["key"].as_str(), text(f, "label").to_lowercase(), text(f, "type")) else { continue };
+                if ["file", "checkbox", "checkboxes", "add", "password"].contains(&typ.as_str()) {
+                    continue;
+                }
+                let label = label.trim_start_matches('*').trim();
+                let options: Vec<&str> = f["options"].as_array().map(|a| a.iter().filter_map(|o| o.as_str()).collect()).unwrap_or_default();
+                let listed = typ == "select" || typ == "radio";
+                let has = !no_choice(&text(f, "value"));
+                let want: Option<String> = if label.contains("issuer") || label.contains("issued by") || label.contains("issuing") || label.contains("organi") || label.contains("authority") {
+                    if c.issuer.trim().is_empty() { None } else if listed { option_for(&options, &name_forms(&c.issuer)).map(str::to_string) } else if has { None } else { Some(c.issuer.trim().to_string()) }
+                } else if label.contains("number") || label.contains("credential id") || label.contains("licence no") || label.contains("license no") {
+                    (!c.number.trim().is_empty() && !listed).then(|| c.number.trim().to_string())
+                } else if ["certification", "certificate", "certification name", "certificate name", "licence", "license", "name"].contains(&label) {
+                    if listed { option_for(&options, &name_forms(&c.name)).map(str::to_string) } else if has { None } else { Some(c.name.trim().to_string()) }
+                } else {
+                    None
+                };
+                if let Some(a) = want {
+                    if values.get(key).and_then(|v| v.as_str()) != Some(a.as_str()) {
+                        values.insert(key.to_string(), json!(a));
+                        n += 1;
+                    }
+                }
+            }
+        }
+    }
+    n
+}
+
 /// A section's boxes, one list an entry: forms that don't number their entries ("Certificates" over
 /// two certificates, RBC's) repeat the same boxes, and a new entry starts where the first box's
 /// label comes round again. Each with its place (1, 2…), 0 when the section is a single entry.
@@ -323,7 +425,7 @@ pub fn entry_details(fields: &[Value]) -> Vec<(String, String)> {
         let all: Vec<&Value> = fields.iter().filter(|f| text(f, "section") == section).collect();
         for (nth, mine) in entries_of(all) {
         let is_name = |f: &Value| { let l = text(f, "label").to_lowercase(); let l = l.trim_start_matches('*').trim(); names.iter().any(|n| l == *n || l.starts_with(&format!("{n} ")) || l.ends_with(&format!(" {n}")) || (*kind == "Education" && l.contains(n))) && !l.contains("number") && !l.contains("date") && !l.contains("issuer") };
-        let who = mine.iter().find(|f| is_name(f)).map(|f| text(f, "value")).filter(|v| !v.is_empty() && v.len() < 90);
+        let who = mine.iter().find(|f| is_name(f)).map(|f| text(f, "value")).filter(|v| !v.is_empty() && v.len() < 90 && !no_choice(v));
         let place: String = section.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>().chars().rev().collect();
         let place = if place.is_empty() { nth.max(1).to_string() } else { place };
         let about = match &who {
@@ -405,7 +507,7 @@ fn apply_entry_details(bank: &[Value], fields: &[Value], values: &mut serde_json
         for (nth, mine) in entries_of(all) {
         let is_name = |f: &Value| { let l = text(f, "label").to_lowercase(); let l = l.trim_start_matches('*').trim(); names.iter().any(|n| l == *n || l.starts_with(&format!("{n} ")) || l.ends_with(&format!(" {n}")) || (*kind == "Education" && l.contains(n))) && !l.contains("number") && !l.contains("date") && !l.contains("issuer") };
         let answered = |f: &Value| f["key"].as_str().and_then(|k| values.get(k)).and_then(|v| v.as_str()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).unwrap_or_else(|| text(f, "value"));
-        let who = mine.iter().find(|f| is_name(f)).map(|f| question_key(&answered(f))).filter(|w| !w.is_empty());
+        let who = mine.iter().find(|f| is_name(f)).map(|f| answered(f)).filter(|w| !no_choice(w)).map(|w| question_key(&w)).filter(|w| !w.is_empty());
         let place: String = section.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>().chars().rev().collect();
         let place = format!("entry {}", if place.is_empty() { nth.max(1).to_string() } else { place });
         // This entry's kept details: by its name (either may be the longer form of the other), else by its place.
@@ -815,7 +917,8 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
         let mut o = json!({ "key": f["key"], "type": f["type"], "label": f["label"] });
         for k in ["section", "entries", "options", "context", "value", "required", "checked"] {
             if f.get(k).is_some_and(|v| !v.is_null() && v != "" && v != false) {
-                o[k] = f[k].clone();
+                // (A very long list goes to the model cut short; a certificate's issuer is matched in full by cert_answers.)
+                o[k] = match f[k].as_array().filter(|a| k == "options" && a.len() > 400) { Some(a) => json!(a[..400]), None => f[k].clone() };
             }
         }
         o.to_string()
@@ -912,6 +1015,10 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     // GPA and a degree's first year out, however often you'd corrected them).
     let kept_bank = bank(agent);
     let applied = apply_entry_details(&kept_bank, fields, &mut values);
+    // A certificate's issuer, name and number are what Me, About me says of it, entry by entry.
+    let applied = applied + cert_answers(&profile.certifications, fields, &files, &mut values);
+    // "Please Select" is no answer to a list.
+    values.retain(|_, v| v.as_str().is_none_or(|a| a.trim().is_empty() || !no_choice(a)));
     // Always in the debugging record (labels only, no answers): which school, certificate and
     // language details are kept, so a box left empty can be told from a detail never saved.
     crate::debug::always("form", &format!("{} boxes, {} answers; {applied} from kept entry details; kept: {}", fields.len(), values.len(),
@@ -1510,6 +1617,29 @@ mod tests {
             ("Certification entry 2: Certification Number".to_string(), "PMP-123".to_string()),
             ("Language (French): Reading".to_string(), "2 - Classroom Study".to_string()),
         ], "the degree, an empty date's placeholder, a tick box and a job's title aren't details to keep");
+        // Each certificate entry from the certificate it is (by the copy attached to it): the issuer
+        // chosen from the site's list, its own number, its name once the list has it; and a list
+        // still on "Please Select" names nothing.
+        {
+            let c = |name: &str, issuer: &str, number: &str| crate::profile::Certification { name: name.into(), issuer: issuer.into(), number: number.into(), ..Default::default() };
+            let certs = vec![c("Project Management Professional (PMP)", "PMI", "111"), c("PMI Certified Professional in Managing AI (PMI-CPMAI)", "Project Management Institute", "222")];
+            let f = |k: &str, label: &str, typ: &str, opts: Value| json!({"key": k, "label": label, "type": typ, "section": "Certificates", "value": "", "options": opts});
+            let issuers = json!(["ACCA", "PMI - Project Management Institute", "PMI Chapter Toronto Board Of Directors Extra", "Scrum Alliance"]);
+            let form = vec![
+                f("i1", "Certification Issuer", "select", issuers.clone()), f("c1", "Certification", "select", json!([])), f("n1", "Certificate Number", "text", json!(null)), f("u1", "file", "file", json!(null)),
+                f("i2", "Certification Issuer", "select", issuers.clone()), f("c2", "Certification", "select", json!(["CAPM", "PMP", "PMI-CPMAI"])), f("n2", "Certificate Number", "text", json!(null)), f("u2", "file", "file", json!(null)),
+            ];
+            let mut files = serde_json::Map::new();
+            files.insert("u1".into(), json!({"name": "PMI - CPMAI.pdf"}));
+            files.insert("u2".into(), json!({"name": "PMI - PMP.pdf"}));
+            let mut v = serde_json::Map::new();
+            v.insert("n1".into(), json!("111")); v.insert("n2".into(), json!("111")); v.insert("c1".into(), json!("Please Select"));
+            cert_answers(&certs, &form, &files, &mut v);
+            assert_eq!((v["i1"].as_str(), v["n1"].as_str(), v["n2"].as_str(), v["c2"].as_str()), (Some("PMI - Project Management Institute"), Some("222"), Some("111"), Some("PMP")), "{v:?}");
+            assert_eq!(v["i2"], v["i1"]);
+            assert!(no_choice("Please Select") && no_choice("-- Select --") && !no_choice("PMP"));
+            assert_eq!(entry_details(&[json!({"key": "c", "label": "Certification", "type": "select", "section": "Certificates", "value": "Please Select"}), json!({"key": "n", "label": "Certificate Number", "type": "text", "section": "Certificates", "value": "111"})])[0].0, "Certification entry 1: Certificate Number");
+        }
         // Two certificates under one heading (RBC's "Certificates"): each entry's own number, not the first's on both.
         let cert = |k: &str, label: &str, v: &str| json!({"key": k, "label": label, "type": "text", "section": "Certificates", "value": v});
         let two = vec![cert("i1", "Certification Issuer", ""), cert("n1", "Certificate Number", "111"), cert("i2", "Certification Issuer", ""), cert("n2", "Certificate Number", "222")];

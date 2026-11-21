@@ -1,5 +1,17 @@
 [
   {
+    "version": "26.11.8",
+    "date": "2026-11-21",
+    "title": "Dates, certificates and repeated jobs on forms like RBC's",
+    "changes": [
+      "A date box that takes no typing (RBC's From and To) has its month and year chosen from its own calendar.",
+      "A certificate's issuer, name and number come from Me, About me, each entry its own (by the copy attached to it); a list on Please Select no longer counts as its name or answer.",
+      "Job entries a site's CV reader made twice are taken off after filling, or named if the form's Delete button can't be found.",
+      "A comma-separated skills box that puts its old list back is typed key by key, and is no longer shown as filled when it isn't.",
+      "Copy details shows a refused box's own markup and its calendar."
+    ]
+  },
+  {
     "version": "26.11.7",
     "date": "2026-11-21",
     "title": "A step up is searched like your other titles",
