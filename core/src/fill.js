@@ -394,7 +394,7 @@
     return best ? textOf(best).replace(/\s*\*\s*$/, '') : '';
   }
   let addNote = '', addedTo = [], spareGone = [], otherChosen = [], skillMiss = [], skillUnsure = [], attached = new Set(), fields = [], byKey = {}, adders = {}, round = 0, ownClick = false, waitingSince = 0, toggled = false, reveals = 0, depends = 0;
-  let dupesDone = false;
+  let dupesDone = false, redrawn = 0;
   const NOT_SEND = /^\s*\+?\s*(add|delete|remove|edit|cancel|back|previous|next|continue|save|upload|select|choose|attach|browse|clear|close|sign in|log in|create account)\b/i;
   const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // "Add Another" under Work Experience or Education: the form shows one entry until it's pressed.
@@ -1281,7 +1281,9 @@
       prince2: 'PRINCE2', lssgb: 'Lean Six Sigma Green Belt', lssbb: 'Lean Six Sigma Black Belt', mba: 'Master of Business Administration' };
     const full = skill => FULL[skill.toLowerCase().replace(/[®™.]/g, '').replace(/\s+/g, ' ').trim()] || '';
     // The name after who issues it: "Project Management Professional" of "Project Management Institute - Project Management Professional".
-    const tail = x => x.includes(' - ') ? x.slice(x.lastIndexOf(' - ') + 3).trim() : '';
+    // (Or after the group it's filed under: "LinkedIn" of "Social Media > LinkedIn", Workday's How Did You
+    // Hear About Us. That one was taken off as wrong, and "Other" chosen in its place.)
+    const tail = x => / > /.test(x.replace(/\s+/g, ' ')) ? x.replace(/\s+/g, ' ').split(' > ').pop().trim() : x.includes(' - ') ? x.slice(x.lastIndexOf(' - ') + 3).trim() : '';
     // …or before it: "Project Management Professional - Project Management Institute" (Ryan's Workday).
     const head = x => x.includes(' - ') ? x.slice(0, x.indexOf(' - ')).trim() : '';
     // The skill as it may be listed: itself, without its short form in brackets ("Project Management
@@ -1780,6 +1782,11 @@
         const appeared = collect().some(f => f.type !== 'add' && f.type !== 'file' && !f.value && !(byKey[f.key] || []).some(e => had.has(e)));
         if (appeared) { reveals++; round = Math.max(round, 1); status('Unticked "I currently work here" on past jobs; filling in their end dates…'); start(true, true); return; }
       }
+      // Boxes the site drew again after Job Hunt filled them (Workday redraws the address when the
+      // country changes, and adds the province): read the form again once and fill what's empty.
+      if (!onlyKeys && redrawn < 1 && fields.some(f => { const v = answer.values && answer.values[f.key], e = (byKey[f.key] || [])[0]; return v != null && v !== '' && !['add', 'file', 'skills', 'prompt'].includes(f.type) && e && !e.isConnected; })) {
+        redrawn++; round = Math.max(round, 1); status('The form changed as it was filled in; filling in what\'s empty now…'); await wait(700); start(true, true); return;
+      }
       // A list that had no choices until the one before it was chosen (a certificate's name, once
       // its issuer is): read the form again once and fill it.
       if (!onlyKeys && depends < 1 && fields.some(f => f.type === 'select' && !(f.options || []).length && (((byKey[f.key] || [])[0] || {}).options || []).length > 1)) {
@@ -1952,7 +1959,7 @@
     }
   }
   async function startNow(more, dates) {
-    if (!more) { round = 0; reveals = 0; depends = 0; dupesDone = false; addNote = ''; addedTo = []; spareGone = []; skillMiss = []; skillUnsure = []; otherChosen = []; }
+    if (!more) { round = 0; reveals = 0; depends = 0; dupesDone = false; redrawn = 0; addNote = ''; addedTo = []; spareGone = []; skillMiss = []; skillUnsure = []; otherChosen = []; }
     panel();
     if (retired) return;
     if (!more && buttons.hand) buttons.hand.hidden = true;

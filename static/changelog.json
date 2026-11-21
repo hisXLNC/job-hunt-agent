@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.10",
+    "date": "2026-11-21",
+    "title": "Workday: How did you hear about us, and a form that redraws",
+    "changes": [
+      "Workday's own choice Social Media > LinkedIn is kept as the answer LinkedIn; it was taken off as wrong and Other chosen instead.",
+      "When a site redraws boxes Job Hunt just filled (Workday, after the country changes), the form is read once more and what's empty is filled, the province included."
+    ]
+  },
+  {
     "version": "26.11.9",
     "date": "2026-11-21",
     "title": "Contracts are labelled as contracts",

@@ -1217,6 +1217,16 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.10 (Workday: the source list, and a redrawn form)
+
+From a Copy details of oh.wd3.myworkdayjobs.com (Ontario Health), My Information page.
+- `fill.js` `tail`: a pill filed under a group ("Social Media > LinkedIn") is judged by its last part,
+  so Workday's own choice for "LinkedIn" is kept (it was removed as wrong and "Other" chosen).
+- `redrawn`: after the fill loop, when a box that was given an answer is no longer on the page
+  (Country changed from Kuwait to Canada and Workday redrew the name, address and phone boxes), the
+  form is read again once (`start(true, true)`: only empty boxes and tick boxes). Not known from the
+  details whether the redrawn boxes had lost their values; not tried on Workday itself.
+
 ## 26.11.9 (contracts labelled as contracts)
 
 `sources::employment_type`: an "Employment type: Full-time" label (LinkedIn puts it on contracts

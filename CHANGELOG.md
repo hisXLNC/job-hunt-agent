@@ -5,6 +5,15 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.10] - 2026-11-21
+
+Workday: How did you hear about us, and a form that redraws.
+
+### Changes
+
+- Workday's own choice Social Media > LinkedIn is kept as the answer LinkedIn; it was taken off as wrong and Other chosen instead.
+- When a site redraws boxes Job Hunt just filled (Workday, after the country changes), the form is read once more and what's empty is filled, the province included.
+
 ## [26.11.9] - 2026-11-21
 
 Contracts are labelled as contracts.
@@ -2832,6 +2841,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.10]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.10
 [26.11.9]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.9
 [26.11.8]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.8
 [26.11.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.7
