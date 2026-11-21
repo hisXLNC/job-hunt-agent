@@ -1217,6 +1217,14 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.9 (contracts labelled as contracts)
+
+`sources::employment_type`: an "Employment type: Full-time" label (LinkedIn puts it on contracts
+too) no longer wins over the posting's own words. With such a label, or none, a CONTRACT or the new
+CONTRACT2 phrase (duration/term: N months, contract-to-hire, extension possible, incorporated or T4,
+C2C) makes it "Contract · N months", unless PERMANENT matches. Only the label shown in lists changed;
+`filters::work_kind` (what sets a posting aside) is as it was.
+
 ## 26.11.8 (RBC's form again: dates, certificates, repeated jobs)
 
 From a Copy details of jobs.rbc.com on the extension (26.11.7). RBC's site can't be reached from the

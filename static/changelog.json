@@ -1,5 +1,13 @@
 [
   {
+    "version": "26.11.9",
+    "date": "2026-11-21",
+    "title": "Contracts are labelled as contracts",
+    "changes": [
+      "A posting labelled Full-time that says it's a contract (a 12-month contract, Duration: 6 months, contract-to-hire, extension possible, incorporated or T4) now shows as Contract, with its length when given. A posting that says it's permanent stays Full-time."
+    ]
+  },
+  {
     "version": "26.11.8",
     "date": "2026-11-21",
     "title": "Dates, certificates and repeated jobs on forms like RBC's",

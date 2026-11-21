@@ -257,6 +257,9 @@ pub fn employment_type(title: &str, text: &str) -> Option<String> {
     static CONTRACT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bcontract(?:[- ]to[- ]hire)? (?:role|position|assignment|opportunity|basis|term|length|duration|employee|engagement|job)\b|\bon a contract\b|\bthis is a (?:\d+[- ]?months? )?contract\b|\b\d+[- ]?(?:month|mo|year)s?\b[^.\n]{0,20}\bcontract\b|\bcontract\b[^.\n]{0,20}\b\d+[- ]?months?\b|\bfixed[- ]term\b|\b(?:maternity|parental|mat) leave (?:coverage|cover|contract|replacement)\b").unwrap());
     static TEMP: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\btemporary (?:full[- ]time |part[- ]time )?(?:role|position|assignment|contract|opportunity|job)\b").unwrap());
     static LENGTH: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(\d{1,2})[- ]?(month|mo|year)s?\b").unwrap());
+    // More ways a posting says it's a contract while its label says only "Full-time" (the hours).
+    static CONTRACT2: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bcontract[- ]to[- ](?:hire|perm(?:anent)?)\b|(?:^|[^-\w])(?:contract |assignment |project )?(?:duration|term|length)\s*[:\-–]\s*\d{1,2}\+?[- ]?(?:month|year)s?\b|\b\d{1,2}\+?[- ]?months?[- ](?:term|assignment|engagement|mandate|secondment)\b|\b(?:corp[- ]to[- ]corp|c2c)\b|\bcontract (?:extension|renewal)\b|\b(?:possib(?:le|ility of)|potential (?:for|of)|likely|opportunity for) (?:an? )?(?:contract )?extension\b|\bextension (?:possible|likely)\b|\b(?:incorporated|inc\.?) (?:or|/) (?:t4|sole prop)|\bcontractor\b[^.\n]{0,30}\b(?:rate|per hour|hourly)\b").unwrap());
+    static PERMANENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bpermanent,? (?:full[- ]time|part[- ]time|role|position|employment|job|opportunity)\b|\b(?:full[- ]time|regular),? permanent\b|\b(?:employment|job|position|work|role) type\s*[:\-–]?\s*permanent").unwrap());
     static INTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(internship|intern|co-?op (?:student|placement|term|position))\b").unwrap());
     // The kind of employment is stated near the top or at the end: those parts are enough.
     let text: String = if text.chars().count() > 9000 {
@@ -285,8 +288,16 @@ pub fn employment_type(title: &str, text: &str) -> Option<String> {
         let near = CONTRACT.find(&text).map(|m| m.as_str().to_string()).unwrap_or_else(|| title.to_string());
         return Some(with_length(kind, &near));
     }
+    // "Employment type: Full-time" is about the hours (LinkedIn says it of contracts too): a posting
+    // that also says it's a contract, and nowhere that it's permanent, is a contract.
+    let contract = || CONTRACT.find(&text).or_else(|| CONTRACT2.find(&text)).map(|m| { let near: String = text[m.start()..].chars().take(m.as_str().chars().count() + 40).collect(); with_length("Contract", &near) });
     if let Some(c) = LABEL.captures(&text) {
         let kind = named(&c[1]);
+        if kind == "Full-time" && !PERMANENT.is_match(&text) {
+            if let Some(k) = contract() {
+                return Some(k);
+            }
+        }
         let near = CONTRACT.find(&text).map(|m| m.as_str().to_string()).unwrap_or_default();
         return Some(with_length(kind, &near));
     }
@@ -300,6 +311,11 @@ pub fn employment_type(title: &str, text: &str) -> Option<String> {
     }
     if let Some(m) = TEMP.find(&text) {
         return Some(with_length("Temporary", m.as_str()));
+    }
+    if !PERMANENT.is_match(&text) {
+        if let Some(k) = CONTRACT2.find(&text).and(contract()) {
+            return Some(k);
+        }
     }
     let l = text.to_lowercase();
     if l.contains("part-time") || l.contains("part time") {
@@ -2395,6 +2411,13 @@ mod tests {
         assert_eq!(t("Summer Intern, PMO", ""), Some("Internship".into()));
         assert_eq!(t("Coordinator", "A temporary full-time assignment until March."), Some("Temporary".into()));
         assert_eq!(t("Program Manager", "Join our permanent team."), Some("Full-time".into()));
+        // "Full-time" on a label is the hours: the posting's own words decide.
+        assert_eq!(t("Program Manager", "Employment type: Full-time\nThis is a 12-month contract with possible extension."), Some("Contract · 12 months".into()));
+        assert_eq!(t("Program Manager", "Employment type: Full-time\nDuration: 6 months, hybrid in Toronto."), Some("Contract · 6 months".into()));
+        assert_eq!(t("Program Manager", "Full-time, contract-to-hire with our banking client."), Some("Contract".into()));
+        assert_eq!(t("Program Manager", "Our client seeks a PM. Extension possible. Incorporated or T4. Full time hours."), Some("Contract".into()));
+        assert_eq!(t("Program Manager", "Employment type: Full-time\nA permanent, full-time position. You oversee a 24-month vendor contract."), Some("Full-time".into()));
+        assert_eq!(t("Program Manager", "Employment type: Full-time\nLong-term: 5 years of growth ahead."), Some("Full-time".into()));
         assert_eq!(t("Program Manager", "Lead delivery and stakeholders."), None);
     }
 
