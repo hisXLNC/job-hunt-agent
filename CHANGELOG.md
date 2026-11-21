@@ -15,6 +15,7 @@ A watch for new postings, so you can apply among the first.
 - LinkedIn postings from the last day now keep the time they went up (2 hours ago), not only the day.
 - If LinkedIn starts turning the PC away, the watch leaves it alone for two hours so the day's search isn't refused too.
 - Titles on a career path you chose (Me, Career) are searched and scored first. Titles that are a step up or a change of direction come last, so when there is more than a search can cover, the stretches are what waits.
+- Job Hunt wakes the PC from sleep for each look of the watch too (when Wake this PC is on in Settings, App, and the PC is plugged in), not only for the daily search.
 
 ## [26.11.5] - 2026-11-20
 

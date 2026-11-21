@@ -842,6 +842,16 @@ impl Agent {
                 times.extend(at(t.with_timezone(&tz).date_naive() - Duration::days(1), 18));
             }
         }
+        // The watch for new postings: the next look, between 7:00 and 22:00 (else tomorrow at 7:00).
+        if p.watch_minutes > 0 && self.search_paused().is_empty() {
+            use chrono::Timelike;
+            let gap = Duration::minutes(p.watch_minutes.max(10) as i64);
+            let next = chrono::DateTime::parse_from_rfc3339(&self.secret("last.watch")).map(|t| t.with_timezone(&Utc) + gap).unwrap_or(now).max(now + Duration::minutes(2));
+            let h = next.with_timezone(&tz).hour();
+            let day = next.with_timezone(&tz).date_naive();
+            let seven = |d: chrono::NaiveDate| d.and_hms_opt(7, 1, 0).and_then(|t| t.and_local_timezone(tz).earliest()).map(|t| t.with_timezone(&Utc));
+            times.extend(if h < 7 { seven(day) } else if h >= 22 { seven(day + Duration::days(1)) } else { Some(next) });
+        }
         times.into_iter().filter(|t| *t > now + Duration::minutes(1)).min()
     }
 

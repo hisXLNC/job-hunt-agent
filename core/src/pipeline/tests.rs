@@ -397,6 +397,17 @@ fn next_wake_for_the_daily_search() {
     assert!(s.agent.next_wake().is_none(), "off when turned off");
     s.agent.db().delete("app.wake").unwrap();
     let tz = s.agent.profile().tz();
+    // With the watch for new postings on (as it is unless turned off), its next look is the next
+    // wake: within the half hour by day, else 7:01 in the morning.
+    {
+        use chrono::Timelike;
+        let w = s.agent.next_wake().unwrap().with_timezone(&tz);
+        let now = Utc::now();
+        assert!(w > now && (w <= now + Duration::minutes(31) || (w.hour() == 7 && w.minute() == 1)) && (7..22).contains(&w.hour()), "{w}");
+    }
+    let mut p = s.agent.profile();
+    p.watch_minutes = 0;
+    s.agent.save_profile(&p).unwrap();
     let w = s.agent.next_wake().unwrap().with_timezone(&tz);
     let now = Utc::now();
     assert!(w > now && w <= now + Duration::days(1) + Duration::hours(2), "{w}");
