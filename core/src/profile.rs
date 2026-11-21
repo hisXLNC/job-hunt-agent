@@ -308,6 +308,9 @@ pub struct Profile {
     pub search_hour_2: u32,
     /// Minutes between inbox checks.
     pub inbox_minutes: u32,
+    /// Minutes between looks for postings that have just gone up, between the day's searches
+    /// (see Agent::watch); 0: never.
+    pub watch_minutes: u32,
     /// Anything the scorer should weigh, in your words (e.g. "I want hybrid roles in fintech").
     pub guidance: String,
     /// True achievements and stories cover letters may use, beyond what the CV says.
@@ -355,6 +358,7 @@ impl Default for Profile {
             searches_per_day: 1,
             search_hour_2: 17,
             inbox_minutes: 30,
+            watch_minutes: 30,
             guidance: String::new(),
             stories: String::new(),
             follow_up_after: 8,

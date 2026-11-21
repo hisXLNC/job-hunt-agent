@@ -1211,6 +1211,22 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.6 (a watch for new postings)
+
+The user wants to be among the first ten applicants; postings were up to a day old because the
+search runs once or twice a day (and a missed one isn't made up). `Agent::watch`
+(`core/src/pipeline/search.rs`): every `profile.watch_minutes` (default 30, 0 off; 7:00-22:00
+local, not while searches are paused; due in `due_tasks`, run as task "watch") it asks LinkedIn's
+signed-out search for the newest postings (`sources::linkedin_new`: one page, `f_TPR` = three gaps,
+1 h to 24 h; half of `linkedin_searches(p, 16)` each time, by `watch.turn`), re-reads the company
+boards, keeps what `unseen` says Job Hunt never stored or removed, and hands those to
+`search(Some(..))` like a job alert's (the day's `last.report` is put back after). LinkedIn
+refusing sets `watch.linkedin.wait` for two hours. `parse_linkedin_list` keeps "N minutes/hours
+ago" as an RFC 3339 time in `posted_at`. Test `watch_takes_only_what_is_new`. Not tried against
+LinkedIn itself (blocked from the build machine). Not done: age and applicant count shown in the
+Queue, a notice that names the job (the usual "N roles worth applying to" is sent), making up a
+missed daily search.
+
 ## 26.11.5 (put back a wrong "applied", usual answers, one file attached, smaller fixes)
 
 The user's iPad Shortcut said "A server with the specified hostname could not be found": that is

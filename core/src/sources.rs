@@ -1180,6 +1180,8 @@ pub fn parse_linkedin_list(html: &str) -> Vec<Posting> {
     static COMPANY: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?s)<h4[^>]*base-search-card__subtitle[^>]*>(.*?)</h4>"#).unwrap());
     static PLACE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?s)<span[^>]*job-search-card__location[^>]*>(.*?)</span>"#).unwrap());
     static DATE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"<time[^>]*datetime="([0-9-]{10})""#).unwrap());
+    // "35 minutes ago", "2 hours ago" beside the date: the time it went up, to the hour or better.
+    static AGO: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?is)<time[^>]*>\s*(\d+)\s+(minute|hour)s?\s+ago"#).unwrap());
     static LINK: Lazy<Regex> = Lazy::new(|| Regex::new(r#"href="(https://[a-z.]*linkedin\.com/jobs/view/[^"?]+)"#).unwrap());
     static PAY: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?s)<span[^>]*job-search-card__salary-info[^>]*>(.*?)</span>"#).unwrap());
     static LINK_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"-(\d{6,})/?$").unwrap());
@@ -1204,7 +1206,8 @@ pub fn parse_linkedin_list(html: &str) -> Vec<Posting> {
             title,
             location: place,
             url: format!("https://www.linkedin.com/jobs/view/{id}/"),
-            posted_at: DATE.captures(card).map(|m| m[1].to_string()),
+            posted_at: AGO.captures(card).and_then(|m| { let n: i64 = m[1].parse().ok()?; Some((chrono::Utc::now() - if m[2].eq_ignore_ascii_case("hour") { chrono::Duration::hours(n) } else { chrono::Duration::minutes(n) }).to_rfc3339_opts(chrono::SecondsFormat::Secs, true)) })
+                .or_else(|| DATE.captures(card).map(|m| m[1].to_string())),
             salary_max: salary.as_deref().and_then(salary_max_of),
             salary,
             ..Posting::default()
@@ -1263,6 +1266,28 @@ pub fn linkedin(c: &reqwest::blocking::Client, title: &str, place: &str, remote:
         }
     }
     Ok(list)
+}
+
+/// What went up on LinkedIn in the last `secs` (an hour to a day) for one search, newest first: one
+/// page, for the watch between searches (see Agent::watch).
+pub fn linkedin_new(c: &reqwest::blocking::Client, title: &str, place: &str, remote: bool, secs: u64) -> Result<Vec<Posting>, String> {
+    std::thread::sleep(Duration::from_millis(1500));
+    let mut u = url::Url::parse("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search").unwrap();
+    u.query_pairs_mut().append_pair("keywords", title).append_pair("location", place).append_pair("f_TPR", &format!("r{}", secs.clamp(3_600, 86_400))).append_pair("sortBy", "DD").append_pair("start", "0");
+    if remote {
+        u.query_pairs_mut().append_pair("f_WT", "2");
+    }
+    let html = linkedin_get(c, u.as_str())?;
+    let mut got = parse_linkedin_list(&html);
+    if got.is_empty() && (html.contains("authwall") || html.contains("challenge")) {
+        return Err("LinkedIn is limiting requests from this connection for now".into());
+    }
+    if remote {
+        for p in &mut got {
+            p.remote = true;
+        }
+    }
+    Ok(got)
 }
 
 /// The company's own application page from a LinkedIn posting that says "Apply on company website":

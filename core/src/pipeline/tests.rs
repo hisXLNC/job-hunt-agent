@@ -3220,3 +3220,21 @@ fn expected_pay_is_answered_for_each_job() {
     assert_eq!(a["values"]["p1"], "250000");
     assert!(crate::fill::asks_pay("Desired compensation") && crate::fill::asks_pay("What are your salary expectations?") && !crate::fill::asks_pay("Current salary") && !crate::fill::asks_pay("Payroll system used"));
 }
+
+/// The watch scores only what Job Hunt hasn't seen: a posting stored already, or one you turned
+/// down, isn't handed in again; and LinkedIn's "2 hours ago" is kept as a time.
+#[test]
+fn watch_takes_only_what_is_new() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    let fresh = s.agent.unseen(vec![posting("Technical Program Manager", "1"), Posting { company: "Globex".into(), ..posting("Delivery Manager", "7") }, Posting { company: "Globex".into(), ..posting("Delivery Manager", "7") }]);
+    assert_eq!(fresh.iter().map(|p| p.external_id.as_str()).collect::<Vec<_>>(), vec!["7"], "the known one and the repeat are left out");
+    let card = r#"<li><div data-entity-urn="urn:li:jobPosting:4000000001"><a href="https://www.linkedin.com/jobs/view/pm-at-acme-4000000001?x=1"></a><h3 class="base-search-card__title">Program Manager</h3><h4 class="base-search-card__subtitle">Acme</h4><span class="job-search-card__location">Toronto, ON</span><time class="job-search-card__listdate--new" datetime="2026-11-20">2 hours ago</time></div></li>"#;
+    let got = crate::sources::parse_linkedin_list(card);
+    let at = chrono::DateTime::parse_from_rfc3339(got[0].posted_at.as_deref().unwrap()).expect("a time, not only a day");
+    let mins = (chrono::Utc::now() - at.with_timezone(&chrono::Utc)).num_minutes();
+    assert!((119..=121).contains(&mins), "{mins}");
+    assert!(crate::filters::posted_date(got[0].posted_at.as_deref().unwrap()).is_some());
+    let old = crate::sources::parse_linkedin_list(&card.replace("2 hours ago", "3 days ago"));
+    assert_eq!(old[0].posted_at.as_deref(), Some("2026-11-20"));
+}

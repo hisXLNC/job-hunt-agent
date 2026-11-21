@@ -39,6 +39,92 @@ impl Agent {
         self.search_with(postings, false, None)
     }
 
+    /// Between the day's searches: a quick look for postings that have just gone up, so you can be
+    /// among the first to apply. LinkedIn's newest for your titles (half of the searches each time,
+    /// taking turns; one page each, nothing while LinkedIn is turning this connection away) and
+    /// your company boards. Only what Job Hunt hasn't seen is scored, at once, like postings from
+    /// a job alert; the day's search, its time and its report stay as they are. Returns how many
+    /// were new.
+    pub fn watch(&self) -> R<usize> {
+        let _who = crate::db::acting("jobhunt");
+        let p = self.profile();
+        let now = Utc::now();
+        let since_last = chrono::DateTime::parse_from_rfc3339(&self.secret("last.watch")).map(|t| (now - t.with_timezone(&Utc)).num_seconds().max(0) as u64).unwrap_or(86_400);
+        let turn: usize = self.secret("watch.turn").parse().unwrap_or(0);
+        {
+            let db = self.db();
+            db.set("last.watch", &crate::util::now())?;
+            db.set("watch.turn", &(turn + 1).to_string())?;
+        }
+        let c = crate::sources::http();
+        let mut found: Vec<Posting> = vec![];
+        let waiting = chrono::DateTime::parse_from_rfc3339(&self.secret("watch.linkedin.wait")).map(|t| t.with_timezone(&Utc) > now).unwrap_or(false);
+        if p.sources.linkedin && !waiting {
+            // Each search runs every second time, so it looks back over three gaps (never under an hour).
+            let list = crate::sources::linkedin_searches(&p, 16);
+            let secs = (since_last * 3).clamp(3_600, 86_400);
+            for (title, place, remote) in list.iter().enumerate().filter(|(i, _)| list.len() <= 8 || i % 2 == turn % 2).map(|(_, x)| x) {
+                if self.stopping() || self.is_running("search") {
+                    break;
+                }
+                match crate::sources::linkedin_new(&c, title, place, *remote, secs) {
+                    Ok(l) => found.extend(l),
+                    Err(e) => {
+                        // Turned away: left alone for two hours, so the day's search isn't refused too.
+                        if e.contains("limiting") {
+                            self.db().set("watch.linkedin.wait", &(now + chrono::Duration::hours(2)).to_rfc3339())?;
+                        }
+                        self.trace(&format!("watch: LinkedIn \u{201c}{title}\u{201d}: {e}"));
+                        break;
+                    }
+                }
+            }
+        }
+        if !p.sources.is_off("boards") {
+            for (src, name) in crate::sources::boards(&p) {
+                if self.stopping() || self.is_running("search") {
+                    break;
+                }
+                if let Ok((l, _)) = crate::sources::fetch_board(&c, &p, src, &name) {
+                    found.extend(l);
+                }
+            }
+        }
+        let fresh = self.unseen(found);
+        self.trace(&format!("watch: {} new posting{}", fresh.len(), if fresh.len() == 1 { "" } else { "s" }));
+        if fresh.is_empty() {
+            return Ok(0);
+        }
+        // A batch of waiting postings being scored just now: these go in right after it.
+        for _ in 0..60 {
+            if !self.is_running("search") || self.stopping() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        }
+        let n = fresh.len();
+        // Scored like a job alert's postings; the day's report isn't replaced by this one.
+        let report = self.secret("last.report");
+        let r = self.search(Some(fresh));
+        if !report.is_empty() {
+            self.db().set("last.report", &report)?;
+        }
+        r.map(|_| n)
+    }
+
+    /// Those of `found` that Job Hunt has never stored or removed, each once.
+    pub(super) fn unseen(&self, found: Vec<Posting>) -> Vec<Posting> {
+        let db = self.db();
+        let mut out: Vec<Posting> = vec![];
+        for x in found {
+            if out.iter().any(|y| y.id() == x.id()) || db.job_exists_at(&x.id(), &x.company, &x.title, &[x.url.as_str(), x.apply_url.as_deref().unwrap_or("")]).unwrap_or(true) {
+                continue;
+            }
+            out.push(x);
+        }
+        out
+    }
+
     /// A search that also re-checks postings filtered out earlier, against your current CVs and settings.
     pub fn force_search(&self) -> R<Report> {
         self.search_with(None, true, None)

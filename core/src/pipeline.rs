@@ -3685,6 +3685,16 @@ pub fn due_tasks(agent: &Agent) -> Vec<&'static str> {
     if crate::backup::due(agent) && !agent.is_running("backup") {
         out.push("backup");
     }
+    // Postings that have just gone up: looked for every `watch_minutes`, 7:00 to 22:00 your time,
+    // while scheduled searches are on.
+    {
+        use chrono::Timelike;
+        let lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.watch")).map(|t| (now - t.with_timezone(&Utc)).num_minutes() < p.watch_minutes.max(10) as i64).unwrap_or(false);
+        if ready && p.watch_minutes > 0 && (7..22).contains(&local.hour()) && !lately && agent.search_paused().is_empty() && !agent.budget_wait()
+            && !agent.is_running("search") && !agent.is_running("watch") && !agent.search_ending() && !out.contains(&"search") {
+            out.push("watch");
+        }
+    }
     // Postings the last search couldn't score: a batch every 45 minutes while Claude has room.
     let held_lately = chrono::DateTime::parse_from_rfc3339(&agent.secret("last.held"))
         .map(|t| (now - t.with_timezone(&Utc)).num_minutes() < 45)
@@ -3884,6 +3894,15 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
                 std::thread::spawn(move || {
                     if let Ok(_g) = a.claim("people") {
                         a.find_queued();
+                    }
+                });
+            }
+            "watch" => {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    let Ok(_g) = a.claim("watch") else { return };
+                    if let Err(e) = a.watch() {
+                        let _ = a.db().log(None, "watch:error", &e.0);
                     }
                 });
             }
