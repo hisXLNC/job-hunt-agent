@@ -1211,6 +1211,11 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.7 (a step up keeps its place)
+
+The user: "Keep step up". `Agent::stretch_titles` now gives only the `switch` titles of the kv
+`career` paths; a `stretch` (a step up or sideways) ranks 1 with the rest in `title_rank`.
+
 ## 26.11.6 (a watch for new postings)
 
 The user wants to be among the first ten applicants; postings were up to a day old because the

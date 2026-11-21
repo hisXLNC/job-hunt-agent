@@ -1,5 +1,13 @@
 [
   {
+    "version": "26.11.7",
+    "date": "2026-11-21",
+    "title": "A step up is searched like your other titles",
+    "changes": [
+      "Titles that are a step up or sideways keep their place when searching and scoring. Only titles that are a change of direction now come last; titles on a career path you chose still come first."
+    ]
+  },
+  {
     "version": "26.11.6",
     "date": "2026-11-21",
     "title": "A watch for new postings, so you can apply among the first",

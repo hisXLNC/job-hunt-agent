@@ -5,6 +5,14 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.7] - 2026-11-21
+
+A step up is searched like your other titles.
+
+### Changes
+
+- Titles that are a step up or sideways keep their place when searching and scoring. Only titles that are a change of direction now come last; titles on a career path you chose still come first.
+
 ## [26.11.6] - 2026-11-21
 
 A watch for new postings, so you can apply among the first.
@@ -2804,6 +2812,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.7]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.7
 [26.11.6]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.6
 [26.11.5]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.5
 [26.11.4]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.4

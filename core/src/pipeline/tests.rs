@@ -3259,5 +3259,8 @@ fn titles_on_your_path_are_searched_first() {
     assert_eq!(crate::sources::title_rank(&p, "Technical Program Manager"), 0);
     assert_eq!(crate::sources::title_rank(&p, "Product Owner"), 0, "leadership is too general a word to go by; product is not");
     assert_eq!(crate::sources::title_rank(&p, "Business Analyst"), 1);
-    assert_eq!(crate::sources::search_titles(&p), vec!["Technical Program Manager", "Product Owner", "Data Platform Director", "Business Analyst"]);
+    assert_eq!(crate::sources::search_titles(&p), vec!["Technical Program Manager", "Product Owner", "Data Platform Director", "Business Analyst"]);    // A step up among Claude's career paths stays where it was; only a change of direction waits.
+    let s = setup();
+    s.agent.db().set("career", &json!({ "paths": [{ "title": "Director of Program Management", "kind": "stretch" }, { "title": "Data Platform Director", "kind": "switch" }] }).to_string()).unwrap();
+    assert_eq!(s.agent.stretch_titles(), vec!["Data Platform Director"]);
 }

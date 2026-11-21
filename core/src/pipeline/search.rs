@@ -113,10 +113,11 @@ impl Agent {
         r.map(|_| n)
     }
 
-    /// The titles among Claude's career paths that are a step up or a change of direction.
+    /// The titles among Claude's career paths that are a change of direction. (A step up or
+    /// sideways is kept with the rest: you asked for those to stay.)
     pub(super) fn stretch_titles(&self) -> Vec<String> {
         serde_json::from_str::<Value>(&self.secret("career")).ok().and_then(|v| v["paths"].as_array().cloned()).unwrap_or_default().iter()
-            .filter(|c| matches!(c["kind"].as_str(), Some("stretch") | Some("switch"))).filter_map(|c| c["title"].as_str().map(|t| t.trim().to_string())).filter(|t| !t.is_empty()).collect()
+            .filter(|c| c["kind"].as_str() == Some("switch")).filter_map(|c| c["title"].as_str().map(|t| t.trim().to_string())).filter(|t| !t.is_empty()).collect()
     }
 
     /// Those of `found` that Job Hunt has never stored or removed, each once.

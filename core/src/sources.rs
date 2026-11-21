@@ -1896,7 +1896,7 @@ pub fn searches_on(p: &Profile, max: usize, day: usize) -> Vec<(String, String)>
     out
 }
 
-/// Titles Claude's career paths call a step up or a change of direction (see Agent::stretch_titles):
+/// Titles Claude's career paths call a change of direction (see Agent::stretch_titles; a step up isn't one):
 /// searched after the rest. Set by the agent before it searches.
 static STRETCH: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
 pub fn set_stretch_titles(titles: Vec<String>) {
@@ -1904,8 +1904,8 @@ pub fn set_stretch_titles(titles: Vec<String>) {
 }
 
 /// Where a title of yours stands: 0 on a career path you chose (Me, Career: "program management"
-/// takes in "Technical Program Manager"), 2 a stretch (a step up or a change of direction among
-/// Claude's career paths, and not on a path you chose), 1 the rest. The lower, the sooner it is
+/// takes in "Technical Program Manager"), 2 a change of direction among Claude's career paths
+/// that isn't on a path you chose, 1 the rest (a step up included). The lower, the sooner it is
 /// searched and scored.
 pub fn title_rank(p: &Profile, title: &str) -> u8 {
     const GENERIC: [&str; 24] = ["manage", "senior", "leader", "lead", "direct", "head", "and", "the", "for", "with", "role", "roles", "career", "path", "level", "princi", "staff", "chief", "office", "specia", "associ", "junior", "vice", "presid"];
