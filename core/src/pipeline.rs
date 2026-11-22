@@ -482,6 +482,10 @@ pub struct Running<'a> {
 /// When each piece of running work started (seconds since 1970), for the activity list.
 static STARTED: once_cell::sync::Lazy<Mutex<std::collections::HashMap<String, i64>>> = once_cell::sync::Lazy::new(Default::default);
 
+/// What each piece of running work said it was doing, latest last (when, what): kept from its start
+/// until it next starts, so a card that seems stuck can say where it is.
+static STEPS: once_cell::sync::Lazy<Mutex<std::collections::HashMap<String, Vec<(i64, String)>>>> = once_cell::sync::Lazy::new(Default::default);
+
 pub struct OwnedRunning {
     agent: Arc<Agent>,
     name: String,
@@ -958,6 +962,7 @@ impl Agent {
         crate::lifecycle::started(name);
         crate::debug::note("work", &format!("{name}: started"));
         STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
+        STEPS.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), vec![(Utc::now().timestamp(), "Started".to_string())]);
         Ok(Running { agent: self, name: name.to_string(), _task: crate::claude_code::Task::enter(name) })
     }
 
@@ -968,8 +973,21 @@ impl Agent {
             crate::lifecycle::started(name);
             crate::debug::note("work", &format!("{name}: started"));
             STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
+            STEPS.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), vec![(Utc::now().timestamp(), "Started".to_string())]);
             OwnedRunning { agent: self.clone(), name: name.to_string() }
         })
+    }
+
+    /// Say what a piece of running work (`name`, as claimed) is doing now: shown on its card under
+    /// Details, and kept in the debug record.
+    pub(crate) fn doing(&self, name: &str, what: &str) {
+        crate::debug::note("work", &format!("{name}: {what}"));
+        let mut s = STEPS.lock().unwrap_or_else(|e| e.into_inner());
+        let l = s.entry(name.to_string()).or_default();
+        l.push((Utc::now().timestamp(), what.chars().take(200).collect()));
+        if l.len() > 40 {
+            l.remove(1);
+        }
     }
 
     pub fn is_running(&self, name: &str) -> bool {
@@ -1033,6 +1051,7 @@ impl Agent {
             ("ratings", "Looking up what employees say about companies", 120), ("salaries", "Finding the pay in postings that don't state it", 120),
             ("reasons", "Shortening long fit reasons", 60), ("discover", "Looking for companies whose job pages to add", 120), ("recruiters", "Reading email from recruiters", 60),
             ("sync", "Saving a copy to your sync folder", 40), ("backup", "Saving a backup", 20), ("calsync", "Updating your calendar", 20), ("test-sources", "Testing your job sources", 90),
+            ("watch", "Looking for postings from the last hour", 90), ("keywords-in", "Working your keywords into waiting CVs", 300),
             ("update", "Getting an update of Job Hunt", 60), ("files-move", "Moving your files", 30), ("google", "Connecting to Google", 30), ("care", "Tidying up", 60),
         ];
         let now = Utc::now().timestamp();
@@ -1075,7 +1094,15 @@ impl Agent {
                 "claude-fill" => detail = self.secret("claudefill:current"),
                 _ => {}
             }
-            out.push(json!({ "id": name, "label": label, "detail": detail, "secs": secs, "percent": percent, "estimated": estimated, "stoppable": name != SEARCH_ENDING }));
+            // Where it is, step by step, for Details: [{ago (seconds), what}], and how long since the last.
+            let steps: Vec<(i64, String)> = STEPS.lock().unwrap_or_else(|e| e.into_inner()).get(&name).cloned().unwrap_or_default();
+            let quiet = steps.last().map(|(at, _)| (now - at).max(0)).unwrap_or(secs);
+            if let Some((_, what)) = steps.last().filter(|_| steps.len() > 1 && (detail.is_empty() || detail == name)) {
+                detail = what.clone();
+            }
+            let steps: Vec<Value> = steps.iter().rev().take(15).rev().map(|(at, what)| json!({ "ago": (now - at).max(0), "what": what })).collect();
+            out.push(json!({ "id": name, "label": label, "detail": detail, "secs": secs, "percent": percent, "estimated": estimated, "stoppable": name != SEARCH_ENDING,
+                "steps": steps, "quiet": quiet, "usual": usual }));
         }
         out
     }
@@ -2312,6 +2339,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 continue;
             }
             let Ok(_one) = self.claim(&format!("revise:{}", job.id)) else { continue };
+            self.doing("keywords-in", &format!("{} at {}: {}", job.title, job.company, mine.join(", ")));
             tried_now += 1;
             self.keywords_tried(&job.id, &mine);
             let note = format!("I do have real experience with each of these, {CONFIRMED} {}. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.", mine.join(", "));

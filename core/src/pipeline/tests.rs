@@ -2985,6 +2985,22 @@ fn keywords_you_ask_for_are_remembered_and_worked_in_by_themselves() {
 }
 
 #[test]
+fn running_work_says_where_it_is() {
+    let s = setup();
+    let g = s.agent.claim("watch").unwrap();
+    s.agent.doing("watch", "Reading Acme's job page");
+    let a = s.agent.activity().into_iter().find(|a| a["id"] == "watch").unwrap();
+    assert_eq!(a["label"], "Looking for postings from the last hour", "named, not just \"Working in the background\"");
+    assert_eq!(a["detail"], "Reading Acme's job page");
+    assert_eq!(a["steps"].as_array().unwrap().len(), 2, "{a}");
+    assert!(a["quiet"].as_i64().unwrap() <= 2 && a["usual"].as_i64().unwrap() > 0);
+    drop(g);
+    // The next run starts its own list.
+    let _g = s.agent.claim("watch").unwrap();
+    assert_eq!(s.agent.activity().into_iter().find(|a| a["id"] == "watch").unwrap()["steps"].as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn the_debug_report_says_what_is_going_on() {
     let s = setup();
     s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();

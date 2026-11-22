@@ -1217,6 +1217,16 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.14
+
+- Debugging a background task: `Agent::doing(name, what)` records what claimed work is doing (static
+  `STEPS`, reset at each claim; also in the debug record). `activity()` now returns `steps`, `quiet`
+  (seconds since the last step) and `usual` per task, and the latest step as the detail when there
+  was none. The status sheet (`static/app-activity.js`) has Details per task (`actDetails`: steps, a
+  "looks stuck" line after max(5 min, 3x usual) of quiet, Copy details = task text + debug report).
+- "watch" and "keywords-in" are named in `activity()`; the watch reports each LinkedIn search, each
+  job page, and the wait for a running search. Other tasks only say "Started" until they call `doing`.
+
 ## 26.11.13
 
 - Keywords you've said you have (`keywords.have`) now match a posting's keyword however it's written:

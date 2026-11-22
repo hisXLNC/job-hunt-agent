@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.14",
+    "date": "2026-11-22",
+    "title": "See what a background task is doing",
+    "changes": [
+      "Each running task in the status sheet has Details: what it is doing step by step, how long since its last step, a warning when it looks stuck, and Copy details to send.",
+      "The hourly check for new postings is named (it showed as \"watch\") and says which search or job page it is on."
+    ]
+  },
+  {
     "version": "26.11.13",
     "date": "2026-11-22",
     "title": "Your keywords, worked in everywhere",

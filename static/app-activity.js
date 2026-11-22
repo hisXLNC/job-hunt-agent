@@ -40,7 +40,24 @@ function actStrip() {
 // the search, email, backup, Claude, the last notices, and the Auto / Light / Dark switch. It says the
 // one thing that matters most: blue while working, amber with the words when something needs you, a
 // quiet green "All good" otherwise. (It replaced a row of separate chips and the panel at the bottom left.)
-const hub = { open: false, which: 'status', html: '', seen: '' };
+const hub = { open: false, which: 'status', html: '', seen: '', details: new Set() };
+const actLong = s => s < 90 ? `${s} seconds` : `${Math.round(s / 60)} minutes`;
+/** One running thing, as text to paste: what it is, how long, and each step it said it took. */
+function actText(a) {
+  return [`${a.label} (${a.id})`, `running for ${actLong(a.secs)}; usually about ${actLong(a.usual || 60)}; last step ${actLong(a.quiet || 0)} ago${a.estimated ? '' : `; ${a.percent}% done`}`,
+    a.detail ? `now: ${a.detail}` : '', ...(a.steps || []).map(s => `  ${actLong(s.ago)} ago  ${s.what}`)].filter(Boolean).join('\n');
+}
+/** Under a running thing, when you ask: where it is, step by step, whether it looks stuck, and a
+ *  way to copy all of it (with the debug report) to send. */
+function actDetails(a) {
+  const stuck = (a.quiet || 0) > Math.max(300, 3 * (a.usual || 60)) && a.id !== 'search';
+  const steps = (a.steps || []).map(s => `<li><span class="muted nowrap">${esc(actLong(s.ago))} ago</span> ${esc(s.what)}</li>`).join('');
+  return `<div class="act-more small">
+      <div class="${stuck ? 'act-stuck' : 'muted'}">${stuck ? `Nothing new for ${esc(actLong(a.quiet))}: this looks stuck. Stop it, and copy the details if it happens again.` : `Usually takes about ${esc(actLong(a.usual || 60))}. Last step ${esc(actLong(a.quiet || 0))} ago.`}</div>
+      ${steps ? `<ol class="act-steps">${steps}</ol>` : ''}
+      <button class="btn ghost sm" type="button" data-act-copy="${esc(a.id)}" title="Copies this and Job Hunt's debug report, to paste where you report the problem">Copy details</button>
+    </div>`;
+}
 try { hub.seen = localStorage.getItem('hub.seen') || ''; } catch (e) {}
 
 function hubState() {
@@ -68,10 +85,11 @@ function hubSheetHtml() {
   const row = (cls, name, sub, action) => `<div class="hub-row">${dot(cls)}<div class="hub-what"><b>${name}</b><small>${sub}</small></div>${action || ''}</div>`;
   const go = (href, label) => `<a class="hub-do" href="${href}">${label}</a>`;
   const doing = running.list.map(a => `<li class="act-row" data-act-id="${esc(a.id)}">
-      <div class="act-top"><b>${esc(a.label)}</b><span class="muted small">${actTime(a.secs)}</span></div>
-      ${a.detail ? `<div class="muted small act-detail">${esc(a.detail)}</div>` : ''}
+      <div class="act-top"><b>${esc(a.label)}</b><span class="muted small">${actLong(a.secs)} · <button class="linkish" type="button" data-act-more="${esc(a.id)}" aria-expanded="${hub.details.has(a.id)}">${hub.details.has(a.id) ? 'Hide details' : 'Details'}</button></span></div>
+      ${a.detail ? `<div class="muted small act-detail" title="${esc(a.detail)}">${esc(a.detail)}</div>` : ''}
       <div class="act-line"><div class="pbar${a.estimated ? ' guess' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${a.percent}" title="${a.estimated ? 'A guess from how long this usually takes' : `${a.percent}% done`}"><i style="width:${Math.max(3, a.percent)}%"></i></div>
         ${a.stoppable ? `<button class="btn ghost danger sm" type="button" data-act-stop="${esc(a.id)}" ${running.stopping.has(a.id) ? 'disabled' : ''} title="Ends this now. What's done so far is kept; ask for it again when you want it.">${running.stopping.has(a.id) ? 'Stopping…' : 'Stop'}</button>` : ''}</div>
+      ${hub.details.has(a.id) ? actDetails(a) : ''}
     </li>`).join('');
   const searching = running.list.some(a => a.id === 'search');
   const g = o.setup?.google, gOff = (o.setup?.skipped || []).includes('google');
@@ -191,6 +209,23 @@ document.addEventListener('click', async e => {
     actDraw(r.running);
     if (id === 'search') { await refreshOverview(); route(); }
   } catch (x) { running.stopping.delete(id); actDraw(running.list); toast(x.message, true); }
+});
+// Details under a running thing, and copying them.
+document.addEventListener('click', async e => {
+  const more = e.target.closest?.('[data-act-more]'), copy = e.target.closest?.('[data-act-copy]');
+  if (more) {
+    e.stopPropagation();
+    const id = more.dataset.actMore;
+    hub.details.has(id) ? hub.details.delete(id) : hub.details.add(id);
+    return actDraw(running.list);
+  }
+  if (!copy) return;
+  e.stopPropagation();
+  const a = running.list.find(x => x.id === copy.dataset.actCopy);
+  let report = '';
+  try { report = (await api('/api/debug/report')).report || ''; } catch (x) {}
+  const text = `${a ? actText(a) : `${copy.dataset.actCopy}: finished before it could be copied`}\n${report}`;
+  if (await copyText(text)) toast('Copied. Paste it where you report the problem.'); else toast('It couldn\'t be copied. Settings has the same report under Finding problems.', true);
 });
 // Anything you start shows at once, not at the next look.
 document.addEventListener('click', e => { if (e.target.closest?.('[data-act], [data-ask-act], .ask-go, [data-cv-chat-form] button')) setTimeout(actLoad, 700); }, true);

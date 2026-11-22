@@ -68,6 +68,7 @@ impl Agent {
                 if self.stopping() || self.is_running("search") {
                     break;
                 }
+                self.doing("watch", &format!("LinkedIn: \u{201c}{title}\u{201d} in {}", if place.is_empty() { "any place" } else { place.as_str() }));
                 match crate::sources::linkedin_new(&c, title, place, *remote, secs) {
                     Ok(l) => found.extend(l),
                     Err(e) => {
@@ -86,6 +87,7 @@ impl Agent {
                 if self.stopping() || self.is_running("search") {
                     break;
                 }
+                self.doing("watch", &format!("Reading {name}'s job page"));
                 if let Ok((l, _)) = crate::sources::fetch_board(&c, &p, src, &name) {
                     found.extend(l);
                 }
@@ -96,6 +98,7 @@ impl Agent {
         if fresh.is_empty() {
             return Ok(0);
         }
+        self.doing("watch", &format!("{} new posting{}; waiting for the search that's running to finish, then scoring", fresh.len(), if fresh.len() == 1 { "" } else { "s" }));
         // A batch of waiting postings being scored just now: these go in right after it.
         for _ in 0..60 {
             if !self.is_running("search") || self.stopping() {
@@ -106,6 +109,7 @@ impl Agent {
         let n = fresh.len();
         // Scored like a job alert's postings; the day's report isn't replaced by this one.
         let report = self.secret("last.report");
+        self.doing("watch", &format!("Scoring {n} new posting{}", if n == 1 { "" } else { "s" }));
         let r = self.search(Some(fresh));
         if !report.is_empty() {
             self.db().set("last.report", &report)?;
