@@ -2296,7 +2296,15 @@ fn postings_sent_from_the_browser() {
     assert_eq!((j.source.as_str(), j.company.as_str(), j.title.as_str()), ("linkedin", "Maple Bank", "Senior Program Manager"));
     // Twice is refused; a page with no posting is explained.
     let again = s.agent.add_clip(&json!({ "url": "https://www.linkedin.com/jobs/view/123", "text": "Senior Program Manager at Maple Bank. Lead program delivery across finance systems." }));
-    assert!(again.unwrap_err().0.contains("already in Job Hunt"));
+    let again = again.unwrap_err().0;
+    assert!(again.contains("already in Job Hunt"));
+    // It says where the job is and under what name, and the notice opens it.
+    assert!(again.contains("It's kept as Senior Program Manager at Maple Bank, under "), "{again}");
+    assert_eq!(s.agent.notice_link("Already in Job Hunt", &again), format!("#job/{}", url::form_urlencoded::byte_serialize(j.id.as_bytes()).collect::<String>()));
+    s.agent.db().set_status(&j.id, "dismissed", "").unwrap();
+    let hidden = s.agent.add_clip(&json!({ "url": "https://www.linkedin.com/jobs/view/123", "text": "Senior Program Manager at Maple Bank. Lead program delivery across finance systems." })).unwrap_err().0;
+    assert!(hidden.contains("under Not interested.") && hidden.contains("until you choose that stage"), "{hidden}");
+    s.agent.db().set_status(&j.id, "queued", "").unwrap();
     assert!(s.agent.add_clip(&json!({ "url": "https://example.com", "text": "A recipe for banana bread with walnuts and a little cinnamon." })).unwrap_err().0.contains("doesn't look like a job posting"));
     assert!(crate::api::parse_clip("JOBHUNT-CLIP:{\"url\":\"x\"}").is_some() && crate::api::parse_clip("hello").is_none());
     // Sent from LinkedIn with its hiring team: they're kept with the job; a link that isn't a

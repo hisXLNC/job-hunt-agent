@@ -1342,9 +1342,17 @@ impl Agent {
                     }
                     // Its fit is the one worked out when it was first found, against your CVs as they were then.
                     let old = self.db().job(&id)?;
-                    if let Some((score, found)) = old.and_then(|j| j.score.map(|s| (s, j.found_at))) {
+                    if let Some((score, found)) = old.as_ref().and_then(|j| j.score.map(|s| (s, j.found_at.clone()))) {
                         let day = found.get(..10).unwrap_or("").to_string();
                         earlier = format!(" Its fit of {score} was scored{} against your CVs as they were then; it isn't scored again.", if day.is_empty() { String::new() } else { format!(" on {day}") });
+                    }
+                    // Where it is, under the name it's kept by (a source may spell the company or the
+                    // role another way), so it can be found: the notice opens it.
+                    if let Some(j) = old {
+                        earlier.push_str(&format!(" It's kept as {} at {}, under {}.", j.title, j.company, crate::lifecycle::label(&j.status)));
+                        if j.status == "dismissed" {
+                            earlier.push_str(" All jobs hides what's under Not interested until you choose that stage; open the job to bring it back.");
+                        }
                     }
                 }
                 return err(format!("{} at {} is already in Job Hunt.{earlier}", p.title, p.company));

@@ -5,6 +5,15 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.20] - 2026-11-22
+
+Find a job that's already in Job Hunt.
+
+### Changes
+
+- When you add a posting that's already there, the notice says the name it's kept under and its stage, and opens it.
+- Searching All jobs now says how many matches are hidden under Not interested, with a link to show them.
+
 ## [26.11.19] - 2026-11-22
 
 Clear expired postings in one go.
@@ -2920,6 +2929,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.20]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.20
 [26.11.19]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.19
 [26.11.18]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.18
 [26.11.17]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.17

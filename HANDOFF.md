@@ -1217,6 +1217,15 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.20
+
+- "Already in Job Hunt" didn't say where: All jobs hides Not interested rows unless that stage is
+  chosen, and a job may be kept under another spelling of the company. `add_found`'s refusal now
+  ends "It's kept as <title> at <company>, under <stage>." (plus a line about the hidden stage when
+  it's Not interested), which also makes `notice_link` open that job. All jobs' count line shows
+  "N more under Not interested" (a button that switches the stage) when a text search has hidden
+  matches there (`applyAllFilters`). A dismissed job is not brought back by adding it again.
+
 ## 26.11.19
 
 - Queue: "Clear N expired" at the end of the sort and filter row (`showOverview` in

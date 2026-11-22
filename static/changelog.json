@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.20",
+    "date": "2026-11-22",
+    "title": "Find a job that's already in Job Hunt",
+    "changes": [
+      "When you add a posting that's already there, the notice says the name it's kept under and its stage, and opens it.",
+      "Searching All jobs now says how many matches are hidden under Not interested, with a link to show them."
+    ]
+  },
+  {
     "version": "26.11.19",
     "date": "2026-11-22",
     "title": "Clear expired postings in one go",

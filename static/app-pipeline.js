@@ -73,7 +73,7 @@ function applyAllFilters(save = true) {
   const words = (v.q || '').toLowerCase().split(/\s+/).filter(Boolean);
   const starts = words.map(w => new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'u'));
   const since = v.age ? Date.now() - Number(v.age) * 86400000 : 0;
-  let shown = 0;
+  let shown = 0, aside = 0;
   table.querySelectorAll('tr.xrow').forEach(r => r.remove());
   for (const r of table.tBodies[0].rows) {
     const d = r.dataset;
@@ -85,9 +85,20 @@ function applyAllFilters(save = true) {
       && (!since || Number(d.found) >= since) && (!v.pay || d.pay === '1') && (!v.emp || d.emp === v.emp);
     r.hidden = !ok; r.classList.remove('open');
     if (ok) shown++;
+    // What your search would find among the ones you said no to: said, so a job isn't "missing".
+    else if (!v.stage && words.length && d.status === 'dismissed' && starts.every(re => re.test(d.text))
+      && Number(d.fit) >= Number(v.fit || 0) && (!v.source || d.source === v.source) && (!since || Number(d.found) >= since) && (!v.pay || d.pay === '1') && (!v.emp || d.emp === v.emp)) aside++;
   }
   const total = [...table.tBodies[0].rows].filter(r => r.dataset.status !== 'dismissed').length;
   $('#allCount').textContent = v.stage === 'dismissed' ? `${shown} not interested` : `${shown < total ? `${shown} of ` : ''}${total} ${total === 1 ? 'job' : 'jobs'}`;
+  if (aside) {
+    const more = document.createElement('button');
+    more.type = 'button'; more.className = 'linkish'; more.style.marginLeft = '8px';
+    more.textContent = `${aside} more under Not interested`;
+    more.title = 'Postings you set aside (or that were set aside as old or expired) are hidden unless you choose that stage. Press to see them.';
+    more.onclick = () => { const s = box.querySelector('[data-allf=stage]'); if (s) { s.value = 'dismissed'; applyAllFilters(); } };
+    $('#allCount').appendChild(more);
+  }
   const col = Number(v.sort || 5);
   if (!sortState['t-all'] || sortState['t-all'].col !== col || save) {
     sortState['t-all'] = { col, dir: [0, 5].includes(col) ? 'asc' : 'desc' };
