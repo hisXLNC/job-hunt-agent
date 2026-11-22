@@ -235,7 +235,7 @@ impl Llm for DemoLlm {
     fn scheduling_reply(&self, _c: &str, _tz: &str, _e: &EmailIn, _a: Option<&TimeSlot>, _f: &[TimeSlot]) -> R<String> {
         Ok(String::new())
     }
-    fn follow_up(&self, candidate: &str, job: &jobhunt_core::db::Job, applied_on: &str) -> R<jobhunt_core::claude::FollowUp> {
+    fn follow_up(&self, candidate: &str, job: &jobhunt_core::db::Job, applied_on: &str, _cv: &str) -> R<jobhunt_core::claude::FollowUp> {
         Ok(jobhunt_core::claude::FollowUp { subject: format!("Following up: {}", job.title),
             body: format!("Hello,\n\nI applied for the {} role at {} on {applied_on} and wanted to check where things stand. I led a payments platform migration for 2 million customers and would be glad to walk you through it.\n\nIs there a timeline for next steps?\n\nBest regards,\n{candidate}", job.title, job.company) })
     }
