@@ -101,8 +101,10 @@ impl Posting {
         Job {
             id: self.id(),
             source: self.source.clone(),
-            company: self.company.clone(),
-            title: self.title.clone(),
+            // However it arrived (a search, the browser button, an alert): no internal code in
+            // front of the company ("USA013 Thomson Reuters…") and no "&amp;" left in a name.
+            company: tidy_company(&crate::util::unescape(&self.company)),
+            title: crate::util::unescape(&self.title).trim().to_string(),
             location: self.location.clone(),
             url: self.url.clone(),
             apply_email: self.apply_email.clone(),
@@ -2844,6 +2846,8 @@ https://www.linkedin.com/comm/jobs/view/4012345678/ (again)\nhttps://www.linkedi
         assert_eq!(tidy_company("3M Canada"), "3M Canada");
         assert_eq!(tidy_company("0000050007 Royal Bank of Canada"), "Royal Bank of Canada");
         assert_eq!(tidy_company("360 Learning"), "360 Learning");
+        let p = Posting { company: "USA013 Thomson Reuters (Tax &amp; Accounting) Inc".into(), title: "Senior Solutions Manager, Tax &amp; Audit AI FDE".into(), ..Posting::default() };
+        assert_eq!((p.to_job().company.as_str(), p.to_job().title.as_str()), ("Thomson Reuters (Tax & Accounting) Inc", "Senior Solutions Manager, Tax & Audit AI FDE"));
         assert_eq!(crate::db::dupe_key("0000050007 Royal Bank of Canada", "PM"), crate::db::dupe_key("Royal Bank of Canada", "PM"));
         assert_eq!(tidy_company("TD Bank, N.A."), "TD Bank, N.A.");
     }

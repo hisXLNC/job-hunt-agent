@@ -815,6 +815,16 @@ fn file_for(label: &str, only_one: bool) -> Option<&'static str> {
     }
 }
 
+/// A file box that takes more than one file.
+fn takes_several(f: &Value) -> bool {
+    f["multiple"] == true || f["html"].as_str().is_some_and(|h| h.split("<input").skip(1).any(|i| { let i = i.split('>').next().unwrap_or(""); i.contains("type=\"file\"") && i.contains("multiple") }))
+}
+
+/// Whether the form has somewhere of its own for the cover letter: a file box or a text box for it.
+fn letter_has_a_place(fields: &[Value]) -> bool {
+    fields.iter().any(|f| (f["type"] == "file" && which_file(f, false) == Some("letter")) || is_letter_box(f) || (f["type"] == "textarea" && f["label"].as_str().unwrap_or("").to_lowercase().contains("cover letter")))
+}
+
 /// A file box that asks for the CV and the cover letter together.
 fn wants_both(label: &str) -> bool {
     let l = label.to_lowercase();
@@ -908,7 +918,14 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
             Some("both") => agent.one_file(&job).ok().map(|p| as_pdf(&p)).or_else(|| job.cv_path.as_deref().map(|p| as_pdf(Path::new(p)))).or_else(own_cv),
             _ => None,
         };
-        if let Some(a) = path.and_then(|p| attachment(&p, &stem(match which { Some("cv") => "CV", Some("both") => "Cover letter and CV", _ => "Cover letter" }))) {
+        if let Some(mut a) = path.and_then(|p| attachment(&p, &stem(match which { Some("cv") => "CV", Some("both") => "Cover letter and CV", _ => "Cover letter" }))) {
+            // A CV box that takes several files, on a form with no place of its own for the letter
+            // (Workday's "Select files" under Resume/CV): the cover letter goes in with the CV.
+            if which == Some("cv") && takes_several(f) && !letter_has_a_place(fields) {
+                if let Some(l) = job.letter_path.as_deref().and_then(|p| attachment(&as_pdf(Path::new(p)), &stem("Cover letter"))) {
+                    a["also"] = json!([l]);
+                }
+            }
             files.insert(f["key"].as_str().unwrap_or("").to_string(), a);
         }
         // A box for certificates or licences: the copies you keep under Me, About me, Certifications,
@@ -1707,6 +1724,10 @@ mod tests {
         assert!(wants_both("Resume and cover letter") && wants_both("Upload your CV / Cover Letter") && !wants_both("Cover Letter") && !wants_both("Resume/CV") && !wants_both("Service letter"));
         // A box to paste the letter into is the letter's; a question that mentions one is not.
         assert!(is_letter_box(&json!({"type": "textarea", "label": "Cover letter", "value": ""})));
+        // Workday's one box under Resume/CV takes several files: the letter can go in with the CV.
+        let workday = json!({"type": "file", "label": "Select files", "section": "Resume/CV", "html": "<div data-automation-id=\"attachments-FileUpload\"><input data-automation-id=\"file-upload-input-ref\" type=\"file\" multiple=\"\"></div>"});
+        assert!(takes_several(&workday) && takes_several(&json!({"type": "file", "multiple": true})) && !takes_several(&json!({"type": "file", "html": "<input type=\"file\">"})));
+        assert!(!letter_has_a_place(&[workday.clone()]) && letter_has_a_place(&[workday.clone(), json!({"type": "file", "label": "Cover Letter"})]) && letter_has_a_place(&[workday, json!({"type": "textarea", "label": "Cover letter", "value": "Dear team"})]));
         assert!(!is_letter_box(&json!({"type": "textarea", "label": "Cover letter", "value": "Dear team"})));
         assert!(!is_letter_box(&json!({"type": "text", "label": "Cover letter"})));
         assert!(!is_letter_box(&json!({"type": "textarea", "label": "Is there anything not in your cover letter that you would like us to know about you?", "value": ""})));

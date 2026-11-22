@@ -67,7 +67,7 @@ function answers(fields, name) {
   for (const f of fields || []) {
     const nth = Number((/(\d+)\s*$/.exec(f.section || '') || [])[1] || 1), sec = f.section || '';
     if (f.type === 'add') { if (/certif/i.test(sec)) values[f.key] = String(Math.max(0, 2 - (f.entries || 0))); else if (/language/i.test(sec)) values[f.key] = String(Math.max(0, 3 - (f.entries || 0))); }
-    else if (f.type === 'file') { if (/cover|letter/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - Cover letter.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 letter').toString('base64') }; else if (/resume|cv/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - CV.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 test').toString('base64') }; }
+    else if (f.type === 'file') { if (/cover|letter/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - Cover letter.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 letter').toString('base64') }; else if (/resume|cv/i.test(`${f.label} ${sec}`)) files[f.key] = { name: 'Sam Lee - CV.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 test').toString('base64') }, f.multiple && (files[f.key].also = [{ name: 'Sam Lee - Cover letter.pdf', mime: 'application/pdf', b64: Buffer.from('%PDF-1.4 letter').toString('base64') }]); }
     else if (f.type === 'skills') values[f.key] = SKILLS;
     else if (/^Work Duration: /.test(f.label)) values[f.key] = { 'from (month)': 'March', 'from (year)': '2019', 'to (month)': 'June', 'to (year)': '2023' }[f.label.replace('Work Duration: ', '')] || '';
     else if (f.type === 'prompt') values[f.key] = /school|university/i.test(f.label) ? 'American University of Kuwait' : /certif/i.test(f.label) ? (nth === 1 ? 'PMP' : 'PMI-CPMAI') : 'Computer Science';
@@ -226,7 +226,7 @@ const json = (res, v) => { res.writeHead(200, { 'Content-Type': 'application/jso
     if (!eq(st.fluent, [true, true, false])) problems.push(`"I am fluent" is ${JSON.stringify(st.fluent)}`);
     if (st.eduFrom !== '2005') problems.push(`Education's From is "${st.eduFrom}", not 2005`);
     if (st.workFrom !== '03/2019' || st.company !== 'Maple Bank') problems.push(`the job's From is "${st.workFrom}" and its company "${st.company}"`);
-    if (!eq(st.resume, ['Sam Lee - CV.pdf'])) problems.push(`the upload area lists ${JSON.stringify(st.resume)}, not the CV once`);
+    if (!eq(st.resume, ['Sam Lee - CV.pdf', 'Sam Lee - Cover letter.pdf'])) problems.push(`the upload area lists ${JSON.stringify(st.resume)}, not the CV and then the cover letter, once each`);
     if (!/"Other" was chosen for: [^.]*School/.test(s)) problems.push('the panel doesn\'t say Other was chosen for the school');
     const lang = lastFields.find(f => /^language$/i.test(f.label));
     if (!lang || (lang.options || []).length < 120 || !LANGS.every(l => lang.options.includes(l))) problems.push(`the language list sent to Job Hunt has ${lang ? (lang.options || []).length : 0} of 120 options${lang && !lang.options.includes('English') ? ', without English' : ''}`);

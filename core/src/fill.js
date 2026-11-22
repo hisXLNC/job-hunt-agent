@@ -712,6 +712,7 @@
       const chosen = type === 'select' && el.selectedIndex >= 0 && el.value !== '' ? clean(el.options[el.selectedIndex].text) : '';
       const f = { key, type: isSkills(el, type) ? 'skills' : isPrompt(el, type) ? 'prompt' : el.getAttribute('role') === 'combobox' ? 'combobox' : type, label: labelOf(el), required: el.required || el.getAttribute('aria-required') === 'true', value: type === 'file' ? (el.files && el.files.length ? 'attached' : '') : choice ? '' : type === 'select' ? chosen : clean(el.value) };
       if (type === 'checkbox') f.checked = el.checked;
+      if (type === 'file' && el.multiple) f.multiple = true;
       // A file box's own id or name says what it takes when its label doesn't (Greenhouse: "Attach"
       // on both, ids "resume" and "cover_letter").
       if (type === 'file' && (el.id || el.name)) f.id = String(el.id || el.name).slice(0, 60);
@@ -856,6 +857,7 @@
       const box = r.el.isConnected ? r.el : r.node.querySelector('input[type=file]') || document.querySelector('input[type=file]');
       if (box && attach(box, r.file)) { attached.add(r.label + '|' + r.file.name); done++; }
       await wait(500);
+      if (box) { await wait(1500); await alsoIn({ label: r.label, key: r.key }, box, r.file); }
     }
     replaceAsk = [];
     return done;
@@ -942,24 +944,46 @@
     if (monthYear(v) && await pickMonth(el, v)) return true;
     return !kept();
   }
-  async function fillOne(f, v, file) {
-    const els = byKey[f.key] || [];
-    const el = els[0];
-    if (!el) return false;
-    if (f.type === 'file') {
-      if (!file) return el.files && el.files.length > 0;
+  // The files that go in a box along with its own, one after another: each once, and never one the
+  // page lists already.
+  async function alsoIn(f, el, file) {
+    for (const more of file.also || []) {
+      if (attached.has(f.label + '|' + more.name) || (document.body.innerText || '').includes(more.name)) continue;
+      // Workday swaps its box for a new one after each file.
+      const box = el.isConnected ? el : (byKey[f.key] || []).find(x => x.isConnected) || [...document.querySelectorAll('input[type=file]')].find(x => x.multiple);
+      if (!box) { trace('no box left for', { name: more.name }); continue; }
+      attached.add(f.label + '|' + more.name);
+      const ok = await attachSure(box, more);
+      trace(ok ? 'attached as well' : 'could not attach as well', { name: more.name });
+      if (!ok) attached.delete(f.label + '|' + more.name);
+    }
+  }
+  async function fileIn(f, el, file) {
       // Attached already (this time, or the page lists the file): not again. Workday empties its
       // upload box after taking a file, so a second round would upload it twice.
       if (attached.has(f.label + '|' + file.name) || (document.body.innerText || '').includes(file.name)) return true;
       const there = hasFile(el);
       if (there) {
-        if (!replaceAsk.some(r => r.el === el)) replaceAsk.push({ el, node: there, file, label: f.label, names: fileNames(there) });
+        if (!replaceAsk.some(r => r.el === el)) replaceAsk.push({ el, node: there, file, label: f.label, key: f.key, names: fileNames(there) });
         return true;
       }
       attached.add(f.label + '|' + file.name);
       if (await attachSure(el, file)) return true;
       attached.delete(f.label + '|' + file.name);
       return false;
+  }
+  async function fillOne(f, v, file) {
+    const els = byKey[f.key] || [];
+    const el = els[0];
+    if (!el) return false;
+    if (f.type === 'file') {
+      if (!file) return el.files && el.files.length > 0;
+      const ok = await fileIn(f, el, file);
+      // What goes in the same box with it (the cover letter, where a form has one box for several
+      // files and no other place for the letter), unless the form's own file is being asked about
+      // first: then it follows the replacement.
+      if (ok && !replaceAsk.some(r => r.el === el)) await alsoIn(f, el, file);
+      return ok;
     }
     if (v == null || v === '') return f.value !== '' && f.type !== 'checkbox';
     if (f.drop) return fillDrop(el, v);

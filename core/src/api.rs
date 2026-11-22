@@ -781,6 +781,7 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 // With the missing keywords you've said you have before: ticked for you under a thin CV.
                 let known = agent.known_words();
                 let mut job_json = json!(job);
+                job_json["keyword_questions"] = json!(agent.keyword_questions(id));
                 job_json["keywords_have"] = json!(job.keyword_gaps.iter().filter(|k| known.iter().any(|h| crate::cv::same_keyword(h, k))).collect::<Vec<_>>());
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
@@ -1071,6 +1072,30 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 "notes" => {
                     agent.db().update_job(id, &[("notes", s(&b, "text").into())])?;
                     ok()
+                }
+                // Your answer to what Job Hunt asked about a keyword ({k, a}; no answer: skip it).
+                "keyword-answer" => {
+                    let (k, a) = (s(&b, "k").trim().to_string(), s(&b, "a").trim().to_string());
+                    if k.is_empty() {
+                        return Err(Error("Which keyword is this about?".into()));
+                    }
+                    if a.is_empty() {
+                        agent.answer_keyword(id, &k, "")?;
+                        return ok();
+                    }
+                    let key = format!("revise:{id}");
+                    if agent.is_running(&key) || agent.is_running(&format!("tailor:{id}")) {
+                        return Err(Error("This application is being changed already.".into()));
+                    }
+                    let (a2, id) = (agent.clone(), id.to_string());
+                    std::thread::spawn(move || {
+                        let Ok(_g) = a2.claim(&key) else { return };
+                        if let Err(e) = a2.answer_keyword(&id, &k, &a) {
+                            let _ = a2.db().log(Some(&id), "revise:error", &e.0);
+                            a2.note("The change didn't work", &e.0);
+                        }
+                    });
+                    Ok(Resp::json(&json!({ "started": true })))
                 }
                 "revise" => {
                     let (what, note) = (s(&b, "what").to_string(), s(&b, "note").trim().to_string());

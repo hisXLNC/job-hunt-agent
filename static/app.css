@@ -2512,3 +2512,7 @@ ol.steps-list > li .btn { vertical-align: middle; margin: 0 4px 2px 0; }
 /* The phone card's connection check: one line a finding. */
 .check-list { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; font-size: 13.5px; }
 .check-list li.ok { color: var(--muted); } .check-list li.bad { color: var(--crit); font-weight: 600; }
+
+.kw-ask .kw-q { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.kw-ask .kw-q label { display: flex; flex-direction: column; gap: 4px; }
+.kw-ask .kw-q input { width: 100%; }

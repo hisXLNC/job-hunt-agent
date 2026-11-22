@@ -2984,6 +2984,19 @@ fn keywords_you_ask_for_are_remembered_and_worked_in_by_themselves() {
     assert_eq!(s.agent.db().events_of_kind("revised", 100).unwrap().len(), before + 1);
     assert!(s.agent.last_revision("test:2").is_some());
     assert_eq!(s.agent.work_in_known(), 0, "tried once per application");
+    // One it can't place without guessing: it asks instead, and nothing is changed for it.
+    let ask = "I do have real experience with each of these, though my CV doesn't say so: Terraform. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.";
+    s.agent.revise("test:1", "cv", ask).unwrap();
+    let qs = s.agent.keyword_questions("test:1");
+    assert_eq!((qs.len(), qs[0]["k"].as_str(), qs[0]["q"].as_str()), (1, Some("Terraform"), Some("Where did you use Terraform, and for what?")), "{qs:?}");
+    assert!(s.agent.notices().iter().any(|n| n["title"] == "A question about your keywords"));
+    // Your answer goes to Claude with the keyword, is kept for the next CV, and the question is gone.
+    // (The stand-in for Claude makes the one edit it knows, already made above: "nothing changed" here.)
+    let _ = s.agent.answer_keyword("test:1", "Terraform", "At Northbank, for the payments platform's environments");
+    assert!(s.agent.keyword_questions("test:1").is_empty());
+    assert!(s.llm.calls.lock().unwrap().iter().any(|c| c.starts_with("revise_cv:") && c.contains("About Terraform, in my words: At Northbank")));
+    assert_eq!(s.agent.keyword_notes(&["terraform".to_string()]), " About terraform, in my words: At Northbank, for the payments platform's environments");
+    s.agent.forget_keyword("Terraform").unwrap();
     // Read again from the changes asked for before, when the list was never kept (older versions).
     s.agent.db().delete("keywords.have").unwrap();
     assert_eq!(s.agent.known_keywords().len(), 2);
@@ -3332,4 +3345,35 @@ fn titles_on_your_path_are_searched_first() {
     let s = setup();
     s.agent.db().set("career", &json!({ "paths": [{ "title": "Director of Program Management", "kind": "stretch" }, { "title": "Data Platform Director", "kind": "switch" }] }).to_string()).unwrap();
     assert_eq!(s.agent.stretch_titles(), vec!["Data Platform Director"]);
+}
+
+/// A second CV: the roles waiting for you were matched to the first, so they're scored again
+/// against both; and once, the same for CVs that were added before Job Hunt did that.
+#[test]
+fn another_cv_has_waiting_roles_matched_again() {
+    let s = setup();
+    let mut p = s.agent.profile();
+    p.auto_tailor = false;
+    s.agent.save_profile(&p).unwrap();
+    s.agent.search(Some((1..=3).map(|i| Posting { company: format!("Co{i}"), ..posting("Program Manager", &i.to_string()) }).collect())).unwrap();
+    let bar = s.agent.profile().score_threshold;
+    let waiting: Vec<Job> = s.agent.db().jobs(Some("queued"), 10).unwrap().into_iter().filter(|j| j.score.is_some_and(|x| x >= bar)).collect();
+    assert!(!waiting.is_empty());
+    let t = s.agent.add_cv("Tax_CV.docx", &cv::sample_docx(), false).unwrap();
+    for j in &waiting {
+        let j = s.agent.db().job(&j.id).unwrap().unwrap();
+        assert!(j.score.is_none() && j.reasoning.as_deref().is_some_and(|r| r.starts_with("Not scored: you added your ")), "{:?}", j.reasoning);
+    }
+    assert_eq!(s.agent.cv_work_pending().unscored.len(), waiting.len(), "picked up to be scored again");
+    // Scored again, against both; and the once-only look doesn't undo it (adding the CV did it).
+    let ids: Vec<String> = waiting.iter().map(|j| j.id.clone()).collect();
+    s.agent.rescore_through(&ids, |_| {});
+    assert!(s.agent.db().job(&ids[0]).unwrap().unwrap().score.is_some());
+    s.agent.choose_cvs_once();
+    assert!(s.agent.db().job(&ids[0]).unwrap().unwrap().score.is_some());
+    // CVs from before this: looked at once.
+    s.agent.db().delete("cvs.chosen").unwrap();
+    s.agent.choose_cvs_once();
+    assert!(s.agent.db().job(&ids[0]).unwrap().unwrap().reasoning.as_deref().is_some_and(|r| r.contains("which of your CVs")));
+    let _ = t;
 }

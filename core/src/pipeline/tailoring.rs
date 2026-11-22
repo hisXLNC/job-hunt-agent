@@ -69,6 +69,10 @@ impl Agent {
         profile.tracks.push(track.clone());
         self.save_profile(&profile)?;
         self.db().log(None, "cv", &format!("added {} ({})", track.label, filename))?;
+        // Another CV to choose from: what's waiting for you was matched to the ones before it, and
+        // may suit this one better. Scored again against them all (picked up by after_cv_added).
+        let _ = self.db().set("cvs.chosen", &now());
+        self.choose_cv_again(&track.name, &format!("Not scored: you added your {} CV, which may be the better match for this.", track.label), &format!("from before you added the {} CV", track.label))?;
         Ok(track)
     }
 
@@ -210,20 +214,41 @@ impl Agent {
             }
             // With other CVs too: a role waiting for you that another CV scored best may now be a
             // better match for this one. Scored again against them all (it keeps its CV until then).
-            if self.profile().tracks.len() > 1 {
-                for st in ["queued", "saved"] {
-                    let jobs = self.db().jobs(Some(st), 100_000)?;
-                    for j in jobs.into_iter().filter(|j| j.score.is_some_and(|s| s >= bar) && j.track.as_deref().is_some_and(|t| t != id)) {
-                        let db = self.db();
-                        db.update_job(&j.id, &[("score", Value::Null), ("score_potential", Value::Null), ("score_after", Value::Null),
-                            ("reasoning", format!("Not scored: your {label} CV changed and may now be the better match for this.").into())])?;
-                        db.log(Some(&j.id), "unscored", &format!("its fit of {} was from before the {label} CV changed", j.score.unwrap_or(0)))?;
-                        c.unscored.push(j.id);
-                    }
-                }
-            }
+            c.unscored.extend(self.choose_cv_again(id, &format!("Not scored: your {label} CV changed and may now be the better match for this."), &format!("from before the {label} CV changed"))?);
         }
         Ok(c)
+    }
+
+    /// With more than one CV: the roles waiting for you (and saved ones past your bar) whose fit was
+    /// given by a CV other than `id` lose it, to be scored again against all your CVs, so each gets
+    /// the CV that suits it. They keep their CV until then. `id` empty: every one of them.
+    pub(super) fn choose_cv_again(&self, id: &str, reason: &str, logged: &str) -> R<Vec<String>> {
+        let mut ids = Vec::new();
+        let profile = self.profile();
+        if profile.tracks.len() < 2 {
+            return Ok(ids);
+        }
+        let bar = profile.score_threshold;
+        for st in ["queued", "saved"] {
+            let jobs = self.db().jobs(Some(st), 100_000)?;
+            for j in jobs.into_iter().filter(|j| j.score.is_some_and(|s| s >= bar) && j.track.as_deref().is_some_and(|t| t != id)) {
+                let db = self.db();
+                db.update_job(&j.id, &[("score", Value::Null), ("score_potential", Value::Null), ("score_after", Value::Null), ("reasoning", reason.into())])?;
+                db.log(Some(&j.id), "unscored", &format!("its fit of {} was {logged}", j.score.unwrap_or(0)))?;
+                ids.push(j.id);
+            }
+        }
+        Ok(ids)
+    }
+
+    /// Once, for CVs added before Job Hunt looked again at what was waiting: with more than one CV,
+    /// the roles waiting for you are scored again against them all (see choose_cv_again).
+    pub fn choose_cvs_once(&self) {
+        if self.profile().tracks.len() < 2 || self.db().get("cvs.chosen").ok().flatten().is_some() {
+            return;
+        }
+        let _ = self.db().set("cvs.chosen", &now());
+        let _ = self.choose_cv_again("", "Not scored: checking which of your CVs suits this best.", "from before each role was matched to one of your CVs");
     }
 
     /// Keep an application's tailored CV and cover letter as they are, so Put back as it was can
@@ -694,7 +719,8 @@ impl Agent {
         if !mine.is_empty() {
             guidance.push_str(&format!("\n\nConfirmed by the candidate: they have real experience with each of these, though the CV doesn't say so: {}. \
 This posting asks for them, so work each one into the CV where it honestly fits (a skills or tools line, or a bullet about related work), in the posting's \
-own wording, and don't list them in keyword_gaps. Add the keyword only: no employer, project, number or result invented around it.", mine.join(", ")));
+own wording, and don't list them in keyword_gaps. Add the keyword only: no employer, project, number or result invented around it.{}", mine.join(", "),
+                self.keyword_notes(&mine).replace("in my words", "in the candidate's words")));
         }
         let mut result = self.llm().tailor(&profile.name, &doc.numbered(), &job, &job.keywords, &profile.letter_facts(), &t.letter_style, &consistency, &guidance)?;
         // Held to it, whatever came back: the headline as they saw it, and only the few edits that add most.

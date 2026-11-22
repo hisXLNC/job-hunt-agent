@@ -2153,10 +2153,28 @@ replies and interviews, and a little lower for kinds that got none from several 
             "cv" => {
                 let path = job.cv_path.clone().ok_or_else(|| Error("Tailor this application first.".into()))?;
                 let doc = cv::open(Path::new(&path)).map_err(|_| Error("The tailored CV file is missing. Re-tailor to make a new one.".into()))?;
-                let edits = self.llm().revise_cv(&profile.name, &doc.numbered(), &job, note)?;
+                let (edits, questions) = self.llm().revise_cv_asking(&profile.name, &doc.numbered(), &job, note)?;
+                // What it would rather ask than guess, about keywords you said you have: kept on the
+                // job for you to answer, and you're told.
+                let asked_now = confirmed_in(note);
+                let questions: Vec<crate::claude::KeywordQuestion> = if asked_now.is_empty() { vec![] } else {
+                    questions.into_iter().filter(|q| q.keyword.trim().chars().count() >= 2 && q.question.trim().chars().count() >= 8).take(3).collect()
+                };
+                self.keep_keyword_questions(job_id, &asked_now, &questions);
+                if let Some(q) = questions.first() {
+                    self.note("A question about your keywords", &format!("{} at {}: {}{}", job.title, job.company, q.question.trim(),
+                        if questions.len() > 1 { format!(" (and {} more)", questions.len() - 1) } else { String::new() }));
+                }
                 let own = self.own_words(&job, &profile);
                 let map: BTreeMap<usize, String> = edits.iter().map(|e| (e.index, cv::humanize(&e.text, &own))).collect();
                 let applied = cv::apply_edits(&doc, &map)?;
+                if applied.changes.is_empty() && !questions.is_empty() {
+                    // Nothing placed yet: it waits for your answer.
+                    let _ = self.learn_keywords(&asked_now);
+                    self.keywords_tried(job_id, &asked_now);
+                    self.db().log(Some(job_id), "keywords:asked", &format!("asked you about {}", questions.iter().map(|q| q.keyword.trim()).collect::<Vec<_>>().join(", ")))?;
+                    return Ok(job);
+                }
                 if applied.changes.is_empty() {
                     return Err(Error(if applied.rejected.is_empty() {
                         "Claude didn't change anything. Try saying more about what to change.".into()
@@ -2324,6 +2342,57 @@ replies and interviews, and a little lower for kinds that got none from several 
         self.known_keywords().iter().filter_map(|v| v["k"].as_str().map(str::to_string)).collect()
     }
 
+    /// What Job Hunt asked you about an application's keywords, waiting for your answer: [{k, q, at}].
+    pub fn keyword_questions(&self, job_id: &str) -> Vec<Value> {
+        self.db().get(&format!("keywords.ask:{job_id}")).ok().flatten().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    }
+
+    /// After a "work these in" request for `asked`: the questions it came back with replace any
+    /// kept about those keywords (one that was placed this time has no question left).
+    fn keep_keyword_questions(&self, job_id: &str, asked: &[String], questions: &[crate::claude::KeywordQuestion]) {
+        let mut list = self.keyword_questions(job_id);
+        let before = list.len();
+        list.retain(|v| !asked.iter().any(|k| cv::same_keyword(k, v["k"].as_str().unwrap_or(""))) && !questions.iter().any(|q| cv::same_keyword(&q.keyword, v["k"].as_str().unwrap_or(""))));
+        for q in questions {
+            list.push(json!({ "k": q.keyword.trim(), "q": q.question.trim(), "at": now() }));
+        }
+        if list.len() != before || !questions.is_empty() {
+            let key = format!("keywords.ask:{job_id}");
+            let _ = if list.is_empty() { self.db().delete(&key) } else { self.db().set(&key, &json!(list).to_string()) };
+        }
+    }
+
+    /// Your answer to a question about a keyword: remembered with the keyword (so the next CV that
+    /// needs it is told the same, without asking), and worked into this CV. No answer: the question
+    /// is dropped and the keyword left out here.
+    pub fn answer_keyword(&self, job_id: &str, keyword: &str, answer: &str) -> R<Job> {
+        let (keyword, answer) = (keyword.trim(), answer.trim());
+        let mut left = self.keyword_questions(job_id);
+        left.retain(|v| !cv::same_keyword(keyword, v["k"].as_str().unwrap_or("")));
+        let key = format!("keywords.ask:{job_id}");
+        if left.is_empty() { self.db().delete(&key)? } else { self.db().set(&key, &json!(left).to_string())? };
+        if answer.is_empty() {
+            return self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()));
+        }
+        let answer: String = answer.chars().take(400).collect();
+        self.learn_keywords(&[keyword.to_string()])?;
+        let mut list = self.known_keywords();
+        if let Some(v) = list.iter_mut().find(|v| cv::same_keyword(v["k"].as_str().unwrap_or(""), keyword)) {
+            v["where"] = json!(answer);
+        }
+        self.db().set("keywords.have", &json!(list).to_string())?;
+        self.revise(job_id, "cv", &format!("I do have real experience with each of these, {CONFIRMED} {keyword}. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.{}", self.keyword_notes(&[keyword.to_string()])))
+    }
+
+    /// What you've said about where or how you used each of these keywords, as lines for Claude; empty when nothing.
+    pub fn keyword_notes(&self, words: &[String]) -> String {
+        let known = self.known_keywords();
+        words.iter().filter_map(|w| {
+            let said = known.iter().find(|v| cv::same_keyword(v["k"].as_str().unwrap_or(""), w))?["where"].as_str()?.trim().to_string();
+            (!said.is_empty()).then(|| format!(" About {w}, in my words: {said}"))
+        }).collect()
+    }
+
     /// The keywords already asked for on one application (after adding `more`), so none is asked twice.
     fn keywords_tried(&self, job_id: &str, more: &[String]) -> Vec<String> {
         let key = format!("keywords.tried:{job_id}");
@@ -2367,7 +2436,7 @@ replies and interviews, and a little lower for kinds that got none from several 
             self.doing("keywords-in", &format!("{} at {}: {}", job.title, job.company, mine.join(", ")));
             tried_now += 1;
             self.keywords_tried(&job.id, &mine);
-            let note = format!("I do have real experience with each of these, {CONFIRMED} {}. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.", mine.join(", "));
+            let note = format!("I do have real experience with each of these, {CONFIRMED} {}. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.{}", mine.join(", "), self.keyword_notes(&mine));
             match self.revise(&job.id, "cv", &note) {
                 Ok(_) => done += 1,
                 Err(e) => {
@@ -3996,6 +4065,7 @@ pub fn run_due(agent: &Arc<Agent>, start: &dyn Fn(&str) -> bool) {
             "backup" => backup_in_background(agent),
             "cvwork" => {
                 let _ = agent.db().set("last.cvwork", &Utc::now().timestamp().to_string());
+                agent.choose_cvs_once();
                 agent.resume_cv_work();
                 // And the tailored CVs whose fit was never scored, a few at a time.
                 let a = agent.clone();

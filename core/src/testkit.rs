@@ -50,6 +50,16 @@ impl Llm for FakeLlm {
         let index: usize = line[1..line.find('|').unwrap()].parse().unwrap();
         Ok(vec![ParagraphEdit { index, text: "Led **vendor management** of contracted teams and integrators through UAT and release.".into(), keywords_added: vec![] }])
     }
+    // "Terraform" is the one it can't place: it asks, and places it once told where.
+    fn revise_cv_asking(&self, c: &str, numbered: &str, job: &Job, note: &str) -> R<(Vec<ParagraphEdit>, Vec<crate::claude::KeywordQuestion>)> {
+        let list = note.split(". Work each one").next().unwrap_or("");
+        if list.contains("Terraform") && !note.contains("About Terraform, in my words:") {
+            let only = !list.contains(',');
+            let edits = if only { self.calls.lock().unwrap().push(format!("revise_cv:{note}")); vec![] } else { self.revise_cv(c, numbered, job, note)? };
+            return Ok((edits, vec![crate::claude::KeywordQuestion { keyword: "Terraform".into(), question: "Where did you use Terraform, and for what?".into() }]));
+        }
+        Ok((self.revise_cv(c, numbered, job, note)?, vec![]))
+    }
     fn revise_letter(&self, _c: &str, _cv: &str, letter: &str, _job: &Job, note: &str, _s: &str) -> R<String> {
         self.calls.lock().unwrap().push(format!("revise_letter:{note}"));
         Ok(format!("{letter}\n\nP.S. Shorter now."))

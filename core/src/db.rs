@@ -625,6 +625,18 @@ impl Db {
                 }
             }
         }
+        // Names stored with "&amp;" and the like in them (postings sent from the browser).
+        let coded: Vec<(String, String, String)> = {
+            let mut st = con.prepare("SELECT id, company, title FROM jobs WHERE company LIKE '%&%;%' OR title LIKE '%&%;%'")?;
+            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        for (id, company, title) in coded {
+            let (c, t) = (crate::util::unescape(&company), crate::util::unescape(&title));
+            if c != company || t != title {
+                con.execute("UPDATE jobs SET company = ?1, title = ?2, dupe_key = ?3 WHERE id = ?4", params![c.trim(), t.trim(), dupe_key(&c, &t), id])?;
+            }
+        }
         let db = Db { con, quiet: Default::default() };
         // One posting put up more than once, stored before these were told apart: one is kept.
         let _ = db.fold_twins();

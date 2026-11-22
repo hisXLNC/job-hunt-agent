@@ -155,6 +155,14 @@ const coverFact = j => j.coverage_after == null ? '' : j.coverage_after < THIN_C
  *  missing, because nothing in your CV backs them. A gap in experience, not in wording. */
 const flatTailor = j => j.score != null && j.score_after != null && j.score_after - j.score <= 2 && j.coverage_after != null && j.coverage_after < THIN_COVER && !j.applied_at;
 const FLAT_WHY = 'The tailored CV scores about the same as yours and still lacks most of what the posting asks for. Job Hunt only adds what your CV backs, so the gap is experience, not wording. If you do have some of the missing keywords, open it and tick them; if not, this one may not be worth an application.';
+/** What Job Hunt asked about keywords you said you have, when it couldn't tell where one belongs:
+ *  a line for your answer each. The answer places the keyword here and is remembered for later CVs. */
+const kwAskHtml = j => (j.keyword_questions || []).length ? `<div class="advice warn kw-ask">
+    <b>Job Hunt has ${j.keyword_questions.length === 1 ? 'a question' : `${j.keyword_questions.length} questions`} before it works ${j.keyword_questions.length === 1 ? 'this keyword' : 'these keywords'} in.</b>
+    <p class="small">It would rather ask than guess where one belongs. Answer in a line; it uses your words here and remembers them for the next CV that needs the same keyword.</p>
+    ${j.keyword_questions.map(q => `<form class="kw-q" data-kw-form data-job="${esc(j.id)}" data-k="${esc(q.k)}">
+      <label class="small"><b>${esc(q.k)}</b>: ${esc(q.q)}<input type="text" name="a" maxlength="400" placeholder="For example: at Northbank, running the release pipeline" autocomplete="off"></label>
+      <span class="row"><button class="btn sm" type="submit">Answer and work it in</button><button class="btn ghost sm" type="button" data-act="kwSkip" data-job="${esc(j.id)}" data-k="${esc(q.k)}" title="Leaves this keyword out of this CV">Leave it out</button></span></form>`).join('')}</div>` : '';
 /** The posting's keywords the tailored CV lacks (amber when the CV is thin), to tick the ones you really have. Job Hunt left
  *  them out because nothing in your CV backs them; ticking one is you saying it's true. */
 const gapsHtml = j => j.coverage_after != null && (j.keyword_gaps || []).length ? `<div class="advice ${j.coverage_after < THIN_COVER ? 'warn ' : ''}gaps" data-gaps="${esc(j.id)}">

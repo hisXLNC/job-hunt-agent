@@ -355,6 +355,9 @@ async function act(el) {
     box.querySelectorAll('[data-pick]:checked, [data-appr]:checked').forEach(c => { c.checked = false; });
     return a === 'pickClear' ? pickChanged(box) : approveChanged(box);
   }
+  if (a === 'kwSkip') {
+    return busy(async () => { await api(`/api/jobs/${encodeURIComponent(el.dataset.job)}/keyword-answer`, { method: 'POST', body: { k: el.dataset.k, a: '' } }); route(); }, 'Left out of this CV.');
+  }
   if (a === 'clearExpired') {
     const ids = JSON.parse(el.dataset.ids || '[]');
     if (!ids.length || !await ask(`Clear ${ids.length === 1 ? 'the one expired posting' : `the ${ids.length} expired postings`}? ${ids.length === 1 ? 'It goes' : 'They go'} to All jobs under Not interested, with anything tailored for ${ids.length === 1 ? 'it' : 'them'} kept. It doesn't change how Job Hunt scores.`, 'Clear them')) return;
@@ -1721,3 +1724,18 @@ async function jobPicture(jobId, what, file) {
     }
   } catch (e) { toast(e.message, true); } finally { if (btn) btn.disabled = false; }
 }
+
+// Your answer to a question about a keyword: sent, and the CV is changed with it.
+document.addEventListener('submit', async e => {
+  const f = e.target.closest?.('[data-kw-form]');
+  if (!f) return;
+  e.preventDefault();
+  const a = f.elements.a.value.trim();
+  if (!a) { toast('Say where or how you used it, or press Leave it out.', true); f.elements.a.focus(); return; }
+  f.querySelectorAll('button, input').forEach(x => { x.disabled = true; });
+  try {
+    await api(`/api/jobs/${encodeURIComponent(f.dataset.job)}/keyword-answer`, { method: 'POST', body: { k: f.dataset.k, a } });
+    toast('Working it in with your answer…');
+    setTimeout(route, 800);
+  } catch (x) { f.querySelectorAll('button, input').forEach(y => { y.disabled = false; }); toast(x.message, true); }
+});

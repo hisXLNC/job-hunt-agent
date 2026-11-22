@@ -246,7 +246,11 @@ For each posting:\n\
 Below 50: poor fit, wrong seniority, or a hard requirement they lack (for example a licence, clearance or degree \
 they don't hold, or years in a stack they never used). Judge only against what the CVs actually show: credit \
 transferable experience where the work is genuinely the same, and treat hard technical requirements strictly.\n\
-- track: the name of the CV track that best fits this role.\n\
+- track: the name of the CV to send for this role, exactly as it is named above. Choose by subject first: the CV whose \
+field, domain and wording are the posting's own (a posting about tax, or from an employer whose product is tax, takes \
+the tax CV; a posting about product delivery takes the product one), whatever the job title says. When the posting \
+suits several, the one that shows more of its core requirements. Score the role against the CV you chose, since \
+that is the one the employer will read.\n\
 - reasoning: one short line, at most 15 words: the strongest match, then the biggest gap (\"Strong match: payments delivery. Gap: no Snowflake.\"). \
 No company name, no filler.\n\
 - red_flags: concrete concerns, a few words each (commission-only, unrealistic requirements, location mismatch, likely scam, \
@@ -509,6 +513,11 @@ pub trait Llm: Send + Sync {
     /// Changes to a tailored CV (numbered paragraphs) that do what the candidate asks in `note`.
     fn revise_cv(&self, _candidate: &str, _numbered_cv: &str, _job: &crate::db::Job, _note: &str) -> R<Vec<ParagraphEdit>> {
         Err(Error("Revising isn't available.".into()))
+    }
+    /// revise_cv, with what Claude would rather ask than guess (where a keyword the candidate
+    /// says they have belongs). None from an engine that doesn't ask.
+    fn revise_cv_asking(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, note: &str) -> R<(Vec<ParagraphEdit>, Vec<KeywordQuestion>)> {
+        Ok((self.revise_cv(candidate, numbered_cv, job, note)?, vec![]))
     }
     /// The cover letter rewritten as the candidate asks in `note`.
     fn revise_letter(&self, _candidate: &str, _cv: &str, _letter: &str, _job: &crate::db::Job, _note: &str, _stories: &str) -> R<String> {
@@ -1489,6 +1498,16 @@ pub struct FollowUp {
 #[serde(default)]
 struct Revised {
     edits: Vec<ParagraphEdit>,
+    questions: Vec<KeywordQuestion>,
+}
+
+/// Something the candidate asked to have worked in that Claude couldn't place without guessing,
+/// and the one short question whose answer would settle it.
+#[derive(Deserialize, Serialize, Default, Clone, Debug)]
+#[serde(default)]
+pub struct KeywordQuestion {
+    pub keyword: String,
+    pub question: String,
 }
 
 fn revise_cv_system() -> String {
@@ -1502,8 +1521,16 @@ shortening, reordering within a paragraph and choosing what to foreground are fi
 - Keep every figure exactly as written. Do not add figures.\n\
 - Keep each paragraph at most ~30% longer than it is. No tabs or line breaks inside a paragraph.\n\
 - For competency lines that start with a bold label like \"**Tools:**\", return the whole line, label included.\n\
+- What the candidate tells you in the request about where or how they did something (\"About X, in my words: ...\") \
+is a fact from them: use it, in the CV's own style, without adding to it.\n\
 edits: one entry per paragraph you change, with its index, the full new text, and any posting keywords it now \
-contains. Leave unchanged paragraphs out. If the request can't be met honestly, change nothing."
+contains. Leave unchanged paragraphs out. If the request can't be met honestly, change nothing.\n\
+questions: when the candidate asks to work in something they say they have and you can't tell where it belongs \
+(which of their roles used it, or in what sense they mean it), don't guess and don't park it somewhere vague: \
+leave that one out and ask. One entry per such keyword: the keyword as the request gives it, and one short, \
+specific question they can answer in a line (\"Where did you use Kubernetes: at Northbank or at Maple Insurance, \
+and for what?\"). Ask only when the answer would change what you write. A tool or method that plainly belongs \
+on a skills or tools line needs no question: add it there. Work in everything else in the request as usual."
     )
 }
 
@@ -2351,14 +2378,20 @@ exactly as if it were the only posting, never against the others. Answer with on
     }
 
     fn revise_cv(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, note: &str) -> R<Vec<ParagraphEdit>> {
+        Ok(self.revise_cv_asking(candidate, numbered_cv, job, note)?.0)
+    }
+
+    fn revise_cv_asking(&self, candidate: &str, numbered_cv: &str, job: &crate::db::Job, note: &str) -> R<(Vec<ParagraphEdit>, Vec<KeywordQuestion>)> {
         let user = format!(
             "Candidate: {candidate}\n\n<cv>\n{numbered_cv}\n</cv>\n\n{}\n\n<request>\n{}\n</request>",
             posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description),
             note.trim()
         );
         let edit = obj(json!({"index": {"type": "integer"}, "text": {"type": "string"}, "keywords_added": strings()}));
-        let schema = obj(json!({"edits": {"type": "array", "items": edit}}));
-        Ok(self.call::<Revised>(&revise_cv_system(), &user, schema, "high")?.edits)
+        let question = obj(json!({"keyword": {"type": "string"}, "question": {"type": "string"}}));
+        let schema = obj(json!({"edits": {"type": "array", "items": edit}, "questions": {"type": "array", "items": question}}));
+        let r = self.call::<Revised>(&revise_cv_system(), &user, schema, "high")?;
+        Ok((r.edits, r.questions))
     }
 
     fn revise_letter(&self, candidate: &str, cv: &str, letter: &str, job: &crate::db::Job, note: &str, stories: &str) -> R<String> {

@@ -249,7 +249,7 @@ async function showJob(id) {
         </details>` : ''}
         ${(j.cv_changes || []).length && !own?.cv ? `<section class="card" id="cvChangesCard">
           <header><h2>What changed in your CV</h2><span class="muted small">${j.cv_changes.length} paragraph${j.cv_changes.length === 1 ? '' : 's'} reworded</span></header>
-          ${gapsHtml(j)}
+          ${kwAskHtml(j)}${gapsHtml(j)}
           ${changesHtml(j, false)}
         </section>` : ''}
       ${j.cv_path || j.cover_letter ? '' : `<section class="card">

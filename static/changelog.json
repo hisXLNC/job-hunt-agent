@@ -2,8 +2,13 @@
   {
     "version": "26.11.20",
     "date": "2026-11-22",
-    "title": "Find a job that's already in Job Hunt",
+    "title": "The right CV for each role, and a cover letter that gets attached",
     "changes": [
+      "With more than one CV, each role is matched to the CV whose field it's in (a tax posting gets your tax CV), and its fit is scored against that CV. Roles waiting for you are matched again once, and whenever you add a CV.",
+      "Workday forms with one upload box for several files now get your cover letter as well as your CV.",
+      "When Job Hunt isn't sure where a keyword you have belongs on your CV, it asks you on the job's page, and works your answer in.",
+      "The search box at the top finds companies as well as jobs.",
+      "Company names lose the employer's internal code and stray \"&amp;\", so Thomson Reuters shows as Thomson Reuters.",
       "When you add a posting that's already there, the notice says the name it's kept under and its stage, and opens it.",
       "Searching All jobs now says how many matches are hidden under Not interested, with a link to show them."
     ]

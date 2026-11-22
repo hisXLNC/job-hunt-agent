@@ -1219,6 +1219,12 @@ The ten screen changes the user approved ("do them all"):
 
 ## 26.11.20
 
+More in 26.11.20 (one release):
+- **Which CV for which role.** Scoring already returned a `track`; the scorer prompt now says to choose by subject first and score against the chosen CV. `add_cv` calls `choose_cv_again` (roles waiting for you, and saved ones past the bar, lose their fit and are scored again against all CVs; picked up by `after_cv_added`), and `choose_cvs_once` (kv `cvs.chosen`) does the same once for CVs added before this. Applications already prepared keep their CV.
+- **Cover letter on Workday.** One "Select files" box under Resume/CV, `multiple`, and no place for a letter: `fill.rs` sends the letter as `files[key].also` (`takes_several`, `letter_has_a_place`); `fill.js` `alsoIn` attaches it after the CV (and after a replacement). The page now sends `multiple` on file fields. Not tried on a real Workday form.
+- **Keyword questions.** `revise_cv_asking` returns `questions`; kept in kv `keywords.ask:{job}`, shown on the job page (`kwAskHtml`), answered through POST `/api/jobs/{id}/keyword-answer`; answers are stored as `where` on the known keyword and passed on as "About X, in my words: …".
+- **Company search** in the top search box (`jobPalette`), and **company names** unescaped and stripped of codes in `sources.rs::to_job` plus a one-off pass in `db.rs` init.
+
 - "Already in Job Hunt" didn't say where: All jobs hides Not interested rows unless that stage is
   chosen, and a job may be kept under another spelling of the company. `add_found`'s refusal now
   ends "It's kept as <title> at <company>, under <stage>." (plus a line about the hidden stage when

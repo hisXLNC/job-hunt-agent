@@ -211,6 +211,9 @@ impl Llm for Metered {
     fn revise_cv(&self, candidate: &str, numbered_cv: &str, job: &Job, note: &str) -> R<Vec<ParagraphEdit>> {
         self.run("revise", |l| l.revise_cv(candidate, numbered_cv, job, note))
     }
+    fn revise_cv_asking(&self, candidate: &str, numbered_cv: &str, job: &Job, note: &str) -> R<(Vec<ParagraphEdit>, Vec<crate::claude::KeywordQuestion>)> {
+        self.run("revise", |l| l.revise_cv_asking(candidate, numbered_cv, job, note))
+    }
     fn revise_letter(&self, candidate: &str, cv: &str, letter: &str, job: &Job, note: &str, stories: &str) -> R<String> {
         self.run("revise", |l| l.revise_letter(candidate, cv, letter, job, note, stories))
     }
