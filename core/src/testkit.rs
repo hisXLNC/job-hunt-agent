@@ -198,8 +198,8 @@ impl Llm for FakeLlm {
         let n = job.id.rsplit(':').next().unwrap_or("");
         Ok(Some(format!("https://careers.example.com/jobs/{n}")).filter(|_| n != "2"))
     }
-    fn follow_up(&self, c: &str, job: &Job, applied_on: &str) -> R<FollowUp> {
-        self.calls.lock().unwrap().push("follow_up".into());
+    fn follow_up(&self, c: &str, job: &Job, applied_on: &str, cv: &str) -> R<FollowUp> {
+        self.calls.lock().unwrap().push(format!("follow_up{}", if cv.trim().is_empty() { "" } else { " with the CV" }));
         Ok(FollowUp { subject: format!("Following up: {} application", job.title), body: format!("Hello, I applied on {applied_on}. {c}") })
     }
     fn revise_email(&self, _c: &str, subject: &str, body: &str, change: &str, _about: &str) -> R<FollowUp> {

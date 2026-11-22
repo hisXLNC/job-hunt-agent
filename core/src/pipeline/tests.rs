@@ -3166,6 +3166,7 @@ fn emails_wait_for_your_approval() {
     s.agent.db().con.execute("UPDATE jobs SET apply_email = 'jobs@acme.example' WHERE id = 'test:1'", []).unwrap();
     s.agent.db().record_email("e1", "t1", Some("test:1"), "Dana <dana@acme.example>", "Thanks for applying", "other_job_related", "We're reviewing this week", None, "2026-01-02T00:00:00Z").unwrap();
     let id = s.agent.write_follow_up("test:1").unwrap()["draft"].as_str().unwrap().to_string();
+    assert!(s.llm.calls.lock().unwrap().contains(&"follow_up with the CV".to_string()), "written from your CV, so the reason it gives is one that fits the role");
     // Held here: on the list, in the Queue, and nothing in Gmail.
     assert!(id.starts_with("jh:"));
     assert_eq!(s.agent.drafts_held_count(), 1);

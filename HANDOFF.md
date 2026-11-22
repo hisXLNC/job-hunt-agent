@@ -1217,6 +1217,15 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.17
+
+- Follow-up emails named experience that didn't fit the role: the writer was given only the posting
+  and the cover letter. `Llm::follow_up` now takes the CV text (the tailored CV sent, else the
+  track's CV) and the job's `reasoning`; `follow_up_system` says to pick the experience closest to
+  the role's business and work (not the biggest), to say the skill plainly when nothing is close,
+  and not to join unrelated facts. Effort raised from low to medium. Drafts already written are not
+  rewritten: use the draft's "ask for a change" or write it again.
+
 ## 26.11.16
 
 - `db::is_company_code` also takes an all-digit code of five or more digits ("0000050007 Royal Bank

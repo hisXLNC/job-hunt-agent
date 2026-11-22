@@ -268,8 +268,8 @@ impl Llm for Metered {
     fn revise_email(&self, candidate: &str, subject: &str, body: &str, change: &str, about: &str) -> R<FollowUp> {
         self.run("followup", |l| l.revise_email(candidate, subject, body, change, about))
     }
-    fn follow_up(&self, candidate: &str, job: &Job, applied_on: &str) -> R<FollowUp> {
-        self.run("followup", |l| l.follow_up(candidate, job, applied_on))
+    fn follow_up(&self, candidate: &str, job: &Job, applied_on: &str, cv: &str) -> R<FollowUp> {
+        self.run("followup", |l| l.follow_up(candidate, job, applied_on, cv))
     }
     fn company_rating(&self, company: &str, location: &str) -> R<crate::claude::CompanyRating> {
         self.run("ratings", |l| l.company_rating(company, location))

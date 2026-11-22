@@ -590,7 +590,7 @@ pub trait Llm: Send + Sync {
         Err(Error("Changing an email isn't available.".into()))
     }
     /// A short, polite follow-up on an application that hasn't had a reply.
-    fn follow_up(&self, _candidate: &str, _job: &crate::db::Job, _applied_on: &str) -> R<FollowUp> {
+    fn follow_up(&self, _candidate: &str, _job: &crate::db::Job, _applied_on: &str, _cv: &str) -> R<FollowUp> {
         Err(Error("Follow-ups aren't available.".into()))
     }
     /// What employees say about a company, from review sites, found with a web search.
@@ -1536,10 +1536,22 @@ fn follow_up_system() -> String {
 {UNTRUSTED}\n\n{HUMAN}\n\n\
 Write in the candidate's voice: warm, brief (50-90 words: shorter gets more replies), confident and not pushy. \
 The first sentence names the role (with its \
-job ID or reference number if the posting shows one) and when they applied. Then restate in one sentence the \
-strongest concrete reason they fit (from the posting and their application), offer a quick call or anything \
-else that would help, and thank them. Never ask about the status or for an update, never paste the CV, and \
-mention no attachments. Sign with the candidate's name. subject: \"Following up: <job title> application\". \
+job ID or reference number if the posting shows one) and when they applied.\n\n\
+Then one sentence on why they fit, and this sentence decides whether the email is read:\n\
+- Start from the posting: what is the main thing this role does, and in what business (payments, banking, retail, \
+government...)? Then look through the CV for the experience closest to that: the same industry or the same kind of \
+work first, and the most recent where two are equally close. Use that one, even if another achievement is more impressive.\n\
+- Never reach for a project just because it is the candidate's biggest. A tax system doesn't speak to a payments \
+role; a government ministry doesn't speak to a bank unless the work itself is the same.\n\
+- When nothing in the CV is close, say the skill plainly in the posting's terms (years of running multi-vendor \
+technology programmes, for example) without naming an unrelated employer or project.\n\
+- One fact, stated the way a person would say it. Don't join unrelated facts in one sentence: a certification is \
+not something held \"at\" an employer, so mention it by itself or not at all.\n\
+- Take facts only from the CV and the cover letter, exactly as they are; the note on why the role fits is a guide \
+to what matters, not something to quote.\n\n\
+Then offer a quick call or anything else that would help, and thank them. Never ask about the status or for an \
+update, never paste the CV, and mention no attachments. Sign with the candidate's name. \
+subject: \"Following up: <job title> application\". \
 Never invent facts."
     )
 }
@@ -2698,14 +2710,17 @@ note says; no company name, no filler. Return them in the same order, one for ea
         Ok(f)
     }
 
-    fn follow_up(&self, candidate: &str, job: &crate::db::Job, applied_on: &str) -> R<FollowUp> {
+    fn follow_up(&self, candidate: &str, job: &crate::db::Job, applied_on: &str, cv: &str) -> R<FollowUp> {
         let letter: String = job.cover_letter.as_deref().unwrap_or("").chars().take(4000).collect();
+        let cv: String = cv.chars().take(9000).collect();
+        let why: String = job.reasoning.as_deref().unwrap_or("").chars().take(800).collect();
         let user = format!(
-            "Candidate: {candidate}\nApplied on: {applied_on}\nToday: {}\n\n{}\n\nTheir cover letter (data):\n<posting>\n{letter}\n</posting>",
+            "Candidate: {candidate}\nApplied on: {applied_on}\nToday: {}\n\n{}\n\nWhy the role was judged a fit (a guide, data):\n<posting>\n{why}\n</posting>\n\n\
+The CV they applied with (data):\n<posting>\n{cv}\n</posting>\n\nTheir cover letter (data):\n<posting>\n{letter}\n</posting>",
             chrono::Local::now().format("%B %-d, %Y"),
             posting_block(&job.title, &job.company, &job.location, job.salary.as_deref().unwrap_or("not stated"), &job.url, &job.description),
         );
-        let f: FollowUp = self.call(&follow_up_system(), &user, obj(json!({"subject": {"type": "string"}, "body": {"type": "string"}})), "low")?;
+        let f: FollowUp = self.call(&follow_up_system(), &user, obj(json!({"subject": {"type": "string"}, "body": {"type": "string"}})), "medium")?;
         if f.body.trim().is_empty() {
             return Err(Error("Claude's follow-up came back empty; try again.".into()));
         }

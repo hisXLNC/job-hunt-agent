@@ -1,5 +1,13 @@
 [
   {
+    "version": "26.11.17",
+    "date": "2026-11-22",
+    "title": "Follow-ups that fit the role",
+    "changes": [
+      "Follow-up emails are now written from the CV you applied with, and name the experience closest to the role's business and work, not your biggest project. When nothing is close, the skill is stated plainly."
+    ]
+  },
+  {
     "version": "26.11.16",
     "date": "2026-11-22",
     "title": "One posting, shown once",

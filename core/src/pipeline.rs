@@ -2575,7 +2575,12 @@ replies and interviews, and a little lower for kinds that got none from several 
         let applied_on = job.applied_at.as_deref().and_then(|a| chrono::DateTime::parse_from_rfc3339(a).ok())
             .map(|d| d.with_timezone(&profile.tz()).format("%B %-d").to_string())
             .unwrap_or_else(|| "recently".into());
-        let mut f = self.llm().follow_up(&profile.name, &job, &applied_on)?;
+        // With the CV that was sent (or yours for this kind of role): the reason given comes from it.
+        let cv_text = job.cv_path.as_deref().and_then(|p| cv::open(Path::new(p)).ok())
+            .or_else(|| profile.track(job.track.as_deref()).and_then(|t| cv::open(&self.cv_path(&t.name)).ok()))
+            .map(|d| d.plain_text())
+            .unwrap_or_default();
+        let mut f = self.llm().follow_up(&profile.name, &job, &applied_on, &cv_text)?;
         let own = self.own_words(&job, &profile);
         (f.subject, f.body) = (cv::humanize(&f.subject, &own), cv::humanize(&f.body, &own));
         let to = self.follow_up_to(&job)?;
