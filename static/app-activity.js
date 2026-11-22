@@ -85,7 +85,7 @@ function hubSheetHtml() {
   const row = (cls, name, sub, action) => `<div class="hub-row">${dot(cls)}<div class="hub-what"><b>${name}</b><small>${sub}</small></div>${action || ''}</div>`;
   const go = (href, label) => `<a class="hub-do" href="${href}">${label}</a>`;
   const doing = running.list.map(a => `<li class="act-row" data-act-id="${esc(a.id)}">
-      <div class="act-top"><b>${esc(a.label)}</b><span class="muted small">${actLong(a.secs)} · <button class="linkish" type="button" data-act-more="${esc(a.id)}" aria-expanded="${hub.details.has(a.id)}">${hub.details.has(a.id) ? 'Hide details' : 'Details'}</button></span></div>
+      <div class="act-top"><b>${esc(a.label)}</b><span class="muted small">${actTime(a.secs)} · <button class="linkish" type="button" data-act-more="${esc(a.id)}" aria-expanded="${hub.details.has(a.id)}">${hub.details.has(a.id) ? 'Hide details' : 'Details'}</button></span></div>
       ${a.detail ? `<div class="muted small act-detail" title="${esc(a.detail)}">${esc(a.detail)}</div>` : ''}
       <div class="act-line"><div class="pbar${a.estimated ? ' guess' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${a.percent}" title="${a.estimated ? 'A guess from how long this usually takes' : `${a.percent}% done`}"><i style="width:${Math.max(3, a.percent)}%"></i></div>
         ${a.stoppable ? `<button class="btn ghost danger sm" type="button" data-act-stop="${esc(a.id)}" ${running.stopping.has(a.id) ? 'disabled' : ''} title="Ends this now. What's done so far is kept; ask for it again when you want it.">${running.stopping.has(a.id) ? 'Stopping…' : 'Stop'}</button>` : ''}</div>
