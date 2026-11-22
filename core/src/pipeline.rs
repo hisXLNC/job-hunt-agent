@@ -2143,6 +2143,7 @@ replies and interviews, and a little lower for kinds that got none from several 
                 // Keywords you said you have: remembered, so the next tailoring adds them by itself.
                 let asked = confirmed_in(note);
                 let _ = self.learn_keywords(&asked);
+                self.keywords_tried(job_id, &asked);
                 if !asked.is_empty() {
                     if let Ok(d) = cv::open(Path::new(&path)) {
                         self.rescore_revision(&job, &d.plain_text());
@@ -2251,19 +2252,80 @@ replies and interviews, and a little lower for kinds that got none from several 
     /// Stop counting a keyword as yours.
     pub fn forget_keyword(&self, word: &str) -> R<()> {
         let mut list = self.known_keywords();
-        list.retain(|v| cv::norm(v["k"].as_str().unwrap_or("")) != cv::norm(word));
+        list.retain(|v| !cv::same_keyword(v["k"].as_str().unwrap_or(""), word));
         self.db().set("keywords.have", &json!(list).to_string())
     }
 
     /// Of a posting's keywords, the ones you've said you have that `cv_text` doesn't mention: what
     /// tailoring works in without being asked, in the posting's own wording.
     pub fn confirmed_for(&self, job: &Job, cv_text: &str) -> Vec<String> {
-        let known: HashSet<String> = self.known_keywords().iter().map(|v| cv::norm(v["k"].as_str().unwrap_or(""))).collect();
+        let known = self.known_words();
         if known.is_empty() {
             return vec![];
         }
         let (_, missing) = cv::keyword_coverage(cv_text, &job.keywords);
-        missing.into_iter().filter(|k| known.contains(&cv::norm(k))).collect()
+        missing.into_iter().filter(|k| known.iter().any(|h| cv::same_keyword(h, k))).collect()
+    }
+
+    /// The keywords you've said you have, as you or the posting wrote them.
+    pub fn known_words(&self) -> Vec<String> {
+        self.known_keywords().iter().filter_map(|v| v["k"].as_str().map(str::to_string)).collect()
+    }
+
+    /// The keywords already asked for on one application (after adding `more`), so none is asked twice.
+    fn keywords_tried(&self, job_id: &str, more: &[String]) -> Vec<String> {
+        let key = format!("keywords.tried:{job_id}");
+        let mut tried: Vec<String> = self.db().get(&key).ok().flatten().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        if !more.is_empty() {
+            tried.extend(more.iter().map(|k| cv::norm(k)));
+            tried.sort();
+            tried.dedup();
+            let _ = self.db().set(&key, &json!(tried).to_string());
+        }
+        tried
+    }
+
+    /// The CVs already tailored and waiting for you, brought up to date with the keywords you've
+    /// said you have: where a waiting posting asks for one its CV still doesn't say, it's worked in
+    /// (one request to Claude each, and one more to score it again), as if you had ticked it there.
+    /// Each keyword is tried once per application, so undoing one stays undone. How many CVs changed.
+    pub fn work_in_known(&self) -> usize {
+        const AT_ONCE: usize = 10;
+        let Ok(_g) = self.claim("keywords-in") else { return 0 };
+        if self.known_keywords().is_empty() {
+            return 0;
+        }
+        let waiting = self.db().jobs(Some("ready"), 200).unwrap_or_default();
+        let (mut done, mut tried_now) = (0, 0);
+        for job in waiting {
+            if tried_now >= AT_ONCE {
+                break;
+            }
+            let Some(path) = job.cv_path.clone() else { continue };
+            if self.own_file(&job.id, "cv") || self.is_running(&format!("tailor:{}", job.id)) {
+                continue;
+            }
+            let Ok(doc) = cv::open(Path::new(&path)) else { continue };
+            let tried = self.keywords_tried(&job.id, &[]);
+            let mine: Vec<String> = self.confirmed_for(&job, &doc.plain_text()).into_iter().filter(|k| !tried.contains(&cv::norm(k))).collect();
+            if mine.is_empty() {
+                continue;
+            }
+            let Ok(_one) = self.claim(&format!("revise:{}", job.id)) else { continue };
+            tried_now += 1;
+            self.keywords_tried(&job.id, &mine);
+            let note = format!("I do have real experience with each of these, {CONFIRMED} {}. Work each one into the CV where it honestly fits, in the posting's own wording. Change nothing else.", mine.join(", "));
+            match self.revise(&job.id, "cv", &note) {
+                Ok(_) => done += 1,
+                Err(e) => {
+                    let _ = self.db().log(Some(&job.id), "revise:error", &format!("your keywords ({}): {}", mine.join(", "), e.0));
+                }
+            }
+        }
+        if done > 0 {
+            self.note("Your keywords were worked in", &format!("{done} waiting CV{} now say{} the keywords you've said you have. Each one shows what changed, and can be undone.", if done == 1 { "" } else { "s" }, if done == 1 { "s" } else { "" }));
+        }
+        done
     }
 
     /// After keywords were worked in: the tailored CV is scored again (one more request), and the
@@ -4454,7 +4516,7 @@ fn add_known(list: &mut Vec<Value>, words: &[String], at: &str) {
         if key.is_empty() {
             continue;
         }
-        match list.iter_mut().find(|v| cv::norm(v["k"].as_str().unwrap_or("")) == key) {
+        match list.iter_mut().find(|v| cv::same_keyword(v["k"].as_str().unwrap_or(""), w)) {
             Some(v) => {
                 v["n"] = json!(v["n"].as_u64().unwrap_or(0) + 1);
                 v["at"] = json!(at);

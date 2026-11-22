@@ -887,6 +887,46 @@ pub(crate) fn norm(s: &str) -> String {
     t.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// The ways one keyword may be written, for telling two spellings of the same thing apart from two
+/// things: the whole phrase, the phrase without a bracketed short form, and the short form itself
+/// ("Software Development Life Cycle (SDLC)" is also "SDLC"); plurals, "&" and spacing set aside
+/// ("life cycles" is "lifecycle").
+fn keyword_forms(s: &str) -> Vec<String> {
+    let squash = |x: &str| -> String {
+        norm(x).split(' ').map(|w| {
+            let n = w.chars().count();
+            if w == "&" {
+                "and".to_string()
+            } else if n > 4 && w.ends_with("ies") {
+                format!("{}y", &w[..w.len() - 3])
+            } else if n > 3 && w.ends_with('s') && !w.ends_with("ss") && !w.ends_with("us") && !w.ends_with("is") {
+                w[..w.len() - 1].to_string()
+            } else {
+                w.to_string()
+            }
+        }).collect::<String>()
+    };
+    let mut out = vec![squash(s)];
+    if let (Some(a), Some(b)) = (s.find('('), s.rfind(')')) {
+        if a < b {
+            let (inside, outside) = (s[a + 1..b].trim(), format!("{} {}", &s[..a], &s[b + 1..]));
+            out.push(squash(&outside));
+            // A short form only: "(preferred)" or "(3+ years)" isn't another name for it.
+            if (2..=8).contains(&inside.chars().count()) && inside.chars().all(|c| c.is_uppercase() || c.is_ascii_digit() || "&/+-".contains(c)) {
+                out.push(squash(inside));
+            }
+        }
+    }
+    out.retain(|x| x.chars().count() >= 2);
+    out
+}
+
+/// Whether two keywords name the same thing, however each is written.
+pub(crate) fn same_keyword(a: &str, b: &str) -> bool {
+    let (x, y) = (keyword_forms(a), keyword_forms(b));
+    x.iter().any(|f| y.contains(f))
+}
+
 /// Share of keywords that appear in text (case and punctuation-insensitive), and the misses.
 pub fn keyword_coverage(text: &str, keywords: &[String]) -> (f64, Vec<String>) {
     if keywords.is_empty() {

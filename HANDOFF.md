@@ -1217,6 +1217,16 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.13
+
+- Keywords you've said you have (`keywords.have`) now match a posting's keyword however it's written:
+  `cv::same_keyword` (plurals, "&"/"and", spacing, a bracketed short form such as "(SDLC)"). Used by
+  `confirmed_for`, `add_known`, `forget_keyword` and the job page's `keywords_have`.
+- `Agent::work_in_known`: after keywords are learned (POST /api/keywords add, or a "work these in"
+  revision), the CVs already tailored and waiting (status "ready", not your own file) get them too,
+  through `revise`, at most 10 per pass. `keywords.tried:{job}` keeps what was asked per application
+  so nothing is asked twice and an undo stays undone. Claimed as "keywords-in".
+
 ## 26.11.12 (Air Canada: address from saved answers, no made-up middle name)
 
 From a Copy details of careers.aircanada.com (Phenom, like RBC's).

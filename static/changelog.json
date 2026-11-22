@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.13",
+    "date": "2026-11-22",
+    "title": "Your keywords, worked in everywhere",
+    "changes": [
+      "Keywords you've ticked or added before are now also worked into the CVs already tailored and waiting for you, not only the next ones. Each shows what changed and can be undone.",
+      "A keyword you have is recognised however the posting writes it: plural, with a short form in brackets, or spaced differently."
+    ]
+  },
+  {
     "version": "26.11.12",
     "date": "2026-11-22",
     "title": "Your address from saved answers, whatever a form calls it",

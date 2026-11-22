@@ -5,6 +5,15 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.13] - 2026-11-22
+
+Your keywords, worked in everywhere.
+
+### Changes
+
+- Keywords you've ticked or added before are now also worked into the CVs already tailored and waiting for you, not only the next ones. Each shows what changed and can be undone.
+- A keyword you have is recognised however the posting writes it: plural, with a short form in brackets, or spaced differently.
+
 ## [26.11.12] - 2026-11-22
 
 Your address from saved answers, whatever a form calls it.
@@ -2860,6 +2869,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.13]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.13
 [26.11.12]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.12
 [26.11.11]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.11
 [26.11.10]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.10

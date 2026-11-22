@@ -2958,6 +2958,24 @@ fn keywords_you_ask_for_are_remembered_and_worked_in_by_themselves() {
     assert!(other.keywords.iter().any(|k| k == "Kubernetes"));
     assert_eq!(s.agent.confirmed_for(&other, "Led program delivery and UAT."), vec!["Kubernetes"]);
     assert!(s.agent.confirmed_for(&other, "Ran Kubernetes clusters.").is_empty(), "already in the CV: nothing to add");
+    // However the posting writes it: a plural, a short form in brackets, different spacing.
+    assert!(crate::cv::same_keyword("Kubernetes", "kubernetes"));
+    assert!(crate::cv::same_keyword("Software Development Life Cycle (SDLC)", "SDLC"));
+    assert!(crate::cv::same_keyword("life cycles", "Lifecycle"));
+    assert!(crate::cv::same_keyword("Risk & Controls", "risk and control"));
+    assert!(!crate::cv::same_keyword("Agile (preferred)", "Scrum (preferred)"));
+    assert!(!crate::cv::same_keyword("Java", "JavaScript"));
+    // A CV already tailored and waiting, for a posting that asks for one: brought up to date
+    // without asking, once (an undo stays undone).
+    s.agent.tailor("test:2", None).unwrap();
+    let waiting = s.agent.db().job("test:2").unwrap().unwrap();
+    let text = crate::cv::open(std::path::Path::new(waiting.cv_path.as_deref().unwrap())).unwrap().plain_text();
+    assert_eq!(s.agent.confirmed_for(&waiting, &text), vec!["Kubernetes"]);
+    let before = s.agent.db().events_of_kind("revised", 100).unwrap().len();
+    assert_eq!(s.agent.work_in_known(), 1, "the waiting CV, not the one you asked on yourself");
+    assert_eq!(s.agent.db().events_of_kind("revised", 100).unwrap().len(), before + 1);
+    assert!(s.agent.last_revision("test:2").is_some());
+    assert_eq!(s.agent.work_in_known(), 0, "tried once per application");
     // Read again from the changes asked for before, when the list was never kept (older versions).
     s.agent.db().delete("keywords.have").unwrap();
     assert_eq!(s.agent.known_keywords().len(), 2);

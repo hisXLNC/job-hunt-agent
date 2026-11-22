@@ -779,9 +779,9 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 let history = agent.db().history(id)?;
                 let pdf = |p: &Option<String>| p.as_deref().map(|p| !crate::util::pdf_stale(Path::new(p))).unwrap_or(false);
                 // With the missing keywords you've said you have before: ticked for you under a thin CV.
-                let known: std::collections::HashSet<String> = agent.known_keywords().iter().map(|v| crate::cv::norm(v["k"].as_str().unwrap_or(""))).collect();
+                let known = agent.known_words();
                 let mut job_json = json!(job);
-                job_json["keywords_have"] = json!(job.keyword_gaps.iter().filter(|k| known.contains(&crate::cv::norm(k))).collect::<Vec<_>>());
+                job_json["keywords_have"] = json!(job.keyword_gaps.iter().filter(|k| known.iter().any(|h| crate::cv::same_keyword(h, k))).collect::<Vec<_>>());
                 return Ok(Resp::json(&json!({
                     "warnings": crate::pipeline::posting_warnings(&job, agent.db().reposts()?.get(&job.id).copied().unwrap_or(0), chrono::Utc::now()),
                     // The same job's other listings (the company's site, job boards, posted again), compared.
@@ -1087,9 +1087,16 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                     let (a, id) = (agent.clone(), id.to_string());
                     std::thread::spawn(move || {
                         let Ok(_g) = a.claim(&key) else { return };
+                        let learned = what == "cv" && !crate::pipeline::confirmed_in(&note).is_empty();
                         if let Err(e) = a.revise(&id, &what, &note) {
                             let _ = a.db().log(Some(&id), "revise:error", &e.0);
                             a.note("The change didn't work", &e.0);
+                            return;
+                        }
+                        // Keywords you've just said you have: the other waiting CVs get them too.
+                        if learned {
+                            drop(_g);
+                            a.work_in_known();
                         }
                     });
                     Ok(Resp::json(&json!({ "started": true })))
@@ -1318,6 +1325,13 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             agent.learn_keywords(&add)?;
             if !s(&b, "forget").is_empty() {
                 agent.forget_keyword(s(&b, "forget"))?;
+            }
+            // The CVs already waiting are brought up to date with them.
+            if !add.is_empty() {
+                let a = agent.clone();
+                std::thread::spawn(move || {
+                    a.work_in_known();
+                });
             }
             Ok(Resp::json(&json!({ "keywords": agent.known_keywords() })))
         }
