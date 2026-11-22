@@ -292,7 +292,7 @@ async function showJob(id) {
     </section>` : ''}
     ${fu || following_up || j.status === 'applied' ? `<section class="card">
       <header><h2>Follow-up</h2>${following_up ? '<span class="muted small"><span class="spin" data-kind="followup"></span>Writing…</span>' : `<button class="btn" data-act="followUp" data-job="${esc(j.id)}">${fu ? 'Write again' : 'Write follow-up'}</button>`}</header>
-      ${fu ? `<p class="small muted">${emailState(fu)} ${esc(ago(fu.at))}${fu.to ? ` · to ${esc(fu.to)}` : ' · add the recruiter\'s address before sending'}</p>
+      ${fu ? `<p class="small muted">${emailState(fu)} ${esc(ago(fu.at))}${fu.to ? ` · to ${esc(fu.to)}` : ' · add the recruiter\'s address before sending'}</p>${fu.to_note ? `<p class="small" style="color:var(--warn)">${esc(fu.to_note)}</p>` : ''}
         <p><b>${esc(fu.subject)}</b></p><div class="posting" id="fuBody">${esc(fu.body)}</div>
         <div class="row"><button class="btn ghost" data-act="copy" data-from="fuBody">Copy</button></div>`
         : `<p class="muted">${following_up ? 'Claude is writing a short, polite note asking about the timeline.' : `No reply yet? Job Hunt drafts a short follow-up ${st.profile.follow_up_after ? `${st.profile.follow_up_after} days after you apply` : 'when you ask'}.`}</p>`}

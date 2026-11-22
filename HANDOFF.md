@@ -1217,6 +1217,12 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.21
+
+- **Address finder (`core/src/emails.rs`).** `Agent::company_address(job)` (people.rs): domain from the posting's own site or `Llm::company_mail` (a web search by Claude for the domain and addresses shown in public), plus `leads::published_emails` and an MX check through dns.google; kept in kv `mail:{company_key}` for 30 days (7 when empty). `emails::choose` applies the company's pattern (`pattern_of`) to the first contact without an address, else takes the hiring mailbox. `follow_up_to` uses it last, after every known address; the follow-up json carries `to_note`, shown under the draft on the job page, and history gets `followup:to`. Not tried against real companies from here; nothing is sent without approval.
+- **`usage::Metered` didn't pass `find_recruiters` on**, so the real app always got the trait's default error. Fixed; the test `the_usage_meter_passes_every_request_on` compares the trait with the meter's impl so a new request can't be forgotten.
+- **Phone alert for early roles.** `watch` remembers which postings came from the under-10-applicants look; `tell_early` sends "Under 10 applicants: <title> at <company>" for those that end up queued or ready (urgent, so it passes "urgent only"; `private_notice` has a line for it). Needs phone notifications on (Connections).
+
 ## 26.11.20
 
 More in 26.11.20 (one release):

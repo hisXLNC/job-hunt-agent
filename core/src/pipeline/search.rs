@@ -61,6 +61,8 @@ impl Agent {
         }
         crate::sources::set_stretch_titles(self.stretch_titles());
         let c = crate::sources::http();
+        // The ones LinkedIn's "Under 10 applicants" filter returned: told to you at once when they match.
+        let mut early: HashSet<String> = HashSet::new();
         let mut found: Vec<Posting> = vec![];
         // Slow job sites don't hold it for long: what's left is read on the next turn.
         let give_up = std::time::Instant::now() + std::time::Duration::from_secs(6 * 60);
@@ -84,6 +86,7 @@ impl Agent {
                             Ok(e) => {
                                 let more = e.iter().filter(|p| !found.iter().any(|f| f.id() == p.id())).count();
                                 self.trace(&format!("watch: LinkedIn \u{201c}{title}\u{201d}, under 10 applicants in the last 24 hours: {} ({more} the first look didn't have)", e.len()));
+                                early.extend(e.iter().map(|p| p.id()));
                                 found.extend(e.into_iter().filter(|p| !found.iter().any(|f| f.id() == p.id())).collect::<Vec<_>>());
                             }
                             Err(e) => {
@@ -137,11 +140,30 @@ impl Agent {
         // Scored like a job alert's postings; the day's report isn't replaced by this one.
         let report = self.secret("last.report");
         self.doing("watch", &format!("Scoring {n} new posting{}", if n == 1 { "" } else { "s" }));
+        let early: Vec<String> = fresh.iter().map(|p| p.id()).filter(|id| early.contains(id)).collect();
         let r = self.search(Some(fresh));
         if !report.is_empty() {
             self.db().set("last.report", &report)?;
         }
+        self.tell_early(&early);
         r.map(|_| n)
+    }
+
+    /// New matches that LinkedIn lists with under 10 applicants: a notice each (on your phone too,
+    /// when that's on, even set to urgent ones only), so you can be among the first. At most three
+    /// by name; the rest in one line.
+    pub(super) fn tell_early(&self, ids: &[String]) {
+        let jobs: Vec<Job> = ids.iter().filter_map(|id| self.db().job(id).ok().flatten()).filter(|j| ["queued", "ready"].contains(&j.status.as_str())).collect();
+        for j in &jobs {
+            let _ = self.db().log(Some(&j.id), "early", "LinkedIn listed it with under 10 applicants, posted in the last 24 hours, when Job Hunt found it");
+        }
+        for j in jobs.iter().take(3) {
+            self.note(&format!("Under 10 applicants: {} at {}", j.title, j.company),
+                &format!("{} at {}. Fit {}. LinkedIn lists it with under 10 applicants, posted in the last 24 hours{}.", j.title, j.company, j.score.unwrap_or(0), if j.status == "ready" { "; your CV and cover letter are ready" } else { "" }));
+        }
+        if jobs.len() > 3 {
+            self.note(&format!("Under 10 applicants: {} more new roles", jobs.len() - 3), "LinkedIn lists them with under 10 applicants, posted in the last 24 hours. They're on your Overview.");
+        }
     }
 
     /// The titles among Claude's career paths that are a change of direction. (A step up or

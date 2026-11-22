@@ -126,6 +126,67 @@ impl Agent {
         n
     }
 
+    /// Who to write to at a job's company when nobody is known by address, found the way address
+    /// finders do (see emails.rs): the addresses the company shows in public (its own pages, and a
+    /// web search by Claude), the pattern its people's addresses follow, and that pattern applied to
+    /// the recruiter or hiring contact found for the job; else its hiring mailbox. (address, how it
+    /// was found). Looked up once a company and kept 30 days (a week when nothing was found).
+    pub fn company_address(&self, job: &Job) -> Option<(String, String)> {
+        let key = format!("mail:{}", crate::db::company_key(&job.company));
+        let kept: Value = serde_json::from_str(&self.secret(&key)).unwrap_or(Value::Null);
+        let age = kept["at"].as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days());
+        let found = kept["known"].as_array().is_some_and(|k| !k.is_empty());
+        let facts = if age.is_some_and(|d| d < if found { 30 } else { 7 }) {
+            kept
+        } else {
+            // Where its people's mail is: the posting's own site when it's on the company's, else what Claude finds.
+            let mut domain = [job.apply_url.as_deref().unwrap_or(""), job.url.as_str()].iter().map(|u| crate::leads::domain(&crate::logos::own_site(u).unwrap_or_default())).find(|d| !d.is_empty()).unwrap_or_default();
+            let mut known: Vec<(String, String)> = vec![];
+            match self.llm().company_mail(job) {
+                Ok(m) => {
+                    let d = crate::leads::domain(&m.domain);
+                    if !d.is_empty() {
+                        domain = d;
+                    }
+                    known.extend(m.addresses.into_iter().map(|a| (a.name.trim().to_string(), a.email.trim().to_lowercase())).filter(|a| a.1.contains('@')));
+                }
+                // Claude's limit, or not set up: nothing kept, so it's looked up when Claude can.
+                Err(e) if domain.is_empty() => {
+                    let _ = self.db().log(Some(&job.id), "contact:error", &format!("looking up {}'s addresses: {}", job.company, e.0));
+                    return None;
+                }
+                Err(_) => {}
+            }
+            let mut takes_mail = Value::Null;
+            if !domain.is_empty() && !cfg!(test) {
+                let http = crate::sources::http();
+                for e in crate::leads::published_emails(&http, &format!("https://{domain}"), &domain) {
+                    if !known.iter().any(|k| k.1 == e) {
+                        known.push((String::new(), e));
+                    }
+                }
+                takes_mail = json!(crate::emails::has_mail(&http, &domain));
+            }
+            let v = json!({ "at": now(), "domain": domain, "known": known.iter().map(|(n, e)| json!({ "name": n, "email": e })).collect::<Vec<_>>(), "takes_mail": takes_mail });
+            let _ = self.db().set(&key, &v.to_string());
+            let _ = self.db().log(Some(&job.id), "contact", &format!("looked up how {} writes its addresses: {} found at {}", job.company, known.len(), if domain.is_empty() { "no site of its own" } else { domain.as_str() }));
+            v
+        };
+        let domain = facts["domain"].as_str().unwrap_or("");
+        // A site that takes no mail: no address there is worth writing to.
+        if domain.is_empty() || facts["takes_mail"] == false {
+            return None;
+        }
+        let mut known: Vec<(String, String)> = facts["known"].as_array().cloned().unwrap_or_default().iter()
+            .map(|k| (k["name"].as_str().unwrap_or("").to_string(), k["email"].as_str().unwrap_or("").to_string())).collect();
+        let contacts = self.contacts(&job.id);
+        // People known by address here show the pattern too.
+        known.extend(contacts.iter().filter_map(|c| Some((c["name"].as_str()?.to_string(), c["email"].as_str().filter(|e| e.contains('@'))?.to_lowercase()))));
+        let people: Vec<String> = contacts.iter().filter(|c| c["name"] != "Recruiter" && c["email"].as_str().unwrap_or("").is_empty() && contact_time(c, "sent_at").is_none())
+            .filter_map(|c| c["name"].as_str().map(str::to_string)).collect();
+        crate::emails::choose(job.company.trim(), domain, &people, &known)
+    }
+
     /// Find the people and, when `write`, write the note to the best one.
     fn find_people(&self, job_id: &str, write: bool) -> R<usize> {
         let job = self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))?;

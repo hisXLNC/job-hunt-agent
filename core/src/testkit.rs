@@ -127,6 +127,14 @@ impl Llm for FakeLlm {
         ];
         Ok(all.into_iter().filter(|l| !skip.contains(&l.company)).collect())
     }
+    fn company_mail(&self, job: &Job) -> R<crate::claude::CompanyMail> {
+        self.calls.lock().unwrap().push(format!("company_mail:{}", job.company));
+        if job.company != "Mailco" {
+            return Ok(crate::claude::CompanyMail::default());
+        }
+        let seen = |n: &str, e: &str| crate::claude::MailSeen { name: n.into(), email: e.into() };
+        Ok(crate::claude::CompanyMail { domain: "mailco.com".into(), addresses: vec![seen("Dana Lee", "dlee@mailco.com"), seen("Sam Roy", "sroy@mailco.com"), seen("", "careers@mailco.com")] })
+    }
     fn find_recruiters(&self, job: &Job) -> R<Vec<crate::claude::FoundPerson>> {
         Ok(vec![crate::claude::FoundPerson { name: "Priya Shah".into(), title: format!("Talent Acquisition Partner at {}", job.company), linkedin: "https://www.linkedin.com/in/priya-shah-ta".into(), why: "hires for PMO roles in Toronto".into(), ..Default::default() }])
     }

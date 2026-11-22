@@ -171,6 +171,8 @@ pub fn private_notice(title: &str) -> (String, String) {
         "A reply to an application"
     } else if t.starts_with("closes") {
         "A posting you picked closes soon"
+    } else if t.starts_with("under 10 applicants") {
+        "A new role with under 10 applicants"
     } else if t.contains("ready") || t.contains("tailored") {
         "Applications ready for you"
     } else if t.contains("roles") || t.contains("search") || t.contains("found") || t.contains("opening") {
@@ -186,7 +188,7 @@ pub fn private_notice(title: &str) -> (String, String) {
 /// Where a phone notice is sent: an ntfy topic (https://ntfy.sh, or your own ntfy server).
 /// Notices that can't wait: interviews, offers, replies from employers, and posting deadlines.
 pub fn is_urgent(title: &str) -> bool {
-    !title.contains("didn't") && ["Interview", "You have an offer", "Reply from", "Thank-you note", "Closes "].iter().any(|w| title.starts_with(w))
+    !title.contains("didn't") && ["Interview", "You have an offer", "Reply from", "Thank-you note", "Closes ", "Under 10 applicants"].iter().any(|w| title.starts_with(w))
 }
 
 pub fn phone_url(server: &str, topic: &str, title: &str) -> String {
@@ -2648,11 +2650,16 @@ replies and interviews, and a little lower for kinds that got none from several 
             .filter_map(|c| c["email"].as_str()).map(|e| e.trim().to_lowercase()).find(|e| e.contains('@') && !robot_address(e)) {
             return Ok(e);
         }
-        Ok(self.db().job_emails()?.into_iter().rev()
+        let wrote = self.db().job_emails()?.into_iter().rev()
             .filter(|(id, _, _, _)| *id == job.id)
             .map(|(_, _, from, _)| google::address(&from))
             .find(|a| a.contains('@') && !robot_address(&a.to_lowercase()))
-            .unwrap_or_default())
+            .unwrap_or_default();
+        if !wrote.is_empty() {
+            return Ok(wrote);
+        }
+        // Nobody known by address: the company's own, worked out from what it shows in public.
+        Ok(self.company_address(job).map(|x| x.0).unwrap_or_default())
     }
 
     /// Write the follow-up for an application, and save it as a Gmail draft when Gmail is connected.
@@ -2673,7 +2680,12 @@ replies and interviews, and a little lower for kinds that got none from several 
         let to = self.follow_up_to(&job)?;
         // Held for your approval (Inbox, Drafts): nothing reaches Gmail before that.
         let draft = self.hold_draft("follow-up", Some(job_id), &to, &f.subject, &f.body, None, &[])?;
-        let v = json!({ "at": now(), "to": to, "subject": f.subject, "body": f.body, "draft": draft });
+        // An address Job Hunt worked out says so, wherever the follow-up shows.
+        let to_note = self.company_address(&job).filter(|x| x.0 == to).map(|x| x.1).unwrap_or_default();
+        let v = json!({ "at": now(), "to": to, "to_note": to_note, "subject": f.subject, "body": f.body, "draft": draft });
+        if !to_note.is_empty() {
+            self.db().log(Some(job_id), "followup:to", &format!("{to}: {to_note}"))?;
+        }
         let db = self.db();
         db.set(&format!("followup:{job_id}"), &v.to_string())?;
         db.delete(&format!("seen:draft:{job_id}"))?;

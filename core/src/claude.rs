@@ -613,6 +613,10 @@ pub trait Llm: Send + Sync {
     }
     /// Recruiters (and the likely hiring manager) at the company, found on LinkedIn with a web search:
     /// best first, only people the search showed.
+    /// The company's email domain and the work addresses it shows in public (see emails.rs).
+    fn company_mail(&self, _job: &crate::db::Job) -> R<CompanyMail> {
+        Err(Error("Looking up a company's addresses needs Claude Code (Settings \u{2192} Accounts \u{2192} Claude).".into()))
+    }
     fn find_recruiters(&self, _job: &crate::db::Job) -> R<Vec<FoundPerson>> {
         Err(Error("Finding people on LinkedIn needs Claude Code (Settings \u{2192} Accounts \u{2192} Claude).".into()))
     }
@@ -680,6 +684,25 @@ about a role, and anything not about a job."
 
 /// The value for one field of an application form, by the key the page gave it.
 /// Someone at a company, found on LinkedIn (see find_recruiters).
+/// What's public about a company's email: its own domain, and work addresses pages show there.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CompanyMail {
+    /// The domain its people's addresses are at ("acme.com").
+    #[serde(default)]
+    pub domain: String,
+    #[serde(default)]
+    pub addresses: Vec<MailSeen>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MailSeen {
+    #[serde(default)]
+    pub email: String,
+    /// Whose it is, when the page says; empty for a shared mailbox or an address shown alone.
+    #[serde(default)]
+    pub name: String,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct FoundPerson {
@@ -808,6 +831,22 @@ pub fn found_people(people: Vec<FoundPerson>) -> Vec<FoundPerson> {
         p.email = if e.contains('@') && !e.contains(' ') && e.split('@').nth(1).is_some_and(|d| d.contains('.')) && !crate::pipeline::robot_address(&e) { e } else { String::new() };
         (!p.name.is_empty() && !(p.linkedin.is_empty() && p.source.is_empty() && p.email.is_empty())).then_some(p)
     }).take(5).collect()
+}
+
+fn company_mail_system() -> String {
+    format!(
+        "You find out how a company writes its work email addresses, from what is public, the way an email-finder \
+tool does.\n\n{UNTRUSTED}\n\n\
+1. The company's own email domain: the one its staff's addresses are at (usually its main website's domain; a \
+subsidiary may use its parent's). Not a job board's, an applicant system's or a recruiter agency's.\n\
+2. Work addresses at that domain that pages show in public. Search the web for \"@<domain>\" with words such as \
+email, contact, recruiter, \"talent acquisition\", careers, press, and read the company's contact, careers, team \
+and press pages, press releases, conference and author pages, public documents. Wanted most: the hiring or HR \
+mailbox (careers@, hr@, talent@, recruiting@), and several named people's addresses, whoever they are, since \
+they show the pattern the company uses.\n\
+Return the domain, and up to 12 addresses, each with the person's full name when the page gives it (empty for a \
+shared mailbox or an address shown without a name). Only addresses you saw written on a page: never work one \
+out, complete one or guess. When you find none, return none; when you can't tell the domain, leave it empty.")
 }
 
 fn find_recruiters_system() -> String {
@@ -2688,6 +2727,18 @@ note says; no company name, no filler. Return them in the same order, one for ea
         })?;
         let url = v["url"].as_str().unwrap_or("").trim().to_string();
         Ok(Some(url).filter(|u| v["found"].as_bool() == Some(true) && u.starts_with("http") && !crate::sources::is_job_board(u)))
+    }
+
+    fn company_mail(&self, job: &crate::db::Job) -> R<CompanyMail> {
+        let cc = self.code()?;
+        let user = format!("Company: {}\nA job posting of theirs: {}\nWhere: {}", job.company, job.url, job.location);
+        let seen = obj(json!({"email": {"type": "string"}, "name": {"type": "string"}}));
+        let schema = obj(json!({"domain": {"type": "string"}, "addresses": {"type": "array", "items": seen}}));
+        let v = crate::claude_code::ask(cc, &crate::claude_code::Ask {
+            system: &company_mail_system(), prompt: &user, schema: &schema, model: &model_id(self.search_model(), false), effort: "low", files: &[],
+            connectors: &[], web: true, limit: Duration::from_secs(5 * 60),
+        })?;
+        Ok(serde_json::from_value(v).unwrap_or_default())
     }
 
     fn find_recruiters(&self, job: &crate::db::Job) -> R<Vec<FoundPerson>> {

@@ -1,5 +1,15 @@
 [
   {
+    "version": "26.11.21",
+    "date": "2026-11-22",
+    "title": "Finds who to email, and tells your phone about early roles",
+    "changes": [
+      "Follow-up emails now find an address when Job Hunt has none: it looks up the addresses the company shows in public, works out the pattern its people's addresses follow, and uses the recruiter's likely address (marked as likely, to check before sending) or the company's hiring mailbox.",
+      "New matches that LinkedIn lists with under 10 applicants get their own notice, on your phone too when phone notifications are on (even set to urgent only).",
+      "Fixed: looking for a job's recruiter or hiring team never reached Claude, so it always came back empty. It works now."
+    ]
+  },
+  {
     "version": "26.11.20",
     "date": "2026-11-22",
     "title": "The right CV for each role, and a cover letter that gets attached",

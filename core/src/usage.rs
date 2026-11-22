@@ -289,6 +289,13 @@ impl Llm for Metered {
     fn find_leads(&self, candidate: &str, cv: &str, wants: &str, skip: &str) -> R<Vec<crate::claude::FoundLead>> {
         self.run("leads", |l| l.find_leads(candidate, cv, wants, skip))
     }
+    // (Missing until 26.11.21: every look for a job's recruiter answered "needs Claude Code".)
+    fn find_recruiters(&self, job: &Job) -> R<Vec<crate::claude::FoundPerson>> {
+        self.run("people", |l| l.find_recruiters(job))
+    }
+    fn company_mail(&self, job: &Job) -> R<crate::claude::CompanyMail> {
+        self.run("people", |l| l.company_mail(job))
+    }
 }
 
 #[cfg(test)]

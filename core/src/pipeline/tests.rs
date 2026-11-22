@@ -3386,3 +3386,54 @@ fn another_cv_has_waiting_roles_matched_again() {
     assert!(s.agent.db().job(&ids[0]).unwrap().unwrap().reasoning.as_deref().is_some_and(|r| r.contains("which of your CVs")));
     let _ = t;
 }
+
+/// A follow-up with nobody known by address: the company's addresses are looked up as an address
+/// finder would, the recruiter's likely address is worked out from its pattern, and it says so.
+#[test]
+fn a_follow_up_goes_to_an_address_worked_out_from_the_companys() {
+    let s = setup();
+    s.agent.search(Some(vec![Posting { company: "Mailco".into(), ..posting("Technical Program Manager", "1") }, posting("Senior Program Manager", "2")])).unwrap();
+    for id in ["test:1", "test:2"] { s.agent.db().set_status(id, "applied", "").unwrap(); }
+    // No recruiter known: the company's hiring mailbox.
+    let f = s.agent.write_follow_up("test:1").unwrap();
+    assert_eq!(f["to"], "careers@mailco.com", "{f}");
+    assert!(f["to_note"].as_str().unwrap().contains("hiring address"));
+    // The recruiter found for the job, with no address: theirs, by the pattern the company's follow.
+    s.agent.find_recruiter("test:1").unwrap();
+    let f = s.agent.write_follow_up("test:1").unwrap();
+    assert_eq!(f["to"], "pshah@mailco.com", "{f}");
+    assert!(f["to_note"].as_str().unwrap().contains("likely address for Priya Shah"), "{f}");
+    assert!(s.agent.db().history("test:1").unwrap().iter().any(|e| e.kind == "followup:to"));
+    // Asked of Claude once a company, not once a follow-up.
+    assert_eq!(s.llm.calls.lock().unwrap().iter().filter(|c| c.as_str() == "company_mail:Mailco").count(), 1);
+    // A company that shows no addresses: no address, as before.
+    assert_eq!(s.agent.write_follow_up("test:2").unwrap()["to"], "");
+}
+
+/// New matches LinkedIn lists with under 10 applicants are told at once, and count as urgent on a phone.
+#[test]
+fn early_roles_are_told_at_once() {
+    let s = setup();
+    s.agent.search(Some(vec![posting("Technical Program Manager", "1")])).unwrap();
+    s.agent.tell_early(&["test:1".to_string(), "test:gone".to_string()]);
+    let notes = s.notes.lock().unwrap().clone();
+    assert!(notes.iter().any(|n| n.contains("Under 10 applicants: Technical Program Manager at ")), "{notes:?}");
+    assert!(crate::pipeline::is_urgent("Under 10 applicants: PM at Acme"));
+    assert_eq!(crate::pipeline::private_notice("Under 10 applicants: PM at Acme").0, "Job Hunt: A new role with under 10 applicants");
+    assert!(s.agent.db().history("test:1").unwrap().iter().any(|e| e.kind == "early"));
+}
+
+/// Every Claude request goes through the usage meter: one it doesn't pass on answers "not
+/// available" in the real app while every test (which talk to the fake directly) passes.
+/// (find_recruiters was missing until 26.11.21.)
+#[test]
+fn the_usage_meter_passes_every_request_on() {
+    let names = |src: &str, from: &str| -> Vec<String> {
+        let s = &src[src.find(from).unwrap()..];
+        let s = &s[..s.find("\n}\n").unwrap()];
+        s.lines().filter_map(|l| l.strip_prefix("    fn ")).filter_map(|l| l.split('(').next()).map(|n| n.split('<').next().unwrap().to_string()).collect()
+    };
+    let (all, passed) = (names(include_str!("../claude.rs"), "pub trait Llm"), names(include_str!("../usage.rs"), "impl Llm for Metered"));
+    let missing: Vec<&String> = all.iter().filter(|n| !passed.contains(n)).collect();
+    assert!(all.len() > 20 && missing.is_empty(), "not passed on by usage::Metered: {missing:?}");
+}

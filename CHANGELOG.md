@@ -5,6 +5,16 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.21] - 2026-11-22
+
+Finds who to email, and tells your phone about early roles.
+
+### Changes
+
+- Follow-up emails now find an address when Job Hunt has none: it looks up the addresses the company shows in public, works out the pattern its people's addresses follow, and uses the recruiter's likely address (marked as likely, to check before sending) or the company's hiring mailbox.
+- New matches that LinkedIn lists with under 10 applicants get their own notice, on your phone too when phone notifications are on (even set to urgent only).
+- Fixed: looking for a job's recruiter or hiring team never reached Claude, so it always came back empty. It works now.
+
 ## [26.11.20] - 2026-11-22
 
 The right CV for each role, and a cover letter that gets attached.
@@ -2937,6 +2947,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.21]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.21
 [26.11.20]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.20
 [26.11.19]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.19
 [26.11.18]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.18
