@@ -2122,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "jobhunt"
-version = "26.11.11"
+version = "26.11.12"
 dependencies = [
  "arboard",
  "chrono",
@@ -2144,7 +2144,7 @@ dependencies = [
 
 [[package]]
 name = "jobhunt-core"
-version = "26.11.11"
+version = "26.11.12"
 dependencies = [
  "base64 0.22.1",
  "chrono",

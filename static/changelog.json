@@ -1,5 +1,15 @@
 [
   {
+    "version": "26.11.12",
+    "date": "2026-11-22",
+    "title": "Your address from saved answers, whatever a form calls it",
+    "changes": [
+      "A street, postal code, phone or province you've given before now fills the same box under another name (Street Address for Address Line 1, Postal Code / Zip for Postal Code).",
+      "A middle name is filled only if you've given one; it is no longer made up.",
+      "A name the site put in the wrong capitals (Al-taha) is put right."
+    ]
+  },
+  {
     "version": "26.11.11",
     "date": "2026-11-21",
     "title": "Workday skills: no look-alikes",

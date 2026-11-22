@@ -1217,6 +1217,15 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.12 (Air Canada: address from saved answers, no made-up middle name)
+
+From a Copy details of careers.aircanada.com (Phenom, like RBC's).
+- `fill.rs` `same_fact`: a saved answer fills the same fact under another site's name (street,
+  postal code, phone, province). The street and postal code were kept as Workday's "Address Line 1"
+  and "Postal Code", so "Street Address" and "Postal Code / Zip" got nothing.
+- A "Middle ..." box is answered only from saved answers (the model wrote "Taha").
+- `fill.js`: a short text box holding the answer in other capitals ("Al-taha") is set once more.
+
 ## 26.11.11 (Workday skills: no look-alikes)
 
 From a Copy details of Ontario Health's My Experience page (still on 26.11.9).

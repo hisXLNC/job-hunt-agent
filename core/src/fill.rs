@@ -574,11 +574,25 @@ fn from_bank(list: &[Value], f: &Value) -> Option<String> {
     if key.len() < 3 {
         return None;
     }
-    let a = list.iter().find(|x| x["key"] == key.as_str())?["a"].as_str()?.to_string();
+    // The same question first; else the same thing under another site's name for it (the street kept
+    // as "Address Line 1" answers "Street Address"; Air Canada's form got no street or postal code).
+    let a = list.iter().find(|x| x["key"] == key.as_str())
+        .or_else(|| { let mine = same_fact(&key)?; list.iter().find(|x| x["key"].as_str().and_then(same_fact) == Some(mine)) })?["a"].as_str()?.to_string();
     match f["options"].as_array().filter(|o| !o.is_empty()) {
         Some(opts) => opts.iter().filter_map(|o| o.as_str()).find(|o| question_key(o) == question_key(&a)).map(String::from),
         None => Some(a),
     }
+}
+
+/// The fact about you that a box's name asks for, when sites call it different things.
+fn same_fact(key: &str) -> Option<&'static str> {
+    const FACTS: [(&str, &[&str]); 4] = [
+        ("street", &["street address", "address line 1", "address line1", "address 1", "address1", "address", "street", "home address", "mailing address", "street address line 1"]),
+        ("postal", &["postal code", "postal code zip", "zip", "zip code", "zip postal code", "postcode", "post code", "postal zip code", "zip or postal code", "postal or zip code", "postal"]),
+        ("phone", &["phone number", "phone", "mobile number", "mobile phone", "mobile phone number", "cell phone", "cell phone number", "telephone", "telephone number", "primary phone", "contact number"]),
+        ("province", &["province", "state", "province state", "state province", "province territory", "province or state", "state or province", "state province region"]),
+    ];
+    FACTS.iter().find(|(_, names)| names.contains(&key)).map(|(fact, _)| *fact)
 }
 
 /// Whether Job Hunt may press Submit for you on simple forms (off unless you turn it on).
@@ -1007,6 +1021,13 @@ pub fn answers(agent: &Agent, job_id: &str, fields: &[Value]) -> R<Value> {
     }
     let certs = cv_listed(&cv_text, "cert").max(profile.certifications.iter().filter(|c| !c.name.trim().is_empty()).count());
     tidy_answers(fields, &mut values, &cv_text, &profile.application_facts, roles_listed, certs);
+    // A middle name is only what you've given one yourself: the model made one up from the family
+    // name ("Taha" for Al-Taha, on Air Canada's form).
+    for f in fields.iter().filter(|f| question_key(f["label"].as_str().unwrap_or("")).starts_with("middle ")) {
+        if let Some(k) = f["key"].as_str().filter(|k| !banked.iter().any(|b| b == k)) {
+            values.remove(k);
+        }
+    }
     if !is_profile {
         usual_answers(fields, &mut values, &job.source, &job.company, &cv_text);
     }
@@ -1617,6 +1638,13 @@ mod tests {
             ("Certification entry 2: Certification Number".to_string(), "PMP-123".to_string()),
             ("Language (French): Reading".to_string(), "2 - Classroom Study".to_string()),
         ], "the degree, an empty date's placeholder, a tick box and a job's title aren't details to keep");
+        // A fact kept under one site's name for it answers another's.
+        {
+            let kept = vec![json!({"key": "address line 1", "q": "Address Line 1", "a": "1 Main St"}), json!({"key": "postal code", "q": "Postal Code", "a": "M1M 1M1"}), json!({"key": "province", "q": "Province", "a": "Ontario"})];
+            let b = |label: &str, opts: Value| from_bank(&kept, &json!({"key": "x", "label": label, "type": "text", "section": "Review", "options": opts}));
+            assert_eq!((b("Street Address", json!(null)), b("Postal Code / Zip", json!(null)), b("Middle Name", json!(null))), (Some("1 Main St".into()), Some("M1M 1M1".into()), None));
+            assert_eq!(b("Province/State", json!(["Ontario", "Quebec"])), Some("Ontario".into()));
+        }
         // Each certificate entry from the certificate it is (by the copy attached to it): the issuer
         // chosen from the site's list, its own number, its name once the list has it; and a list
         // still on "Please Select" names nothing.

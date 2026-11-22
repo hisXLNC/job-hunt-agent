@@ -1014,7 +1014,9 @@
     }
     // Already has an answer (yours or the site's): kept, unless Job Hunt corrects it from your CV
     // (a site's CV reader often cuts a job title short or puts it in the wrong box).
-    if (f.value && same(f.value, v)) return true;
+    // (The same but for its capitals, in a short box: put right once, as you'd write it. Air Canada's
+    // CV reader made the last name "Al-taha".)
+    if (f.value && same(f.value, v)) { if (f.type === 'text' && clean(f.value) !== clean(v) && String(v).length < 60 && !f.recased) { f.recased = true; setter(el, String(v)); } return true; }
     // Boxes that choose from the site's own list are searched, never typed into as text.
     // "Separate each skill with a comma": a plain box to type into, not a list to search (RBC's:
     // each skill was searched for, none found, and the box left empty).
