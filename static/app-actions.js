@@ -355,6 +355,14 @@ async function act(el) {
     box.querySelectorAll('[data-pick]:checked, [data-appr]:checked').forEach(c => { c.checked = false; });
     return a === 'pickClear' ? pickChanged(box) : approveChanged(box);
   }
+  if (a === 'clearExpired') {
+    const ids = JSON.parse(el.dataset.ids || '[]');
+    if (!ids.length || !await ask(`Clear ${ids.length === 1 ? 'the one expired posting' : `the ${ids.length} expired postings`}? ${ids.length === 1 ? 'It goes' : 'They go'} to All jobs under Not interested, with anything tailored for ${ids.length === 1 ? 'it' : 'them'} kept. It doesn't change how Job Hunt scores.`, 'Clear them')) return;
+    return busy(async () => {
+      for (const id of ids) await api(`/api/jobs/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status: 'dismissed', note: 'expired', learn: false } });
+      await refreshOverview(); route(); toast(`${ids.length} expired posting${ids.length === 1 ? '' : 's'} cleared.`);
+    });
+  }
   if (a === 'pickStale') {
     const ids = JSON.parse(el.dataset.ids || '[]');
     if (!ids.length || !await ask(`Set aside ${ids.length === 1 ? 'the one posting' : `the ${ids.length} postings`} that ${ids.length === 1 ? 'has' : 'have'} been up for more than three weeks or expired? ${ids.length === 1 ? 'It goes' : 'They go'} to All jobs under the stage Not interested, where you can still tailor ${ids.length === 1 ? 'it' : 'any of them'}. It doesn't change how Job Hunt scores.`, 'Set them aside')) return;

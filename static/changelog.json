@@ -1,5 +1,13 @@
 [
   {
+    "version": "26.11.19",
+    "date": "2026-11-22",
+    "title": "Clear expired postings in one go",
+    "changes": [
+      "The Queue's sort and filter row has a Clear expired button when any posting there is marked Expired. They go to All jobs under Not interested; anything tailored for them is kept."
+    ]
+  },
+  {
     "version": "26.11.18",
     "date": "2026-11-22",
     "title": "Forms are filled from the tailored CV",

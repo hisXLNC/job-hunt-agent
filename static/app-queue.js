@@ -278,11 +278,14 @@ async function showOverview(arg) {
     // What's furthest along first, as in the one-by-one order; a step you chose shows all of itself.
     const order = step ? [step] : ['interviews', 'approve', 'submit', 'pick', 'waiting'].filter(s => all.some(x => x.step === s));
     const qopt = (v, n) => `<option value="${v}">${n}</option>`;
+    // Postings the company took down, or whose last day has passed, in the lists shown: cleared in one go.
+    const gone = [...new Set((step ? all.filter(x => x.step === step) : all).filter(x => x.j && expiredWhy(x.j)).map(x => x.j.id))];
+    const goneBtn = gone.length ? `<button class="btn ghost sm" type="button" data-act="clearExpired" data-ids="${esc(JSON.stringify(gone))}" title="Sets aside the postings marked Expired here. They go to All jobs under Not interested.">Clear ${gone.length} expired</button>` : '';
     const qbar = (step ? all.filter(x => x.step === step) : all).filter(x => x.j).length > 1 ? `<div class="queue-filters" data-queuebox>
         <label class="small" title="Recommended: each list in the order that suits it. Pick and Ready to approve: the best to apply to now first (fit, less for each day the posting has been up, for red flags and for pay under your minimum). Submit: the quickest to send first.">Sort by <select data-queuef="sort">${qopt('', 'Recommended order')}${qopt('now', 'Best to apply to now')}${qopt('fit', 'Best fit')}${qopt('new', 'Newest')}${qopt('pay', 'Highest pay')}${qopt('co', 'Company (A to Z)')}${qopt('role', 'Role (A to Z)')}${qopt('loc', 'Place (A to Z)')}</select></label>
         <label class="check small"><input type="checkbox" data-queuef="pay"> Shows pay</label>
         <label class="check small"><input type="checkbox" data-queuef="flags"> <span>No <span class="wide-only">red </span>flags</span></label>
-        <span class="muted small" data-queuecount></span></div>` : '';
+        <span class="muted small" data-queuecount></span>${goneBtn}</div>` : goneBtn ? `<div class="queue-filters">${goneBtn}</div>` : '';
     listing = `${qbar}${notes.some(x => x.h.level === 'problem') ? `<section class="card next-card">${notes.filter(x => x.h.level === 'problem').map(noteRow).join('')}</section>` : ''}
       ${order.map(s => `${s === 'pick' ? heldLine() : ''}${stepHtml(o, s, s === step ? tracked : [])}`).join('')}
       ${notes.some(x => x.h.level !== 'problem') ? `<section class="card next-card">${notes.filter(x => x.h.level !== 'problem').map(noteRow).join('')}</section>` : ''}

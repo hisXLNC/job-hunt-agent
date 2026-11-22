@@ -1217,6 +1217,13 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.19
+
+- Queue: "Clear N expired" at the end of the sort and filter row (`showOverview` in
+  `static/app-queue.js`, action `clearExpired` in `static/app-actions.js`). Covers every posting
+  marked Expired (`expiredWhy`: taken down, or last day passed) in the lists shown, across steps;
+  each goes to Not interested with note "expired", `learn: false`. The sort header and filters stay.
+
 ## 26.11.18
 
 - Checked that the form filler uses the tailored CV: the uploaded file is `job.cv_path` (your own CV
