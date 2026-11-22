@@ -1659,7 +1659,7 @@ async function jobPalette() {
   const back = document.createElement('div');
   back.className = 'modal-back palette-back';
   back.innerHTML = `<div class="modal palette" role="dialog" aria-modal="true" aria-label="Find a job">
-    <input type="search" class="palette-q" placeholder="Find a job by company, title or place…" aria-label="Find a job">
+    <input type="search" class="palette-q" placeholder="Find a job or a company: name, title or place…" aria-label="Find a job">
     <div class="palette-list"><p class="muted small">Loading…</p></div>
     <p class="muted small palette-hint">↑ ↓ to choose · Enter to open · Esc to close</p></div>`;
   document.body.appendChild(back);
@@ -1670,11 +1670,23 @@ async function jobPalette() {
   const draw = () => {
     const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
     const hay = j => `${j.company} ${j.title} ${j.location || ''}`.toLowerCase();
-    shown = (paletteJobs || []).filter(j => words.every(w => hay(j).includes(w)))
+    // Companies whose name matches, first: each opens every job Job Hunt has from it.
+    const cos = new Map();
+    if (words.length) for (const j of paletteJobs || []) {
+      const name = (j.company || '').trim(), k = name.toLowerCase();
+      if (!k || !words.every(w => k.includes(w))) continue;
+      const c = cos.get(k) || { co: name, n: 0, open: 0 };
+      c.n++; if (['queued', 'ready', 'approved'].includes(j.status) && !expiredWhy(j)) c.open++;
+      cos.set(k, c);
+    }
+    const companies = [...cos.values()].sort((a, b) => b.n - a.n).slice(0, 5).map(c => ({ ...c, href: `#company/${encodeURIComponent(c.co)}` }));
+    const found = (paletteJobs || []).filter(j => words.every(w => hay(j).includes(w)))
       .sort((a, b) => (ORDER.indexOf(a.status) - ORDER.indexOf(b.status)) || (b.score || 0) - (a.score || 0)).slice(0, 40);
+    shown = [...companies, ...found];
     sel = Math.min(sel, Math.max(0, shown.length - 1));
     let last = '';
     list.innerHTML = shown.length ? shown.map((j, i) => {
+      if (j.co) return `${i === 0 ? '<h3>Companies</h3>' : ''}<a class="palette-row ${i === sel ? 'on' : ''}" href="${esc(j.href)}" data-i="${i}"><span class="grow"><b>${esc(j.co)}</b><br><span class="muted small">${j.n} job${j.n === 1 ? '' : 's'} in Job Hunt${j.open ? ` · ${j.open} waiting for you` : ''}</span></span><span class="muted small">All its jobs</span></a>`;
       const head = j.status !== last ? `<h3>${esc(STAGES[j.status] || j.status)}</h3>` : '';
       last = j.status;
       return `${head}<a class="palette-row ${i === sel ? 'on' : ''}" href="#job/${encodeURIComponent(j.id)}" data-i="${i}">${scoreBadge(j.score)}<span class="grow"><b>${esc(j.company)}</b> · ${esc(j.title)}${expiredWhy(j) ? ' <span class="pill crit expired">Expired</span>' : ''}<br><span class="muted small">${esc(j.location || '')}</span></span></a>`;
@@ -1684,7 +1696,7 @@ async function jobPalette() {
   const key = e => {
     if (e.key === 'Escape') { e.preventDefault(); close(); }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, Math.min(shown.length - 1, sel + (e.key === 'ArrowDown' ? 1 : -1))); draw(); }
-    else if (e.key === 'Enter' && shown[sel]) { e.preventDefault(); close(); location.hash = `#job/${encodeURIComponent(shown[sel].id)}`; }
+    else if (e.key === 'Enter' && shown[sel]) { e.preventDefault(); close(); location.hash = shown[sel].href || `#job/${encodeURIComponent(shown[sel].id)}`; }
   };
   document.addEventListener('keydown', key, true);
   back.addEventListener('click', e => { if (e.target === back || e.target.closest('.palette-row')) close(); });
