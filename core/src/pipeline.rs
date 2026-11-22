@@ -388,6 +388,7 @@ pub struct Agent {
     pub usage: Arc<Mutex<crate::usage::Log>>,
     /// You pressed Stop: the running search ends at its next step, keeping what it has.
     stop: std::sync::atomic::AtomicBool,
+    soon: Mutex<Soon>,
     /// The running search is paused: it waits at its next step until resumed (or stopped).
     hold: std::sync::atomic::AtomicBool,
 }
@@ -460,6 +461,22 @@ struct SearchRun {
     spare: Vec<Posting>,
     /// Jobs that got another listing in this search (see pipeline/copies.rs): told at the end.
     copies: Vec<String>,
+}
+
+/// Roles a search tailors as soon as each is scored, while it goes on searching and scoring (see
+/// `search_in` and `tailor_as_scored`): no waiting for the search to end, and no limit a search.
+#[derive(Default)]
+struct Soon {
+    /// A job's id, and whether to check first that its posting is still open (one from before this search).
+    queue: std::collections::VecDeque<(String, bool)>,
+    sent: HashSet<String>,
+    busy: usize,
+    done: usize,
+    closed: usize,
+    errors: Vec<String>,
+    /// Claude can't tailor now (the usage limit, no key): what's left waits, still in the queue of
+    /// roles to pick, for the next search.
+    halted: bool,
 }
 
 /// What every batch of a search is scored against.
@@ -557,6 +574,7 @@ impl Agent {
             progress: Mutex::new(Progress::default()),
             scoring_all: Mutex::new(None),
             stop: std::sync::atomic::AtomicBool::new(false),
+            soon: Mutex::new(Soon::default()),
             hold: std::sync::atomic::AtomicBool::new(false),
             sync_mark: std::sync::atomic::AtomicU64::new(u64::MAX),
             presence: Mutex::new(crate::sync::Presence::default()),

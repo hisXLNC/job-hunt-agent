@@ -11,6 +11,8 @@ The right CV for each role, and a cover letter that gets attached.
 
 ### Changes
 
+- Tailoring by itself is instant: each role is tailored the moment it's scored, up to three at a time, while the search is still running. Nothing waits for the search to end, and the limit of so many a search is gone.
+- The hourly look at LinkedIn now also uses LinkedIn's own filters for postings from the last 24 hours with under 10 applicants.
 - With more than one CV, each role is matched to the CV whose field it's in (a tax posting gets your tax CV), and its fit is scored against that CV. Roles waiting for you are matched again once, and whenever you add a CV.
 - Workday forms with one upload box for several files now get your cover letter as well as your CV.
 - When Job Hunt isn't sure where a keyword you have belongs on your CV, it asks you on the job's page, and works your answer in.
@@ -18,6 +20,7 @@ The right CV for each role, and a cover letter that gets attached.
 - Company names lose the employer's internal code and stray "&amp;", so Thomson Reuters shows as Thomson Reuters.
 - When you add a posting that's already there, the notice says the name it's kept under and its stage, and opens it.
 - Searching All jobs now says how many matches are hidden under Not interested, with a link to show them.
+- Sources: a problem an old test found is no longer listed once the source has worked in a search since (Indeed showed twice, as Problem and as Working).
 
 ## [26.11.19] - 2026-11-22
 

@@ -696,18 +696,27 @@ fn search_scores_filters_and_tailors() {
     assert_eq!(s.llm.calls.lock().unwrap().len(), calls);
 }
 
+/// Tailoring by itself: every role that clears the bar is tailored in the search that found it,
+/// as it's scored. (There used to be a limit a search, and the rest waited for the next one.)
 #[test]
-fn daily_cap_queues_the_rest() {
+fn every_match_is_tailored_in_the_search_that_found_it() {
     let s = setup();
     let mut p = s.agent.profile();
     p.max_per_run = 1;
     s.agent.db().save_profile(&p).unwrap();
-    s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2")])).unwrap();
+    let r = s.agent.search(Some(vec![posting("Technical Program Manager", "1"), posting("Senior Program Manager", "2"), Posting { company: "Globex".into(), ..posting("Program Manager", "3") }])).unwrap();
     let counts = s.agent.db().counts().unwrap();
-    assert_eq!((counts["ready"].as_i64(), counts["queued"].as_i64()), (Some(1), Some(1)));
+    assert_eq!((counts["ready"].as_i64(), counts["queued"].as_i64().unwrap_or(0), r.tailored), (Some(3), 0, 3));
     drop(counts);
-    s.agent.search(Some(vec![])).unwrap();
-    assert_eq!(s.agent.db().counts().unwrap()["ready"].as_i64(), Some(2));
+    // One left waiting from before (tailoring was off then) is done by the next search.
+    p.auto_tailor = false;
+    s.agent.db().save_profile(&p).unwrap();
+    s.agent.search(Some(vec![Posting { company: "Initech".into(), ..posting("Program Manager", "4") }])).unwrap();
+    assert_eq!(s.agent.db().counts().unwrap()["queued"].as_i64(), Some(1));
+    p.auto_tailor = true;
+    s.agent.db().save_profile(&p).unwrap();
+    assert_eq!(s.agent.search(Some(vec![])).unwrap().tailored, 1);
+    assert_eq!(s.agent.db().counts().unwrap()["ready"].as_i64(), Some(4));
 }
 
 #[test]

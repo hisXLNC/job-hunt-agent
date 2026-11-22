@@ -155,7 +155,16 @@ impl Agent {
             // Read first: the lock would otherwise be held through the loop, which takes it again.
             let jobs = self.db().jobs(Some(st), 100_000)?;
             for j in jobs {
-                if j.track.as_deref() != Some(id) || j.score.is_none() {
+                if j.track.as_deref() != Some(id) {
+                    continue;
+                }
+                // Waiting to be scored again already (another CV was added, say): with this CV gone
+                // it forgets it too, and is still to be scored.
+                if j.score.is_none() {
+                    if removed && j.reasoning.as_deref().is_some_and(|r| r.starts_with("Not scored: ")) {
+                        self.db().update_job(&j.id, &[("track", Value::Null), ("reasoning", format!("Not scored: the {label} CV it was scored against {what}.").into())])?;
+                        c.unscored.push(j.id);
+                    }
                     continue;
                 }
                 if !removed && *st == "saved" && j.score.is_some_and(|s| s < bar) {

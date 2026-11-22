@@ -75,7 +75,26 @@ impl Agent {
                 }
                 self.doing("watch", &format!("LinkedIn: \u{201c}{title}\u{201d} in {}", if place.is_empty() { "any place" } else { place.as_str() }));
                 match crate::sources::linkedin_new(&c, title, place, *remote, secs) {
-                    Ok(l) => found.extend(l),
+                    Ok(l) => {
+                        found.extend(l);
+                        // And LinkedIn's own filters for the ones worth being early for: posted in
+                        // the last 24 hours, under 10 applicants. (What both looks find counts once.)
+                        self.doing("watch", &format!("LinkedIn, under 10 applicants, last 24 hours: \u{201c}{title}\u{201d}"));
+                        match crate::sources::linkedin_new_of(&c, title, place, *remote, 86_400, true) {
+                            Ok(e) => {
+                                let more = e.iter().filter(|p| !found.iter().any(|f| f.id() == p.id())).count();
+                                self.trace(&format!("watch: LinkedIn \u{201c}{title}\u{201d}, under 10 applicants in the last 24 hours: {} ({more} the first look didn't have)", e.len()));
+                                found.extend(e.into_iter().filter(|p| !found.iter().any(|f| f.id() == p.id())).collect::<Vec<_>>());
+                            }
+                            Err(e) => {
+                                if e.contains("limiting") {
+                                    self.db().set("watch.linkedin.wait", &(now + chrono::Duration::hours(2)).to_rfc3339())?;
+                                    break;
+                                }
+                                self.trace(&format!("watch: LinkedIn \u{201c}{title}\u{201d} (under 10 applicants): {e}"));
+                            }
+                        }
+                    }
                     Err(e) => {
                         // Turned away: left alone for two hours, so the day's search isn't refused too.
                         if e.contains("limiting") {
@@ -374,7 +393,72 @@ impl Agent {
         out
     }
 
+    /// A search, with the roles it's to tailor by itself tailored as each is scored: up to three at a
+    /// time, beside the searching and scoring, so the first is ready minutes into a search and not
+    /// after it. (They used to wait for the search to end, and then only so many a search.)
     pub(super) fn search_in(&self, postings: Option<Vec<Posting>>, force: bool, batch: Option<usize>, only: Option<&str>) -> R<Report> {
+        // 0: not started (another search may be running: its roles aren't this one's), 1: running, 2: over.
+        let state = std::sync::atomic::AtomicU8::new(0);
+        std::thread::scope(|scope| {
+            for _ in 0..3 {
+                scope.spawn(|| self.tailor_as_scored(&state));
+            }
+            let r = self.search_run(postings, force, batch, only, &state);
+            state.store(2, std::sync::atomic::Ordering::SeqCst);
+            r
+        })
+    }
+
+    /// One of a search's tailoring hands: takes the next role to tailor until the search is over.
+    fn tailor_as_scored(&self, state: &std::sync::atomic::AtomicU8) {
+        use std::sync::atomic::Ordering::SeqCst;
+        let nap = std::time::Duration::from_millis(if cfg!(test) { 2 } else { 300 });
+        let soon = || self.soon.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            let next = if state.load(SeqCst) == 1 { let mut s = soon(); let n = s.queue.pop_front(); if n.is_some() { s.busy += 1; } n } else { None };
+            let Some((id, check)) = next else {
+                if state.load(SeqCst) == 2 { return; }
+                std::thread::sleep(nap);
+                continue;
+            };
+            let skip = self.stopping() || soon().halted;
+            // Picked by you meanwhile (it's being tailored already): left to that.
+            let claim = if skip { None } else { self.claim(&format!("tailor:{id}")).ok() };
+            // (Read first: the database's lock mustn't be held through the tailoring.)
+            let job = self.db().job(&id);
+            if let (Some(_g), Ok(Some(job))) = (claim.as_ref(), job) {
+                if job.status == "queued" {
+                    self.trace(&format!("tailoring {} at {} now", job.title, job.company));
+                    // Postings can sit in the queue for days: don't tailor one that has closed.
+                    if check && crate::sources::posting_closed(&job.url) == Some(true) {
+                        let _ = self.mark_closed(&job, "the posting says it's closed");
+                        soon().closed += 1;
+                    } else {
+                        match self.tailor(&id, None) {
+                            Ok(_) => soon().done += 1,
+                            Err(e) => {
+                                let mut s = soon();
+                                if ["usage limit", "API key", "signed in", "isn't set up", "key was rejected"].iter().any(|w| e.0.contains(w)) { s.halted = true; }
+                                s.errors.push(format!("tailoring {} / {}: {e}", job.company, job.title));
+                            }
+                        }
+                    }
+                }
+            }
+            drop(claim);
+            soon().busy -= 1;
+        }
+    }
+
+    /// Hand a role to the search's tailoring hands (once a search).
+    fn tailor_soon(&self, id: &str, check: bool) {
+        let mut s = self.soon.lock().unwrap_or_else(|e| e.into_inner());
+        if s.sent.insert(id.to_string()) {
+            s.queue.push_back((id.to_string(), check));
+        }
+    }
+
+    fn search_run(&self, postings: Option<Vec<Posting>>, force: bool, batch: Option<usize>, only: Option<&str>, state: &std::sync::atomic::AtomicU8) -> R<Report> {
         if self.is_running("update") {
             return err("Job Hunt is about to restart for an update; it searches again after.");
         }
@@ -384,6 +468,8 @@ impl Agent {
         let _scope = crate::claude_code::Scope::enter(crate::claude_code::SCOPE_SEARCH);
         let _guard = self.claim("search")?;
         self.stop.store(false, std::sync::atomic::Ordering::SeqCst);
+        *self.soon.lock().unwrap_or_else(|e| e.into_inner()) = crate::pipeline::Soon::default();
+        state.store(1, std::sync::atomic::Ordering::SeqCst);
         // A pause belongs to this search only: cleared when it ends, however it ends.
         struct Unhold<'a>(&'a std::sync::atomic::AtomicBool);
         impl Drop for Unhold<'_> {
@@ -552,24 +638,23 @@ impl Agent {
         if !profile.auto_tailor {
             report.to_pick = self.db().jobs(Some("queued"), 500)?.len();
         }
-        let n = queued.len();
-        for (i, job) in queued.into_iter().enumerate() {
-            if self.stopping() {
+        // The ones from before this search (it tailors its own as it scores them), then wait for
+        // them all: the search is over when its applications are ready.
+        for job in &queued {
+            self.tailor_soon(&job.id, true);
+        }
+        loop {
+            let (left, busy, done, closed, halted) = { let s = self.soon.lock().unwrap_or_else(|e| e.into_inner()); (s.queue.len(), s.busy, s.done, s.closed, s.halted) };
+            report.tailored = done;
+            self.tally(&report);
+            if left + busy == 0 || ((self.stopping() || halted) && busy == 0) {
+                report.closed += closed;
                 break;
             }
-            self.step("Tailoring applications", i, n, &format!("{} at {}", job.title, job.company));
-            // Postings can sit in the queue for days: don't tailor one that has closed.
-            if crate::sources::posting_closed(&job.url) == Some(true) {
-                self.mark_closed(&job, "the posting says it's closed")?;
-                report.closed += 1;
-                continue;
-            }
-            match self.tailor(&job.id, None) {
-                Ok(_) => report.tailored += 1,
-                Err(e) => report.errors.push(format!("tailoring {} / {}: {e}", job.company, job.title)),
-            }
-            self.tally(&report);
+            self.step("Tailoring applications", done, done + left + busy, &format!("{} still being written", left + busy));
+            std::thread::sleep(std::time::Duration::from_millis(if cfg!(test) { 2 } else { 500 }));
         }
+        report.errors.append(&mut self.soon.lock().unwrap_or_else(|e| e.into_inner()).errors);
         self.step("Tailoring applications", 1, 1, "done");
         self.trace(&format!("search finished: {} found, {} new, {} scored, {} tailored, {} errors", report.found, report.new, report.scored, report.tailored, report.errors.len()));
         if self.stopping() {
@@ -1045,6 +1130,11 @@ impl Agent {
                     let db = self.db();
                     db.insert_job(&job)?;
                     db.log(Some(&job.id), "scored", &format!("{} on the {} track", s.score, s.track))?;
+                    drop(db);
+                    // To be tailored without being asked: now, while the search goes on.
+                    if job.status == "queued" && (profile.auto_tailor || (profile.auto_tailor_min > 0 && s.score >= profile.auto_tailor_min)) {
+                        self.tailor_soon(&job.id, false);
+                    }
                 }
                 // Held, so the next search retries it.
                 Err(e) => {
@@ -1098,7 +1188,7 @@ impl Agent {
         self.db().job(job_id)?.ok_or_else(|| Error("That job no longer exists.".into()))
     }
 
-    /// The roles a search tailors without being asked, best fit first, at most `max_per_run`:
+    /// The roles a search tailors without being asked, best fit first (all of them: there's no limit a search):
     /// every one that cleared your fit score when tailoring is automatic; else, when you chose a
     /// score for it, only the strong fits found in the last two weeks (an old match isn't worth the
     /// usage until you say so). None otherwise.
@@ -1108,7 +1198,6 @@ impl Agent {
         let mut list: Vec<Job> = self.db().jobs(Some("queued"), 500)?.into_iter()
             .filter(|j| j.score.unwrap_or(0) >= from && (profile.auto_tailor || j.found_at >= recent)).collect();
         list.sort_by_key(|j| std::cmp::Reverse(j.score.unwrap_or(0)));
-        list.truncate(profile.max_per_run);
         Ok(list)
     }
 

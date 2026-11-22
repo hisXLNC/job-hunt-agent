@@ -649,7 +649,13 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
                 return Ok(Resp::json(&r));
             }
             ["api", "sources", "test"] => {
-                let last: Value = serde_json::from_str(&agent.secret("sources.test")).unwrap_or(Value::Null);
+                let mut last: Value = serde_json::from_str(&agent.secret("sources.test")).unwrap_or(Value::Null);
+                // A problem an old test found, for a source that has worked in a search since: not
+                // shown any more (Indeed was listed twice, as a Problem here and Working below).
+                let working: Vec<String> = agent.connections()?.into_iter().filter(|r| r["status"] == "ok").filter_map(|r| r["id"].as_str().map(str::to_string)).collect();
+                if let Some(rows) = last["results"].as_array_mut() {
+                    rows.retain(|r| r["ok"] == true || r["skipped"] == true || !r["id"].as_str().is_some_and(|id| working.iter().any(|w| w == id)));
+                }
                 return Ok(Resp::json(&json!({ "running": agent.is_running("test-sources"), "last": last })));
             }
             ["api", "sources", "search"] => {

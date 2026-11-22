@@ -1289,12 +1289,27 @@ pub fn linkedin(c: &reqwest::blocking::Client, title: &str, place: &str, remote:
 /// What went up on LinkedIn in the last `secs` (an hour to a day) for one search, newest first: one
 /// page, for the watch between searches (see Agent::watch).
 pub fn linkedin_new(c: &reqwest::blocking::Client, title: &str, place: &str, remote: bool, secs: u64) -> Result<Vec<Posting>, String> {
-    std::thread::sleep(Duration::from_millis(1500));
+    linkedin_new_of(c, title, place, remote, secs, false)
+}
+
+/// The address the watch asks LinkedIn's public search for. `early`: with LinkedIn's own "Under 10
+/// applicants" filter (f_EA) on.
+pub fn linkedin_new_url(title: &str, place: &str, remote: bool, secs: u64, early: bool) -> String {
     let mut u = url::Url::parse("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search").unwrap();
     u.query_pairs_mut().append_pair("keywords", title).append_pair("location", place).append_pair("f_TPR", &format!("r{}", secs.clamp(3_600, 86_400))).append_pair("sortBy", "DD").append_pair("start", "0");
+    if early {
+        u.query_pairs_mut().append_pair("f_EA", "true");
+    }
     if remote {
         u.query_pairs_mut().append_pair("f_WT", "2");
     }
+    u.to_string()
+}
+
+/// linkedin_new, optionally for postings with under 10 applicants only (see linkedin_new_url).
+pub fn linkedin_new_of(c: &reqwest::blocking::Client, title: &str, place: &str, remote: bool, secs: u64, early: bool) -> Result<Vec<Posting>, String> {
+    std::thread::sleep(Duration::from_millis(1500));
+    let u = linkedin_new_url(title, place, remote, secs, early);
     let html = linkedin_get(c, u.as_str())?;
     let mut got = parse_linkedin_list(&html);
     if got.is_empty() && (html.contains("authwall") || html.contains("challenge")) {
@@ -2692,6 +2707,9 @@ mod tests {
         assert!(linkedin_search_url("Tax Manager", "Toronto, ON", true).contains("keywords=Tax+Manager&location=Toronto%2C+ON&f_TPR=r604800&f_WT=2"));
         assert!(linkedin_search_since("Tax Manager", "Toronto, ON", false, 30_000).contains("f_TPR=r30000&sortBy=DD"), "since the last search, newest first");
         assert!(linkedin_search_since("Tax Manager", "Toronto, ON", false, 10).contains("f_TPR=r3600&"), "never under an hour");
+        // The watch's second look: the last day's postings with under 10 applicants.
+        assert!(linkedin_new_url("Tax Manager", "Toronto, ON", false, 86_400, true).contains("f_TPR=r86400&sortBy=DD&start=0&f_EA=true"));
+        assert!(!linkedin_new_url("Tax Manager", "Toronto, ON", true, 3_600, false).contains("f_EA"));
     }
 
     #[test]
