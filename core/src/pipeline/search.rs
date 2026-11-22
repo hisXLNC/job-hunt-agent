@@ -59,13 +59,15 @@ impl Agent {
         crate::sources::set_stretch_titles(self.stretch_titles());
         let c = crate::sources::http();
         let mut found: Vec<Posting> = vec![];
+        // Slow job sites don't hold it for long: what's left is read on the next turn.
+        let give_up = std::time::Instant::now() + std::time::Duration::from_secs(6 * 60);
         let waiting = chrono::DateTime::parse_from_rfc3339(&self.secret("watch.linkedin.wait")).map(|t| t.with_timezone(&Utc) > now).unwrap_or(false);
         if p.sources.linkedin && !waiting {
             // Each search runs every second time, so it looks back over three gaps (never under an hour).
             let list = crate::sources::linkedin_searches(&p, 16);
             let secs = (since_last * 3).clamp(3_600, 86_400);
             for (title, place, remote) in list.iter().enumerate().filter(|(i, _)| list.len() <= 8 || i % 2 == turn % 2).map(|(_, x)| x) {
-                if self.stopping() || self.is_running("search") {
+                if self.stopping() || self.is_running("search") || self.stop_asked("watch") || std::time::Instant::now() > give_up {
                     break;
                 }
                 self.doing("watch", &format!("LinkedIn: \u{201c}{title}\u{201d} in {}", if place.is_empty() { "any place" } else { place.as_str() }));
@@ -84,7 +86,7 @@ impl Agent {
         }
         if !p.sources.is_off("boards") {
             for (src, name) in crate::sources::boards(&p) {
-                if self.stopping() || self.is_running("search") {
+                if self.stopping() || self.is_running("search") || self.stop_asked("watch") || std::time::Instant::now() > give_up {
                     break;
                 }
                 self.doing("watch", &format!("Reading {name}'s job page"));
@@ -101,10 +103,13 @@ impl Agent {
         self.doing("watch", &format!("{} new posting{}; waiting for the search that's running to finish, then scoring", fresh.len(), if fresh.len() == 1 { "" } else { "s" }));
         // A batch of waiting postings being scored just now: these go in right after it.
         for _ in 0..60 {
-            if !self.is_running("search") || self.stopping() {
+            if !self.is_running("search") || self.stopping() || self.stop_asked("watch") {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_secs(5));
+        }
+        if self.stop_asked("watch") {
+            return Ok(0);
         }
         let n = fresh.len();
         // Scored like a job alert's postings; the day's report isn't replaced by this one.

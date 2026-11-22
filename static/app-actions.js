@@ -23,11 +23,13 @@ async function act(el) {
     return busy(async () => {
       toast('Getting the update…');
       const before = settingsCache?.app?.version || (await api('/api/settings').catch(() => null))?.app?.version || '';
-      const r = await api('/api/update/install', { method: 'POST' });
+      const r = await api('/api/update/install', { method: 'POST', body: el.dataset.now ? { now: true } : {} });
       if (r.waiting) {
-        const what = (r.for || []).some(n => n === 'search') ? 'the job search' : 'the tailoring';
-        toast(`Installing after ${what} finishes: Job Hunt restarts by itself then. Nothing is lost.`);
-        document.querySelectorAll('[data-act=updateInstall]').forEach(b => { b.disabled = true; b.textContent = `Installs after ${what}`; });
+        const f = r.for || [];
+        const what = f.some(n => n === 'search') ? 'the job search' : f.some(n => /^(tailor|revise|cv-update)/.test(n)) ? 'the tailoring' : 'what\'s running';
+        toast(`Installing after ${what} finishes: Job Hunt restarts by itself then. Don't want to wait? Press Install now anyway.`);
+        // Not held up by something stuck: the same button installs at once (what's running is stopped; it can be asked for again).
+        document.querySelectorAll('[data-act=updateInstall]').forEach(b => { b.dataset.now = '1'; b.textContent = 'Install now anyway'; b.title = `Waiting for ${what} to finish. Press to stop it and install now; what it was doing can be asked for again.`; });
       } else if (!r.installed) { toast("You're already on the newest version."); checkUpdate(); }
       else { toast('Installing the update… Job Hunt restarts by itself in a moment.'); waitForRestart(before); }
     });

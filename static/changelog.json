@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.15",
+    "date": "2026-11-22",
+    "title": "Stop works, and updates don't get stuck",
+    "changes": [
+      "Stop and Force stop now end the hourly check for new postings, which could run for most of an hour on slow job pages; it also gives up by itself after 6 minutes.",
+      "An update no longer waits for something you stopped, and while it waits the button reads Install now anyway."
+    ]
+  },
+  {
     "version": "26.11.14",
     "date": "2026-11-22",
     "title": "See what a background task is doing",

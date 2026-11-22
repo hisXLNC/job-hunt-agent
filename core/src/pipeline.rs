@@ -486,6 +486,10 @@ static STARTED: once_cell::sync::Lazy<Mutex<std::collections::HashMap<String, i6
 /// until it next starts, so a card that seems stuck can say where it is.
 static STEPS: once_cell::sync::Lazy<Mutex<std::collections::HashMap<String, Vec<(i64, String)>>>> = once_cell::sync::Lazy::new(Default::default);
 
+/// The running work you pressed Stop on (or force-stopped), until it next starts: it's told to end
+/// at its next step, and an update no longer waits for it.
+static STOPPED: once_cell::sync::Lazy<Mutex<HashSet<String>>> = once_cell::sync::Lazy::new(Default::default);
+
 pub struct OwnedRunning {
     agent: Arc<Agent>,
     name: String,
@@ -963,6 +967,7 @@ impl Agent {
         crate::debug::note("work", &format!("{name}: started"));
         STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
         STEPS.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), vec![(Utc::now().timestamp(), "Started".to_string())]);
+        STOPPED.lock().unwrap_or_else(|e| e.into_inner()).remove(name);
         Ok(Running { agent: self, name: name.to_string(), _task: crate::claude_code::Task::enter(name) })
     }
 
@@ -974,6 +979,7 @@ impl Agent {
             crate::debug::note("work", &format!("{name}: started"));
             STARTED.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), Utc::now().timestamp());
             STEPS.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), vec![(Utc::now().timestamp(), "Started".to_string())]);
+            STOPPED.lock().unwrap_or_else(|e| e.into_inner()).remove(name);
             OwnedRunning { agent: self.clone(), name: name.to_string() }
         })
     }
@@ -987,6 +993,21 @@ impl Agent {
         l.push((Utc::now().timestamp(), what.chars().take(200).collect()));
         if l.len() > 40 {
             l.remove(1);
+        }
+    }
+
+    /// Whether you pressed Stop on this piece of running work: it should end at its next step.
+    pub(crate) fn stop_asked(&self, name: &str) -> bool {
+        STOPPED.lock().unwrap_or_else(|e| e.into_inner()).contains(name)
+    }
+
+    fn mark_stopped(&self, names: &[String]) {
+        let mut s = STOPPED.lock().unwrap_or_else(|e| e.into_inner());
+        for n in names {
+            if n != "update" {
+                s.insert(n.clone());
+                self.doing(n, "Stopped by you: ending at its next step");
+            }
         }
     }
 
@@ -1122,6 +1143,7 @@ impl Agent {
             }
             _ => crate::claude_code::cancel_task(id),
         }
+        self.mark_stopped(&[id.to_string()]);
         self.trace(&format!("stopped by you: {id}"));
         true
     }
@@ -1132,6 +1154,7 @@ impl Agent {
     /// was running.
     pub fn force_stop_work(&self) -> Vec<String> {
         let was: Vec<String> = self.running().into_iter().filter(|n| n == "cv-update" || n == "rescore" || n.starts_with("tailor") || n.starts_with("revise")).collect();
+        self.mark_stopped(&was);
         self.stop_cv_update(false);
         crate::claude_code::cancel(Some(crate::claude_code::SCOPE_WORK));
         self.trace(&format!("background work force-stopped by you ({})", if was.is_empty() { "nothing was running".to_string() } else { was.join(", ") }));
@@ -1142,6 +1165,7 @@ impl Agent {
     /// answer being written, a reply, the assistant). Returns what was running.
     pub fn force_stop_all(&self) -> Vec<String> {
         let was = self.running();
+        self.mark_stopped(&was);
         self.force_stop_search();
         self.stop_cv_update(false);
         crate::claude_code::cancel(None);
@@ -1299,9 +1323,10 @@ impl Agent {
         (p.found, p.new, p.scored, p.tailored) = (r.found, r.new, r.scored, r.tailored);
     }
 
-    /// Work an update must not cut short: a search, tailoring, or a posting being added.
+    /// Work an update must not cut short: a search, tailoring, or a posting being added. Not what
+    /// you stopped yourself: if that never lets go, the update goes ahead without it.
     pub fn busy_for_update(&self) -> Vec<String> {
-        self.running().into_iter().filter(|n| n != "update").collect()
+        self.running().into_iter().filter(|n| n != "update" && !self.stop_asked(n)).collect()
     }
 
     pub fn running(&self) -> Vec<String> {

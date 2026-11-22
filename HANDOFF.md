@@ -1217,6 +1217,17 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.15
+
+- Stop on a background task did nothing unless the task was inside a Claude request, and the update
+  waits for everything running, so a stuck "watch" blocked updating. Now: static `STOPPED` (set by
+  `stop_activity`, `force_stop_work`, `force_stop_all`; cleared at the next claim), `stop_asked(name)`
+  for work to check between steps, and `busy_for_update` leaves out what you stopped.
+- The watch checks `stop_asked("watch")` between requests and gives up reading sites after 6 minutes
+  (many slow job pages at a 30 s timeout each could hold it for most of an hour).
+- POST /api/update/install {now: true}: stops everything and installs at once. The page's install
+  button turns into "Install now anyway" while the update is waiting.
+
 ## 26.11.14
 
 - Debugging a background task: `Agent::doing(name, what)` records what claimed work is doing (static

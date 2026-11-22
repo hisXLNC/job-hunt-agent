@@ -2391,6 +2391,12 @@ fn route_on(agent: &Arc<Agent>, host: &Arc<dyn Host>, req: &Req) -> R<Resp> {
             // Whatever is running finishes first (a search, tailoring, a reply being written, a check
             // of your email): the update installs, and Job Hunt restarts, as soon as it's done. No
             // new search starts meanwhile (see Agent::search).
+            // {now: true}: you'd rather not wait. What's running is told to stop, and it installs.
+            if b["now"].as_bool() == Some(true) {
+                agent.force_stop_all();
+                let installed = host.update_install()?;
+                return Ok(Resp::json(&json!({ "installed": installed })));
+            }
             if agent.is_running("update") {
                 return Ok(Resp::json(&json!({ "waiting": true, "for": agent.busy_for_update() })));
             }
@@ -2681,6 +2687,12 @@ mod tests {
             assert_eq!((r["waiting"].as_bool(), r["for"][0].as_str()), (Some(true), Some("search")));
             std::thread::sleep(std::time::Duration::from_millis(300));
             assert!(agent.is_running("update"));
+            // Something you stopped that doesn't let go isn't waited for.
+            let stuck = agent.claim("watch").unwrap();
+            assert!(agent.busy_for_update().contains(&"watch".to_string()));
+            assert!(agent.stop_activity("watch") && agent.stop_asked("watch"));
+            assert_eq!(agent.busy_for_update(), vec!["search".to_string()]);
+            drop(stuck);
             drop(g);
             assert!(agent.search(None).is_err_and(|e| e.0.contains("update")), "no search while the update waits");
             for _ in 0..80 {
