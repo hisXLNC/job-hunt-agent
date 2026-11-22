@@ -1,5 +1,13 @@
 [
   {
+    "version": "26.11.18",
+    "date": "2026-11-22",
+    "title": "Forms are filled from the tailored CV",
+    "changes": [
+      "A form's headline, summary, current title or employer, skills and achievements always come from the CV tailored for that job, never from an answer saved on an earlier application."
+    ]
+  },
+  {
     "version": "26.11.17",
     "date": "2026-11-22",
     "title": "Follow-ups that fit the role",

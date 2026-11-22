@@ -186,8 +186,14 @@ fn work_history(label: &str) -> bool {
         "responsibilities", "duties", "from", "to", "start date", "end date", "dates", "location", "city", "school",
         "school name", "school or university", "university", "college", "institution", "degree", "field of study", "major",
         "discipline", "i currently work here", "currently work here", "current job"];
+    // What a tailored CV words differently for each job, wherever on a form it's asked and whatever
+    // the site calls it: always from the CV for this job, never from an answer kept from another.
+    const CV_SAYS: &[&str] = &["current job title", "current title", "most recent job title", "recent job title", "current position", "current role",
+        "current employer", "current company", "most recent employer", "recent employer", "present employer", "headline", "professional headline",
+        "about", "about me", "about you", "bio", "profile", "objective", "career objective", "skills", "key skills", "top skills", "core skills", "technical skills"];
+    const CV_PARTS: &[&str] = &["summary", "headline", "achievement", "accomplishment", "responsibilit", "key skills", "core competenc", "areas of expertise"];
     let k = question_key(label);
-    KEYS.contains(&k.as_str())
+    KEYS.contains(&k.as_str()) || CV_SAYS.contains(&k.as_str()) || CV_PARTS.iter().any(|w| k.contains(w))
 }
 
 /// Questions nearly every form asks in its own words, about you and not about one job: answered
@@ -1772,6 +1778,12 @@ mod tests {
         let list = vec![json!({ "q": "Job Title", "key": "job title", "a": "Assistant" })];
         assert_eq!(from_bank(&list, &json!({ "label": "Job Title", "type": "text" })), None, "an old saved job title isn't reused");
         // Your own city (under Address) is kept and reused; a job's city and an entry's dates aren't.
+        // What the tailored CV says is never taken from an answer kept from another application.
+        for l in ["Professional Summary", "Headline", "Current Job Title", "Current Employer", "Key Skills", "Key achievements", "Summary of responsibilities", "About me"] {
+            assert!(personal_in(l, "", "text") && personal_in(l, "Profile", "textarea"), "{l}");
+            assert!(from_bank(&[json!({ "q": l, "key": question_key(l), "a": "From another job's CV" })], &json!({ "label": l, "type": "text" })).is_none(), "{l}");
+        }
+        assert!(!personal_in("Years of experience", "", "text") && !personal_in("Phone number", "", "text"));
         assert!(!personal_in("City", "Address", "text"));
         assert!(personal_in("City", "Work Experience 2", "text"));
         // A language entry's boxes are its own, so one saved answer never fills all of them.

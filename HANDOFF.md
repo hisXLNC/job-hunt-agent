@@ -1217,6 +1217,16 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.18
+
+- Checked that the form filler uses the tailored CV: the uploaded file is `job.cv_path` (your own CV
+  only when the job isn't tailored), the text Claude answers from is the same file, and the
+  extension keeps nothing between applications but the job's id. The one leak: a short CV-content
+  box outside a named work-history section ("Headline", "Current Job Title", "Key Skills",
+  "Professional Summary") could be answered from the bank of saved answers, i.e. from another job's
+  CV. `work_history` (used by `personal_in`, so by both `learn` and `from_bank`) now covers those
+  (`CV_SAYS`, `CV_PARTS`); entries already in the bank under such labels are ignored.
+
 ## 26.11.17
 
 - Follow-up emails named experience that didn't fit the role: the writer was given only the posting

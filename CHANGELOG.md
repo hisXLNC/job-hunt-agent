@@ -5,6 +5,14 @@ and versions are dated ([Calendar Versioning](https://calver.org)): YY.M.N is th
 Releases up to 2.99.4 used Semantic Versioning and keep their numbers.
 This file is generated from `static/changelog.json` by `python tools/release_ci.py sync`; edit that file instead.
 
+## [26.11.18] - 2026-11-22
+
+Forms are filled from the tailored CV.
+
+### Changes
+
+- A form's headline, summary, current title or employer, skills and achievements always come from the CV tailored for that job, never from an answer saved on an earlier application.
+
 ## [26.11.17] - 2026-11-22
 
 Follow-ups that fit the role.
@@ -2904,6 +2912,7 @@ Job Hunt for Windows.
 - Its own window and tray icon, notifications and start at sign-in.
 - Overview, applications board, job review with CV changes before and after, inbox and settings.
 
+[26.11.18]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.18
 [26.11.17]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.17
 [26.11.16]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.16
 [26.11.15]: https://github.com/hisXLNC/job-hunt-releases/releases/tag/v26.11.15
