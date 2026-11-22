@@ -1217,6 +1217,18 @@ The ten screen changes the user approved ("do them all"):
   address in the tab, where the form can be filled. Before, a press filled only what the outer page
   had (Stripe's newsletter box; 2.96.5 stopped that).
 
+## 26.11.16
+
+- `db::is_company_code` also takes an all-digit code of five or more digits ("0000050007 Royal Bank
+  of Canada"); `Db::init` cleans stored company names that start with a code and recomputes their
+  `dupe_key`.
+- `Db::fold_twins`: among jobs still "queued" or "ready", the same role (dupe_key), place and text
+  (`text_key`: first 1500 letters/digits, at least 300) stored more than once under different
+  requisition numbers is kept once (tailored first, then higher score, then older); the rest become
+  "skipped" with reasoning "Set aside: the employer posted this role more than once…" and a "twin"
+  event. Runs when the database opens and after each search. Twins are still scored once before
+  being folded (the description isn't known where new postings are first matched).
+
 ## 26.11.15
 
 - Stop on a background task did nothing unless the task was inside a Claude request, and the update

@@ -36,7 +36,10 @@ impl Agent {
     pub fn search(&self, postings: Option<Vec<Posting>>) -> R<Report> {
         // What this does by itself is Job Hunt's in the history, even when you pressed the button that began it.
         let _who = crate::db::acting("jobhunt");
-        self.search_with(postings, false, None)
+        let r = self.search_with(postings, false, None);
+        // The same posting put up more than once (other requisition numbers, the same text): one is kept.
+        let _ = self.db().fold_twins();
+        r
     }
 
     /// Between the day's searches: a quick look for postings that have just gone up, so you can be

@@ -2985,6 +2985,32 @@ fn keywords_you_ask_for_are_remembered_and_worked_in_by_themselves() {
 }
 
 #[test]
+fn one_posting_put_up_three_times_is_shown_once() {
+    let s = setup();
+    let text = "Lead the change and transformation portfolio across the bank. ".repeat(12);
+    // Stored as an older version left them: three copies under three numbers, and one in another city.
+    for (i, place) in [(1, "TORONTO, Ontario"), (2, "TORONTO, Ontario"), (3, "TORONTO, Ontario"), (9, "MONTREAL, Quebec")] {
+        let mut p = posting("Senior Program Manager", &format!("r{i}"));
+        p.company = "Royal Bank of Canada".into();
+        p.location = place.into();
+        p.url = format!("https://rbc.wd3.myworkdayjobs.com/RBCGLOBAL1/job/X/Senior-Program-Manager_R-000{i}");
+        p.description = text.clone();
+        let mut j = p.to_job();
+        j.status = if i == 2 { "ready" } else { "queued" }.into();
+        j.score = Some(70 + i);
+        s.agent.db().insert_job(&j).unwrap();
+    }
+    let folded = s.agent.db().fold_twins().unwrap();
+    assert_eq!(folded.len(), 2);
+    assert!(folded.iter().all(|(kept, _)| kept == "test:r2"), "the tailored one is kept: {folded:?}");
+    let waiting: Vec<Job> = s.agent.db().jobs_in(&["queued", "ready"], false).unwrap().into_iter().filter(|j| j.title == "Senior Program Manager").collect();
+    assert_eq!(waiting.len(), 2, "{:?}", waiting.iter().map(|j| (&j.id, &j.location)).collect::<Vec<_>>());
+    let aside: Vec<Job> = s.agent.db().jobs(Some("skipped"), 50).unwrap().into_iter().filter(|j| j.reasoning.as_deref().unwrap_or("").starts_with("Set aside: the employer posted")).collect();
+    assert_eq!(aside.len(), 2);
+    assert!(s.agent.db().fold_twins().unwrap().is_empty(), "nothing left to fold");
+}
+
+#[test]
 fn running_work_says_where_it_is() {
     let s = setup();
     let g = s.agent.claim("watch").unwrap();

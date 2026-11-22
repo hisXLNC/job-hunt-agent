@@ -2842,6 +2842,9 @@ https://www.linkedin.com/comm/jobs/view/4012345678/ (again)\nhttps://www.linkedi
     fn workday_company_codes_are_dropped() {
         assert_eq!(tidy_company("USA018 Thomson Reuters Holdings Inc."), "Thomson Reuters Holdings Inc.");
         assert_eq!(tidy_company("3M Canada"), "3M Canada");
+        assert_eq!(tidy_company("0000050007 Royal Bank of Canada"), "Royal Bank of Canada");
+        assert_eq!(tidy_company("360 Learning"), "360 Learning");
+        assert_eq!(crate::db::dupe_key("0000050007 Royal Bank of Canada", "PM"), crate::db::dupe_key("Royal Bank of Canada", "PM"));
         assert_eq!(tidy_company("TD Bank, N.A."), "TD Bank, N.A.");
     }
 

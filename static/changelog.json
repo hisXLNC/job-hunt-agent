@@ -1,5 +1,14 @@
 [
   {
+    "version": "26.11.16",
+    "date": "2026-11-22",
+    "title": "One posting, shown once",
+    "changes": [
+      "A role an employer posted several times (same title, place and text, different reference numbers) now shows once: the tailored or best-fitting copy is kept and the others are set aside.",
+      "Company names no longer carry a site's internal number in front (\"0000050007 Royal Bank of Canada\" is \"Royal Bank of Canada\")."
+    ]
+  },
+  {
     "version": "26.11.15",
     "date": "2026-11-22",
     "title": "Stop works, and updates don't get stuck",

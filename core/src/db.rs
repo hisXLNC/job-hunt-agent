@@ -366,11 +366,19 @@ pub fn different_requisitions(a: &[&str], b: &[&str]) -> bool {
     !shared.is_empty() && shared.iter().all(|x| !rb.iter().any(|y| y.0 == x.0 && y.1 == x.1))
 }
 
-/// An internal code like "USA018": two or more letters, then two or more digits.
+/// An internal code like "USA018" (two or more letters, then two or more digits) or "0000050007"
+/// (five or more digits and nothing else).
 pub fn is_company_code(w: &str) -> bool {
     let letters = w.chars().take_while(|c| c.is_ascii_alphabetic()).count();
     let digits = w.chars().skip(letters).take_while(|c| c.is_ascii_digit()).count();
-    letters >= 2 && digits >= 2 && letters + digits == w.chars().count()
+    letters + digits == w.chars().count() && ((letters >= 2 && digits >= 2) || (letters == 0 && digits >= 5))
+}
+
+/// What a posting says, reduced to what two copies of the same posting share: the first 1500
+/// letters and digits. None for a text too short to tell (a list page's one line).
+fn text_key(description: &str) -> Option<String> {
+    let k: String = description.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).take(1500).collect();
+    (k.chars().count() >= 300).then_some(k)
 }
 
 fn list<T: serde::de::DeserializeOwned + Default>(s: String) -> T {
@@ -604,7 +612,23 @@ impl Db {
         for (id, company, title) in missing {
             con.execute("UPDATE jobs SET dupe_key = ?1 WHERE id = ?2", params![dupe_key(&company, &title), id])?;
         }
-        Ok(Db { con, quiet: Default::default() })
+        // Company names stored with a site's internal code in front ("0000050007 Royal Bank of Canada").
+        let coded: Vec<(String, String, String)> = {
+            let mut st = con.prepare("SELECT id, company, title FROM jobs WHERE company GLOB '[0-9A-Za-z]*[0-9] *'")?;
+            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        for (id, company, title) in coded {
+            if let Some((code, rest)) = company.trim().split_once(' ') {
+                if is_company_code(code) && !rest.trim().is_empty() {
+                    con.execute("UPDATE jobs SET company = ?1, dupe_key = ?2 WHERE id = ?3", params![rest.trim(), dupe_key(rest, &title), id])?;
+                }
+            }
+        }
+        let db = Db { con, quiet: Default::default() };
+        // One posting put up more than once, stored before these were told apart: one is kept.
+        let _ = db.fold_twins();
+        Ok(db)
     }
 
     // --- jobs ----------------------------------------------------------------------------
@@ -631,6 +655,41 @@ impl Db {
         let has_req = links.iter().any(|l| requisition(l).is_some());
         let n: i64 = self.con.query_row("SELECT COUNT(*) FROM purged WHERE id = ?1 OR (?3 = 0 AND dupe_key = ?2)", params![id, dupe_key(company, title), has_req as i64], |r| r.get(0))?;
         Ok(n > 0)
+    }
+
+    /// One posting an employer put up more than once (the same role, place and text, under other
+    /// requisition numbers), among those still waiting for you: the best is kept (tailored before
+    /// not, then the higher fit, then the older) and the rest are set aside, never anything you
+    /// approved, saved or applied to. Returns (kept, set aside) pairs.
+    pub fn fold_twins(&self) -> R<Vec<(String, String)>> {
+        let rows: Vec<(String, String, String, String, String, i64, String)> = {
+            let mut st = self.con.prepare("SELECT id, COALESCE(dupe_key, ''), location, description, status, COALESCE(score, 0), found_at FROM jobs WHERE status IN ('queued', 'ready')")?;
+            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        let mut groups: std::collections::HashMap<(String, String, String), Vec<(String, String, i64, String)>> = Default::default();
+        for (id, key, place, text, status, score, found) in rows {
+            let Some(text) = text_key(&text) else { continue };
+            if key.is_empty() || key.ends_with('|') {
+                continue;
+            }
+            let place: String = place.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+            groups.entry((key, place, text)).or_default().push((id, status, score, found));
+        }
+        let mut out = vec![];
+        for (_, mut g) in groups {
+            if g.len() < 2 {
+                continue;
+            }
+            g.sort_by(|a, b| (b.1 == "ready").cmp(&(a.1 == "ready")).then(b.2.cmp(&a.2)).then(a.3.cmp(&b.3)).then(a.0.cmp(&b.0)));
+            let keep = g[0].0.clone();
+            for (id, ..) in g.into_iter().skip(1) {
+                self.con.execute("UPDATE jobs SET status = 'skipped', reasoning = ?1 WHERE id = ?2", params!["Set aside: the employer posted this role more than once, and the same posting is already in your list.", id])?;
+                self.log(Some(&id), "twin", &format!("the same posting as {keep}, posted again under another number: set aside"))?;
+                out.push((keep.clone(), id));
+            }
+        }
+        Ok(out)
     }
 
     pub fn job_exists(&self, id: &str, company: &str, title: &str) -> R<bool> {
