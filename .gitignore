@@ -1,5 +1,6 @@
-target/
-desktop/src-tauri/gen/
-data/
-preview-data/
-__pycache__/
+/dist/
+/tmp/
+*.exe
+*.test
+.DS_Store
+node_modules/

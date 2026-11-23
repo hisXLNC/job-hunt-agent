@@ -1,0 +1,20 @@
+const IC = {
+  today:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>',
+  radar:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6-6"/></svg>',
+  roles:'<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>',
+  people:'<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.200-5.500 6.500-5.500s5.900 1.900 6.500 5.500M16 4.800a3.500 3.500 0 010 6.400M18.500 14.800c1.700.8 2.700 2.500 3 5.200"/></svg>',
+  prep:'<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  prog:'<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  you:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.200 4-6 8-6s7 1.800 8 6"/></svg>',
+};
+const NAV = [['today','Today','3'],['radar','Radar','2','hot'],['roles','Roles','212'],['people','People','4'],['prep','Interviews','1'],['prog','Progress',''],['you','You','2']];
+function ring(v, label, color){ const c=2*Math.PI*22, col=color||(v>=85?'#0B7A3B':v>=70?'#2F4FC4':'#8F5B00');
+  return `<div class="ring"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="22" fill="none" stroke="#E8EBF2" stroke-width="5"/><circle cx="27" cy="27" r="22" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c*v/100} ${c}" transform="rotate(-90 27 27)"/></svg><b>${v}</b><span>${label}</span></div>`; }
+const rings = (a,b) => `<div class="rings">${ring(a,'Fit now')}${ring(b,'Tailored')}</div>`;
+const lg = (t,c) => `<div class="lg" style="background:${c}">${t}</div>`;
+function shell(id, title, sub, inner, work){
+  return `<section class="screen" id="${id}" style="position:relative"><aside class="side"><div class="logo"><i>J</i>Job Hunt</div>${NAV.map(n=>`<div class="nav ${n[0]===id?'on':''}">${IC[n[0]]}${n[1]}${n[2]?`<b class="${n[3]||''}">${n[2]}</b>`:''}</div>`).join('')}
+  <div class="sp"></div><div class="pilot"><h6><span class="dot"></span>Working for you</h6>Watching 61 sources. Tailoring 2 roles found 3 min ago.<div class="bar"><i style="width:38%"></i></div><div style="margin-top:6px;color:#8F98B3">38% of this week's Claude budget used</div></div></aside>
+  <div class="main"><div class="top"><h1>${title}</h1><span class="sub">${sub||''}</span><div class="find"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></svg>Find a role, company or person<kbd>Ctrl K</kbd></div><div class="work"><span class="dot"></span>${work||'Next look at LinkedIn in 4 min'}</div></div>${inner}</div><div class="sample">Sample data, for the design only</div></section>`;
+}
+const S = [];
