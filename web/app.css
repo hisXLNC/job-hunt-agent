@@ -166,3 +166,14 @@ details>summary{cursor:pointer;font-weight:600;color:var(--accent)}
 .app.chat-open .pilot{display:none}
 .app.chat-open .find{width:220px}
 }
+
+/* who the person would be working for */
+.who{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px 26px}
+.who p{margin:5px 0 6px;font-size:14px;line-height:1.5}
+button.link{background:none;border:0;padding:0;font:inherit;color:var(--accent);cursor:pointer}
+button.link:hover{text-decoration:underline}
+.tbl tr.has-about td{border-bottom:0;padding-bottom:4px}
+.tbl tr.about td{padding:0 16px 12px 58px;line-height:1.45}
+.tbl tbody tr.about:hover{background:none}
+.tbl.emp th:first-child{width:30%}.tbl.emp th:nth-child(2){width:27%}
+.tbl.emp tr:not(.about) td:nth-child(n+3){white-space:nowrap}

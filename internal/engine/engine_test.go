@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"jobhunt/internal/brain"
+	"jobhunt/internal/llm"
 	"jobhunt/internal/sources"
 	"jobhunt/internal/store"
 )
@@ -559,5 +561,105 @@ func TestArrivingAndTalks(t *testing.T) {
 	name, ics, err := e.ICS(tid)
 	if err != nil || !strings.HasSuffix(name, ".ics") || !bytes.Contains(ics, []byte("BEGIN:VEVENT")) {
 		t.Errorf("ics: %q %v", name, err)
+	}
+}
+
+// Every role says who the person would be working for: the employer in
+// general, and the part of it the posting is for. The employer's description
+// is kept on the employer, the person's own wording is never replaced, and an
+// employer nobody can place is asked about once and then left alone.
+func TestEmployerAndTeamDescriptions(t *testing.T) {
+	e, w := newEngine(t)
+	co := setUp(t, e)
+	ctx := context.Background()
+	stand := brain.StandIn()
+	asked, sawOnRecord := 0, ""
+	e.Sample = llm.Func(func(ctx context.Context, req llm.Request) (llm.Response, error) {
+		switch req.Task {
+		case "about_employers":
+			asked++
+			return llm.Response{Text: `{"employers":[{"name":"Borealis Works","about":"Makes signalling equipment for railways."},{"name":"Nobody Knows Ltd","about":""}]}`}, nil
+		case "read_role":
+			if i := strings.Index(req.Prompt, "</posting>"); i >= 0 {
+				sawOnRecord = req.Prompt[i:]
+			}
+			res, err := stand.Do(ctx, req)
+			if err != nil {
+				return res, err
+			}
+			var m map[string]any
+			json.Unmarshal([]byte(res.Text), &m)
+			m["employer"] = "Acme makes anvils and ships them worldwide."
+			m["agency"] = strings.Contains(req.Prompt, "Our client")
+			m["division"] = "Group Tax, a team of eight inside Finance; the role reports to the head of tax."
+			res.Text = string(mustJSON(m))
+			return res, nil
+		}
+		return stand.Do(ctx, req)
+	})
+	w.jobs = []map[string]any{job(1, "Tax Technology Manager", "Toronto, ON", goodAd)}
+	if err := e.Search(ctx, "full"); err != nil {
+		t.Fatal(err)
+	}
+	all, _, _ := e.S.Roles(store.RoleFilter{Limit: 5})
+	if len(all) != 1 {
+		t.Fatalf("want one role, got %d", len(all))
+	}
+	var rd brain.Reading
+	one, _ := e.S.Role(all[0].ID)
+	json.Unmarshal(one.Reading, &rd)
+	if rd.Employer == "" || !strings.HasPrefix(rd.Division, "Group Tax") {
+		t.Fatalf("the reading should describe the employer and the team: %+v", rd)
+	}
+	got, _ := e.S.Company(co.ID)
+	if got.About != "Acme makes anvils and ships them worldwide." || got.AboutFrom != "posting" {
+		t.Fatalf("the employer should keep its description: %q from %q", got.About, got.AboutFrom)
+	}
+
+	// The person's own words stand, and Claude is shown them on the next read.
+	got.About, got.AboutFrom = "A family firm I know well.", "you"
+	e.S.SaveCompany(got)
+	if _, _, err := e.ReadRole(ctx, all[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = e.S.Company(co.ID); got.About != "A family firm I know well." || got.AboutFrom != "you" {
+		t.Fatalf("the person's description was replaced: %+v", got)
+	}
+	if !strings.Contains(sawOnRecord, "A family firm I know well.") {
+		t.Fatalf("the reading was not told what is on record: %q", sawOnRecord)
+	}
+
+	// A recruiter's posting describes its client, not the recruiter: the role
+	// carries the description, the recruiter's own record stays as it was.
+	aid, err := e.AddRole("Brightline Staffing", "Tax Technology Manager", "Toronto, ON", "", "Our client, a food distributor, needs a tax technology manager. "+strings.Repeat("Maintain sales tax determination in SAP and prepare returns. ", 8), "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.ReadRole(ctx, aid); err != nil {
+		t.Fatal(err)
+	}
+	ar, _ := e.S.Role(aid)
+	json.Unmarshal(ar.Reading, &rd)
+	if ac, _ := e.S.Company(ar.CompanyID); !rd.Agency || rd.Employer == "" || ac.About != "" {
+		t.Fatalf("a recruiter must not be described by one client's posting: agency=%v about=%q", rd.Agency, ac.About)
+	}
+	e.S.SaveCompany(func() store.Company { c, _ := e.S.Company(ar.CompanyID); c.State = "suggested"; return c }())
+
+	// Employers with no postings yet are described from what is widely known,
+	// or marked as unknown; either way they are asked about only once.
+	known, _, _ := e.S.UpsertCompany(store.Company{Name: "Borealis Works", State: "following"})
+	unknown, _, _ := e.S.UpsertCompany(store.Company{Name: "Nobody Knows Ltd", State: "following"})
+	if err := e.DescribeEmployers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := e.S.Company(known.ID); c.About != "Makes signalling equipment for railways." || c.AboutFrom != "claude" {
+		t.Fatalf("known employer: %+v", c)
+	}
+	if c, _ := e.S.Company(unknown.ID); c.About != "" || c.AboutFrom != "unknown" {
+		t.Fatalf("an employer nobody can place must stay undescribed: %+v", c)
+	}
+	e.DescribeEmployers(ctx)
+	if asked != 1 {
+		t.Fatalf("employers were asked about %d times, want 1", asked)
 	}
 }

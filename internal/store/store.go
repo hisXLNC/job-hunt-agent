@@ -280,6 +280,12 @@ CREATE TABLE chat_files (
 );
 CREATE INDEX chat_files_chat ON chat_files(chat_id);
 `,
+	// 4: what an employer does, in a sentence or two, and where that came from
+	// ("posting", "claude", "you", or "unknown" when asked and nobody could say).
+	`
+ALTER TABLE companies ADD COLUMN about TEXT NOT NULL DEFAULT '';
+ALTER TABLE companies ADD COLUMN about_from TEXT NOT NULL DEFAULT '';
+`,
 }
 
 // Open opens (creating and upgrading if needed) the database at path.

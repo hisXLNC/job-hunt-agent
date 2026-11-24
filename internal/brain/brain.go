@@ -209,6 +209,7 @@ type Employer struct {
 	Name   string `json:"name"`
 	Site   string `json:"site"`
 	Sector string `json:"sector"`
+	About  string `json:"about"`
 	Why    string `json:"why"`
 }
 
@@ -216,6 +217,7 @@ var employersShape = llm.Obj("employers", llm.Arr("the employers", llm.Obj(
 	"name", llm.Str("the employer's common name"),
 	"site", llm.Str("its main website address, e.g. https://www.example.com, or empty if unsure"),
 	"sector", llm.Str("2 or 3 words, e.g. 'Big-four firm', 'Bank', 'Provincial government', 'Tax software'"),
+	"about", llm.Str(aboutRule),
 	"why", llm.Str("one short sentence on why this employer hires people like this person"),
 )))
 
@@ -244,6 +246,88 @@ Your task: name real employers that hire people with this person's background in
 	return out.Employers, err
 }
 
+// What a description of an employer is allowed to be. The same words are used
+// wherever Claude is asked for one, so they read alike across the app.
+const aboutRule = "what this employer is and does, in one or two plain sentences and under 45 words, for a newcomer to the country: what it makes, sells or is responsible for, who it serves, roughly how large it is and where it is based. Facts only, no praise, no slogans. Empty if you are not sure which organisation this is"
+
+// brief keeps a description to whole sentences within n characters.
+func brief(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) <= n {
+		return s
+	}
+	cut := s[:n]
+	if i := strings.LastIndex(cut, ". "); i > n/3 {
+		return cut[:i+1]
+	}
+	if i := strings.LastIndexByte(cut, ' '); i > 0 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,;:") + "…"
+}
+
+// EmployerRef names an employer to describe.
+type EmployerRef struct {
+	Name   string `json:"name"`
+	Site   string `json:"site"`
+	Sector string `json:"sector"`
+}
+
+var aboutShape = llm.Obj("employers", llm.Arr("one entry for each employer asked about, in the same order", llm.Obj(
+	"name", llm.Str("the employer's name, exactly as it was given"),
+	"about", llm.Str(aboutRule),
+)))
+
+// AboutEmployers says in a sentence or two what each employer does. An
+// employer Claude cannot place comes back with an empty description: saying
+// nothing is better than describing the wrong organisation.
+func (b *Brain) AboutEmployers(ctx context.Context, place string, list []EmployerRef) (map[string]string, error) {
+	if len(list) == 0 {
+		return nil, nil
+	}
+	var q strings.Builder
+	for i, e := range list {
+		fmt.Fprintf(&q, "%d. %s", i+1, clip(e.Name, 120))
+		if e.Site != "" {
+			fmt.Fprintf(&q, " (%s)", clip(e.Site, 160))
+		}
+		if e.Sector != "" {
+			fmt.Fprintf(&q, ", %s", clip(e.Sector, 60))
+		}
+		q.WriteString("\n")
+	}
+	type ans struct {
+		Employers []struct {
+			Name  string `json:"name"`
+			About string `json:"about"`
+		} `json:"employers"`
+	}
+	where := ""
+	if place != "" {
+		where = " The person is looking for work in " + place + ", so where a name is shared by several organisations it is the one that hires there."
+	}
+	out, _, err := llm.JSON[ans](ctx, b.LLM, llm.Request{
+		Task: "about_employers",
+		System: house + `
+
+Your task: for each employer listed, say what it is and does so that someone new to the country knows who they would be working for. Use only what is widely known and settled about the organisation. Never guess from the name alone: a small or unfamiliar employer gets an empty description.` + where,
+		Prompt: "<employers>\n" + q.String() + "</employers>",
+		Schema: aboutShape,
+		Effort: "low",
+		Input:  list,
+	})
+	if err != nil {
+		return nil, err
+	}
+	got := map[string]string{}
+	for _, e := range out.Employers {
+		if a := strings.TrimSpace(e.About); a != "" {
+			got[store.NormName(e.Name)] = brief(a, 420)
+		}
+	}
+	return got, nil
+}
+
 // ---- reading a role ------------------------------------------------------------
 
 // Ask is one thing a posting asks for, and where the person's CV shows it.
@@ -259,6 +343,9 @@ type Reading struct {
 	Verdict  string   `json:"verdict"` // apply, maybe, skip
 	Band     string   `json:"band"`    // level, step_up, sideways, other
 	Summary  string   `json:"summary"`
+	Employer string   `json:"employer"` // what the employer does, in general
+	Division string   `json:"division"` // the part of it this posting is for
+	Agency   bool     `json:"agency"`   // posted by a recruiter for somebody else
 	Asks     []Ask    `json:"asks"`
 	Concerns []string `json:"concerns"`
 	Keywords []string `json:"keywords"`
@@ -271,6 +358,9 @@ var readingShape = llm.Obj(
 	"verdict", llm.Enum("apply: worth applying. maybe: only if little else is around. skip: not for this person", "apply", "maybe", "skip"),
 	"band", llm.Enum("how the role sits against the person's level", "level", "step_up", "sideways", "other"),
 	"summary", llm.Str("Job Hunt's read in two sentences: why this is or isn't a match, and the one thing that will decide it"),
+	"employer", llm.Str(aboutRule+". Start from what the posting says about the employer and add what is widely known about it. If the posting comes from a recruiter or staffing agency hiring for a client, describe the client as far as the posting does and say that the agency named is recruiting for it"),
+	"agency", llm.Bool("true only when the posting was placed by a recruiter or staffing agency that is hiring for another organisation"),
+	"division", llm.Str("the division, business unit, department or team this role sits in, by name, and what that group does, in one or two plain sentences; add who the role reports to and the size of the team if the posting says. Under 60 words, taken from the posting only; never mention what the posting leaves out. Empty if the posting names no group and says nothing of what it does"),
 	"asks", llm.Arr("the 4 to 7 things this posting most requires, most important first", llm.Obj(
 		"ask", llm.Str("the requirement, in the posting's own words, shortened to under 12 words"),
 		"evidence", llm.Str("the specific thing on the CV or in the facts that shows it, with employer and year; or 'Nothing on your CV' if there is none"),
@@ -298,6 +388,8 @@ A person who is relocating and has not arrived yet can still apply: that alone i
 // Posting is the part of a role Claude is shown.
 type Posting struct {
 	Company, Title, Location, Workplace, Pay, Description string
+	// About is what is already on record about the employer, if anything.
+	About string
 }
 
 func (p Posting) block() string {
@@ -314,6 +406,9 @@ func (p Posting) block() string {
 		fmt.Fprintf(&b, "Pay: %s\n", p.Pay)
 	}
 	b.WriteString("\n" + clip(p.Description, 24000) + "\n</posting>")
+	if p.About != "" {
+		b.WriteString("\n\nAlready on record about this employer (keep it unless the posting shows it is wrong): " + clip(p.About, 400))
+	}
 	return b.String()
 }
 
@@ -340,6 +435,7 @@ Your task: read one job posting against this person and say honestly how well th
 		return out, err
 	}
 	out.Fit = min(max(out.Fit, 0), 100)
+	out.Employer, out.Division = brief(out.Employer, 420), brief(out.Division, 520)
 	if !knownCV(p.CVs, out.CVID) && len(p.CVs) > 0 {
 		out.CVID = p.CVs[0].ID
 	}

@@ -22,6 +22,8 @@ type Company struct {
 	BoardNote      string          `json:"board_note"`
 	Why            string          `json:"why"`
 	Sector         string          `json:"sector"`
+	About          string          `json:"about"`
+	AboutFrom      string          `json:"about_from"`
 	State          string          `json:"state"`
 	Source         string          `json:"source"`
 	Plan           json.RawMessage `json:"plan"`
@@ -69,12 +71,12 @@ func NormName(name string) string {
 	return strings.Join(keep, " ")
 }
 
-const companyCols = `c.id, c.name, c.site, c.board_kind, c.board_token, c.board_checked_at, c.board_note, c.why, c.sector, c.state, c.source, c.plan, c.created_at`
+const companyCols = `c.id, c.name, c.site, c.board_kind, c.board_token, c.board_checked_at, c.board_note, c.why, c.sector, c.about, c.about_from, c.state, c.source, c.plan, c.created_at`
 
 func scanCompany(sc interface{ Scan(...any) error }, extra ...any) (Company, error) {
 	var c Company
 	var plan string
-	dst := []any{&c.ID, &c.Name, &c.Site, &c.BoardKind, &c.BoardToken, &c.BoardCheckedAt, &c.BoardNote, &c.Why, &c.Sector, &c.State, &c.Source, &plan, &c.CreatedAt}
+	dst := []any{&c.ID, &c.Name, &c.Site, &c.BoardKind, &c.BoardToken, &c.BoardCheckedAt, &c.BoardNote, &c.Why, &c.Sector, &c.About, &c.AboutFrom, &c.State, &c.Source, &plan, &c.CreatedAt}
 	if len(extra) > 0 {
 		dst = append(dst, &c.OpenRoles, &c.BestFit, &c.NewestRole, &c.People, &c.KnowYou, &c.Applied)
 	}
@@ -101,6 +103,9 @@ func (s *Store) UpsertCompany(c Company) (Company, bool, error) {
 		if got.Sector == "" && c.Sector != "" {
 			got.Sector, changed = c.Sector, true
 		}
+		if got.About == "" && c.About != "" {
+			got.About, got.AboutFrom, changed = c.About, c.AboutFrom, true
+		}
 		if got.BoardKind == "" && c.BoardKind != "" {
 			got.BoardKind, got.BoardToken, changed = c.BoardKind, c.BoardToken, true
 		}
@@ -118,8 +123,8 @@ func (s *Store) UpsertCompany(c Company) (Company, bool, error) {
 	if c.Source == "" {
 		c.Source = "you"
 	}
-	res, err := s.db.Exec(`INSERT INTO companies(name, norm, site, board_kind, board_token, why, sector, state, source, plan, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-		strings.TrimSpace(c.Name), norm, c.Site, c.BoardKind, c.BoardToken, c.Why, c.Sector, c.State, c.Source, rawStr(c.Plan, "{}"), s.now())
+	res, err := s.db.Exec(`INSERT INTO companies(name, norm, site, board_kind, board_token, why, sector, about, about_from, state, source, plan, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		strings.TrimSpace(c.Name), norm, c.Site, c.BoardKind, c.BoardToken, c.Why, c.Sector, c.About, c.AboutFrom, c.State, c.Source, rawStr(c.Plan, "{}"), s.now())
 	if err != nil {
 		return Company{}, false, err
 	}
@@ -131,8 +136,8 @@ func (s *Store) UpsertCompany(c Company) (Company, bool, error) {
 }
 
 func (s *Store) SaveCompany(c Company) error {
-	_, err := s.db.Exec(`UPDATE companies SET name=?, site=?, board_kind=?, board_token=?, board_checked_at=?, board_note=?, why=?, sector=?, state=?, plan=? WHERE id=?`,
-		c.Name, c.Site, c.BoardKind, c.BoardToken, c.BoardCheckedAt, c.BoardNote, c.Why, c.Sector, c.State, rawStr(c.Plan, "{}"), c.ID)
+	_, err := s.db.Exec(`UPDATE companies SET name=?, site=?, board_kind=?, board_token=?, board_checked_at=?, board_note=?, why=?, sector=?, about=?, about_from=?, state=?, plan=? WHERE id=?`,
+		c.Name, c.Site, c.BoardKind, c.BoardToken, c.BoardCheckedAt, c.BoardNote, c.Why, c.Sector, c.About, c.AboutFrom, c.State, rawStr(c.Plan, "{}"), c.ID)
 	s.Changed("companies")
 	return err
 }

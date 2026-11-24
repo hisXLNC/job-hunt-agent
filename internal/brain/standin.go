@@ -26,6 +26,8 @@ func StandIn() llm.Engine {
 			out = standPropose(req.Input.(string))
 		case "employers":
 			out = map[string]any{"employers": standEmployers(req.Input.(Person))}
+		case "about_employers":
+			out = map[string]any{"employers": standAbout(req.Input.([]EmployerRef))}
 		case "read_role":
 			in := req.Input.(readInput)
 			out = standRead(in.Person, in.Posting)
@@ -430,6 +432,8 @@ func standRead(p Person, post Posting) Reading {
 			gaps++
 		}
 	}
+	r.Employer = firstNonEmpty(post.About, sentenceWith(post.Description, "we are a ", "we are the ", "we're a ", "our company", "our mission", "founded in", "headquartered"))
+	r.Division = sentenceWith(post.Description, " team", "division", "department", "business unit", "report to", "reports to", "reporting to", " group")
 	r.Summary = fmt.Sprintf("Your CV shows %d of the %d things this posting asks for most.", len(r.Asks)-gaps, len(r.Asks))
 	if gaps > 0 {
 		r.Summary += " The gaps are what a screening call will probe."
@@ -438,6 +442,43 @@ func standRead(p Person, post Posting) Reading {
 		r.Summary += " Speed matters more than polish here."
 	}
 	return r
+}
+
+// standAbout has no knowledge of real employers, so it only restates what it
+// was told and says nothing about a name it was given bare.
+func standAbout(list []EmployerRef) []map[string]string {
+	var out []map[string]string
+	for _, e := range list {
+		about := ""
+		if e.Sector != "" {
+			about = e.Name + " is a " + strings.ToLower(e.Sector) + " employer. (A sample line: with Claude connected, this says what the employer does.)"
+		}
+		out = append(out, map[string]string{"name": e.Name, "about": about})
+	}
+	return out
+}
+
+// sentenceWith returns the first sentence of text that contains one of the
+// marks, in the text's own words.
+func sentenceWith(text string, marks ...string) string {
+	for _, para := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(para), "-") {
+			continue
+		}
+		for _, sen := range strings.SplitAfter(para, ". ") {
+			sen = strings.TrimSpace(sen)
+			low := " " + strings.ToLower(sen)
+			if len(sen) < 30 || len(sen) > 320 {
+				continue
+			}
+			for _, m := range marks {
+				if strings.Contains(low, m) {
+					return sen
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func clipWords(s string, n int) string {

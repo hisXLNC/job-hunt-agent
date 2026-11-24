@@ -40,12 +40,13 @@ export default {
               <a class="chip ${state === 'suggested' ? 'on' : ''}" href="${with_(route, { state: 'suggested', page: '' })}">Seen in searches ${c.suggested}</a>
               <a class="chip ${state === 'muted' ? 'on' : ''}" href="${with_(route, { state: 'muted', page: '' })}">Muted ${c.muted}</a>
               <form data-act="filter" class="row" style="gap:6px"><input type="text" name="q" value="${route.q.q || ''}" placeholder="Filter employers" aria-label="Filter employers" style="width:170px;height:30px"><button class="btn sm">Filter</button></form></div>
-            <table class="tbl"><thead><tr><th>${sortHead('Employer', 'name', route, 'open')}</th><th>Where it posts</th><th>${sortHead('Open roles', 'open', route, 'open')}</th><th>${sortHead('Best fit', 'fit', route, 'open')}</th><th>${sortHead('People', 'people', route, 'open')}</th><th></th></tr></thead>
-            <tbody>${c.companies.map(x => html`<tr><td><div class="row">${tile(x.name, true)}<div><a class="t" href="${href('roles', { company: x.id, closed: 'all' })}">${x.name}</a><span class="xs m">${x.sector || x.why}</span></div></div></td>
+            <table class="tbl emp"><thead><tr><th>${sortHead('Employer', 'name', route, 'open')}</th><th>Where it posts</th><th>${sortHead('Open roles', 'open', route, 'open')}</th><th>${sortHead('Best fit', 'fit', route, 'open')}</th><th>${sortHead('People', 'people', route, 'open')}</th><th></th></tr></thead>
+            <tbody>${c.companies.map(x => html`<tr class="${x.about ? 'has-about' : ''}"><td><div class="row">${tile(x.name, true)}<div><a class="t" href="${href('roles', { company: x.id, closed: 'all' })}">${x.name}</a><span class="xs m">${x.sector || x.why}</span></div></div></td>
               <td class="s">${BOARD[x.board_kind] || html`<span class="m">${x.board_note || 'LinkedIn search'}</span>`}</td>
               <td class="s"><b>${x.open_roles}</b>${x.applied ? html` <span class="m">· ${x.applied} applied</span>` : ''}</td><td class="s">${x.best_fit > 0 ? x.best_fit : html`<span class="m">–</span>`}</td>
               <td class="s">${x.people ? html`${x.people}${x.know_you ? html` <b style="color:var(--good)">· ${x.know_you} know you</b>` : ''}` : html`<span class="m">–</span>`}</td>
-              <td style="text-align:right;white-space:nowrap">${x.state === 'following' ? html`<button class="btn sm ghost" data-act="state" data-id="${x.id}" data-state="muted">Mute</button>` : html`<button class="btn sm" data-act="state" data-id="${x.id}" data-state="following">Watch</button>`}</td></tr>`)}
+              <td style="text-align:right;white-space:nowrap">${x.state === 'following' ? html`<button class="btn sm ghost" data-act="state" data-id="${x.id}" data-state="muted">Mute</button>` : html`<button class="btn sm" data-act="state" data-id="${x.id}" data-state="following">Watch</button>`}</td></tr>
+              ${x.about ? html`<tr class="about"><td colspan="6" class="s ink2">${x.about}</td></tr>` : ''}`)}
               ${!c.companies.length ? html`<tr><td colspan="6" class="s m" style="padding:22px;text-align:center">No employers here.</td></tr>` : ''}</tbody></table>
             <div style="padding:0 14px 12px">${pager(c.total, c.page, c.size, route)}</div></div>
         </div>

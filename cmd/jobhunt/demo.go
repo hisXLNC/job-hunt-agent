@@ -58,7 +58,7 @@ var demoBullets = map[string][]string{
 }
 
 func demoAd(kind, company, title string) string {
-	return "About the role\n" + company + " is hiring a " + title + " to join the finance organisation in Toronto. You will work with tax, finance and technology teams across the group and report to the head of tax.\n\nWhat you bring\n- " +
+	return "About the role\n" + company + " is hiring a " + title + " in Toronto. You will join the Tax Technology team, eight people inside Group Finance who run the systems that work out, file and report tax for every part of the business, and you will report to the head of tax.\n\nWhat you bring\n- " +
 		strings.Join(demoBullets[kind], "\n- ") + "\n\nWe offer a hybrid working model, a competitive salary and a defined contribution pension. We thank all applicants; only those selected for an interview will be contacted."
 }
 
@@ -92,14 +92,14 @@ func seedDemo(e *engine.Engine) error {
 	s.Ask(store.Question{Key: "pay_floor", Text: "What is the lowest yearly salary you would accept in Toronto?", Why: "Roles that state less are set aside.", Weight: 60})
 
 	for _, c := range []store.Company{
-		{Name: "Maple Ledger", Sector: "Tax software", Why: "Builds the kind of tax engine you have implemented", BoardKind: "greenhouse", BoardToken: "mapleledger"},
-		{Name: "Harbourfront Bank", Sector: "Banking", Why: "Large in-house tax technology team in Toronto", BoardKind: "workday", BoardToken: "harbourfront.wd3/careers"},
-		{Name: "Northlight Retail", Sector: "Retail", Why: "On SAP S/4HANA with stores in every province", BoardKind: "lever", BoardToken: "northlight"},
-		{Name: "Cedar & Pine Advisory", Sector: "Professional services", Why: "Indirect tax technology practice; hires from industry"},
-		{Name: "Lakeshore Logistics", Sector: "Logistics", Why: "Cross-border GST and HST at volume", BoardKind: "ashby", BoardToken: "lakeshore"},
-		{Name: "Quill Payments", Sector: "Payments", Why: "Launching e-invoicing products", BoardKind: "greenhouse", BoardToken: "quill"},
+		{Name: "Maple Ledger", About: "A Toronto software company of about 400 people that makes sales-tax and e-invoicing software used by mid-sized retailers and distributors across Canada and the United States.", Sector: "Tax software", Why: "Builds the kind of tax engine you have implemented", BoardKind: "greenhouse", BoardToken: "mapleledger"},
+		{Name: "Harbourfront Bank", About: "One of the larger retail and commercial banks in Canada, based in Toronto, with about 30,000 staff and branches in every province.", Sector: "Banking", Why: "Large in-house tax technology team in Toronto", BoardKind: "workday", BoardToken: "harbourfront.wd3/careers"},
+		{Name: "Northlight Retail", About: "A national chain of home and outdoor stores with about 250 shops and an online business, run from a head office in Mississauga.", Sector: "Retail", Why: "On SAP S/4HANA with stores in every province", BoardKind: "lever", BoardToken: "northlight"},
+		{Name: "Cedar & Pine Advisory", About: "A mid-sized Canadian accounting and advisory firm with offices in Toronto, Calgary and Vancouver; its clients are mostly private companies and public bodies.", Sector: "Professional services", Why: "Indirect tax technology practice; hires from industry"},
+		{Name: "Lakeshore Logistics", About: "A freight and customs broker that moves goods by road and rail between Canada and the United States, with about 1,200 staff.", Sector: "Logistics", Why: "Cross-border GST and HST at volume", BoardKind: "ashby", BoardToken: "lakeshore"},
+		{Name: "Quill Payments", About: "A payments company whose software lets businesses send invoices and get paid online; about 600 people, founded in Toronto in 2015.", Sector: "Payments", Why: "Launching e-invoicing products", BoardKind: "greenhouse", BoardToken: "quill"},
 	} {
-		c.State, c.Source = "following", "proposed"
+		c.State, c.Source, c.AboutFrom = "following", "proposed", "claude"
 		got, _, err := s.UpsertCompany(c)
 		if err != nil {
 			return err

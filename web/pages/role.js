@@ -1,4 +1,4 @@
-import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, stageChip, freshness, BAND, STAGE, KIND } from '../app.js';
+import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, stageChip, freshness, openAssistant, BAND, STAGE, KIND } from '../app.js';
 
 const STRENGTH = { strong: ['You have it', 'good'], partly: ['Partly', 'warn'], gap: ['Gap', 'crit'] };
 
@@ -16,6 +16,21 @@ function why(rd) {
       ${rd.asks.map(a => { const [l, c] = STRENGTH[a.strength] || ['', '']; return html`<tr><td class="s" style="width:38%"><b>${a.ask}</b></td><td class="s ink2">${a.evidence}</td><td><span class="chip ${c}">${l}</span></td></tr>`; })}</tbody></table>` : ''}
     ${rd.concerns?.length ? html`<div style="margin-top:10px"><div class="eb">Worth knowing</div><ul class="s ink2" style="margin:4px 0 0 18px">${rd.concerns.map(x => html`<li>${x}</li>`)}</ul></div>` : ''}</div>`;
 }
+
+// Who the person would be working for: the employer in general, and the part
+// of it this posting is for. Shown only when there is something to say.
+function who(d) {
+  // A recruiter's posting is about its client, so there the posting's own account comes first.
+  const viaAgency = d.reading?.agency && d.reading?.employer;
+  const about = viaAgency ? d.reading.employer : d.company?.about || d.reading?.employer || '', team = d.reading?.division || '';
+  if (!about && !team) return '';
+  return html`<div class="card who">
+    ${about ? html`<div><div class="eb">${viaAgency ? 'The employer, through a recruiter' : 'The employer'}</div><p>${about}</p>
+      <div class="xs m">${viaAgency ? 'From this posting' : html`${d.company?.sector ? html`${d.company.sector} · ` : ''}${FROM[d.company?.about_from] || 'From this posting'} · <button class="link" data-act="fixabout">Correct this</button>`}</div></div>` : ''}
+    ${team ? html`<div><div class="eb">The team this role is in</div><p>${team}</p><div class="xs m">From this posting</div></div>` : ''}
+  </div>`;
+}
+const FROM = { posting: 'From its postings', claude: 'What Claude knows of it; check before you rely on it', you: 'In your words' };
 
 function sent(d) {
   const r = d.role;
@@ -76,7 +91,7 @@ export default {
           ${url ? html`<a class="btn p" href="${url}" target="_blank" rel="noopener noreferrer">Open the posting</a>` : ''}
           ${r.closed ? html`<button class="btn sm" data-act="reopen">Bring back</button>` : html`<div class="row" style="gap:6px">${stageOrder(r.stage) < 3 ? html`<button class="btn sm" data-act="applied">I applied</button>` : ''}<button class="btn sm ghost" data-act="no" data-confirm="Not interested in this role? It will never be shown again.">Not for me</button></div>`}
         </div></div>
-      <div class="cols wide"><div class="col" style="gap:14px">${why(d.reading)}${sent(d)}
+      <div class="cols wide"><div class="col" style="gap:14px">${who(d)}${why(d.reading)}${sent(d)}
         <div class="card"><details ${d.cv || d.reading?.summary ? '' : 'open'}><summary>The posting</summary><div class="s pre ink2" style="margin-top:10px">${r.description || 'Job Hunt has no text for this posting. Open it to read it.'}</div></details></div></div>
         ${side(d)}</div></div>`;
   },
@@ -92,6 +107,7 @@ export default {
     switchcv: ({ route, value }) => { toast('Tailoring from the other CV…'); return post(`roles/${route.parts[1]}/cv`, { cv: +value }); },
     saveletter: ({ route, f }) => post(`roles/${route.parts[1]}/letter`, { text: f.text }).then(() => toast('Letter saved')),
     copyletter: ({ data }) => { copy(data.letter || ''); return false; },
+    fixabout: ({ data }) => { openAssistant(`About ${data.role.company}: `, false); return false; },
     case: ({ route }) => post(`roles/${route.parts[1]}/case`),
     copycase: ({ data }) => { copy((data.case.subject ? data.case.subject + '\n\n' : '') + data.case.body); return false; },
     async note({ d, route }) { await post(`people/${d.id}/note`, { purpose: 'applied', role: +route.parts[1] }); location.hash = `#/people/${d.id}`; return false; },

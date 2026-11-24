@@ -38,7 +38,7 @@ func (e *Engine) SeedEmployers(ctx context.Context, n int) error {
 		if strings.TrimSpace(emp.Name) == "" {
 			continue
 		}
-		_, isNew, err := e.S.UpsertCompany(store.Company{Name: emp.Name, Site: cleanSite(emp.Site), Sector: emp.Sector, Why: emp.Why, State: "following", Source: "proposed"})
+		_, isNew, err := e.S.UpsertCompany(store.Company{Name: emp.Name, Site: cleanSite(emp.Site), Sector: emp.Sector, Why: emp.Why, About: strings.TrimSpace(emp.About), AboutFrom: fromIf(emp.About, "claude"), State: "following", Source: "proposed"})
 		if err == nil && isNew {
 			added++
 		}
@@ -47,6 +47,7 @@ func (e *Engine) SeedEmployers(ctx context.Context, n int) error {
 		e.S.Log(store.Activity{Kind: "employers", Text: fmt.Sprintf("Added %d employers that hire people like you", added)})
 	}
 	e.DetectBoards(ctx)
+	e.DescribeEmployers(ctx)
 	return nil
 }
 
@@ -75,6 +76,65 @@ func (e *Engine) DetectBoards(ctx context.Context) {
 		}
 		e.DetectBoard(ctx, c.ID)
 	}
+}
+
+func fromIf(text, from string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return from
+}
+
+// DescribeEmployers fills in what watched employers do, for the ones nobody
+// has described yet. Each is asked about once: an employer Claude cannot
+// place is marked so, and gets its description from its first posting instead.
+func (e *Engine) DescribeEmployers(ctx context.Context, ids ...int64) error {
+	if e.LLM().Engine == "" {
+		return nil
+	}
+	var todo []store.Company
+	if len(ids) > 0 {
+		for _, id := range ids {
+			if c, err := e.S.Company(id); err == nil && c.About == "" {
+				todo = append(todo, c)
+			}
+		}
+	} else {
+		all, _ := e.S.Companies("following")
+		for _, c := range all {
+			if c.About == "" && c.AboutFrom == "" {
+				todo = append(todo, c)
+			}
+		}
+	}
+	p := e.S.Profile()
+	place := strings.TrimSpace(p.City + " " + p.Country)
+	for len(todo) > 0 && ctx.Err() == nil {
+		batch := todo[:min(len(todo), 20)]
+		todo = todo[len(batch):]
+		refs := make([]brain.EmployerRef, len(batch))
+		for i, c := range batch {
+			refs[i] = brain.EmployerRef{Name: c.Name, Site: c.Site, Sector: c.Sector}
+		}
+		got, err := e.brain.AboutEmployers(ctx, place, refs)
+		if err != nil {
+			return err
+		}
+		for _, c := range batch {
+			// Read it again: a posting may have described it meanwhile.
+			now, err := e.S.Company(c.ID)
+			if err != nil || now.About != "" {
+				continue
+			}
+			if a := got[store.NormName(c.Name)]; a != "" {
+				now.About, now.AboutFrom = a, "claude"
+			} else {
+				now.AboutFrom = "unknown"
+			}
+			e.S.SaveCompany(now)
+		}
+	}
+	return ctx.Err()
 }
 
 // DetectBoard looks for one employer's public job board.
@@ -784,9 +844,23 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 	if len(p.CVs) == 0 {
 		return false, false, errors.New("add a CV first")
 	}
-	reading, err := e.brain.ReadRole(ctx, p, postingOf(r))
+	post := postingOf(r)
+	co, coErr := e.S.Company(r.CompanyID)
+	if coErr == nil {
+		post.About = co.About
+	}
+	reading, err := e.brain.ReadRole(ctx, p, post)
 	if err != nil {
 		return false, false, err
+	}
+	// The first posting that says what an employer does describes it from then
+	// on; what the person wrote themselves is never replaced. A recruiter's
+	// posting describes its client, which says nothing about its next one.
+	if coErr == nil && reading.Employer != "" && co.About == "" && !reading.Agency {
+		if now, err := e.S.Company(r.CompanyID); err == nil && now.About == "" {
+			now.About, now.AboutFrom = reading.Employer, "posting"
+			e.S.SaveCompany(now)
+		}
 	}
 	band := reading.Band
 	if band == "other" || band == "" {

@@ -130,7 +130,7 @@ func (e *Engine) chores(now time.Time) {
 		e.Go("mail", "", func(ctx context.Context) error { return e.CheckMail(ctx) })
 	}
 	if every("boards", 24*time.Hour) {
-		e.Go("boards", "", func(ctx context.Context) error { e.DetectBoards(ctx); return nil })
+		e.Go("boards", "", func(ctx context.Context) error { e.DetectBoards(ctx); return e.DescribeEmployers(ctx) })
 	}
 }
 

@@ -595,10 +595,16 @@ func (s *Server) Handler() http.Handler {
 			return nil, err
 		}
 		if b := safeLink(in.Site); b != "" && e.SetBoardFromURL(c.ID, b) == nil {
+			id := c.ID
+			e.Go(fmt.Sprintf("about:%d", id), "", func(ctx context.Context) error { return e.DescribeEmployers(ctx, id) })
 			return c, nil
 		}
 		id := c.ID
-		e.Go(fmt.Sprintf("board:%d", id), "", func(ctx context.Context) error { return e.DetectBoard(ctx, id) })
+		e.Go(fmt.Sprintf("board:%d", id), "", func(ctx context.Context) error {
+			err := e.DetectBoard(ctx, id)
+			e.DescribeEmployers(ctx, id)
+			return err
+		})
 		return c, nil
 	})
 	h("POST /api/companies/more", func(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -614,10 +620,20 @@ func (s *Server) Handler() http.Handler {
 			return nil, err
 		}
 		var in struct {
-			State, Board *string
+			State, Board, About *string
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
+		}
+		if in.About != nil {
+			// The person's own words stand: nothing the program reads later replaces them.
+			c.About, c.AboutFrom = clipText(strings.Join(strings.Fields(*in.About), " "), 600), "you"
+			if c.About == "" {
+				c.AboutFrom = ""
+			}
+			if err := st.SaveCompany(c); err != nil {
+				return nil, err
+			}
 		}
 		if in.State != nil {
 			switch *in.State {

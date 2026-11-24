@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -163,5 +164,36 @@ func TestEmptyListsOnAFreshStart(t *testing.T) {
 		if strings.Contains(w.Body.String(), ":null") && p != "/api/arriving" && p != "/api/today" {
 			t.Logf("%s still sends null somewhere: %.300s", p, w.Body)
 		}
+	}
+}
+
+// The role page says who the employer is; the person can put it in their own
+// words, and those are what every later answer carries.
+func TestEmployerDescriptionOnTheRolePage(t *testing.T) {
+	srv, h := newServer(t)
+	id, err := srv.E.AddRole("Northwind", "Finance Manager", "Toronto, ON", "", "Run the month-end close.", "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := srv.S.Role(id)
+	path := "/api/companies/" + strconv.FormatInt(r.CompanyID, 10)
+	if w := do(h, call{method: "PUT", path: path, marker: true, body: `{"about":"  A   grocery wholesaler <b>in</b> Ontario. "}`}); w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	w := do(h, call{path: "/api/roles/" + strconv.FormatInt(id, 10)})
+	var got struct {
+		Company struct {
+			About     string `json:"about"`
+			AboutFrom string `json:"about_from"`
+		} `json:"company"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if got.Company.About != "A grocery wholesaler <b>in</b> Ontario." || got.Company.AboutFrom != "you" {
+		t.Fatalf("the role page should carry the person's wording, tidied but unchanged: %+v", got.Company)
+	}
+	// Emptying it lets Job Hunt describe the employer again.
+	do(h, call{method: "PUT", path: path, marker: true, body: `{"about":""}`})
+	if c, _ := srv.S.Company(r.CompanyID); c.About != "" || c.AboutFrom != "" {
+		t.Fatalf("an emptied description should be open to filling again: %+v", c)
 	}
 }
