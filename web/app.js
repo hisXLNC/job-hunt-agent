@@ -403,15 +403,28 @@ export function redraw() {
   if (cursor >= 0) moveCursor(cursor);
 }
 let sizeTimer, lastSize = '';
-window.addEventListener('resize', () => {
+// The page's own room changes with the window and when the Claude panel opens beside it.
+function sized() {
   clearTimeout(sizeTimer);
   sizeTimer = setTimeout(() => {
-    const now = Math.round(innerWidth / 40) + 'x' + Math.round(innerHeight / 30);
+    const pg = document.getElementById('page');
+    const now = Math.round((pg?.clientWidth || innerWidth) / 40) + 'x' + Math.round(innerHeight / 30);
     if (now === lastSize || typing()) return;
+    const first = !lastSize;
     lastSize = now;
+    if (first) return;
     app.page?.sized ? reload(true) : redraw();
   }, 160);
-});
+}
+window.addEventListener('resize', sized);
+let sizeWatch;
+function watchSize() {
+  const pg = document.getElementById('page');
+  if (!pg || !window.ResizeObserver) return;
+  sizeWatch?.disconnect();
+  sizeWatch = new ResizeObserver(sized);
+  sizeWatch.observe(pg);
+}
 
 async function navigate() {
   const route = parseHash();
@@ -425,7 +438,7 @@ async function navigate() {
   const mod = (await PAGES[key]()).default;
   app.page = mod;
   if (key === 'setup') { $app.innerHTML = '<div class="page" id="page" style="height:100vh"></div><h1 id="title" hidden></h1><span id="sub" hidden></span>'; }
-  else if (!$app.querySelector('.app')) { $app.innerHTML = frame().s; mountAssistant(); bellCount(); }
+  else if (!$app.querySelector('.app')) { $app.innerHTML = frame().s; mountAssistant(); bellCount(); watchSize(); }
   else {
     const active = key === 'role' || key === 'employer' ? 'roles' : key;
     $app.querySelectorAll('.nav').forEach(a => { const on = a.getAttribute('href') === '#/' + active; a.classList.toggle('on', on); on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
