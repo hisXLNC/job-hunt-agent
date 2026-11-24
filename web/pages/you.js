@@ -240,7 +240,7 @@ function connections(d, route) {
     ['phoneaccess', 'Job Hunt on your phone', pa?.on ? (pa.problem ? ['crit', 'Not working'] : ['good', 'On']) : ['', 'Off'],
       pa?.on ? `${pa.devices?.length || 0} phone${pa.devices?.length === 1 ? '' : 's'} paired` : 'See Today and act on roles from your phone\'s browser', phoneAccess(d.phoneaccess)],
     ['sources', 'More job sources', setUp.length ? [setUp.length === keyed.length ? 'good' : 'warn', `${setUp.length} of ${keyed.length}`] : ['', 'None'],
-      keyed.length ? (setUp.length ? `${setUp.map(x => x.name).join(', ')} set up` : 'Each needs a free key') + (keyed.length > setUp.length ? ` · ${keyed.filter(x => !setUp.includes(x)).map(x => x.name).join(', ')} need${keyed.length - setUp.length === 1 ? 's' : ''} a free key` : '') : '', moreSources(d)],
+      keyed.length ? (setUp.length ? `${setUp.map(x => x.name).join(', ')} set up` + (keyed.length > setUp.length ? ` · ${keyed.filter(x => !setUp.includes(x)).map(x => x.name).join(', ')} need${keyed.length - setUp.length === 1 ? 's' : ''} a free key` : '') : `${keyed.map(x => x.name).join(', ')}: each needs a free key`) : '', moreSources(d)],
     ['schedule', 'Search times', ['good', 'On'], `Full searches at ${sc.full.length ? sc.full.map(hhmm).join(', ') : 'no set times'} · quick checks every ${sc.fast_minutes || 20} minutes`, schedule(d)],
     ['desk', 'On this computer', ['good', 'On'], [d.startup?.on ? 'Starts when you sign in' : 'Does not start by itself', k.notify ? 'Windows notifications on' : 'no Windows notifications', k.morning >= 0 ? `morning summary at ${k.morning}:00` : 'no morning summary'].join(' · '), thisComputer(d)],
   ];

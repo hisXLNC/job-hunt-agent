@@ -258,14 +258,15 @@ const IC = {
   replies: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
   interviews: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   progress: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  career: '<svg viewBox="0 0 24 24"><path d="M4 20c2-6 6-9 12-10M13 6l4 4-4 4"/><circle cx="4" cy="20" r="1.2"/></svg>',
   you: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.200 4-6 8-6s7 1.800 8 6"/></svg>',
 };
-const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['you', 'You']];
+const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['career', 'Career path'], ['you', 'You']];
 const PAGES = {
   today: () => import('./pages/today.js'), radar: () => import('./pages/radar.js'), roles: () => import('./pages/roles.js'),
   role: () => import('./pages/role.js'), people: () => import('./pages/people.js'), replies: () => import('./pages/replies.js'),
   employer: () => import('./pages/employer.js'),
-  interviews: () => import('./pages/interviews.js'), progress: () => import('./pages/progress.js'), you: () => import('./pages/you.js'),
+  interviews: () => import('./pages/interviews.js'), progress: () => import('./pages/progress.js'), career: () => import('./pages/career.js'), you: () => import('./pages/you.js'),
   setup: () => import('./pages/setup.js'),
 };
 

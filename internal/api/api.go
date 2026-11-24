@@ -1268,6 +1268,35 @@ func (s *Server) Handler() http.Handler {
 
 	// ---- progress ------------------------------------------------------------------
 	h("GET /api/progress", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.Progress(), nil })
+
+	// ---- career path ---------------------------------------------------------------
+	h("GET /api/career", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.Career(), nil })
+	h("POST /api/career/look", func(w http.ResponseWriter, r *http.Request) (any, error) { return nil, e.LookAtCareer() })
+	h("POST /api/career/done", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			ID   string `json:"id"`
+			Done bool   `json:"done"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		return nil, e.MarkCareerGap(in.ID, in.Done)
+	})
+	h("POST /api/career/search", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		in := struct {
+			Route *int   `json:"route"`
+			Title string `json:"title"`
+		}{}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		route := -1
+		if in.Route != nil {
+			route = *in.Route
+		}
+		added, err := e.SearchCareerTitles(route, in.Title)
+		return map[string]any{"added": added}, err
+	})
 	h("GET /api/activity", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return st.ActivityList(store.ActivityFilter{Limit: min(max(qInt(r, "limit", 40), 1), 200)})
 	})

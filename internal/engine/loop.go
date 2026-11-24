@@ -223,6 +223,12 @@ func (e *Engine) chores(now time.Time) {
 	if e.MailSet().On && !e.heldBack("mail") && every("mail", e.MailSet().Often()) {
 		e.Go("mail", "Checking your inbox", func(ctx context.Context) error { return e.CheckMail(ctx) })
 	}
+	// Career path is read again each week, from Monday; a failed try waits six hours.
+	if e.LLM().Engine != "" && !e.heldBack("career") && e.careerDue(now) && every("career", 6*time.Hour) {
+		if cvs, _ := e.S.CVs(); len(cvs) > 0 {
+			e.Go("career", "Reading where your CV can go", func(ctx context.Context) error { return e.readCareer(ctx) })
+		}
+	}
 	if !e.heldBack("boards") && every("boards", 24*time.Hour) {
 		e.Go("boards", "Looking for employers' job boards", func(ctx context.Context) error { e.DetectBoards(ctx); return e.DescribeEmployers(ctx) })
 	}

@@ -276,7 +276,7 @@ func TestTheSidePanelGetsTheCVsHistory(t *testing.T) {
 
 func TestEmptyListsOnAFreshStart(t *testing.T) {
 	_, h := newServer(t)
-	for _, p := range []string{"/api/roles", "/api/people", "/api/mail", "/api/talks", "/api/you", "/api/radar", "/api/today", "/api/progress", "/api/board", "/api/connections", "/api/app", "/api/arriving", "/api/activity"} {
+	for _, p := range []string{"/api/roles", "/api/people", "/api/mail", "/api/talks", "/api/you", "/api/radar", "/api/today", "/api/progress", "/api/board", "/api/connections", "/api/app", "/api/arriving", "/api/activity", "/api/career"} {
 		w := do(h, call{path: p})
 		if w.Code != 200 {
 			t.Errorf("%s: %d %s", p, w.Code, w.Body)

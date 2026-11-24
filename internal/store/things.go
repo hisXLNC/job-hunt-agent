@@ -1327,3 +1327,27 @@ type Pair struct {
 	Label string `json:"label"`
 	N     int    `json:"n"`
 }
+
+// RoleText is the little of a role the career reading counts with.
+type RoleText struct {
+	Title, Text, Band, Stage string
+	Applied                  bool
+}
+
+// RoleTexts lists roles first seen since a moment, with their text.
+func (s *Store) RoleTexts(since int64) ([]RoleText, error) {
+	rows, err := s.db.Query(`SELECT title, description, band, stage, applied_at > 0 FROM roles WHERE first_seen_at >= ? OR applied_at > 0`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RoleText
+	for rows.Next() {
+		var r RoleText
+		if err := rows.Scan(&r.Title, &r.Text, &r.Band, &r.Stage, &r.Applied); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

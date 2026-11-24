@@ -2,6 +2,14 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.37
+
+- **Career path is back**, as its own page under Progress. Claude reads your CV and shows three ways it can go from here: a step up, sideways, or the same level somewhere new. Each shows how well your CV fits today, what it pays now and in 3, 5 and 10 years (Claude's estimate; check it), what's missing, and **Search these titles**.
+- **The plan** for a route lists each gap, how many of the postings Job Hunt saw ask for it, the smallest thing that closes it and how long that takes. **Mark done** stays done when the plan is read again.
+- Also: titles to try this week, and how your own applications to that kind of role have gone. It is read again every Monday, or press **Look again now**.
+- Every number of postings is counted by Job Hunt from what it has actually seen, not guessed. Until it has seen a few for a route it says so.
+- Connections: the "More job sources" line no longer says sources are set up when they have no key.
+
 ## 26.11.36
 
 - **Radar in four tabs: Fresh now, Sources, Employers, Titles.** Sources lists every place Job Hunt looks with the ones that aren't working first, each with what went wrong and a button: **Set it up**, **Try now**, or **Fix the 3** for employers' boards that didn't answer. The tab shows a red count when something is wrong, and the top card links straight to it.

@@ -78,7 +78,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 ## E. Whole features with no counterpart — 0 present, 5 gaps
 
 1. **Leads — MISSING (L).** Hiring posts read by the extension, funding news from a web search, pasted leads, each sized up with who to write to and one follow-up (2.49; `core/src/leads.rs`, `static/app-leads.js`). New People "doors" covers people at watched employers only.
-2. **Career paths and Career coach — MISSING (L).** Paths with pay over 3/5/10 years, comparison table, recommended paths, skill gaps with a plan, weekly title ideas (1.30, 1.41, 1.42.2, 2.11, 2.57). New proposes titles once, when a CV is added.
+2. **Career paths and Career coach — DONE 26.11.37 (its own page under Progress).** Paths with pay over 3/5/10 years, comparison table, recommended paths, skill gaps with a plan, weekly title ideas (1.30, 1.41, 1.42.2, 2.11, 2.57). New proposes titles once, when a CV is added.
 3. **Insights depth — PARTIAL (M).** Old: results by CV, fit score, kind of role and pay band; pay insights; source overlap; 7/30/90-day view; Claude's reading of your results; what your rejections say, fed back into tailoring (1.12, 1.23, 1.30, 2.8, 2.53). New Progress has the funnel, eight weeks, by source, by level, speed, people, and rule-based "lessons".
 4. **Job Hunt inside Claude Desktop (MCP) — MISSING (M).** (1.13, 1.14; `core/src/mcp.rs`, `JobHunt.exe --mcp`)
 5. **Know when your CV links are opened — MISSING (M).** (2.8; `core/src/links.rs`) It needed a public address, and the server builds are discontinued, so this may be one to drop on purpose.

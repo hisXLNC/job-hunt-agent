@@ -55,6 +55,8 @@ func StandIn() llm.Engine {
 			out = standAssist(req.Input.(AssistInput))
 		case "mail":
 			out = standMail(req.Input.(mailInput))
+		case "career":
+			out = standCareer(req.Input.(CareerInput))
 		case "reviews":
 			out = Reviews{Rating: 3.9, Count: 412, Sources: []ReviewSource{{Name: "Glassdoor", Rating: 3.9, URL: "https://www.glassdoor.com/"}, {Name: "Indeed", Rating: 3.8, URL: "https://www.indeed.com/"}},
 				Likes: []string{"Hybrid, two days in the office", "Steady work, good benefits"}, Warns: []string{"Slow decisions, many layers", "Pay rises below market"}}
@@ -884,4 +886,37 @@ func standMail(in mailInput) MailReading {
 		out.Reply = "Hi " + first + ",\n\nThank you for your note. [your answer]\n\nBest regards,\n" + in.Person.Profile.Name
 	}
 	return out
+}
+
+// standCareer is a believable reading built from the person's own titles.
+func standCareer(in CareerInput) Career {
+	pr := in.Person.Profile
+	pick := func(list []string, i int, alt string) string {
+		if i < len(list) {
+			return list[i]
+		}
+		return alt
+	}
+	now := pick(pr.Titles.Level, 0, firstNonEmpty(pr.Headline, "Your current role"))
+	up := pick(pr.Titles.StepUp, 0, "Head of "+now)
+	side := pick(pr.Titles.Sideways, 0, now+" (consulting)")
+	up2 := pick(pr.Titles.StepUp, 1, "Director, "+now)
+	gaps := func(a, b string) []CareerGap {
+		all := map[string]CareerGap{
+			"lead-team": {ID: "lead-team", Gap: "Leading a team", Words: []string{"team of", "people leader", "direct reports", "lead a team"}, How: "Say on your CV how many people your biggest project drew on; it is the leadership they ask for", Time: "An evening"},
+			"budget":    {ID: "budget", Gap: "Owning a budget", Words: []string{"budget", "p&l", "cost"}, How: "Move the budget you managed up to the top of that role on your CV", Time: "10 minutes"},
+			"data":      {ID: "data", Gap: "Data and analytics (SQL, Power BI)", Words: []string{"sql", "power bi", "tableau", "analytics"}, How: "One short course, or one report built from work you already did", Time: "4 weeks"},
+			"product":   {ID: "product", Gap: "Product roadmaps", Words: []string{"roadmap", "product owner", "backlog"}, How: "Name the systems you shaped and who used them, as a product would be described", Time: "An evening"},
+		}
+		return []CareerGap{all[a], all[b]}
+	}
+	return Career{
+		Now: CareerNow{Title: now, Pay: 98000, Currency: "CAD", Years: max(pr.Years, 1), Summary: firstNonEmpty(strings.Join(pr.Strengths[:min(2, len(pr.Strengths))], " and "), "your field")},
+		Routes: []CareerRoute{
+			{Title: up, Band: "step_up", Why: "The shortest step: the same work, leading it.", Fit: 82, Recommended: true, Pay3: 118000, Pay5: 132000, Pay10: 155000, Titles: []string{up, up2}, Gaps: gaps("lead-team", "budget")},
+			{Title: side, Band: "sideways", Why: "Your experience, used for several clients rather than one employer.", Fit: 76, Pay3: 108000, Pay5: 122000, Pay10: 145000, Titles: []string{side, now + " Advisor"}, Gaps: gaps("product", "data")},
+			{Title: up2, Band: "step_up", Why: "A longer step: setting direction for a whole function.", Fit: 64, Pay3: 125000, Pay5: 145000, Pay10: 175000, Titles: []string{up2}, Gaps: gaps("lead-team", "data")},
+		},
+		Try: []CareerTitle{{Title: now + " Lead", Band: "step_up"}, {Title: "Senior " + now, Band: "level"}, {Title: now + " Specialist", Band: "sideways"}},
+	}
 }
