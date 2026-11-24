@@ -180,3 +180,12 @@ button.link:hover{text-decoration:underline}
 
 .work .doing{max-width:340px;overflow:hidden;text-overflow:ellipsis}.work .bar{width:90px;height:6px;flex:none}.work .bar i{transition:width 1.2s linear}
 .work .stop{border:0;background:none;color:var(--crit);font:600 12.5px inherit;cursor:pointer;padding:0 2px}.work .stop:hover{text-decoration:underline}
+
+/* what Job Hunt is doing, bottom left */
+.pilot .job{margin:0 0 9px}.pilot .job b{color:#fff;font-weight:600;min-width:0}.pilot .job .row{align-items:flex-start}
+.pilot .job .bar{margin-top:5px}.pilot .job .bar i{transition:width 1.2s linear}
+.pilot .step{color:#8F98B3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pilot .stop{border:0;background:none;color:#FF9C9C;font:600 12px inherit;cursor:pointer;padding:0 0 0 4px;flex:none}.pilot .stop:hover{text-decoration:underline}
+.pilot .stop.go{color:#9DB0FF;padding:0}
+.pilot .foot{margin-top:7px;color:#8F98B3}
+.pilot .ver{display:block;margin-top:7px;padding-top:7px;border-top:1px solid #2A3555;color:#8F98B3;text-decoration:none}.pilot .ver:hover{color:#DCE3FF}

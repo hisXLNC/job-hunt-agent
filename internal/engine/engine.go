@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"jobhunt/internal/trace"
 	"net"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -196,11 +198,16 @@ func (e *Engine) Go(name, doing string, fn func(ctx context.Context) error) bool
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
+				trace.Log("problem", "panic in job %s: %v ⏎ %s", name, r, debug.Stack())
 				e.S.Log(store.Activity{Kind: "problem", Text: fmt.Sprintf("Something went wrong while %s: %v", strings.ToLower(doing), r)})
 			}
 			e.endJob(j)
 		}()
-		if err := fn(ctx); err != nil && !errors.Is(err, context.Canceled) && ctx.Err() == nil {
+		err := fn(ctx)
+		if err != nil {
+			trace.Log("job", "%s returned: %v", name, err)
+		}
+		if err != nil && !errors.Is(err, context.Canceled) && ctx.Err() == nil {
 			e.problem(doing, err)
 		}
 	}()
@@ -215,7 +222,7 @@ func (e *Engine) problem(doing string, err error) {
 	text := fmt.Sprintf("%s didn't finish: %v", doing, err)
 	switch {
 	case errors.Is(err, llm.ErrNotConnected):
-		text = doing + " is waiting: connect Claude under You → Connections"
+		text = doing + " is waiting: connect Claude under Settings → Connections"
 	case errors.As(err, &lim):
 		text = doing + " is paused: " + lim.Msg
 	case errors.As(err, &auth):
@@ -247,6 +254,7 @@ type Status struct {
 	NextFast int64     `json:"next_fast"`
 	NextFull int64     `json:"next_full"`
 	Paused   bool      `json:"paused"`
+	Held     int64     `json:"held,omitempty"`
 	Sources  int       `json:"sources"`
 }
 
@@ -259,6 +267,7 @@ func (e *Engine) Status() Status {
 	e.mu.Unlock()
 	st.Jobs = e.Jobs()
 	st.Paused = e.Paused()
+	st.Held = e.HeldUntil()
 	st.NextFast, st.NextFull = e.nextTimes()
 	st.Sources = e.S.Count(`SELECT COUNT(*) FROM companies WHERE state = 'following' AND board_kind != ''`)
 	// Each title on each title search is a place looked at, and so is each site.

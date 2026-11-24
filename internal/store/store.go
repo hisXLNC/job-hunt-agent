@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"jobhunt/internal/trace"
 	"os"
 	"path/filepath"
 	"strings"
@@ -822,6 +823,11 @@ func (s *Store) Log(a Activity) {
 	}
 	s.db.Exec(`INSERT INTO activity(at, kind, text, role_id, company_id, person_id, detail) VALUES(?,?,?,?,?,?,?)`,
 		a.At, a.Kind, a.Text, a.RoleID, a.CompanyID, a.PersonID, a.Detail)
+	area := "did"
+	if a.Kind == "problem" {
+		area = "problem"
+	}
+	trace.Log(area, "[%s] %s %s", a.Kind, a.Text, a.Detail)
 	s.Changed("activity")
 }
 
@@ -903,6 +909,7 @@ func (s *Store) StartRun(kind string) int64 {
 func (s *Store) EndRun(id int64, state string, stats any, log string) {
 	b, _ := json.Marshal(stats)
 	s.db.Exec(`UPDATE runs SET ended_at = ?, state = ?, stats = ?, log = ? WHERE id = ?`, s.now(), state, string(b), log, id)
+	trace.Log("search", "run %d ended %s: %s %s", id, state, b, log)
 	s.Changed("runs")
 }
 
@@ -958,6 +965,7 @@ func (s *Store) LogCall(c Call) {
 	}
 	s.db.Exec(`INSERT INTO llm_calls(at, task, engine, model, tokens_in, tokens_out, tokens_cached, cost, ms, error) VALUES(?,?,?,?,?,?,?,?,?,?)`,
 		c.At, c.Task, c.Engine, c.Model, c.TokensIn, c.TokensOut, c.TokensCached, c.Cost, c.Ms, c.Error)
+	trace.Log("claude", "%s via %s %s: %dms, %d in, %d out, %d cached %s", c.Task, c.Engine, c.Model, c.Ms, c.TokensIn, c.TokensOut, c.TokensCached, c.Error)
 }
 
 type Usage struct {

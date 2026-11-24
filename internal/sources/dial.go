@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"jobhunt/internal/trace"
 	"net"
 	"net/http"
 	"net/netip"
@@ -72,7 +73,7 @@ func (c *Client) publicOnly() *http.Client {
 		}
 		return d.DialContext(ctx, network, addr)
 	}
-	return &http.Client{Timeout: defaultTimeout, Transport: tr, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	return &http.Client{Timeout: defaultTimeout, Transport: traced{tr}, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 6 {
 			return errors.New("sources: too many redirects")
 		}
@@ -107,4 +108,25 @@ func publicURL(raw string) (*url.URL, bool) {
 		return nil, false
 	}
 	return u, true
+}
+
+// traced writes one line to the debugging record for every page fetched.
+type traced struct{ next http.RoundTripper }
+
+func (t traced) RoundTrip(req *http.Request) (*http.Response, error) {
+	start := time.Now()
+	resp, err := t.next.RoundTrip(req)
+	u := req.URL.Host + req.URL.Path
+	if q := req.URL.RawQuery; q != "" {
+		if len(q) > 160 {
+			q = q[:160] + "…"
+		}
+		u += "?" + q
+	}
+	if err != nil {
+		trace.Log("fetch", "%s %s failed after %s: %v", req.Method, u, trace.Took(time.Since(start)), err)
+		return resp, err
+	}
+	trace.Log("fetch", "%s %s -> %d %s in %s", req.Method, u, resp.StatusCode, resp.Header.Get("Content-Type"), trace.Took(time.Since(start)))
+	return resp, err
 }

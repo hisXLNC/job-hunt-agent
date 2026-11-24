@@ -12,12 +12,14 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"jobhunt/internal/trace"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,7 +33,8 @@ import (
 	"jobhunt/internal/store"
 )
 
-// Version is shown under You → The app.
+// Version is shown at the bottom left and under Settings → The app. Release
+// builds are given the number in the VERSION file.
 var Version = "preview"
 
 // Server serves the pages and the API.
@@ -113,7 +116,7 @@ func say(err error) (int, string) {
 	case errors.Is(err, store.ErrNotFound):
 		return 404, "That isn't here any more."
 	case errors.Is(err, llm.ErrNotConnected):
-		return 409, "Claude isn't connected yet. Connect it under You → Connections."
+		return 409, "Claude isn't connected yet. Connect it under Settings → Connections."
 	case errors.As(err, &lim):
 		return 429, lim.Msg
 	case errors.As(err, &auth):
@@ -126,11 +129,23 @@ func say(err error) (int, string) {
 
 func (s *Server) wrap(h handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		began := time.Now()
+		defer func() {
+			if p := recover(); p != nil {
+				trace.Log("problem", "panic in %s %s: %v ⏎ %s", r.Method, r.URL.Path, p, debug.Stack())
+				writeJSON(w, 500, map[string]string{"error": "Something went wrong inside Job Hunt. It is in the debugging record under Settings, The app."})
+			}
+		}()
 		out, err := h(w, r)
+		took := time.Since(began)
 		if err != nil {
 			code, msg := say(err)
+			trace.Log("request", "%s %s -> %d in %s: %s (%v)", r.Method, r.URL.Path, code, trace.Took(took), msg, err)
 			writeJSON(w, code, map[string]string{"error": msg})
 			return
+		}
+		if (r.Method != "GET" || took > 700*time.Millisecond) && r.URL.Path != "/api/debug/note" {
+			trace.Log("request", "%s %s -> 200 in %s", r.Method, r.URL.Path, trace.Took(took))
 		}
 		if out == nil {
 			out = map[string]bool{"ok": true}
@@ -257,7 +272,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 						s.S.Changed("connections", "state")
 					}
 				}
-				writeJSON(w, 403, map[string]string{"error": "Open Job Hunt and approve this side panel under You, Connections.", "pair": "pending"})
+				writeJSON(w, 403, map[string]string{"error": "Open Job Hunt and approve this side panel under Settings, Connections.", "pair": "pending"})
 				return
 			}
 		default:
@@ -897,7 +912,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	h("POST /api/mail/check", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		if !e.MailSet().On {
-			return nil, bad("Connect your inbox first, under You → Connections.")
+			return nil, bad("Connect your inbox first, under Settings → Connections.")
 		}
 		e.Go("mail", "Checking your inbox", func(ctx context.Context) error { return e.CheckMail(ctx) })
 		return nil, nil
@@ -1183,6 +1198,12 @@ func (s *Server) Handler() http.Handler {
 		acts, _ := st.ActivityList(store.ActivityFilter{Kinds: []string{"problem"}, Limit: 10})
 		return map[string]any{"version": Version, "update": e.NewerVersion(), "dir": e.Dir, "changes": changes, "calls": calls, "problems": acts,
 			"week": st.UsageSince(e.Now().Add(-7 * 24 * time.Hour).Unix()), "today": st.UsageSince(e.Now().Add(-24 * time.Hour).Unix())}, nil
+	})
+	s.debugRoutes(mux, h)
+	// Letting work the person stopped start by itself again.
+	h("POST /api/jobs/resume", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		e.Resume("")
+		return nil, nil
 	})
 	// Stopping what Job Hunt is doing: one job by name, or everything.
 	h("POST /api/jobs/stop", func(w http.ResponseWriter, r *http.Request) (any, error) {

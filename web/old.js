@@ -1,5 +1,5 @@
 // The card for bringing things over from the old Job Hunt. It is shown on the
-// welcome screen and under You → The app.
+// welcome screen and under Settings → The app.
 import { html, api, post, toast } from './app.js';
 
 const n = (k, one, many) => (k ? `${k} ${k === 1 ? one : many || one + 's'}` : '');

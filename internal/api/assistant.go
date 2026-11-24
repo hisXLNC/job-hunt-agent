@@ -134,7 +134,7 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/roles/{id}/close", Class: mustAsk, Kind: "role", Label: "Close a role", Help: `Body: {"stage": "rejected|withdrawn|expired", "why": "..."}.`, Show: []string{"stage", "why"}},
 	{Method: "POST", Pattern: "/api/roles/{id}/reopen", Class: mustAsk, Kind: "role", Label: "Reopen a role", Help: "Only when the person asks for this role by name."},
 	{Method: "PUT", Pattern: "/api/profile", Class: mustAsk, Label: "Change your profile", Help: `Body: only the fields to change, from GET /api/you: name, headline, summary, years, strengths, rare, home, city, places (other towns that count as the city, besides its own surrounding area listed under "area"), country, arrive_on (YYYY-MM-DD), work_status (citizen|resident|permit|none), start_early, titles {"level": [], "step_up": [], "sideways": []}, domain, avoid, workplaces (remote,hybrid,onsite), pay_floor, pay_unit. A list is replaced whole: send the full new list.`},
-	{Method: "PUT", Pattern: "/api/phone", Class: mustAsk, Label: "Change phone notifications", Help: `Body: any of {"on", "min_fit", "quiet_from", "quiet_to"} (hours 0-23). Where notifications are sent is changed by the person under You, Connections.`, Show: []string{"on", "min_fit", "quiet_from", "quiet_to"}, Only: true},
+	{Method: "PUT", Pattern: "/api/phone", Class: mustAsk, Label: "Change phone notifications", Help: `Body: any of {"on", "min_fit", "quiet_from", "quiet_to"} (hours 0-23). Where notifications are sent is changed by the person under Settings, Connections.`, Show: []string{"on", "min_fit", "quiet_from", "quiet_to"}, Only: true},
 	{Method: "POST", Pattern: "/api/places/remove", Class: mustAsk, Label: "Stop watching a job site", Help: `Body: {"id": "..."}. Roles already found there stay.`, Show: []string{"id"}, Only: true},
 	{Method: "DELETE", Pattern: "/api/cvs/{id}", Class: mustAsk, Kind: "cv", Label: "Remove a CV"},
 	{Method: "DELETE", Pattern: "/api/people/{id}", Class: mustAsk, Kind: "person", Label: "Remove a person"},
@@ -637,7 +637,7 @@ func (s *Server) assistCall(ctx context.Context, c brain.AssistCall, run *assist
 	}
 	t, id := findTool(method, u.Path)
 	if t == nil {
-		note.Result = "Not made: that is not available to you. If it is about a password, a key or a connection, the person does it themselves under You, Connections."
+		note.Result = "Not made: that is not available to you. If it is about a password, a key or a connection, the person does it themselves under Settings, Connections."
 		return note
 	}
 	body := []byte(strings.TrimSpace(c.Body))

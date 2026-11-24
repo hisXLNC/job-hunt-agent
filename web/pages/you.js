@@ -1,7 +1,7 @@
-import { html, api, post, put, del, ago, when, toast } from '../app.js';
+import { html, api, post, put, del, ago, when, toast, copy } from '../app.js';
 import { oldCard, oldActions } from '../old.js';
 
-const TABS = [['', 'About you'], ['arriving', 'Arriving'], ['connections', 'Connections'], ['app', 'The app']];
+const TABS = [['', 'About you'], ['arriving', 'Arriving'], ['connections', 'Connections'], ['panel', 'Browser side panel'], ['app', 'The app and debugging']];
 const lines = s => (s || '').split(/\n|,/).map(x => x.trim()).filter(Boolean);
 const WORK = { '': 'Not said yet', citizen: 'Yes, as a citizen', resident: 'Yes, as a permanent resident', permit: 'Yes, on a work permit', none: 'Not yet' };
 
@@ -70,10 +70,7 @@ function connections(d) {
       <label class="field" style="max-width:340px">Model<select name="model">${d.models.map(x => html`<option value="${x.ID}" ${cl.model === x.ID ? 'selected' : ''}>${x.Name}: ${x.Note}</option>`)}</select></label>
       <div class="row"><button class="btn p">Save</button><button type="button" class="btn" data-act="testllm" data-busy="Asking Claude…">Test it</button><span class="grow"></span><span class="xs m">${cl.calls} calls today${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)} today · $${cl.week.toFixed(2)} this week` : ''}</span></div>
       ${usage.length ? html`<details><summary class="s">What Claude was used for this week</summary><table class="tbl" style="margin-top:6px"><tbody>${usage.map(([k, u]) => html`<tr><td class="s">${k.replace(/_/g, ' ')}</td><td class="s">${u.calls} calls</td><td class="s">${u.cost ? '$' + u.cost.toFixed(2) : ''}</td><td class="s m">${u.errors ? u.errors + ' failed' : ''}</td></tr>`)}</tbody></table></details>` : ''}</form>
-    <div class="card col" style="gap:8px"><div class="row"><h3 class="grow">Browser side panel</h3><span class="chip ${ext.paired_at ? 'good' : ''}">${ext.paired_at ? 'Connected' : 'Not connected'}</span></div>
-      <p class="s m">Sits beside a posting or an application form in Chrome or Edge: shows your fit, attaches your documents and fills in answers. You read the form and press Submit yourself; the extension never does.</p>
-      ${d.ext_pending ? html`<div class="card" style="border-color:var(--accent);background:var(--accent-soft)"><p class="s"><b>A side panel is asking to connect.</b> It shows the code <b style="font-size:16px;letter-spacing:.08em">${d.ext_pending}</b>. Approve only if the Job Hunt side panel in your browser shows the same code.</p><div class="row" style="margin-top:8px"><button class="btn p sm" data-act="pair">Approve</button></div></div>` : ''}
-      ${ext.paired_at ? html`<div class="row"><span class="xs m grow">Connected ${ago(ext.paired_at)} · code ${ext.code}</span><button class="btn sm" data-act="unpair">Disconnect</button></div>` : !d.ext_pending ? html`<p class="xs m">To connect: in Chrome or Edge open the Extensions page, switch on Developer mode, choose Load unpacked and pick ${d.ext_dir ? html`this folder: <code style="word-break:break-all">${d.ext_dir}</code>.` : 'the "extension" folder.'} Open its side panel, then come back here and approve it.</p>` : ''}</div>
+    <div class="card row"><span class="s grow">The browser side panel has its own page.</span><a class="btn sm" href="#/you/panel">Browser side panel</a></div>
     </div>
     <div class="col" style="gap:14px">
     <form data-act="savephone" class="card col" style="gap:10px"><div class="row"><h3 class="grow">Phone notices</h3><span class="chip ${ph.on ? 'good' : ''}">${ph.on ? 'On' : 'Off'}</span></div>
@@ -93,6 +90,22 @@ function connections(d) {
     </div></div>`;
 }
 
+function panel(d) {
+  const ext = d.ext;
+  const addr = (name, a) => html`<span class="row" style="gap:6px"><code class="s" style="background:var(--s2);padding:3px 7px;border-radius:6px">${a}</code><button type="button" class="btn sm" data-act="copytext" data-text="${a}" title="Copies the address. Paste it into the address bar of ${name}; a page cannot open it for you.">Copy</button></span>`;
+  return html`<div class="grid2" style="align-items:start"><div class="card col" style="gap:10px"><div class="row"><h3 class="grow">Browser side panel</h3><span class="chip ${ext.paired_at ? 'good' : ''}">${ext.paired_at ? 'Connected' : 'Not connected'}</span></div>
+      <p class="s m">Sits beside a posting or an application form in Chrome or Edge: shows your fit, attaches your documents and fills in answers. You read the form and press Submit yourself; the side panel never does.</p>
+      ${d.ext_pending ? html`<div class="card" style="border-color:var(--accent);background:var(--accent-soft)"><p class="s"><b>A side panel is asking to connect.</b> It shows the code <b style="font-size:16px;letter-spacing:.08em">${d.ext_pending}</b>. Approve only if the Job Hunt side panel in your browser shows the same code.</p><div class="row" style="margin-top:8px"><button class="btn p sm" data-act="pair">Approve</button></div></div>` : ''}
+      ${ext.paired_at ? html`<div class="row"><span class="xs m grow">Connected ${ago(ext.paired_at)} · code ${ext.code}</span><button class="btn sm" data-act="unpair">Disconnect</button></div>` : ''}</div>
+    <div class="card col" style="gap:12px"><h3>${ext.paired_at ? 'Putting it in another browser' : 'Getting it'}</h3>
+      <div class="s"><b>1. Have the folder.</b> ${d.ext_dir ? html`It came with Job Hunt and is already on this computer:<div class="row" style="gap:6px;margin-top:5px;flex-wrap:wrap"><code class="s" style="background:var(--s2);padding:3px 7px;border-radius:6px;word-break:break-all">${d.ext_dir}</code><button type="button" class="btn sm" data-act="copytext" data-text="${d.ext_dir}">Copy</button><button type="button" class="btn sm" data-act="openfolder" data-what="extension">Open the folder</button></div><div class="xs m" style="margin-top:5px">Or <a href="/extension.zip" download>download it as a zip</a> for another computer.</div>` : html`<div class="row" style="margin-top:5px"><a class="btn p" href="/extension.zip" download>Download the side panel</a></div><div class="xs m" style="margin-top:5px">Unpack the zip somewhere it can stay, such as Documents. The browser reads it from there every time.</div>`}</div>
+      <div class="s"><b>2. Open your browser's extensions page.</b><div class="row" style="gap:14px;margin-top:5px;flex-wrap:wrap">${addr('Chrome', 'chrome://extensions')}${addr('Edge', 'edge://extensions')}</div></div>
+      <div class="s"><b>3. Switch on "Developer mode"</b>, press <b>Load unpacked</b> and pick the folder from step 1.</div>
+      <div class="s"><b>4. Open the side panel</b> by pressing the Job Hunt icon in the browser's toolbar (pin it from the puzzle-piece menu). It shows a code.</div>
+      <div class="s"><b>5. Come back to this page</b> and press Approve when the same code appears here.</div>
+      <p class="xs m">After a Job Hunt update, press the round-arrow "Reload" on the extensions page so the side panel is the new version too.</p></div></div>`;
+}
+
 function theApp(d) {
   return html`<div class="grid2" style="align-items:start"><div class="col" style="gap:14px">
     <div class="card col" style="gap:8px"><h3>Job Hunt ${d.version}</h3>${d.update ? html`<p class="s" style="background:var(--accent-soft);padding:8px 10px;border-radius:8px"><b>Version ${d.update.version} is ready.</b> <a href="${d.update.url}">Download the installer</a> and run it: Job Hunt restarts on the new version and your data stays.</p>` : ''}<p class="s m">Everything is kept in one folder on this computer:</p><code class="s" style="background:var(--s2);padding:6px 9px;border-radius:7px;word-break:break-all">${d.dir}</code>
@@ -100,6 +113,10 @@ function theApp(d) {
       <div class="row"><button class="btn" data-act="backup">Save a copy now</button><span class="grow"></span><button class="btn danger" data-act="quit" data-confirm="Stop Job Hunt? Searching stops until you start it again.">Stop Job Hunt</button></div></div>
     ${d.old ? oldCard(d.old, false) : ''}
     ${d.problems?.length ? html`<div class="card"><h4>Recent problems</h4><div class="col s" style="margin-top:10px;gap:8px">${d.problems.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:70px;flex:none">${ago(a.at)}</span><span>${a.text}</span></div>`)}</div></div>` : ''}
+    ${d.debug ? html`<div class="card col" style="gap:8px"><div class="row"><h4 class="grow">Debugging</h4><button class="btn sm p" data-act="copydebug" title="Copies the report below so you can paste it when reporting a problem. It leaves out your name, e-mail addresses and keys.">Copy debug details</button><a class="btn sm" href="/api/debug/report" download title="Saves a longer report (the newest 4,000 lines) as a text file.">Save as a file</a><button class="btn sm" data-act="openfolder" data-what="data" title="Opens the folder that holds your data and debug.log.">Open the folder</button></div>
+      <p class="xs m">Job Hunt writes down everything it does: each search and page it fetches, each call to Claude, each background job, each error in the program or in a page. Your name, e-mail addresses and keys are left out. The file is debug.log in your data folder.</p>
+      <pre class="xs" style="margin:0;background:var(--s2);border-radius:8px;padding:9px 10px;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Consolas,monospace;line-height:1.45">${d.debug.report.split('\n').slice(-45).join('\n')}</pre>
+      <p class="xs m">The newest 45 lines. Copy or save for the rest.</p></div>` : ''}
   </div><div class="col" style="gap:14px">
     <div class="card"><h4>Claude, lately</h4><p class="xs m" style="margin-top:3px">${d.today.calls} calls in the last day, ${d.week.calls} this week${d.week.cost ? html` · $${d.week.cost.toFixed(2)}` : ''}${d.week.errors ? html` · ${d.week.errors} failed` : ''}</p>
       <table class="tbl" style="margin-top:8px"><tbody>${(d.calls || []).map(c => html`<tr><td class="xs m" style="white-space:nowrap">${when(c.at)}</td><td class="s">${c.task.replace(/_/g, ' ')}</td><td class="xs m">${(c.ms / 1000).toFixed(1)} s</td><td class="xs" style="color:var(--crit)">${c.error ? c.error.slice(0, 80) : ''}</td></tr>`)}</tbody></table></div>
@@ -108,21 +125,21 @@ function theApp(d) {
 }
 
 export default {
-  title: 'You',
-  sub: (d, route) => ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer', connections: 'Claude, your phone, your inbox, your browser', app: 'Where your data lives' })[route.parts[1] || ''],
+  title: 'Settings',
+  sub: (d, route) => ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer', connections: 'Claude, your phone, your inbox', panel: 'Get it, put it in your browser, connect it', app: 'Version, your data, and what Job Hunt has been doing' })[route.parts[1] || ''],
   topics: ['you', 'profile', 'connections'],
   load(route) {
     switch (route.parts[1] || '') {
       case 'arriving': return api('arriving');
-      case 'connections': return api('connections');
-      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null)]).then(([a, o]) => ({ ...a, old: o }));
+      case 'connections': case 'panel': return api('connections');
+      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null)]).then(([a, o, g]) => ({ ...a, old: o, debug: g }));
     }
     return api('you');
   },
   view(d, route) {
     const tab = route.parts[1] || '';
     return html`<div class="body"><div class="tabs">${TABS.map(([k, v]) => html`<a class="${k === tab ? 'on' : ''}" href="#/you${k ? '/' + k : ''}">${v}</a>`)}</div>
-      ${tab === 'arriving' ? arriving(d) : tab === 'connections' ? connections(d) : tab === 'app' ? theApp(d) : about(d)}</div>`;
+      ${tab === 'arriving' ? arriving(d) : tab === 'connections' ? connections(d) : tab === 'panel' ? panel(d) : tab === 'app' ? theApp(d) : about(d)}</div>`;
   },
   actions: {
     ...oldActions,
@@ -139,7 +156,7 @@ export default {
     delanswer: ({ d }) => del(`answers/${d.id}`),
     build: () => post('arriving').then(() => toast('Writing your arrival pack. About a minute.')),
     toggle: ({ d }) => post('arriving/change', { index: +d.i, off: !!d.off }),
-    apply: () => post('arriving/apply').then(() => toast('A copy of your CV in local form was added under You')),
+    apply: () => post('arriving/apply').then(() => toast('A copy of your CV in local form was added under Settings')),
     async savellm({ f }) {
       if (!f.engine) throw new Error('Choose how to reach Claude.');
       await put('llm', { engine: f.engine, key: f.key || '', model: f.model, daily_limit: +f.daily_limit || 0 });
@@ -150,6 +167,9 @@ export default {
     newtopic({ el }) { const a = new Uint8Array(12); crypto.getRandomValues(a); el.closest('form').querySelector('[name=topic]').value = 'jobhunt-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); return false; },
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
     savemail: ({ f }) => put('mailset', { on: !!f.on, user: f.user, pass: f.pass || '', host: f.host }).then(() => toast(f.on ? 'Connected. Job Hunt is reading recent replies.' : 'Saved')),
+    copytext: ({ d }) => copy(d.text).then(() => false),
+    copydebug: () => api('debug').then(g => copy(g.report)).then(() => false),
+    openfolder: ({ d }) => post('open-folder', { what: d.what }).then(() => false),
     pair: () => post('ext/pair').then(() => toast('The side panel is connected')),
     unpair: () => post('ext/unpair'),
     async backup() { const r = await post('backup'); toast('Saved to ' + r.path); return false; },

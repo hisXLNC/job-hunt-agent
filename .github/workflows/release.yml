@@ -28,12 +28,19 @@ jobs:
         shell: bash
         run: |
           v=$(tr -d ' \r\n' < VERSION)
-          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "VERSION must look like 3.0.0, not '$v'"; exit 1; fi
+          # Versions are dated: year.month.count, such as 26.11.22. The count
+          # goes up by one with each release and starts at 0 in a new month.
+          if ! [[ "$v" =~ ^[0-9]{2}\.([1-9]|1[0-2])\.(0|[1-9][0-9]*)$ ]]; then echo "VERSION must be year.month.count such as 26.11.22, not '$v'"; exit 1; fi
+          top=$(grep -m1 '^## ' CHANGELOG.md | sed 's/^## *//' | tr -d ' \r')
+          if [ "$top" != "$v" ]; then echo "The top of CHANGELOG.md describes $top, VERSION says $v"; exit 1; fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           if gh release view "v$v" > /dev/null 2>&1; then
             echo "v$v is already published: nothing to do."
             echo "publish=false" >> "$GITHUB_OUTPUT"
           else
+            # A new version comes after every version already published.
+            newest=$(gh api "repos/${{ github.repository }}/releases?per_page=100" --jq '.[].tag_name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -Ev '^v[0-9]\.' | sed 's/^v//' | sort -V | tail -1)
+            if [ -n "$newest" ] && [ "$(printf '%s\n%s\n' "$newest" "$v" | sort -V | tail -1)" != "$v" ]; then echo "$v does not come after $newest, which is already published"; exit 1; fi
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 

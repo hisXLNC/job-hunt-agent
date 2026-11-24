@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"jobhunt/internal/trace"
 	"log"
 	"net"
 	"net/http"
@@ -109,12 +110,13 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	if f, err := os.OpenFile(filepath.Join(dir, "jobhunt.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
-		if st, _ := f.Stat(); st != nil && st.Size() > 4<<20 {
-			f.Truncate(0)
-		}
-		log.SetOutput(f)
+	// Everything the program does is written to debug.log in the data folder.
+	if err := trace.Open(dir); err == nil {
+		log.SetFlags(0)
+		log.SetOutput(trace.Writer{Area: "app"})
 	}
+	trace.Log("app", "Job Hunt %s starting on %s/%s, demo=%v", api.Version, runtime.GOOS, runtime.GOARCH, *demo)
+	defer trace.Log("app", "Job Hunt stopping")
 	s, err := store.Open(filepath.Join(dir, "jobhunt.db"))
 	if err != nil {
 		fatal(fmt.Errorf("Job Hunt couldn't open its data in %s: %w", dir, err))

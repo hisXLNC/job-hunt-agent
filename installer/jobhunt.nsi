@@ -1,6 +1,6 @@
 ; The Windows installer for Job Hunt. Built by .github/workflows/release.yml:
 ;
-;   makensis /DVERSION=3.0.0 /DEXE=..\dist\JobHunt3.exe /DOUT=..\dist\JobHunt3-Setup.exe installer\jobhunt.nsi
+;   makensis /DVERSION=26.11.22 /DEXE=..\dist\JobHunt3.exe /DOUT=..\dist\JobHunt3-Setup.exe installer\jobhunt.nsi
 ;
 ; It installs for the person's own Windows account, so it never asks for an
 ; administrator. Their data lives elsewhere and is never touched here.
@@ -76,7 +76,7 @@ Section "Job Hunt" SecApp
   SetOutPath "$INSTDIR"
   File "/oname=${PROGRAM}" "${EXE}"
   SetOutPath "$INSTDIR\extension"
-  File /r "${EXT}\*.*"
+  File /r /x *.go "${EXT}\*.*"
   SetOutPath "$INSTDIR"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortCut "$SMPROGRAMS\${NAME}.lnk" "$INSTDIR\${PROGRAM}"

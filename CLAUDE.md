@@ -4,6 +4,11 @@ This branch (`redesign`) is a ground-up rewrite. The previous app lives untouche
 (also saved as branch `claude/backup-before-redesign-26.11.21`).
 Never push it to `main`.
 
+Versions are dated, `year.month.count` (26.11.22 is the 23rd release of November 2026): the count goes
+up by one with every release and starts at 0 in a new month. It carries on from the old app's 26.11.21.
+`VERSION`, the top of `CHANGELOG.md` and `extension/manifest.json` always say the same number
+(`cmd/jobhunt/version_test.go` checks it).
+
 A release of the rewrite is made by changing `VERSION` (and the top of `CHANGELOG.md`) on this
 branch: `.github/workflows/release.yml` builds, tests on Windows and publishes `v<version>` with
 `JobHunt3-Setup.exe`. See `installer/README.md`. It installs as "Job Hunt 3", next to the old app,

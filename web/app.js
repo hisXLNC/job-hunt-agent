@@ -37,9 +37,17 @@ export async function api(path, opts = {}) {
   let r;
   try { r = await fetch('/api/' + path, init); } catch { throw new Error('Job Hunt is not running. Start it again from the Start menu.'); }
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || 'Something went wrong.');
+  if (!r.ok) { if (r.status >= 500) note(`${init.method} ${path} answered ${r.status}: ${data.error || ''}`); throw new Error(data.error || 'Something went wrong.'); }
   return data;
 }
+// Anything that goes wrong in a page is written to the debugging record.
+let notes = 0;
+export function note(text) {
+  if (++notes > 40) return;
+  try { fetch('/api/debug/note', { method: 'POST', headers: { 'X-JobHunt': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ text: String(text).slice(0, 1800), page: location.hash }) }).catch(() => {}); } catch { /* nothing to do */ }
+}
+window.addEventListener('error', ev => note(`page error: ${ev.message} at ${(ev.filename || '').replace(location.origin, '')}:${ev.lineno}:${ev.colno} ${ev.error?.stack || ''}`));
+window.addEventListener('unhandledrejection', ev => note(`unhandled: ${ev.reason?.stack || ev.reason?.message || ev.reason}`));
 export const post = (p, body = {}) => api(p, { method: 'POST', body });
 export const put = (p, body = {}) => api(p, { method: 'PUT', body });
 export const del = p => api(p, { method: 'DELETE' });
@@ -156,9 +164,9 @@ const IC = {
   replies: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
   interviews: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   progress: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
-  you: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.200 4-6 8-6s7 1.800 8 6"/></svg>',
+  you: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.700 1.700 0 0 0 .3 1.800l.1.1a2 2 0 1 1-2.800 2.800l-.1-.1a1.700 1.700 0 0 0-1.800-.3 1.700 1.700 0 0 0-1 1.500V21a2 2 0 1 1-4 0v-.1a1.700 1.700 0 0 0-1.100-1.500 1.700 1.700 0 0 0-1.800.3l-.1.1a2 2 0 1 1-2.800-2.800l.1-.1a1.700 1.700 0 0 0 .3-1.800 1.700 1.700 0 0 0-1.500-1H3a2 2 0 1 1 0-4h.1a1.700 1.700 0 0 0 1.500-1.100 1.700 1.700 0 0 0-.3-1.800l-.1-.1a2 2 0 1 1 2.800-2.800l.1.1a1.700 1.700 0 0 0 1.800.3h.1a1.700 1.700 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.700 1.700 0 0 0 1 1.500 1.700 1.700 0 0 0 1.800-.3l.1-.1a2 2 0 1 1 2.800 2.800l-.1.1a1.700 1.700 0 0 0-.3 1.800v.1a1.700 1.700 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.700 1.700 0 0 0-1.500 1z"/></svg>',
 };
-const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['you', 'You']];
+const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['you', 'Settings']];
 const PAGES = {
   today: () => import('./pages/today.js'), radar: () => import('./pages/radar.js'), roles: () => import('./pages/roles.js'),
   role: () => import('./pages/role.js'), people: () => import('./pages/people.js'), replies: () => import('./pages/replies.js'),
@@ -177,26 +185,6 @@ function badge(key) {
   return html`<b class="${hot ? 'hot' : ''}">${n}</b>`;
 }
 
-function pill() {
-  const st = app.state;
-  if (!st) return '';
-  if (!st.claude.engine) return html`<a class="work" href="#/you/connections"><span class="dot off"></span>Connect Claude to start</a>`;
-  if (!st.claude.ok) return html`<a class="work" href="#/you/connections" title="${st.claude.note}"><span class="dot off"></span>Claude is resting${st.claude.until ? html` until ${clock(st.claude.until)}` : ''}</a>`;
-  const jobs = st.status.jobs || [];
-  if (jobs.length) {
-    const j = jobs[0], more = jobs.length - 1;
-    const all = jobs.map(x => `${x.doing}${x.step ? ': ' + x.step : ''} (${x.percent}%)`).join('\n');
-    return html`<span class="work" title="${all}"><span class="dot busy"></span><span class="doing"><b>${j.doing}</b>${j.step ? html` <span class="m">${j.step}</span>` : ''}</span>
-      <span class="bar" role="progressbar" aria-label="${j.doing}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${j.percent}"><i style="width:${j.percent}%"></i></span><span class="xs m">${j.percent}%</span>
-      ${more ? html`<span class="xs m" title="${all}">+${more} more</span>` : ''}
-      <button class="stop" data-stop="${more ? '' : j.name}" title="${more ? 'Stops everything Job Hunt is doing right now.' : 'Stops this now. What is already done stays.'} Job Hunt will not start it again by itself for half an hour.">${more ? 'Stop all' : 'Stop'}</button></span>`;
-  }
-  if (st.status.doing) return html`<span class="work"><span class="dot busy"></span>${st.status.doing}</span>`;
-  if (st.status.paused) return html`<a class="work" href="#/radar"><span class="dot off"></span>Searching is paused</a>`;
-  const next = Math.min(st.status.next_fast || Infinity, st.status.next_full || Infinity);
-  return html`<span class="work"><span class="dot"></span>Next check ${isFinite(next) ? until(next) : 'soon'}</span>`;
-}
-
 function frame() {
   const st = app.state, on = app.route.parts[0] || 'today';
   const active = on === 'roles' || on === 'role' ? 'roles' : on;
@@ -207,29 +195,44 @@ function frame() {
     <div class="pilot" id="pilot">${pilot()}</div></aside>
     <div class="main"><div class="top"><h1 id="title"></h1><span class="sub" id="sub"></span>
       <div class="find"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></svg><input id="find" type="text" placeholder="Find a role, employer or person" aria-label="Find a role, employer or person" autocomplete="off" style="height:32px;padding:0;border:0;box-shadow:none"><kbd>Ctrl K</kbd><div class="found" id="found" hidden></div></div>
-      <span id="pill">${pill()}</span>${assistantButton()}</div>
+      ${assistantButton()}</div>
       <div class="page" id="page" tabindex="-1"></div></div>${assistantFrame()}</div>`;
   void cl;
 }
+// The one place that says what Job Hunt is doing: bottom left, on every page.
 function pilot() {
-  const st = app.state, cl = st.claude;
-  const head = cl.engine ? (st.status.paused ? 'Paused' : 'Working for you') : 'Not connected';
+  const st = app.state, cl = st.claude, s = st.status;
   const how = { 'claude-code': 'your Claude sign-in', api: 'your API key', demo: 'sample answers (no Claude)' }[cl.engine] || '';
   const up = st.update ? html`<a href="${st.update.url}" style="display:block;margin-bottom:8px;padding:7px 9px;border-radius:8px;background:rgba(157,176,255,.16);color:#DCE3FF;text-decoration:none" title="Downloads the installer. Run it and Job Hunt restarts on the new version; your data stays.">Version ${st.update.version} is ready · Download</a>` : '';
-  return html`${up}<h6><span class="dot ${cl.engine && cl.ok && !st.status.paused ? '' : 'off'}"></span>${head}</h6>
-    ${cl.engine ? html`Watching ${st.status.sources} sources. ${st.status.doing || ''}<div style="margin-top:6px;color:#8F98B3">${cl.calls} Claude calls today via ${how}${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)}` : ''}</div>` : html`<a href="#/you/connections" style="color:#9DB0FF">Connect Claude</a> and Job Hunt starts searching.`}`;
+  const ver = html`<a class="ver" href="#/you/app" title="The version you are running. Opens Settings, The app: updates, your data folder and the debugging record.">Job Hunt ${st.version}</a>`;
+  if (!cl.engine) return html`${up}<h6><span class="dot off"></span>Not connected</h6><a href="#/you/connections" style="color:#9DB0FF">Connect Claude</a> and Job Hunt starts searching.${ver}`;
+  const jobs = s.jobs || [];
+  const foot = html`<div class="foot">Watching ${s.sources} sources · ${cl.calls} Claude calls today via ${how}${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)}` : ''}</div>${ver}`;
+  if (!cl.ok) return html`${up}<h6><span class="dot off"></span>Claude is resting</h6><a href="#/you/connections" style="color:#9DB0FF" title="${cl.note}">${cl.until ? html`Until ${clock(cl.until)}. ` : ''}See why</a>${foot}`;
+  if (jobs.length) {
+    const many = jobs.length > 1;
+    return html`${up}<h6><span class="dot busy"></span><span class="grow">Working now</span>${many ? html`<button class="stop" data-stop="" title="Stops everything Job Hunt is doing right now. It will not start again by itself for half an hour.">Stop all</button>` : ''}</h6>
+      ${jobs.slice(0, 3).map(j => html`<div class="job" title="${j.doing}${j.step ? ': ' + j.step : ''}"><div class="row" style="gap:6px"><b class="grow">${j.doing}</b><span>${j.percent}%</span><button class="stop" data-stop="${j.name}" title="Stops this now. What is already done stays. Job Hunt will not start it again by itself for half an hour.">Stop</button></div>
+        ${j.step ? html`<div class="step">${j.step}</div>` : ''}<div class="bar" role="progressbar" aria-label="${j.doing}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${j.percent}"><i style="width:${j.percent}%"></i></div></div>`)}
+      ${jobs.length > 3 ? html`<div class="step">and ${jobs.length - 3} more</div>` : ''}${foot}`;
+  }
+  if (s.paused) return html`${up}<h6><span class="dot off"></span>Searching is paused</h6><a href="#/radar" style="color:#9DB0FF">Turn it back on in Radar</a>${foot}`;
+  if (s.held) return html`${up}<h6><span class="dot off"></span>Stopped by you</h6>Job Hunt starts by itself again at ${clock(s.held)}. <button class="stop go" data-resume title="Lets Job Hunt carry on now instead of waiting.">Carry on now</button>${foot}`;
+  const next = Math.min(s.next_fast || Infinity, s.next_full || Infinity);
+  return html`${up}<h6><span class="dot"></span>Watching for you</h6>${s.doing || html`Next check ${isFinite(next) ? until(next) : 'soon'}.`}${foot}`;
 }
 
 async function refreshState() {
   try { app.state = await api('state'); } catch { return; }
-  const p = document.getElementById('pill'), pl = document.getElementById('pilot');
-  if (p) p.innerHTML = pill().s;
+  const pl = document.getElementById('pilot');
   if (pl) pl.innerHTML = pilot().s;
   for (const n of NAV) { const b = document.getElementById('b-' + n[0]); if (b) b.innerHTML = piece(badge(n[0])); }
 }
 
-// The Stop button at the top works on every page.
+// Stop and Carry on, in the bottom left, work on every page.
 document.addEventListener('click', async ev => {
+  const go = ev.target.closest('[data-resume]');
+  if (go) { ev.preventDefault(); try { await post('jobs/resume'); } catch (e) { toast(e.message, true); } refreshState(); return; }
   const b = ev.target.closest('[data-stop]');
   if (!b) return;
   ev.preventDefault();

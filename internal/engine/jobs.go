@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"jobhunt/internal/trace"
 	"sort"
 	"strings"
 	"time"
@@ -55,6 +56,7 @@ func (e *Engine) startJob(parent context.Context, name, doing string) (context.C
 		e.doing = doing
 	}
 	e.mu.Unlock()
+	trace.Log("job", "start %s: %s", name, doing)
 	e.S.Changed("status")
 	return context.WithValue(ctx, jobKey{}, j), j, true
 }
@@ -74,6 +76,11 @@ func (e *Engine) endJob(j *task) {
 	stopped := j.stopped
 	e.mu.Unlock()
 	j.cancel()
+	how := "done"
+	if stopped {
+		how = "stopped by the person"
+	}
+	trace.Log("job", "end %s: %s after %s", j.name, how, trace.Took(time.Since(j.started)))
 	if stopped && j.doing != "" {
 		e.S.Log(store.Activity{Kind: "stopped", Text: "You stopped: " + strings.ToLower(j.doing[:1]) + j.doing[1:]})
 	}
@@ -88,6 +95,9 @@ func (e *Engine) Report(ctx context.Context, done, total int, step string) {
 		return
 	}
 	e.mu.Lock()
+	if step != j.step {
+		trace.Log("job", "%s: %s (%d of %d)", j.name, step, done, total)
+	}
 	j.done, j.total, j.step, j.stepAt, j.pct = done, total, step, time.Now(), -1
 	tell := time.Since(j.said) > 400*time.Millisecond
 	if tell {
@@ -168,6 +178,7 @@ func (e *Engine) StopJob(name string) int {
 		j.cancel()
 		kind, _, _ := strings.Cut(k, ":")
 		e.held[kind] = until
+		trace.Log("job", "stop asked: %s", k)
 		n++
 	}
 	e.mu.Unlock()
@@ -194,8 +205,34 @@ func (e *Engine) heldBack(kind string) bool {
 }
 
 // Resume forgets a stop, when the person asks for the work themselves.
+// An empty kind forgets every stop.
 func (e *Engine) Resume(kind string) {
 	e.mu.Lock()
-	delete(e.held, kind)
+	if kind == "" {
+		e.held = map[string]time.Time{}
+	} else {
+		delete(e.held, kind)
+	}
 	e.mu.Unlock()
+	trace.Log("job", "resume %q", kind)
+	e.S.Changed("status")
+}
+
+// HeldUntil is when work the person stopped may start by itself again; 0
+// when nothing is held.
+func (e *Engine) HeldUntil() int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var last time.Time
+	for k, t := range e.held {
+		if e.Now().After(t) {
+			delete(e.held, k)
+		} else if t.After(last) {
+			last = t
+		}
+	}
+	if last.IsZero() {
+		return 0
+	}
+	return last.Unix()
 }
