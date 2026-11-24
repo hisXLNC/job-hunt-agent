@@ -276,6 +276,9 @@ type Role struct {
 	Saved       bool            `json:"saved"`
 	Auto        bool            `json:"auto"`
 	AppliedAt   int64           `json:"applied_at"`
+	// LaterUntil: the person saved the role for later; it stays off Today
+	// until this moment. 0 when not saved for later.
+	LaterUntil int64 `json:"later_until"`
 }
 
 // Age is when the posting went up, or when Job Hunt first saw it.
@@ -286,12 +289,12 @@ func (r Role) Age() int64 {
 	return r.FirstSeenAt
 }
 
-const roleCols = `r.id, r.company_id, c.name, r.key, r.source, r.title, r.location, r.workplace, r.pay, r.url, r.apply_url, r.posted_at, r.first_seen_at, r.last_seen_at, r.gone_at, r.applicants, r.band, r.stage, r.stage_at, r.closed, r.closed_why, r.fit, r.fit_tailored, r.saved, r.auto, r.applied_at`
+const roleCols = `r.id, r.company_id, c.name, r.key, r.source, r.title, r.location, r.workplace, r.pay, r.url, r.apply_url, r.posted_at, r.first_seen_at, r.last_seen_at, r.gone_at, r.applicants, r.band, r.stage, r.stage_at, r.closed, r.closed_why, r.fit, r.fit_tailored, r.saved, r.auto, r.applied_at, r.later_until`
 
 func scanRole(sc interface{ Scan(...any) error }, full bool) (Role, error) {
 	var r Role
 	var saved, auto int
-	dst := []any{&r.ID, &r.CompanyID, &r.Company, &r.Key, &r.Source, &r.Title, &r.Location, &r.Workplace, &r.Pay, &r.URL, &r.ApplyURL, &r.PostedAt, &r.FirstSeenAt, &r.LastSeenAt, &r.GoneAt, &r.Applicants, &r.Band, &r.Stage, &r.StageAt, &r.Closed, &r.ClosedWhy, &r.Fit, &r.FitTailored, &saved, &auto, &r.AppliedAt}
+	dst := []any{&r.ID, &r.CompanyID, &r.Company, &r.Key, &r.Source, &r.Title, &r.Location, &r.Workplace, &r.Pay, &r.URL, &r.ApplyURL, &r.PostedAt, &r.FirstSeenAt, &r.LastSeenAt, &r.GoneAt, &r.Applicants, &r.Band, &r.Stage, &r.StageAt, &r.Closed, &r.ClosedWhy, &r.Fit, &r.FitTailored, &saved, &auto, &r.AppliedAt, &r.LaterUntil}
 	var reading string
 	if full {
 		dst = append(dst, &r.Description, &reading)
@@ -491,16 +494,113 @@ func (s *Store) CloseRole(id int64, closed, why string) error {
 	default:
 		return fmt.Errorf("unknown way to close a role: %q", closed)
 	}
-	_, err := s.db.Exec(`UPDATE roles SET closed = ?, closed_why = ?, stage_at = ? WHERE id = ? AND closed != 'no'`, closed, why, s.now(), id)
+	_, err := s.db.Exec(`UPDATE roles SET closed = ?, closed_why = ?, stage_at = ?, later_until = 0 WHERE id = ? AND closed != 'no'`, closed, why, s.now(), id)
 	s.Changed("roles", "today", "progress")
 	return err
 }
 
 // Reopen is only ever called because the person asked.
 func (s *Store) Reopen(id int64) error {
-	_, err := s.db.Exec(`UPDATE roles SET closed = '', closed_why = '', stage = CASE WHEN stage = 'new' THEN 'found' ELSE stage END, stage_at = ? WHERE id = ?`, s.now(), id)
+	_, err := s.db.Exec(`UPDATE roles SET closed = '', closed_why = '', later_until = 0, stage = CASE WHEN stage = 'new' THEN 'found' ELSE stage END, stage_at = ? WHERE id = ?`, s.now(), id)
 	s.Changed("roles", "today")
 	return err
+}
+
+// SetLater keeps an open role off Today until a moment (0 brings it back
+// now). It never touches a closed role: a role the person said no to cannot
+// come back this way, and it reports whether anything changed.
+func (s *Store) SetLater(id, until int64) (bool, error) {
+	res, err := s.db.Exec(`UPDATE roles SET later_until = ? WHERE id = ? AND closed = ''`, until, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	s.Changed("roles", "today")
+	return n > 0, nil
+}
+
+// Unapply takes back a mistaken "I applied": the role goes to the given
+// earlier stage and is no longer counted as applied. Only a role that is at
+// "applied" and open is changed; it reports whether one was.
+func (s *Store) Unapply(id int64, stage string) (bool, error) {
+	if stageRank(stage) < 0 || stageRank(stage) >= stageRank("applied") {
+		return false, fmt.Errorf("unknown stage %q", stage)
+	}
+	res, err := s.db.Exec(`UPDATE roles SET stage = ?, stage_at = ?, applied_at = 0 WHERE id = ? AND stage = 'applied' AND closed = ''`, stage, s.now(), id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	s.Changed("roles", "today", "progress")
+	return n > 0, nil
+}
+
+// untouched picks open roles the person never prepared or applied to. Roles
+// with documents or an application keep everything and are never picked.
+const untouched = `closed = '' AND stage IN ('new','found') AND applied_at = 0
+	AND NOT EXISTS (SELECT 1 FROM docs d WHERE d.role_id = roles.id)`
+
+// Of those, the ones whose posting is gone: taken down where the source says
+// so, or not seen in any search since a moment, for sources that never say
+// (a role the person added themselves is never called unseen).
+const (
+	takenDown = untouched + ` AND gone_at > 0`
+	unseen    = untouched + ` AND gone_at = 0 AND source NOT IN ('manual','extension') AND last_seen_at < ?`
+)
+
+// GoneUntouched counts the roles CloseGone would close.
+func (s *Store) GoneUntouched(unseenSince int64) int {
+	return s.Count(`SELECT COUNT(*) FROM roles WHERE `+takenDown) + s.Count(`SELECT COUNT(*) FROM roles WHERE `+unseen, unseenSince)
+}
+
+// CloseGone closes (never deletes) every open role whose posting was taken
+// down, or has not been seen since a moment, and that the person never
+// prepared or applied to. It returns how many.
+func (s *Store) CloseGone(unseenSince int64) (int, error) {
+	now := s.now()
+	total := 0
+	for _, step := range []struct {
+		why, where string
+		args       []any
+	}{
+		{"The posting was taken down", takenDown, nil},
+		{"The posting hasn't been seen for a month", unseen, []any{unseenSince}},
+	} {
+		res, err := s.db.Exec(`UPDATE roles SET closed = 'expired', closed_why = ?, stage_at = ?, later_until = 0 WHERE `+step.where, append([]any{step.why, now}, step.args...)...)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+	}
+	s.Changed("roles", "today", "progress")
+	return total, nil
+}
+
+// AppliedQuiet lists open roles applied to between two moments that have had
+// no answer: no mail from a person or a hiring system beyond a receipt, no
+// conversation, and no follow-up already sent or let go.
+func (s *Store) AppliedQuiet(from, to, now int64, limit int) ([]Role, error) {
+	rows, err := s.db.Query(`SELECT `+roleCols+` FROM roles r JOIN companies c ON c.id = r.company_id
+		WHERE r.closed = '' AND r.stage = 'applied' AND r.applied_at >= ? AND r.applied_at <= ? AND r.later_until <= ?
+		AND NOT EXISTS (SELECT 1 FROM mails m WHERE m.role_id = r.id AND m.kind IN ('interview','assessment','question','offer','rejection','person'))
+		AND NOT EXISTS (SELECT 1 FROM talks t WHERE t.role_id = r.id)
+		AND NOT EXISTS (SELECT 1 FROM docs d WHERE d.role_id = r.id AND d.kind = 'chase'
+			AND (COALESCE(json_extract(d.body, '$.sent_at'), 0) > 0 OR COALESCE(json_extract(d.body, '$.dropped_at'), 0) > 0))
+		ORDER BY r.applied_at ASC, r.id ASC LIMIT ?`, from, to, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Role
+	for rows.Next() {
+		r, err := scanRole(rows, false)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) SetSaved(id int64, saved bool) error {
@@ -533,6 +633,8 @@ type RoleFilter struct {
 	Band      string
 	MinFit    int
 	Saved     bool
+	Later     int64  // not 0: only roles saved for later beyond this moment
+	NotLater  int64  // not 0: leave out roles saved for later beyond this moment
 	Unread    bool   // include stage "new"
 	Sort      string // fit, age, company, title, stage, applicants (prefix "-" reverses)
 	Limit     int
@@ -579,6 +681,14 @@ func (f RoleFilter) where() (string, []any) {
 	}
 	if f.Saved {
 		w = append(w, `r.saved = 1`)
+	}
+	if f.Later != 0 {
+		w = append(w, `r.later_until > ?`)
+		args = append(args, f.Later)
+	}
+	if f.NotLater != 0 {
+		w = append(w, `r.later_until <= ?`)
+		args = append(args, f.NotLater)
 	}
 	return strings.Join(w, " AND "), args
 }
@@ -688,6 +798,13 @@ func (s *Store) SaveDoc(roleID int64, kind string, body any) error {
 	now := s.now()
 	_, err = s.db.Exec(`INSERT INTO docs(role_id, kind, body, created_at, updated_at) VALUES(?,?,?,?,?)
 		ON CONFLICT(role_id, kind) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`, roleID, kind, string(b), now, now)
+	s.Changed("roles", "docs")
+	return err
+}
+
+// DropDoc removes one document of a role, if it has it.
+func (s *Store) DropDoc(roleID int64, kind string) error {
+	_, err := s.db.Exec(`DELETE FROM docs WHERE role_id = ? AND kind = ?`, roleID, kind)
 	s.Changed("roles", "docs")
 	return err
 }

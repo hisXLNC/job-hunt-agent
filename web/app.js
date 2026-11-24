@@ -165,16 +165,31 @@ export function sortHead(label, key, route, def) {
 }
 
 let toastTimer;
-export function toast(msg, bad) {
+// undo, when given, is how to take back what was just done: the message then
+// stays ten seconds with an Undo button.
+export function toast(msg, bad, undo) {
   document.querySelector('.toast')?.remove();
   const t = document.createElement('div');
   t.className = 'toast' + (bad ? ' bad' : '');
   t.textContent = msg;
   t.setAttribute('role', 'status');
+  if (undo) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Undo';
+    b.onclick = async () => {
+      b.disabled = true;
+      try { await undo(); toast('Undone'); await refreshState(); await reload(true); } catch (e) { toast(e.message, true); }
+    };
+    t.append(b);
+  }
   document.body.append(t);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.remove(), bad ? 7000 : 3500);
+  toastTimer = setTimeout(() => t.remove(), undo ? 10000 : bad ? 7000 : 3500);
 }
+// The three ways to save a role for later, and how the day it comes back reads.
+export const LATER = [[1, 'Tomorrow'], [3, 'In 3 days'], [7, 'Next week']];
+export const dayName = t => new Date(t * 1000).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 export async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast('Couldn\'t copy. Select the text and press Ctrl+C.', true); }
 }

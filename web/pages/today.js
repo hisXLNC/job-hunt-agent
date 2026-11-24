@@ -1,9 +1,9 @@
-import { html, api, post, ago, when, tile, toast, copy, safeUrl, app, openAssistant, with_, fitColor, employer, shortPay, rowsThatFit, picked, redraw } from '../app.js';
+import { html, api, post, ago, when, tile, toast, copy, safeUrl, app, openAssistant, with_, fitColor, employer, shortPay, rowsThatFit, picked, redraw, LATER } from '../app.js';
 
 // What each row asks of the person: the word in the first column and the one main button.
 const TODO = {
   apply: ['Send', 'hot', 'send'], decide: ['Prepare', 'blue', 'prepare'], mail: ['Reply', 'info', 'reply'], talk: ['Interview', 'info', 'talk'],
-  nudge: ['Follow up', 'warn', 'follow'], send: ['Send note', 'good', 'people'], meet: ['Write to', 'good', 'people'],
+  nudge: ['Follow up', 'warn', 'follow'], chase: ['Follow up', 'warn', 'follow'], send: ['Send note', 'good', 'people'], meet: ['Write to', 'good', 'people'],
 };
 const GROUPS = [['', 'Everything'], ['send', 'Send'], ['prepare', 'Prepare'], ['reply', 'Replies'], ['talk', 'Interviews'], ['follow', 'Follow up'], ['people', 'People']];
 const WHERE = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On site' };
@@ -24,6 +24,7 @@ function mainButton(c) {
     case 'talk': return html`<a class="btn p sm" href="#/interviews/${c.talk_id}">Open prep</a>`;
     case 'send': return html`<button class="btn p sm" data-act="copyopen" data-note="${c.note_id}" data-url="${url}" title="Copies your note${url ? ' and opens their profile' : ''}. You paste and send it.">Copy note</button>`;
     case 'nudge': return html`<button class="btn p sm" data-act="nudge" data-id="${c.person_id}" data-busy="Writing…">Write follow-up</button>`;
+    case 'chase': return c.body ? html`<a class="btn p sm" href="#/roles/${c.role_id}" title="Your follow-up is written. Read it, then send it from your own mail.">Read and send</a>` : html`<button class="btn p sm" data-act="chase" data-id="${c.role_id}" data-busy="Writing…" title="Writes one short follow-up e-mail for you to read and send yourself.">Write follow-up</button>`;
     case 'meet': return html`<button class="btn p sm" data-act="draft" data-id="${c.person_id}" data-busy="Writing…">Write a note</button>`;
   }
   return '';
@@ -37,6 +38,14 @@ function more(c) {
     if (url && c.kind === 'decide') items.push(html`<a href="${url}" target="_blank" rel="noopener noreferrer">Open the posting</a>`);
     items.push(html`<button data-act="applied" data-id="${c.role_id}">I applied</button>`);
     items.push(html`<button data-act="no" data-id="${c.role_id}" data-confirm="Not interested in this role? It will never be shown again.">Not for me</button>`);
+  }
+  if (c.kind === 'chase') {
+    if (c.body) items.push(html`<button data-act="chasesent" data-id="${c.role_id}">I sent it</button>`);
+    items.push(html`<button data-act="chasedrop" data-id="${c.role_id}" title="Stops suggesting a follow-up for this application. The application stays as it is.">Let it go</button>`);
+  }
+  if (c.kind === 'apply' || c.kind === 'decide' || c.kind === 'chase') {
+    items.push(html`<span class="mh">Save for later</span>`);
+    for (const [days, label] of LATER) items.push(html`<button data-act="later" data-id="${c.role_id}" data-days="${days}" title="Leaves Today and comes back by itself.">${label}</button>`);
   }
   if (c.kind === 'talk' && url) items.push(html`<a href="${url}" target="_blank" rel="noopener noreferrer">Join link</a>`);
   if (c.kind === 'send') { items.push(html`<button data-act="sent" data-id="${c.note_id}">I sent it</button>`); items.push(html`<a href="#/people/${c.person_id}">Edit the note</a>`); }
@@ -52,7 +61,7 @@ function row(c, f) {
   const isRole = c.kind === 'apply' || c.kind === 'decide';
   const go = c.role_id ? `#/roles/${c.role_id}` : c.mail_id ? `#/replies/${c.mail_id}` : c.talk_id ? `#/interviews/${c.talk_id}` : c.person_id ? `#/people/${c.person_id}` : '';
   const age = Date.now() / 1000 - c.at;
-  const line2 = isRole ? html`${employerLink(c)}${c.place ? html` <span class="m">· ${c.place}</span>` : ''}` : c.kind === 'talk' ? html`${c.sub} <span class="m">· ${when(c.at)}</span>` : html`${c.company_id ? html`${employerLink(c)} <span class="m">·</span> ` : ''}${c.sub}`;
+  const line2 = isRole ? html`${employerLink(c)}${c.place ? html` <span class="m">· ${c.place}</span>` : ''}` : c.kind === 'talk' ? html`${c.sub} <span class="m">· ${when(c.at)}</span>` : c.kind === 'chase' ? html`${employerLink(c)} <span class="m">· ${c.sub}</span>` : html`${c.company_id ? html`${employerLink(c)} <span class="m">·</span> ` : ''}${c.sub}`;
   const tick = html`<td class="pick">${isRole ? html`<input type="checkbox" data-on="change" data-act="pick" data-id="${c.role_id}" ${picked.has(String(c.role_id)) ? 'checked' : ''} aria-label="Tick ${c.title}">` : ''}</td>`;
   const first = html`<td><span class="chip ${c.fresh && c.kind === 'apply' ? 'hot' : cls}" title="${c.fresh && c.kind === 'apply' ? 'Still early: few people have applied.' : ''}">${label}</span></td>`;
   const who = html`<div class="row" style="gap:9px">${tile(c.company || c.title, true, c.company_id)}<div class="two"><a class="t" href="${go}" title="${c.title}${c.why ? '\n\n' + c.why : ''}">${c.title}</a><span class="xs ink2">${line2}</span></div></div>`;
@@ -130,7 +139,7 @@ export default {
   load: () => api('today'),
   view(d, route) {
     return html`<div class="body col" style="gap:10px">
-      <div class="card row wrap" style="padding:8px 14px;gap:22px">${d.numbers.map(n => html`<div class="row" style="gap:6px" title="${n.sub}"><b style="font-size:17px;${n.tone === 'hot' ? 'color:var(--hot)' : n.tone === 'good' ? 'color:var(--good)' : ''}">${n.value}</b><span class="s m">${n.label.toLowerCase()}</span><span class="xs m">· ${n.sub}</span></div>`)}</div>
+      <div class="card row wrap" style="padding:8px 14px;gap:22px">${d.numbers.map(n => html`<div class="row" style="gap:6px" title="${n.sub}"><b style="font-size:17px;${n.tone === 'hot' ? 'color:var(--hot)' : n.tone === 'good' ? 'color:var(--good)' : ''}">${n.value}</b><span class="s m">${n.label.toLowerCase()}</span>${n.of ? html`<span class="bar goal ${n.done >= n.of ? 'met' : ''}" title="Your goal is ${n.of} applications a week. Change it under You."><i style="width:${Math.min(100, Math.round((n.done || 0) * 100 / n.of))}%"></i></span>` : ''}<span class="xs m">· ${n.sub}</span></div>`)}</div>
       ${d.problems?.length ? html`<div class="card" style="border-color:var(--crit);background:#FFF8F7;padding:9px 14px">${d.problems.map(p => html`<p class="s"><b style="color:var(--crit)">Needs attention.</b> ${p.text} <span class="m">· ${ago(p.at)}</span></p>`)}</div>` : ''}
       ${d.question ? question(d.question, d.waiting) : ''}
       ${list(d, route)}
@@ -149,11 +158,17 @@ export default {
       let done = 0;
       for (const c of mine) { await post(`roles/${c.role_id}/${d.do}`); done++; }
       picked.clear();
-      toast({ prepare: `Preparing ${done}. Each takes about a minute.`, applied: `${done} marked as applied`, no: `${done} won't be shown again` }[d.do]);
+      const back = { applied: 'unapply', no: 'reopen' }[d.do];
+      toast({ prepare: `Preparing ${done}. Each takes about a minute.`, applied: `${done} marked as applied`, no: `${done} won't be shown again` }[d.do], false,
+        back && done ? async () => { for (const c of mine) await post(`roles/${c.role_id}/${back}`); } : undefined);
     },
     filter({ el, route }) { location.hash = with_(route, { [el.name]: el.value, page: '' }); return false; },
-    applied: ({ d }) => post(`roles/${d.id}/applied`).then(() => toast('Marked as applied')),
-    no: ({ d }) => post(`roles/${d.id}/no`).then(() => toast('It won\'t be shown again')),
+    applied: ({ d }) => post(`roles/${d.id}/applied`).then(() => toast('Marked as applied', false, () => post(`roles/${d.id}/unapply`))),
+    no: ({ d }) => post(`roles/${d.id}/no`).then(() => toast('It won\'t be shown again', false, () => post(`roles/${d.id}/reopen`))),
+    later: ({ d }) => post(`roles/${d.id}/later`, { days: +d.days }).then(() => toast({ 1: 'Saved for later. Back tomorrow.', 3: 'Saved for later. Back in 3 days.', 7: 'Saved for later. Back next week.' }[d.days], false, () => post(`roles/${d.id}/later`, { days: 0 }))),
+    async chase({ d }) { await post(`roles/${d.id}/chase`); location.hash = `#/roles/${d.id}`; return false; },
+    chasesent: ({ d }) => post(`roles/${d.id}/chasesent`).then(() => toast('Noted in the role\'s history.')),
+    chasedrop: ({ d }) => post(`roles/${d.id}/chasedrop`),
     prepare: ({ d }) => post(`roles/${d.id}/prepare`),
     async answer({ d, f }) {
       const answer = (d.answer || f?.answer || '').trim();

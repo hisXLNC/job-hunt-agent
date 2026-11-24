@@ -474,10 +474,6 @@ func (e *Engine) ICS(id int64) (string, []byte, error) {
 	return fileNameExt("ics", title), []byte(b.String()), nil
 }
 
-func fileNameExt(ext string, parts ...string) string {
-	return strings.TrimSuffix(fileName(parts...), ".docx") + "." + ext
-}
-
 // ---- the one-page case, form answers, ask ---------------------------------------------------
 
 // CaseDoc is the note sent straight to a hiring manager.

@@ -1008,11 +1008,33 @@ type TailoredCV struct {
 	LeftOut   []brain.LeftOut `json:"left_out"`
 	Questions []string        `json:"questions"`
 	FitAfter  int             `json:"fit_after"`
+	// Prev is the set of edits as it was before the person last asked for
+	// changes, so "Put it back" can restore it.
+	Prev *CVBefore `json:"prev,omitempty"`
+}
+
+// CVBefore is a tailored CV as it stood before the person asked for changes.
+type CVBefore struct {
+	Changes   []cv.Change     `json:"changes"`
+	LeftOut   []brain.LeftOut `json:"left_out"`
+	Questions []string        `json:"questions"`
+	FitAfter  int             `json:"fit_after"`
+	Ask       string          `json:"ask"` // what they asked for
 }
 
 // LetterDoc is the "letter" document of a role.
 type LetterDoc struct {
-	Text string `json:"text"`
+	Text  string `json:"text"`
+	Style string `json:"style,omitempty"` // one of store.LetterStyles; "" reads as the first
+	// Prev is the letter as it was before it was last written again.
+	Prev *LetterBefore `json:"prev,omitempty"`
+}
+
+// LetterBefore is a letter as it stood before it was written again.
+type LetterBefore struct {
+	Text  string `json:"text"`
+	Style string `json:"style"`
+	Ask   string `json:"ask"` // what the person asked for; "" when only the style changed
 }
 
 // Prepare makes the documents for a role: a tailored CV and a letter. Both
@@ -1052,6 +1074,12 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 		return err
 	}
 	post := postingOf(r)
+	// A role that already has a letter keeps the style chosen for it.
+	style := p.Profile.LetterStyle
+	var had LetterDoc
+	if ok, _ := e.S.Doc(id, "letter", &had); ok && store.KnownLetterStyle(had.Style) {
+		style = had.Style
+	}
 	e.StepTakes(ctx, 50*time.Second)
 	e.Report(ctx, 0, 1, "Tailoring your CV and writing the letter for "+r.Company)
 
@@ -1060,8 +1088,8 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 	var letter string
 	var terr, lerr error
 	wg.Add(2)
-	go func() { defer wg.Done(); tail, terr = e.brain.Tailor(ctx, p, base, post, reading) }()
-	go func() { defer wg.Done(); letter, lerr = e.brain.Letter(ctx, p, post, reading) }()
+	go func() { defer wg.Done(); tail, terr = e.brain.Tailor(ctx, p, base, post, reading, nil) }()
+	go func() { defer wg.Done(); letter, lerr = e.brain.Letter(ctx, p, post, reading, style, nil) }()
 	wg.Wait()
 	if terr != nil {
 		return terr
@@ -1073,7 +1101,7 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 	if err := e.S.SaveDoc(id, "cv", doc); err != nil {
 		return err
 	}
-	if err := e.S.SaveDoc(id, "letter", LetterDoc{Text: letter}); err != nil {
+	if err := e.S.SaveDoc(id, "letter", LetterDoc{Text: letter, Style: style}); err != nil {
 		return err
 	}
 	e.S.SetFitTailored(id, tail.FitAfter)
@@ -1156,15 +1184,32 @@ type File struct {
 	Data []byte
 }
 
-var unsafeName = regexp.MustCompile(`[^A-Za-z0-9 ._-]+`)
+// Everything but letters (of any alphabet), digits and a little punctuation
+// is left out of a file's name, so it is safe on Windows and in a download
+// header.
+var unsafeName = regexp.MustCompile(`[^\p{L}\p{N} ._-]+`)
 
 func fileName(parts ...string) string {
-	s := strings.Join(parts, " - ")
-	s = strings.Join(strings.Fields(unsafeName.ReplaceAllString(s, " ")), " ")
+	return fileNameExt("docx", parts...)
+}
+
+func fileNameExt(ext string, parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		p = strings.Join(strings.Fields(unsafeName.ReplaceAllString(p, " ")), " ")
+		if p = strings.Trim(p, " ."); p != "" {
+			kept = append(kept, p)
+		}
+	}
+	s := []rune(strings.Join(kept, " - "))
 	if len(s) > 90 {
 		s = s[:90]
 	}
-	return s + ".docx"
+	name := strings.Trim(string(s), " .-")
+	if name == "" {
+		name = "Job Hunt"
+	}
+	return name + "." + ext
 }
 
 // CVFile renders the tailored CV for a role as a Word document.
@@ -1178,36 +1223,17 @@ func (e *Engine) CVFile(roleID int64) (File, error) {
 		return File{}, err
 	}
 	data, err := office.RenderCV(out)
-	return File{Name: fileName(firstOf(out.Name, "CV"), r.Company), Data: data}, err
+	return File{Name: fileName(e.sender(out), r.Company, "CV"), Data: data}, err
 }
 
 // LetterFile renders the letter for a role as a Word document.
 func (e *Engine) LetterFile(roleID int64) (File, error) {
-	var doc LetterDoc
-	ok, err := e.S.Doc(roleID, "letter", &doc)
+	l, r, err := e.roleLetter(roleID)
 	if err != nil {
 		return File{}, err
 	}
-	if !ok {
-		return File{}, store.ErrNotFound
-	}
-	r, err := e.S.Role(roleID)
-	if err != nil {
-		return File{}, err
-	}
-	p := e.S.Profile()
-	contact := []string{}
-	if cvs, _ := e.S.CVs(); len(cvs) > 0 {
-		var m cv.CV
-		if json.Unmarshal(cvs[0].Model, &m) == nil {
-			contact = append([]string{m.Contact.Location, m.Contact.Email, m.Contact.Phone}, m.Contact.Links...)
-		}
-	}
-	data, err := office.RenderLetter(office.Letter{
-		Name: p.Name, Contact: contact, Date: e.Now().Format("2 January 2006"),
-		To: []string{"Hiring team", r.Company}, Subject: r.Title, Body: "Dear hiring team,\n\n" + doc.Text, Sign: "Sincerely,",
-	})
-	return File{Name: fileName(firstOf(p.Name, "Letter"), r.Company, "letter"), Data: data}, err
+	data, err := office.RenderLetter(l)
+	return File{Name: fileName(firstOf(l.Name, "Letter"), r.Company, "Letter"), Data: data}, err
 }
 
 // BaseCVFile renders a stored CV, untailored.

@@ -39,6 +39,8 @@ func StandIn() llm.Engine {
 		case "case":
 			in := req.Input.(letterInput)
 			out = Message{Subject: in.Posting.Title + ": two things I've already done", Body: standCase(in)}
+		case "follow_up":
+			out = standFollowUp(req.Input.(letterInput))
 		case "note":
 			out = standNote(req.Input.(noteInput))
 		case "doors":
@@ -556,9 +558,13 @@ func standTailor(in tailorInput) Tailoring {
 	used := 0
 	if in.CV.Headline != "" {
 		t.Changes = append(t.Changes, cv.Change{ID: "headline", After: in.CV.Headline + " | " + in.Posting.Title, Why: "Puts the role's title where a recruiter looks first"})
+		if in.Ask != "" {
+			t.Changes[0] = cv.Change{ID: "headline", After: in.Posting.Title + " | " + in.CV.Headline, Why: "Changed as you asked: " + in.Ask}
+		}
 	}
 	for _, u := range cv.Units(in.CV) {
-		if used >= 4 || !strings.Contains(u.ID, ".b") {
+		// Asked to change it, the stand-in proposes a smaller set.
+		if used >= 4 || (in.Ask != "" && used >= 2) || !strings.Contains(u.ID, ".b") {
 			continue
 		}
 		low := strings.ToLower(u.Text)
@@ -591,6 +597,16 @@ func standLetter(in letterInput) string {
 	}
 	p1 := fmt.Sprintf("Your posting for %s asks for someone who has done this work before. I have.", in.Posting.Title)
 	p2 := "Two examples from my CV:"
+	switch in.Style {
+	case "formal":
+		p1 = fmt.Sprintf("I am writing to apply for the position of %s. The posting asks for someone who has done this work before, and I have.", in.Posting.Title)
+		p2 = "Two examples from my curriculum vitae:"
+	case "warm":
+		p1 = fmt.Sprintf("I was glad to see %s is hiring a %s. It is the work I have been doing, and the work I want to keep doing.", firstNonEmpty(in.Posting.Company, "your team"), in.Posting.Title)
+	}
+	if in.Ask != "" {
+		p2 = "The two things on my CV closest to what you ask for:"
+	}
 	for i, s := range strong {
 		if i >= 2 {
 			break
@@ -601,7 +617,34 @@ func standLetter(in letterInput) string {
 	if moving, _ := in.Person.Profile.Relocating(in.Person.Today); moving {
 		p3 = fmt.Sprintf("I arrive in %s on %s and am available by video at any time until then.", firstNonEmpty(in.Person.Profile.City, "the city"), in.Person.Profile.ArriveOn)
 	}
+	if in.Style == "short" || strings.Contains(strings.ToLower(in.Ask), "short") {
+		if len(strong) > 0 {
+			p1 += " For example: " + strings.TrimSuffix(strong[0], ".") + "."
+		}
+		return p1 + "\n\n" + p3
+	}
 	return p1 + "\n\n" + p2 + "\n\n" + p3
+}
+
+func standFollowUp(in letterInput) Message {
+	hello := "Hello,"
+	if f := strings.Fields(in.To); len(f) > 0 {
+		hello = "Hello " + f[0] + ","
+	}
+	when := fmt.Sprintf("%d days ago", in.Days)
+	if !in.Person.Today.IsZero() {
+		when = "on " + in.Person.Today.AddDate(0, 0, -in.Days).Format("2 January")
+	}
+	fit := "The role is close to the work I have been doing."
+	for _, a := range in.Reading.Asks {
+		if a.Strength != "gap" && a.Evidence != "" {
+			fit = "The closest thing I have done: " + strings.TrimSuffix(a.Evidence, ".") + "."
+			break
+		}
+	}
+	body := fmt.Sprintf("%s\n\nI applied for %s %s. %s\n\nI'm still very interested, and glad to send anything else that would help or to talk whenever suits.\n\n%s",
+		hello, in.Posting.Title, when, fit, firstNonEmpty(in.Person.Profile.Name, "[your name]"))
+	return Message{Subject: "My application for " + in.Posting.Title, Body: body}
 }
 
 func standCase(in letterInput) string {

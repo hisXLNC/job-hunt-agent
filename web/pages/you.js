@@ -27,6 +27,11 @@ function about(d) {
       <div class="grid3"><label class="field">Posted no longer ago than<select name="max_age_days">${[[0, 'Any age'], [1, '1 day'], [3, '3 days'], [7, '1 week'], [14, '2 weeks'], [30, '1 month']].map(([v, t]) => html`<option value="${v}" ${(p.max_age_days || 0) === v ? 'selected' : ''}>${t}</option>`)}</select></label>
         <label class="row s" style="gap:6px;font-weight:500;align-self:end;height:36px"><input type="checkbox" name="pay_strict" ${p.pay_strict ? 'checked' : ''}> Set aside roles that pay under your floor</label></div>
       <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Never show:</span>${[['contract', 'Contract'], ['part-time', 'Part-time'], ['internship', 'Internships']].map(([k, t]) => html`<label class="row s" style="gap:5px"><input type="checkbox" name="no_${k}" ${(p.no_types || []).includes(k) ? 'checked' : ''}> ${t}</label>`)}</div>
+      <div class="hr"></div><h3>Letters, follow-ups and your week</h3>
+      <div class="grid3"><label class="field">Letter style <span class="h">You can change it for any one role.</span><select name="letter_style">${[['standard', 'Standard'], ['formal', 'Formal: banks, government, law'], ['short', 'Short and direct'], ['warm', 'Warm and personal']].map(([k, t]) => html`<option value="${k}" ${p.letter_style === k ? 'selected' : ''}>${t}</option>`)}</select></label>
+        <label class="field">Follow up on an application <span class="h">When there has been no reply.</span><select name="chase_days">${[...new Set([0, 5, 8, 10, 14, 21, p.chase_days ?? 8])].sort((a, b) => a - b).map(n => html`<option value="${n}" ${(p.chase_days ?? 8) === n ? 'selected' : ''}>${n ? `After ${n} days` : 'Never'}</option>`)}</select></label>
+        <label class="field">Applications a week <span class="h">Your goal. 0 for none.</span><input type="number" name="weekly_goal" min="0" max="100" value="${p.weekly_goal ?? 10}"></label></div>
+      <label class="field" style="max-width:420px">How you sign a letter <span class="h">One line each. Leave empty for "Sincerely," and your name.</span><textarea name="signature" rows="2" placeholder="Kind regards,&#10;Sam Rivera, CPA">${p.signature || ''}</textarea></label>
       <label class="field" style="max-width:420px">When a strong role appears<select name="may_prepare"><option value="do" ${p.may_prepare !== 'ask' ? 'selected' : ''}>Write the CV and letter straight away</option><option value="ask" ${p.may_prepare === 'ask' ? 'selected' : ''}>Ask me before writing anything</option></select></label>
       <p class="xs m">Job Hunt never submits an application or sends a message. That is always you.</p>
       <div class="row"><button class="btn p">Save</button></div></form>
@@ -189,6 +194,7 @@ export default {
       const wp = ['remote', 'hybrid', 'onsite'].filter(w => f['wp_' + w]);
       await put('profile', { name: f.name, headline: f.headline, rare: f.rare, city: f.city, places: lines(f.places), country: f.country, home: f.home, arrive_on: f.arrive_on, work_status: f.work_status, pay_floor: +f.pay_floor || 0,
         start_early: !!f.start_early, titles: { level: lines(f.level), step_up: lines(f.step_up), sideways: lines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid), workplaces: wp.length === 3 ? [] : wp, may_prepare: f.may_prepare,
+        letter_style: f.letter_style, signature: f.signature, chase_days: Math.max(0, +f.chase_days || 0), weekly_goal: Math.max(0, Math.round(+f.weekly_goal) || 0),
         pay_strict: !!f.pay_strict, max_age_days: +f.max_age_days || 0, no_types: ['contract', 'part-time', 'internship'].filter(k => f['no_' + k]) });
       toast('Saved. The next search uses this.');
     },

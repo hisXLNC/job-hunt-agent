@@ -353,6 +353,24 @@ func (s *Server) Handler() http.Handler {
 		}
 		p.SetupDone = done
 		p.City, p.Country, p.Name = strings.TrimSpace(p.City), strings.TrimSpace(p.Country), strings.TrimSpace(p.Name)
+		if !store.KnownLetterStyle(p.LetterStyle) {
+			return nil, bad("The letter style is one of: " + strings.Join(store.LetterStyles, ", ") + ".")
+		}
+		if p.ChaseAfter() > 60 || (p.ChaseDays != nil && *p.ChaseDays < 0) {
+			return nil, bad("Follow up after 0 to 60 days (0 means never).")
+		}
+		if p.Goal() > 100 || (p.WeeklyGoal != nil && *p.WeeklyGoal < 0) {
+			return nil, bad("Applications a week is 0 to 100 (0 means no goal).")
+		}
+		// The closing under a letter: a few short lines, no more.
+		sig := strings.Split(strings.ReplaceAll(p.Signature, "\r", ""), "\n")
+		var lines []string
+		for _, l := range sig {
+			if l = strings.TrimSpace(l); l != "" && len(lines) < 4 {
+				lines = append(lines, string([]rune(l)[:min(len([]rune(l)), 80)]))
+			}
+		}
+		p.Signature = strings.Join(lines, "\n")
 		if p.ArriveOn != "" {
 			if _, err := time.Parse("2006-01-02", p.ArriveOn); err != nil {
 				return nil, bad("The arrival date should look like 2027-01-15.")
@@ -442,6 +460,10 @@ func (s *Server) Handler() http.Handler {
 		page := max(qInt(r, "page", 1), 1)
 		f := store.RoleFilter{Search: q.Get("q"), Band: q.Get("band"), MinFit: qInt(r, "minfit", 0), Sort: q.Get("sort"), Limit: size, Offset: (page - 1) * size,
 			CompanyID: int64(qInt(r, "company", 0)), Saved: q.Get("saved") == "1"}
+		now := e.Now().Unix()
+		if q.Get("later") == "1" {
+			f.Later = now
+		}
 		if v := q.Get("stage"); v != "" {
 			f.Stages = strings.Split(v, ",")
 		}
@@ -468,7 +490,10 @@ func (s *Server) Handler() http.Handler {
 			out[i] = item{x, e.Preparing(x.ID)}
 		}
 		counts, _ := st.RoleCounts()
-		return map[string]any{"roles": out, "total": total, "page": page, "size": size, "counts": counts}, nil
+		// Not stages: roles put away until a day, and ones a tidy would close.
+		counts["later"] = st.Count(`SELECT COUNT(*) FROM roles WHERE closed = '' AND later_until > ?`, now)
+		counts["taken_down"] = e.TakenDown()
+		return map[string]any{"roles": out, "total": total, "page": page, "size": size, "counts": counts, "now": now}, nil
 	})
 	h("GET /api/board", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		out := map[string]any{}
@@ -490,6 +515,12 @@ func (s *Server) Handler() http.Handler {
 		id, err := e.AddRole(in.Company, in.Title, in.Location, safeLink(in.URL), in.Description, "manual")
 		return map[string]int64{"id": id}, err
 	})
+	// Closes (never deletes) roles whose posting is gone and that were never
+	// prepared or applied to.
+	h("POST /api/roles/tidy", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		n, err := e.ClearTakenDown()
+		return map[string]int{"closed": n}, err
+	})
 	h("GET /api/roles/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) { return s.roleDetail(idOf(r)) })
 	h("POST /api/roles/{id}/{action}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		id := idOf(r)
@@ -502,12 +533,32 @@ func (s *Server) Handler() http.Handler {
 			After *string `json:"after"`
 			Text  string  `json:"text"`
 			How   string  `json:"how"`
+			Style string  `json:"style"`
+			Ask   string  `json:"ask"`
+			Days  int     `json:"days"`
+			Subj  string  `json:"subject"`
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
 		}
-		if _, err := st.Role(id); err != nil {
+		role, err := st.Role(id)
+		if err != nil {
 			return nil, err
+		}
+		// Writing again asks Claude and takes a moment; the page waits for it.
+		rewrite := func(do func(ctx context.Context) error) (any, error) {
+			if e.LLM().Engine == "" {
+				return nil, llm.ErrNotConnected
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			defer cancel()
+			if err := do(ctx); err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					return nil, bad("There is nothing written for this role yet.")
+				}
+				return nil, err
+			}
+			return nil, nil
 		}
 		switch r.PathValue("action") {
 		case "prepare":
@@ -541,7 +592,67 @@ func (s *Server) Handler() http.Handler {
 		case "change":
 			return nil, e.SetChange(id, in.Index, in.Off, in.After)
 		case "letter":
-			return nil, st.SaveDoc(id, "letter", engine.LetterDoc{Text: strings.TrimSpace(in.Text)})
+			return nil, e.SaveLetter(id, in.Text)
+		case "letterstyle":
+			if !store.KnownLetterStyle(in.Style) {
+				return nil, bad("unknown letter style")
+			}
+			return rewrite(func(ctx context.Context) error { return e.RewriteLetter(ctx, id, in.Style, "") })
+		case "askletter":
+			if strings.TrimSpace(in.Ask) == "" {
+				return nil, bad("Say what to change.")
+			}
+			return rewrite(func(ctx context.Context) error { return e.RewriteLetter(ctx, id, "", clipAsk(in.Ask)) })
+		case "askcv":
+			if strings.TrimSpace(in.Ask) == "" {
+				return nil, bad("Say what to change.")
+			}
+			return rewrite(func(ctx context.Context) error { return e.RetailorCV(ctx, id, clipAsk(in.Ask)) })
+		case "undoletter":
+			if err := e.UndoLetter(id); errors.Is(err, store.ErrNotFound) {
+				return nil, bad("There is no earlier letter to put back.")
+			} else {
+				return nil, err
+			}
+		case "undocv":
+			if err := e.UndoCV(id); errors.Is(err, store.ErrNotFound) {
+				return nil, bad("There is no earlier version to put back.")
+			} else {
+				return nil, err
+			}
+		case "later":
+			// days 0 brings the role back to Today now.
+			if in.Days != 0 && in.Days != 1 && in.Days != 3 && in.Days != 7 {
+				return nil, bad("Save for later takes 1, 3 or 7 days (0 brings it back).")
+			}
+			if err := e.Later(id, in.Days); err != nil {
+				return nil, bad(err.Error())
+			}
+			return nil, nil
+		case "unapply":
+			if err := e.Unapply(id); err != nil {
+				return nil, bad(capitalise(err.Error()) + ".")
+			}
+			return nil, nil
+		case "chase":
+			if role.AppliedAt == 0 || role.Closed != "" {
+				return nil, bad("A follow-up is for a role you applied to and that is still open.")
+			}
+			var was engine.ChaseDoc
+			if st.Doc(id, "chase", &was); was.SentAt > 0 {
+				return nil, bad("You already followed up on this one. A second follow-up rarely helps.")
+			}
+			return rewrite(func(ctx context.Context) error { return e.WriteChase(ctx, id) })
+		case "chasesave":
+			if err := e.SaveChase(id, in.Subj, in.Text); errors.Is(err, store.ErrNotFound) {
+				return nil, bad("There is no follow-up written for this role yet.")
+			} else {
+				return nil, err
+			}
+		case "chasesent":
+			return nil, e.ChaseSent(id)
+		case "chasedrop":
+			return nil, e.ChaseDropped(id)
 		case "case":
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
@@ -559,6 +670,19 @@ func (s *Server) Handler() http.Handler {
 	})
 	h("GET /api/roles/{id}/letter.docx", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		f, err := e.LetterFile(idOf(r))
+		return sendFile(w, f.Name, f.Data, err)
+	})
+	h("GET /api/roles/{id}/cv.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		f, err := e.CVPDF(idOf(r))
+		return sendFile(w, f.Name, f.Data, err)
+	})
+	h("GET /api/roles/{id}/letter.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		f, err := e.LetterPDF(idOf(r))
+		return sendFile(w, f.Name, f.Data, err)
+	})
+	// The letter and the CV in one file, letter first, for forms that take one.
+	h("GET /api/roles/{id}/both.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		f, err := e.PackPDF(idOf(r))
 		return sendFile(w, f.Name, f.Data, err)
 	})
 
@@ -1460,6 +1584,19 @@ func safeLink(s string) string {
 	return s
 }
 
+// clipAsk keeps what the person asked for to a few sentences.
+func clipAsk(s string) string {
+	r := []rune(strings.TrimSpace(s))
+	return string(r[:min(len(r), 600)])
+}
+
+func capitalise(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
 func sendFile(w http.ResponseWriter, name string, data []byte, err error) (any, error) {
 	if err != nil {
 		return nil, err
@@ -1468,6 +1605,8 @@ func sendFile(w http.ResponseWriter, name string, data []byte, err error) (any, 
 	switch path.Ext(name) {
 	case ".docx":
 		ctype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".pdf":
+		ctype = "application/pdf"
 	case ".ics":
 		ctype = "text/calendar; charset=utf-8"
 	}
@@ -1591,7 +1730,25 @@ func (s *Server) roleDetail(id int64) (any, error) {
 	var letter engine.LetterDoc
 	if ok, _ := st.Doc(id, "letter", &letter); ok {
 		out["letter"] = letter.Text
+		style := letter.Style
+		if !store.KnownLetterStyle(style) {
+			style = store.LetterStyles[0]
+		}
+		out["letter_style"] = style
+		if letter.Prev != nil {
+			out["letter_prev"] = map[string]string{"ask": letter.Prev.Ask, "style": letter.Prev.Style}
+		}
+		// A PDF made here shows Western European letters only.
+		out["pdf_gap"] = e.PDFGap(id)
 	}
+	out["letter_styles"] = store.LetterStyles
+	// The one follow-up to a quiet application.
+	var chase engine.ChaseDoc
+	if ok, _ := st.Doc(id, "chase", &chase); ok {
+		out["chase"] = chase
+	}
+	out["chase_due"] = r.Closed == "" && r.Stage == "applied" && e.ChaseDue(r)
+	out["now"] = e.Now().Unix()
 	if f, err := e.OldCVFile(id); err == nil {
 		out["old_cv"] = f.Name
 	}
