@@ -4,6 +4,9 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,13 +40,41 @@ type Server struct {
 	Quit func() // stops the program; set by main
 
 	mu      sync.Mutex
-	pending string // extension id asking to connect
+	pending ExtSet // the extension asking to connect, if any
 }
 
-// ExtSet is the paired browser extension.
+// ExtSet is the paired browser extension. The extension makes up a secret
+// key and sends it with every request; only the key's SHA-256 is kept here.
 type ExtSet struct {
 	ID       string `json:"id"`
+	KeyHash  string `json:"key_hash,omitempty"`
 	PairedAt int64  `json:"paired_at"`
+}
+
+// Code is the short code shown in both the side panel and the app, so the
+// person can see they are approving the panel in front of them.
+func (x ExtSet) Code() string {
+	if len(x.KeyHash) < 6 {
+		return ""
+	}
+	return strings.ToUpper(x.KeyHash[:6])
+}
+
+func hashKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])
+}
+
+func validKey(key string) bool {
+	if len(key) < 32 || len(key) > 128 {
+		return false
+	}
+	for _, c := range key {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 type apiError struct {
@@ -159,10 +190,21 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			return
 		}
 		o := r.Header.Get("Origin")
-		own := o == "" || o == s.origin() || o == fmt.Sprintf("http://localhost:%d", s.Port)
-		fromExt := strings.HasPrefix(o, "chrome-extension://")
+		key := r.Header.Get("X-JobHunt-Ext")
+		extOrigin := strings.HasPrefix(o, "chrome-extension://")
+		own := key == "" && (o == "" || o == s.origin() || o == fmt.Sprintf("http://localhost:%d", s.Port))
+		// The browser leaves Origin off some of an extension's requests, so
+		// the extension is known by the key it sends, not by where it says
+		// it comes from.
+		fromExt := extOrigin || (o == "" && key != "")
 		switch {
 		case own:
+			// A browser says when a request was started by some other site
+			// (an image or script tag pointed here). Those get nothing.
+			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+				http.Error(w, "not allowed", http.StatusForbidden)
+				return
+			}
 			// Our own pages always send the marker header on anything that
 			// changes something; a form on another site cannot.
 			if r.Method != "GET" && r.Header.Get("X-JobHunt") != "1" {
@@ -174,19 +216,41 @@ func (s *Server) guard(next http.Handler) http.Handler {
 				return
 			}
 		case fromExt:
-			id := strings.TrimPrefix(o, "chrome-extension://")
 			if !strings.HasPrefix(r.URL.Path, "/api/ext/") {
 				http.Error(w, "not allowed", http.StatusForbidden)
 				return
 			}
-			if paired := s.ext().ID; paired != id {
-				if r.URL.Path == "/api/ext/hello" && validExtID(id) {
-					s.mu.Lock()
-					s.pending = id
-					s.mu.Unlock()
-					s.S.Changed("connections", "state")
+			if extOrigin {
+				w.Header().Set("Access-Control-Allow-Origin", o)
+				w.Header().Set("Vary", "Origin")
+				if r.Method == http.MethodOptions {
+					w.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-JobHunt-Ext")
+					w.Header().Set("Access-Control-Max-Age", "600")
+					w.WriteHeader(http.StatusNoContent)
+					return
 				}
-				writeJSON(w, 403, map[string]string{"error": "Open Job Hunt and approve this extension under You → Connections.", "pair": "pending"})
+			}
+			if !validKey(key) {
+				writeJSON(w, 403, map[string]string{"error": "This side panel didn't say who it is. Reload the extension."})
+				return
+			}
+			hash := hashKey(key)
+			if x := s.ext(); x.KeyHash == "" || subtle.ConstantTimeCompare([]byte(x.KeyHash), []byte(hash)) != 1 {
+				if r.URL.Path == "/api/ext/hello" {
+					id := strings.TrimPrefix(o, "chrome-extension://")
+					if !validExtID(id) {
+						id = ""
+					}
+					s.mu.Lock()
+					changed := s.pending.KeyHash != hash
+					s.pending = ExtSet{ID: id, KeyHash: hash}
+					s.mu.Unlock()
+					if changed {
+						s.S.Changed("connections", "state")
+					}
+				}
+				writeJSON(w, 403, map[string]string{"error": "Open Job Hunt and approve this side panel under You, Connections.", "pair": "pending"})
 				return
 			}
 		default:
@@ -968,11 +1032,11 @@ func (s *Server) Handler() http.Handler {
 		mail.Pass = ""
 		cliPath, _ := llm.FindCLI()
 		s.mu.Lock()
-		pending := s.pending
+		pending := s.pending.Code()
 		s.mu.Unlock()
 		byTask, _ := st.UsageByTask(e.Now().Add(-7 * 24 * time.Hour).Unix())
 		return map[string]any{"claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
-			"ext": s.ext(), "ext_pending": pending, "usage": byTask}, nil
+			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "usage": byTask}, nil
 	})
 	h("PUT /api/llm", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		cur := e.LLM()
@@ -1034,13 +1098,14 @@ func (s *Server) Handler() http.Handler {
 	})
 	h("POST /api/ext/pair", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		s.mu.Lock()
-		id := s.pending
-		s.pending = ""
+		x := s.pending
+		s.pending = ExtSet{}
 		s.mu.Unlock()
-		if id == "" {
+		if x.KeyHash == "" {
 			return nil, bad("No extension is asking to connect. Open the Job Hunt side panel in your browser first.")
 		}
-		st.Set("ext", ExtSet{ID: id, PairedAt: e.Now().Unix()})
+		x.PairedAt = e.Now().Unix()
+		st.Set("ext", x)
 		st.Changed("connections", "state")
 		return nil, nil
 	})
@@ -1171,7 +1236,7 @@ func (s *Server) state() State {
 	moving, days := p.Relocating(now)
 	counts, _ := st.RoleCounts()
 	s.mu.Lock()
-	pending := s.pending != ""
+	pending := s.pending.KeyHash != ""
 	s.mu.Unlock()
 	qs, _ := st.OpenQuestions()
 	return State{

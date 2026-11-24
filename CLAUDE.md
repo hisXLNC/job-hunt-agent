@@ -1,7 +1,7 @@
 # Job Hunt (the rewrite)
 
 This branch (`redesign`) is a ground-up rewrite. The previous app lives untouched on `main`
-(also saved as branch `claude/backup-before-redesign-26.11.21` and tag `classic-26.11.21`).
+(also saved as branch `claude/backup-before-redesign-26.11.21`).
 Nothing on this branch publishes a release; do not push it to `main`.
 
 ## Shape
@@ -30,3 +30,15 @@ interface on 127.0.0.1 and talks to Claude. No build step for the interface.
 - The person's e-mail address and other personal details never go into code, tests, commits or
   requests to outside services other than the ones they chose.
 - Lists page; they do not scroll inside the page. Sort header rows and filters stay.
+- The local interface answers only this computer's own pages and the one approved side panel
+  (`internal/api`, `guard`). The side panel proves itself with a key it made up; only the key's
+  hash is stored. Keep the tests in `internal/api/api_test.go` passing.
+
+## Trying it
+
+    go run ./cmd/jobhunt -demo        # a fictional person, searching paused, sample answers
+    go run ./cmd/jobhunt              # the real thing; first run asks four things
+
+Data lives in `<user config dir>/Job Hunt 2` (`JOBHUNT_HOME` overrides it, `JOBHUNT_PORT` or
+`-port` moves it off 47700; the side panel expects 47700). The side panel is loaded from
+`extension/` with "Load unpacked".

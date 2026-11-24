@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Job Hunt side panel",
+  "version": "0.1.0",
+  "description": "Sits beside a job posting or an application form: shows your fit, attaches your CV and fills in answers. You read the form and press Submit.",
+  "minimum_chrome_version": "116",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "permissions": ["sidePanel", "storage", "scripting"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "https://*.linkedin.com/*",
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.workable.com/*",
+    "https://*.icims.com/*",
+    "https://*.bamboohr.com/*",
+    "https://*.jobvite.com/*",
+    "https://*.taleo.net/*",
+    "https://*.successfactors.com/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "background": { "service_worker": "background.js" },
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "Open Job Hunt", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; connect-src http://127.0.0.1:47700" }
+}
