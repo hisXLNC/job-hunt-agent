@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,7 +78,14 @@ func (a *API) Do(ctx context.Context, req Request) (Response, error) {
 		params.Betas = []anthropic.AnthropicBeta{anthropic.AnthropicBetaServerSideFallback2026_07_01}
 		params.Fallbacks = anthropic.BetaFallbacksParamOfDefault()
 	}
-	params.Messages = []anthropic.BetaMessageParam{anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock(prompt))}
+	var blocks []anthropic.BetaContentBlockParamUnion
+	for _, im := range req.Images {
+		blocks = append(blocks, anthropic.NewBetaImageBlock(anthropic.BetaBase64ImageSourceParam{
+			Data: base64.StdEncoding.EncodeToString(im.Data), MediaType: anthropic.BetaBase64ImageSourceMediaType(im.Mime),
+		}))
+	}
+	blocks = append(blocks, anthropic.NewBetaTextBlock(prompt))
+	params.Messages = []anthropic.BetaMessageParam{anthropic.NewBetaUserMessage(blocks...)}
 
 	var out Response
 	out.Model = model

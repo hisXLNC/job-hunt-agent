@@ -3,9 +3,11 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,6 +96,20 @@ func (c *CLI) Do(ctx context.Context, req Request) (Response, error) {
 	}
 	args := []string{"-p", "--output-format", "json", "--model", model, "--effort", effort,
 		"--setting-sources", "", "--system-prompt", req.System}
+	// Pictures can only go in as a typed message, which needs the streaming
+	// formats on both sides. The last line of the stream is the same result.
+	var stdin io.Reader = strings.NewReader(req.Prompt)
+	if len(req.Images) > 0 {
+		args[2] = "stream-json"
+		args = append(args, "--input-format", "stream-json", "--verbose")
+		var content []map[string]any
+		for _, im := range req.Images {
+			content = append(content, map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": im.Mime, "data": base64.StdEncoding.EncodeToString(im.Data)}})
+		}
+		content = append(content, map[string]any{"type": "text", "text": req.Prompt})
+		line, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": content}})
+		stdin = bytes.NewReader(append(line, '\n'))
+	}
 	if req.Web {
 		args = append(args, "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch")
 	} else {
@@ -118,7 +134,7 @@ func (c *CLI) Do(ctx context.Context, req Request) (Response, error) {
 	}
 	// The prompt goes in through standard input: it is long, and it must not
 	// be readable in the process list.
-	cmd.Stdin = strings.NewReader(req.Prompt)
+	cmd.Stdin = stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	// Job Hunt's own API key, if any, must not leak into the person's sign-in.

@@ -36,6 +36,9 @@ func (c *Client) Search(ctx context.Context, q Query) ([]Posting, error) {
 	if s := strings.TrimSpace(q.Location); s != "" {
 		v.Set("location", s)
 	}
+	if q.Miles > 0 {
+		v.Set("distance", strconv.Itoa(q.Miles))
+	}
 	if q.Within > 0 {
 		v.Set("f_TPR", "r"+strconv.FormatInt(max(int64(q.Within/time.Second), 1), 10))
 	}

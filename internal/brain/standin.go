@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -46,8 +47,8 @@ func StandIn() llm.Engine {
 			out = standArrive(req.Input.(tailorInput))
 		case "prep":
 			out = standPrep(req.Input.(prepInput))
-		case "ask":
-			out = standAsk(req.Input.(string))
+		case "assist":
+			out = standAssist(req.Input.(AssistInput))
 		case "mail":
 			out = standMail(req.Input.(mailInput))
 		case "test":
@@ -697,20 +698,62 @@ func lowerFirstWord(s string) string {
 	return strings.ToLower(s[:1]) + s[1:]
 }
 
-func standAsk(text string) Reply {
-	r := Reply{Reply: "Noted. I'll use that from now on."}
-	low := strings.ToLower(text)
-	if strings.HasSuffix(strings.TrimSpace(text), "?") {
-		r.Reply = "Short answer: say it plainly, give one piece of evidence, and stop. I can draft the exact wording on the role's page."
-		return r
+// standAssist makes the assistant's moves visible without Claude: it reads
+// the brief, and knows a handful of plain requests.
+func standAssist(in AssistInput) AssistStep {
+	low := strings.ToLower(in.Message)
+	made := 0
+	for _, n := range in.Notes {
+		if !strings.Contains(n.Call, "on their screen") {
+			made++
+		}
 	}
-	if m := regexp.MustCompile(`20\d{2}-\d{2}-\d{2}`).FindString(text); m != "" && (strings.Contains(low, "arriv") || strings.Contains(low, "land") || strings.Contains(low, "flight")) {
-		r.ArriveOn = m
-		r.Reply = "Updated: you arrive on " + m + ". Letters and notes will say so."
-		return r
+	if made == 0 && !in.Last {
+		call := func(method, path, body, why string) AssistStep {
+			return AssistStep{Doing: why, Calls: []AssistCall{{Method: method, Path: path, Body: body, Why: why}}}
+		}
+		role := regexp.MustCompile(`^#/roles/(\d+)`).FindStringSubmatch(in.Page)
+		switch {
+		case strings.Contains(low, "resume search") || strings.Contains(low, "start searching"):
+			return call("POST", "/api/pause", `{"paused":false}`, "Starting the searches again")
+		case strings.Contains(low, "pause"):
+			return call("POST", "/api/pause", `{"paused":true}`, "Pausing the searches")
+		case strings.Contains(low, "not interested") && role != nil:
+			return call("POST", "/api/roles/"+role[1]+"/no", `{"why":"You said so"}`, "Marking this role not interested")
+		case strings.Contains(low, "prepare") && role != nil:
+			return call("POST", "/api/roles/"+role[1]+"/prepare", "", "Preparing your documents")
+		case strings.Contains(low, "cv") && len(in.Files) > 0:
+			f := in.Files[len(in.Files)-1]
+			st := call("POST", "/api/cvs?name="+url.QueryEscape(f.Name), "", "Adding the CV you attached")
+			st.Calls[0].File = f.ID
+			return st
+		case strings.HasPrefix(low, "remember ") || strings.HasPrefix(low, "i hold ") || strings.HasPrefix(low, "i have "):
+			b, _ := json.Marshal(map[string]string{"text": strings.TrimSpace(strings.TrimPrefix(in.Message, "Remember "))})
+			return call("POST", "/api/facts", string(b), "Keeping that for future applications")
+		}
+		return call("GET", "/api/today", "", "Reading today's brief")
 	}
-	r.Remember = []string{strings.TrimSpace(text)}
-	return r
+	last := ""
+	if made > 0 {
+		last = in.Notes[len(in.Notes)-1].Call + " " + in.Notes[len(in.Notes)-1].Result
+	}
+	switch {
+	case strings.Contains(last, "waiting for the person"):
+		return AssistStep{Say: "That needs your OK. Press the button below and it is done."}
+	case strings.Contains(last, "/api/pause"):
+		if strings.Contains(last, "false") {
+			return AssistStep{Say: "Searching is on again. New roles show up on [Radar](#/radar)."}
+		}
+		return AssistStep{Say: "Searching is paused. Start it again from [Radar](#/radar) or ask me."}
+	case strings.Contains(last, "/api/facts"):
+		return AssistStep{Say: "Noted. It is kept under [You](#/you) and used in future applications."}
+	case strings.Contains(last, "/prepare"):
+		return AssistStep{Say: "Started. The CV and letter will be on the role's page in a minute."}
+	case strings.Contains(last, "/api/cvs"):
+		return AssistStep{Say: "Your CV is added. It is under [You](#/you)."}
+	}
+	first, _, _ := strings.Cut(in.Standing, "\n")
+	return AssistStep{Say: "These are sample answers, so I can only tell you where things stand. " + first + " Connect Claude under [You, Connections](#/you/connections) and I can answer anything and do what the screens do."}
 }
 
 func standMail(in mailInput) MailReading {

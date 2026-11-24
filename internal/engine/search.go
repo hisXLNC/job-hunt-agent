@@ -248,7 +248,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 				break
 			}
 			stats.Looked++
-			posts, err := e.Src.Search(ctx, sources.Query{Keywords: bt.Title, Location: place, Within: within, FewApplicants: few})
+			posts, err := e.Src.Search(ctx, sources.Query{Keywords: bt.Title, Location: place, Miles: metros[cityOf(p)].Miles, Within: within, FewApplicants: few})
 			if err != nil {
 				var he *sources.HTTPError
 				if errors.As(err, &he) && (he.Status == 429 || he.Status == 999 || he.Status == 403) {
@@ -414,15 +414,52 @@ func coreWords(p store.Profile) []string {
 
 var juniorRe = regexp.MustCompile(`(?i)\b(intern|internship|co-?op|student|summer|apprentice|graduate program|new grad|trainee|entry[- ]level|volunteer)\b`)
 
-// nearby places that count as the same job market.
-var metros = map[string][]string{
-	"toronto":   {"toronto", "gta", "greater toronto", "mississauga", "markham", "vaughan", "north york", "etobicoke", "scarborough", "brampton", "oakville", "richmond hill", "ontario", " on"},
-	"vancouver": {"vancouver", "burnaby", "richmond", "surrey", "british columbia", " bc"},
-	"montreal":  {"montreal", "montréal", "laval", "quebec", "québec", " qc"},
-	"ottawa":    {"ottawa", "gatineau", "kanata", "ontario", " on"},
-	"calgary":   {"calgary", "alberta", " ab"},
-	"new york":  {"new york", "nyc", "manhattan", "brooklyn", "jersey city", " ny"},
-	"london":    {"london", "greater london"},
+// metro is a city together with the towns around it that are the same job
+// market, so that "Toronto" means the Greater Toronto Area.
+type metro struct {
+	Towns  []string // a town marked ~ shares its name with places elsewhere and needs the region or country beside it
+	Region []string // the province or state, as written in postings
+	Miles  int      // how far LinkedIn's search should reach from the centre
+}
+
+var metros = map[string]metro{
+	"toronto": {Miles: 35, Region: []string{"ontario", "on", "ont"}, Towns: []string{"toronto", "gta", "greater toronto", "greater toronto area", "north york", "etobicoke", "scarborough", "east york",
+		"mississauga", "brampton", "caledon", "vaughan", "woodbridge", "thornhill", "markham", "unionville", "richmond hill", "~aurora", "~newmarket", "king city", "stouffville",
+		"oakville", "~burlington", "~milton", "halton hills", "~georgetown", "pickering", "ajax", "whitby", "oshawa", "~concord", "york region", "peel region", "halton region", "durham region"}},
+	"vancouver": {Miles: 30, Region: []string{"british columbia", "bc"}, Towns: []string{"vancouver", "burnaby", "~richmond", "~surrey", "north vancouver", "west vancouver", "new westminster", "coquitlam", "port coquitlam", "port moody", "~delta", "~langley", "metro vancouver", "lower mainland"}},
+	"montreal":  {Miles: 30, Region: []string{"quebec", "québec", "qc"}, Towns: []string{"montreal", "montréal", "laval", "longueuil", "brossard", "dorval", "pointe claire", "saint laurent", "greater montreal"}},
+	"ottawa":    {Miles: 25, Region: []string{"ontario", "on"}, Towns: []string{"ottawa", "gatineau", "kanata", "nepean", "orleans"}},
+	"calgary":   {Miles: 25, Region: []string{"alberta", "ab"}, Towns: []string{"calgary", "airdrie", "cochrane", "okotoks"}},
+	"new york":  {Miles: 25, Region: []string{"new york", "ny"}, Towns: []string{"new york", "nyc", "manhattan", "brooklyn", "queens", "bronx", "jersey city", "hoboken"}},
+	"london":    {Miles: 25, Towns: []string{"london", "greater london"}},
+}
+
+var placeSplit = strings.NewReplacer(",", " ", "(", " ", ")", " ", "-", " ", "/", " ", ".", " ", ";", " ", "|", " ", "·", " ")
+
+// placeWords pads a place with spaces so that whole names can be looked for.
+func placeWords(s string) string {
+	return " " + strings.Join(strings.Fields(placeSplit.Replace(strings.ToLower(s))), " ") + " "
+}
+
+func cityOf(p store.Profile) string {
+	return strings.ToLower(strings.TrimSpace(strings.Split(p.City, ",")[0]))
+}
+
+// Area lists the places that count as the person's city, for showing them.
+func Area(p store.Profile) []string {
+	var out []string
+	for _, t := range metros[cityOf(p)].Towns {
+		t = strings.TrimPrefix(t, "~")
+		if t == cityOf(p) || strings.Contains(t, "region") || strings.Contains(t, "greater") || len(t) <= 3 {
+			continue
+		}
+		words := strings.Fields(t)
+		for i, w := range words {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+		out = append(out, strings.Join(words, " "))
+	}
+	return out
 }
 
 // placeOK reports whether a posting's location is somewhere the person will be.
@@ -431,34 +468,49 @@ func placeOK(p store.Profile, location, workplace string) bool {
 	if strings.TrimSpace(loc) == "" {
 		return true // unknown: let the reading decide
 	}
-	city := strings.ToLower(strings.TrimSpace(strings.Split(p.City, ",")[0]))
+	city := cityOf(p)
 	if city == "" {
 		return true
 	}
-	names := metros[city]
-	if names == nil {
-		names = []string{city}
+	padded := placeWords(loc)
+	has := func(name string) bool { return strings.Contains(padded, placeWords(name)) }
+	country := strings.ToLower(strings.TrimSpace(p.Country))
+	m, known := metros[city]
+	if !known {
+		m.Towns = []string{city}
 	}
-	padded := " " + strings.NewReplacer(",", " ", "(", " ", ")", " ", "-", " ", "/", " ").Replace(loc) + " "
-	for _, n := range names {
-		if strings.HasPrefix(n, " ") {
-			if strings.Contains(padded, n+" ") {
-				return true
-			}
-		} else if strings.Contains(loc, n) {
+	inRegion := country != "" && has(country)
+	for _, r := range m.Region {
+		inRegion = inRegion || has(r)
+	}
+	for _, t := range m.Towns {
+		if name := strings.TrimPrefix(t, "~"); has(name) && (name == t || inRegion) {
 			return true
 		}
 	}
-	country := strings.ToLower(strings.TrimSpace(p.Country))
-	remote := workplace == "remote" || strings.Contains(loc, "remote") || strings.Contains(loc, "anywhere")
-	if remote && (country == "" || strings.Contains(loc, country) || strings.TrimSpace(strings.NewReplacer("remote", "", "-", "", ",", "").Replace(loc)) == "") {
-		return true
+	// Places the person added themselves.
+	for _, t := range p.Places {
+		if t = strings.TrimSpace(t); t != "" && has(t) {
+			return true
+		}
 	}
-	// A bare country name means "anywhere in the country".
-	if country != "" && strings.TrimSpace(loc) == country {
-		return true
+	// What is left once the province, the country and the words about
+	// working from home are taken away. Nothing left means the posting names
+	// no town: "Ontario, Canada", "Remote - Canada", "Canada".
+	rest := padded
+	for _, w := range append([]string{country, "remote", "hybrid", "anywhere", "work from home", "wfh", "in", "within", "area", "province", "state"}, m.Region...) {
+		if w != "" {
+			rest = strings.ReplaceAll(rest, placeWords(w), " ")
+		}
 	}
-	return false
+	bare := strings.TrimSpace(rest) == ""
+	remote := workplace == "remote" || has("remote") || has("anywhere") || has("work from home")
+	if remote {
+		// Remote in the person's country or province, or with no place given.
+		return country == "" || inRegion || bare
+	}
+	// A province or country alone means "somewhere in it".
+	return bare && inRegion
 }
 
 // titleOK reports whether a title could be a job this person wants, and the

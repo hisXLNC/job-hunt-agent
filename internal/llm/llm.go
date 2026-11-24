@@ -22,10 +22,18 @@ type Request struct {
 	Effort    string         // "low", "medium" (default), "high"
 	MaxTokens int            // 0 = a sensible default
 	Web       bool           // Claude may search the web for this one
+	Images    []Image        // pictures to look at along with the prompt
 
 	// Input is the same material as Prompt in typed form. Real engines ignore
 	// it; the stand-in used by tests and the demo works from it.
 	Input any
+}
+
+// Image is a picture sent with a request. Mime is image/png, image/jpeg,
+// image/gif or image/webp.
+type Image struct {
+	Mime string
+	Data []byte
 }
 
 // Response is Claude's answer and what it cost.

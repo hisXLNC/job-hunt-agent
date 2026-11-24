@@ -863,40 +863,6 @@ Your task: prepare this person for an upcoming conversation. For an informal cha
 	return out, err
 }
 
-// ---- ask or tell --------------------------------------------------------------------------
-
-// Reply is Job Hunt's answer to something the person typed.
-type Reply struct {
-	Reply    string   `json:"reply"`
-	Remember []string `json:"remember"`
-	ArriveOn string   `json:"arrive_on"`
-	Avoid    []string `json:"avoid"`
-}
-
-var replyShape = llm.Obj(
-	"reply", llm.Str("the answer, 1 to 5 sentences"),
-	"remember", llm.Arr("facts about the person stated in their message that are worth keeping for future applications, each a full sentence; empty if none", llm.Str("a fact")),
-	"arrive_on", llm.Str("if they gave a new arrival date, that date as YYYY-MM-DD; otherwise empty"),
-	"avoid", llm.Arr("job titles or employers they said they never want to see; empty if none", llm.Str("a title or employer")),
-)
-
-// Ask answers a question or takes in something the person tells Job Hunt.
-func (b *Brain) Ask(ctx context.Context, p Person, text, state string) (Reply, error) {
-	out, _, err := llm.JSON[Reply](ctx, b.LLM, llm.Request{
-		Task: "ask",
-		System: house + `
-
-Your task: the person typed something into Job Hunt. It is either a question about their search or something they want Job Hunt to know. Answer briefly and concretely, like a sharp adviser who knows their file. If they told you something about themselves, confirm in one sentence what you will do with it and list it under "remember". Do not promise actions Job Hunt cannot take: it finds roles, prepares documents and notes, and tracks what happens; the person sends and submits.
-
-` + p.Block(),
-		Prompt: "# Where their search stands\n" + state + "\n\n<message>\n" + clip(text, 4000) + "\n</message>",
-		Schema: replyShape,
-		Effort: "medium",
-		Input:  text,
-	})
-	return out, err
-}
-
 // ---- reading mail ---------------------------------------------------------------------------
 
 // Mail is one message that arrived for the person.

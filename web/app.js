@@ -1,6 +1,9 @@
 // The frame around every page: navigation, the find box, the status pill,
 // and the small helpers pages share. No build step; plain modules.
 
+import { assistantButton, assistantFrame, mountAssistant, assistantRoute, refreshAssistant, openAssistant } from './assistant.js';
+export { openAssistant };
+
 // ---- safe HTML -----------------------------------------------------------------
 // Everything interpolated into html`` is escaped unless it is itself the
 // result of html``. Postings, mail and names are outside text: they only
@@ -193,8 +196,8 @@ function frame() {
     <div class="pilot" id="pilot">${pilot()}</div></aside>
     <div class="main"><div class="top"><h1 id="title"></h1><span class="sub" id="sub"></span>
       <div class="find"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></svg><input id="find" type="text" placeholder="Find a role, employer or person" aria-label="Find a role, employer or person" autocomplete="off" style="height:32px;padding:0;border:0;box-shadow:none"><kbd>Ctrl K</kbd><div class="found" id="found" hidden></div></div>
-      <span id="pill">${pill()}</span></div>
-      <div class="page" id="page" tabindex="-1"></div></div></div>`;
+      <span id="pill">${pill()}</span>${assistantButton()}</div>
+      <div class="page" id="page" tabindex="-1"></div></div>${assistantFrame()}</div>`;
   void cl;
 }
 function pilot() {
@@ -252,7 +255,7 @@ async function navigate() {
   const mod = (await PAGES[key]()).default;
   app.page = mod;
   if (key === 'setup') { $app.innerHTML = '<div class="page" id="page" style="height:100vh"></div><h1 id="title" hidden></h1><span id="sub" hidden></span>'; }
-  else if (!$app.querySelector('.app')) $app.innerHTML = frame().s;
+  else if (!$app.querySelector('.app')) { $app.innerHTML = frame().s; mountAssistant(); }
   else {
     const active = key === 'role' ? 'roles' : key;
     $app.querySelectorAll('.nav').forEach(a => { const on = a.getAttribute('href') === '#/' + active; a.classList.toggle('on', on); on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
@@ -260,6 +263,7 @@ async function navigate() {
   document.title = 'Job Hunt';
   await reload();
   document.getElementById('page').scrollTop = 0;
+  assistantRoute();
 }
 
 // Clicks, form submits and changes are routed to the page's actions by name.
@@ -334,7 +338,11 @@ function flush() {
 function listen() {
   const es = new EventSource('/api/events');
   es.onmessage = m => {
-    try { JSON.parse(m.data).forEach(t => pendingTopics.add(t)); } catch { return; }
+    let topics;
+    try { topics = JSON.parse(m.data); } catch { return; }
+    topics.forEach(t => pendingTopics.add(t));
+    // The conversation with Claude keeps up even while the person is typing.
+    if (topics.includes('assistant')) refreshAssistant();
     clearTimeout(flushTimer);
     flushTimer = setTimeout(flush, 250);
   };

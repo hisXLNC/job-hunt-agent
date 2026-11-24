@@ -1,4 +1,4 @@
-import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, app, BAND, KIND } from '../app.js';
+import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, app, openAssistant, BAND, KIND } from '../app.js';
 
 const LABEL = {
   talk: ['Coming up', 'blue'], mail: ['Reply', 'blue'], apply: ['Apply now', 'hot'], decide: ['Worth a look', ''],
@@ -82,9 +82,8 @@ export default {
         ${d.landing ? landing(d.landing) : ''}
         <div class="card"><h4>Done while you were away</h4><div class="col s" style="margin-top:10px;gap:9px">
           ${d.done?.length ? d.done.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none;padding-top:1px">${ago(a.at)}</span><span>${a.text}</span></div>`) : html`<span class="m">Nothing yet. The first search starts as soon as Claude is connected.</span>`}</div></div>
-        <div class="card"><h4>Ask or tell Job Hunt</h4><p class="xs m" style="margin-top:3px">A question about your search, or something it should know about you.</p>
-          <form data-act="ask" data-busy="Thinking…" class="col" style="margin-top:8px;gap:6px"><textarea name="text" rows="2" placeholder="I also hold a CPA from Ontario" aria-label="Ask or tell Job Hunt"></textarea><button class="btn sm" style="align-self:flex-end">Send</button></form>
-          <div id="askout"></div></div>
+        <div class="card"><h4>Ask Claude, or tell it something</h4><p class="xs m" style="margin-top:3px">It sees everything here and can do what the screens do. Attach a posting, an e-mail or a screenshot if you like.</p>
+          <form data-act="ask" class="col" style="margin-top:8px;gap:6px"><textarea name="text" rows="2" placeholder="I also hold a CPA from Ontario" aria-label="Message to Claude"></textarea><button class="btn sm" style="align-self:flex-end">Ask Claude</button></form></div>
       </div></div>`;
   },
   actions: {
@@ -106,10 +105,10 @@ export default {
     quiet: ({ d }) => post(`notes/${d.id}/quiet`),
     async nudge({ d }) { await post(`people/${d.id}/note`, { purpose: 'nudge' }); location.hash = `#/people/${d.id}`; return false; },
     async draft({ d }) { await post(`people/${d.id}/note`, {}); location.hash = `#/people/${d.id}`; return false; },
-    async ask({ f, el }) {
-      const r = await post('ask', { text: f.text });
+    ask({ f, el }) {
+      if (!f.text.trim()) return false;
+      openAssistant(f.text.trim(), true);
       el.reset();
-      document.getElementById('askout').innerHTML = html`<p class="s quote" style="margin-top:10px">${r.reply}</p>${r.remembered?.length ? html`<p class="xs m" style="margin-top:6px">Remembered: ${r.remembered.join(' · ')}</p>` : ''}`.s;
       return false;
     },
   },

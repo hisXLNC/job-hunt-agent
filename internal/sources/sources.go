@@ -74,6 +74,7 @@ type Board struct {
 type Query struct {
 	Keywords      string
 	Location      string        // e.g. "Toronto, Ontario, Canada"
+	Miles         int           // how far from Location to look (0 = LinkedIn's usual 25)
 	Within        time.Duration // only postings newer than this (0 = any)
 	Remote        bool          // remote jobs only
 	FewApplicants bool          // LinkedIn's "under 10 applicants"

@@ -561,57 +561,11 @@ func (e *Engine) FormAnswers(ctx context.Context, roleID int64, questions []stri
 	return out, nil
 }
 
-// AskReply is what comes back when the person types something to Job Hunt.
-type AskReply struct {
-	Reply      string   `json:"reply"`
-	Remembered []string `json:"remembered"`
-}
-
-// Ask answers a question or takes in something the person tells Job Hunt.
-func (e *Engine) Ask(ctx context.Context, text string) (AskReply, error) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return AskReply{}, errors.New("type a question, or something Job Hunt should know")
-	}
-	rep, err := e.brain.Ask(ctx, e.Person(), text, e.stateInWords())
-	if err != nil {
-		return AskReply{}, err
-	}
-	out := AskReply{Reply: rep.Reply}
-	for _, f := range rep.Remember {
-		if f = strings.TrimSpace(f); f != "" {
-			e.S.AddFact(f, "you")
-			out.Remembered = append(out.Remembered, f)
-		}
-	}
-	p := e.S.Profile()
-	changed := false
-	if _, err := time.Parse("2006-01-02", rep.ArriveOn); err == nil && rep.ArriveOn != p.ArriveOn {
-		e.S.RecordChange(store.Change{What: "Arrival date set to " + rep.ArriveOn, Why: "You said so", Key: "profile.arrive_on", Before: p.ArriveOn, After: rep.ArriveOn})
-		p.ArriveOn, changed = rep.ArriveOn, true
-		out.Remembered = append(out.Remembered, "Arrival date: "+rep.ArriveOn)
-	}
-	for _, a := range rep.Avoid {
-		a = strings.TrimSpace(a)
-		if a == "" {
-			continue
-		}
-		dup := false
-		for _, x := range p.Avoid {
-			if strings.EqualFold(x, a) {
-				dup = true
-			}
-		}
-		if !dup {
-			p.Avoid = append(p.Avoid, a)
-			changed = true
-			out.Remembered = append(out.Remembered, "Never show: "+a)
-		}
-	}
-	if changed {
-		e.S.SaveProfile(p)
-	}
-	return out, nil
+// Assist takes one step of the assistant.
+func (e *Engine) Assist(ctx context.Context, in brain.AssistInput) (brain.AssistStep, error) {
+	in.Standing = e.stateInWords()
+	in.Now = e.Now().Format("Monday 2 January 2006, 15:04")
+	return e.brain.Assist(ctx, e.Person(), in)
 }
 
 // stateInWords summarises the search for Claude.

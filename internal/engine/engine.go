@@ -39,6 +39,10 @@ type Engine struct {
 	ctx     context.Context
 
 	mailDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
+
+	// Sample answers in place of Claude when the engine is "demo". Tests set
+	// it to script what Claude says; nil means the built-in stand-in.
+	Sample llm.Engine
 }
 
 // LLMSettings is how Claude is reached.
@@ -109,6 +113,9 @@ func (e *Engine) pickEngine() (llm.Engine, error) {
 	case "claude-code":
 		return &llm.CLI{Path: set.CLI, Model: set.Model, Dir: filepath.Join(e.Dir, "claude")}, nil
 	case "demo":
+		if e.Sample != nil {
+			return e.Sample, nil
+		}
 		return brain.StandIn(), nil
 	}
 	return nil, llm.ErrNotConnected

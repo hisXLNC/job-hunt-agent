@@ -259,6 +259,27 @@ CREATE TABLE mails (
 );
 CREATE INDEX mails_at ON mails(at DESC);
 `,
+	`
+CREATE TABLE chat (
+  id INTEGER PRIMARY KEY,
+  at INTEGER NOT NULL,
+  who TEXT NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  extra TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE chat_files (
+  id INTEGER PRIMARY KEY,
+  chat_id INTEGER NOT NULL DEFAULT 0,
+  at INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT '',
+  size INTEGER NOT NULL DEFAULT 0,
+  text TEXT NOT NULL DEFAULT '',
+  data BLOB
+);
+CREATE INDEX chat_files_chat ON chat_files(chat_id);
+`,
 }
 
 // Open opens (creating and upgrading if needed) the database at path.
@@ -466,12 +487,13 @@ type Profile struct {
 	Strengths []string `json:"strengths"`
 	Rare      string   `json:"rare"` // the one thing few other applicants have
 
-	Home       string `json:"home"`        // where they live now
-	City       string `json:"city"`        // where they want to work
-	Country    string `json:"country"`     // country of City
-	ArriveOn   string `json:"arrive_on"`   // YYYY-MM-DD, "" if already there
-	WorkStatus string `json:"work_status"` // "", "citizen", "resident", "permit", "none"
-	StartEarly bool   `json:"start_early"` // open to starting remotely before arriving
+	Home       string   `json:"home"`        // where they live now
+	City       string   `json:"city"`        // where they want to work
+	Places     []string `json:"places"`      // other towns they count as the same place
+	Country    string   `json:"country"`     // country of City
+	ArriveOn   string   `json:"arrive_on"`   // YYYY-MM-DD, "" if already there
+	WorkStatus string   `json:"work_status"` // "", "citizen", "resident", "permit", "none"
+	StartEarly bool     `json:"start_early"` // open to starting remotely before arriving
 
 	Titles     Titles   `json:"titles"`
 	Domain     []string `json:"domain"` // words nearly every wanted job has in its title

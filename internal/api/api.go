@@ -41,6 +41,10 @@ type Server struct {
 
 	mu      sync.Mutex
 	pending ExtSet // the extension asking to connect, if any
+
+	mux    *http.ServeMux
+	inner  http.Handler // the guarded routes; the assistant calls them like a page would
+	assist assistState
 }
 
 // ExtSet is the paired browser extension. The extension makes up a secret
@@ -297,15 +301,6 @@ func (s *Server) Handler() http.Handler {
 			return nil, err
 		}
 		return nil, e.Answer(idOf(r), in.Answer)
-	})
-	h("POST /api/ask", func(w http.ResponseWriter, r *http.Request) (any, error) {
-		var in struct {
-			Text string `json:"text"`
-		}
-		if err := read(r, &in); err != nil {
-			return nil, err
-		}
-		return e.Ask(r.Context(), in.Text)
 	})
 	h("GET /api/find", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		q := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -960,7 +955,7 @@ func (s *Server) Handler() http.Handler {
 		facts, _ := st.Facts()
 		answers, _ := st.Answers()
 		qs, _ := st.OpenQuestions()
-		return map[string]any{"profile": st.Profile(), "cvs": cvs, "facts": facts, "answers": answers, "questions": qs}, nil
+		return map[string]any{"profile": st.Profile(), "cvs": cvs, "facts": facts, "answers": answers, "questions": qs, "area": engine.Area(st.Profile())}, nil
 	})
 	h("POST /api/facts", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
@@ -1147,7 +1142,10 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-cache")
 		files.ServeHTTP(w, r)
 	})
-	return s.guard(mux)
+	s.assistRoutes(h, mux)
+	s.mux = mux
+	s.inner = s.guard(mux)
+	return s.inner
 }
 
 func sortCompanies(list []store.Company, key string) {

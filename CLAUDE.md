@@ -16,7 +16,7 @@ interface on 127.0.0.1 and talks to Claude. No build step for the interface.
 - `internal/sources` public job sources (company boards, LinkedIn's public search)
 - `internal/office`  reading CV files, writing .docx
 - `internal/engine`  what runs when: searches, preparing, the daily brief
-- `internal/api`     the local HTTP interface the pages and the extension use
+- `internal/api`     the local HTTP interface the pages and the extension use, and the assistant
 - `web/`             the pages (plain ES modules, embedded into the program)
 - `extension/`       the browser side panel
 - `design/mockups/`  the screens the person approved; the reference for look and wording
@@ -30,6 +30,10 @@ interface on 127.0.0.1 and talks to Claude. No build step for the interface.
 - The person's e-mail address and other personal details never go into code, tests, commits or
   requests to outside services other than the ones they chose.
 - Lists page; they do not scroll inside the page. Sort header rows and filters stay.
+- The assistant (the Claude panel) can only make the calls listed in `internal/api/assistant.go`.
+  Looking is free, changes that can be undone are made at once, and removals, closing or reopening
+  a role and profile changes wait for the person's button. Keys, passwords and connections are not
+  on the list. A new route is not reachable by the assistant until it is added there on purpose.
 - The local interface answers only this computer's own pages and the one approved side panel
   (`internal/api`, `guard`). The side panel proves itself with a key it made up; only the key's
   hash is stored. Keep the tests in `internal/api/api_test.go` passing.

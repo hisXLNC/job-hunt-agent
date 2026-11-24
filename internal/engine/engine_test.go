@@ -338,10 +338,22 @@ func TestPlaceAndTitleRules(t *testing.T) {
 	for loc, want := range map[string]bool{
 		"Toronto, ON": true, "Mississauga, Ontario, Canada": true, "Remote - Canada": true, "Remote": true, "Canada": true, "": true,
 		"Vancouver, BC": false, "Berlin": false, "Remote - United States": false, "London, UK": false, "Boston, MA": false,
+		// Toronto means the Greater Toronto Area, not the whole province.
+		"Oshawa, ON": true, "Greater Toronto Area, Canada": true, "North York, Ontario": true, "Burlington, ON, Canada": true, "Aurora, Ontario": true, "GTA": true,
+		"Ontario, Canada": true, "ON": true, "Remote, Ontario": true, "Vancouver, BC, Canada (Remote)": true,
+		"Ottawa, ON": false, "Hamilton, ON": false, "Waterloo, Ontario, Canada": false, "London, ON, Canada": false,
+		"Aurora, CO": false, "Burlington, Vermont": false, "Concord, CA": false, "Toronto, OH, United States": true,
 	} {
 		if got := placeOK(p, loc, ""); got != want {
 			t.Errorf("placeOK(%q) = %v, want %v", loc, got, want)
 		}
+	}
+	p.Places = []string{"Hamilton"}
+	if !placeOK(p, "Hamilton, ON", "") || placeOK(p, "Ottawa, ON", "") {
+		t.Error("a place the person added should count, and only that one")
+	}
+	if a := Area(p); len(a) < 20 || a[0] != "North York" {
+		t.Errorf("Area = %v", a)
 	}
 	for title, want := range map[string]string{
 		"Senior Manager, Tax Technology": "level", "Director of Tax Technology": "step_up", "Finance Systems Manager": "sideways",
@@ -547,9 +559,5 @@ func TestArrivingAndTalks(t *testing.T) {
 	name, ics, err := e.ICS(tid)
 	if err != nil || !strings.HasSuffix(name, ".ics") || !bytes.Contains(ics, []byte("BEGIN:VEVENT")) {
 		t.Errorf("ics: %q %v", name, err)
-	}
-	rep, err := e.Ask(ctx, "I hold a CPA and I arrive on 2027-02-01. How is my search going?")
-	if err != nil || rep.Reply == "" {
-		t.Fatalf("ask: %+v %v", rep, err)
 	}
 }
