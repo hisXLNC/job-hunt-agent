@@ -82,8 +82,6 @@ export default {
         ${d.landing ? landing(d.landing) : ''}
         <div class="card"><h4>Done while you were away</h4><div class="col s" style="margin-top:10px;gap:9px">
           ${d.done?.length ? d.done.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none;padding-top:1px">${ago(a.at)}</span><span>${a.text}</span></div>`) : html`<span class="m">Nothing yet. The first search starts as soon as Claude is connected.</span>`}</div></div>
-        <div class="card"><h4>Ask Claude, or tell it something</h4><p class="xs m" style="margin-top:3px">It sees everything here and can do what the screens do. Attach a posting, an e-mail or a screenshot if you like.</p>
-          <form data-act="ask" class="col" style="margin-top:8px;gap:6px"><textarea name="text" rows="2" placeholder="I also hold a CPA from Ontario" aria-label="Message to Claude"></textarea><button class="btn sm" style="align-self:flex-end">Ask Claude</button></form></div>
       </div></div>`;
   },
   actions: {

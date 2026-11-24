@@ -243,6 +243,9 @@ func (e *Engine) oldSay(text string, done, total float64) {
 	}
 	e.mu.Lock()
 	e.oldStep = OldStep{Text: text, Percent: pc}
+	if j := e.jobs["old"]; j != nil && text != "" {
+		j.pct, j.step = pc, text
+	}
 	e.mu.Unlock()
 }
 
@@ -271,6 +274,13 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 	now := e.Now()
 	res := OldResult{At: now.Unix(), Where: firstOf(shown, src.Where)}
 	op := src.Profile()
+	// It is a job like any other: it shows at the top of every page and can be stopped.
+	ctx, j, ok := e.startJob(ctx, "old", "Bringing things over from the old Job Hunt")
+	if !ok {
+		return res, errors.New("already bringing things over. Give it a few minutes")
+	}
+	defer e.endJob(j)
+	stopped := errors.New("stopped. What was already brought over stays, and nothing is added twice: press the button again to carry on")
 	e.oldSay("Opening the old Job Hunt", 0, 1)
 	defer e.oldSay("", 0, 0)
 
@@ -378,6 +388,9 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 		}()
 		_, _, err := e.AddCV(ctx, name, data)
 		close(reading)
+		if ctx.Err() != nil {
+			return res, stopped
+		}
 		if err != nil {
 			res.Notes = append(res.Notes, fmt.Sprintf("Your CV %q could not be read: %s", name, plainErr(err)))
 			if stopsWork(err) {

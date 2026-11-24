@@ -707,6 +707,7 @@ func (s *Server) Handler() http.Handler {
 		if in.Kind != "fast" {
 			in.Kind = "full"
 		}
+		e.Resume("search")
 		if e.LLM().Engine == "" {
 			return nil, llm.ErrNotConnected
 		}
@@ -1182,6 +1183,14 @@ func (s *Server) Handler() http.Handler {
 		acts, _ := st.ActivityList(store.ActivityFilter{Kinds: []string{"problem"}, Limit: 10})
 		return map[string]any{"version": Version, "update": e.NewerVersion(), "dir": e.Dir, "changes": changes, "calls": calls, "problems": acts,
 			"week": st.UsageSince(e.Now().Add(-7 * 24 * time.Hour).Unix()), "today": st.UsageSince(e.Now().Add(-24 * time.Hour).Unix())}, nil
+	})
+	// Stopping what Job Hunt is doing: one job by name, or everything.
+	h("POST /api/jobs/stop", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Name string `json:"name"`
+		}
+		read(r, &in)
+		return map[string]any{"stopped": e.StopJob(in.Name)}, nil
 	})
 	h("POST /api/quit", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		if s.Quit == nil {

@@ -36,8 +36,10 @@ type Engine struct {
 
 	mu      sync.Mutex
 	busy    map[string]bool // background jobs running now, by name
-	doing   string          // what Job Hunt is doing, in words
-	preps   map[int64]bool  // roles being prepared
+	jobs    map[string]*task
+	held    map[string]time.Time // kinds of work the person stopped, and until when
+	doing   string               // what Job Hunt is doing, in words
+	preps   map[int64]bool       // roles being prepared
 	stopAll context.CancelFunc
 	ctx     context.Context
 
@@ -65,7 +67,7 @@ type LLMSettings struct {
 
 // New builds an engine over an open store.
 func New(s *store.Store, dir string) *Engine {
-	e := &Engine{S: s, Dir: dir, Now: time.Now, Src: &sources.Client{}, busy: map[string]bool{}, preps: map[int64]bool{}}
+	e := &Engine{S: s, Dir: dir, Now: time.Now, Src: &sources.Client{}, busy: map[string]bool{}, jobs: map[string]*task{}, held: map[string]time.Time{}, preps: map[int64]bool{}}
 	e.ctx, e.stopAll = context.WithCancel(context.Background())
 	e.meter = &llm.Metered{
 		Pick: e.pickEngine,
@@ -187,31 +189,18 @@ func (e *Engine) TestClaude(ctx context.Context) (string, error) {
 
 // Go runs a named job in the background unless one with that name is running.
 func (e *Engine) Go(name, doing string, fn func(ctx context.Context) error) bool {
-	e.mu.Lock()
-	if e.busy[name] {
-		e.mu.Unlock()
+	ctx, j, ok := e.startJob(e.ctx, name, doing)
+	if !ok {
 		return false
 	}
-	e.busy[name] = true
-	if doing != "" {
-		e.doing = doing
-	}
-	e.mu.Unlock()
-	e.S.Changed("status")
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				e.S.Log(store.Activity{Kind: "problem", Text: fmt.Sprintf("Something went wrong while %s: %v", strings.ToLower(doing), r)})
 			}
-			e.mu.Lock()
-			delete(e.busy, name)
-			if e.doing == doing {
-				e.doing = ""
-			}
-			e.mu.Unlock()
-			e.S.Changed("status", "today")
+			e.endJob(j)
 		}()
-		if err := fn(e.ctx); err != nil && !errors.Is(err, context.Canceled) {
+		if err := fn(ctx); err != nil && !errors.Is(err, context.Canceled) && ctx.Err() == nil {
 			e.problem(doing, err)
 		}
 	}()
@@ -252,12 +241,13 @@ func (e *Engine) Busy(name string) bool {
 
 // Status is what Job Hunt is doing now and when it looks next.
 type Status struct {
-	Doing    string   `json:"doing"`
-	Busy     []string `json:"busy"`
-	NextFast int64    `json:"next_fast"`
-	NextFull int64    `json:"next_full"`
-	Paused   bool     `json:"paused"`
-	Sources  int      `json:"sources"`
+	Doing    string    `json:"doing"`
+	Busy     []string  `json:"busy"`
+	Jobs     []JobView `json:"jobs"`
+	NextFast int64     `json:"next_fast"`
+	NextFull int64     `json:"next_full"`
+	Paused   bool      `json:"paused"`
+	Sources  int       `json:"sources"`
 }
 
 func (e *Engine) Status() Status {
@@ -267,6 +257,7 @@ func (e *Engine) Status() Status {
 		st.Busy = append(st.Busy, k)
 	}
 	e.mu.Unlock()
+	st.Jobs = e.Jobs()
 	st.Paused = e.Paused()
 	st.NextFast, st.NextFull = e.nextTimes()
 	st.Sources = e.S.Count(`SELECT COUNT(*) FROM companies WHERE state = 'following' AND board_kind != ''`)

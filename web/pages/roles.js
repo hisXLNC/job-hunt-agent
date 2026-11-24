@@ -1,4 +1,4 @@
-import { html, api, post, rings, tile, toast, pager, sortHead, with_, href, stageChip, freshness, BAND, STAGE, CLOSED } from '../app.js';
+import { html, api, post, rings, tile, toast, pager, sortHead, with_, href, stageChip, freshness, BAND, STAGE, CLOSED, fitColor } from '../app.js';
 
 const SIZE = 9;
 const STAGES = ['found', 'ready', 'applied', 'reply', 'interview', 'offer'];
@@ -45,7 +45,7 @@ function table(d, route) {
   return html`<div class="card" style="padding:0"><table class="tbl">
     <thead><tr><th>${sortHead('Role', 'title', route, 'age')} · ${sortHead('Employer', 'company', route, 'age')}</th><th>${sortHead('Fit now', 'fit', route, 'age')} · Tailored</th><th>${sortHead('Posted', 'age', route, 'age')}</th><th>${sortHead('Applicants', 'applicants', route, 'age')}</th><th>${sortHead('Stage', 'stage', route, 'age')}</th><th></th></tr></thead>
     <tbody>${d.roles.map(r => html`<tr>
-      <td><div class="row">${tile(r.company, true)}<div class="grow"><a class="t" href="#/roles/${r.id}">${r.title}</a><span class="s m">${r.company}${r.location ? html` · ${r.location}` : ''}${r.workplace ? html` · ${r.workplace}` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}</span></div></div></td>
+      <td><div class="row">${tile(r.company, true)}<div class="grow"><a class="t" href="#/roles/${r.id}">${r.title}</a><span class="s m">${r.company}${r.location ? html` · ${r.location}` : ''}${r.workplace ? html` · ${r.workplace}` : ''}${r.pay ? html` · <b style="font-weight:600;color:var(--ink2)">${r.pay}</b>` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}</span></div></div></td>
       <td>${rings(r.fit, r.fit_tailored, true)}</td>
       <td>${freshness(r, true)}</td>
       <td class="s">${r.applicants >= 0 ? html`<b style="${r.applicants < 10 ? 'color:var(--hot)' : 'font-weight:500'}">${r.applicants}</b>${r.applicants < 10 ? html` <span class="xs" style="color:var(--hot)">be early</span>` : ''}` : html`<span class="m">–</span>`}</td>
@@ -56,7 +56,7 @@ function table(d, route) {
 
 function board(d) {
   return html`<div class="kan">${STAGES.map(s => html`<div><div class="colh"><h4>${STAGE[s]}</h4><span class="chip">${d.counts[s] || 0}</span></div>
-    ${(d[s] || []).map(r => html`<a class="kc" href="#/roles/${r.id}"><b class="s" style="display:block">${r.title}</b><span class="xs m">${r.company}</span><div class="row" style="margin-top:6px;justify-content:space-between">${freshness(r)}<b class="s" style="color:${Math.max(r.fit, r.fit_tailored) >= 70 ? 'var(--accent)' : 'var(--warn)'}">${Math.max(r.fit, r.fit_tailored) >= 0 ? Math.max(r.fit, r.fit_tailored) : ''}</b></div></a>`)}
+    ${(d[s] || []).map(r => html`<a class="kc" href="#/roles/${r.id}"><b class="s" style="display:block">${r.title}</b><span class="xs m">${r.company}</span><div class="row" style="margin-top:6px;justify-content:space-between">${freshness(r)}<b class="s" style="color:${fitColor(Math.max(r.fit, r.fit_tailored))}">${Math.max(r.fit, r.fit_tailored) >= 0 ? Math.max(r.fit, r.fit_tailored) : ''}</b></div></a>`)}
     ${(d.counts[s] || 0) > (d[s] || []).length ? html`<a class="s" href="${href('roles', { stage: s })}" style="padding-left:4px">${(d.counts[s] || 0) - d[s].length} more</a>` : ''}
     ${!(d[s] || []).length ? html`<p class="xs m" style="padding:0 4px">Nothing here yet.</p>` : ''}</div>`)}</div>`;
 }

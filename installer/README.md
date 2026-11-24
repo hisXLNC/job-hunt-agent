@@ -14,8 +14,9 @@ Running copies check once a day for a newer release and show a download link.
 
 ## The icon
 
-`python3 installer/make-icon.py` draws `jobhunt.ico`. To put it inside the program:
+`installer/logo.svg` is the logo and `jobhunt.ico` the same picture in the sizes Windows wants.
+To put the icon inside the program after changing it:
 
     cd installer && x86_64-w64-mingw32-windres --use-temp-file --preprocessor=cat -O coff -o ../cmd/jobhunt/rsrc_windows_amd64.syso jobhunt.rc
 
-Both results are checked in, so this is only needed when the icon changes.
+The result is checked in, so this is only needed when the icon changes.

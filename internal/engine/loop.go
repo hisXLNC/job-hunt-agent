@@ -85,7 +85,7 @@ func (e *Engine) tick() {
 		return
 	}
 	e.chores(now)
-	if e.Paused() || e.Busy("search") {
+	if e.Paused() || e.Busy("search") || e.heldBack("search") {
 		return
 	}
 	if e.LLM().Engine == "" {
@@ -101,7 +101,7 @@ func (e *Engine) tick() {
 		if rest, _, _ := e.meter.Resting(); rest {
 			return
 		}
-		if e.S.Count(`SELECT COUNT(*) FROM roles WHERE stage = 'new' AND closed = ''`) > 0 {
+		if !e.heldBack("read") && e.S.Count(`SELECT COUNT(*) FROM roles WHERE stage = 'new' AND closed = ''`) > 0 {
 			e.Go("read", "Reading new roles", func(ctx context.Context) error {
 				e.ReadUnread(ctx)
 				return nil
@@ -129,11 +129,11 @@ func (e *Engine) chores(now time.Time) {
 	if every("quiet", time.Hour) {
 		e.letGoQuiet(now)
 	}
-	if e.MailSet().On && every("mail", 10*time.Minute) {
-		e.Go("mail", "", func(ctx context.Context) error { return e.CheckMail(ctx) })
+	if e.MailSet().On && !e.heldBack("mail") && every("mail", 10*time.Minute) {
+		e.Go("mail", "Checking your inbox", func(ctx context.Context) error { return e.CheckMail(ctx) })
 	}
-	if every("boards", 24*time.Hour) {
-		e.Go("boards", "", func(ctx context.Context) error { e.DetectBoards(ctx); return e.DescribeEmployers(ctx) })
+	if !e.heldBack("boards") && every("boards", 24*time.Hour) {
+		e.Go("boards", "Looking for employers' job boards", func(ctx context.Context) error { e.DetectBoards(ctx); return e.DescribeEmployers(ctx) })
 	}
 }
 

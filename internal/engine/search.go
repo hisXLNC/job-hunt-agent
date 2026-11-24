@@ -270,6 +270,17 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 
 	// 1. Employers' own boards: the earliest place a posting appears.
 	companies, _ := e.S.Companies("following")
+	// How many places there are to look at, for the progress bar.
+	look, at := len(p.Titles.All()), 0
+	for _, c := range companies {
+		if c.BoardKind != "" && !(kind == "fast" && (c.BoardKind == "workday" || c.BoardKind == "page")) {
+			look++
+		}
+	}
+	if kind == "full" {
+		look += 2
+	}
+	e.StepTakes(ctx, 4*time.Second)
 	for _, c := range companies {
 		if ctx.Err() != nil {
 			break
@@ -281,6 +292,8 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		if kind == "fast" && (c.BoardKind == "workday" || c.BoardKind == "page") {
 			continue
 		}
+		e.Report(ctx, at, look, c.Name)
+		at++
 		stats.Looked++
 		posts, err := e.listBoard(ctx, c, p)
 		if err != nil {
@@ -335,6 +348,8 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			if ctx.Err() != nil || blocked {
 				break
 			}
+			e.Report(ctx, at, look, "LinkedIn: "+bt.Title)
+			at++
 			stats.Looked++
 			posts, err := e.Src.Search(ctx, sources.Query{Keywords: bt.Title, Location: place, Miles: metros[cityOf(p)].Miles, Within: within, FewApplicants: few})
 			if err != nil {
@@ -385,8 +400,15 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 
 	// 3. The other title searches, and the job sites and recruiters the person
 	// has Job Hunt watch. Slower places: asked on full searches only.
-	if kind == "full" {
+	if kind == "full" && ctx.Err() == nil {
+		e.StepTakes(ctx, 40*time.Second)
+		e.Report(ctx, look-2, look, "Job Bank, FreeHire and the job sites you watch")
 		e.searchPlaces(ctx, p, sinceLast, &stats, &fresh, note)
+	}
+	// Stopped part-way: the next search starts where a full one would.
+	if ctx.Err() != nil {
+		e.S.EndRun(runID, "stopped", stats, "You stopped it")
+		return ctx.Err()
 	}
 
 	if kind == "full" {
@@ -762,6 +784,9 @@ func (e *Engine) readAll(ctx context.Context, ids []int64, stats *RunStats) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	work := make(chan int64)
+	readDone := 0
+	e.StepTakes(ctx, 8*time.Second)
+	e.Report(ctx, 0, len(list), fmt.Sprintf("Reading %s against your CV", countWord(len(list), "new role")))
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func() {
@@ -769,6 +794,8 @@ func (e *Engine) readAll(ctx context.Context, ids []int64, stats *RunStats) {
 			for id := range work {
 				kept, prepared, err := e.ReadRole(ctx, id)
 				mu.Lock()
+				readDone++
+				e.Report(ctx, readDone, len(list), fmt.Sprintf("Read %d of %d new roles", readDone, len(list)))
 				if err == nil {
 					stats.Read++
 					if kept {
@@ -983,6 +1010,8 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 		return err
 	}
 	post := postingOf(r)
+	e.StepTakes(ctx, 50*time.Second)
+	e.Report(ctx, 0, 1, "Tailoring your CV and writing the letter for "+r.Company)
 
 	var wg sync.WaitGroup
 	var tail brain.Tailoring

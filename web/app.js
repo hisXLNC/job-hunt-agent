@@ -66,10 +66,12 @@ export const when = ts => new Date(ts * 1000).toLocaleString('en-GB', { weekday:
 export const day = ts => new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 export const clock = ts => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
+// A fit score's colour says how good it is: green, blue, amber, red.
+export const fitColor = v => (v >= 85 ? '#0B7A3B' : v >= 75 ? '#2F4FC4' : v >= 65 ? '#8F5B00' : '#B42D2D');
 export function ring(v, label) {
   const c = 2 * Math.PI * 22, has = v >= 0;
-  const col = v >= 85 ? '#0B7A3B' : v >= 70 ? '#2F4FC4' : '#8F5B00';
-  return html`<div class="ring" title="${label}"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="22" fill="none" stroke="#E8EBF2" stroke-width="5"/>${has ? html`<circle cx="27" cy="27" r="22" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 27 27)"/>` : ''}</svg><b>${has ? v : '–'}</b><span>${label}</span></div>`;
+  const col = fitColor(v);
+  return html`<div class="ring" title="${label}"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="22" fill="none" stroke="#E8EBF2" stroke-width="5"/>${has ? html`<circle cx="27" cy="27" r="22" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 27 27)"/>` : ''}</svg><b style="${has ? `color:${col}` : ''}">${has ? v : '–'}</b><span>${label}</span></div>`;
 }
 // Two rings, always: how the CV fits as it is, and after tailoring.
 export const rings = (fit, tailored, small) => html`<div class="rings ${small ? 'small' : ''}">${ring(fit, 'Fit now')}${ring(tailored, 'Tailored')}</div>`;
@@ -180,6 +182,15 @@ function pill() {
   if (!st) return '';
   if (!st.claude.engine) return html`<a class="work" href="#/you/connections"><span class="dot off"></span>Connect Claude to start</a>`;
   if (!st.claude.ok) return html`<a class="work" href="#/you/connections" title="${st.claude.note}"><span class="dot off"></span>Claude is resting${st.claude.until ? html` until ${clock(st.claude.until)}` : ''}</a>`;
+  const jobs = st.status.jobs || [];
+  if (jobs.length) {
+    const j = jobs[0], more = jobs.length - 1;
+    const all = jobs.map(x => `${x.doing}${x.step ? ': ' + x.step : ''} (${x.percent}%)`).join('\n');
+    return html`<span class="work" title="${all}"><span class="dot busy"></span><span class="doing"><b>${j.doing}</b>${j.step ? html` <span class="m">${j.step}</span>` : ''}</span>
+      <span class="bar" role="progressbar" aria-label="${j.doing}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${j.percent}"><i style="width:${j.percent}%"></i></span><span class="xs m">${j.percent}%</span>
+      ${more ? html`<span class="xs m" title="${all}">+${more} more</span>` : ''}
+      <button class="stop" data-stop="${more ? '' : j.name}" title="${more ? 'Stops everything Job Hunt is doing right now.' : 'Stops this now. What is already done stays.'} Job Hunt will not start it again by itself for half an hour.">${more ? 'Stop all' : 'Stop'}</button></span>`;
+  }
   if (st.status.doing) return html`<span class="work"><span class="dot busy"></span>${st.status.doing}</span>`;
   if (st.status.paused) return html`<a class="work" href="#/radar"><span class="dot off"></span>Searching is paused</a>`;
   const next = Math.min(st.status.next_fast || Infinity, st.status.next_full || Infinity);
@@ -190,7 +201,7 @@ function frame() {
   const st = app.state, on = app.route.parts[0] || 'today';
   const active = on === 'roles' || on === 'role' ? 'roles' : on;
   const cl = st.claude;
-  return html`<div class="app"><aside class="side"><a class="logo" href="#/today" style="text-decoration:none"><i>J</i>Job Hunt</a>
+  return html`<div class="app"><aside class="side"><a class="logo" href="#/today" style="text-decoration:none"><img src="/logo.svg" alt="" width="28" height="28">Job Hunt</a>
     <nav class="col" style="gap:2px" aria-label="Main">${NAV.map(n => html`<a class="nav ${n[0] === active ? 'on' : ''}" href="#/${n[0]}" ${n[0] === active ? new Safe('aria-current="page"') : ''}>${new Safe(IC[n[0]])}${n[1]}<span id="b-${n[0]}" style="margin-left:auto;display:contents">${badge(n[0])}</span></a>`)}</nav>
     <div class="sp"></div>
     <div class="pilot" id="pilot">${pilot()}</div></aside>
@@ -216,6 +227,18 @@ async function refreshState() {
   if (pl) pl.innerHTML = pilot().s;
   for (const n of NAV) { const b = document.getElementById('b-' + n[0]); if (b) b.innerHTML = piece(badge(n[0])); }
 }
+
+// The Stop button at the top works on every page.
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-stop]');
+  if (!b) return;
+  ev.preventDefault();
+  b.disabled = true;
+  try { await post('jobs/stop', { name: b.dataset.stop }); toast('Stopped'); } catch (e) { toast(e.message, true); }
+  refreshState();
+});
+// While something is running, the bar is kept moving.
+setInterval(() => { if (app.state?.status?.jobs?.length && !document.hidden) refreshState(); }, 1500);
 
 function typing() {
   const a = document.activeElement;
