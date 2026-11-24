@@ -69,7 +69,7 @@ func (c *Client) Logo(ctx context.Context, host, mustName string) ([]byte, strin
 	}
 	var tries []string
 	page, final, err := c.fetch(ctx, "GET", base.String(), "text/html", nil)
-	if mustName != "" && (err != nil || !pageNames(page, mustName) || final != nil && OwnSite(final.String()) == "") {
+	if mustName != "" && (err != nil || !pageNames(page, mustName) || parked(page, host) || final != nil && !Belongs(OwnSite(final.String()), mustName)) {
 		return nil, "", errors.New("sources: not the employer's site")
 	}
 	if err == nil {
@@ -144,7 +144,7 @@ func (c *Client) Logo(ctx context.Context, host, mustName string) ([]byte, strin
 
 var (
 	nameCutRe   = regexp.MustCompile(`\s*(,|\(|\||/| - | – | — ).*$`)
-	nameParenRe = regexp.MustCompile(`\(([A-Za-z0-9&]{2,8})\)`)
+	nameParenRe = regexp.MustCompile(`\(([A-Z][A-Z0-9&]{1,7})\)`) // "(CIBC)", not "(Canada)"
 	legalWords  = map[string]bool{"inc": true, "ltd": true, "llc": true, "llp": true, "corp": true, "corporation": true, "limited": true, "co": true, "company": true, "plc": true, "the": true, "group": true, "holdings": true, "ulc": true, "lp": true}
 )
 
@@ -258,6 +258,26 @@ func pageNames(page []byte, name string) bool {
 	for _, m := range titleRe.FindAllSubmatch(head, 4) {
 		t := letters(string(m[1]) + " " + string(m[2]))
 		if want != "" && strings.Contains(t, want) || paren != "" && strings.Contains(t, paren) {
+			return true
+		}
+	}
+	return false
+}
+
+var parkedRe = regexp.MustCompile(`(?i)for sale|buy this domain|domain (is )?(parked|available)|parkingcrew|sedo|godaddy|hugedomains|dan\.com`)
+
+// parked tells a page that only holds a domain name for sale, whose title
+// carries the name it was guessed from.
+func parked(page []byte, host string) bool {
+	head := page
+	if len(head) > 200000 {
+		head = head[:200000]
+	}
+	if parkedRe.Match(head) {
+		return true
+	}
+	for _, m := range titleRe.FindAllSubmatch(head, 4) {
+		if strings.Contains(strings.ToLower(string(m[1])), strings.ToLower(host)) {
 			return true
 		}
 	}

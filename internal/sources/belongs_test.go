@@ -17,7 +17,7 @@ func TestASiteBelongsToTheEmployerOnlyWhenItCarriesItsName(t *testing.T) {
 			t.Errorf("%s should belong to %q", c[0], c[1])
 		}
 	}
-	no := [][2]string{{"t.me", "EMCD"}, {"somejobsite.com", "BMO"}, {"bankofcommerce.com", "Canadian Imperial Bank of Commerce"}, {"analyst.com", "Rogers Communications"}}
+	no := [][2]string{{"t.me", "EMCD"}, {"somejobsite.com", "BMO"}, {"bankofcommerce.com", "Canadian Imperial Bank of Commerce"}, {"canada.com", "Canadian Imperial Bank of Commerce (Canada)"}, {"analyst.com", "Rogers Communications"}}
 	for _, c := range no {
 		if Belongs(c[0], c[1]) {
 			t.Errorf("%s should not belong to %q", c[0], c[1])
@@ -33,6 +33,12 @@ func TestASiteBelongsToTheEmployerOnlyWhenItCarriesItsName(t *testing.T) {
 	}
 	if g := Guesses("Canadian Imperial Bank of Commerce (CIBC)"); !slices.Contains(g, "cibc.com") {
 		t.Errorf("Guesses = %v", g)
+	}
+	if g := Guesses("Canadian Imperial Bank of Commerce (Canada)"); slices.Contains(g, "canada.com") {
+		t.Errorf("a place in brackets taken for a short name: %v", g)
+	}
+	if !parked([]byte("<title>analysttechnicalsolutions.com is for sale</title>"), "analysttechnicalsolutions.com") || parked([]byte("<title>Paralucent | Consulting</title>"), "paralucent.com") {
+		t.Error("parked page check")
 	}
 	if g := Guesses("FacilityOS"); !slices.Contains(g, "facilityos.com") {
 		t.Errorf("Guesses = %v", g)

@@ -223,7 +223,7 @@ var logoSlots = make(chan struct{}, 3)
 // Logo returns an employer's picture from its own site, kept on disk after
 // the first time. ok is false when it has none (the letter tile is shown).
 func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, ok bool) {
-	dir := filepath.Join(e.Dir, "logos2") // "logos" held pictures of job sites taken for employers
+	dir := filepath.Join(e.Dir, "logos3") // "logos" and "logos2" held some pictures of other sites taken for employers
 	file := filepath.Join(dir, fmt.Sprint(id))
 	if b, err := os.ReadFile(file); err == nil {
 		if len(b) == 0 {

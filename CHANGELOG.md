@@ -2,6 +2,10 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.33
+
+- **Wrong employer logos, second fix.** The window kept the old wrong pictures for up to a week, so the yellow icon stayed on BMO, Rogers and others; it now asks again. "(Canada)" in an employer's name was taken for a short name, which gave CIBC the logo of canada.com. A guessed address is now also refused when it is a domain for sale, or when it sends you on to a site without the employer's name. Logos are looked up once more after this update.
+
 ## 26.11.32
 
 - **No more Next button.** Today, Roles, Radar, Replies, People and an employer's roles are each one list: the whole page scrolls, and the filters and the sort header row stay at the top while it does. More rows come in by themselves as you near the end. Sorting and filters work across everything.
