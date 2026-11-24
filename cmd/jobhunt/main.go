@@ -125,7 +125,11 @@ func main() {
 				if r2, err := c.Do(req); err == nil && r2.StatusCode == 200 {
 					r2.Body.Close()
 				} else {
-					openWindow(url+page, "")
+					if d, err := dataDir(); err == nil {
+						openWindow(url+page, d)
+					} else {
+						openWindow(url+page, "")
+					}
 				}
 			}
 			return
@@ -229,8 +233,9 @@ func jsSafe(s string) string {
 	return string(out)
 }
 
-// openWindow shows the interface: as its own window where Edge or Chrome is
-// installed, otherwise in the default browser.
+// openWindow shows the interface when Job Hunt's own window can't: as an
+// Edge or Chrome app window where one is installed (in a profile of its own
+// when dir is given), otherwise in the default browser.
 func openWindow(url, dir string) {
 	switch runtime.GOOS {
 	case "windows":
@@ -241,7 +246,13 @@ func openWindow(url, dir string) {
 			filepath.Join(os.Getenv("LocalAppData"), `Google\Chrome\Application\chrome.exe`),
 		} {
 			if _, err := os.Stat(p); err == nil {
-				if exec.Command(p, "--app="+url, "--window-size=1440,940").Start() == nil {
+				args := []string{"--app=" + url, "--window-size=1440,940"}
+				if dir != "" {
+					// Its own profile: none of the person's extensions (password
+					// managers, Claude in the browser) run inside Job Hunt.
+					args = append(args, "--user-data-dir="+filepath.Join(dir, "browser"), "--no-first-run", "--no-default-browser-check", "--disable-extensions")
+				}
+				if exec.Command(p, args...).Start() == nil {
 					return
 				}
 			}

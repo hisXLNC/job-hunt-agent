@@ -2,6 +2,11 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.34
+
+- **1Password (and other password managers) stop prompting in Job Hunt.** The key, inbox and calendar fields looked like a sign-in form to them. Every field now tells them it is not one.
+- **Job Hunt's own window, even when it can't start.** It is meant to open as its own window (since 26.11.29). On a computer where that part of Windows is missing or fails, it used to fall back to an Edge window with your own browser profile, so your extensions, 1Password among them, ran inside it and it looked like a browser. The fallback now uses a profile of Job Hunt's own with no extensions, and the reason is written to the log so "Copy details" shows it.
+
 ## 26.11.33
 
 - **Wrong employer logos, second fix.** The window kept the old wrong pictures for up to a week, so the yellow icon stayed on BMO, Rogers and others; it now asks again. "(Canada)" in an employer's name was taken for a short name, which gave CIBC the logo of canada.com. A guessed address is now also refused when it is a domain for sale, or when it sends you on to a site without the employer's name. Logos are looked up once more after this update.

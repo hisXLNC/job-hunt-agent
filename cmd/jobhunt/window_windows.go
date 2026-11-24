@@ -101,6 +101,9 @@ func hasWebView2() bool {
 func startWindow(url, dir string) {
 	sharpOnEveryScreen()
 	win = &nativeWindow{url: url, dir: dir, ask: make(chan string, 4), broken: !hasWebView2()}
+	if win.broken {
+		trace.Log("window", "the part of Windows that draws Job Hunt's window (WebView2) is not installed; using an Edge window instead")
+	}
 	go win.loop()
 }
 

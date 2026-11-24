@@ -193,6 +193,19 @@ function watchEnd(root) {
   }, { root, rootMargin: '0px 0px 900px 0px' });
   endWatch.observe(end);
 }
+// Password managers (1Password, LastPass, Bitwarden, the browser's own) take
+// the key and mail fields for a login form and keep offering to fill or save.
+// Nothing here is a sign-in, so every field says so.
+export function noFill(root) {
+  root?.querySelectorAll('input:not([data-1p-ignore]),textarea:not([data-1p-ignore])').forEach(i => {
+    i.setAttribute('data-1p-ignore', '');
+    i.setAttribute('data-lpignore', 'true');
+    i.setAttribute('data-bwignore', '');
+    i.setAttribute('data-form-type', 'other');
+    if (!i.hasAttribute('autocomplete')) i.setAttribute('autocomplete', 'off');
+    if (i.type === 'password') i.setAttribute('autocomplete', 'new-password');
+  });
+}
 // The filters that stay in view are as tall as they are: the header row sits under them.
 function stickHeight(root) {
   const st = root.querySelector('.stick');
@@ -434,7 +447,7 @@ export async function reload(quiet) {
     document.getElementById('title').textContent = typeof page.title === 'function' ? page.title(data, route) : page.title;
     document.getElementById('sub').textContent = page.sub ? page.sub(data, route) : '';
     page.after?.(root, data, route);
-    stickHeight(root); watchEnd(root);
+    stickHeight(root); watchEnd(root); noFill(document.getElementById('app') || document);
     if (cursor >= 0) { if (quiet) moveCursor(cursor); else cursor = -1; }
   } catch (e) {
     if (seq !== loadSeq || !root.isConnected) return;
@@ -452,7 +465,7 @@ export function redraw() {
   root.innerHTML = app.page.view(app.data, app.route).s;
   root.scrollTop = keep;
   app.page.after?.(root, app.data, app.route);
-  stickHeight(root); watchEnd(root);
+  stickHeight(root); watchEnd(root); noFill(document.getElementById('app') || document);
   if (cursor >= 0) moveCursor(cursor);
 }
 let sizeTimer, lastSize = '';
