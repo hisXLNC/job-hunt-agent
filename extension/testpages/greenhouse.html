@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Greenhouse (test page)</title><script src="lib.js"></script></head>
+<body>
+<h1>Senior Analyst</h1>
+<form id="application-form" class="application--form">
+  <h2>Apply for this job</h2>
+  <div class="text-input-wrapper"><label for="first_name">First Name<span>*</span></label><input data-c id="first_name" type="text" aria-required="true" autocomplete="given-name"></div>
+  <div class="text-input-wrapper"><label for="last_name">Last Name<span>*</span></label><input data-c id="last_name" type="text" aria-required="true"></div>
+  <div class="text-input-wrapper"><label for="email">Email<span>*</span></label><input data-c id="email" type="text" aria-required="true"></div>
+  <div class="text-input-wrapper"><label for="phone">Phone</label><input data-c id="phone" type="tel"></div>
+  <div id="location-slot"></div>
+  <div class="file-upload" role="group" aria-labelledby="upload-label-resume"><div id="upload-label-resume" class="label upload-label">Resume/CV<span>*</span></div>
+    <button type="button" class="btn btn--pill">Attach</button><button type="button" class="btn btn--pill">Enter manually</button><input type="file" id="resume" class="visually-hidden" accept=".pdf,.doc,.docx,.txt,.rtf"></div>
+  <div class="file-upload" role="group" aria-labelledby="upload-label-cover_letter"><div id="upload-label-cover_letter" class="label upload-label">Cover Letter</div>
+    <button type="button" class="btn btn--pill">Attach</button><button type="button" class="btn btn--pill">Enter manually</button><input type="file" id="cover_letter" class="visually-hidden"></div>
+  <div class="education--container"><div class="education--form" id="schools"></div><button type="button" class="add-another-button" id="add-school">Add another</button></div>
+  <div class="text-input-wrapper"><label for="question_101">LinkedIn Profile</label><input data-c id="question_101" type="text"></div>
+  <div class="text-input-wrapper"><label for="question_102">Why are you interested in this role?<span>*</span></label><textarea id="question_102"></textarea></div>
+  <div id="q-slot"></div>
+  <fieldset class="checkbox"><legend>Which of these tools have you used?</legend>
+    <div><input type="checkbox" id="q105_1" name="question_105[]" value="1"><label for="q105_1">Excel</label></div>
+    <div><input type="checkbox" id="q105_2" name="question_105[]" value="2"><label for="q105_2">Tableau</label></div>
+    <div><input type="checkbox" id="q105_3" name="question_105[]" value="3"><label for="q105_3">Power BI</label></div></fieldset>
+  <h3>Voluntary Self-Identification</h3>
+  <div id="eeo-slot"></div>
+  <button type="submit" data-never class="btn btn--pill">Submit application</button>
+</form>
+<script>
+  document.getElementById('location-slot').append(reactSelect('candidate-location', 'Location (City)', ['Toronto, Ontario, Canada', 'Toronto, Ohio, United States', 'Torino, Italy', 'Vancouver, British Columbia, Canada'], true));
+  const q = document.getElementById('q-slot');
+  q.append(reactSelect('question_103', 'Are you legally authorized to work in Canada?', ['Yes', 'No']));
+  q.append(reactSelect('question_104', 'How did you hear about this job?', ['LinkedIn', 'Company Website', 'Referral', 'Other']));
+  document.getElementById('eeo-slot').append(reactSelect('gender', 'Gender', ['Male', 'Female', 'Decline To Self Identify']));
+  let n = 0;
+  const school = () => {
+    const i = n++;
+    document.getElementById('schools').append(el('fieldset', { class: 'education--form' }, el('legend', { class: 'visually-hidden' }, 'Education'),
+      reactSelect('school--' + i, 'School', ['Example University', 'Example College', 'Northfield Institute of Technology'], true),
+      reactSelect('degree--' + i, 'Degree', ["Associate's Degree", "Bachelor's Degree", "Master's Degree", 'Doctor of Philosophy (Ph.D.)']),
+      reactSelect('discipline--' + i, 'Discipline', ['Accounting', 'Computer Science', 'Mechanical Engineering']),
+      el('div', {}, el('label', { for: 'start-year--' + i }, 'Start date year'), controlled(el('input', { id: 'start-year--' + i, type: 'number', placeholder: 'YYYY' }))),
+      el('div', {}, el('label', { for: 'end-year--' + i }, 'End date year'), controlled(el('input', { id: 'end-year--' + i, type: 'number', placeholder: 'YYYY' })))));
+  };
+  school();
+  document.getElementById('add-school').addEventListener('click', school);
+</script>
+</body></html>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>SmartRecruiters (test page)</title><script src="lib.js"></script></head>
+<body>
+<oc-apply-form>
+  <h2>Personal information</h2>
+  <spl-input id="first-name-input" label="First name" required></spl-input>
+  <spl-input id="last-name-input" label="Last name" required></spl-input>
+  <spl-input id="email-input" label="Email" kind="email" required></spl-input>
+  <spl-input id="confirm-email-input" label="Confirm your email" kind="email" required></spl-input>
+  <spl-autocomplete id="city-input" label="City"></spl-autocomplete>
+  <spl-input id="linkedin-input" label="LinkedIn"></spl-input>
+  <h2>Experience</h2>
+  <button type="button" data-never>+ Add</button>
+  <h2>Resume</h2>
+  <spl-dropzone id="resume-zone" label="Resume"></spl-dropzone>
+  <h2>Preliminary questions</h2>
+  <spl-radio-group id="q-auth" label="Are you authorized to work in Canada?"></spl-radio-group>
+  <spl-textarea id="message" label="Message to the Hiring Team"></spl-textarea>
+  <button type="button" data-never id="next-step">Next</button>
+</oc-apply-form>
+<script>
+  // Their fields are web components: the real input sits inside an open shadow root.
+  const shadow = (name, build) => customElements.define(name, class extends HTMLElement { connectedCallback() { if (!this.shadowRoot) build(this, this.attachShadow({ mode: 'open' })); } });
+  shadow('spl-input', (host, root) => root.append(el('label', { for: 'input' }, host.getAttribute('label')), controlled(el('input', { id: 'input', class: 'c-spl-input', type: host.getAttribute('kind') || 'text' }))));
+  shadow('spl-textarea', (host, root) => root.append(el('label', { for: 'ta' }, host.getAttribute('label')), el('textarea', { id: 'ta' })));
+  shadow('spl-dropzone', (host, root) => root.append(el('div', { class: 'c-spl-dropzone' }, 'Drag a file here or ', el('button', { type: 'button' }, 'browse'), el('input', { type: 'file', style: 'display:none' }))));
+  shadow('spl-radio-group', (host, root) => root.append(el('fieldset', {}, el('legend', {}, host.getAttribute('label')), ['Yes', 'No'].map((o, i) => el('label', {}, el('input', { type: 'radio', name: 'q', value: o }), o)))));
+  shadow('spl-autocomplete', (host, root) => {
+    const input = el('input', { id: 'input', type: 'text', role: 'combobox', 'aria-autocomplete': 'list', 'aria-controls': 'listbox' });
+    const list = el('ul', { id: 'listbox', role: 'listbox', hidden: true });
+    let t = 0;
+    input.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => {
+      const q = input.value.trim().toLowerCase();
+      list.replaceChildren(...['Toronto, ON, Canada', 'Toronto, OH, United States', 'Ottawa, ON, Canada'].filter(o => q && o.toLowerCase().includes(q)).map(o => el('li', { role: 'option' }, o)));
+      list.hidden = !list.children.length;
+    }, 200); });
+    list.addEventListener('click', e => { const o = e.target.closest('[role=option]'); if (o) { input.value = o.textContent; host.dataset.value = o.textContent; list.hidden = true; } });
+    root.append(el('label', { for: 'input' }, host.getAttribute('label')), input, list);
+  });
+</script>
+</body></html>

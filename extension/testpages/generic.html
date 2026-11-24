@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>An employer's own form (test page)</title><script src="lib.js"></script></head>
+<body>
+<header><form role="search"><input type="search" name="q" placeholder="Search jobs"></form></header>
+<main id="main">
+<h1>Apply: Operations Analyst</h1>
+<form id="apply">
+  <p><label for="g-name">Full name</label><input data-c id="g-name" name="fullname" type="text" autocomplete="name"></p>
+  <p><label for="g-email">Email address</label><input data-c id="g-email" name="email" type="email"></p>
+  <p><label for="g-tel">Telephone</label><input data-c id="g-tel" name="tel" type="tel" value="555 0100"></p>
+  <p><label for="g-pass">Choose a password</label><input id="g-pass" name="pass" type="password"></p>
+  <p><label for="g-start">Earliest start date</label><input id="g-start" name="start" type="date" required></p>
+  <p><label for="g-pay">Expected salary (CAD)</label><input data-c id="g-pay" name="pay" type="number"></p>
+  <p><label for="g-years">How many years of experience do you have?</label><input data-c id="g-years" name="years" type="text" maxlength="2"></p>
+  <p><label for="g-notice">What is your notice period?</label><input data-c id="g-notice" name="notice" type="text"></p>
+  <p><label for="g-shift">Which shift do you prefer?</label><select id="g-shift" name="shift"><option value="">Please select</option><option value="d">Days</option><option value="n">Nights</option></select></p>
+  <p><label for="g-sin">Social Insurance Number</label><input data-c id="g-sin" name="sin" type="text"></p>
+  <p><label for="g-letter">Cover letter</label><textarea id="g-letter" name="letter"></textarea></p>
+  <details id="more"><summary>More about you</summary>
+    <p><label for="g-site">Website</label><input data-c id="g-site" name="site" type="text"></p></details>
+  <div role="group" aria-labelledby="g-own">
+    <div id="g-own">Do you own a car?</div>
+    <button>Yes</button><button>No</button></div>
+  <div><div id="g-lang-l">Preferred language</div>
+    <div role="radiogroup" aria-labelledby="g-lang-l"><div role="radio" aria-checked="false" tabindex="0">English</div><div role="radio" aria-checked="false" tabindex="0">French</div></div></div>
+  <p><input type="checkbox" id="g-agree" name="agree" required><label for="g-agree">I agree to the privacy policy</label></p>
+  <p><label for="g-cv">Upload your CV</label><input id="g-cv" name="cv" type="file"></p>
+  <button type="submit" id="send">Submit application</button>
+</form>
+</main>
+<footer><form><input type="email" name="newsletter" placeholder="Subscribe to our newsletter"></form></footer>
+<script>
+  document.querySelectorAll('[role=radio]').forEach(r => r.addEventListener('click', () => r.parentElement.querySelectorAll('[role=radio]').forEach(x => x.setAttribute('aria-checked', String(x === r)))));
+  document.querySelector('[role=group]').addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+  // Sent: the page turns into its thank-you, as a one-page site does.
+  document.getElementById('apply').addEventListener('submit', () => setTimeout(() => { document.getElementById('main').replaceChildren(el('h1', {}, 'Thank you for applying'), el('p', {}, 'We have received your application.')); }, 300));
+</script>
+</body></html>

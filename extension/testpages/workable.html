@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Workable (test page)</title><script src="lib.js"></script></head>
+<body>
+<form data-ui="application-form">
+  <section data-ui="personal-information"><h2>Personal information</h2>
+    <div><label for="firstname"><span>First name</span><span>*</span></label><input data-c id="firstname" name="firstname" data-ui="firstname" type="text" required></div>
+    <div><label for="lastname"><span>Last name</span><span>*</span></label><input data-c id="lastname" name="lastname" data-ui="lastname" type="text" required></div>
+    <div><label for="email"><span>Email</span><span>*</span></label><input data-c id="email" name="email" data-ui="email" type="email" required></div>
+    <div><label for="phone"><span>Phone</span></label><input data-c id="phone" name="phone" data-ui="phone" type="tel"></div>
+    <div><label for="address"><span>Address</span></label><input data-c id="address" name="address" data-ui="address" type="text"></div>
+  </section>
+  <section data-ui="profile"><h2>Profile</h2>
+    <div data-ui="experience"><span>Experience</span><button type="button" data-never data-ui="add-section" aria-label="Add experience">+ Add</button></div>
+    <div data-ui="resume"><label for="resume-in">Resume<span>*</span></label><input type="file" id="resume-in" data-ui="resume" accept=".pdf,.doc,.docx"><span id="resume-name">Sam Rivera - old.pdf</span></div>
+  </section>
+  <section data-ui="details"><h2>Details</h2>
+    <div><label for="cover_letter">Cover letter</label><textarea id="cover_letter" name="cover_letter" data-ui="cover_letter"></textarea></div>
+    <fieldset data-ui="QA_301"><legend>Do you have the right to work in Canada?</legend><div role="radiogroup">
+      <label><input type="radio" name="QA_301" value="true">Yes</label><label><input type="radio" name="QA_301" value="false">No</label></div></fieldset>
+    <div data-ui="QA_302"><label id="QA_302_label">What is your notice period?</label>
+      <div><input type="text" id="QA_302" role="combobox" aria-haspopup="listbox" aria-labelledby="QA_302_label" aria-controls="QA_302_listbox" readonly placeholder="Select an option"></div>
+      <ul role="listbox" id="QA_302_listbox" hidden><li role="option">Immediately</li><li role="option">2 weeks</li><li role="option">1 month</li><li role="option">More than 1 month</li></ul></div>
+    <div><label for="QA_303">What salary do you expect (per year)?</label><input data-c id="QA_303" name="QA_303" type="number"></div>
+  </section>
+  <button type="submit" data-never data-ui="apply-button">Submit application</button>
+</form>
+<script>
+  const combo = document.getElementById('QA_302'), list = document.getElementById('QA_302_listbox');
+  combo.addEventListener('click', () => { list.hidden = !list.hidden; });
+  list.addEventListener('click', e => { const o = e.target.closest('[role=option]'); if (o) { combo.value = o.textContent; list.hidden = true; } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') list.hidden = true; });
+</script>
+</body></html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Workday: My Information (test page)</title><script src="lib.js"></script></head>
+<body>
+<div data-automation-id="applyFlowPage">
+  <div data-automation-id="progressBarActiveStep">current step 1 of 5 My Information</div>
+  <h2>My Information</h2>
+  <div data-automation-id="formField-sourcePrompt">
+    <label for="input-1">How Did You Hear About Us?<abbr title="required">*</abbr></label>
+    <div data-automation-id="multiSelectContainer"><div data-automation-id="multiselectInputContainer"><input id="input-1" type="text" data-uxi-widget-type="selectinput" placeholder="Search"><span data-automation-id="promptIcon"></span></div></div>
+  </div>
+  <fieldset data-automation-id="formField-candidateIsPreviousWorker">
+    <legend>Have you previously worked for Example Corp?<abbr>*</abbr></legend>
+    <div><input type="radio" id="pw-1" name="candidateIsPreviousWorker" value="true"><label for="pw-1">Yes</label></div>
+    <div><input type="radio" id="pw-2" name="candidateIsPreviousWorker" value="false"><label for="pw-2">No</label></div>
+  </fieldset>
+  <div data-automation-id="formField-country"><label for="input-3">Country<abbr>*</abbr></label><button type="button" id="input-3" aria-haspopup="listbox" data-automation-id="countryDropdown">Select One</button></div>
+  <h3>Legal Name</h3>
+  <div data-automation-id="formField-legalNameSection_firstName"><label for="input-4">First Name<abbr>*</abbr></label><input data-c id="input-4" type="text" data-automation-id="legalNameSection_firstName" aria-required="true"></div>
+  <div data-automation-id="formField-legalNameSection_lastName"><label for="input-5">Last Name<abbr>*</abbr></label><input data-c id="input-5" type="text" data-automation-id="legalNameSection_lastName" aria-required="true"></div>
+  <h3>Address</h3>
+  <div data-automation-id="formField-addressSection_addressLine1"><label for="input-6">Address Line 1</label><input data-c id="input-6" type="text" data-automation-id="addressSection_addressLine1"></div>
+  <div data-automation-id="formField-addressSection_city"><label for="input-7">City<abbr>*</abbr></label><input data-c id="input-7" type="text" data-automation-id="addressSection_city"></div>
+  <div data-automation-id="formField-addressSection_postalCode"><label for="input-8">Postal Code</label><input data-c id="input-8" type="text" data-automation-id="addressSection_postalCode"></div>
+  <h3>Phone</h3>
+  <div data-automation-id="formField-phone-device-type"><label for="input-9">Phone Device Type<abbr>*</abbr></label><button type="button" id="input-9" aria-haspopup="listbox" data-automation-id="phone-device-type">Select One</button></div>
+  <div data-automation-id="formField-phone-number"><label for="input-10">Phone Number<abbr>*</abbr></label><input data-c id="input-10" type="text" data-automation-id="phone-number"></div>
+  <div data-automation-id="formField-phone-extension"><label for="input-11">Phone Extension</label><input data-c id="input-11" type="text" data-automation-id="phone-extension"></div>
+  <h2>Application Questions</h2>
+  <div data-automation-id="formField-q1"><label for="input-12">Are you legally authorized to work in the country where this job is located?<abbr>*</abbr></label><button type="button" id="input-12" aria-haspopup="listbox" aria-label="Are you legally authorized to work in the country where this job is located? Select One Required">Select One</button></div>
+  <div data-automation-id="formField-q2"><label for="input-13">Will you now or in the future require sponsorship for employment visa status?<abbr>*</abbr></label><button type="button" id="input-13" aria-haspopup="listbox">Select One</button></div>
+  <div data-automation-id="formField-q3"><label for="input-14">What is your highest level of spoken French?</label><button type="button" id="input-14" aria-haspopup="listbox">Select One</button></div>
+  <div data-automation-id="formField-q4"><label for="input-15">What are your salary expectations?</label><input data-c id="input-15" type="text"></div>
+  <button type="button" data-never data-automation-id="bottom-navigation-next-button">Save and Continue</button>
+</div>
+<script>
+  wdPrompt(document.getElementById('input-1'), ['Job Board > Indeed', 'Job Board > LinkedIn', 'Company Website', 'Employee Referral', 'Social Media > Facebook'], false);
+  listbox(document.getElementById('input-3'), ['Australia', 'Canada', 'France', 'United Kingdom', 'United States of America']);
+  listbox(document.getElementById('input-9'), ['Home', 'Mobile', 'Work']);
+  listbox(document.getElementById('input-12'), ['Yes', 'No']);
+  listbox(document.getElementById('input-13'), ['Yes', 'No']);
+  listbox(document.getElementById('input-14'), ['1 - None', '2 - Basic', '3 - Conversational', '4 - Fluent']);
+</script>
+</body></html>
