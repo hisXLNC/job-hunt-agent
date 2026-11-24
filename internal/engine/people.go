@@ -505,11 +505,23 @@ func (e *Engine) WriteCase(ctx context.Context, roleID int64) error {
 
 // FormAnswers answers application-form questions for the extension. Answers
 // it is unsure of are also queued as questions, so the person is asked once.
-func (e *Engine) FormAnswers(ctx context.Context, roleID int64, questions []string) ([]brain.FormAnswer, error) {
+// choices, when given, holds each question's choices (or none): Claude is told
+// them, and what was answered before is still found by the question alone.
+func (e *Engine) FormAnswers(ctx context.Context, roleID int64, questions []string, choices [][]string) ([]brain.FormAnswer, error) {
 	var clean []string
-	for _, q := range questions {
+	var opts [][]string
+	for i, q := range questions {
 		if q = strings.TrimSpace(q); q != "" && len(q) < 600 && len(clean) < 40 {
 			clean = append(clean, q)
+			var o []string
+			if i < len(choices) {
+				for _, c := range choices[i] {
+					if c = strings.TrimSpace(c); c != "" && len(c) <= 120 && len(o) < 60 {
+						o = append(o, c)
+					}
+				}
+			}
+			opts = append(opts, o)
 		}
 	}
 	if len(clean) == 0 {
@@ -528,6 +540,9 @@ func (e *Engine) FormAnswers(ctx context.Context, roleID int64, questions []stri
 		if a, ok := known[store.QuestionKey(q)]; ok {
 			out[i] = brain.FormAnswer{Question: q, Answer: a, Sure: true}
 		} else {
+			if len(opts[i]) > 1 {
+				q += " [" + strings.Join(opts[i], " | ") + "]"
+			}
 			ask = append(ask, q)
 			askAt = append(askAt, i)
 		}
@@ -543,7 +558,7 @@ func (e *Engine) FormAnswers(ctx context.Context, roleID int64, questions []stri
 			return nil, err
 		}
 		for j, i := range askAt {
-			fa := brain.FormAnswer{Question: ask[j]}
+			fa := brain.FormAnswer{Question: clean[i]}
 			if j < len(got) {
 				fa.Answer, fa.Sure = got[j].Answer, got[j].Sure
 			}

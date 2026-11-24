@@ -158,6 +158,122 @@ func TestExtensionNeedsApproval(t *testing.T) {
 	}
 }
 
+// approvedPanel connects a side panel and returns how it calls.
+func approvedPanel(t *testing.T, h http.Handler) func(method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	origin, key := "chrome-extension://"+strings.Repeat("d", 32), strings.Repeat("p", 40)
+	do(h, call{method: "POST", path: "/api/ext/hello", origin: origin, key: key, body: "{}"})
+	if got := do(h, call{method: "POST", path: "/api/ext/pair", marker: true}).Code; got != 200 {
+		t.Fatalf("approving the panel: got %d", got)
+	}
+	return func(method, path, body string) *httptest.ResponseRecorder {
+		return do(h, call{method: method, path: path, origin: origin, key: key, body: body})
+	}
+}
+
+// An answer the person typed into a form is kept only through the approved
+// side panel, and never when it is a secret, an identity number, a date of
+// birth or a long piece of writing.
+func TestTheSidePanelKeepsAnAnswerThePersonGave(t *testing.T) {
+	srv, h := newServer(t)
+	body := `{"question":"What is your notice period?","answer":"Two weeks"}`
+	// Not from the app's own pages, not from another site, not without approval.
+	for name, c := range map[string]call{
+		"own page":            {method: "POST", path: "/api/ext/answer", body: body, marker: true},
+		"another site":        {method: "POST", path: "/api/ext/answer", body: body, origin: "https://evil.example", marker: true},
+		"an unapproved panel": {method: "POST", path: "/api/ext/answer", body: body, origin: "chrome-extension://" + strings.Repeat("e", 32), key: strings.Repeat("q", 40)},
+	} {
+		if got := do(h, c).Code; got != 403 {
+			t.Errorf("%s keeping an answer: got %d, want 403", name, got)
+		}
+	}
+	panel := approvedPanel(t, h)
+	if w := panel("POST", "/api/ext/answer", body); w.Code != 200 {
+		t.Fatalf("keeping an answer: %d %s", w.Code, w.Body)
+	}
+	for name, b := range map[string]string{
+		"a password":           `{"question":"Choose a password","answer":"hunter2"}`,
+		"an identity number":   `{"question":"Social Insurance Number (SIN)","answer":"000 000 000"}`,
+		"a social security no": `{"question":"What is your SSN?","answer":"000-00-0000"}`,
+		"bank details":         `{"question":"Bank account number","answer":"0000000"}`,
+		"a card":               `{"question":"Credit card number","answer":"0000 0000 0000 0000"}`,
+		"a date of birth":      `{"question":"Date of birth","answer":"1 January 1990"}`,
+		"long writing":         `{"question":"Why us?","answer":"` + strings.Repeat("word ", 80) + `"}`,
+		"no answer":            `{"question":"Why us?","answer":"  "}`,
+		"no question":          `{"question":"","answer":"Yes"}`,
+	} {
+		if w := panel("POST", "/api/ext/answer", b); w.Code != 400 {
+			t.Errorf("%s: got %d, want 400", name, w.Code)
+		}
+	}
+	saved, _ := srv.S.Answers()
+	if len(saved) != 1 || saved[0].Answer != "Two weeks" {
+		t.Fatalf("saved answers: %+v", saved)
+	}
+	// It is used as is the next time a form asks, also when the form lists choices.
+	w := panel("POST", "/api/ext/answers", `{"role":0,"questions":["What is your notice period?","Do you own a car?"],"options":[["Immediately","Two weeks","One month"],["Yes","No"]]}`)
+	var out struct {
+		Answers []struct {
+			Question, Answer string
+			Sure             bool
+		}
+	}
+	if json.Unmarshal(w.Body.Bytes(), &out); w.Code != 200 || len(out.Answers) != 2 {
+		t.Fatalf("answers: %d %s", w.Code, w.Body)
+	}
+	if a := out.Answers[0]; a.Answer != "Two weeks" || !a.Sure || a.Question != "What is your notice period?" {
+		t.Errorf("the kept answer came back as %+v", a)
+	}
+	if a := out.Answers[1]; a.Sure || a.Question != "Do you own a car?" {
+		t.Errorf("an unknown question came back as %+v", a)
+	}
+	// The assistant has no way to the side panel's routes.
+	for _, tl := range tools {
+		if strings.HasPrefix(tl.Pattern, "/api/ext/") {
+			t.Errorf("the assistant can reach %s %s", tl.Method, tl.Pattern)
+		}
+	}
+}
+
+// The panel is told the jobs, schools and skills on the CV, for forms that
+// ask for each one again, and the pay floor for "expected salary".
+func TestTheSidePanelGetsTheCVsHistory(t *testing.T) {
+	srv, h := newServer(t)
+	p := srv.S.Profile()
+	p.Name, p.PayFloor, p.PayUnit = "Sam Rivera", 90000, "a year"
+	srv.S.Set("profile", p)
+	model := `{"name":"Sam Rivera","contact":{"email":"sam.rivera@example.com","phone":"555 0142","location":"Toronto, ON","links":["https://example.com/sam"]},"sections":[
+		{"title":"Experience","kind":"experience","items":[{"heading":"Senior Analyst","org":"Northwind Example Ltd","dates":"Mar 2021 – Present","bullets":["Cut month-end close by two days"]}]},
+		{"title":"Education","kind":"education","items":[{"heading":"BSc Computer Science","org":"Example University","dates":"2014 – 2018"}]},
+		{"title":"Skills","kind":"skills","items":[{"text":"Tools: SQL, Python; Tableau"}]}]}`
+	if _, err := srv.S.AddCV(store.CV{Name: "CV", Model: json.RawMessage(model)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	w := approvedPanel(t, h)("GET", "/api/ext/me", "")
+	var me struct {
+		Email     string `json:"email"`
+		PayFloor  int    `json:"pay_floor"`
+		Work      []struct{ Title, Org, Dates, Text string }
+		Education []struct{ Title, Org string }
+		Skills    []string
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &me); err != nil || w.Code != 200 {
+		t.Fatalf("me: %d %s", w.Code, w.Body)
+	}
+	if me.Email != "sam.rivera@example.com" || me.PayFloor != 90000 {
+		t.Errorf("contact and floor: %+v", me)
+	}
+	if len(me.Work) != 1 || me.Work[0].Title != "Senior Analyst" || me.Work[0].Org != "Northwind Example Ltd" || !strings.Contains(me.Work[0].Text, "month-end") {
+		t.Errorf("work: %+v", me.Work)
+	}
+	if len(me.Education) != 1 || me.Education[0].Org != "Example University" {
+		t.Errorf("education: %+v", me.Education)
+	}
+	if strings.Join(me.Skills, "|") != "SQL|Python|Tableau" {
+		t.Errorf("skills: %v", me.Skills)
+	}
+}
+
 func TestEmptyListsOnAFreshStart(t *testing.T) {
 	_, h := newServer(t)
 	for _, p := range []string{"/api/roles", "/api/people", "/api/mail", "/api/talks", "/api/you", "/api/radar", "/api/today", "/api/progress", "/api/board", "/api/connections", "/api/app", "/api/arriving", "/api/activity"} {

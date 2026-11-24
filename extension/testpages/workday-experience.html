@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Workday: My Experience (test page)</title><script src="lib.js"></script></head>
+<body>
+<div data-automation-id="applyFlowPage">
+  <div data-automation-id="progressBarActiveStep">current step 2 of 5 My Experience</div>
+  <h2>My Experience</h2>
+  <div data-automation-id="workExperienceSection"><h3>Work Experience</h3><div id="jobs"></div>
+    <button type="button" id="add-work" data-automation-id="Add" aria-label="Add Work Experience">Add</button></div>
+  <div data-automation-id="educationSection"><h3>Education</h3><div id="schools"></div>
+    <button type="button" id="add-edu" data-automation-id="Add" aria-label="Add Education">Add</button></div>
+  <div data-automation-id="languageSection"><h3>Languages</h3>
+    <button type="button" id="add-lang" data-never data-automation-id="Add" aria-label="Add Languages">Add</button></div>
+  <div data-automation-id="skillsSection"><h3>Skills</h3>
+    <div data-automation-id="formField-skills"><label for="skills-in">Type to Add Skills</label>
+      <div data-automation-id="multiSelectContainer"><div data-automation-id="multiselectInputContainer"><input id="skills-in" type="text" data-uxi-widget-type="selectinput" placeholder="Search"></div></div></div></div>
+  <div data-automation-id="resumeSection"><h3>Resume/CV</h3>
+    <div data-automation-id="attachments-FileUpload"><div data-automation-id="file-upload-drop-zone">Drop files here <button type="button" data-automation-id="select-files">Select files</button><input type="file" data-automation-id="file-upload-input-ref" style="display:none"></div></div></div>
+  <h3>Websites</h3>
+  <button type="button" data-never aria-label="Add Websites">Add</button>
+  <button type="button" data-never data-automation-id="bottom-navigation-next-button">Save and Continue</button>
+</div>
+<script>
+  const field = (id, label, inner) => el('div', { 'data-automation-id': 'formField-' + id }, inner.tagName === 'FIELDSET' ? null : el('label', { for: inner.id || (inner.querySelector('input,button,textarea') || {}).id }, label, el('abbr', {}, '*')), inner);
+  const text = id => controlled(el('input', { id, type: 'text' }));
+  const prompt = (id, options) => { const input = el('input', { id, type: 'text', 'data-uxi-widget-type': 'selectinput', placeholder: 'Search' }); const box = el('div', { 'data-automation-id': 'multiSelectContainer' }, el('div', { 'data-automation-id': 'multiselectInputContainer' }, input)); wdPrompt(input, options, false); return box; };
+  const date = (legend, parts) => el('fieldset', {}, el('legend', {}, legend), el('div', { 'data-automation-id': 'dateInputWrapper' }, parts.map(p => controlled(el('input', { 'data-automation-id': `dateSection${p}-input`, role: 'spinbutton', 'aria-label': p, placeholder: p === 'Year' ? 'YYYY' : 'MM', type: 'text' })))));
+  let jobs = 0, schools = 0;
+  document.getElementById('add-work').addEventListener('click', e => {
+    const n = ++jobs, p = `workExperience-${n}--`;
+    document.getElementById('jobs').append(el('div', { 'data-automation-id': 'workExperience-' + n }, el('h4', {}, 'Work Experience ' + n),
+      field(p + 'jobTitle', 'Job Title', text(p + 'jobTitle')), field(p + 'companyName', 'Company', text(p + 'companyName')), field(p + 'location', 'Location', text(p + 'location')),
+      el('div', { 'data-automation-id': 'formField-' + p + 'currentlyWorkHere' }, el('input', { type: 'checkbox', id: p + 'currentlyWorkHere', name: 'currentlyWorkHere' }), el('label', { for: p + 'currentlyWorkHere' }, 'I currently work here')),
+      field(p + 'startDate', 'From', date('From', ['Month', 'Year'])), field(p + 'endDate', 'To', date('To', ['Month', 'Year'])),
+      field(p + 'roleDescription', 'Role Description', el('textarea', { id: p + 'roleDescription' })),
+      el('button', { type: 'button', 'data-automation-id': 'panel-set-delete-button' }, 'Delete')));
+    e.target.textContent = 'Add Another';
+    e.target.setAttribute('aria-label', 'Add Another Work Experience');
+  });
+  document.getElementById('add-edu').addEventListener('click', e => {
+    const n = ++schools, p = `education-${n}--`;
+    const degree = el('button', { type: 'button', id: p + 'degree', 'aria-haspopup': 'listbox' }, 'Select One');
+    listbox(degree, ['High School Diploma', "Associate's Degree", "Bachelor's Degree", "Master's Degree", 'Doctorate']);
+    document.getElementById('schools').append(el('div', { 'data-automation-id': 'education-' + n }, el('h4', {}, 'Education ' + n),
+      field(p + 'schoolName', 'School or University', prompt(p + 'schoolName', ['Example University', 'Example College', 'Northfield Institute of Technology'])),
+      field(p + 'degree', 'Degree', degree),
+      field(p + 'fieldOfStudy', 'Field of Study', prompt(p + 'fieldOfStudy', ['Accounting', 'Computer Science', 'Mechanical Engineering'])),
+      field(p + 'firstYearAttended', 'From', date('From', ['Year'])), field(p + 'lastYearAttended', 'To (Actual or Expected)', date('To (Actual or Expected)', ['Year']))));
+    e.target.textContent = 'Add Another';
+    e.target.setAttribute('aria-label', 'Add Another Education');
+  });
+  wdPrompt(document.getElementById('skills-in'), ['Python (Programming Language)', 'SQL', 'Project Management', 'Data Analysis', 'Tableau Software'], true);
+</script>
+</body></html>

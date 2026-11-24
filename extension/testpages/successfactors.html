@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>SuccessFactors (test page)</title><script src="lib.js"></script></head>
+<body>
+<div id="rcmJobApplicationCtr">
+  <h2>Candidate Profile</h2>
+  <div class="rcmFormField"><label for="sf_fn">First Name<span>*</span></label><input data-c id="sf_fn" name="firstName" class="rcmFormElement" type="text"></div>
+  <div class="rcmFormField"><label for="sf_ln">Last Name<span>*</span></label><input data-c id="sf_ln" name="lastName" class="rcmFormElement" type="text"></div>
+  <div class="rcmFormField"><label for="sf_em">Email Address<span>*</span></label><input data-c id="sf_em" name="contactEmail" class="rcmFormElement" type="text"></div>
+  <div class="rcmFormField"><label for="sf_ph">Phone Number</label><input data-c id="sf_ph" name="cellPhone" class="rcmFormElement" type="text"></div>
+  <div class="rcmFormField"><label for="sf_co">Country/Region</label>
+    <span class="sfDropdown"><input id="sf_co" type="text" role="combobox" readonly value="No Selection" aria-owns="sf_co_list" aria-haspopup="true"><button type="button" aria-label="toggle" tabindex="-1">▾</button></span></div>
+  <ul id="sf_co_list" role="listbox" style="display:none"><li role="option"><a>No Selection</a></li><li role="option"><a>Canada</a></li><li role="option"><a>United Kingdom</a></li><li role="option"><a>United States</a></li></ul>
+  <h2>Job-Specific Information</h2>
+  <div class="rcmFormField"><label for="sf_q1">Are you willing to travel up to 25% of the time?</label>
+    <span class="sfDropdown"><input id="sf_q1" type="text" role="combobox" readonly value="No Selection" aria-owns="sf_q1_list" aria-haspopup="true"><button type="button" aria-label="toggle" tabindex="-1">▾</button></span></div>
+  <ul id="sf_q1_list" role="listbox" style="display:none"><li role="option"><a>No Selection</a></li><li role="option"><a>Yes</a></li><li role="option"><a>No</a></li></ul>
+  <div class="rcmFormField"><label for="sf_q2">Date available to start</label><input data-c id="sf_q2" type="text" placeholder="MM/DD/YYYY"></div>
+  <div class="rcmFormField"><label for="sf_q3">What is your date of birth?</label><input data-c id="sf_q3" type="text"></div>
+  <button type="button" data-never id="applyBtn">Apply</button>
+</div>
+<script>
+  for (const id of ['sf_co', 'sf_q1']) {
+    const input = document.getElementById(id), list = document.getElementById(id + '_list');
+    input.addEventListener('click', () => { list.style.display = list.style.display === 'none' ? 'block' : 'none'; });
+    list.addEventListener('click', e => { const o = e.target.closest('li'); if (o) { input.value = o.textContent; list.style.display = 'none'; } });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') list.style.display = 'none'; });
+  }
+</script>
+</body></html>

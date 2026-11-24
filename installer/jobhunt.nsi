@@ -97,7 +97,7 @@ Section "Job Hunt" SecApp
   SetOutPath "$INSTDIR"
   File "/oname=${PROGRAM}" "${EXE}"
   SetOutPath "$INSTDIR\extension"
-  File /r /x *.go "${EXT}\*.*"
+  File /r /x *.go /x testpages "${EXT}\*.*"
   SetOutPath "$INSTDIR"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortCut "$SMPROGRAMS\${NAME}.lnk" "$INSTDIR\${PROGRAM}"

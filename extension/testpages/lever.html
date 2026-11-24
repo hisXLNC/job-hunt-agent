@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Lever (test page)</title><script src="lib.js"></script></head>
+<body>
+<form id="application-form" class="application-form" method="POST">
+  <h4>Submit your application</h4>
+  <ul>
+    <li class="application-question resume"><label><div class="application-label">Resume/CV<span class="required">✱</span></div><div class="application-field"><input type="file" name="resume" id="resume-upload-input"></div></label></li>
+    <li class="application-question"><label><div class="application-label">Full name<span class="required">✱</span></div><div class="application-field"><input data-c type="text" name="name" required></div></label></li>
+    <li class="application-question"><label><div class="application-label">Email<span class="required">✱</span></div><div class="application-field"><input data-c type="email" name="email" required></div></label></li>
+    <li class="application-question"><label><div class="application-label">Phone</div><div class="application-field"><input data-c type="text" name="phone"></div></label></li>
+    <li class="application-question"><label><div class="application-label">Current location</div><div class="application-field"><input data-c type="text" name="location" id="location-input"></div></label></li>
+    <li class="application-question"><label><div class="application-label">Current company</div><div class="application-field"><input data-c type="text" name="org"></div></label></li>
+  </ul>
+  <h4>Links</h4>
+  <ul>
+    <li class="application-question"><label><div class="application-label">LinkedIn URL</div><div class="application-field"><input data-c type="text" name="urls[LinkedIn]"></div></label></li>
+    <li class="application-question"><label><div class="application-label">GitHub URL</div><div class="application-field"><input data-c type="text" name="urls[GitHub]"></div></label></li>
+    <li class="application-question"><label><div class="application-label">Portfolio URL</div><div class="application-field"><input data-c type="text" name="urls[Portfolio]"></div></label></li>
+  </ul>
+  <h4>Questions</h4>
+  <ul>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">Are you authorized to work in Canada?<span class="required">✱</span></div></div>
+      <div class="application-field"><ul data-qa="multiple-choice">
+        <li><label><input type="radio" name="cards[a1][field0]" value="Yes"><span class="application-answer-alternative">Yes</span></label></li>
+        <li><label><input type="radio" name="cards[a1][field0]" value="No"><span class="application-answer-alternative">No</span></label></li></ul></div></li>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">Why do you want to work here?</div></div>
+      <div class="application-field"><textarea name="cards[a1][field1]"></textarea></div></li>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">How many years of experience do you have with SQL?</div></div>
+      <div class="application-field"><select name="cards[a1][field2]"><option value="">Select...</option><option>0-1</option><option>2-4</option><option>5+</option></select></div></li>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">Which offices could you work from?</div></div>
+      <div class="application-field"><ul data-qa="checkboxes">
+        <li><label><input type="checkbox" name="cards[a1][field3]" value="Toronto"><span class="application-answer-alternative">Toronto</span></label></li>
+        <li><label><input type="checkbox" name="cards[a1][field3]" value="Montreal"><span class="application-answer-alternative">Montreal</span></label></li>
+        <li><label><input type="checkbox" name="cards[a1][field3]" value="Vancouver"><span class="application-answer-alternative">Vancouver</span></label></li></ul></div></li>
+  </ul>
+  <h4>Additional information</h4>
+  <textarea name="comments" placeholder="Add a cover letter or anything else you want to share."></textarea>
+  <h4>U.S. Equal Employment Opportunity information</h4>
+  <div class="application-question"><div class="application-label">Gender</div><select name="eeo[gender]"><option value="">Select ...</option><option>Male</option><option>Female</option><option>Decline to self-identify</option></select></div>
+  <button type="submit" id="btn-submit" data-never class="postings-btn template-btn-submit">Submit application</button>
+</form>
+</body></html>

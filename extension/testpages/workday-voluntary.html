@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Workday: Voluntary Disclosures (test page)</title><script src="lib.js"></script></head>
+<body>
+<div data-automation-id="applyFlowPage">
+  <div data-automation-id="progressBarActiveStep">current step 4 of 5 Voluntary Disclosures</div>
+  <h2>Voluntary Disclosures</h2>
+  <div data-automation-id="formField-gender"><label for="v-1">Gender</label><button type="button" id="v-1" aria-haspopup="listbox">Select One</button></div>
+  <div data-automation-id="formField-ethnicity"><label for="v-2">Race/Ethnicity</label><button type="button" id="v-2" aria-haspopup="listbox">Select One</button></div>
+  <div data-automation-id="formField-veteran"><label for="v-3">Veteran Status</label><button type="button" id="v-3" aria-haspopup="listbox">Select One</button></div>
+  <h3>Terms and Conditions</h3>
+  <div data-automation-id="formField-agreementCheckbox"><input type="checkbox" id="v-4" aria-required="true"><label for="v-4">Yes, I have read and consent to the terms and conditions</label></div>
+  <button type="button" data-never data-automation-id="bottom-navigation-next-button">Save and Continue</button>
+</div>
+<script>
+  window.opened = 0;
+  for (const id of ['v-1', 'v-2', 'v-3']) { const b = document.getElementById(id); b.addEventListener('click', () => window.opened++); listbox(b, ['Option A', 'Option B', 'I do not wish to answer']); }
+</script>
+</body></html>

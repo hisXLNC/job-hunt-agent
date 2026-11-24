@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Zoho Recruit (test page)</title><script src="lib.js"></script>
+<style>lyte-input, lyte-dropdown, crux-text-component, crux-dropdown, rec-dropdown { display: inline-block; } .row { margin: 6px 0; }</style></head>
+<body>
+<crux-form><form>
+  <h3>Basic Info</h3>
+  <div class="row"><label id="crc-label-rec-form_101">First Name</label><crux-text-component id="rec-form_101"><lyte-input><div class="lyteField"><input data-c type="text" id="101_input"></div></lyte-input></crux-text-component></div>
+  <div class="row"><label id="crc-label-rec-form_102">Last Name <span>*</span></label><crux-text-component id="rec-form_102"><lyte-input><div class="lyteField"><input data-c type="text" id="102_input"></div></lyte-input></crux-text-component></div>
+  <div class="row"><label id="crc-label-rec-form_103">Email <span>*</span></label><crux-text-component id="rec-form_103"><lyte-input><div class="lyteField"><input data-c type="text" id="103_input"></div></lyte-input></crux-text-component></div>
+  <div class="row"><label id="crc-label-rec-form_104">Mobile</label><crux-text-component id="rec-form_104"><lyte-input><div class="lyteField"><input data-c type="text" id="104_input"></div></lyte-input></crux-text-component></div>
+  <div class="row"><label id="crc-label-rec-form_105">Country</label><crux-dropdown id="rec-form_105"><lyte-dropdown><div class="lyteDummyEventContainer" role="combobox" aria-haspopup="listbox" tabindex="0"><span class="lyteDropdownLabel">-None-</span></div></lyte-dropdown></crux-dropdown></div>
+  <h3>Experience Details</h3>
+  <div id="jobs"></div>
+  <button type="button" id="add-job">+ Add Experience Details</button>
+  <h3>Attachment Information</h3>
+  <div class="row"><label id="crc-label-rec-form_190">Resume</label><crux-file-component id="rec-form_190"><input type="file" id="190_input"></crux-file-component></div>
+  <button type="submit" data-never>Submit Application</button>
+</form></crux-form>
+<script>
+  const drop = (id, options) => { const face = el('div', { class: 'lyteDummyEventContainer', role: 'combobox', 'aria-haspopup': 'listbox', tabindex: '0' }, el('span', { class: 'lyteDropdownLabel' }, options[0])); listbox(face, options.slice(1), { tag: 'lyte-drop-body', item: 'lyte-drop-item', label: '.lyteDropdownLabel' }); return el('rec-dropdown', { id }, el('lyte-dropdown', {}, face)); };
+  listbox(document.querySelector('#rec-form_105 [role=combobox]'), ['Canada', 'India', 'United States'], { tag: 'lyte-drop-body', item: 'lyte-drop-item', label: '.lyteDropdownLabel' });
+  const MON = ['Month', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], YR = ['Year', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016'];
+  let n = 0;
+  const job = () => {
+    const k = 200 + 10 * n++;
+    const row = (i, label, inner) => el('div', { class: 'row' }, el('label', { id: 'crc-label-rec-form_' + (k + i) }, label), el('crux-text-component', { id: 'rec-form_' + (k + i) }, el('lyte-input', {}, el('div', { class: 'lyteField' }, inner))));
+    document.getElementById('jobs').append(el('div', { class: 'entry' },
+      row(1, 'Occupation / Title', controlled(el('input', { type: 'text', id: (k + 1) + '_input' }))),
+      row(2, 'Company', controlled(el('input', { type: 'text', id: (k + 2) + '_input' }))),
+      row(3, 'Summary', el('textarea', { id: (k + 3) + '_input' })),
+      el('div', { class: 'row' }, el('span', {}, 'Work Duration'), el('rec-month-range-component', { 'cx-prop-label': 'Work Duration' },
+        drop(`rec-form_${k + 4}_from_month`, MON), drop(`rec-form_${k + 4}_from_year`, YR), ' to ', drop(`rec-form_${k + 4}_to_month`, MON), drop(`rec-form_${k + 4}_to_year`, YR))),
+      el('div', { class: 'row' }, el('input', { type: 'checkbox', id: 'cur' + k, name: 'currently' }), el('label', { for: 'cur' + k }, 'I currently work here'))));
+  };
+  job();
+  document.getElementById('add-job').addEventListener('click', job);
+</script>
+</body></html>

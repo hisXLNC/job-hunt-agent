@@ -71,6 +71,65 @@ func (s *Server) extRole(r store.Role) extRole {
 	return out
 }
 
+// extEntry is one job or school from the CV, as a form asks for it again.
+type extEntry struct {
+	Title    string `json:"title"`
+	Org      string `json:"org"`
+	Dates    string `json:"dates"`
+	Location string `json:"location"`
+	Text     string `json:"text,omitempty"`
+}
+
+// extHistory lists the CV's jobs, schools and skills one by one.
+func extHistory(m cv.CV) (work, schools []extEntry, skills []string) {
+	work, schools, skills = []extEntry{}, []extEntry{}, []string{}
+	for _, sec := range m.Sections {
+		for _, it := range sec.Items {
+			switch sec.Kind {
+			case "experience":
+				text := it.Text
+				for _, b := range it.Bullets {
+					text += "\n• " + b
+				}
+				text = strings.TrimSpace(text)
+				// An item with no title and no employer is the rest of the job above it.
+				if n := len(work); n > 0 && it.Heading == "" && it.Org == "" {
+					last := &work[n-1]
+					last.Text = strings.TrimSpace(last.Text + "\n" + text)
+					if last.Dates == "" {
+						last.Dates = it.Dates
+					}
+					continue
+				}
+				work = append(work, extEntry{Title: it.Heading, Org: it.Org, Dates: it.Dates, Location: it.Location, Text: text})
+			case "education":
+				if n := len(schools); n > 0 && it.Heading == "" && it.Org == "" {
+					if schools[n-1].Dates == "" {
+						schools[n-1].Dates = it.Dates
+					}
+					continue
+				}
+				schools = append(schools, extEntry{Title: it.Heading, Org: it.Org, Dates: it.Dates, Location: it.Location})
+			case "skills":
+				for _, line := range append([]string{it.Heading, it.Text}, it.Bullets...) {
+					if i := strings.Index(line, ":"); i >= 0 && i < 40 {
+						line = line[i+1:]
+					}
+					for _, w := range strings.FieldsFunc(line, func(r rune) bool { return r == ',' || r == ';' || r == '•' || r == '|' }) {
+						if w = strings.TrimSpace(w); w != "" && len(w) <= 60 && len(skills) < 40 {
+							skills = append(skills, w)
+						}
+					}
+				}
+			}
+		}
+	}
+	return work, schools, skills
+}
+
+// neverKept names the questions whose answers are never remembered.
+var neverKept = regexp.MustCompile(`(?i)passwor|passcode|\bpin\b|social (security|insurance)|\bssn\b|\bsin\b|national (id|insurance)|passport|driver'?s? licen[cs]e|\bbank|\biban\b|routing|account (number|no)|sort code|card (number|no)|credit card|debit card|\bcvv\b|\bcvc\b|date of birth|birth ?(date|day)|\bdob\b`)
+
 // extRoutes are the only things the browser extension can reach.
 func (s *Server) extRoutes(h func(string, handler)) {
 	e, st := s.E, s.S
@@ -142,28 +201,49 @@ func (s *Server) extRoutes(h func(string, handler)) {
 	// them in; the person reads the form and presses Submit themselves.
 	h("POST /api/ext/answers", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
-			Role      int64    `json:"role"`
-			Questions []string `json:"questions"`
+			Role      int64      `json:"role"`
+			Questions []string   `json:"questions"`
+			Options   [][]string `json:"options"` // each question's choices, where it has them
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
-		ans, err := e.FormAnswers(ctx, in.Role, in.Questions)
+		ans, err := e.FormAnswers(ctx, in.Role, in.Questions, in.Options)
 		return map[string]any{"answers": ans}, err
 	})
 	// The contact details a form asks for, taken from the CV.
 	h("GET /api/ext/me", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		p := st.Profile()
-		out := map[string]any{"name": p.Name, "city": p.City, "country": p.Country, "home": p.Home}
+		out := map[string]any{"name": p.Name, "city": p.City, "country": p.Country, "home": p.Home, "pay_floor": p.PayFloor, "pay_unit": p.PayUnit}
 		if cvs, _ := st.CVs(); len(cvs) > 0 {
 			var m cv.CV
 			if json.Unmarshal(cvs[0].Model, &m) == nil {
 				out["email"], out["phone"], out["location"], out["links"] = m.Contact.Email, m.Contact.Phone, m.Contact.Location, m.Contact.Links
+				out["work"], out["education"], out["skills"] = extHistory(m)
 			}
 		}
 		return out, nil
+	})
+	// An answer the person typed into a form themselves, kept when they say
+	// so in the panel. Never a password, an identity or bank number, a date
+	// of birth, or a long piece of writing.
+	h("POST /api/ext/answer", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Question, Answer string
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		q, a := strings.TrimSpace(in.Question), strings.TrimSpace(in.Answer)
+		if q == "" || a == "" || len(q) > 400 {
+			return nil, bad("There is no question and answer to keep.")
+		}
+		if len([]rune(a)) > 300 || neverKept.MatchString(q) {
+			return nil, bad("Job Hunt doesn't keep that kind of answer.")
+		}
+		return nil, st.SaveAnswer(q, a)
 	})
 	h("POST /api/ext/role/{id}/applied", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, e.MarkApplied(idOf(r), "")

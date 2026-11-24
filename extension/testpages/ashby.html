@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Ashby (test page)</title><script src="lib.js"></script>
+<style>._active_x1 { background: #cde; }</style></head>
+<body>
+<div class="ashby-application-form-container">
+  <div class="_fieldEntry_a1 ashby-application-form-field-entry"><label class="_heading_a1 ashby-application-form-question-title" for="_systemfield_name">Name</label><input data-c id="_systemfield_name" name="_systemfield_name" type="text" required placeholder="Type here..."></div>
+  <div class="_fieldEntry_a1 ashby-application-form-field-entry"><label class="_heading_a1 ashby-application-form-question-title" for="_systemfield_email">Email</label><input data-c id="_systemfield_email" name="_systemfield_email" type="email" required placeholder="hello@example.com..."></div>
+  <div class="_fieldEntry_a1 ashby-application-form-field-entry"><label class="_heading_a1 ashby-application-form-question-title" for="_systemfield_resume">Resume</label>
+    <div class="_container_a1"><button type="button">Upload File</button><input type="file" id="_systemfield_resume" style="display:none"></div></div>
+  <div class="_fieldEntry_a1 ashby-application-form-field-entry"><label class="_heading_a1 ashby-application-form-question-title" for="q-linkedin">LinkedIn Profile</label><input data-c id="q-linkedin" type="text" placeholder="Type here..."></div>
+  <div class="_fieldEntry_a1 ashby-application-form-field-entry"><label class="_heading_a1 ashby-application-form-question-title">Are you legally authorized to work in Canada?</label>
+    <div class="_yesno_a1"><button class="_option_a1">Yes</button><button class="_option_a1">No</button><input type="checkbox" name="q1" tabindex="-1" style="display:none"></div></div>
+  <div class="_fieldEntry_a1 ashby-application-form-field-entry"><label class="_heading_a1 ashby-application-form-question-title">Will you require visa sponsorship?</label>
+    <div class="_yesno_a1"><button class="_option_a1">Yes</button><button class="_option_a1">No</button><input type="checkbox" name="q2" tabindex="-1" style="display:none"></div></div>
+  <fieldset class="_fieldEntry_a1 ashby-application-form-field-entry"><label class="_heading_a1 ashby-application-form-question-title">Where do you prefer to work?</label>
+    <div class="_option_r"><span><input type="radio" id="r1" name="q3"></span><label for="r1">Remote</label></div>
+    <div class="_option_r"><span><input type="radio" id="r2" name="q3"></span><label for="r2">Hybrid</label></div>
+    <div class="_option_r"><span><input type="radio" id="r3" name="q3"></span><label for="r3">In the office</label></div></fieldset>
+  <div class="_fieldEntry_a1 ashby-application-form-field-entry"><label class="_heading_a1 ashby-application-form-question-title" for="q4">What interests you about this role?</label><textarea id="q4" placeholder="Type here..."></textarea></div>
+  <button data-never class="ashby-application-form-submit-button">Submit Application</button>
+</div>
+<script>
+  document.querySelectorAll('._yesno_a1').forEach(box => box.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    box.querySelectorAll('button').forEach(x => x.classList.toggle('_active_x1', x === b));
+    box.dataset.value = b.textContent;
+  }));
+</script>
+</body></html>

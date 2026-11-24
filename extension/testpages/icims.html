@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>iCIMS (test page)</title></head>
+<body>
+<div class="iCIMS_MainWrapper"><h1>Careers at Example Corp</h1>
+<!-- Their form sits in a frame of the same site as the page around it. -->
+<iframe id="icims_content_iframe" title="Application" style="width:100%;height:600px" srcdoc='
+<!doctype html><html><head><script src="lib.js"></script></head><body>
+<form class="iCIMS_Forms" id="frmApply">
+  <div class="iCIMS_Header">Candidate Profile</div>
+  <div class="iCIMS_TableRow"><label class="iCIMS_InfoMsg iCIMS_InfoField_Candidate" for="PersonProfileFields.FirstName">First Name</label><input data-c type="text" id="PersonProfileFields.FirstName" name="PersonProfileFields.FirstName"></div>
+  <div class="iCIMS_TableRow"><label class="iCIMS_InfoMsg iCIMS_InfoField_Candidate" for="PersonProfileFields.LastName">Last Name</label><input data-c type="text" id="PersonProfileFields.LastName" name="PersonProfileFields.LastName"></div>
+  <div class="iCIMS_TableRow"><label class="iCIMS_InfoMsg iCIMS_InfoField_Candidate" for="PersonProfileFields.Email">Email</label><input data-c type="text" id="PersonProfileFields.Email" name="PersonProfileFields.Email"></div>
+  <div class="iCIMS_TableRow"><label class="iCIMS_InfoMsg" for="rcf3048">Are you willing to relocate?</label>
+    <select id="rcf3048" name="rcf3048" style="display:none"><option value="">&#8212; Make a Selection &#8212;</option><option value="1">Yes</option><option value="2">No</option></select>
+    <div class="dropdown-container"><a class="dropdown-toggle" href="#"><span class="dropdown-text">&#8212; Make a Selection &#8212;</span></a></div></div>
+  <div class="iCIMS_TableRow"><label class="iCIMS_InfoMsg" for="rcf3050">How did you hear about us?</label>
+    <select id="rcf3050" name="rcf3050"><option value="">&#8212; Make a Selection &#8212;</option><option value="1">Company Website</option><option value="2">LinkedIn</option><option value="3">Job Fair</option></select></div>
+  <div class="iCIMS_TableRow"><label class="iCIMS_InfoMsg" for="rcf3051">Disability status</label>
+    <select id="rcf3051" name="rcf3051"><option value="">&#8212; Make a Selection &#8212;</option><option value="1">Yes</option><option value="2">No</option></select></div>
+  <input type="submit" data-never value="Submit Application">
+</form></body></html>'></iframe>
+</div>
+</body></html>
