@@ -203,7 +203,8 @@ export function noFill(root) {
     i.setAttribute('data-bwignore', '');
     i.setAttribute('data-form-type', 'other');
     if (!i.hasAttribute('autocomplete')) i.setAttribute('autocomplete', 'off');
-    if (i.type === 'password') i.setAttribute('autocomplete', 'new-password');
+    // A key is hidden as it is typed without being a password field, which is what draws them in.
+    if (i.type === 'password') { i.type = 'text'; i.classList.add('secret'); i.spellcheck = false; }
   });
 }
 // The filters that stay in view are as tall as they are: the header row sits under them.

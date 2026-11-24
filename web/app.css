@@ -91,6 +91,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 .stick{position:sticky;top:0;z-index:6;background:var(--bg);margin:-8px -6px -8px;padding:8px 6px}
 .tbl.long thead th{position:sticky;top:var(--stick,0px);z-index:5;box-shadow:0 -1px 0 var(--line)}
 .endless{padding:10px 14px;text-align:center}
+input.secret{-webkit-text-security:disc}
 .tbl.long tbody tr{scroll-margin-top:calc(var(--stick,0px) + 44px)}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
 .tabs a{padding:9px 14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}

@@ -125,6 +125,7 @@ func main() {
 				if r2, err := c.Do(req); err == nil && r2.StatusCode == 200 {
 					r2.Body.Close()
 				} else {
+					trace.Log("window", "the running Job Hunt did not bring its window forward (%v); opening a plain window", err)
 					if d, err := dataDir(); err == nil {
 						openWindow(url+page, d)
 					} else {

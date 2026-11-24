@@ -264,7 +264,7 @@ func pageNames(page []byte, name string) bool {
 	return false
 }
 
-var parkedRe = regexp.MustCompile(`(?i)for sale|buy this domain|domain (is )?(parked|available)|parkingcrew|sedo|godaddy|hugedomains|dan\.com`)
+var parkedRe = regexp.MustCompile(`(?i)for sale|buy this domain|domain (is )?(parked|available)|parkingcrew|\bsedo\b|godaddy|hugedomains`)
 
 // parked tells a page that only holds a domain name for sale, whose title
 // carries the name it was guessed from.
@@ -273,11 +273,9 @@ func parked(page []byte, host string) bool {
 	if len(head) > 200000 {
 		head = head[:200000]
 	}
-	if parkedRe.Match(head) {
-		return true
-	}
 	for _, m := range titleRe.FindAllSubmatch(head, 4) {
-		if strings.Contains(strings.ToLower(string(m[1])), strings.ToLower(host)) {
+		t := string(m[1]) + " " + string(m[2])
+		if parkedRe.MatchString(t) || strings.Contains(strings.ToLower(t), strings.ToLower(host)) {
 			return true
 		}
 	}

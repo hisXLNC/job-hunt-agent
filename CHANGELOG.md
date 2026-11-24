@@ -2,6 +2,13 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.35
+
+- **Which sources aren't working, at a glance.** Radar's top card now says when a source isn't working ("LinkedIn isn't working", "3 sources aren't working") with a link to **Where Job Hunt looks**, which now sits above the employers list instead of below it. Employers' own job boards that didn't answer are named, each with the reason.
+- Key fields no longer look like password fields to password managers, so they don't offer to save or suggest a password there.
+- If Job Hunt's own window can't open once, it is tried again the next time instead of using a plain window for the rest of the session. Why it couldn't open is written to the log ("Copy details" under You → The app and debugging).
+- Where each employer's logo came from is written to the same log.
+
 ## 26.11.34
 
 - **1Password (and other password managers) stop prompting in Job Hunt.** The key, inbox and calendar fields looked like a sign-in form to them. Every field now tells them it is not one.

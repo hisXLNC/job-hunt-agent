@@ -167,10 +167,9 @@ func closeWindow() {
 func (n *nativeWindow) loop() {
 	runtime.LockOSThread()
 	for page := range n.ask {
+		// A window that would not open this time is tried again next time;
+		// meanwhile the pages open in a plain window of their own.
 		if !n.open(page) {
-			n.mu.Lock()
-			n.broken = true
-			n.mu.Unlock()
 			openWindow(n.url+page, n.dir)
 		}
 	}

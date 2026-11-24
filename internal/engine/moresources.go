@@ -522,12 +522,16 @@ type SourceRow struct {
 	Seen  int    `json:"seen"`            // postings it showed then
 	New   int    `json:"new"`             // of those, new
 	Setup string `json:"setup,omitempty"` // where it is set up, when it needs setting up
+	// Failed names each place of this kind that didn't answer last time:
+	// for employers' boards, "Maple Ledger: the board was not found".
+	Failed []string `json:"failed,omitempty"`
 }
 
 // lastRun is what one kind of source gave in the newest search that asked it.
 type lastRun struct {
 	SourceRun
-	At int64
+	At       int64
+	Problems []string // every place that search found not answering
 }
 
 // lastBySource finds, for each kind of source, the newest finished search
@@ -548,7 +552,7 @@ func (e *Engine) lastBySource() map[string]lastRun {
 		}
 		for kind, sr := range st.BySource {
 			if _, have := out[kind]; !have {
-				out[kind] = lastRun{sr, r.EndedAt}
+				out[kind] = lastRun{sr, r.EndedAt, st.Problems}
 			}
 		}
 	}
@@ -585,6 +589,19 @@ func (e *Engine) Sources() []SourceRow {
 		b.What, b.State, b.Note = "", "none", "No employer you watch has a job board Job Hunt can read yet. Add employers below."
 	} else {
 		fromRun(&b, srcBoards)
+		if l, ok := last[srcBoards]; ok && l.Failed > 0 {
+			names := map[string]bool{}
+			if cs, err := e.S.Companies("following"); err == nil {
+				for _, c := range cs {
+					names[c.Name] = true
+				}
+			}
+			for _, p := range l.Problems {
+				if name, _, ok := strings.Cut(p, ": "); ok && names[name] {
+					b.Failed = append(b.Failed, p)
+				}
+			}
+		}
 	}
 	rows = append(rows, b)
 

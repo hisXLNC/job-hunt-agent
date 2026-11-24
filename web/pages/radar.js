@@ -32,12 +32,18 @@ const SRC_STATE = { working: ['good', 'Working'], problem: ['crit', 'Problem'], 
 function sourcesCard(list) {
   if (!list?.length) return '';
   const none = html`<span class="m">–</span>`;
-  return html`<div class="card" style="padding:0"><div class="row" style="padding:14px 16px 10px"><h3 class="grow">Where Job Hunt looks</h3><span class="s m">Every kind of source, and how each did last time</span></div>
+  return html`<div class="card" style="padding:0" id="sources"><div class="row" style="padding:14px 16px 10px"><h3 class="grow">Where Job Hunt looks</h3><span class="s m">Every kind of source, and how each did last time</span></div>
     <table class="tbl"><thead><tr><th>Source</th><th>State</th><th>Last looked</th><th>Postings then</th></tr></thead>
     <tbody>${list.map(s => { const [tone, word] = SRC_STATE[s.state] || SRC_STATE.none; return html`<tr><td class="s"><b>${s.name}</b>${s.what ? html` <span class="m">· ${s.what}</span>` : ''}
-        ${s.note || s.setup ? html`<div class="xs" style="margin-top:2px;color:var(--${s.state === 'problem' ? 'crit' : 'muted'})">${s.note}${s.setup ? html` <a href="${s.setup}">Set it up</a>` : ''}</div>` : ''}</td>
+        ${s.note || s.setup ? html`<div class="xs" style="margin-top:2px;color:var(--${s.state === 'problem' ? 'crit' : 'muted'})">${s.note}${s.setup ? html` <a href="${s.setup}">Set it up</a>` : ''}</div>` : ''}${s.failed?.length ? html`<details style="margin-top:3px"><summary class="xs" style="color:var(--warn)">${s.failed.length} didn't answer: which</summary><div class="xs m pre" style="margin-top:3px">${s.failed.join('\n')}</div></details>` : ''}</td>
       <td><span class="chip ${tone}">${word}</span></td><td class="s" style="white-space:nowrap">${s.at ? ago(s.at) : none}</td>
       <td class="s" style="white-space:nowrap">${s.at ? html`<b>${s.seen}</b> <span class="m">· ${s.new} new</span>` : none}</td></tr>`; })}</tbody></table></div>`;
+}
+// One line on how the sources are doing, with a way to the list.
+function health(list) {
+  if (!list?.length) return '';
+  const bad = list.filter(s => s.state === 'problem' || s.failed?.length), ok = list.filter(s => s.state === 'working').length;
+  return html`<div style="margin-top:4px">${bad.length ? html`<b style="color:var(--crit)">${bad.length === 1 ? `${bad[0].name} isn't working` : `${bad.length} sources aren't working`}.</b> ` : ok ? html`<span style="color:var(--good)">Every source answered last time.</span> ` : ''}<button class="link s" data-act="tosources">See where Job Hunt looks</button></div>`;
 }
 const tried = r => toast(r.found ? `Watching ${r.place.name}: it showed ${r.found} posting${r.found === 1 ? '' : 's'} just now` : `Watching ${r.place.name}, but it ${r.note || 'showed nothing just now'}`);
 
@@ -58,7 +64,7 @@ export default {
         <div><div class="eb">Watching</div><div class="big">${st.sources}</div><div class="xs m">sources</div></div>
         <div class="grow s ink2" style="min-width:300px">Full searches run at the times you set; in between, Job Hunt keeps checking for postings under two hours old, so you can be among the first ten applicants. <a href="#/you/connections">Change the times</a>.
           <div style="margin-top:4px">${st.paused ? html`<b style="color:var(--warn)">Searching is paused${st.paused_until ? html` until ${dayName(st.paused_until)}, then starts again by itself` : ''}.</b>` : html`Next quick check <b>${soon(st.next_fast)}</b> · next full search <b>${soon(st.next_full)}</b>`}${d.search.last_full ? html` · last full search ${rel(d.search.last_full)}` : ''}${d.unread ? html` · ${d.unread} new roles waiting to be read` : ''}</div>
-          ${d.search.linkedin_note ? html`<div style="color:var(--warn);margin-top:2px">${d.search.linkedin_note}</div>` : ''}</div>
+          ${d.search.linkedin_note ? html`<div style="color:var(--warn);margin-top:2px">${d.search.linkedin_note}</div>` : ''}${health(d.sources)}</div>
         <div class="row"><button class="btn p" data-act="search" data-kind="full">Search now</button>${st.paused ? html`<button class="btn" data-act="pause" data-paused="">Resume searching</button>` : html`<select class="mini" style="max-width:150px" aria-label="Pause searching" data-on="change" data-act="pausefor" title="Stops the searches Job Hunt runs by itself. Search now still works."><option value="">Pause…</option><option value="0">Until I turn it back on</option><option value="1">For a day</option><option value="3">For 3 days</option><option value="7">For a week</option><option value="14">For two weeks</option></select>`}</div>
       </div>
       <div class="cols wide">
@@ -66,6 +72,7 @@ export default {
           <div class="card"><div class="row"><h3 class="grow">Fresh now</h3><span class="s m">Posted or first seen in the last two days</span></div>
             ${d.fresh?.length ? html`<div class="col" style="margin-top:12px;gap:12px">${d.fresh.map(r => html`<div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a href="#/roles/${r.id}"><b>${r.title}</b></a><div class="s m">${employer(r.company, r.company_id)}${r.location ? html` · ${r.location}` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}</div><div>${freshness(r)}</div></div>${rings(r.fit, r.fit_tailored, true)}<a class="btn sm ${r.stage === 'ready' ? 'p' : ''}" href="#/roles/${r.id}">${r.stage === 'ready' ? 'Review and apply' : 'Open'}</a></div>`)}</div>`
               : html`<p class="s m" style="margin-top:8px">Nothing new in the last two days that fits. ${d.cleared} postings have been set aside by the rules so far; see them under <a href="${href('roles', { closed: 'screened' })}">Roles → Set aside</a>.</p>`}</div>
+          ${sourcesCard(d.sources)}
           <div class="card" style="padding:0"><div class="row" style="padding:14px 16px 10px"><h3 class="grow">Employers</h3>
               <a class="chip ${state === 'following' ? 'on' : ''}" href="${with_(route, { state: ''})}">Watching</a>
               <a class="chip ${state === 'suggested' ? 'on' : ''}" href="${with_(route, { state: 'suggested'})}">Seen in searches ${c.suggested}</a>
@@ -80,7 +87,6 @@ export default {
               ${x.about ? html`<tr class="about"><td colspan="6" class="s ink2">${x.about}</td></tr>` : ''}`)}
               ${!c.companies.length ? html`<tr><td colspan="6" class="s m" style="padding:22px;text-align:center">No employers here.</td></tr>` : ''}</tbody></table>
             <div style="padding:0 14px 12px">${endless('radar', (c.companies || []).length, c.total)}</div></div>
-          ${sourcesCard(d.sources)}
         </div>
         <div class="col" style="gap:14px">
           <div class="card"><h4>Add an employer</h4><form data-act="addco" class="col" style="margin-top:8px;gap:8px"><label class="field">Name<input type="text" name="name" required></label>
@@ -95,6 +101,7 @@ export default {
         </div></div></div>`;
   },
   actions: {
+    tosources() { document.getElementById('sources')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return false; },
     search: ({ d }) => post('search', { kind: d.kind }).then(() => toast('Searching. New roles appear as they are read.')),
     pause: ({ d }) => post('pause', { paused: !!d.paused }),
     pausefor: ({ value }) => value === '' ? false : post('pause', { paused: true, days: +value }),

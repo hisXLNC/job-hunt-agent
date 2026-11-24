@@ -288,8 +288,10 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 		return err == nil
 	}
 	found := false
+	from := ""
 	for _, s := range sites {
 		if found = try(s, ""); found {
+			from = s
 			break
 		}
 	}
@@ -297,7 +299,12 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 		if found || ctx.Err() != nil {
 			break
 		}
-		found = try(s, name)
+		if found = try(s, name); found {
+			from = s + " (guessed from the name)"
+		}
+	}
+	if found {
+		trace.Log("fetch", "picture for employer %d (%s) taken from %s", id, name, from)
 	}
 	if !found {
 		if ctx.Err() == nil {
