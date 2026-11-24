@@ -2,6 +2,13 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.29
+
+- **Job Hunt has its own window again**, like the old app. It is no longer a browser window, so there is no address bar and none of the browser's extensions or their banners ("... is debugging this browser" came from an extension in your browser). It opens **where you left it, at the size you left it**, maximised if it was. Postings and other outside links open in your normal browser, where the side panel is.
+- Starting Job Hunt while it is running brings its window forward. A click on a notification opens that page in Job Hunt's window.
+- **An update never cuts a search short.** It waits until the search, the reading and the writing in hand have finished, starts nothing new meanwhile, then installs. "Install now" during a search says so and does the same. The window comes back by itself afterwards.
+- **A search that was cut short is picked up at the next start** (the computer shut down, Job Hunt was stopped), so nothing it had not reached yet is missed.
+
 ## 26.11.28
 
 - **Job Hunt on your phone.** Under You → Connections, turn on "Let my phone connect", press "Add a phone" and point the phone's camera at the code. The phone's browser then shows Today, a role with its fit and your letter, the CV and letter as PDF, replies and interviews, and you can mark a role applied, not for you or saved for later. Nothing is installed on the phone. It works on your own Wi-Fi while this computer is on; with Tailscale on both it works from anywhere. A phone can't reach keys, passwords, settings or saved copies.

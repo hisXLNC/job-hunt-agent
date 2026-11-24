@@ -34,6 +34,8 @@ type Engine struct {
 	// Tests only: where installers may come from, and what stands in for running one.
 	UpdateDownload string
 	RunInstaller   func(file string) error
+	// Called just before an update's installer takes over; nil is fine.
+	BeforeUpdate func()
 	// How this computer is told things; nil where there is no way.
 	Notify  func(title, text, link string) error
 	BaseURL string // where this program's own pages are, for links in notices

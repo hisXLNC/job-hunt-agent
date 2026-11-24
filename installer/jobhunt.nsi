@@ -111,6 +111,10 @@ Section "Job Hunt" SecApp
   WriteRegDWORD HKCU "${UNKEY}" "NoModify" 1
   WriteRegDWORD HKCU "${UNKEY}" "NoRepair" 1
   WriteRegDWORD HKCU "${UNKEY}" "EstimatedSize" 21000
+  ; A click on one of Job Hunt's notifications comes back to Job Hunt, not to a browser.
+  WriteRegStr HKCU "Software\Classes\jobhunt3" "" "URL:Job Hunt"
+  WriteRegStr HKCU "Software\Classes\jobhunt3" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\jobhunt3\shell\open\command" "" '"$INSTDIR\${PROGRAM}" "%1"'
 SectionEnd
 
 Section "Shortcut on the desktop" SecDesktop
@@ -137,5 +141,6 @@ Section "Uninstall"
   Delete "$DESKTOP\${NAME}.lnk"
   DeleteRegValue HKCU "${RUNKEY}" "JobHunt3"
   DeleteRegKey HKCU "${UNKEY}"
+  DeleteRegKey HKCU "Software\Classes\jobhunt3"
   ; The person's roles, CVs and settings (in %APPDATA%\Job Hunt 3) are left alone.
 SectionEnd

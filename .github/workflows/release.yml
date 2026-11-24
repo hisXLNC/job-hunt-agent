@@ -123,6 +123,48 @@ jobs:
           if (Running) { throw "Job Hunt was asked to stop and is still running" }
           Write-Host "Stopped when asked"
 
+          # 3b. Its own window: it opens, it is Job Hunt's own and not a browser's, a second start
+          #     brings it forward instead of starting twice, and it comes back where it was left.
+          $wv = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+          $hasWv = (Test-Path "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$wv") -or (Test-Path "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$wv") -or (Test-Path "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$wv")
+          if (-not $hasWv) { Write-Host "This machine has no WebView2, so the window was not tried here" } else {
+            Add-Type @"
+          using System; using System.Runtime.InteropServices;
+          public class JHWin {
+            [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowW(string c, string t);
+            [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int hh, bool r);
+            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+            [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+          }
+          "@
+            function Win { for ($i = 0; $i -lt 80; $i++) { $h = [JHWin]::FindWindowW("webview", "Job Hunt"); if ($h -ne [IntPtr]::Zero) { return $h }; Start-Sleep -Milliseconds 500 }; return [IntPtr]::Zero }
+            Start-Process $exe
+            State | Out-Null
+            $h = Win
+            if ($h -eq [IntPtr]::Zero) { throw "Job Hunt's own window did not open" }
+            if (-not (Get-Process msedgewebview2 -ErrorAction SilentlyContinue)) { throw "the window opened with nothing inside it" }
+            Start-Process $exe -Wait
+            if (@(Get-Process JobHunt3).Count -ne 1) { throw "starting Job Hunt twice left two copies running" }
+            [JHWin]::MoveWindow($h, 60, 50, 1000, 700, $true) | Out-Null
+            Start-Sleep -Seconds 2
+            Start-Process $exe -ArgumentList "-quit" -Wait
+            Start-Sleep -Seconds 1
+            if (Running) { throw "Job Hunt with its window open was asked to stop and is still running" }
+            if (-not (Test-Path "$env:JOBHUNT_HOME\window.json")) { throw "where the window was is not written down" }
+            Start-Process $exe
+            State | Out-Null
+            $h = Win
+            if ($h -eq [IntPtr]::Zero) { throw "Job Hunt's window did not open the second time" }
+            Start-Sleep -Seconds 1
+            $r = New-Object JHWin+RECT
+            [JHWin]::GetWindowRect($h, [ref]$r) | Out-Null
+            Write-Host "Window came back at $($r.L),$($r.T) size $($r.R - $r.L)x$($r.B - $r.T) (left at 60,50 size 1000x700)"
+            if ([math]::Abs($r.L - 60) -gt 2 -or [math]::Abs($r.T - 50) -gt 2 -or [math]::Abs($r.R - $r.L - 1000) -gt 2 -or [math]::Abs($r.B - $r.T - 700) -gt 2) { throw "the window did not come back where it was left" }
+            Start-Process $exe -ArgumentList "-quit" -Wait
+            Start-Sleep -Seconds 1
+            Write-Host "Own window: opens, one copy only, remembers its place and size"
+          }
+
           # 4. Installing over a running copy (an update) stops it, replaces it and keeps the data.
           Start-Process $exe -ArgumentList "-no-window"
           State | Out-Null

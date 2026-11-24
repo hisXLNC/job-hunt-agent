@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -47,6 +48,8 @@ type Server struct {
 	Web  fs.FS
 	Port int
 	Quit func() // stops the program; set by main
+	// Show opens Job Hunt's own window, or brings it forward, on a page; nil where there is none.
+	Show func(page string)
 	// Restart stops the program and starts it again; nil where it can't.
 	Restart func() error
 
@@ -202,6 +205,8 @@ func read(r *http.Request, out any) error {
 	}
 	return nil
 }
+
+var windowPage = regexp.MustCompile(`^#/[A-Za-z0-9/_?=&.-]{0,200}$`)
 
 func (s *Server) origin() string { return fmt.Sprintf("http://127.0.0.1:%d", s.Port) }
 
@@ -1592,6 +1597,24 @@ func (s *Server) Handler() http.Handler {
 	})
 	s.assistRoutes(h, mux)
 	s.moreRoutes(mux, h)
+	// A second start of the program, or a click on a notification, asks the
+	// copy that is running to show its window.
+	h("POST /api/window", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Page string `json:"page"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if s.Show == nil {
+			return nil, &apiError{404, "This copy has no window of its own."}
+		}
+		if in.Page != "" && !windowPage.MatchString(in.Page) {
+			in.Page = ""
+		}
+		s.Show(in.Page)
+		return nil, nil
+	})
 	s.reachRoutes(h)
 	s.mux = mux
 	s.inner = s.guard(mux)

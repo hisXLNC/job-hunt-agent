@@ -46,7 +46,7 @@ func runTray(ctx context.Context, stop func(), url, dir string, e *engine.Engine
 						systray.Quit()
 						return
 					case <-open.ClickedCh:
-						openWindow(url, dir)
+						showWindow("")
 					case <-search.ClickedCh:
 						e.Resume("")
 						e.StartSearch("full")
@@ -93,6 +93,7 @@ func deskNotify(title, text, link string) error {
 	if !strings.HasPrefix(link, "http://127.0.0.1:") {
 		link = ""
 	}
+	link = appLink(link)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", toastScript)

@@ -192,6 +192,9 @@ func (e *Engine) InstallUpdate() error {
 		if run == nil {
 			run = runInstaller
 		}
+		if e.BeforeUpdate != nil {
+			e.BeforeUpdate()
+		}
 		if err := run(file); err != nil {
 			return fmt.Errorf("the installer could not be started: %w", err)
 		}

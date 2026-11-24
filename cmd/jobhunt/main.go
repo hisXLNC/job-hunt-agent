@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -80,6 +82,8 @@ func main() {
 	version := flag.Bool("version", false, "print the version and leave")
 	restarted := flag.Bool("restarted", false, "started by Job Hunt itself, to take over from the copy that is stopping")
 	flag.Parse()
+	// A click on a notification arrives as a link Windows hands to the program.
+	page := pageFromLink(flag.Arg(0))
 	if p, err := strconv.Atoi(os.Getenv("JOBHUNT_PORT")); err == nil && p > 0 {
 		*port = p
 	}
@@ -112,7 +116,17 @@ func main() {
 		if resp, gerr := c.Get(url + "api/state"); gerr == nil {
 			resp.Body.Close()
 			if !*noWindow {
-				openWindow(url, "")
+				// The copy that is running brings its own window forward;
+				// one that can't gets a browser.
+				body, _ := json.Marshal(map[string]string{"page": page})
+				req, _ := http.NewRequest("POST", url+"api/window", bytes.NewReader(body))
+				req.Header.Set("X-JobHunt", "1")
+				req.Header.Set("Content-Type", "application/json")
+				if r2, err := c.Do(req); err == nil && r2.StatusCode == 200 {
+					r2.Body.Close()
+				} else {
+					openWindow(url+page, "")
+				}
 			}
 			return
 		}
@@ -155,7 +169,12 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop, Restart: func() error { return restartSelf(stop) }}
+	startWindow(url, dir)
+	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop, Show: showWindow, Restart: func() error {
+		noteWindowOpen(dir)
+		return restartSelf(stop)
+	}}
+	e.BeforeUpdate = func() { noteWindowOpen(dir) }
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	srv.StartPhone()
 	go func() {
@@ -176,10 +195,11 @@ func main() {
 	}
 	go e.Run()
 	log.Printf("Job Hunt %s listening on %s, data in %s", api.Version, url, dir)
-	if !*noWindow && !*restarted {
-		openWindow(url, dir)
+	if reopen := windowWasOpen(dir); (!*noWindow && !*restarted) || reopen {
+		showWindow(page)
 	}
 	<-ctx.Done()
+	closeWindow()
 	e.Stop()
 	sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

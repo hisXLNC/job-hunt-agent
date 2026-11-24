@@ -582,3 +582,16 @@ function listen() {
 setInterval(refreshState, 60000);
 listen();
 navigate();
+
+// In Job Hunt's own window, a link to somewhere else (a posting, LinkedIn)
+// opens in the person's browser, where the side panel is.
+if (window.jhNative) {
+  const outside = href => { try { const u = new URL(href, location.href); return (u.protocol === 'http:' || u.protocol === 'https:') && u.origin !== location.origin ? u.href : ''; } catch { return ''; } };
+  document.addEventListener('click', ev => {
+    const a = ev.target.closest?.('a[href]');
+    const to = a && outside(a.getAttribute('href'));
+    if (to) { ev.preventDefault(); window.jhOpen(to); }
+  }, true);
+  const open = window.open.bind(window);
+  window.open = (href, ...rest) => { const to = outside(href); if (to) { window.jhOpen(to); return null; } return open(href, ...rest); };
+}
