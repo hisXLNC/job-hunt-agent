@@ -76,6 +76,16 @@ func reopen() error {
 	return nil
 }
 
+// Close stops writing to the file; the record in memory stays.
+func Close() {
+	mu.Lock()
+	defer mu.Unlock()
+	if file != nil {
+		file.Close()
+		file = nil
+	}
+}
+
 // Path is where the record is written, "" when it is only kept in memory.
 func Path() string {
 	mu.Lock()

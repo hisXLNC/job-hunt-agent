@@ -116,6 +116,7 @@ func main() {
 		log.SetOutput(trace.Writer{Area: "app"})
 	}
 	trace.Log("app", "Job Hunt %s starting on %s/%s, demo=%v", api.Version, runtime.GOOS, runtime.GOARCH, *demo)
+	defer trace.Close()
 	defer trace.Log("app", "Job Hunt stopping")
 	s, err := store.Open(filepath.Join(dir, "jobhunt.db"))
 	if err != nil {
