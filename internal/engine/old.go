@@ -12,6 +12,7 @@ import (
 	"jobhunt/internal/brain"
 	"jobhunt/internal/llm"
 	"jobhunt/internal/old"
+	"jobhunt/internal/sources"
 	"jobhunt/internal/store"
 )
 
@@ -51,6 +52,7 @@ type OldResult struct {
 	Facts         int      `json:"facts"`
 	Employers     int      `json:"employers"`
 	Muted         int      `json:"muted"`
+	Sites         int      `json:"sites"`
 	Claude        string   `json:"claude"` // "" or how Claude was connected from the old settings
 	Notes         []string `json:"notes"`  // anything that did not come over, in words
 }
@@ -531,8 +533,26 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 		}
 	}
 
-	if n := len(op.Sources.CustomSites) + len(op.Sources.Sites); n > 0 {
-		res.Notes = append(res.Notes, fmt.Sprintf("The %s you had switched on are not searched here yet.", countWord(n, "job site")))
+	// Job sites and recruiters that were being watched.
+	var sites []PlaceSite
+	var lost []string
+	for _, id := range op.Sources.Sites {
+		if k, ok := sources.KnownByID(id); ok {
+			sites = append(sites, PlaceSite{ID: k.ID, Name: k.Name, URL: k.URL, Link: k.Link, Browser: k.Browser, Kind: k.Kind, About: k.About})
+		} else {
+			lost = append(lost, id)
+		}
+	}
+	for _, c := range op.Sources.CustomSites {
+		if s, err := siteAt(clip(c.Name, 60), c.URL, sites); err == nil {
+			sites = append(sites, s)
+		} else {
+			lost = append(lost, firstOf(clip(c.Name, 60), "a site without a usable address"))
+		}
+	}
+	res.Sites = e.keepSites(sites)
+	if len(lost) > 0 {
+		res.Notes = append(res.Notes, "Not brought over, because Job Hunt cannot read them here: "+strings.Join(lost, ", ")+".")
 	}
 
 	e.S.Set(oldDoneKey, res)

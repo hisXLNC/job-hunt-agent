@@ -221,33 +221,9 @@ func (e *Engine) AddSite(ctx context.Context, id, name, raw string) (Place, int,
 	if k, ok := sources.KnownByID(id); ok && raw == "" {
 		s = PlaceSite{ID: k.ID, Name: k.Name, URL: k.URL, Link: k.Link, Browser: k.Browser, Kind: k.Kind, About: k.About}
 	} else {
-		raw = strings.TrimSpace(raw)
-		if raw != "" && !strings.Contains(raw, "://") {
-			raw = "https://" + raw
-		}
-		// The address is checked with its blanks filled, since a blank is not valid in one.
-		probe := sources.Site{URL: raw}.Address("manager", "toronto")
-		if _, ok := sources.PublicURL(probe); !ok {
-			return Place{}, 0, "", errors.New("that is not a web address Job Hunt can open. Paste the page's address from your browser, starting with https://")
-		}
-		u, _ := url.Parse(probe)
-		host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
-		s = PlaceSite{ID: "site-" + strings.NewReplacer(".", "-").Replace(host), Name: strings.TrimSpace(name), URL: raw, Kind: "Job site"}
-		if s.Name == "" {
-			s.Name = host
-		}
-		if len(s.Name) > 60 {
-			s.Name = s.Name[:60]
-		}
-		for n, base := 2, s.ID; ; n++ {
-			clash := false
-			for _, x := range ps.Sites {
-				clash = clash || (x.ID == s.ID && x.URL != s.URL)
-			}
-			if !clash {
-				break
-			}
-			s.ID = fmt.Sprintf("%s-%d", base, n)
+		var err error
+		if s, err = siteAt(name, raw, ps.Sites); err != nil {
+			return Place{}, 0, "", err
 		}
 	}
 	for _, x := range ps.Sites {
@@ -289,6 +265,58 @@ func (e *Engine) AddSite(ctx context.Context, id, name, raw string) (Place, int,
 	e.S.Log(store.Activity{Kind: "source", Text: "Started watching " + s.Name})
 	e.S.Changed("runs", "status")
 	return Place{ID: s.ID, Name: s.Name, Kind: s.Kind, About: s.About, URL: s.URL, On: true, Mine: true, Note: capFirst(note)}, len(posts), note, nil
+}
+
+// siteAt makes a watched site from an address the person gave.
+func siteAt(name, raw string, have []PlaceSite) (PlaceSite, error) {
+	raw = strings.TrimSpace(raw)
+	if raw != "" && !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	// The address is checked with its blanks filled, since a blank is not valid in one.
+	probe := sources.Site{URL: raw}.Address("manager", "toronto")
+	if _, ok := sources.PublicURL(probe); !ok {
+		return PlaceSite{}, errors.New("that is not a web address Job Hunt can open. Paste the page's address from your browser, starting with https://")
+	}
+	u, _ := url.Parse(probe)
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	s := PlaceSite{ID: "site-" + strings.NewReplacer(".", "-").Replace(host), Name: strings.TrimSpace(name), URL: raw, Kind: "Job site"}
+	if s.Name == "" {
+		s.Name = host
+	}
+	if len(s.Name) > 60 {
+		s.Name = s.Name[:60]
+	}
+	for n, base := 2, s.ID; ; n++ {
+		clash := false
+		for _, x := range have {
+			clash = clash || (x.ID == s.ID && x.URL != s.URL)
+		}
+		if !clash {
+			return s, nil
+		}
+		s.ID = fmt.Sprintf("%s-%d", base, n)
+	}
+}
+
+// keepSites adds sites to the list without trying them first (the next full
+// search does that). It returns how many were new.
+func (e *Engine) keepSites(add []PlaceSite) int {
+	ps, n := e.placeSet(), 0
+	for _, s := range add {
+		dup := len(ps.Sites) >= 40
+		for _, x := range ps.Sites {
+			dup = dup || x.ID == s.ID || x.URL == s.URL
+		}
+		if !dup {
+			ps.Sites = append(ps.Sites, s)
+			n++
+		}
+	}
+	if n > 0 {
+		e.S.Set(placesKey, ps)
+	}
+	return n
 }
 
 // RemoveSite stops watching a site. Roles already found there stay.

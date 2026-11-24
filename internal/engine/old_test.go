@@ -93,7 +93,7 @@ func oldData(t *testing.T, modern, withCV bool, secrets map[string]string) strin
 		"name": "Sam Rivera", "email": "sam@example.com", "locations": []string{"Toronto, ON", "Mississauga, ON"}, "remote_ok": true, "min_salary": 120000,
 		"exclude_companies": []string{"Borealis Ltd."}, "exclude_title_keywords": []string{"intern"},
 		"tracks":            []map[string]any{{"name": "taxtech", "label": "Tax technology", "titles": []string{"Indirect Tax Manager", "Tax Technology Manager"}}},
-		"sources":           map[string]any{"greenhouse": []string{"acme"}, "lever": []string{"northern-rail"}, "custom_sites": []map[string]string{{"name": "Aplin", "url": "https://aplin.example/jobs?q={title}"}}},
+		"sources":           map[string]any{"greenhouse": []string{"acme"}, "lever": []string{"northern-rail"}, "sites": []string{"roberthalf", "aerotek"}, "custom_sites": []map[string]string{{"name": "Aplin", "url": "https://aplin.example/jobs?q={title}"}, {"name": "Broken", "url": "file:///etc/passwd"}}},
 		"application_facts": "I hold a valid G driving licence\n- Open to hybrid work",
 		"certifications":    []map[string]string{{"name": "CPA", "issuer": "CPA Ontario", "issued": "2020"}},
 		"stories":           "At Northwind I cut the close by four days.\n\nAt Contoso I trained forty people.",
@@ -134,7 +134,7 @@ func TestBringOverFromTheOldJobHunt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Roles != 8 || res.Applied != 4 || res.Prepared != 1 || res.NotInterested != 1 || res.LeftBehind != 2 || res.CVs != 1 || res.People != 1 || res.Talks != 1 || res.Muted != 1 {
+	if res.Roles != 8 || res.Applied != 4 || res.Prepared != 1 || res.NotInterested != 1 || res.LeftBehind != 2 || res.CVs != 1 || res.People != 1 || res.Talks != 1 || res.Muted != 1 || res.Sites != 2 {
 		t.Fatalf("result = %+v", res)
 	}
 	// The way Claude was already reached here is left alone.
@@ -251,6 +251,20 @@ func TestBringOverFromTheOldJobHunt(t *testing.T) {
 	again, err := e.ImportOld(ctx, dir, "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The job sites that were being watched are watched here; the ones that cannot be are named.
+	var watched []string
+	for _, x := range e.placeSet().Sites {
+		watched = append(watched, x.ID+" "+x.URL)
+	}
+	if got := strings.Join(watched, "; "); !strings.Contains(got, "roberthalf ") || !strings.Contains(got, "site-aplin-example https://aplin.example/jobs?q={title}") || strings.Contains(got, "passwd") {
+		t.Fatalf("watched sites: %s", got)
+	}
+	if notes := strings.Join(res.Notes, " "); !strings.Contains(notes, "aerotek") || !strings.Contains(notes, "Broken") {
+		t.Fatalf("notes: %q", notes)
+	}
+	if again.Sites != 0 || len(e.placeSet().Sites) != 2 {
+		t.Fatalf("sites added twice: %+v", e.placeSet().Sites)
 	}
 	if again.Roles != 0 || again.CVs != 0 || again.People != 0 || again.Talks != 0 || again.Facts != 0 || e.S.Count(`SELECT COUNT(*) FROM roles`) != roles {
 		t.Fatalf("the second run added things: %+v", again)
