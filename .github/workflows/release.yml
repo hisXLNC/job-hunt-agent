@@ -1,7 +1,7 @@
 name: Release Job Hunt for Windows
 
 # A change to VERSION on the redesign branch is a release. Everything is
-# tested on Windows before anything is published.
+# tested on Windows before anything is published. Versions are dated: year.month.count.
 on:
   push:
     branches: [redesign]
