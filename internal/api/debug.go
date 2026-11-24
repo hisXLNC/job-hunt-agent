@@ -119,7 +119,7 @@ func (s *Server) debugRoutes(mux *http.ServeMux, h func(string, handler)) {
 			What string `json:"what"`
 		}
 		read(r, &in)
-		dir := map[string]string{"data": s.E.Dir, "extension": extDir()}[in.What]
+		dir := map[string]string{"data": s.E.Dir, "extension": extDir(), "backups": s.E.BackupDir()}[in.What]
 		if dir == "" {
 			return nil, bad("There is no such folder on this computer.")
 		}

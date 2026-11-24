@@ -1,11 +1,11 @@
-import { html, api, post, put, ago, until, when, rings, tile, toast, pager, sortHead, with_, href, freshness, BAND, employer } from '../app.js';
+import { html, api, post, put, ago, until, when, rings, tile, toast, pager, sortHead, with_, href, freshness, BAND, employer, rel, soon } from '../app.js';
 
 const BOARD = { greenhouse: 'Its own board (Greenhouse)', lever: 'Its own board (Lever)', ashby: 'Its own board (Ashby)', smartrecruiters: 'Its own board (SmartRecruiters)', workday: 'Its own board (Workday)', workable: 'Its own board (Workable)', bamboohr: 'Its own board (BambooHR)', recruitee: 'Its own board (Recruitee)', page: 'Its own careers page' };
 
 function run(r) {
   const s = r.stats || {}, kind = r.kind === 'search:fast' ? 'Quick check' : 'Full search';
   const probs = s.problems || [];
-  return html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:74px;flex:none;padding-top:1px">${ago(r.started_at)}</span>
+  return html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:74px;flex:none;padding-top:1px">${rel(r.started_at)}</span>
     <span class="grow s"><b>${kind}</b>${r.state === 'running' ? html` <span class="chip blue">running</span>` : html`: ${s.seen || 0} postings in ${s.looked || 0} places, <b>${s.new || 0} new</b>, ${s.cleared || 0} set aside by the rules, ${s.kept || 0} worth a look${s.prepared ? html`, ${s.prepared} prepared` : ''}.`}
       ${probs.length ? html`<details style="margin-top:2px"><summary class="xs" style="color:var(--warn)">${probs.length} place${probs.length === 1 ? '' : 's'} didn't answer</summary><div class="xs m pre">${probs.join('\n')}</div></details>` : ''}</span></div>`;
 }
@@ -17,7 +17,7 @@ function placesCard(pv) {
   const row = p => html`<div class="row top-al" style="gap:10px">
     <button class="switch ${p.on ? 'on' : ''}" role="switch" aria-checked="${p.on ? 'true' : 'false'}" aria-label="Search ${p.name}" data-act="placeon" data-id="${p.id}" data-to="${p.on ? '' : '1'}" style="margin-top:2px"></button>
     <div class="grow"><div class="s"><b>${p.name}</b> <span class="m">· ${p.kind === 'Search' ? 'every title' : p.kind}</span></div>
-      <div class="xs m">${p.note ? html`<span style="color:var(--warn)">${p.note}${p.rest_until ? html`. Trying again ${until(p.rest_until)}` : ''}</span>` : p.on ? (p.seen ? html`${p.seen} postings last full search, ${p.new} new` : p.about) : 'Off'}</div></div>
+      <div class="xs m">${p.note ? html`<span style="color:var(--warn)">${p.note}${p.rest_until ? html`. Trying again ${soon(p.rest_until)}` : ''}</span>` : p.on ? (p.seen ? html`${p.seen} postings last full search, ${p.new} new` : p.about) : 'Off'}</div></div>
     ${p.mine ? html`<button class="btn sm ghost" data-act="placeoff" data-id="${p.id}" data-confirm="Stop watching ${p.name}? Roles already found there stay.">Remove</button>` : ''}</div>`;
   return html`<div class="card"><h4>Where Job Hunt looks</h4><p class="xs m" style="margin-top:3px">Besides each employer's own board. Job sites and recruiters are asked on full searches only, slowly.</p>
     <div class="col" style="margin-top:10px;gap:10px">${pv.places.map(row)}</div>
@@ -45,7 +45,7 @@ export default {
       <div class="card row wrap" style="gap:18px">
         <div><div class="eb">Watching</div><div class="big">${st.sources}</div><div class="xs m">sources</div></div>
         <div class="grow s ink2" style="min-width:300px">Full searches run at the times you set; in between, Job Hunt keeps checking for postings under two hours old, so you can be among the first ten applicants. <a href="#/you/connections">Change the times</a>.
-          <div style="margin-top:4px">${st.paused ? html`<b style="color:var(--warn)">Searching is paused.</b>` : html`Next quick check <b>${until(st.next_fast)}</b> · next full search <b>${until(st.next_full)}</b>`}${d.search.last_full ? html` · last full search ${ago(d.search.last_full)}` : ''}${d.unread ? html` · ${d.unread} new roles waiting to be read` : ''}</div>
+          <div style="margin-top:4px">${st.paused ? html`<b style="color:var(--warn)">Searching is paused.</b>` : html`Next quick check <b>${soon(st.next_fast)}</b> · next full search <b>${soon(st.next_full)}</b>`}${d.search.last_full ? html` · last full search ${rel(d.search.last_full)}` : ''}${d.unread ? html` · ${d.unread} new roles waiting to be read` : ''}</div>
           ${d.search.linkedin_note ? html`<div style="color:var(--warn);margin-top:2px">${d.search.linkedin_note}</div>` : ''}</div>
         <div class="row"><button class="btn p" data-act="search" data-kind="full">Search now</button><button class="btn" data-act="pause" data-paused="${st.paused ? '' : '1'}">${st.paused ? 'Resume searching' : 'Pause'}</button></div>
       </div>

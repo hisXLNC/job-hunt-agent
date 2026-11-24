@@ -1,4 +1,4 @@
-import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, stageChip, freshness, openAssistant, BAND, STAGE, KIND, employer } from '../app.js';
+import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, stageChip, freshness, openAssistant, BAND, STAGE, KIND, employer, rel } from '../app.js';
 
 const STRENGTH = { strong: ['You have it', 'good'], partly: ['Partly', 'warn'], gap: ['Gap', 'crit'] };
 
@@ -74,9 +74,9 @@ function side(d) {
       ${d.people?.length ? html`<div class="col" style="margin-top:10px;gap:10px">${d.people.map(p => html`<div class="row top-al">${tile(p.name, true)}<div class="grow"><a href="#/people/${p.id}"><b class="s">${p.name}</b></a><div class="xs m">${p.title}${p.knows_you_at ? html` · <b style="color:var(--good)">knows you</b>` : ''}</div></div><button class="btn sm" data-act="note" data-id="${p.id}" data-busy="Writing…">Write</button></div>`)}</div>`
         : html`<p class="s m" style="margin-top:6px">Nobody yet. A short note to someone on the team doubles the odds your application is read.</p>`}
       <a class="btn sm" style="margin-top:10px" href="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(r.company + ' ' + r.title.split(/[,(-]/)[0])}" target="_blank" rel="noopener noreferrer">Look for the team on LinkedIn</a></div>
-    ${d.mail?.length ? html`<div class="card"><h4>Mail about this role</h4><div class="col" style="margin-top:10px;gap:8px">${d.mail.map(m => html`<a href="#/replies/${m.id}" class="s" style="color:inherit"><b>${m.subject || m.summary}</b><div class="xs m">${m.from_name} · ${ago(m.at)}</div></a>`)}</div></div>` : ''}
+    ${d.mail?.length ? html`<div class="card"><h4>Mail about this role</h4><div class="col" style="margin-top:10px;gap:8px">${d.mail.map(m => html`<a href="#/replies/${m.id}" class="s" style="color:inherit"><b>${m.subject || m.summary}</b><div class="xs m">${m.from_name} · ${rel(m.at)}</div></a>`)}</div></div>` : ''}
     ${d.talks?.length ? html`<div class="card"><h4>Conversations</h4><div class="col" style="margin-top:10px;gap:8px">${d.talks.map(t => html`<a href="#/interviews/${t.id}" class="s" style="color:inherit"><b>${t.title}</b><div class="xs m">${when(t.at)}</div></a>`)}</div></div>` : ''}
-    <div class="card"><h4>What happened</h4><div class="col s" style="margin-top:10px;gap:8px">${(d.activity || []).map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none;padding-top:1px">${ago(a.at)}</span><span>${a.text}</span></div>`)}${!(d.activity || []).length ? html`<span class="m">Found ${ago(r.first_seen_at)}.</span>` : ''}</div></div>
+    <div class="card"><h4>What happened</h4><div class="col s" style="margin-top:10px;gap:8px">${(d.activity || []).map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none;padding-top:1px">${rel(a.at)}</span><span>${a.text}</span></div>`)}${!(d.activity || []).length ? html`<span class="m">Found ${rel(r.first_seen_at)}.</span>` : ''}</div></div>
     <div class="card"><h4>Keep the record straight</h4><p class="xs m" style="margin-top:3px">If something happened outside Job Hunt, set it here.</p>
       <div class="row" style="margin-top:8px"><select aria-label="Stage" data-on="change" data-act="stage">${Object.entries(STAGE).filter(([k]) => k !== 'new').map(([k, v]) => html`<option value="${k}" ${r.stage === k ? 'selected' : ''}>${v}</option>`)}</select></div>
       <div class="row wrap" style="margin-top:8px;gap:6px">${r.closed ? html`<button class="btn sm" data-act="reopen">Bring back</button>` : html`<button class="btn sm" data-act="close" data-how="rejected">They said no</button><button class="btn sm" data-act="close" data-how="withdrawn">I withdrew</button>`}</div></div>
@@ -92,7 +92,7 @@ export default {
     const r = d.role, url = safeUrl(r.apply_url || r.url);
     return html`<div class="body">
       <div class="card row" style="gap:16px;padding:20px">${tile(r.company, false, r.company_id)}
-        <div class="grow col" style="gap:6px"><div class="row wrap" style="gap:8px">${stageChip(r)}${BAND[r.band] ? html`<span class="chip">${BAND[r.band]}</span>` : ''}${freshness(r)}${r.pay ? html`<span class="s m">· ${r.pay}</span>` : ''}${r.gone_at ? html`<span class="chip warn">Posting taken down ${ago(r.gone_at)}</span>` : ''}</div>
+        <div class="grow col" style="gap:6px"><div class="row wrap" style="gap:8px">${stageChip(r)}${BAND[r.band] ? html`<span class="chip">${BAND[r.band]}</span>` : ''}${freshness(r)}${r.pay ? html`<span class="s m">· ${r.pay}</span>` : ''}${r.gone_at ? html`<span class="chip warn">Posting taken down ${rel(r.gone_at)}</span>` : ''}</div>
           <h2 style="font-size:21px">${r.title}</h2><div class="s m">${employer(r.company, r.company_id)}${r.location ? html` · ${r.location}` : ''}${r.closed && r.closed_why ? html` · <b>${r.closed_why}</b>` : ''}</div></div>
         ${rings(r.fit, r.fit_tailored)}
         <div class="col" style="gap:6px">

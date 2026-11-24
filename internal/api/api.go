@@ -47,6 +47,8 @@ type Server struct {
 	Web  fs.FS
 	Port int
 	Quit func() // stops the program; set by main
+	// Restart stops the program and starts it again; nil where it can't.
+	Restart func() error
 
 	mu      sync.Mutex
 	pending ExtSet // the extension asking to connect, if any
@@ -1408,6 +1410,7 @@ func (s *Server) Handler() http.Handler {
 		files.ServeHTTP(w, r)
 	})
 	s.assistRoutes(h, mux)
+	s.moreRoutes(mux, h)
 	s.mux = mux
 	s.inner = s.guard(mux)
 	return s.inner
@@ -1498,6 +1501,8 @@ type State struct {
 	AutoUpdate bool               `json:"auto_update"`
 	Checked    int64              `json:"update_checked"`
 	WhatsNew   *whatsNew          `json:"whats_new,omitempty"`
+	Theme      string             `json:"theme"`   // light, dark, or system (match Windows)
+	Notices    int                `json:"notices"` // unread, for the bell
 }
 
 func (s *Server) state() State {
@@ -1511,7 +1516,7 @@ func (s *Server) state() State {
 	s.mu.Unlock()
 	qs, _ := st.OpenQuestions()
 	return State{
-		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(), CanInstall: e.CanInstall(), AutoUpdate: e.AutoUpdate(), Checked: e.UpdateChecked(), WhatsNew: s.whatsNew(),
+		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(), CanInstall: e.CanInstall(), AutoUpdate: e.AutoUpdate(), Checked: e.UpdateChecked(), WhatsNew: s.whatsNew(), Theme: e.Theme(), Notices: e.UnreadNotices(),
 		Counts: map[string]int{
 			"ready":     counts["ready"],
 			"fresh":     st.Count(`SELECT COUNT(*) FROM roles WHERE closed = '' AND stage IN ('found','ready') AND CASE WHEN posted_at > 0 THEN posted_at ELSE first_seen_at END > ?`, now.Add(-24*time.Hour).Unix()),

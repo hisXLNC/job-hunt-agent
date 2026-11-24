@@ -81,6 +81,8 @@ var tools = []tool{
 	{Method: "GET", Pattern: "/api/app", Help: "The version, where the data is kept, recent changes the program made to its own settings, recent Claude calls and problems."},
 	{Method: "GET", Pattern: "/api/import/old", Help: "Whether the old Job Hunt's data is on this computer and what it holds (jobs applied to, prepared, CVs, people), and what was last brought over from it. Bringing it over is the person's own button under You, The app."},
 	{Method: "GET", Pattern: "/api/places", Help: "Where Job Hunt looks besides employers' own boards: the title searches (LinkedIn, Job Bank, FreeHire), the job sites and recruiters being watched, whether each is on, what each found in the last full search, any that is resting and why, and the sites that could be added (suggested)."},
+	{Method: "GET", Pattern: "/api/notices", Help: "What is under the bell: the last fifty things Job Hunt told the person (a fresh strong role, someone wrote, a new version, a problem), newest first, each with the page it opens and whether it was read."},
+	{Method: "GET", Pattern: "/api/calendar", Help: "Everything with a date around a month: interviews, booked conversations, the days follow-ups are due and the days postings close. Query: from, to (unix seconds, at most 100 days apart); left out means this month."},
 	{Method: "GET", Pattern: "/api/find", Help: "Quick search across roles, people and employers. Query: q."},
 
 	// ---- doing ----------------------------------------------------------------
