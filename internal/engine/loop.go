@@ -123,8 +123,11 @@ func (e *Engine) chores(now time.Time) {
 	if every("backup", 24*time.Hour) {
 		go e.Backup()
 	}
-	if every("update", 24*time.Hour) {
+	if every("update", 4*time.Hour) {
 		go e.CheckUpdate(e.ctx)
+	} else if u := e.NewerVersion(); u != nil && e.AutoUpdate() && e.CanInstall() && !e.anyJobBut("") && every("update-try:"+u.Version, 6*time.Hour) {
+		// A version found while Job Hunt was busy is installed once it is idle.
+		e.InstallUpdate()
 	}
 	if every("quiet", time.Hour) {
 		e.letGoQuiet(now)

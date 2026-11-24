@@ -8,6 +8,7 @@
 Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
 
 !ifndef VERSION
   !define VERSION "0.0.0"
@@ -58,6 +59,26 @@ VIAddVersionKey "LegalCopyright" ""
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
+; "/S /UPDATE" is how Job Hunt updates itself: quietly, keeping the person's
+; choices about the desktop shortcut and starting with Windows, and starting
+; Job Hunt again afterwards.
+Var Updating
+Function .onInit
+  StrCpy $Updating 0
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/UPDATE" $R1
+  ${IfNot} ${Errors}
+    StrCpy $Updating 1
+  ${EndIf}
+  ClearErrors
+FunctionEnd
+Function .onInstSuccess
+  ${If} $Updating == 1
+    Exec '"$INSTDIR\${PROGRAM}" -no-window'
+  ${EndIf}
+FunctionEnd
+
 ; Ask the Job Hunt that is running to stop, so its file can be replaced. It
 ; finishes what it is writing first. Only if it does not answer is it ended.
 !macro StopRunning
@@ -93,13 +114,17 @@ Section "Job Hunt" SecApp
 SectionEnd
 
 Section "Shortcut on the desktop" SecDesktop
-  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\${PROGRAM}"
+  ${If} $Updating != 1
+    CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\${PROGRAM}"
+  ${EndIf}
 SectionEnd
 
 ; Being early to new postings needs Job Hunt running. This starts it quietly,
 ; with no window, when the person signs in to Windows.
 Section "Keep searching: start with Windows" SecStart
-  WriteRegStr HKCU "${RUNKEY}" "JobHunt3" '"$INSTDIR\${PROGRAM}" -no-window'
+  ${If} $Updating != 1
+    WriteRegStr HKCU "${RUNKEY}" "JobHunt3" '"$INSTDIR\${PROGRAM}" -no-window'
+  ${EndIf}
 SectionEnd
 
 Section "Uninstall"

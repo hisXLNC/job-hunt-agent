@@ -147,6 +147,18 @@ func (j *task) percent(now time.Time) int {
 }
 
 // Jobs lists what is running now, oldest first.
+// anyJobBut says whether anything the person would see is running, other than the named job.
+func (e *Engine) anyJobBut(name string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, j := range e.jobs {
+		if j.doing != "" && j.name != name {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Engine) Jobs() []JobView {
 	now := time.Now()
 	e.mu.Lock()

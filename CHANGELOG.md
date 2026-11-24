@@ -2,6 +2,14 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.25
+
+- **Job Hunt updates itself.** It looks for a newer version every few hours. When there is one it downloads the installer, checks it is exactly the file that was published, installs it quietly while it isn't in the middle of something, and comes back by itself on the new version. Your data, your desktop shortcut and your "start with Windows" choice are left as they are.
+- **"Install now"** in the bottom left and under You → The app, for when you don't want to wait. "Check for a newer version" looks at once.
+- **A switch, "Install new versions by themselves"**, under You → The app. Turn it off and Job Hunt only tells you.
+- **"What's new"**: after an update Job Hunt shows once what changed since the version you were on.
+- This one version still has to be installed by hand. Every later one installs itself.
+
 ## 26.11.24
 
 - **Every employer has its own page.** Its postings (part of the company, where, type, pay, fit, posted, applicants, where each stands) with filters and sorting, your history there, the people you know there, what it does, what working there is like (Claude reads public employee reviews when you press "Look it up"), what happened lately, and your own notes.

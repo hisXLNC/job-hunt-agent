@@ -228,7 +228,10 @@ function frame() {
 function pilot() {
   const st = app.state, cl = st.claude, s = st.status;
   const how = { 'claude-code': 'your Claude sign-in', api: 'your API key', demo: 'sample answers (no Claude)' }[cl.engine] || '';
-  const up = st.update ? html`<a href="${st.update.url}" style="display:block;margin-bottom:8px;padding:7px 9px;border-radius:8px;background:rgba(157,176,255,.16);color:#DCE3FF;text-decoration:none" title="Downloads the installer. Run it and Job Hunt restarts on the new version; your data stays.">Version ${st.update.version} is ready · Download</a>` : '';
+  const installing = (st.status.jobs || []).some(j => j.name === 'update');
+  const up = !st.update || installing ? '' : st.can_install
+    ? html`<button class="upd" data-update title="Downloads version ${st.update.version}, checks it and installs it. Job Hunt comes back by itself in about a minute; your data stays.">Version ${st.update.version} is ready · Install now</button>`
+    : html`<a class="upd" href="${st.update.url}" title="Downloads the installer. Run it and Job Hunt restarts on the new version; your data stays.">Version ${st.update.version} is ready · Download</a>`;
   const ver = html`<a class="ver" href="#/you/app" title="The version you are running. Opens You, The app: updates, your data folder and the debugging record.">Job Hunt ${st.version}</a>`;
   if (!cl.engine) return html`${up}<h6><span class="dot off"></span>Not connected</h6><a href="#/you/connections" style="color:#9DB0FF">Connect Claude</a> and Job Hunt starts searching.${ver}`;
   const jobs = s.jobs || [];
@@ -247,8 +250,30 @@ function pilot() {
   return html`${up}<h6><span class="dot"></span>Watching for you</h6>${s.doing || html`Next check ${isFinite(next) ? until(next) : 'soon'}.`}${foot}`;
 }
 
+// The version these pages were loaded from. When the program comes back as another one, the pages load again.
+let loadedVersion = '';
+// What changed, shown once after an update. Only the plain marks the change list uses are understood.
+function mark(text) {
+  const line = t => new Safe(esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '$1'));
+  const items = text.split('\n').map(l => l.trim()).filter(Boolean);
+  return html`<ul>${items.map(l => html`<li>${line(l.replace(/^[-*]\s+/, ''))}</li>`)}</ul>`;
+}
+function whatsNew() {
+  const w = app.state?.whats_new;
+  if (!w || document.getElementById('whatsnew')) return;
+  const box = document.createElement('div');
+  box.id = 'whatsnew';
+  box.className = 'modal';
+  box.innerHTML = html`<div class="card" role="dialog" aria-label="What's new"><div class="row"><h3 class="grow">Job Hunt updated itself to ${app.state.version}</h3><button class="btn sm p" data-seen>Got it</button></div>
+    <p class="s m">You were on ${w.from}. This is what changed.</p>
+    <div class="news">${w.changes.map(c => html`${w.changes.length > 1 ? html`<h4>${c.version}</h4>` : ''}${mark(c.text)}`)}</div></div>`.s;
+  document.body.append(box);
+}
 async function refreshState() {
   try { app.state = await api('state'); } catch { return; }
+  if (loadedVersion && app.state.version !== loadedVersion) { location.reload(); return; }
+  loadedVersion = app.state.version;
+  whatsNew();
   const pl = document.getElementById('pilot');
   if (pl) pl.innerHTML = pilot().s;
   for (const n of NAV) { const b = document.getElementById('b-' + n[0]); if (b) b.innerHTML = piece(badge(n[0])); }
@@ -258,6 +283,9 @@ async function refreshState() {
 document.addEventListener('click', async ev => {
   const go = ev.target.closest('[data-resume]');
   if (go) { ev.preventDefault(); try { await post('jobs/resume'); } catch (e) { toast(e.message, true); } refreshState(); return; }
+  if (ev.target.closest('[data-seen]')) { document.getElementById('whatsnew')?.remove(); post('update/seen').catch(() => {}); return; }
+  const upd = ev.target.closest('[data-update]');
+  if (upd) { ev.preventDefault(); upd.disabled = true; try { await post('update/install'); toast('Installing. Job Hunt comes back by itself in about a minute.'); } catch (e) { toast(e.message, true); } refreshState(); return; }
   const b = ev.target.closest('[data-stop]');
   if (!b) return;
   ev.preventDefault();
@@ -267,6 +295,8 @@ document.addEventListener('click', async ev => {
 });
 // While something is running, the bar is kept moving.
 setInterval(() => { if (app.state?.status?.jobs?.length && !document.hidden) refreshState(); }, 1500);
+// While an update installs the program is away for a moment; keep asking until it is back.
+setInterval(() => { if ((app.state?.status?.jobs || []).some(j => j.name === 'update')) refreshState(); }, 2500);
 
 function typing() {
   const a = document.activeElement;
@@ -318,7 +348,7 @@ window.addEventListener('resize', () => {
 
 async function navigate() {
   const route = parseHash();
-  if (!app.state) { try { app.state = await api('state'); } catch (e) { $app.innerHTML = html`<div class="setup"><div class="card empty"><h3>Job Hunt is not running</h3><p>${e.message}</p></div></div>`.s; return; } }
+  if (!app.state) { try { app.state = await api('state'); loadedVersion = app.state.version; whatsNew(); } catch (e) { $app.innerHTML = html`<div class="setup"><div class="card empty"><h3>Job Hunt is not running</h3><p>${e.message}</p></div></div>`.s; return; } }
   let key = route.parts[0] || 'today';
   if (!app.state.setup_done && key !== 'setup') { location.hash = '#/setup'; return; }
   if (key === 'roles' && route.parts[1] && route.parts[1] !== 'board') key = 'role';

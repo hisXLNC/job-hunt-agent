@@ -31,6 +31,9 @@ type Engine struct {
 
 	Version   string // this program's version; empty or a word for a build without one
 	UpdateURL string // where newer versions are listed (tests point it elsewhere)
+	// Tests only: where installers may come from, and what stands in for running one.
+	UpdateDownload string
+	RunInstaller   func(file string) error
 	Now       func() time.Time
 
 	meter *llm.Metered

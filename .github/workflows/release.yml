@@ -130,6 +130,18 @@ jobs:
           State | Out-Null
           Write-Host "Updated over a running copy; data kept; starts again"
 
+          # 4b. The way Job Hunt updates itself: quietly, keeping the person's choices, and starting again by itself.
+          Remove-Item "$([Environment]::GetFolderPath('Desktop'))\Job Hunt 3.lnk"
+          Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name JobHunt3
+          # Not -Wait: that would also wait for Job Hunt, which the installer starts again.
+          (Start-Process dist\JobHunt3-Setup.exe -ArgumentList "/S", "/UPDATE" -PassThru).WaitForExit()
+          $st = State
+          if ($st.version -ne "${{ steps.v.outputs.version }}") { throw "after updating itself the program says it is version '$($st.version)'" }
+          if (Test-Path "$([Environment]::GetFolderPath('Desktop'))\Job Hunt 3.lnk") { throw "a self-update put back the desktop shortcut the person removed" }
+          if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3) { throw "a self-update turned starting with Windows back on" }
+          if (-not $st.can_install) { throw "the installed copy says it cannot update itself" }
+          Write-Host "Self-update: quiet, kept the person's choices, came back by itself"
+
           # 5. Removing it stops it and takes everything out except the person's data.
           Start-Process "$dir\Uninstall.exe" -ArgumentList "/S", "_?=$dir" -Wait
           if (Running) { throw "removing Job Hunt left it running" }

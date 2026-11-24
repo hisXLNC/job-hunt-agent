@@ -2,9 +2,14 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestANewerVersionIsNoticed(t *testing.T) {
@@ -47,5 +52,57 @@ func TestANewerVersionIsNoticed(t *testing.T) {
 	}
 	if !newer("3.10.0", "3.9.9") || newer("3.1.0", "3.1.0") || newer("26.11.21", "preview") || newer("x", "3.0.0") {
 		t.Fatal("version order")
+	}
+}
+
+func TestAnUpdateIsCheckedBeforeItIsRun(t *testing.T) {
+	e, _ := newEngine(t)
+	installer := []byte("MZ this stands in for the installer")
+	sum := sha256.Sum256(installer)
+	good := "sha256:" + hex.EncodeToString(sum[:])
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(installer) }))
+	defer srv.Close()
+	e.UpdateDownload = srv.URL + "/"
+	e.Version = "26.11.24"
+	ran := make(chan string, 1)
+	e.RunInstaller = func(file string) error { ran <- file; return nil }
+
+	// A file that is not the one published is never run.
+	e.S.Set(updateKey, Update{Version: "26.11.25", URL: srv.URL + "/v26.11.25/JobHunt3-Setup.exe", Digest: "sha256:" + strings.Repeat("0", 64)})
+	if _, err := e.fetchInstaller(context.Background(), *e.NewerVersion()); err == nil {
+		t.Fatal("an installer with the wrong contents was accepted")
+	}
+	// Nor one the release says nothing about, nor one from somewhere else.
+	e.S.Set(updateKey, Update{Version: "26.11.25", URL: srv.URL + "/v26.11.25/JobHunt3-Setup.exe"})
+	if _, err := e.fetchInstaller(context.Background(), *e.NewerVersion()); err == nil {
+		t.Fatal("an installer that could not be checked was accepted")
+	}
+	e.S.Set(updateKey, Update{Version: "26.11.25", URL: "https://elsewhere.example/JobHunt3-Setup.exe", Digest: good})
+	if err := e.InstallUpdate(); err == nil {
+		t.Fatal("an installer from somewhere else was accepted")
+	}
+
+	e.S.Set(updateKey, Update{Version: "26.11.25", URL: srv.URL + "/v26.11.25/JobHunt3-Setup.exe", Digest: good})
+	if err := e.InstallUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case file := <-ran:
+		b, err := os.ReadFile(file)
+		if err != nil || string(b) != string(installer) {
+			t.Fatalf("the installer that was run: %v %q", err, b)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the installer was never run")
+	}
+	e.StopJob("update")
+	// Back on the new version, the person is told once what changed.
+	e.Version = "26.11.25"
+	if e.WhatsNew() != "26.11.24" {
+		t.Fatalf("what's new from %q", e.WhatsNew())
+	}
+	e.SawWhatsNew()
+	if e.WhatsNew() != "" {
+		t.Fatal("told twice")
 	}
 }

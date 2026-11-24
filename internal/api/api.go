@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	jobhunt "jobhunt"
 	"jobhunt/internal/trace"
 	"mime"
 	"net/http"
@@ -1238,6 +1239,30 @@ func (s *Server) Handler() http.Handler {
 		read(r, &in)
 		return map[string]any{"stopped": e.StopJob(in.Name)}, nil
 	})
+	// Updates: look now, install now, and whether they install by themselves.
+	h("POST /api/update/check", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if err := e.CheckUpdate(r.Context()); err != nil {
+			return nil, bad("Couldn't look for a newer version just now. Job Hunt tries again by itself.")
+		}
+		return map[string]any{"update": e.NewerVersion()}, nil
+	})
+	h("POST /api/update/install", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if err := e.InstallUpdate(); err != nil {
+			return nil, bad(err.Error())
+		}
+		return nil, nil
+	})
+	h("PUT /api/update", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Auto bool `json:"auto"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		e.SetAutoUpdate(in.Auto)
+		return nil, nil
+	})
+	h("POST /api/update/seen", func(w http.ResponseWriter, r *http.Request) (any, error) { e.SawWhatsNew(); return nil, nil })
 	h("POST /api/quit", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		if s.Quit == nil {
 			return nil, bad("Close the window to stop.")
@@ -1399,6 +1424,10 @@ type State struct {
 	ExtPending bool               `json:"ext_pending"`
 	Version    string             `json:"version"`
 	Update     *engine.Update     `json:"update,omitempty"`
+	CanInstall bool               `json:"can_install"`
+	AutoUpdate bool               `json:"auto_update"`
+	Checked    int64              `json:"update_checked"`
+	WhatsNew   *whatsNew          `json:"whats_new,omitempty"`
 }
 
 func (s *Server) state() State {
@@ -1412,7 +1441,7 @@ func (s *Server) state() State {
 	s.mu.Unlock()
 	qs, _ := st.OpenQuestions()
 	return State{
-		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(),
+		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(), CanInstall: e.CanInstall(), AutoUpdate: e.AutoUpdate(), Checked: e.UpdateChecked(), WhatsNew: s.whatsNew(),
 		Counts: map[string]int{
 			"ready":     counts["ready"],
 			"fresh":     st.Count(`SELECT COUNT(*) FROM roles WHERE closed = '' AND stage IN ('found','ready') AND CASE WHEN posted_at > 0 THEN posted_at ELSE first_seen_at END > ?`, now.Add(-24*time.Hour).Unix()),
@@ -1532,4 +1561,22 @@ func extDir() string {
 		return ""
 	}
 	return d
+}
+
+// whatsNew is what changed since the version this program was updated from, shown once.
+type whatsNew struct {
+	From    string            `json:"from"`
+	Changes []jobhunt.Section `json:"changes"`
+}
+
+func (s *Server) whatsNew() *whatsNew {
+	from := s.E.WhatsNew()
+	if from == "" {
+		return nil
+	}
+	ch := jobhunt.Changes(from, Version)
+	if len(ch) == 0 {
+		return nil
+	}
+	return &whatsNew{From: from, Changes: ch}
 }

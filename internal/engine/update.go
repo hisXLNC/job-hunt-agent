@@ -2,17 +2,25 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"jobhunt/internal/trace"
 )
 
-// Job Hunt looks once a day for a newer version of itself. It only tells the
-// person; they download the installer and run it. The request carries
-// nothing about them.
+// Job Hunt looks a few times a day for a newer version of itself and can
+// install it: it downloads the installer from the one place installers come
+// from, checks it is the file that was published, runs it quietly and comes
+// back on the new version. The requests carry nothing about the person.
 
 const (
 	updateKey   = "update"
@@ -28,6 +36,9 @@ type Update struct {
 	URL     string `json:"url"`
 	Page    string `json:"page"`
 	At      int64  `json:"at"`
+	Notes   string `json:"notes"`  // what changed, as published with the release
+	Digest  string `json:"digest"` // "sha256:…" of the installer, as published
+	Size    int64  `json:"size"`
 }
 
 // NewerVersion is the update waiting, if there is one newer than this program.
@@ -71,9 +82,12 @@ func (e *Engine) CheckUpdate(ctx context.Context) error {
 		Draft      bool   `json:"draft"`
 		Prerelease bool   `json:"prerelease"`
 		Assets     []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
+			Name   string `json:"name"`
+			URL    string `json:"browser_download_url"`
+			Digest string `json:"digest"`
+			Size   int64  `json:"size"`
 		} `json:"assets"`
+		Body string `json:"body"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&list); err != nil {
 		return err
@@ -87,8 +101,12 @@ func (e *Engine) CheckUpdate(ctx context.Context) error {
 		for _, a := range r.Assets {
 			// What a release says is text from outside: the address must be
 			// the one place installers come from.
-			if a.Name == setupName && strings.HasPrefix(a.URL, downloadFrom) && strings.HasPrefix(r.Page, "https://github.com/hisXLNC/job-hunt-agent/") {
-				best = Update{Version: v, URL: a.URL, Page: r.Page, At: e.Now().Unix()}
+			if a.Name == setupName && strings.HasPrefix(a.URL, e.downloadPrefix()) && strings.HasPrefix(r.Page, "https://github.com/hisXLNC/job-hunt-agent/") {
+				notes := r.Body
+				if len(notes) > 6000 {
+					notes = notes[:6000]
+				}
+				best = Update{Version: v, URL: a.URL, Page: r.Page, At: e.Now().Unix(), Notes: notes, Digest: a.Digest, Size: a.Size}
 			}
 		}
 	}
@@ -97,8 +115,142 @@ func (e *Engine) CheckUpdate(ctx context.Context) error {
 	if (had == nil) != (best.Version == "") || (had != nil && had.Version != best.Version) {
 		e.S.Changed("status")
 	}
+	e.S.Set("update:checked", e.Now().Unix())
+	if best.Version != "" && e.AutoUpdate() && !e.anyJobBut("update") {
+		e.InstallUpdate()
+	}
 	return nil
 }
+
+func (e *Engine) downloadPrefix() string {
+	if e.UpdateDownload != "" {
+		return e.UpdateDownload
+	}
+	return downloadFrom
+}
+
+// AutoUpdate says whether new versions are installed without asking. On unless turned off.
+func (e *Engine) AutoUpdate() bool {
+	var off bool
+	e.S.Get("update:manual", &off)
+	return !off
+}
+
+func (e *Engine) SetAutoUpdate(on bool) { e.S.Set("update:manual", !on); e.S.Changed("status") }
+
+// UpdateChecked is when Job Hunt last looked for a newer version.
+func (e *Engine) UpdateChecked() int64 { return e.S.GetInt("update:checked") }
+
+// CanInstall says whether this program can install an update by itself (Windows, installed copy).
+func (e *Engine) CanInstall() bool { return canRunInstaller() }
+
+// InstallUpdate downloads the waiting version, checks it and runs its
+// installer, which stops this program, replaces it and starts it again.
+func (e *Engine) InstallUpdate() error {
+	u := e.NewerVersion()
+	if u == nil {
+		return errors.New("There is no newer version to install.")
+	}
+	if !canRunInstaller() && e.RunInstaller == nil {
+		return errors.New("This copy can't install updates by itself. Download the installer and run it.")
+	}
+	if !strings.HasPrefix(u.URL, e.downloadPrefix()) {
+		return errors.New("The update's address is not where Job Hunt's installers come from.")
+	}
+	e.Go("update", "Installing version "+u.Version, func(ctx context.Context) error {
+		e.StepTakes(ctx, 40*time.Second)
+		e.Report(ctx, 0, 3, "Downloading")
+		file, err := e.fetchInstaller(ctx, *u)
+		if err != nil {
+			return fmt.Errorf("the update could not be downloaded: %w", err)
+		}
+		e.Report(ctx, 2, 3, "Starting the installer")
+		e.S.Set("update:from", e.Version)
+		e.Backup()
+		trace.Log("app", "installing version %s from %s", u.Version, filepath.Base(file))
+		run := e.RunInstaller
+		if run == nil {
+			run = runInstaller
+		}
+		if err := run(file); err != nil {
+			return fmt.Errorf("the installer could not be started: %w", err)
+		}
+		// The installer asks this program to stop, replaces it and starts it again.
+		select {
+		case <-ctx.Done():
+		case <-time.After(90 * time.Second):
+			return errors.New("the installer did not take over; download it and run it by hand")
+		}
+		return nil
+	})
+	return nil
+}
+
+// fetchInstaller downloads the installer into the data folder and checks it
+// against what was published.
+func (e *Engine) fetchInstaller(ctx context.Context, u Update) (string, error) {
+	want, ok := strings.CutPrefix(u.Digest, "sha256:")
+	if !ok || len(want) != 64 {
+		return "", errors.New("the release does not say what its installer should be, so it can't be checked")
+	}
+	dir := filepath.Join(e.Dir, "updates")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	old, _ := filepath.Glob(filepath.Join(dir, "JobHunt3-Setup-*.exe"))
+	for _, f := range old {
+		os.Remove(f)
+	}
+	file := filepath.Join(dir, "JobHunt3-Setup-"+u.Version+".exe")
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(cctx, "GET", u.URL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "JobHunt")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	out, err := os.OpenFile(file, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o700)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.New()
+	n, err := io.Copy(io.MultiWriter(out, sum), io.LimitReader(resp.Body, 200<<20))
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil && hex.EncodeToString(sum.Sum(nil)) != strings.ToLower(want) {
+		err = errors.New("the downloaded installer is not the file that was published")
+	}
+	if err == nil && n < 1<<20 && e.UpdateDownload == "" {
+		err = errors.New("the downloaded installer is too small to be real")
+	}
+	if err != nil {
+		os.Remove(file)
+		return "", err
+	}
+	return file, nil
+}
+
+// WhatsNew is the version this program was updated from, once, so the
+// person can be told what changed; "" when there is nothing to tell.
+func (e *Engine) WhatsNew() string {
+	var from string
+	e.S.Get("update:from", &from)
+	if from == "" || from == e.Version {
+		return ""
+	}
+	return from
+}
+
+func (e *Engine) SawWhatsNew() { e.S.Set("update:from", ""); e.S.Changed("status") }
 
 // versionParts reads "3.1.0" as three numbers.
 func versionParts(v string) ([3]int, bool) {
