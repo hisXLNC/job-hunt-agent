@@ -345,7 +345,10 @@ func (s *Server) Handler() http.Handler {
 		for i := range p.Domain {
 			p.Domain[i] = strings.ToLower(strings.TrimSpace(p.Domain[i]))
 		}
-		return st.Profile(), st.SaveProfile(p)
+		if err := st.SaveProfile(p); err != nil {
+			return nil, err
+		}
+		return st.Profile(), nil
 	})
 	h("POST /api/setup/finish", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		p := st.Profile()
