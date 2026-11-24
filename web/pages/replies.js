@@ -1,4 +1,4 @@
-import { html, api, post, put, del, ago, when, tile, toast, copy, pager, with_, employer } from '../app.js';
+import { html, api, post, put, del, ago, when, tile, toast, copy, pager, with_, employer, rel } from '../app.js';
 
 const KINDS = { interview: ['Wants to talk', 'good'], assessment: ['Assessment', 'warn'], question: ['Asks you something', 'blue'], offer: ['Offer', 'good'], rejection: ['Said no', 'crit'], receipt: ['Received', ''], person: ['From a person', 'blue'], other: ['Other', ''] };
 const chip = k => { const [l, c] = KINDS[k] || [k, '']; return html`<span class="chip ${c}">${l}</span>`; };
@@ -12,11 +12,11 @@ function list(d, route) {
       <a class="chip ${!q.state && !q.kind ? 'on' : ''}" href="#/replies">Needs you <span style="opacity:.7">${d.waiting}</span></a>
       <a class="chip ${q.state === 'all' && !q.kind ? 'on' : ''}" href="${with_(route, { state: 'all', kind: '', page: '' })}">Everything</a>
       ${['interview', 'question', 'person', 'rejection', 'receipt'].map(k => html`<a class="chip ${q.kind === k ? 'on' : ''}" href="${with_(route, { state: 'all', kind: k, page: '' })}">${KINDS[k][0]}</a>`)}
-      <span class="grow"></span>${d.on ? html`<span class="xs m">${d.last_at ? 'Checked ' + ago(d.last_at) : ''}</span><button class="btn sm" data-act="check">${d.checking ? 'Checking…' : 'Check now'}</button>` : ''}</div>
+      <span class="grow"></span>${d.on ? html`<span class="xs m">${d.last_at ? html`Checked ${rel(d.last_at)}` : ''}</span><button class="btn sm" data-act="check">${d.checking ? 'Checking…' : 'Check now'}</button>` : ''}</div>
     ${d.mail?.length ? html`<div class="card" style="padding:0"><table class="tbl"><thead><tr><th>From</th><th>What they say</th><th>About</th><th>When</th><th></th></tr></thead><tbody>
       ${d.mail.map(m => html`<tr><td style="width:22%"><div class="row">${tile(m.company || m.from_name, true, m.company_id)}<div><a class="t" href="#/replies/${m.id}">${m.from_name || m.from_addr || 'Unknown sender'}</a><span class="xs m">${employer(m.company, m.company_id)}</span></div></div></td>
         <td class="s">${chip(m.kind)} <span class="ink2">${m.summary || m.subject}</span>${m.state === 'new' && m.next ? html`<div class="xs" style="margin-top:2px"><b>Next:</b> ${m.next}</div>` : ''}</td>
-        <td class="s">${m.role_id ? html`<a href="#/roles/${m.role_id}">${m.role}</a>` : html`<span class="m">–</span>`}</td><td class="s m" style="white-space:nowrap">${ago(m.at)}</td>
+        <td class="s">${m.role_id ? html`<a href="#/roles/${m.role_id}">${m.role}</a>` : html`<span class="m">–</span>`}</td><td class="s m" style="white-space:nowrap">${rel(m.at)}</td>
         <td style="text-align:right"><a class="btn sm ${m.state === 'new' ? 'p' : ''}" href="#/replies/${m.id}">${m.state === 'new' ? 'Read and reply' : 'Open'}</a></td></tr>`)}</tbody></table></div>${pager(d.total, d.page, d.size, route)}`
       : html`<div class="card empty"><h3>${q.state || q.kind ? 'Nothing here' : 'Nothing is waiting for you'}</h3><p>When an employer or someone you wrote to answers, it shows up here with a drafted reply.</p></div>`}
   </div>

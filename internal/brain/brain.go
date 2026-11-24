@@ -486,11 +486,22 @@ type tailorInput struct {
 	Reading Reading
 	Posting Posting
 	Person  Person
+	Ask     string      // what the person asked to be changed, if this is a second go
+	Current []cv.Change // the edits they were looking at when they asked
+}
+
+// Again is what the person asked for when they sent a piece of writing back:
+// their words, and what they were looking at.
+type Again struct {
+	Ask     string
+	Changes []cv.Change // for a CV: the edits as they stand
+	Text    string      // for a letter: the letter as it stands
 }
 
 // Tailor proposes edits to a CV for one role. Every edit is reversible and
-// carries its reason; nothing is invented.
-func (b *Brain) Tailor(ctx context.Context, p Person, base cv.CV, post Posting, r Reading) (Tailoring, error) {
+// carries its reason; nothing is invented. With again, the person has seen a
+// first set of edits and asked for something different.
+func (b *Brain) Tailor(ctx context.Context, p Person, base cv.CV, post Posting, r Reading, again *Again) (Tailoring, error) {
 	var units strings.Builder
 	for _, u := range cv.Units(base) {
 		fmt.Fprintf(&units, "[%s] %s\n", u.ID, u.Text)
@@ -509,6 +520,21 @@ func (b *Brain) Tailor(ctx context.Context, p Person, base cv.CV, post Posting, 
 	prompt := post.block() + "\n\n# What the posting asks for, and the evidence found\n" + asks.String() +
 		"\nTerms a screening system will look for: " + strings.Join(r.Keywords, ", ") + "\n" + facts +
 		"\n# The CV, one addressed piece of text per line\n" + units.String()
+	in := tailorInput{CV: base, Reading: r, Posting: post, Person: p}
+	if again != nil && strings.TrimSpace(again.Ask) != "" {
+		in.Ask, in.Current = strings.TrimSpace(again.Ask), again.Changes
+		var cur strings.Builder
+		for _, ch := range again.Changes {
+			state := "on"
+			if ch.Off {
+				state = "switched off by the person"
+			}
+			fmt.Fprintf(&cur, "[%s] (%s) %s\n", ch.ID, state, ch.After)
+		}
+		prompt += "\n# The edits you proposed before, which the person has read\n" + cur.String() +
+			"\n# What the person now asks for\n" + clip(in.Ask, 600) +
+			"\n\nGive the whole set of edits again with that done. Keep the earlier edits that still serve; leave out the ones the person switched off unless they ask for them. Their request changes emphasis, length and wording. It never makes something true: if it asks for a claim nothing supports, do not write it, and say so under left_out."
+	}
 	out, _, err := llm.JSON[Tailoring](ctx, b.LLM, llm.Request{
 		Task: "tailor",
 		System: house + `
@@ -530,7 +556,7 @@ For anything the posting wants that the person cannot honestly claim, do not wri
 		Schema:    tailoringShape,
 		Effort:    "high",
 		MaxTokens: 16000,
-		Input:     tailorInput{base, r, post, p},
+		Input:     in,
 	})
 	if err != nil {
 		return out, err
@@ -563,6 +589,18 @@ type letterInput struct {
 	Posting Posting
 	Reading Reading
 	Kind    string
+	Style   string // for a letter: standard, formal, short, warm
+	Ask     string // what the person asked to be changed, if this is a second go
+	Current string // the letter they were looking at when they asked
+	Days    int    // for a follow-up: days since they applied
+	To      string // for a follow-up: who it goes to, when known
+}
+
+// How each letter style reads. "standard" is the task as written.
+var letterStyles = map[string]string{
+	"formal": "Formal and reserved, as for a bank, a government body, an insurer or a law firm: 230 to 300 words, measured claims, no contractions, full sentences.",
+	"short":  "Short and direct, as for a startup: 110 to 150 words, two short paragraphs and at most three lines starting with \"- \", plain conversational sentences; contractions are fine.",
+	"warm":   "Warm and personal: 200 to 260 words, one sentence on why this employer in particular, taken from the posting and never invented; confident and friendly, not gushing.",
 }
 
 func evidence(r Reading) string {
@@ -573,10 +611,23 @@ func evidence(r Reading) string {
 	return b.String()
 }
 
-// Letter writes a cover letter body: no address block, no sign-off.
-func (b *Brain) Letter(ctx context.Context, p Person, post Posting, r Reading) (string, error) {
+// Letter writes a cover letter body in one of the letter styles: no address
+// block, no sign-off. With again, the person has read a first letter and
+// asked for something different.
+func (b *Brain) Letter(ctx context.Context, p Person, post Posting, r Reading, style string, again *Again) (string, error) {
 	type ans struct {
 		Letter string `json:"letter"`
+	}
+	prompt := post.block() + "\n\n# Evidence found for what the posting asks\n" + evidence(r)
+	in := letterInput{Person: p, Posting: post, Reading: r, Kind: "letter", Style: style}
+	if how := letterStyles[style]; how != "" {
+		prompt += "\n\n# The style of this letter (it replaces the length and tone above; the honesty rules stay)\n" + how
+	}
+	if again != nil && strings.TrimSpace(again.Ask) != "" {
+		in.Ask, in.Current = strings.TrimSpace(again.Ask), again.Text
+		prompt += "\n\n# The letter as it stands, which the person has read\n<message>\n" + clip(again.Text, 6000) + "\n</message>" +
+			"\n\n# What the person now asks for\n" + clip(in.Ask, 600) +
+			"\n\nWrite the letter again with that done and as little else changed as the request allows. Their request changes emphasis, length and wording. It never makes something true: leave out any claim nothing supports."
 	}
 	out, _, err := llm.JSON[ans](ctx, b.LLM, llm.Request{
 		Task: "letter",
@@ -588,12 +639,39 @@ Open with the thing in this posting that the person has actually done, stated as
 Sound like a capable person writing to a peer.
 
 ` + p.Block(),
-		Prompt: post.block() + "\n\n# Evidence found for what the posting asks\n" + evidence(r),
+		Prompt: prompt,
 		Schema: llm.Obj("letter", llm.Str("the letter body")),
 		Effort: "medium",
-		Input:  letterInput{p, post, r, "letter"},
+		Input:  in,
 	})
 	return strings.TrimSpace(out.Letter), err
+}
+
+// FollowUp writes the one short e-mail a person sends when an application
+// has had no answer. Job Hunt never sends it; the person does.
+func (b *Brain) FollowUp(ctx context.Context, p Person, post Posting, r Reading, days int, to string) (Message, error) {
+	who := "Nobody by name: open with \"Hello,\"."
+	if strings.TrimSpace(to) != "" {
+		who = "It goes to " + strings.TrimSpace(to) + ": open with their first name."
+	}
+	out, _, err := llm.JSON[Message](ctx, b.LLM, llm.Request{
+		Task: "follow_up",
+		System: house + `
+
+Your task: write a short follow-up e-mail from the person about a job application that has had no reply. They will read it, edit it and send it themselves. 50 to 90 words: shorter gets more answers.
+
+The first sentence names the role, with its reference number if the posting shows one, and says when they applied. Then one sentence on why they fit, and this sentence decides whether the e-mail is read: start from what this role mainly does and in what line of business, and use the experience on their CV closest to that, the most recent where two are equally close, even if another achievement is more impressive. Then one line that makes answering easy: they are still interested and glad to send anything more or to talk. If they are relocating, one clause with the arrival date.
+
+Confident, never pushy. Do not apologise for writing, do not ask whether the application was received, do not guilt the reader. End with their full name on its own line. The subject is under 9 words and names the role.
+
+` + p.Block(),
+		Prompt: fmt.Sprintf("They applied %d days ago, on %s.\n%s\n\n%s\n\n# Evidence found for what the posting asks\n%s", days, p.Today.AddDate(0, 0, -days).Format("2 January"), who, post.block(), evidence(r)),
+		Schema: messageShape,
+		Effort: "medium",
+		Input:  letterInput{Person: p, Posting: post, Reading: r, Kind: "follow_up", Days: days, To: to},
+	})
+	out.Subject, out.Body = strings.TrimSpace(out.Subject), strings.TrimSpace(out.Body)
+	return out, err
 }
 
 // Message is a short piece of writing to one person.
@@ -623,7 +701,7 @@ Your task: write a short direct note from the person to the manager who is hirin
 		Prompt: "Writing to: " + to + "\n\n" + post.block() + "\n\n# Evidence found\n" + evidence(r),
 		Schema: messageShape,
 		Effort: "medium",
-		Input:  letterInput{p, post, r, "case"},
+		Input:  letterInput{Person: p, Posting: post, Reading: r, Kind: "case"},
 	})
 	out.Body = strings.TrimSpace(out.Body)
 	return out, err

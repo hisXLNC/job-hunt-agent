@@ -81,6 +81,8 @@ var tools = []tool{
 	{Method: "GET", Pattern: "/api/app", Help: "The version, where the data is kept, recent changes the program made to its own settings, recent Claude calls and problems."},
 	{Method: "GET", Pattern: "/api/import/old", Help: "Whether the old Job Hunt's data is on this computer and what it holds (jobs applied to, prepared, CVs, people), and what was last brought over from it. Bringing it over is the person's own button under You, The app."},
 	{Method: "GET", Pattern: "/api/places", Help: "Where Job Hunt looks besides employers' own boards: the title searches (LinkedIn, Job Bank, FreeHire), the job sites and recruiters being watched, whether each is on, what each found in the last full search, any that is resting and why, and the sites that could be added (suggested)."},
+	{Method: "GET", Pattern: "/api/notices", Help: "What is under the bell: the last fifty things Job Hunt told the person (a fresh strong role, someone wrote, a new version, a problem), newest first, each with the page it opens and whether it was read."},
+	{Method: "GET", Pattern: "/api/calendar", Help: "Everything with a date around a month: interviews, booked conversations, the days follow-ups are due and the days postings close. Query: from, to (unix seconds, at most 100 days apart); left out means this month."},
 	{Method: "GET", Pattern: "/api/find", Help: "Quick search across roles, people and employers. Query: q."},
 
 	// ---- doing ----------------------------------------------------------------
@@ -92,7 +94,18 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/roles/{id}/read", Class: canDo, Kind: "role", Label: "Read the posting again", Help: "Reads the posting again and scores the fit. Background."},
 	{Method: "POST", Pattern: "/api/roles/{id}/applied", Class: canDo, Kind: "role", Label: "Mark as applied", Help: `Body: {"how": "where they applied, optional"}. Only when the person says they sent the application.`},
 	{Method: "POST", Pattern: "/api/roles/{id}/stage", Class: canDo, Kind: "role", Label: "Move to another stage", Help: `Body: {"stage": "found|ready|applied|reply|interview|offer"}.`, Show: []string{"stage"}},
-	{Method: "POST", Pattern: "/api/roles/{id}/save", Class: canDo, Kind: "role", Label: "Save or unsave", Help: `Body: {"off": false} to save for later, {"off": true} to unsave.`},
+	{Method: "POST", Pattern: "/api/roles/{id}/save", Class: canDo, Kind: "role", Label: "Bookmark or remove the bookmark", Help: `Body: {"off": false} to bookmark a role (it shows with saved=1), {"off": true} to remove the bookmark. It does not take the role off Today; "later" does that.`},
+	{Method: "POST", Pattern: "/api/roles/{id}/later", Class: canDo, Kind: "role", Label: "Save for later", Help: `Body: {"days": 1|3|7} keeps an open role off Today until then; {"days": 0} brings it back now. Refused for a closed role.`, Show: []string{"days"}},
+	{Method: "POST", Pattern: "/api/roles/{id}/unapply", Class: canDo, Kind: "role", Label: "Take back \"applied\"", Help: "Only when the person says they did not send the application after all. The role goes back to ready (or found). Works only while the role is at applied."},
+	{Method: "POST", Pattern: "/api/roles/{id}/letterstyle", Class: canDo, Kind: "role", Label: "Write the letter in another style", Help: `Body: {"style": "standard|formal|short|warm"}. Writes the letter again; the one before is kept and "undoletter" puts it back. About half a minute.`, Show: []string{"style"}},
+	{Method: "POST", Pattern: "/api/roles/{id}/askletter", Class: canDo, Kind: "role", Label: "Change the letter as asked", Help: `Body: {"ask": "what the person wants changed, in their words"}. Writes the letter again with that done; the one before is kept. About half a minute.`, Show: []string{"ask"}},
+	{Method: "POST", Pattern: "/api/roles/{id}/askcv", Class: canDo, Kind: "role", Label: "Tailor the CV again as asked", Help: `Body: {"ask": "what the person wants changed, in their words"}. Proposes the CV changes again with that done; the set before is kept and "undocv" puts it back. About a minute. It never adds experience the person does not have.`, Show: []string{"ask"}},
+	{Method: "POST", Pattern: "/api/roles/{id}/undoletter", Class: canDo, Kind: "role", Label: "Put the earlier letter back", Help: "Restores the letter as it was before it was last written again."},
+	{Method: "POST", Pattern: "/api/roles/{id}/undocv", Class: canDo, Kind: "role", Label: "Put the earlier CV changes back", Help: "Restores the CV changes as they were before the person last asked for changes."},
+	{Method: "POST", Pattern: "/api/roles/{id}/chase", Class: canDo, Kind: "role", Label: "Write a follow-up", Help: "Drafts the one short follow-up e-mail for an application with no reply. The person reads and sends it themselves. Refused once a follow-up was sent. About half a minute."},
+	{Method: "POST", Pattern: "/api/roles/{id}/chasesave", Class: canDo, Kind: "role", Label: "Reword the follow-up", Help: `Body: {"subject": "...", "text": "the whole e-mail"}. Both are replaced.`},
+	{Method: "POST", Pattern: "/api/roles/{id}/chasesent", Class: canDo, Kind: "role", Label: "Mark the follow-up as sent", Help: "Only when the person says they sent it."},
+	{Method: "POST", Pattern: "/api/roles/{id}/chasedrop", Class: canDo, Kind: "role", Label: "Stop suggesting a follow-up", Help: "When the person would rather let this application be. The application itself is untouched."},
 	{Method: "POST", Pattern: "/api/roles/{id}/cv", Class: canDo, Kind: "role", Label: "Use another CV for this role", Help: `Body: {"cv": number}. Tailors again from that CV; about a minute.`},
 	{Method: "POST", Pattern: "/api/roles/{id}/change", Class: canDo, Kind: "role", Label: "Change the tailored CV", Help: `Body: {"index": n, "off": true} to undo change n of the tailored CV (counting from 0), {"index": n, "off": false} to put it back, {"index": n, "after": "new wording"} to reword it. Never write experience the person does not have.`, Show: []string{"after"}},
 	{Method: "POST", Pattern: "/api/roles/{id}/letter", Class: canDo, Kind: "role", Label: "Rewrite the letter", Help: `Body: {"text": "the whole letter"}. Replaces the letter. Keep it true to the CV and the facts.`},
@@ -135,7 +148,8 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/roles/{id}/no", Class: mustAsk, Kind: "role", Label: "Mark not interested", Help: `Body: {"why": "their reason, short"}. The role never comes back.`, Show: []string{"why"}},
 	{Method: "POST", Pattern: "/api/roles/{id}/close", Class: mustAsk, Kind: "role", Label: "Close a role", Help: `Body: {"stage": "rejected|withdrawn|expired", "why": "..."}.`, Show: []string{"stage", "why"}},
 	{Method: "POST", Pattern: "/api/roles/{id}/reopen", Class: mustAsk, Kind: "role", Label: "Reopen a role", Help: "Only when the person asks for this role by name."},
-	{Method: "PUT", Pattern: "/api/profile", Class: mustAsk, Label: "Change your profile", Help: `Body: only the fields to change, from GET /api/you: name, headline, summary, years, strengths, rare, home, city, places (other towns that count as the city, besides its own surrounding area listed under "area"), country, arrive_on (YYYY-MM-DD), work_status (citizen|resident|permit|none), start_early, titles {"level": [], "step_up": [], "sideways": []}, domain, avoid, workplaces (remote,hybrid,onsite), pay_floor, pay_unit. A list is replaced whole: send the full new list.`},
+	{Method: "POST", Pattern: "/api/roles/tidy", Class: mustAsk, Label: "Clear taken-down roles", Help: `Closes (never deletes) every role whose posting was taken down, or that no search has seen for a month, and that the person never prepared or applied to. "counts.taken_down" in GET /api/roles says how many that is.`},
+	{Method: "PUT", Pattern: "/api/profile", Class: mustAsk, Label: "Change your profile", Help: `Body: only the fields to change, from GET /api/you: name, headline, summary, years, strengths, rare, home, city, places (other towns that count as the city, besides its own surrounding area listed under "area"), country, arrive_on (YYYY-MM-DD), work_status (citizen|resident|permit|none), start_early, titles {"level": [], "step_up": [], "sideways": []}, domain, avoid, workplaces (remote,hybrid,onsite), pay_floor, pay_unit, letter_style (standard|formal|short|warm: how new letters are written), signature (their own closing under a letter, one line each, "" for the usual), chase_days (days of silence after applying before a follow-up is suggested; 0 = never), weekly_goal (applications a week they aim for; 0 = no goal). A list is replaced whole: send the full new list.`},
 	{Method: "PUT", Pattern: "/api/phone", Class: mustAsk, Label: "Change phone notifications", Help: `Body: any of {"on", "min_fit", "quiet_from", "quiet_to"} (hours 0-23). Where notifications are sent is changed by the person under You, Connections.`, Show: []string{"on", "min_fit", "quiet_from", "quiet_to"}, Only: true},
 	{Method: "POST", Pattern: "/api/places/remove", Class: mustAsk, Label: "Stop watching a job site", Help: `Body: {"id": "..."}. Roles already found there stay.`, Show: []string{"id"}, Only: true},
 	{Method: "DELETE", Pattern: "/api/cvs/{id}", Class: mustAsk, Kind: "cv", Label: "Remove a CV"},
@@ -464,10 +478,16 @@ func (s *Server) describe(t *tool, id int64, body []byte) string {
 		}
 		return "Resume searching"
 	case "/api/roles/{id}/save":
-		out = "Save for later"
+		out = "Bookmark"
 		if fields["off"] == true {
-			out = "Unsave"
+			out = "Remove the bookmark"
 		}
+	case "/api/roles/{id}/later":
+		if d, _ := fields["days"].(float64); d == 0 {
+			out = "Bring back to Today"
+		}
+	case "/api/roles/tidy":
+		out = fmt.Sprintf("%s (%d)", t.Label, s.E.TakenDown())
 	}
 	if t.Kind != "" {
 		name := s.nameOf(t.Kind, id)

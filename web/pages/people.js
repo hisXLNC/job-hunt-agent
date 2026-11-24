@@ -1,4 +1,4 @@
-import { html, api, post, put, del, ago, tile, toast, copy, pager, with_, safeUrl, app, KIND, employer } from '../app.js';
+import { html, api, post, put, del, ago, tile, toast, copy, pager, with_, safeUrl, app, KIND, employer, rel } from '../app.js';
 
 const FIVE = ['knows_work', 'made_move', 'same_roots', 'same_craft', 'mentor'];
 const HINT = {
@@ -11,7 +11,7 @@ function status(p) {
   if (p.knows_you_at) return html`<span class="chip good">Knows you</span>`;
   if (!n) return html`<span class="chip">Not written to</span>`;
   if (n.state === 'draft') return html`<span class="chip warn">Note drafted</span>`;
-  if (n.state === 'sent') return html`<span class="chip blue">Written ${ago(n.sent_at)}</span>`;
+  if (n.state === 'sent') return html`<span class="chip blue">Written ${rel(n.sent_at)}</span>`;
   if (n.state === 'quiet') return html`<span class="chip">No answer</span>`;
   return html`<span class="chip good">Answered</span>`;
 }
@@ -62,7 +62,7 @@ function one(d) {
       <h2 style="font-size:21px;margin-top:4px">${p.name}</h2><div class="s m">${p.title}${p.title && p.company ? ' · ' : ''}${employer(p.company, p.company_id)}</div><p class="s ink2" style="margin-top:6px">${p.why}</p></div>
       <div class="col" style="gap:6px">${url ? html`<a class="btn" href="${url}" target="_blank" rel="noopener noreferrer">Open profile</a>` : ''}
         <button class="btn sm" data-act="knows" data-on-val="${p.knows_you_at ? '' : '1'}">${p.knows_you_at ? 'Doesn\'t know me yet' : 'We\'ve spoken'}</button></div></div>
-    ${n ? html`<div class="card col" style="gap:10px"><div class="row"><div class="grow"><div class="eb">${n.state === 'draft' ? 'Your note · draft' : n.state === 'sent' ? 'Your note · sent ' + ago(n.sent_at) : 'Your note'}</div>
+    ${n ? html`<div class="card col" style="gap:10px"><div class="row"><div class="grow"><div class="eb">${n.state === 'draft' ? 'Your note · draft' : n.state === 'sent' ? html`Your note · sent ${rel(n.sent_at)}` : 'Your note'}</div>
         <p class="xs m" style="margin-top:2px">${n.channel === 'linkedin' ? 'For the LinkedIn connect box.' : 'An email.'} Job Hunt wrote it. Nothing is sent until you send it yourself.</p></div>
         ${limit ? html`<span class="chip ${n.body.length > limit ? 'crit' : ''}" id="count">${n.body.length} of ${limit}</span>` : ''}</div>
       <form data-act="save" data-id="${n.id}" class="col" style="gap:8px">
@@ -74,7 +74,7 @@ function one(d) {
           ${n.state === 'replied' ? html`<button type="button" class="btn" data-act="thanks" data-busy="Writing…">Write a thank-you</button><a class="btn" href="#/interviews?person=${p.id}">Book a conversation</a>` : ''}
           <span class="grow"></span><button class="btn sm">Save changes</button><button type="button" class="btn sm" data-act="again" data-busy="Writing…">Write it again</button></div></form></div>`
       : html`<div class="card row"><div class="grow"><h4>No note yet</h4><p class="s m">Job Hunt writes a short, specific note with one clear ask. You read it and send it.</p></div><button class="btn p" data-act="again" data-busy="Writing…">Write a note</button></div>`}
-    ${d.notes?.length > 1 ? html`<div class="card"><h4>Earlier notes</h4><div class="col" style="margin-top:10px;gap:10px">${d.notes.slice(1).map(x => html`<div class="s"><span class="xs m">${ago(x.sent_at || x.created_at)} · ${x.state}</span><div class="quote pre">${x.body}</div></div>`)}</div></div>` : ''}
+    ${d.notes?.length > 1 ? html`<div class="card"><h4>Earlier notes</h4><div class="col" style="margin-top:10px;gap:10px">${d.notes.slice(1).map(x => html`<div class="s"><span class="xs m">${rel(x.sent_at || x.created_at)} · ${x.state}</span><div class="quote pre">${x.body}</div></div>`)}</div></div>` : ''}
   </div>
   <div class="col" style="gap:14px">
     <div class="card"><h4>About them</h4><form data-act="edit" class="col" style="margin-top:8px;gap:8px">
@@ -83,7 +83,7 @@ function one(d) {
       <label class="field">What you share<select name="kind">${Object.entries(KIND).map(([k, v]) => html`<option value="${k}" ${p.kind === k ? 'selected' : ''}>${v}</option>`)}</select></label>
       <label class="field">Why they might answer<textarea name="why" rows="2">${p.why}</textarea></label>
       <div class="row"><button class="btn sm">Save</button><span class="grow"></span><button type="button" class="btn sm danger" data-act="remove" data-confirm="Remove ${p.name} and the notes to them?">Remove</button></div></form></div>
-    <div class="card"><h4>What happened</h4><div class="col s" style="margin-top:10px;gap:8px">${(d.activity || []).map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none">${ago(a.at)}</span><span>${a.text}</span></div>`)}${!(d.activity || []).length ? html`<span class="m">Nothing yet.</span>` : ''}</div></div>
+    <div class="card"><h4>What happened</h4><div class="col s" style="margin-top:10px;gap:8px">${(d.activity || []).map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none">${rel(a.at)}</span><span>${a.text}</span></div>`)}${!(d.activity || []).length ? html`<span class="m">Nothing yet.</span>` : ''}</div></div>
   </div></div>`;
 }
 

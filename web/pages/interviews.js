@@ -1,4 +1,4 @@
-import { html, api, post, put, del, ago, when, until, toast, safeUrl, employer } from '../app.js';
+import { html, api, post, put, del, when, clock, toast, copy, safeUrl, employer, rel, soon, with_ } from '../app.js';
 
 const KINDS = { chat: 'Informal conversation', screen: 'Recruiter call', interview: 'Interview', offer: 'Offer call' };
 const pad = n => String(n).padStart(2, '0');
@@ -11,15 +11,53 @@ function tileDay(ts, past) {
 
 function row(t, past) {
   const who = t.person || t.company ? html`${t.person}${t.person && t.company ? ' · ' : ''}${employer(t.company, t.company_id)}` : '';
-  return html`<div class="row">${tileDay(t.at, past)}<div class="grow"><a href="#/interviews/${t.id}"><b>${t.title}</b></a>${who ? html` <span class="m">· ${who}</span>` : ''}
+  return html`<div class="row wrap">${tileDay(t.at, past)}<div class="grow" style="min-width:220px"><a href="#/interviews/${t.id}"><b>${t.title}</b></a>${who ? html` <span class="m">· ${who}</span>` : ''}
     <div class="s m">${when(t.at)} · ${t.minutes} min · ${KINDS[t.kind] || t.kind}${t.role ? html` · ${t.role}` : ''}</div></div>
-    ${past ? '' : html`<span class="chip ${t.prep && Object.keys(t.prep).length ? 'good' : ''}">${t.prep && Object.keys(t.prep).length ? 'Prep ready' : 'Preparing'}</span>`}<a class="btn sm ${past ? '' : 'p'}" href="#/interviews/${t.id}">${past ? 'Notes' : 'Open prep'}</a></div>`;
+    ${past ? '' : html`<span class="chip ${t.prep && Object.keys(t.prep).length ? 'good' : ''}">${t.prep && Object.keys(t.prep).length ? 'Prep ready' : 'Preparing'}</span><a class="btn sm" href="/api/talks/${t.id}/invite.ics" title="${ICS_TIP}">Add to my calendar</a>`}<a class="btn sm ${past ? '' : 'p'}" href="#/interviews/${t.id}">${past ? 'Notes' : 'Open prep'}</a></div>`;
+}
+
+const ICS_TIP = 'Downloads a calendar file for this one. Open it and your calendar program adds it, with a reminder half an hour before.';
+const tabs = (on, route) => html`<div class="tabs"><a class="${on === 'list' ? 'on' : ''}" href="${with_(route, { view: '', m: '' })}">List</a><a class="${on === 'month' ? 'on' : ''}" href="${with_(route, { view: 'month' })}" title="A month at a glance: interviews, conversations, follow-ups that fall due and the days postings close.">Month</a></div>`;
+
+// ---- the month ---------------------------------------------------------------------
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const ym = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+function monthOf(q) {
+  const m = /^(\d{4})-(\d{2})$/.exec(q.m || ''), now = new Date();
+  return m && +m[2] >= 1 && +m[2] <= 12 ? new Date(+m[1], +m[2] - 1, 1) : new Date(now.getFullYear(), now.getMonth(), 1);
+}
+// The weeks a month's page shows, Monday first: from the Monday on or before the 1st to the Sunday on or after the last day.
+function gridOf(first) {
+  const start = new Date(first.getFullYear(), first.getMonth(), 1 - ((first.getDay() + 6) % 7));
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+  const end = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 7 - ((last.getDay() + 6) % 7));
+  return [start, end];
+}
+const WHAT = { interview: 'Interview', chat: 'Conversation', follow: 'Follow-up due', closes: 'Posting closes' };
+function month(d, route) {
+  const first = monthOf(route.q), [start, end] = gridOf(first), today = ymd(new Date()), nowTs = Date.now() / 1000;
+  const by = {};
+  for (const it of d.items || []) (by[it.day] ||= []).push(it);
+  const days = [];
+  for (let x = new Date(start); x < end; x = new Date(x.getFullYear(), x.getMonth(), x.getDate() + 1)) days.push(x);
+  const go = n => with_(route, { m: ym(new Date(first.getFullYear(), first.getMonth() + n, 1)) });
+  const ev = (it, key) => html`<a class="ev k-${it.kind} ${(it.at ? it.at < nowTs - 3600 : key < today) ? 'past' : ''}" href="${/^#\//.test(it.go || '') ? it.go : '#/interviews'}" title="${WHAT[it.kind] || ''}${it.at ? ' · ' + when(it.at) : ''}\n${it.title}${it.sub ? '\n' + it.sub : ''}">${it.at ? clock(it.at) + ' ' : ''}${it.title}</a>`;
+  const feed = location.origin + '/api/calendar.ics';
+  return html`<div class="body">${tabs('month', route)}
+    <div class="card" style="padding:0"><div class="row wrap" style="padding:12px 16px;gap:10px"><h3 style="min-width:150px">${first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</h3>
+      <span class="row wrap" style="gap:12px">${Object.entries(WHAT).map(([k, v]) => html`<span class="key"><i class="k-${k}"></i>${v}</span>`)}</span><span class="grow"></span>
+      <a class="btn sm" href="${go(-1)}" aria-label="Previous month">Previous</a>${ym(first) === ym(new Date()) ? '' : html`<a class="btn sm" href="${with_(route, { m: '' })}">This month</a>`}<a class="btn sm" href="${go(1)}" aria-label="Next month">Next</a></div>
+      <div class="cal">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => html`<div class="wd">${w}</div>`)}
+        ${days.map(x => { const key = ymd(x), items = by[key] || []; return html`<div class="day ${x.getMonth() === first.getMonth() ? '' : 'out'} ${key === today ? 'today' : ''}"><span class="dn" ${key === today ? html`title="Today"` : ''}>${x.getDate()}</span>${items.slice(0, 5).map(it => ev(it, key))}${items.length > 5 ? html`<span class="xs m" title="${items.slice(5).map(it => it.title).join('\n')}">and ${items.length - 5} more</span>` : ''}</div>`; })}</div></div>
+    ${(d.items || []).length ? '' : html`<p class="s m">Nothing dated in these weeks. Interviews and conversations you add, follow-ups that fall due and postings that name a closing date show up here.</p>`}
+    <div class="card row wrap" style="gap:10px"><div class="grow" style="min-width:260px"><h4>In your own calendar</h4><p class="xs m" style="margin-top:3px">One calendar file with everything dated in the next 90 days. Open it and your calendar program adds the lot. A calendar program on this computer can also read it from the address, so it stays up to date; nothing outside this computer can.</p></div>
+      <a class="btn sm" href="/api/calendar.ics" download title="Downloads job-hunt.ics: interviews and conversations with their times, follow-ups and closing dates as whole-day entries.">Download the next 90 days</a><button type="button" class="btn sm" data-act="copyfeed" data-text="${feed}" title="Copies ${feed}. In Outlook or another calendar program on this computer, choose to add a calendar from the internet and paste it.">Copy the address</button></div></div>`;
 }
 
 function list(d, route) {
   const q = route.q;
   const soon = new Date(Date.now() + 86400000); soon.setMinutes(0, 0, 0);
-  return html`<div class="body cols wide"><div class="col" style="gap:14px">
+  return html`<div class="body">${tabs('list', route)}<div class="cols wide"><div class="col" style="gap:14px">
     <div class="card"><h3>Coming up</h3>${d.upcoming?.length ? html`<div class="col" style="margin-top:12px;gap:14px">${d.upcoming.map(t => row(t))}</div>` : html`<p class="s m" style="margin-top:8px">Nothing booked. A coffee with someone in your field counts: add it and Job Hunt prepares you for it.</p>`}</div>
     ${d.past?.length ? html`<div class="card"><h3>Behind you</h3><div class="col" style="margin-top:12px;gap:14px">${d.past.map(t => row(t, true))}</div></div>` : ''}
   </div>
@@ -30,15 +68,15 @@ function list(d, route) {
     <label class="field">Link or place<input type="url" name="link" placeholder="https://"></label>
     <input type="hidden" name="role_id" value="${q.role || ''}"><input type="hidden" name="person_id" value="${q.person || ''}">
     ${q.role || q.person ? html`<p class="xs m">This will be tied to the ${q.role ? 'role' : 'person'} you came from.</p>` : ''}
-    <button class="btn sm p" style="align-self:flex-start">Add and prepare me</button></form></div></div></div>`;
+    <button class="btn sm p" style="align-self:flex-start">Add and prepare me</button></form></div></div></div></div>`;
 }
 
 function one(d) {
   const t = d.talk, p = t.prep && Object.keys(t.prep).length ? t.prep : null, link = safeUrl(t.link), past = t.at < Date.now() / 1000 - 3600;
   return html`<div class="body cols wide"><div class="col" style="gap:14px">
-    <div class="card row" style="gap:16px;padding:20px">${tileDay(t.at, past)}<div class="grow"><div class="row wrap" style="gap:8px"><span class="chip blue">${KINDS[t.kind] || t.kind}</span><span class="s m">${when(t.at)} · ${past ? ago(t.at) : until(t.at)} · ${t.minutes} min</span></div>
+    <div class="card row" style="gap:16px;padding:20px">${tileDay(t.at, past)}<div class="grow"><div class="row wrap" style="gap:8px"><span class="chip blue">${KINDS[t.kind] || t.kind}</span><span class="s m">${when(t.at)} · ${past ? rel(t.at) : soon(t.at)} · ${t.minutes} min</span></div>
       <h2 style="font-size:21px;margin-top:4px">${t.title}</h2><div class="s m">${t.person}${t.person && t.company ? ' · ' : ''}${employer(t.company, t.company_id)}${t.role ? html` · ${t.role_id ? html`<a class="emp" href="#/roles/${t.role_id}">${t.role}</a>` : t.role}` : ''}</div></div>
-      <div class="col" style="gap:6px">${link ? html`<a class="btn p" href="${link}" target="_blank" rel="noopener noreferrer">Join</a>` : ''}<a class="btn sm" href="/api/talks/${t.id}/invite.ics">Add to calendar</a></div></div>
+      <div class="col" style="gap:6px">${link ? html`<a class="btn p" href="${link}" target="_blank" rel="noopener noreferrer">Join</a>` : ''}<a class="btn sm" href="/api/talks/${t.id}/invite.ics" title="${ICS_TIP}">Add to my calendar</a></div></div>
     ${d.preparing ? html`<div class="card row"><span class="spin"></span><div><h4>Writing your prep pack</h4><p class="s m">About a minute. The page updates by itself.</p></div></div>` : ''}
     ${p ? html`<div class="card col" style="gap:14px">
       <div><div class="eb">Your opening · 45 seconds</div><p style="margin-top:6px;font-size:14.5px">${p.opening}</p></div>
@@ -63,11 +101,17 @@ const ts = v => Math.floor(new Date(v).getTime() / 1000);
 
 export default {
   title: (d, route) => route.parts[1] ? d.talk.title : 'Interviews',
-  sub: (d, route) => route.parts[1] ? when(d.talk.at) : 'Conversations and interviews, with you prepared for each',
-  topics: ['talks'],
-  load: route => route.parts[1] ? api('talks/' + route.parts[1]) : api('talks'),
-  view: (d, route) => route.parts[1] ? one(d) : list(d, route),
+  sub: (d, route) => route.parts[1] ? when(d.talk.at) : route.q.view === 'month' ? 'Interviews, conversations, follow-ups and closing dates' : 'Conversations and interviews, with you prepared for each',
+  topics: ['talks', 'people', 'roles'],
+  load(route) {
+    if (route.parts[1]) return api('talks/' + route.parts[1]);
+    if (route.q.view !== 'month') return api('talks');
+    const [start, end] = gridOf(monthOf(route.q));
+    return api(`calendar?from=${Math.floor(start / 1000)}&to=${Math.floor(end / 1000)}`);
+  },
+  view: (d, route) => route.parts[1] ? one(d) : route.q.view === 'month' ? month(d, route) : list(d, route),
   actions: {
+    copyfeed: ({ d }) => copy(d.text).then(() => false),
     async add({ f }) {
       const at = ts(f.at);
       if (!at) throw new Error('Choose when it is.');

@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -212,28 +210,6 @@ func (e *Engine) letGoQuiet(now time.Time) {
 	}
 }
 
-// Backup writes today's copy of the data and keeps the last seven.
-func (e *Engine) Backup() (string, error) {
-	if e.Dir == "" {
-		return "", errors.New("no data folder")
-	}
-	dir := filepath.Join(e.Dir, "backups")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	dst := filepath.Join(dir, "jobhunt-"+e.Now().Format("2006-01-02")+".db")
-	if err := e.S.Backup(dst); err != nil {
-		return "", err
-	}
-	old, _ := filepath.Glob(filepath.Join(dir, "jobhunt-*.db"))
-	sort.Strings(old)
-	for len(old) > 7 {
-		os.Remove(old[0])
-		old = old[1:]
-	}
-	return dst, nil
-}
-
 // ---- phone notices ---------------------------------------------------------------
 
 // PhoneSet is how notices reach the person's phone: a topic on an ntfy
@@ -348,9 +324,11 @@ func (e *Engine) WantsAwake() bool {
 	return e.anyJobBut("")
 }
 
-// Tell shows a notification on this computer, if they are on. page is the
-// part of Job Hunt it opens, like "#/roles/12".
+// Tell shows a notification on this computer, if they are on, and keeps it
+// under the bell either way. page is the part of Job Hunt it opens, like
+// "#/roles/12".
 func (e *Engine) Tell(title, text, page string) {
+	e.Keep(noticeKind(page), title, text, page)
 	if e.Notify == nil || !e.Desk().Notify {
 		return
 	}

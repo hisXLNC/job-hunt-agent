@@ -238,6 +238,39 @@ type RunStats struct {
 	Problems  []string          `json:"problems"`   // places that didn't answer
 	ByPlace   map[string][2]int `json:"by_place"`   // place → seen, new
 	ClearedBy map[string]int    `json:"cleared_by"` // reason → count
+	// BySource is the same search seen by kind of source ("boards",
+	// "linkedin", "jobbank", "freehire", "sites", "adzuna", "jooble",
+	// "jsearch"): what Radar's list of sources is drawn from.
+	BySource map[string]SourceRun `json:"by_source,omitempty"`
+}
+
+// SourceRun is what one kind of source gave in one search.
+type SourceRun struct {
+	Looked int    `json:"looked"`          // places of this kind asked
+	Seen   int    `json:"seen"`            // postings they showed
+	New    int    `json:"new"`             // of those, not seen before
+	Failed int    `json:"failed"`          // places that did not answer
+	Error  string `json:"error,omitempty"` // the last one's reason, in plain words
+}
+
+// saw notes that one place of a kind answered.
+func (st *RunStats) saw(kind string, seen, added int) {
+	if st.BySource == nil {
+		st.BySource = map[string]SourceRun{}
+	}
+	r := st.BySource[kind]
+	r.Looked, r.Seen, r.New = r.Looked+1, r.Seen+seen, r.New+added
+	st.BySource[kind] = r
+}
+
+// missed notes that one place of a kind did not answer, and why.
+func (st *RunStats) missed(kind, why string) {
+	if st.BySource == nil {
+		st.BySource = map[string]SourceRun{}
+	}
+	r := st.BySource[kind]
+	r.Looked, r.Failed, r.Error = r.Looked+1, r.Failed+1, why
+	st.BySource[kind] = r
 }
 
 // StartSearch starts a search in the background. Kind is "full" or "fast".
@@ -299,6 +332,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		posts, err := e.listBoard(ctx, c, p)
 		if err != nil {
 			stats.Problems = append(stats.Problems, fmt.Sprintf("%s: %s", c.Name, plainErr(err)))
+			stats.missed(srcBoards, fmt.Sprintf("%s: %s", c.Name, plainErr(err)))
 			continue
 		}
 		open, _ := e.S.OpenRoleKeys(c.ID, c.BoardKind)
@@ -324,6 +358,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			}
 		}
 		stats.Seen += len(posts)
+		stats.saw(srcBoards, len(posts), added)
 		note(c.Name, len(posts), added)
 	}
 
@@ -359,10 +394,12 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 					st.LinkedInUntil = now.Add(2 * time.Hour).Unix()
 					st.LinkedInNote = "LinkedIn asked Job Hunt to slow down; trying again later"
 					stats.Problems = append(stats.Problems, st.LinkedInNote)
+					stats.missed("linkedin", st.LinkedInNote)
 					blocked = true
 					continue
 				}
 				stats.Problems = append(stats.Problems, "LinkedIn, "+bt.Title+": "+plainErr(err))
+				stats.missed("linkedin", "LinkedIn "+plainErr(err))
 				continue
 			}
 			st.LinkedInNote = ""
@@ -389,6 +426,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 				}
 			}
 			stats.Seen += len(posts)
+			stats.saw("linkedin", len(posts), added)
 			note("LinkedIn: "+bt.Title, len(posts), added)
 			select {
 			case <-ctx.Done():
@@ -397,6 +435,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		}
 	} else {
 		stats.Problems = append(stats.Problems, firstOf(st.LinkedInNote, "LinkedIn is resting"))
+		stats.missed("linkedin", firstOf(st.LinkedInNote, "LinkedIn is resting"))
 	}
 
 	// 3. The other title searches, and the job sites and recruiters the person
@@ -405,6 +444,12 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		e.StepTakes(ctx, 40*time.Second)
 		e.Report(ctx, look-2, look, "Job Bank, FreeHire and the job sites you watch")
 		e.searchPlaces(ctx, p, sinceLast, &stats, &fresh, note)
+	}
+	// 3b. The searches that take a key (Adzuna, Jooble, Google for Jobs), for
+	// those who set one up. Each has a daily allowance, so a quick check asks
+	// them sparingly, and only those that can be asked for today's postings.
+	if ctx.Err() == nil {
+		e.searchKeyed(ctx, kind, p, sinceLast, &stats, &fresh, note)
 	}
 	// Stopped part-way: the next search starts where a full one would.
 	if ctx.Err() != nil {
@@ -1008,11 +1053,33 @@ type TailoredCV struct {
 	LeftOut   []brain.LeftOut `json:"left_out"`
 	Questions []string        `json:"questions"`
 	FitAfter  int             `json:"fit_after"`
+	// Prev is the set of edits as it was before the person last asked for
+	// changes, so "Put it back" can restore it.
+	Prev *CVBefore `json:"prev,omitempty"`
+}
+
+// CVBefore is a tailored CV as it stood before the person asked for changes.
+type CVBefore struct {
+	Changes   []cv.Change     `json:"changes"`
+	LeftOut   []brain.LeftOut `json:"left_out"`
+	Questions []string        `json:"questions"`
+	FitAfter  int             `json:"fit_after"`
+	Ask       string          `json:"ask"` // what they asked for
 }
 
 // LetterDoc is the "letter" document of a role.
 type LetterDoc struct {
-	Text string `json:"text"`
+	Text  string `json:"text"`
+	Style string `json:"style,omitempty"` // one of store.LetterStyles; "" reads as the first
+	// Prev is the letter as it was before it was last written again.
+	Prev *LetterBefore `json:"prev,omitempty"`
+}
+
+// LetterBefore is a letter as it stood before it was written again.
+type LetterBefore struct {
+	Text  string `json:"text"`
+	Style string `json:"style"`
+	Ask   string `json:"ask"` // what the person asked for; "" when only the style changed
 }
 
 // Prepare makes the documents for a role: a tailored CV and a letter. Both
@@ -1052,6 +1119,12 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 		return err
 	}
 	post := postingOf(r)
+	// A role that already has a letter keeps the style chosen for it.
+	style := p.Profile.LetterStyle
+	var had LetterDoc
+	if ok, _ := e.S.Doc(id, "letter", &had); ok && store.KnownLetterStyle(had.Style) {
+		style = had.Style
+	}
 	e.StepTakes(ctx, 50*time.Second)
 	e.Report(ctx, 0, 1, "Tailoring your CV and writing the letter for "+r.Company)
 
@@ -1060,8 +1133,8 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 	var letter string
 	var terr, lerr error
 	wg.Add(2)
-	go func() { defer wg.Done(); tail, terr = e.brain.Tailor(ctx, p, base, post, reading) }()
-	go func() { defer wg.Done(); letter, lerr = e.brain.Letter(ctx, p, post, reading) }()
+	go func() { defer wg.Done(); tail, terr = e.brain.Tailor(ctx, p, base, post, reading, nil) }()
+	go func() { defer wg.Done(); letter, lerr = e.brain.Letter(ctx, p, post, reading, style, nil) }()
 	wg.Wait()
 	if terr != nil {
 		return terr
@@ -1073,7 +1146,7 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 	if err := e.S.SaveDoc(id, "cv", doc); err != nil {
 		return err
 	}
-	if err := e.S.SaveDoc(id, "letter", LetterDoc{Text: letter}); err != nil {
+	if err := e.S.SaveDoc(id, "letter", LetterDoc{Text: letter, Style: style}); err != nil {
 		return err
 	}
 	e.S.SetFitTailored(id, tail.FitAfter)
@@ -1156,15 +1229,32 @@ type File struct {
 	Data []byte
 }
 
-var unsafeName = regexp.MustCompile(`[^A-Za-z0-9 ._-]+`)
+// Everything but letters (of any alphabet), digits and a little punctuation
+// is left out of a file's name, so it is safe on Windows and in a download
+// header.
+var unsafeName = regexp.MustCompile(`[^\p{L}\p{N} ._-]+`)
 
 func fileName(parts ...string) string {
-	s := strings.Join(parts, " - ")
-	s = strings.Join(strings.Fields(unsafeName.ReplaceAllString(s, " ")), " ")
+	return fileNameExt("docx", parts...)
+}
+
+func fileNameExt(ext string, parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		p = strings.Join(strings.Fields(unsafeName.ReplaceAllString(p, " ")), " ")
+		if p = strings.Trim(p, " ."); p != "" {
+			kept = append(kept, p)
+		}
+	}
+	s := []rune(strings.Join(kept, " - "))
 	if len(s) > 90 {
 		s = s[:90]
 	}
-	return s + ".docx"
+	name := strings.Trim(string(s), " .-")
+	if name == "" {
+		name = "Job Hunt"
+	}
+	return name + "." + ext
 }
 
 // CVFile renders the tailored CV for a role as a Word document.
@@ -1178,36 +1268,17 @@ func (e *Engine) CVFile(roleID int64) (File, error) {
 		return File{}, err
 	}
 	data, err := office.RenderCV(out)
-	return File{Name: fileName(firstOf(out.Name, "CV"), r.Company), Data: data}, err
+	return File{Name: fileName(e.sender(out), r.Company, "CV"), Data: data}, err
 }
 
 // LetterFile renders the letter for a role as a Word document.
 func (e *Engine) LetterFile(roleID int64) (File, error) {
-	var doc LetterDoc
-	ok, err := e.S.Doc(roleID, "letter", &doc)
+	l, r, err := e.roleLetter(roleID)
 	if err != nil {
 		return File{}, err
 	}
-	if !ok {
-		return File{}, store.ErrNotFound
-	}
-	r, err := e.S.Role(roleID)
-	if err != nil {
-		return File{}, err
-	}
-	p := e.S.Profile()
-	contact := []string{}
-	if cvs, _ := e.S.CVs(); len(cvs) > 0 {
-		var m cv.CV
-		if json.Unmarshal(cvs[0].Model, &m) == nil {
-			contact = append([]string{m.Contact.Location, m.Contact.Email, m.Contact.Phone}, m.Contact.Links...)
-		}
-	}
-	data, err := office.RenderLetter(office.Letter{
-		Name: p.Name, Contact: contact, Date: e.Now().Format("2 January 2006"),
-		To: []string{"Hiring team", r.Company}, Subject: r.Title, Body: "Dear hiring team,\n\n" + doc.Text, Sign: "Sincerely,",
-	})
-	return File{Name: fileName(firstOf(p.Name, "Letter"), r.Company, "letter"), Data: data}, err
+	data, err := office.RenderLetter(l)
+	return File{Name: fileName(firstOf(l.Name, "Letter"), r.Company, "Letter"), Data: data}, err
 }
 
 // BaseCVFile renders a stored CV, untailored.

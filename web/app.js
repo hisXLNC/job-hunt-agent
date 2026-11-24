@@ -73,14 +73,19 @@ export function until(ts) {
 export const when = ts => new Date(ts * 1000).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 export const day = ts => new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 export const clock = ts => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+// "3 days ago" on the page, the exact day and time when the pointer rests on it.
+export const exact = ts => new Date(ts * 1000).toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+export const rel = ts => (ts ? html`<span class="rel" title="${exact(ts)}">${ago(ts)}</span>` : '');
+export const soon = ts => (ts ? html`<span class="rel" title="${exact(ts)}">${until(ts)}</span>` : '');
 
 // A fit score's colour, as the old Job Hunt had it: green from 80, amber from 60, red below.
-export const fitColor = v => (v >= 80 ? '#0B7A3B' : v >= 60 ? '#8F5B00' : '#B42D2D');
-const ringColor = v => (v >= 80 ? '#0B7A3B' : v >= 60 ? '#D49A1E' : '#B42D2D');
+// The shades themselves are in app.css, one set for light and one for dark.
+export const fitColor = v => (v >= 80 ? 'var(--fit-good)' : v >= 60 ? 'var(--fit-ok)' : 'var(--fit-low)');
+const ringColor = v => (v >= 80 ? 'var(--fit-good)' : v >= 60 ? 'var(--fit-ok-ring)' : 'var(--fit-low)');
 export function ring(v, label) {
   const c = 2 * Math.PI * 22, has = v >= 0;
   const col = fitColor(v);
-  return html`<div class="ring" title="${label}"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="22" fill="none" stroke="#E8EBF2" stroke-width="5"/>${has ? html`<circle cx="27" cy="27" r="22" fill="none" stroke="${ringColor(v)}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 27 27)"/>` : ''}</svg><b style="${has ? `color:${col}` : ''}">${has ? v : '–'}</b><span>${label}</span></div>`;
+  return html`<div class="ring" title="${label}"><svg viewBox="0 0 54 54"><circle class="track" cx="27" cy="27" r="22" fill="none" stroke-width="5"/>${has ? html`<circle cx="27" cy="27" r="22" fill="none" style="stroke:${ringColor(v)}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 27 27)"/>` : ''}</svg><b style="${has ? `color:${col}` : ''}">${has ? v : '–'}</b><span>${label}</span></div>`;
 }
 // Two rings, always: how the CV fits as it is, and after tailoring.
 export const rings = (fit, tailored, small) => html`<div class="rings ${small ? 'small' : ''}">${ring(fit, 'Fit now')}${ring(tailored, 'Tailored')}</div>`;
@@ -131,7 +136,7 @@ export function stageChip(r) {
 export function freshness(r, timeOnly) {
   const at = r.posted_at || r.first_seen_at, age = Date.now() / 1000 - at;
   const hot = age < 86400, few = r.applicants >= 0 && r.applicants < 10;
-  return html`<span class="s m">${r.posted_at ? 'Posted' : 'Seen'} <b style="${hot ? 'color:var(--hot)' : ''}">${ago(at)}</b>${!timeOnly && r.applicants >= 0 ? html` · <b style="${few ? 'color:var(--hot)' : ''}">${r.applicants} applicant${r.applicants === 1 ? '' : 's'}</b>` : ''}</span>`;
+  return html`<span class="s m">${r.posted_at ? 'Posted' : 'Seen'} <b style="${hot ? 'color:var(--hot)' : ''}">${rel(at)}</b>${!timeOnly && r.applicants >= 0 ? html` · <b style="${few ? 'color:var(--hot)' : ''}">${r.applicants} applicant${r.applicants === 1 ? '' : 's'}</b>` : ''}</span>`;
 }
 
 // ---- routing ----------------------------------------------------------------------
@@ -165,16 +170,31 @@ export function sortHead(label, key, route, def) {
 }
 
 let toastTimer;
-export function toast(msg, bad) {
+// undo, when given, is how to take back what was just done: the message then
+// stays ten seconds with an Undo button.
+export function toast(msg, bad, undo) {
   document.querySelector('.toast')?.remove();
   const t = document.createElement('div');
   t.className = 'toast' + (bad ? ' bad' : '');
   t.textContent = msg;
   t.setAttribute('role', 'status');
+  if (undo) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Undo';
+    b.onclick = async () => {
+      b.disabled = true;
+      try { await undo(); toast('Undone'); await refreshState(); await reload(true); } catch (e) { toast(e.message, true); }
+    };
+    t.append(b);
+  }
   document.body.append(t);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.remove(), bad ? 7000 : 3500);
+  toastTimer = setTimeout(() => t.remove(), undo ? 10000 : bad ? 7000 : 3500);
 }
+// The three ways to save a role for later, and how the day it comes back reads.
+export const LATER = [[1, 'Tomorrow'], [3, 'In 3 days'], [7, 'Next week']];
+export const dayName = t => new Date(t * 1000).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 export async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast('Couldn\'t copy. Select the text and press Ctrl+C.', true); }
 }
@@ -220,7 +240,7 @@ function frame() {
     <div class="pilot" id="pilot">${pilot()}</div></aside>
     <div class="main"><div class="top"><h1 id="title"></h1><span class="sub" id="sub"></span>
       <div class="find"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></svg><input id="find" type="text" placeholder="Find a role, employer or person" aria-label="Find a role, employer or person" autocomplete="off" style="height:32px;padding:0;border:0;box-shadow:none"><kbd>Ctrl K</kbd><div class="found" id="found" hidden></div></div>
-      ${assistantButton()}</div>
+      ${bellFrame()}${assistantButton()}</div>
       <div class="page" id="page" tabindex="-1"></div></div>${assistantFrame()}</div>`;
   void cl;
 }
@@ -247,7 +267,64 @@ function pilot() {
   if (s.paused) return html`${up}<h6><span class="dot off"></span>Searching is paused</h6><a href="#/radar" style="color:#9DB0FF">Turn it back on in Radar</a>${foot}`;
   if (s.held) return html`${up}<h6><span class="dot off"></span>Stopped by you</h6>Job Hunt starts by itself again at ${clock(s.held)}. <button class="stop go" data-resume title="Lets Job Hunt carry on now instead of waiting.">Carry on now</button>${foot}`;
   const next = Math.min(s.next_fast || Infinity, s.next_full || Infinity);
-  return html`${up}<h6><span class="dot"></span>Watching for you</h6>${s.doing || html`Next check ${isFinite(next) ? until(next) : 'soon'}.`}${foot}`;
+  return html`${up}<h6><span class="dot"></span>Watching for you</h6>${s.doing || html`Next check ${isFinite(next) ? soon(next) : 'soon'}.`}${foot}`;
+}
+
+// ---- the bell ------------------------------------------------------------------------
+// Everything Job Hunt told the person is kept (the last fifty) and listed
+// here, ten to a page. A click opens the page the notice is about.
+const BELL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0112 0c0 6 2.500 7.500 2.500 7.500h-17S6 15 6 9z"/><path d="M10 20a2.200 2.200 0 004 0"/></svg>';
+const bell = { open: false, page: 1, list: [] };
+// Ten to a page, fewer when the window is too short to show ten without scrolling inside the list.
+const bellSize = () => Math.max(3, Math.min(10, Math.floor((window.innerHeight - 160) / 54)));
+const bellFrame = () => html`<div class="bell" id="bell"><button type="button" id="bell-btn" aria-label="Notices" aria-expanded="false" aria-controls="bell-list" title="What Job Hunt told you: fresh roles that fit, replies, new versions and problems. Kept here so nothing is missed.">${new Safe(BELL)}<b id="bell-n" hidden></b></button><div class="bell-list" id="bell-list" role="dialog" aria-label="Notices" hidden></div></div>`;
+function bellCount() {
+  const b = document.getElementById('bell-n'), n = app.state?.notices || 0;
+  if (!b) return;
+  b.textContent = n > 99 ? '99+' : n;
+  b.hidden = !n;
+  document.getElementById('bell-btn').setAttribute('aria-label', n ? `Notices, ${n} unread` : 'Notices');
+}
+function bellDraw() {
+  const box = document.getElementById('bell-list');
+  if (!box) return;
+  const BELL_SIZE = bellSize(), all = bell.list, pages = Math.max(1, Math.ceil(all.length / BELL_SIZE));
+  bell.page = Math.max(1, Math.min(bell.page, pages));
+  const from = (bell.page - 1) * BELL_SIZE, shown = all.slice(from, from + BELL_SIZE), unread = all.filter(n => !n.read).length;
+  box.innerHTML = html`<header><b class="grow">Notices</b>${unread ? html`<button type="button" class="btn sm ghost" data-bell="all" title="Marks every notice as read. They stay in the list.">Mark all read</button>` : html`<span class="xs m">All read</span>`}</header>
+    ${shown.length ? shown.map(n => html`<a class="n ${n.read ? '' : 'new'} ${n.kind === 'problem' ? 'problem' : ''}" href="${/^#\//.test(n.page || '') ? n.page : '#/today'}" data-bell="go" data-id="${n.id}"><b title="${n.title}">${n.title}</b><span class="xs m">${rel(n.at)}</span><span class="tx" title="${n.text}">${n.text}</span></a>`)
+      : html`<p class="s m" style="padding:14px 12px">Nothing yet. Fresh roles that fit, replies and problems are kept here.</p>`}
+    ${all.length > BELL_SIZE ? html`<footer><span class="xs m grow">${from + 1} to ${from + shown.length} of ${all.length}</span><button type="button" class="btn sm" data-bell="prev" ${bell.page > 1 ? '' : 'disabled'}>Previous</button><button type="button" class="btn sm" data-bell="next" ${bell.page < pages ? '' : 'disabled'}>Next</button></footer>` : ''}`.s;
+}
+async function bellLoad() {
+  try { const r = await api('notices'); bell.list = r.notices || []; if (app.state) app.state.notices = r.unread; } catch { return; }
+  bellCount();
+  bellDraw();
+}
+function bellShow(open) {
+  const box = document.getElementById('bell-list');
+  if (!box) return;
+  bell.open = open;
+  box.hidden = !open;
+  document.getElementById('bell-btn').setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) { bell.page = 1; bellDraw(); bellLoad(); }
+}
+document.addEventListener('click', async ev => {
+  if (ev.target.closest('#bell-btn')) { bellShow(!bell.open); return; }
+  const el = ev.target.closest('[data-bell]');
+  if (!el) { if (bell.open && !ev.target.closest('#bell')) bellShow(false); return; }
+  switch (el.dataset.bell) {
+    case 'prev': bell.page--; bellDraw(); break;
+    case 'next': bell.page++; bellDraw(); break;
+    case 'all': await post('notices/read').catch(() => {}); await bellLoad(); break;
+    case 'go': bellShow(false); post('notices/read', { id: +el.dataset.id }).then(r => { if (app.state) app.state.notices = r.unread; bellCount(); }).catch(() => {}); break;
+  }
+});
+
+// Light, dark, or whatever Windows is set to. The choice is kept by the
+// program; theme.js applies it before the first paint, this keeps it right.
+export function applyTheme(t) {
+  if (t && document.documentElement.dataset.theme !== t) document.documentElement.dataset.theme = t;
 }
 
 // The version these pages were loaded from. When the program comes back as another one, the pages load again.
@@ -273,6 +350,8 @@ async function refreshState() {
   try { app.state = await api('state'); } catch { return; }
   if (loadedVersion && app.state.version !== loadedVersion) { location.reload(); return; }
   loadedVersion = app.state.version;
+  applyTheme(app.state.theme);
+  bellCount();
   whatsNew();
   const pl = document.getElementById('pilot');
   if (pl) pl.innerHTML = pilot().s;
@@ -308,9 +387,10 @@ export async function reload(quiet) {
   const page = app.page, route = app.route, seq = ++loadSeq;
   if (!page) return;
   const root = document.getElementById('page');
+  if (!root) return; // the frame is gone while Job Hunt restarts
   try {
     const data = await page.load(route);
-    if (seq !== loadSeq) return;
+    if (seq !== loadSeq || !root.isConnected) return;
     app.data = data;
     const keep = root.scrollTop;
     root.innerHTML = page.view(data, route).s;
@@ -320,7 +400,7 @@ export async function reload(quiet) {
     page.after?.(root, data, route);
     if (cursor >= 0) { if (quiet) moveCursor(cursor); else cursor = -1; }
   } catch (e) {
-    if (seq !== loadSeq) return;
+    if (seq !== loadSeq || !root.isConnected) return;
     document.getElementById('title').textContent = typeof page.title === 'string' ? page.title : 'Job Hunt';
     document.getElementById('sub').textContent = '';
     root.innerHTML = html`<div class="body"><div class="card empty"><h3>This page couldn't load</h3><p>${e.message}</p><p style="margin-top:12px"><button class="btn" data-act="_retry">Try again</button></p></div></div>`.s;
@@ -338,19 +418,32 @@ export function redraw() {
   if (cursor >= 0) moveCursor(cursor);
 }
 let sizeTimer, lastSize = '';
-window.addEventListener('resize', () => {
+// The page's own room changes with the window and when the Claude panel opens beside it.
+function sized() {
   clearTimeout(sizeTimer);
   sizeTimer = setTimeout(() => {
-    const now = Math.round(innerWidth / 40) + 'x' + Math.round(innerHeight / 30);
+    const pg = document.getElementById('page');
+    const now = Math.round((pg?.clientWidth || innerWidth) / 40) + 'x' + Math.round(innerHeight / 30);
     if (now === lastSize || typing()) return;
+    const first = !lastSize;
     lastSize = now;
+    if (first) return;
     app.page?.sized ? reload(true) : redraw();
   }, 160);
-});
+}
+window.addEventListener('resize', sized);
+let sizeWatch;
+function watchSize() {
+  const pg = document.getElementById('page');
+  if (!pg || !window.ResizeObserver) return;
+  sizeWatch?.disconnect();
+  sizeWatch = new ResizeObserver(sized);
+  sizeWatch.observe(pg);
+}
 
 async function navigate() {
   const route = parseHash();
-  if (!app.state) { try { app.state = await api('state'); loadedVersion = app.state.version; whatsNew(); } catch (e) { $app.innerHTML = html`<div class="setup"><div class="card empty"><h3>Job Hunt is not running</h3><p>${e.message}</p></div></div>`.s; return; } }
+  if (!app.state) { try { app.state = await api('state'); loadedVersion = app.state.version; applyTheme(app.state.theme); whatsNew(); } catch (e) { $app.innerHTML = html`<div class="setup"><div class="card empty"><h3>Job Hunt is not running</h3><p>${e.message}</p></div></div>`.s; return; } }
   let key = route.parts[0] || 'today';
   if (!app.state.setup_done && key !== 'setup') { location.hash = '#/setup'; return; }
   if (key === 'roles' && route.parts[1] && route.parts[1] !== 'board') key = 'role';
@@ -360,7 +453,7 @@ async function navigate() {
   const mod = (await PAGES[key]()).default;
   app.page = mod;
   if (key === 'setup') { $app.innerHTML = '<div class="page" id="page" style="height:100vh"></div><h1 id="title" hidden></h1><span id="sub" hidden></span>'; }
-  else if (!$app.querySelector('.app')) { $app.innerHTML = frame().s; mountAssistant(); }
+  else if (!$app.querySelector('.app')) { $app.innerHTML = frame().s; mountAssistant(); bellCount(); watchSize(); }
   else {
     const active = key === 'role' || key === 'employer' ? 'roles' : key;
     $app.querySelectorAll('.nav').forEach(a => { const on = a.getAttribute('href') === '#/' + active; a.classList.toggle('on', on); on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
@@ -425,7 +518,7 @@ document.addEventListener('input', ev => {
 });
 document.addEventListener('keydown', ev => {
   if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k') { ev.preventDefault(); document.getElementById('find')?.focus(); }
-  if (ev.key === 'Escape') { document.getElementById('found')?.setAttribute('hidden', ''); }
+  if (ev.key === 'Escape') { document.getElementById('found')?.setAttribute('hidden', ''); if (bell.open) { bellShow(false); document.getElementById('bell-btn')?.focus(); } }
   if (ev.key === 'Enter' && ev.target.id === 'find') { const a = document.querySelector('#found a'); if (a) { location.hash = a.getAttribute('href'); ev.target.value = ''; document.getElementById('found').hidden = true; } }
 });
 // Keyboard flow in lists: j and k move, Enter opens, x ticks, p prepares, a marks applied, n is "not for me", ? shows the keys.
@@ -461,7 +554,7 @@ document.addEventListener('keydown', ev => {
   }
 });
 let goKey = 0;
-window.addEventListener('hashchange', () => { const f = document.getElementById('find'); if (f) f.value = ''; document.getElementById('found')?.setAttribute('hidden', ''); navigate(); });
+window.addEventListener('hashchange', () => { if (bell.open) bellShow(false); const f = document.getElementById('find'); if (f) f.value = ''; document.getElementById('found')?.setAttribute('hidden', ''); navigate(); });
 
 // The program says when something changed; open pages bring themselves up to date.
 let pendingTopics = new Set(), flushTimer;
@@ -470,6 +563,7 @@ function flush() {
   const topics = pendingTopics;
   pendingTopics = new Set();
   refreshState();
+  if (bell.open && topics.has('notices')) bellLoad();
   const mine = app.page?.topics || [];
   if (mine.some(t => topics.has(t))) reload(true);
 }

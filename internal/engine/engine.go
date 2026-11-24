@@ -53,6 +53,8 @@ type Engine struct {
 
 	mailDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
 
+	srcMu sync.Mutex // the keys and the state of the searches that take one
+
 	oldMu     sync.Mutex // one import from the old Job Hunt at a time
 	oldSeen   *OldLook   // the last look at the old data on this computer, kept a minute
 	oldSeenAt time.Time
@@ -205,7 +207,9 @@ func (e *Engine) Go(name, doing string, fn func(ctx context.Context) error) bool
 		defer func() {
 			if r := recover(); r != nil {
 				trace.Log("problem", "panic in job %s: %v ⏎ %s", name, r, debug.Stack())
-				e.S.Log(store.Activity{Kind: "problem", Text: fmt.Sprintf("Something went wrong while %s: %v", strings.ToLower(doing), r)})
+				text := fmt.Sprintf("Something went wrong while %s: %v", strings.ToLower(doing), r)
+				e.S.Log(store.Activity{Kind: "problem", Text: text})
+				e.keepProblem(text)
 			}
 			e.endJob(j)
 		}()
@@ -243,6 +247,7 @@ func (e *Engine) problem(doing string, err error) {
 		}
 	}
 	e.S.Log(store.Activity{Kind: "problem", Text: text})
+	e.keepProblem(text)
 }
 
 // Busy reports whether a named job is running.
@@ -285,6 +290,11 @@ func (e *Engine) Status() Status {
 	}
 	for _, site := range ps.Sites {
 		if !site.Off {
+			st.Sources++
+		}
+	}
+	for _, m := range e.MoreSources() {
+		if m.On && m.State != "none" {
 			st.Sources++
 		}
 	}
