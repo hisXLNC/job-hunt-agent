@@ -85,6 +85,7 @@ func (p Person) Block() string {
 	if pr.PayFloor > 0 {
 		line("Pay floor", fmt.Sprintf("%d %s", pr.PayFloor, pr.PayUnit))
 	}
+	line("What matters to them in a job (their own words; weigh a role by it)", clip(pr.Matters, 800))
 	if len(p.Facts) > 0 {
 		b.WriteString("\n# True things that are not on the CV (the person told Job Hunt)\n")
 		for _, f := range p.Facts {
@@ -1070,6 +1071,9 @@ type MailReading struct {
 	// For a receipt about none of the listed roles: what was applied to.
 	Company string `json:"company"`
 	Title   string `json:"title"`
+	// For an interview that is already fixed: when, and where to join.
+	When string `json:"when"`
+	Link string `json:"link"`
 }
 
 var mailShape = llm.Obj(
@@ -1080,6 +1084,8 @@ var mailShape = llm.Obj(
 	"reply", llm.Str("a draft reply in the person's voice when one is called for, under 110 words, with [time 1] style gaps where only they know the answer; empty when no reply is needed"),
 	"company", llm.Str("only for a receipt that is about none of the listed roles: the employer the person applied to, as the message names it; empty otherwise"),
 	"title", llm.Str("only for a receipt that is about none of the listed roles: the job title applied for, as the message names it; empty otherwise"),
+	"when", llm.Str("only when the message confirms an interview or call at one fixed date and time (not a request for availability, not a choice of several): that moment as YYYY-MM-DDTHH:MM in the time zone the message uses; empty otherwise"),
+	"link", llm.Str("only with 'when': the video or meeting link the message gives for it; empty if none"),
 )
 
 type mailInput struct {

@@ -326,6 +326,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	if !p.SetupDone {
 		return nil
 	}
+	e.preparedNow.Store(0)
 	runID := e.S.StartRun("search:" + kind)
 	stats := RunStats{Kind: kind, ByPlace: map[string][2]int{}, ClearedBy: map[string]int{}}
 	st := e.searchState()
@@ -963,8 +964,7 @@ func postingOf(r store.Role) brain.Posting {
 // The fit at or above which a role is worth the person's attention, and at
 // or above which documents are prepared without being asked.
 const (
-	keepFit    = 55
-	prepareFit = 70
+	keepFit = 55 // unless the person chose another: Profile.Keep
 )
 
 // ReadRole reads one role against the person: fetches the full posting if
@@ -1056,7 +1056,8 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 	if err := e.S.SetReading(id, reading.Fit, band, reading); err != nil {
 		return false, false, err
 	}
-	if reading.Verdict == "skip" || reading.Fit < keepFit {
+	prof := e.S.Profile()
+	if reading.Verdict == "skip" || reading.Fit < prof.Keep() {
 		why := firstOf(reading.SkipWhy, "Fit too low ("+fmt.Sprint(reading.Fit)+")")
 		// A role the person added themselves is never set aside for them.
 		if r.Source != "manual" && r.Source != "extension" {
@@ -1067,9 +1068,13 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 	e.S.Advance(id, "found")
 	e.S.Log(store.Activity{Kind: "read", RoleID: id, CompanyID: r.CompanyID, Text: fmt.Sprintf("Scored %d against your %s", reading.Fit, e.cvName(reading.CVID))})
 
-	if reading.Fit >= prepareFit && e.S.Profile().MayPrepare != "ask" {
+	// One search prepares at most as many as the person allowed; the rest
+	// wait on Today with a Prepare button.
+	full := prof.PrepareMax > 0 && e.Busy("search") && int(e.preparedNow.Load()) >= prof.PrepareMax
+	if reading.Fit >= prof.PrepareAt() && prof.MayPrepare != "ask" && !full {
 		if perr := e.Prepare(ctx, id); perr == nil {
 			prepared = true
+			e.preparedNow.Add(1)
 		} else if !errors.Is(perr, context.Canceled) {
 			e.problem("Preparing documents", perr)
 		}

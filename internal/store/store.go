@@ -567,7 +567,35 @@ type Profile struct {
 	// Applications the person aims to send each week. 0 = no goal. Not set = 10.
 	WeeklyGoal *int `json:"weekly_goal"`
 
-	SetupDone bool `json:"setup_done"`
+	// The fit a role needs to be kept at all. Not set = 55.
+	KeepFit *int `json:"keep_fit"`
+	// The fit from which the CV and letter are written without asking
+	// (when MayPrepare allows). Not set = 70.
+	PrepareFit *int `json:"prepare_fit"`
+	// The most roles one search prepares by itself; 0 = no limit. The
+	// rest wait on Today with a Prepare button.
+	PrepareMax int `json:"prepare_max"`
+	// What matters to the person in a job, in their own words. Claude
+	// weighs it when it reads a role.
+	Matters   string `json:"matters"`
+	SetupDone bool   `json:"setup_done"`
+}
+
+// Keep is the fit a role needs to be kept.
+func (p Profile) Keep() int {
+	if p.KeepFit == nil {
+		return 55
+	}
+	return min(max(*p.KeepFit, 30), 95)
+}
+
+// PrepareAt is the fit from which documents are written without asking.
+func (p Profile) PrepareAt() int {
+	at := 70
+	if p.PrepareFit != nil {
+		at = min(max(*p.PrepareFit, 30), 100)
+	}
+	return max(at, p.Keep())
 }
 
 // LetterStyles are the ways a cover letter can be written; the first is the usual one.

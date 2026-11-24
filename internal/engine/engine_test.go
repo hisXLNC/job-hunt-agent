@@ -159,7 +159,7 @@ func TestSearchReadPrepareApply(t *testing.T) {
 		t.Fatalf("want 5 roles recorded, got %d", len(all))
 	}
 	good := by["Tax Technology Manager|Toronto, ON"]
-	if good.Stage != "ready" || good.Fit < prepareFit {
+	if good.Stage != "ready" || good.Fit < 70 {
 		t.Fatalf("the matching role should be read and prepared at once: stage=%s fit=%d closed=%s", good.Stage, good.Fit, good.Closed)
 	}
 	if good.FitTailored < good.Fit {

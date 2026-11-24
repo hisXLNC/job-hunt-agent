@@ -203,10 +203,10 @@ var (
 	// "$85,000 - $105,000 a year", "CAD 40.50/hour", "£45k–£55k"
 	payMarkedRe = regexp.MustCompile(`(?i)` + payCur + `\s?(?:` + payNum + `)(?:\s?(?:-|–|—|to|and)\s?` + payCur + `?\s?(?:` + payNum + `))?(?:\s?(?:CAD|USD|AUD|GBP|EUR))?` + payPer + `?`)
 	// "90,000 to 110,000 CAD per year", where no sign comes first
-	payBareRe = regexp.MustCompile(`(?i)(?:` + payNum + `)\s?(?:-|–|—|to)\s?(?:` + payNum + `)(?:\s?(?:CAD|USD|AUD|GBP|EUR|dollars))?` + payPer + `?`)
+	payBareRe   = regexp.MustCompile(`(?i)(?:` + payNum + `)\s?(?:-|–|—|to)\s?(?:` + payNum + `)(?:\s?(?:CAD|USD|AUD|GBP|EUR|dollars))?` + payPer + `?`)
 	payPerEndRe = regexp.MustCompile(`(?i)` + payPer + `$`)
-	payWordRe = regexp.MustCompile(`(?i)\b(salary|salaries|compensation|pay range|base pay|pay rate|pay:|wage|hourly rate|remuneration|pay band|pay scale|rate of pay|earn|OTE|on-target earnings|per hour|per year|annually|/hr|/hour|/yr|/year)\b`)
-	payNotRe  = regexp.MustCompile(`(?i)\b(revenue|funding|raised|valuation|billion|million|customers|assets|portfolio|budget|turnover|sales of|ARR|bonus of|sign-?on|signing bonus|referral|allowance|stipend|reimburse|tuition|rrsp|401\(?k|coverage|benefit of|up to \$?\d+ (?:for|toward))`)
+	payWordRe   = regexp.MustCompile(`(?i)\b(salary|salaries|compensation|pay range|base pay|pay rate|pay:|wage|hourly rate|remuneration|pay band|pay scale|rate of pay|earn|OTE|on-target earnings|per hour|per year|annually|/hr|/hour|/yr|/year)\b`)
+	payNotRe    = regexp.MustCompile(`(?i)\b(revenue|funding|raised|valuation|billion|million|customers|assets|portfolio|budget|turnover|sales of|ARR|bonus of|sign-?on|signing bonus|referral|allowance|stipend|reimburse|tuition|rrsp|401\(?k|coverage|benefit of|up to \$?\d+ (?:for|toward))`)
 )
 
 // PayFromText finds the pay a posting names in its own text, for the many

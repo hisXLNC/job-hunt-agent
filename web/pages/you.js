@@ -20,6 +20,8 @@ const SETTINGS = [
   ['', 'profile', 'avoid', 'Never show: titles or employers', 'never show avoid block hide exclude employers mute'],
   ['', 'profile', 'wp_remote', 'Ways of working: remote, hybrid, on site', 'remote hybrid onsite on site office work from home'],
   ['', 'profile', 'max_age_days', 'Hard limits: age of posting, pay, contract, part-time', 'hard limits old postings age contract part-time internship strict'],
+  ['', 'profile', 'keep_fit', 'Fit score a role needs, and when documents are written', 'fit score needed threshold tailor automatically strong fits all limit per search most tailored scored'],
+  ['', 'profile', 'matters', 'What matters to you in a job', 'matters priorities preferences values what i want'],
   ['', 'profile', 'may_prepare', 'When a strong role appears: write straight away or ask', 'prepare automatically ask before writing tailor auto'],
   ['', 'cvs', '', 'Your CVs', 'cv resume résumé upload add file word pdf'],
   ['', 'facts', '', 'What Job Hunt knows about you', 'facts know about me remember forget'],
@@ -29,6 +31,7 @@ const SETTINGS = [
   ['connections', 'claude', 'daily_limit', 'Daily spending limit', 'limit budget spend cost dollars money cap'],
   ['connections', 'phone', '', 'Phone notices', 'phone ntfy notice notification push buzz mobile topic quiet hours'],
   ['connections', 'phoneaccess', '', 'Job Hunt on your phone', 'phone mobile access remote browser wifi tailscale away qr code pair'],
+  ['connections', 'owncal', 'talkset', 'When you can do interviews', 'interview hours availability times to offer length slots time zone'],
   ['connections', 'owncal', '', 'Your Google Calendar', 'google calendar sync busy free times outlook icloud ical ics availability'],
   ['app', 'cloud', '', 'Copies in Google Drive or OneDrive', 'sync google drive onedrive dropbox cloud another computer second pc laptop move'],
   ['connections', 'mail', '', 'Your inbox', 'inbox mail email e-mail gmail imap app password replies'],
@@ -97,6 +100,10 @@ function about(d) {
         <label class="field">Follow up on an application <span class="h">When there has been no reply.</span><select name="chase_days">${[...new Set([0, 5, 8, 10, 14, 21, p.chase_days ?? 8])].sort((a, b) => a - b).map(n => html`<option value="${n}" ${(p.chase_days ?? 8) === n ? 'selected' : ''}>${n ? `After ${n} days` : 'Never'}</option>`)}</select></label>
         <label class="field">Applications a week <span class="h">Your goal. 0 for none.</span><input type="number" name="weekly_goal" min="0" max="100" value="${p.weekly_goal ?? 10}"></label></div>
       <label class="field" style="max-width:420px">How you sign a letter <span class="h">One line each. Leave empty for "Sincerely," and your name.</span><textarea name="signature" rows="2" placeholder="Kind regards,&#10;Sam Rivera, CPA">${p.signature || ''}</textarea></label>
+      <div class="grid3" data-set="fit"><label class="field">Fit a role needs <span class="h">Under this, it is set aside. 55 unless you say.</span><input type="number" name="keep_fit" min="30" max="95" value="${p.keep_fit ?? 55}"></label>
+        <label class="field">Write documents from fit <span class="h">85 for strong fits only; the same as the first for all.</span><input type="number" name="prepare_fit" min="30" max="100" value="${p.prepare_fit ?? 70}"></label>
+        <label class="field">Most to write in one search <span class="h">0 for no limit. The rest wait on Today.</span><input type="number" name="prepare_max" min="0" max="200" value="${p.prepare_max || 0}"></label></div>
+      <label class="field">What matters to you in a job <span class="h">In your own words. Claude weighs every role by it.</span><textarea name="matters" rows="2" maxlength="1500" placeholder="A team that ships; no on-call; within 40 minutes by train; a manager who was an accountant.">${p.matters || ''}</textarea></label>
       <label class="field" style="max-width:420px">When a strong role appears<select name="may_prepare"><option value="do" ${p.may_prepare !== 'ask' ? 'selected' : ''}>Write the CV and letter straight away</option><option value="ask" ${p.may_prepare === 'ask' ? 'selected' : ''}>Ask me before writing anything</option></select></label>
       <p class="xs m">Job Hunt never submits an application or sends a message. That is always you.</p>
       <div class="row"><button class="btn p">Save</button></div></form>
@@ -168,6 +175,10 @@ function ownCalendar(c) {
     <div class="row wrap"><button class="btn p">${c.on ? 'Read it now' : 'Connect'}</button>${c.has_url ? html`<button type="button" class="btn danger" data-act="forgetcal" data-confirm="Stop reading your calendar? The address and everything read from it are removed from Job Hunt.">Disconnect</button>` : ''}</div>
     ${c.on && c.free?.length ? html`<div><div class="eb">When you are free</div><p class="xs m" style="margin-top:3px">Working hours on the coming working days with nothing in your calendar or in Job Hunt.</p><ul class="s" style="margin:6px 0 0 18px">${c.free.map(t => html`<li>${slot(t)}</li>`)}</ul>
       <button type="button" class="btn sm" style="margin-top:8px" data-act="copyfree" data-text="${c.free.map(slot).join('\n')}">Copy these times</button></div>` : ''}
+    <div class="hr"></div>
+    <div data-set="talkset"><div class="eb">When you can do interviews</div><p class="xs m" style="margin-top:3px">When an employer asks for your availability, the drafted reply offers free times inside these hours${c.on ? '' : ' (once your calendar is connected; until then the draft leaves gaps for you to fill)'}. A message that fixes one time puts the interview into Interviews by itself.</p>
+      <div class="grid4" style="margin-top:8px"><label class="field">From <span class="h">Hour, 0 to 22.</span><input type="number" name="t_from" min="0" max="22" value="${c.talkset?.from ?? 9}"></label><label class="field">Until <span class="h">Hour, up to 24.</span><input type="number" name="t_to" min="1" max="24" value="${c.talkset?.to ?? 17}"></label><label class="field">Minutes each<input type="number" name="t_minutes" min="15" max="240" step="15" value="${c.talkset?.minutes ?? 60}"></label><label class="field">Times to offer<input type="number" name="t_offer" min="1" max="6" value="${c.talkset?.offer ?? 3}"></label></div>
+      <button type="button" class="btn sm" style="margin-top:8px" data-act="savetalkset">Save these hours</button></div>
     <p class="xs m">Outlook and iCloud calendars have such an address too (Outlook: Settings → Calendar → Shared calendars → Publish a calendar → ICS). To put an interview <b>into</b> Google Calendar, open it under Interviews and press <b>Add to Google Calendar</b>.</p></form>`;
 }
 const clockOf = ts => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -423,6 +434,7 @@ export default {
       await put('profile', { name: f.name, headline: f.headline, rare: f.rare, city: f.city, places: lines(f.places), country: f.country, home: f.home, arrive_on: f.arrive_on, work_status: f.work_status, pay_floor: +f.pay_floor || 0,
         start_early: !!f.start_early, titles: { level: lines(f.level), step_up: lines(f.step_up), sideways: lines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid), workplaces: wp.length === 3 ? [] : wp, may_prepare: f.may_prepare,
         letter_style: f.letter_style, signature: f.signature, chase_days: Math.max(0, +f.chase_days || 0), weekly_goal: Math.max(0, Math.round(+f.weekly_goal) || 0),
+        keep_fit: Math.min(95, Math.max(30, Math.round(+f.keep_fit) || 55)), prepare_fit: Math.min(100, Math.max(30, Math.round(+f.prepare_fit) || 70)), prepare_max: Math.max(0, Math.round(+f.prepare_max) || 0), matters: f.matters,
         pay_strict: !!f.pay_strict, max_age_days: +f.max_age_days || 0, no_types: ['contract', 'part-time', 'internship'].filter(k => f['no_' + k]) });
       toast('Saved. The next search uses this.');
     },
@@ -455,6 +467,7 @@ export default {
       return false;
     },
     phoneforget: ({ d }) => del('phoneaccess/devices/' + d.id).then(() => toast('Removed')),
+    savetalkset({ el }) { const f = el.closest('form'); return put('talkset', { from: +f.t_from.value, to: +f.t_to.value, minutes: +f.t_minutes.value, offer: +f.t_offer.value }).then(() => toast('Saved')); },
     async savecal({ f }) { await put('owncal', { url: f.url }); toast('Connected. Your entries are on the month under Interviews.'); },
     forgetcal: () => del('owncal').then(() => toast('Disconnected')),
     copyfree: ({ d }) => copy(d.text).then(() => false),

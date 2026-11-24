@@ -393,7 +393,7 @@ func (s *Server) reachRoutes(h func(string, handler)) {
 	// ---- the person's own calendar ---------------------------------------------------
 	own := func() map[string]any {
 		c := e.OwnCal()
-		return map[string]any{"on": c.On, "has_url": c.URL != "", "at": c.At, "note": c.Note, "count": c.Count, "free": e.FreeTimes(5)}
+		return map[string]any{"on": c.On, "has_url": c.URL != "", "at": c.At, "note": c.Note, "count": c.Count, "free": e.FreeTimes(max(5, e.TalkSet().Offer)), "talkset": e.TalkSet()}
 	}
 	h("GET /api/owncal", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		out := own()
@@ -402,6 +402,16 @@ func (s *Server) reachRoutes(h func(string, handler)) {
 			out["events"] = e.OwnEvents(from, to)
 		}
 		return out, nil
+	})
+	h("PUT /api/talkset", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		set := e.TalkSet()
+		if err := read(r, &set); err != nil {
+			return nil, err
+		}
+		if err := e.SetTalkSet(set); err != nil {
+			return nil, bad(capitalise(err.Error()) + ".")
+		}
+		return nil, nil
 	})
 	h("PUT /api/owncal", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {

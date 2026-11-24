@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -194,6 +195,89 @@ type Slot struct {
 	End   int64 `json:"end"`
 }
 
+// TalkSet is when the person can do interviews and what to offer an
+// employer who asks.
+type TalkSet struct {
+	From    int `json:"from"`    // first hour of the day, 0-23
+	To      int `json:"to"`      // the hour it ends
+	Minutes int `json:"minutes"` // how long one is
+	Offer   int `json:"offer"`   // how many times to offer
+}
+
+func (e *Engine) TalkSet() TalkSet {
+	set := TalkSet{From: 9, To: 17, Minutes: 60, Offer: 3}
+	e.S.Get("talkset", &set)
+	if set.From < 0 || set.From > 22 || set.To <= set.From || set.To > 24 {
+		set.From, set.To = 9, 17
+	}
+	if set.Minutes < 15 || set.Minutes > 240 {
+		set.Minutes = 60
+	}
+	if set.Offer < 1 || set.Offer > 6 {
+		set.Offer = 3
+	}
+	return set
+}
+
+func (e *Engine) SetTalkSet(set TalkSet) error {
+	if set.From < 0 || set.From > 22 || set.To <= set.From || set.To > 24 {
+		return errors.New("interview hours run from an hour to a later hour, like 9 to 17")
+	}
+	if set.Minutes < 15 || set.Minutes > 240 {
+		return errors.New("an interview is 15 to 240 minutes long")
+	}
+	if set.Offer < 1 || set.Offer > 6 {
+		return errors.New("offer between 1 and 6 times")
+	}
+	if err := e.S.Set("talkset", set); err != nil {
+		return err
+	}
+	e.S.Changed("connections")
+	return nil
+}
+
+// OfferTimes writes free times the way a person would in a reply.
+func (e *Engine) OfferTimes(n int) []string {
+	var out []string
+	loc := e.Now().Location()
+	for _, s := range e.FreeTimes(n) {
+		a, b := time.Unix(s.Start, 0).In(loc), time.Unix(s.End, 0).In(loc)
+		out = append(out, a.Format("Monday 2 January")+", "+a.Format("15:04")+" to "+b.Format("15:04"))
+	}
+	return out
+}
+
+var timeGapRe = regexp.MustCompile(`\[(?:time|slot|option) ?(\d)\]`)
+
+// fillTimes puts the person's free times into a drafted reply that left
+// [time 1] style gaps. With no calendar connected the gaps stay, because
+// only the person knows.
+func (e *Engine) fillTimes(reply string) string {
+	if !timeGapRe.MatchString(reply) {
+		return reply
+	}
+	times := e.OfferTimes(e.TalkSet().Offer)
+	if len(times) == 0 {
+		return reply
+	}
+	out := timeGapRe.ReplaceAllStringFunc(reply, func(m string) string {
+		i := int(timeGapRe.FindStringSubmatch(m)[1][0] - '1')
+		if i >= 0 && i < len(times) {
+			return times[i]
+		}
+		return m
+	})
+	// A line left with a gap nobody can fill is dropped.
+	var keep []string
+	for _, line := range strings.Split(out, "\n") {
+		if timeGapRe.MatchString(line) && strings.TrimSpace(timeGapRe.ReplaceAllString(line, "")) == "-" {
+			continue
+		}
+		keep = append(keep, line)
+	}
+	return strings.Join(keep, "\n")
+}
+
 // FreeTimes offers up to n one-hour stretches in working hours over the
 // coming working days that touch nothing in the person's calendar or in
 // Job Hunt's own list of conversations, at most two a day.
@@ -204,13 +288,15 @@ func (e *Engine) FreeTimes(n int) []Slot {
 	}
 	now := e.Now()
 	day := dayStart(now)
+	set := e.TalkSet()
+	long := time.Duration(set.Minutes) * time.Minute
 	for d := 1; d <= 14 && len(out) < n; d++ {
 		at := day.AddDate(0, 0, d)
 		if wd := at.Weekday(); wd == time.Saturday || wd == time.Sunday {
 			continue
 		}
-		open := time.Date(at.Year(), at.Month(), at.Day(), 9, 0, 0, 0, at.Location())
-		shut := time.Date(at.Year(), at.Month(), at.Day(), 17, 0, 0, 0, at.Location())
+		open := time.Date(at.Year(), at.Month(), at.Day(), set.From, 0, 0, 0, at.Location())
+		shut := time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, at.Location()).Add(time.Duration(set.To) * time.Hour)
 		type span struct{ a, b int64 }
 		busy := []span{}
 		for _, ev := range e.OwnEvents(open.Unix(), shut.Unix()) {
@@ -223,8 +309,8 @@ func (e *Engine) FreeTimes(n int) []Slot {
 			busy = append(busy, span{t.At - 15*60, t.At + int64(max(t.Minutes, 15))*60 + 15*60})
 		}
 		taken := 0
-		for t := open; taken < 2 && len(out) < n && !t.Add(time.Hour).After(shut); t = t.Add(30 * time.Minute) {
-			a, b := t.Unix(), t.Add(time.Hour).Unix()
+		for t := open; taken < 2 && len(out) < n && !t.Add(long).After(shut); t = t.Add(30 * time.Minute) {
+			a, b := t.Unix(), t.Add(long).Unix()
 			clear := true
 			for _, s := range busy {
 				if s.a < b && s.b > a {

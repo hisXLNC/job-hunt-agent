@@ -383,6 +383,19 @@ func (s *Server) Handler() http.Handler {
 		if p.ChaseAfter() > 60 || (p.ChaseDays != nil && *p.ChaseDays < 0) {
 			return nil, bad("Follow up after 0 to 60 days (0 means never).")
 		}
+		if p.KeepFit != nil && (*p.KeepFit < 30 || *p.KeepFit > 95) {
+			return nil, bad("The fit a role needs is between 30 and 95.")
+		}
+		if p.PrepareFit != nil && (*p.PrepareFit < 30 || *p.PrepareFit > 100) {
+			return nil, bad("The fit to write documents at is between 30 and 100.")
+		}
+		if p.PrepareMax < 0 || p.PrepareMax > 200 {
+			return nil, bad("The most to prepare in one search is 0 (no limit) to 200.")
+		}
+		if len(p.Matters) > 1500 {
+			return nil, bad("Keep what matters to you under 1,500 characters.")
+		}
+		p.Matters = strings.TrimSpace(p.Matters)
 		if p.Goal() > 100 || (p.WeeklyGoal != nil && *p.WeeklyGoal < 0) {
 			return nil, bad("Applications a week is 0 to 100 (0 means no goal).")
 		}

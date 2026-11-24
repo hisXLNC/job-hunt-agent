@@ -668,6 +668,10 @@ func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 		return err
 	}
 	m.Kind, m.Summary, m.Next, m.Draft, m.RoleID = reading.Kind, reading.Summary, reading.Next, reading.Reply, reading.RoleID
+	if m.Kind == "interview" {
+		// They ask when the person is free: the draft offers real free times.
+		m.Draft = e.fillTimes(m.Draft)
+	}
 	if m.PersonID != 0 && (m.Kind == "other" || m.Kind == "question") {
 		m.Kind = "person"
 	}
@@ -723,6 +727,9 @@ func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 		}
 	case "interview", "assessment":
 		e.S.Advance(r.ID, "interview")
+		if m.Kind == "interview" {
+			e.bookFromMail(r, reading.When, reading.Link, m.At)
+		}
 	case "offer":
 		e.S.Advance(r.ID, "offer")
 	case "question":
@@ -738,6 +745,39 @@ func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 		e.Say(plain != "", firstOf(plain, "An employer wrote to you"), r.Company+" wrote to you", firstOf(m.Summary, m.Subject), "#/replies")
 	}
 	return nil
+}
+
+// bookFromMail puts a confirmed interview into Interviews, with prep, when
+// the message fixes one moment for it. The moment and the link come from
+// mail, so both are checked; an entry already there is left alone.
+func (e *Engine) bookFromMail(r store.Role, when, link string, mailAt int64) {
+	when = strings.TrimSpace(when)
+	if when == "" {
+		return
+	}
+	var at time.Time
+	var err error
+	for _, layout := range []string{"2006-01-02T15:04", "2006-01-02T15:04:05", time.RFC3339, "2006-01-02 15:04"} {
+		if at, err = time.ParseInLocation(layout, when, e.Now().Location()); err == nil {
+			break
+		}
+	}
+	now := e.Now()
+	if err != nil || at.Before(now) || at.After(now.AddDate(0, 0, 120)) {
+		return
+	}
+	talks, _ := e.S.TalksForRole(r.ID)
+	for _, t := range talks {
+		if d := t.At - at.Unix(); d > -6*3600 && d < 6*3600 {
+			return
+		}
+	}
+	id, err := e.AddTalk(store.Talk{Kind: "interview", RoleID: r.ID, Title: "Interview", At: at.Unix(), Minutes: e.TalkSet().Minutes, Link: safeURL(link)})
+	if err != nil {
+		return
+	}
+	e.S.Log(store.Activity{Kind: "talk", RoleID: r.ID, CompanyID: r.CompanyID, Text: "Added to Interviews from their message: " + at.Format("Monday 2 January, 15:04")})
+	e.Say(true, "An interview is booked", "Interview with "+r.Company+" on "+at.Format("Monday 2 January")+" at "+at.Format("15:04"), "It is in Interviews, taken from their message. Check the time against the message; your prep pack is being written.", fmt.Sprintf("#/interviews/%d", id))
 }
 
 // appliedElsewhere records an application the person made that Job Hunt had

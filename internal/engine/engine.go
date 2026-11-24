@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"jobhunt/internal/brain"
@@ -61,7 +62,8 @@ type Engine struct {
 
 	mailDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
 
-	srcMu sync.Mutex // the keys and the state of the searches that take one
+	preparedNow atomic.Int32 // documents the search under way has written by itself
+	srcMu       sync.Mutex   // the keys and the state of the searches that take one
 
 	oldMu     sync.Mutex // one import from the old Job Hunt at a time
 	oldSeen   *OldLook   // the last look at the old data on this computer, kept a minute
@@ -275,8 +277,8 @@ type Status struct {
 	Paused   bool      `json:"paused"`
 	// PausedUntil: when a pause for a set time ends by itself; 0 otherwise.
 	PausedUntil int64 `json:"paused_until"`
-	Held     int64     `json:"held,omitempty"`
-	Sources  int       `json:"sources"`
+	Held        int64 `json:"held,omitempty"`
+	Sources     int   `json:"sources"`
 }
 
 func (e *Engine) Status() Status {

@@ -135,7 +135,7 @@ func (e *Engine) Today() Brief {
 		cards = append(cards, e.roleCard("apply", r, now))
 	}
 	// 4. Strong roles nothing was prepared for.
-	found, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"found"}, MinFit: keepFit, Sort: "fit", Limit: 12, NotLater: now.Unix()})
+	found, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"found"}, MinFit: p.Keep(), Sort: "fit", Limit: 12, NotLater: now.Unix()})
 	sort.SliceStable(found, func(i, j int) bool { return urgency(found[i], now) > urgency(found[j], now) })
 	for _, r := range found {
 		c := e.roleCard("decide", r, now)
