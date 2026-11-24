@@ -2,6 +2,17 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.24
+
+- **Every employer has its own page.** Its postings (part of the company, where, type, pay, fit, posted, applicants, where each stands) with filters and sorting, your history there, the people you know there, what it does, what working there is like (Claude reads public employee reviews when you press "Look it up"), what happened lately, and your own notes.
+- **Employer names are links everywhere**: Today, Radar, Roles, a role's page, People, Replies, Interviews and the find box all open the employer's page.
+- **Real employer pictures.** Job Hunt takes each employer's icon from the employer's own website (never from an outside service) and keeps it; the coloured letters stay where a site has none.
+- **The window can be any size.** Lists show as many rows as fit the window and page for the rest. In a narrow window the menu folds to icons and the less important columns step aside; in a wide one the columns spread instead of one column taking everything. Pay is written short ("$110k–$150k") so it is no longer cut off.
+- **Tick several roles and act once**: Prepare, I applied or Not for me, on Today and on Roles.
+- **Fit rings use the old colours again**: green from 80, amber from 60, red below.
+- **"You" is called You again**, and keeps the Browser side panel tab.
+- **Roles that showed with no score.** When a posting's text couldn't be fetched, the role was shown unscored and never tried again. Job Hunt now reads the posting's own page as a second way, tries again on the next passes, and keeps unscored roles out of "Fresh now".
+
 ## 26.11.23
 
 - Today is one compact list, as in the design you saw: every thing to do is a row, about a dozen fit on a screen. Each role shows remote, hybrid or on site, full-time, part-time or contract (read from the posting), pay, both fit scores, how long ago it was posted and how many have applied.

@@ -125,7 +125,7 @@ function theApp(d) {
 }
 
 export default {
-  title: 'Settings',
+  title: 'You',
   sub: (d, route) => ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer', connections: 'Claude, your phone, your inbox', panel: 'Get it, put it in your browser, connect it', app: 'Version, your data, and what Job Hunt has been doing' })[route.parts[1] || ''],
   topics: ['you', 'profile', 'connections'],
   load(route) {
@@ -156,7 +156,7 @@ export default {
     delanswer: ({ d }) => del(`answers/${d.id}`),
     build: () => post('arriving').then(() => toast('Writing your arrival pack. About a minute.')),
     toggle: ({ d }) => post('arriving/change', { index: +d.i, off: !!d.off }),
-    apply: () => post('arriving/apply').then(() => toast('A copy of your CV in local form was added under Settings')),
+    apply: () => post('arriving/apply').then(() => toast('A copy of your CV in local form was added under You')),
     async savellm({ f }) {
       if (!f.engine) throw new Error('Choose how to reach Claude.');
       await put('llm', { engine: f.engine, key: f.key || '', model: f.model, daily_limit: +f.daily_limit || 0 });

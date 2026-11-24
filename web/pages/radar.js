@@ -1,4 +1,4 @@
-import { html, api, post, put, ago, until, when, rings, tile, toast, pager, sortHead, with_, href, freshness, BAND } from '../app.js';
+import { html, api, post, put, ago, until, when, rings, tile, toast, pager, sortHead, with_, href, freshness, BAND, employer } from '../app.js';
 
 const BOARD = { greenhouse: 'Its own board (Greenhouse)', lever: 'Its own board (Lever)', ashby: 'Its own board (Ashby)', smartrecruiters: 'Its own board (SmartRecruiters)', workday: 'Its own board (Workday)', workable: 'Its own board (Workable)', bamboohr: 'Its own board (BambooHR)', recruitee: 'Its own board (Recruitee)', page: 'Its own careers page' };
 
@@ -52,7 +52,7 @@ export default {
       <div class="cols wide">
         <div class="col" style="gap:14px">
           <div class="card"><div class="row"><h3 class="grow">Fresh now</h3><span class="s m">Posted or first seen in the last two days</span></div>
-            ${d.fresh?.length ? html`<div class="col" style="margin-top:12px;gap:12px">${d.fresh.map(r => html`<div class="row">${tile(r.company, true)}<div class="grow"><a href="#/roles/${r.id}"><b>${r.title}</b></a><div class="s m">${r.company}${r.location ? html` · ${r.location}` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}</div><div>${freshness(r)}</div></div>${rings(r.fit, r.fit_tailored, true)}<a class="btn sm ${r.stage === 'ready' ? 'p' : ''}" href="#/roles/${r.id}">${r.stage === 'ready' ? 'Review and apply' : 'Open'}</a></div>`)}</div>`
+            ${d.fresh?.length ? html`<div class="col" style="margin-top:12px;gap:12px">${d.fresh.map(r => html`<div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a href="#/roles/${r.id}"><b>${r.title}</b></a><div class="s m">${employer(r.company, r.company_id)}${r.location ? html` · ${r.location}` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}</div><div>${freshness(r)}</div></div>${rings(r.fit, r.fit_tailored, true)}<a class="btn sm ${r.stage === 'ready' ? 'p' : ''}" href="#/roles/${r.id}">${r.stage === 'ready' ? 'Review and apply' : 'Open'}</a></div>`)}</div>`
               : html`<p class="s m" style="margin-top:8px">Nothing new in the last two days that fits. ${d.cleared} postings have been set aside by the rules so far; see them under <a href="${href('roles', { closed: 'screened' })}">Roles → Set aside</a>.</p>`}</div>
           <div class="card" style="padding:0"><div class="row" style="padding:14px 16px 10px"><h3 class="grow">Employers</h3>
               <a class="chip ${state === 'following' ? 'on' : ''}" href="${with_(route, { state: '', page: '' })}">Watching</a>
@@ -60,7 +60,7 @@ export default {
               <a class="chip ${state === 'muted' ? 'on' : ''}" href="${with_(route, { state: 'muted', page: '' })}">Muted ${c.muted}</a>
               <form data-act="filter" class="row" style="gap:6px"><input type="text" name="q" value="${route.q.q || ''}" placeholder="Filter employers" aria-label="Filter employers" style="width:170px;height:30px"><button class="btn sm">Filter</button></form></div>
             <table class="tbl emp"><thead><tr><th>${sortHead('Employer', 'name', route, 'open')}</th><th>Where it posts</th><th>${sortHead('Open roles', 'open', route, 'open')}</th><th>${sortHead('Best fit', 'fit', route, 'open')}</th><th>${sortHead('People', 'people', route, 'open')}</th><th></th></tr></thead>
-            <tbody>${c.companies.map(x => html`<tr class="${x.about ? 'has-about' : ''}"><td><div class="row">${tile(x.name, true)}<div><a class="t" href="${href('roles', { company: x.id, closed: 'all' })}">${x.name}</a><span class="xs m">${x.sector || x.why}</span></div></div></td>
+            <tbody>${c.companies.map(x => html`<tr class="${x.about ? 'has-about' : ''}"><td><div class="row">${tile(x.name, true, x.id)}<div><a class="t" href="#/employer/${x.id}" title="Opens ${x.name}: its postings, your history there, people, and what working there is like.">${x.name}</a><span class="xs m">${x.sector || x.why}</span></div></div></td>
               <td class="s">${BOARD[x.board_kind] || html`<span class="m">${x.board_note || 'LinkedIn search'}</span>`}</td>
               <td class="s"><b>${x.open_roles}</b>${x.applied ? html` <span class="m">· ${x.applied} applied</span>` : ''}</td><td class="s">${x.best_fit > 0 ? x.best_fit : html`<span class="m">–</span>`}</td>
               <td class="s">${x.people ? html`${x.people}${x.know_you ? html` <b style="color:var(--good)">· ${x.know_you} know you</b>` : ''}` : html`<span class="m">–</span>`}</td>

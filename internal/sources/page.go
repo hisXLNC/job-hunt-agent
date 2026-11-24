@@ -488,6 +488,12 @@ func linkedJobs(body string, base *url.URL, own *regexp.Regexp) []Posting {
 
 // detailPage reads a posting's own page for its text. Only pages on the
 // public internet are opened; see dial.go.
+// DetailFromPage reads a posting's text from its own page, whatever source
+// found it: the fallback when the source's own lookup gives nothing.
+func (c *Client) DetailFromPage(ctx context.Context, p *Posting) error {
+	return c.detailPage(ctx, p)
+}
+
 func (c *Client) detailPage(ctx context.Context, p *Posting) error {
 	u, ok := publicURL(p.URL)
 	if !ok {

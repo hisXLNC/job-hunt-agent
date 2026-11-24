@@ -1,4 +1,4 @@
-import { html, api, post, put, del, ago, when, tile, toast, copy, pager, with_ } from '../app.js';
+import { html, api, post, put, del, ago, when, tile, toast, copy, pager, with_, employer } from '../app.js';
 
 const KINDS = { interview: ['Wants to talk', 'good'], assessment: ['Assessment', 'warn'], question: ['Asks you something', 'blue'], offer: ['Offer', 'good'], rejection: ['Said no', 'crit'], receipt: ['Received', ''], person: ['From a person', 'blue'], other: ['Other', ''] };
 const chip = k => { const [l, c] = KINDS[k] || [k, '']; return html`<span class="chip ${c}">${l}</span>`; };
@@ -14,7 +14,7 @@ function list(d, route) {
       ${['interview', 'question', 'person', 'rejection', 'receipt'].map(k => html`<a class="chip ${q.kind === k ? 'on' : ''}" href="${with_(route, { state: 'all', kind: k, page: '' })}">${KINDS[k][0]}</a>`)}
       <span class="grow"></span>${d.on ? html`<span class="xs m">${d.last_at ? 'Checked ' + ago(d.last_at) : ''}</span><button class="btn sm" data-act="check">${d.checking ? 'Checking…' : 'Check now'}</button>` : ''}</div>
     ${d.mail?.length ? html`<div class="card" style="padding:0"><table class="tbl"><thead><tr><th>From</th><th>What they say</th><th>About</th><th>When</th><th></th></tr></thead><tbody>
-      ${d.mail.map(m => html`<tr><td style="width:22%"><div class="row">${tile(m.company || m.from_name, true)}<div><a class="t" href="#/replies/${m.id}">${m.from_name || m.from_addr || 'Unknown sender'}</a><span class="xs m">${m.company}</span></div></div></td>
+      ${d.mail.map(m => html`<tr><td style="width:22%"><div class="row">${tile(m.company || m.from_name, true, m.company_id)}<div><a class="t" href="#/replies/${m.id}">${m.from_name || m.from_addr || 'Unknown sender'}</a><span class="xs m">${employer(m.company, m.company_id)}</span></div></div></td>
         <td class="s">${chip(m.kind)} <span class="ink2">${m.summary || m.subject}</span>${m.state === 'new' && m.next ? html`<div class="xs" style="margin-top:2px"><b>Next:</b> ${m.next}</div>` : ''}</td>
         <td class="s">${m.role_id ? html`<a href="#/roles/${m.role_id}">${m.role}</a>` : html`<span class="m">–</span>`}</td><td class="s m" style="white-space:nowrap">${ago(m.at)}</td>
         <td style="text-align:right"><a class="btn sm ${m.state === 'new' ? 'p' : ''}" href="#/replies/${m.id}">${m.state === 'new' ? 'Read and reply' : 'Open'}</a></td></tr>`)}</tbody></table></div>${pager(d.total, d.page, d.size, route)}`
@@ -29,7 +29,7 @@ function one(m) {
   const to = m.from_addr, subj = /^re:/i.test(m.subject) ? m.subject : 'Re: ' + (m.subject || '');
   const mailto = to ? `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(m.draft || '')}` : '';
   return html`<div class="body cols wide"><div class="col" style="gap:14px">
-    <div class="card col" style="gap:8px;padding:20px"><div class="row wrap" style="gap:8px">${chip(m.kind)}<span class="s m">${when(m.at)}</span>${m.role_id ? html`<a class="chip" href="#/roles/${m.role_id}">${m.role} · ${m.company}</a>` : ''}</div>
+    <div class="card col" style="gap:8px;padding:20px"><div class="row wrap" style="gap:8px">${chip(m.kind)}<span class="s m">${when(m.at)}</span>${m.role_id ? html`<a class="chip" href="#/roles/${m.role_id}">${m.role}</a>` : ''}${m.company_id ? html`<a class="chip" href="#/employer/${m.company_id}">${m.company}</a>` : ''}</div>
       <h2 style="font-size:20px">${m.summary || m.subject}</h2>${m.next ? html`<p><b>What to do:</b> ${m.next}</p>` : ''}</div>
     <div class="card"><div class="row"><div class="grow"><div class="eb">Their message</div><div class="s" style="margin-top:4px"><b>${m.from_name}</b> <span class="m">${m.from_addr}</span></div><div class="s m">${m.subject}</div></div></div>
       <div class="s pre" style="margin-top:12px;border-top:1px solid var(--line2);padding-top:12px">${m.body || 'The text of this message was not kept.'}</div></div>

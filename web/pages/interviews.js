@@ -1,4 +1,4 @@
-import { html, api, post, put, del, ago, when, until, toast, safeUrl } from '../app.js';
+import { html, api, post, put, del, ago, when, until, toast, safeUrl, employer } from '../app.js';
 
 const KINDS = { chat: 'Informal conversation', screen: 'Recruiter call', interview: 'Interview', offer: 'Offer call' };
 const pad = n => String(n).padStart(2, '0');
@@ -10,7 +10,7 @@ function tileDay(ts, past) {
 }
 
 function row(t, past) {
-  const who = [t.person, t.company].filter(Boolean).join(' · ');
+  const who = t.person || t.company ? html`${t.person}${t.person && t.company ? ' · ' : ''}${employer(t.company, t.company_id)}` : '';
   return html`<div class="row">${tileDay(t.at, past)}<div class="grow"><a href="#/interviews/${t.id}"><b>${t.title}</b></a>${who ? html` <span class="m">· ${who}</span>` : ''}
     <div class="s m">${when(t.at)} · ${t.minutes} min · ${KINDS[t.kind] || t.kind}${t.role ? html` · ${t.role}` : ''}</div></div>
     ${past ? '' : html`<span class="chip ${t.prep && Object.keys(t.prep).length ? 'good' : ''}">${t.prep && Object.keys(t.prep).length ? 'Prep ready' : 'Preparing'}</span>`}<a class="btn sm ${past ? '' : 'p'}" href="#/interviews/${t.id}">${past ? 'Notes' : 'Open prep'}</a></div>`;
@@ -37,7 +37,7 @@ function one(d) {
   const t = d.talk, p = t.prep && Object.keys(t.prep).length ? t.prep : null, link = safeUrl(t.link), past = t.at < Date.now() / 1000 - 3600;
   return html`<div class="body cols wide"><div class="col" style="gap:14px">
     <div class="card row" style="gap:16px;padding:20px">${tileDay(t.at, past)}<div class="grow"><div class="row wrap" style="gap:8px"><span class="chip blue">${KINDS[t.kind] || t.kind}</span><span class="s m">${when(t.at)} · ${past ? ago(t.at) : until(t.at)} · ${t.minutes} min</span></div>
-      <h2 style="font-size:21px;margin-top:4px">${t.title}</h2><div class="s m">${[t.person, t.company, t.role].filter(Boolean).join(' · ')}</div></div>
+      <h2 style="font-size:21px;margin-top:4px">${t.title}</h2><div class="s m">${t.person}${t.person && t.company ? ' · ' : ''}${employer(t.company, t.company_id)}${t.role ? html` · ${t.role_id ? html`<a class="emp" href="#/roles/${t.role_id}">${t.role}</a>` : t.role}` : ''}</div></div>
       <div class="col" style="gap:6px">${link ? html`<a class="btn p" href="${link}" target="_blank" rel="noopener noreferrer">Join</a>` : ''}<a class="btn sm" href="/api/talks/${t.id}/invite.ics">Add to calendar</a></div></div>
     ${d.preparing ? html`<div class="card row"><span class="spin"></span><div><h4>Writing your prep pack</h4><p class="s m">About a minute. The page updates by itself.</p></div></div>` : ''}
     ${p ? html`<div class="card col" style="gap:14px">

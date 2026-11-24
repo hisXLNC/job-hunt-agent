@@ -74,24 +74,48 @@ export const when = ts => new Date(ts * 1000).toLocaleString('en-GB', { weekday:
 export const day = ts => new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 export const clock = ts => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-// A fit score's colour says how good it is: green, blue, amber, red.
-export const fitColor = v => (v >= 85 ? '#0B7A3B' : v >= 75 ? '#2F4FC4' : v >= 65 ? '#8F5B00' : '#B42D2D');
+// A fit score's colour, as the old Job Hunt had it: green from 80, amber from 60, red below.
+export const fitColor = v => (v >= 80 ? '#0B7A3B' : v >= 60 ? '#8F5B00' : '#B42D2D');
+const ringColor = v => (v >= 80 ? '#0B7A3B' : v >= 60 ? '#D49A1E' : '#B42D2D');
 export function ring(v, label) {
   const c = 2 * Math.PI * 22, has = v >= 0;
   const col = fitColor(v);
-  return html`<div class="ring" title="${label}"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="22" fill="none" stroke="#E8EBF2" stroke-width="5"/>${has ? html`<circle cx="27" cy="27" r="22" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 27 27)"/>` : ''}</svg><b style="${has ? `color:${col}` : ''}">${has ? v : '–'}</b><span>${label}</span></div>`;
+  return html`<div class="ring" title="${label}"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="22" fill="none" stroke="#E8EBF2" stroke-width="5"/>${has ? html`<circle cx="27" cy="27" r="22" fill="none" stroke="${ringColor(v)}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 27 27)"/>` : ''}</svg><b style="${has ? `color:${col}` : ''}">${has ? v : '–'}</b><span>${label}</span></div>`;
 }
 // Two rings, always: how the CV fits as it is, and after tailoring.
 export const rings = (fit, tailored, small) => html`<div class="rings ${small ? 'small' : ''}">${ring(fit, 'Fit now')}${ring(tailored, 'Tailored')}</div>`;
 
 const TILE = ['#2F4FC4', '#0B7A3B', '#C2410C', '#7A3FB8', '#0E7490', '#8F5B00', '#B42D2D', '#374151'];
-export function tile(name, small) {
+// An employer's picture comes from its own site, through the program; where
+// there is none, the letters stay. Pictures that failed are not asked for again.
+const noLogo = new Set();
+document.addEventListener('error', ev => {
+  const t = ev.target;
+  if (t?.tagName === 'IMG' && t.classList.contains('lgi')) { noLogo.add(t.dataset.co); t.remove(); }
+}, true);
+document.addEventListener('load', ev => {
+  const t = ev.target;
+  if (t?.tagName === 'IMG' && t.classList.contains('lgi')) t.parentElement.classList.add('has');
+}, true);
+export function tile(name, small, id) {
   const n = (name || '?').trim();
   let h = 0;
   for (const ch of n) h = (h * 31 + ch.codePointAt(0)) >>> 0;
   const init = n.split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w)).slice(0, 2).map(w => [...w][0].toUpperCase()).join('') || '?';
-  return html`<div class="lg ${small ? 'sm' : ''}" style="background:${TILE[h % TILE.length]}">${init}</div>`;
+  const pic = id && !noLogo.has(String(id)) ? html`<img class="lgi" data-co="${id}" src="/api/companies/${id}/logo" alt="" loading="lazy">` : '';
+  return html`<div class="lg ${small === 'big' ? 'big' : small ? 'sm' : ''}" style="background:${TILE[h % TILE.length]}">${init}${pic}</div>`;
 }
+// An employer's name, always a way to its page.
+export const employer = (name, id, cls) => (id && name ? html`<a class="emp ${cls || ''}" href="#/employer/${id}" title="Opens ${name}: its postings, your history there, people, and what working there is like.">${name}</a>` : name || '');
+// "$110,000–$150,000 a year" said short, so it fits a column: "$110k–$150k".
+export function shortPay(p) {
+  if (!p) return '';
+  return String(p).replace(/(\d{2,3}),000(\.00)?/g, '$1k').replace(/(\d),(\d)00(?!\d)/g, '$1.$2k').replace(/\.0k/g, 'k').replace(/\s*(a|per|\/)\s*(year|yr|annum)\b\.?/gi, '').replace(/\s*(a|per|\/)\s*(hour|hr)\b\.?/gi, '/h').replace(/\s+(to|-|–|—)\s+/g, '–').trim();
+}
+// How many rows of a list fit the window, so lists page instead of scrolling.
+export const rowsThatFit = (used, rowHeight, min = 6, max = 40) => Math.max(min, Math.min(max, Math.floor((window.innerHeight - used) / rowHeight)));
+// Rows ticked in a list, kept while the page redraws.
+export const picked = new Set();
 
 export const BAND = { level: 'At your level', step_up: 'A step up', sideways: 'Sideways' };
 export const STAGE = { new: 'Unread', found: 'Worth a look', ready: 'Ready to send', applied: 'Applied', reply: 'In conversation', interview: 'Interview', offer: 'Offer' };
@@ -164,12 +188,13 @@ const IC = {
   replies: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
   interviews: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   progress: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
-  you: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.700 1.700 0 0 0 .3 1.800l.1.1a2 2 0 1 1-2.800 2.800l-.1-.1a1.700 1.700 0 0 0-1.800-.3 1.700 1.700 0 0 0-1 1.500V21a2 2 0 1 1-4 0v-.1a1.700 1.700 0 0 0-1.100-1.500 1.700 1.700 0 0 0-1.800.3l-.1.1a2 2 0 1 1-2.800-2.800l.1-.1a1.700 1.700 0 0 0 .3-1.800 1.700 1.700 0 0 0-1.500-1H3a2 2 0 1 1 0-4h.1a1.700 1.700 0 0 0 1.500-1.100 1.700 1.700 0 0 0-.3-1.800l-.1-.1a2 2 0 1 1 2.800-2.800l.1.1a1.700 1.700 0 0 0 1.800.3h.1a1.700 1.700 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.700 1.700 0 0 0 1 1.500 1.700 1.700 0 0 0 1.800-.3l.1-.1a2 2 0 1 1 2.800 2.800l-.1.1a1.700 1.700 0 0 0-.3 1.800v.1a1.700 1.700 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.700 1.700 0 0 0-1.500 1z"/></svg>',
+  you: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.200 4-6 8-6s7 1.800 8 6"/></svg>',
 };
-const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['you', 'Settings']];
+const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['you', 'You']];
 const PAGES = {
   today: () => import('./pages/today.js'), radar: () => import('./pages/radar.js'), roles: () => import('./pages/roles.js'),
   role: () => import('./pages/role.js'), people: () => import('./pages/people.js'), replies: () => import('./pages/replies.js'),
+  employer: () => import('./pages/employer.js'),
   interviews: () => import('./pages/interviews.js'), progress: () => import('./pages/progress.js'), you: () => import('./pages/you.js'),
   setup: () => import('./pages/setup.js'),
 };
@@ -187,7 +212,7 @@ function badge(key) {
 
 function frame() {
   const st = app.state, on = app.route.parts[0] || 'today';
-  const active = on === 'roles' || on === 'role' ? 'roles' : on;
+  const active = on === 'roles' || on === 'role' || on === 'employer' ? 'roles' : on;
   const cl = st.claude;
   return html`<div class="app"><aside class="side"><a class="logo" href="#/today" style="text-decoration:none"><img src="/logo.svg" alt="" width="28" height="28">Job Hunt</a>
     <nav class="col" style="gap:2px" aria-label="Main">${NAV.map(n => html`<a class="nav ${n[0] === active ? 'on' : ''}" href="#/${n[0]}" ${n[0] === active ? new Safe('aria-current="page"') : ''}>${new Safe(IC[n[0]])}${n[1]}<span id="b-${n[0]}" style="margin-left:auto;display:contents">${badge(n[0])}</span></a>`)}</nav>
@@ -204,7 +229,7 @@ function pilot() {
   const st = app.state, cl = st.claude, s = st.status;
   const how = { 'claude-code': 'your Claude sign-in', api: 'your API key', demo: 'sample answers (no Claude)' }[cl.engine] || '';
   const up = st.update ? html`<a href="${st.update.url}" style="display:block;margin-bottom:8px;padding:7px 9px;border-radius:8px;background:rgba(157,176,255,.16);color:#DCE3FF;text-decoration:none" title="Downloads the installer. Run it and Job Hunt restarts on the new version; your data stays.">Version ${st.update.version} is ready · Download</a>` : '';
-  const ver = html`<a class="ver" href="#/you/app" title="The version you are running. Opens Settings, The app: updates, your data folder and the debugging record.">Job Hunt ${st.version}</a>`;
+  const ver = html`<a class="ver" href="#/you/app" title="The version you are running. Opens You, The app: updates, your data folder and the debugging record.">Job Hunt ${st.version}</a>`;
   if (!cl.engine) return html`${up}<h6><span class="dot off"></span>Not connected</h6><a href="#/you/connections" style="color:#9DB0FF">Connect Claude</a> and Job Hunt starts searching.${ver}`;
   const jobs = s.jobs || [];
   const foot = html`<div class="foot">Watching ${s.sources} sources · ${cl.calls} Claude calls today via ${how}${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)}` : ''}</div>${ver}`;
@@ -271,6 +296,26 @@ export async function reload(quiet) {
   }
 }
 
+// Draws the page again from what is already loaded: after ticking rows, or when the window changes size.
+export function redraw() {
+  const root = document.getElementById('page');
+  if (!root || !app.page || !app.data) return;
+  const keep = root.scrollTop;
+  root.innerHTML = app.page.view(app.data, app.route).s;
+  root.scrollTop = keep;
+  app.page.after?.(root, app.data, app.route);
+}
+let sizeTimer, lastSize = '';
+window.addEventListener('resize', () => {
+  clearTimeout(sizeTimer);
+  sizeTimer = setTimeout(() => {
+    const now = Math.round(innerWidth / 40) + 'x' + Math.round(innerHeight / 30);
+    if (now === lastSize || typing()) return;
+    lastSize = now;
+    app.page?.sized ? reload(true) : redraw();
+  }, 160);
+});
+
 async function navigate() {
   const route = parseHash();
   if (!app.state) { try { app.state = await api('state'); } catch (e) { $app.innerHTML = html`<div class="setup"><div class="card empty"><h3>Job Hunt is not running</h3><p>${e.message}</p></div></div>`.s; return; } }
@@ -278,13 +323,14 @@ async function navigate() {
   if (!app.state.setup_done && key !== 'setup') { location.hash = '#/setup'; return; }
   if (key === 'roles' && route.parts[1] && route.parts[1] !== 'board') key = 'role';
   if (!PAGES[key]) { location.hash = '#/today'; return; }
+  if (app.route?.parts.join('/') !== route.parts.join('/')) picked.clear();
   app.route = route;
   const mod = (await PAGES[key]()).default;
   app.page = mod;
   if (key === 'setup') { $app.innerHTML = '<div class="page" id="page" style="height:100vh"></div><h1 id="title" hidden></h1><span id="sub" hidden></span>'; }
   else if (!$app.querySelector('.app')) { $app.innerHTML = frame().s; mountAssistant(); }
   else {
-    const active = key === 'role' ? 'roles' : key;
+    const active = key === 'role' || key === 'employer' ? 'roles' : key;
     $app.querySelectorAll('.nav').forEach(a => { const on = a.getAttribute('href') === '#/' + active; a.classList.toggle('on', on); on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
   }
   document.title = 'Job Hunt';
@@ -340,7 +386,7 @@ document.addEventListener('input', ev => {
     if (!r) return;
     const any = r.roles.length + r.people.length + r.companies.length;
     box.innerHTML = (any ? html`${r.roles.length ? html`<div class="eb">Roles</div>${r.roles.map(x => html`<a href="#/roles/${x.id}"><b>${x.title}</b> <span class="m">· ${x.company}</span></a>`)}` : ''}
-      ${r.companies.length ? html`<div class="eb">Employers</div>${r.companies.map(x => html`<a href="${href('roles', { company: x.id, closed: 'all' })}"><b>${x.name}</b> <span class="m">· ${x.open_roles} open</span></a>`)}` : ''}
+      ${r.companies.length ? html`<div class="eb">Employers</div>${r.companies.map(x => html`<a href="#/employer/${x.id}"><b>${x.name}</b> <span class="m">· ${x.open_roles} open</span></a>`)}` : ''}
       ${r.people.length ? html`<div class="eb">People</div>${r.people.map(x => html`<a href="#/people/${x.id}"><b>${x.name}</b> <span class="m">· ${x.company}</span></a>`)}` : ''}` : html`<div class="s m" style="padding:10px">Nothing matches “${q}”.</div>`).s;
     box.hidden = false;
   }, 180);

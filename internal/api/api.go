@@ -33,7 +33,7 @@ import (
 	"jobhunt/internal/store"
 )
 
-// Version is shown at the bottom left and under Settings → The app. Release
+// Version is shown at the bottom left and under You → The app. Release
 // builds are given the number in the VERSION file.
 var Version = "preview"
 
@@ -116,7 +116,7 @@ func say(err error) (int, string) {
 	case errors.Is(err, store.ErrNotFound):
 		return 404, "That isn't here any more."
 	case errors.Is(err, llm.ErrNotConnected):
-		return 409, "Claude isn't connected yet. Connect it under Settings → Connections."
+		return 409, "Claude isn't connected yet. Connect it under You → Connections."
 	case errors.As(err, &lim):
 		return 429, lim.Msg
 	case errors.As(err, &auth):
@@ -133,7 +133,7 @@ func (s *Server) wrap(h handler) http.HandlerFunc {
 		defer func() {
 			if p := recover(); p != nil {
 				trace.Log("problem", "panic in %s %s: %v ⏎ %s", r.Method, r.URL.Path, p, debug.Stack())
-				writeJSON(w, 500, map[string]string{"error": "Something went wrong inside Job Hunt. It is in the debugging record under Settings, The app."})
+				writeJSON(w, 500, map[string]string{"error": "Something went wrong inside Job Hunt. It is in the debugging record under You, The app."})
 			}
 		}()
 		out, err := h(w, r)
@@ -272,7 +272,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 						s.S.Changed("connections", "state")
 					}
 				}
-				writeJSON(w, 403, map[string]string{"error": "Open Job Hunt and approve this side panel under Settings, Connections.", "pair": "pending"})
+				writeJSON(w, 403, map[string]string{"error": "Open Job Hunt and approve this side panel under You, Connections.", "pair": "pending"})
 				return
 			}
 		default:
@@ -565,7 +565,8 @@ func (s *Server) Handler() http.Handler {
 		fresh, _, _ := st.Roles(store.RoleFilter{Stages: []string{"found", "ready"}, Sort: "age", Limit: 60})
 		var recent []store.Role
 		for _, x := range fresh {
-			if now.Unix()-x.Age() < 48*3600 && len(recent) < 8 {
+			// Only roles that have been read: an unscored row says nothing yet.
+			if now.Unix()-x.Age() < 48*3600 && len(recent) < 8 && x.Fit >= 0 {
 				recent = append(recent, x)
 			}
 		}
@@ -630,6 +631,30 @@ func (s *Server) Handler() http.Handler {
 			return err
 		})
 		return c, nil
+	})
+	// One employer's page: its postings, your history there, people, reviews.
+	h("GET /api/companies/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.Employer(idOf(r)) })
+	h("POST /api/companies/{id}/reviews", func(w http.ResponseWriter, r *http.Request) (any, error) { return nil, e.LookUpReviews(idOf(r)) })
+	h("PUT /api/companies/{id}/note", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Text string `json:"text"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		return nil, e.SetEmployerNote(idOf(r), strings.TrimSpace(in.Text))
+	})
+	// The employer's picture, from its own site, kept after the first time.
+	mux.HandleFunc("GET /api/companies/{id}/logo", func(w http.ResponseWriter, r *http.Request) {
+		b, kind, ok := e.Logo(r.Context(), idOf(r))
+		if !ok {
+			w.Header().Set("Cache-Control", "private, max-age=3600")
+			http.Error(w, "no picture", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", kind)
+		w.Header().Set("Cache-Control", "private, max-age=604800")
+		w.Write(b)
 	})
 	h("POST /api/companies/more", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		if e.LLM().Engine == "" {
@@ -912,7 +937,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	h("POST /api/mail/check", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		if !e.MailSet().On {
-			return nil, bad("Connect your inbox first, under Settings → Connections.")
+			return nil, bad("Connect your inbox first, under You → Connections.")
 		}
 		e.Go("mail", "Checking your inbox", func(ctx context.Context) error { return e.CheckMail(ctx) })
 		return nil, nil

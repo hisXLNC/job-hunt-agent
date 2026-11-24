@@ -1,4 +1,4 @@
-import { html, api, post, put, del, ago, tile, toast, copy, pager, with_, safeUrl, app, KIND } from '../app.js';
+import { html, api, post, put, del, ago, tile, toast, copy, pager, with_, safeUrl, app, KIND, employer } from '../app.js';
 
 const FIVE = ['knows_work', 'made_move', 'same_roots', 'same_craft', 'mentor'];
 const HINT = {
@@ -33,7 +33,7 @@ function list(d, route) {
         <a class="chip ${q.know ? 'on' : ''}" href="${with_(route, { know: 1, kind: '', page: '' })}">Know you ${d.know}</a></div>
         ${q.kind && HINT[q.kind] ? html`<p class="s m">${HINT[q.kind]}</p>` : ''}</div>
       ${d.people.length ? html`<div class="card" style="padding:0"><table class="tbl"><thead><tr><th>Person</th><th>Why they would answer</th><th>Where it stands</th><th></th></tr></thead><tbody>
-        ${d.people.map(p => html`<tr><td style="width:30%"><div class="row">${tile(p.name, true)}<div><a class="t" href="#/people/${p.id}">${p.name}</a><span class="xs m">${[p.title, p.company].filter(Boolean).join(' · ')}</span></div></div></td>
+        ${d.people.map(p => html`<tr><td style="width:30%"><div class="row">${tile(p.name, true)}<div><a class="t" href="#/people/${p.id}">${p.name}</a><span class="xs m">${p.title}${p.title && p.company ? ' · ' : ''}${employer(p.company, p.company_id)}</span></div></div></td>
           <td class="s ink2"><span class="chip" style="margin-bottom:3px">${KIND[p.kind] || 'Contact'}</span><div>${p.why}</div></td><td>${status(p)}</td>
           <td style="text-align:right;white-space:nowrap">${p.note?.state === 'draft' ? html`<a class="btn sm p" href="#/people/${p.id}">Read and send</a>` : p.note ? html`<a class="btn sm" href="#/people/${p.id}">Open</a>` : html`<button class="btn sm" data-act="draft" data-id="${p.id}" data-busy="Writing…">Write a note</button>`}</td></tr>`)}</tbody></table></div>${pager(d.total, d.page, d.size, route)}`
         : html`<div class="card empty"><h3>Nobody here yet</h3><p>Press “Find people for me”, or add someone you came across.</p></div>`}
@@ -59,7 +59,7 @@ function one(d) {
   const limit = n?.channel === 'linkedin' ? 300 : 0;
   return html`<div class="body cols wide"><div class="col" style="gap:14px">
     <div class="card row" style="gap:16px;padding:20px">${tile(p.name)}<div class="grow"><div class="row wrap" style="gap:8px"><span class="chip">${KIND[p.kind] || 'Contact'}</span>${status({ ...p, note: n })}</div>
-      <h2 style="font-size:21px;margin-top:4px">${p.name}</h2><div class="s m">${[p.title, p.company].filter(Boolean).join(' · ')}</div><p class="s ink2" style="margin-top:6px">${p.why}</p></div>
+      <h2 style="font-size:21px;margin-top:4px">${p.name}</h2><div class="s m">${p.title}${p.title && p.company ? ' · ' : ''}${employer(p.company, p.company_id)}</div><p class="s ink2" style="margin-top:6px">${p.why}</p></div>
       <div class="col" style="gap:6px">${url ? html`<a class="btn" href="${url}" target="_blank" rel="noopener noreferrer">Open profile</a>` : ''}
         <button class="btn sm" data-act="knows" data-on-val="${p.knows_you_at ? '' : '1'}">${p.knows_you_at ? 'Doesn\'t know me yet' : 'We\'ve spoken'}</button></div></div>
     ${n ? html`<div class="card col" style="gap:10px"><div class="row"><div class="grow"><div class="eb">${n.state === 'draft' ? 'Your note · draft' : n.state === 'sent' ? 'Your note · sent ' + ago(n.sent_at) : 'Your note'}</div>

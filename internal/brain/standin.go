@@ -53,6 +53,9 @@ func StandIn() llm.Engine {
 			out = standAssist(req.Input.(AssistInput))
 		case "mail":
 			out = standMail(req.Input.(mailInput))
+		case "reviews":
+			out = Reviews{Rating: 3.9, Count: 412, Sources: []ReviewSource{{Name: "Glassdoor", Rating: 3.9, URL: "https://www.glassdoor.com/"}, {Name: "Indeed", Rating: 3.8, URL: "https://www.indeed.com/"}},
+				Likes: []string{"Hybrid, two days in the office", "Steady work, good benefits"}, Warns: []string{"Slow decisions, many layers", "Pay rises below market"}}
 		case "test":
 			out = map[string]string{"word": "ready"}
 		default:

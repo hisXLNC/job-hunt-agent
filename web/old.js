@@ -1,5 +1,5 @@
 // The card for bringing things over from the old Job Hunt. It is shown on the
-// welcome screen and under Settings → The app.
+// welcome screen and under You → The app.
 import { html, api, post, toast } from './app.js';
 
 const n = (k, one, many) => (k ? `${k} ${k === 1 ? one : many || one + 's'}` : '');
@@ -23,7 +23,7 @@ export function oldCard(old, first) {
     return html`<div class="card" id="oldcard">${progress(o.progress)}</div>`;
   }
   const other = html`<details><summary class="s">${o.found ? 'It is somewhere else' : 'Choose where it is'}</summary>
-    <div class="col" style="gap:8px;margin-top:8px"><div class="row"><label class="btn sm">Choose a backup (.zip)<input type="file" accept=".zip,.db" hidden data-on="change" data-act="oldfile"></label><span class="xs m">The old app made one under Settings → Back up.</span></div>
+    <div class="col" style="gap:8px;margin-top:8px"><div class="row"><label class="btn sm">Choose a backup (.zip)<input type="file" accept=".zip,.db" hidden data-on="change" data-act="oldfile"></label><span class="xs m">The old app made one under You → Back up.</span></div>
     <form data-act="oldpath" data-busy="Bringing it over…" class="row"><input type="text" name="path" placeholder="Or the old data folder, like D:\Job Hunt\data" aria-label="The old data folder" class="grow"><button class="btn sm">Bring over</button></form></div></details>`;
   return html`<div class="card col" style="gap:10px" id="oldcard">
     <div><h3>${first ? 'Used the old Job Hunt?' : 'The old Job Hunt'}</h3>

@@ -1048,6 +1048,8 @@ type Talk struct {
 	Person  string `json:"person,omitempty"`
 	Role    string `json:"role,omitempty"`
 	Company string `json:"company,omitempty"`
+	// The employer the talk is with, 0 when it is with no employer Job Hunt knows.
+	CompanyID int64 `json:"company_id,omitempty"`
 }
 
 func (s *Store) AddTalk(t Talk) (int64, error) {
@@ -1083,7 +1085,7 @@ func (s *Store) DeleteTalk(id int64) error {
 }
 
 const talkSelect = `SELECT t.id, t.person_id, t.role_id, t.kind, t.title, t.at, t.minutes, t.link, t.prep, t.notes, t.created_at,
-	COALESCE(p.name, ''), COALESCE(r.title, ''), COALESCE(c.name, pc.name, '')
+	COALESCE(p.name, ''), COALESCE(r.title, ''), COALESCE(c.name, pc.name, ''), COALESCE(c.id, pc.id, 0)
 	FROM talks t LEFT JOIN people p ON p.id = t.person_id LEFT JOIN roles r ON r.id = t.role_id
 	LEFT JOIN companies c ON c.id = r.company_id LEFT JOIN companies pc ON pc.id = p.company_id `
 
@@ -1097,7 +1099,7 @@ func (s *Store) queryTalks(where string, args ...any) ([]Talk, error) {
 	for rows.Next() {
 		var t Talk
 		var prep string
-		if err := rows.Scan(&t.ID, &t.PersonID, &t.RoleID, &t.Kind, &t.Title, &t.At, &t.Minutes, &t.Link, &prep, &t.Notes, &t.CreatedAt, &t.Person, &t.Role, &t.Company); err != nil {
+		if err := rows.Scan(&t.ID, &t.PersonID, &t.RoleID, &t.Kind, &t.Title, &t.At, &t.Minutes, &t.Link, &prep, &t.Notes, &t.CreatedAt, &t.Person, &t.Role, &t.Company, &t.CompanyID); err != nil {
 			return nil, err
 		}
 		t.Prep = raw(prep)

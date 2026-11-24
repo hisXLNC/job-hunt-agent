@@ -1,4 +1,4 @@
-import { html, api, post, ago, when, tile, toast, copy, safeUrl, app, openAssistant, href, with_, fitColor } from '../app.js';
+import { html, api, post, ago, when, tile, toast, copy, safeUrl, app, openAssistant, with_, fitColor, employer, shortPay, rowsThatFit, picked, redraw } from '../app.js';
 
 // What each row asks of the person: the word in the first column and the one main button.
 const TODO = {
@@ -7,9 +7,13 @@ const TODO = {
 };
 const GROUPS = [['', 'Everything'], ['send', 'Send'], ['prepare', 'Prepare'], ['reply', 'Replies'], ['talk', 'Interviews'], ['follow', 'Follow up'], ['people', 'People']];
 const WHERE = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On site' };
-const SIZE = 20;
 const short = t => ago(t).replace(/ ago$/, '');
-const employerLink = c => (c.company_id ? html`<a href="${href('roles', { company: c.company_id, closed: 'all' })}" title="Everything from ${c.company}: its postings and what you sent there.">${c.company}</a>` : c.company || '');
+const employerLink = c => employer(c.company, c.company_id);
+// Which columns the window has room for. The list keeps its shape; the less important columns step aside.
+function fits() {
+  const w = document.getElementById('page')?.clientWidth || window.innerWidth - 212;
+  return { w, where: w >= 1000, type: w >= 1120, seen: w >= 880, tags: w >= 1180, pay: w >= 760 };
+}
 
 function mainButton(c) {
   const url = safeUrl(c.url);
@@ -43,22 +47,24 @@ function more(c) {
   return html`<details class="menu"><summary aria-label="More for this row" title="More: everything else you can do with this row.">⋯</summary><div>${items}</div></details>`;
 }
 
-function row(c) {
+function row(c, f) {
   const [label, cls] = TODO[c.kind] || [c.kind, ''];
   const isRole = c.kind === 'apply' || c.kind === 'decide';
   const go = c.role_id ? `#/roles/${c.role_id}` : c.mail_id ? `#/replies/${c.mail_id}` : c.talk_id ? `#/interviews/${c.talk_id}` : c.person_id ? `#/people/${c.person_id}` : '';
   const age = Date.now() / 1000 - c.at;
-  const line2 = isRole ? html`${employerLink(c)}${c.place ? html` <span class="m">· ${c.place}</span>` : ''}` : c.kind === 'talk' ? html`${c.sub} <span class="m">· ${when(c.at)}</span>` : c.sub;
+  const line2 = isRole ? html`${employerLink(c)}${c.place ? html` <span class="m">· ${c.place}</span>` : ''}` : c.kind === 'talk' ? html`${c.sub} <span class="m">· ${when(c.at)}</span>` : html`${c.company_id ? html`${employerLink(c)} <span class="m">·</span> ` : ''}${c.sub}`;
+  const tick = html`<td class="pick">${isRole ? html`<input type="checkbox" data-on="change" data-act="pick" data-id="${c.role_id}" ${picked.has(String(c.role_id)) ? 'checked' : ''} aria-label="Tick ${c.title}">` : ''}</td>`;
   const first = html`<td><span class="chip ${c.fresh && c.kind === 'apply' ? 'hot' : cls}" title="${c.fresh && c.kind === 'apply' ? 'Still early: few people have applied.' : ''}">${label}</span></td>`;
-  const who = html`<div class="row" style="gap:9px">${tile(c.company || c.title, true)}<div class="two"><a class="t" href="${go}" title="${c.title}${c.why ? '\n\n' + c.why : ''}">${c.title}</a><span class="xs ink2">${line2}</span></div></div>`;
+  const who = html`<div class="row" style="gap:9px">${tile(c.company || c.title, true, c.company_id)}<div class="two"><a class="t" href="${go}" title="${c.title}${c.why ? '\n\n' + c.why : ''}">${c.title}</a><span class="xs ink2">${line2}</span></div></div>`;
   const last = html`<td class="do"><div class="row" style="gap:4px;justify-content:flex-end">${mainButton(c)}${more(c)}</div></td>`;
-  if (!isRole) return html`<tr>${first}<td class="rc" colspan="5">${who}</td><td title="${c.kind === 'mail' ? when(c.at) : ''}">${c.kind === 'mail' ? short(c.at) : ''}</td><td colspan="2" class="xs m" title="${c.why || ''}">${c.why || ''}</td>${last}</tr>`;
-  return html`<tr>${first}<td class="rc">${who}</td>
-    <td>${WHERE[c.workplace] || ''}</td><td>${c.job_type || ''}</td><td>${c.pay || html`<span class="m">Not named</span>`}</td>
+  const tail = f.seen + f.tags;
+  if (!isRole) return html`<tr>${tick}${first}<td class="rc" colspan="${2 + f.where + f.type + f.pay}">${who}</td><td title="${c.kind === 'mail' ? when(c.at) : ''}">${c.kind === 'mail' ? short(c.at) : ''}</td>${tail ? html`<td colspan="${tail}" class="xs m" title="${c.why || ''}">${c.why || ''}</td>` : ''}${last}</tr>`;
+  return html`<tr class="${picked.has(String(c.role_id)) ? 'sel' : ''}">${tick}${first}<td class="rc">${who}</td>
+    ${f.where ? html`<td>${WHERE[c.workplace] || ''}</td>` : ''}${f.type ? html`<td>${c.job_type || ''}</td>` : ''}${f.pay ? html`<td title="${c.pay || ''}">${shortPay(c.pay) || html`<span class="m">Not named</span>`}</td>` : ''}
     <td>${c.fit >= 0 ? html`<span class="fitpair" title="Fit now, then with your tailored CV"><b style="color:${fitColor(c.fit)}">${c.fit}</b><span class="m">→</span>${c.tailored >= 0 && c.kind === 'apply' ? html`<b style="color:${fitColor(c.tailored)}">${c.tailored}</b>` : html`<span class="m">–</span>`}</span>` : ''}</td>
     <td title="${when(c.at)}"><span style="${age < 86400 ? 'color:var(--hot);font-weight:600' : ''}">${short(c.at)}</span></td>
-    <td>${c.seen >= 0 ? html`<span style="${c.seen < 10 ? 'color:var(--hot);font-weight:600' : ''}">${c.seen}</span>` : html`<span class="m">—</span>`}</td>
-    <td class="tags">${(c.tags || []).map(x => html`<span class="chip ${x.tone || ''}">${x.text}</span>`)}</td>${last}</tr>`;
+    ${f.seen ? html`<td>${c.seen >= 0 ? html`<span style="${c.seen < 10 ? 'color:var(--hot);font-weight:600' : ''}">${c.seen}</span>` : html`<span class="m" title="The posting doesn't say how many have applied.">—</span>`}</td>` : ''}
+    ${f.tags ? html`<td class="tags">${(c.tags || []).map(x => html`<span class="chip ${x.tone || ''}">${x.text}</span>`)}</td>` : ''}${last}</tr>`;
 }
 
 const SORTS = {
@@ -73,21 +79,35 @@ function list(d, route) {
     && (!q.minfit || c.fit >= +q.minfit) && (!q.within || Date.now() / 1000 - c.at < +q.within * 86400) && (!q.minpay || c.pay_year >= +q.minpay));
   const by = SORTS[q.sort];
   if (by) { const dir = q.dir === 'up' ? -1 : 1; rows = rows.map((c, i) => [by(c), i, c]).sort((a, b) => (a[0] < b[0] ? -dir : a[0] > b[0] ? dir : a[1] - b[1])).map(x => x[2]); }
-  const page = Math.max(1, +q.page || 1), shown = rows.slice((page - 1) * SIZE, page * SIZE);
-  const th = (key, label, tip) => html`<th><a class="${q.sort === key ? 'on' : ''}" href="${with_(route, { sort: key, dir: q.sort === key && q.dir !== 'up' ? 'up' : '', page: '' })}" title="${tip}">${label}${q.sort === key ? (q.dir === 'up' ? ' ▲' : ' ▼') : ''}</a></th>`;
+  const f = fits(), SIZE = rowsThatFit(292 + (d.question ? 96 : 0) + (d.problems?.length ? 46 : 0), 45, 8, 40);
+  const page = Math.max(1, Math.min(+q.page || 1, Math.ceil(rows.length / SIZE) || 1)), shown = rows.slice((page - 1) * SIZE, page * SIZE);
+  const th = (key, label, tip, w) => html`<th style="${w ? `width:${w}px` : ''}"><a class="${q.sort === key ? 'on' : ''}" href="${with_(route, { sort: key, dir: q.sort === key && q.dir !== 'up' ? 'up' : '', page: '' })}" title="${tip}">${label}${q.sort === key ? (q.dir === 'up' ? ' ▲' : ' ▼') : ''}</a></th>`;
   const sel = (name, label, opts) => html`<select name="${name}" aria-label="${label}" data-on="change" data-act="filter" class="mini"><option value="">${label}</option>${opts.map(([v, t]) => html`<option value="${v}" ${q[name] == v ? 'selected' : ''}>${t}</option>`)}</select>`;
+  const ticks = shown.filter(c => c.kind === 'apply' || c.kind === 'decide');
   const types = [...new Set(all.map(c => (c.job_type || '').split(',')[0]).filter(Boolean))];
   const filtered = q.show || q.where || q.type || q.minfit || q.within || q.minpay;
   return html`<div class="row wrap" style="gap:6px">${GROUPS.map(([k, v]) => { const n = k ? all.filter(c => group(c) === k).length : all.length; return n || !k ? html`<a class="chip ${(q.show || '') === k ? 'on' : ''}" style="padding:4px 11px;font-size:12px" href="${with_(route, { show: k, page: '' })}">${v} ${n}</a>` : ''; })}
       <span class="grow"></span>
       ${sel('where', 'Where', Object.entries(WHERE))}${types.length ? sel('type', 'Type', types.map(t => [t, t])) : ''}${sel('minpay', 'Pay', [[80000, '$80k and up'], [100000, '$100k and up'], [120000, '$120k and up'], [150000, '$150k and up']])}${sel('minfit', 'Fit', [60, 70, 80, 90].map(n => [n, `Fit ${n} and up`]))}${sel('within', 'Posted', [[1, 'In the last day'], [3, 'In 3 days'], [7, 'In a week']])}
       ${filtered || q.sort ? html`<a class="btn sm ghost" href="#/today" title="Shows everything again, in Job Hunt's own order.">Clear</a>` : ''}</div>
+    ${bulkBar(all)}
     <div class="card" style="padding:0"><table class="tbl today">
-      <colgroup><col style="width:100px"><col><col style="width:64px"><col style="width:96px"><col style="width:108px"><col style="width:74px"><col style="width:62px"><col style="width:82px"><col style="width:17%"><col style="width:140px"></colgroup>
-      <thead><tr>${th('todo', 'To do', 'Sort by what the row asks of you')}${th('employer', 'Role · Employer', 'Sort by employer')}<th>Where</th><th>Type</th>${th('pay', 'Pay', 'Sort by pay, highest first')}${th('fit', 'Fit', 'Sort by fit: as your CV stands, then tailored')}${th('posted', 'Posted', 'Sort by when it was posted, newest first')}${th('applicants', 'Applicants', 'Sort by how many have applied, fewest first')}<th>Worth knowing</th><th></th></tr></thead>
-      <tbody>${shown.length ? shown.map(row) : html`<tr><td colspan="10"><div class="empty" style="padding:26px"><h3>${all.length ? 'Nothing matches these filters' : 'Your list is clear'}</h3><p>${all.length ? html`<a href="#/today">Show everything</a>` : 'New roles show up here within minutes of being posted, with your CV and letter already written.'}</p></div></td></tr>`}</tbody></table>
+      <thead><tr><th class="pick" style="width:34px"><input type="checkbox" data-on="change" data-act="pickall" ${ticks.length && ticks.every(c => picked.has(String(c.role_id))) ? 'checked' : ''} ${ticks.length ? '' : 'disabled'} aria-label="Tick every role on this page" title="Tick every role on this page"></th>${th('todo', 'To do', 'Sort by what the row asks of you', 96)}${th('employer', 'Role · Employer', 'Sort by employer')}${f.where ? html`<th style="width:70px">Where</th>` : ''}${f.type ? html`<th style="width:${f.w >= 1500 ? 124 : 100}px">Type</th>` : ''}${f.pay ? th('pay', 'Pay', 'Sort by pay, highest first', f.w >= 1500 ? 150 : 120) : ''}${th('fit', 'Fit', 'Sort by fit: as your CV stands, then tailored', 76)}${th('posted', 'Posted', 'Sort by when it was posted, newest first', 68)}${f.seen ? th('applicants', 'Applicants', 'Sort by how many have applied, fewest first', 92) : ''}${f.tags ? html`<th style="width:${f.w >= 1600 ? 26 : 18}%">Worth knowing</th>` : ''}<th style="width:146px"></th></tr></thead>
+      <tbody>${shown.length ? shown.map(c => row(c, f)) : html`<tr><td colspan="${6 + f.where + f.type + f.pay + f.seen + f.tags}"><div class="empty" style="padding:26px"><h3>${all.length ? 'Nothing matches these filters' : 'Your list is clear'}</h3><p>${all.length ? html`<a href="#/today">Show everything</a>` : 'New roles show up here within minutes of being posted, with your CV and letter already written.'}</p></div></td></tr>`}</tbody></table>
       <div class="row xs m" style="padding:6px 12px;border-top:1px solid var(--line2)">${rows.length ? html`${(page - 1) * SIZE + 1} to ${Math.min(page * SIZE, rows.length)} of ${rows.length}` : ''}${q.sort ? '' : html` · in the order that gets you closest to an interview`}<span class="grow"></span>
-        ${rows.length > SIZE ? html`${page > 1 ? html`<a class="btn sm" href="${with_(route, { page: page - 1 })}">Previous</a>` : ''}${page * SIZE < rows.length ? html`<a class="btn sm" href="${with_(route, { page: page + 1 })}">Next</a>` : ''}` : html`A title opens it · an employer's name opens the employer · ⋯ has the rest`}</div></div>`;
+        ${rows.length > SIZE ? html`${page > 1 ? html`<a class="btn sm" href="${with_(route, { page: page - 1 })}">Previous</a>` : ''}${page * SIZE < rows.length ? html`<a class="btn sm" href="${with_(route, { page: page + 1 })}">Next</a>` : ''}` : html`A title opens it · an employer's name opens the employer · tick rows to do several at once`}</div></div>`;
+}
+
+// What can be done to every ticked role in one go.
+function bulkBar(all) {
+  if (!picked.size) return '';
+  const mine = all.filter(c => picked.has(String(c.role_id)) && (c.kind === 'apply' || c.kind === 'decide'));
+  const toPrepare = mine.filter(c => c.kind === 'decide' && !c.busy).length;
+  return html`<div class="bulk"><b>${mine.length} ticked</b>
+    ${toPrepare ? html`<button class="btn sm p" data-act="bulk" data-do="prepare" data-busy="Starting…" title="Tailors your CV and writes the letter for each ticked role that isn't prepared yet.">Prepare ${toPrepare}</button>` : ''}
+    <button class="btn sm" data-act="bulk" data-do="applied" title="Marks every ticked role as applied.">I applied</button>
+    <button class="btn sm danger" data-act="bulk" data-do="no" data-confirm="Not interested in these ${mine.length} roles? They will never be shown again.">Not for me</button>
+    <span class="grow"></span><button class="btn sm ghost" data-act="unpick">Clear ticks</button></div>`;
 }
 
 function question(q, waiting) {
@@ -121,6 +141,16 @@ export default {
       </div></div>`;
   },
   actions: {
+    pick({ d, value }) { value ? picked.add(d.id) : picked.delete(d.id); redraw(); return false; },
+    pickall({ value }) { document.querySelectorAll('.tbl.today td.pick input').forEach(i => (value ? picked.add(i.dataset.id) : picked.delete(i.dataset.id))); redraw(); return false; },
+    unpick() { picked.clear(); redraw(); return false; },
+    async bulk({ d, data }) {
+      const mine = data.cards.filter(c => picked.has(String(c.role_id)) && (c.kind === 'apply' || c.kind === 'decide') && (d.do !== 'prepare' || (c.kind === 'decide' && !c.busy)));
+      let done = 0;
+      for (const c of mine) { await post(`roles/${c.role_id}/${d.do}`); done++; }
+      picked.clear();
+      toast({ prepare: `Preparing ${done}. Each takes about a minute.`, applied: `${done} marked as applied`, no: `${done} won't be shown again` }[d.do]);
+    },
     filter({ el, route }) { location.hash = with_(route, { [el.name]: el.value, page: '' }); return false; },
     applied: ({ d }) => post(`roles/${d.id}/applied`).then(() => toast('Marked as applied')),
     no: ({ d }) => post(`roles/${d.id}/no`).then(() => toast('It won\'t be shown again')),

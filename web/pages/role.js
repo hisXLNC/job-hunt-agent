@@ -1,4 +1,4 @@
-import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, stageChip, freshness, openAssistant, BAND, STAGE, KIND } from '../app.js';
+import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, stageChip, freshness, openAssistant, BAND, STAGE, KIND, employer } from '../app.js';
 
 const STRENGTH = { strong: ['You have it', 'good'], partly: ['Partly', 'warn'], gap: ['Gap', 'crit'] };
 
@@ -70,7 +70,7 @@ function sent(d) {
 function side(d) {
   const r = d.role;
   return html`<div class="col" style="gap:14px">
-    <div class="card"><h4>People at ${r.company}</h4>
+    <div class="card"><h4>People at ${employer(r.company, r.company_id)}</h4>
       ${d.people?.length ? html`<div class="col" style="margin-top:10px;gap:10px">${d.people.map(p => html`<div class="row top-al">${tile(p.name, true)}<div class="grow"><a href="#/people/${p.id}"><b class="s">${p.name}</b></a><div class="xs m">${p.title}${p.knows_you_at ? html` · <b style="color:var(--good)">knows you</b>` : ''}</div></div><button class="btn sm" data-act="note" data-id="${p.id}" data-busy="Writing…">Write</button></div>`)}</div>`
         : html`<p class="s m" style="margin-top:6px">Nobody yet. A short note to someone on the team doubles the odds your application is read.</p>`}
       <a class="btn sm" style="margin-top:10px" href="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(r.company + ' ' + r.title.split(/[,(-]/)[0])}" target="_blank" rel="noopener noreferrer">Look for the team on LinkedIn</a></div>
@@ -91,9 +91,9 @@ export default {
   view(d) {
     const r = d.role, url = safeUrl(r.apply_url || r.url);
     return html`<div class="body">
-      <div class="card row" style="gap:16px;padding:20px">${tile(r.company)}
+      <div class="card row" style="gap:16px;padding:20px">${tile(r.company, false, r.company_id)}
         <div class="grow col" style="gap:6px"><div class="row wrap" style="gap:8px">${stageChip(r)}${BAND[r.band] ? html`<span class="chip">${BAND[r.band]}</span>` : ''}${freshness(r)}${r.pay ? html`<span class="s m">· ${r.pay}</span>` : ''}${r.gone_at ? html`<span class="chip warn">Posting taken down ${ago(r.gone_at)}</span>` : ''}</div>
-          <h2 style="font-size:21px">${r.title}</h2><div class="s m">${r.company}${r.location ? html` · ${r.location}` : ''}${r.closed && r.closed_why ? html` · <b>${r.closed_why}</b>` : ''}</div></div>
+          <h2 style="font-size:21px">${r.title}</h2><div class="s m">${employer(r.company, r.company_id)}${r.location ? html` · ${r.location}` : ''}${r.closed && r.closed_why ? html` · <b>${r.closed_why}</b>` : ''}</div></div>
         ${rings(r.fit, r.fit_tailored)}
         <div class="col" style="gap:6px">
           ${url ? html`<a class="btn p" href="${url}" target="_blank" rel="noopener noreferrer">Open the posting</a>` : ''}

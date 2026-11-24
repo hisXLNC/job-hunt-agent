@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"jobhunt/internal/trace"
 	"regexp"
 	"sort"
 	"strings"
@@ -892,11 +893,36 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 			}
 			e.S.SetRoleDetail(id, post.Description, post.ApplyURL, post.Pay, post.Workplace, applicants, posted)
 			r, _ = e.S.Role(id)
+		} else {
+			trace.Log("search", "posting text for role %d (%s) not fetched: %v", id, r.Source, derr)
+		}
+		// The source's own way did not give the text: read the posting's page
+		// the way a browser would.
+		if len(strings.Fields(r.Description)) < 40 && r.URL != "" {
+			page := sources.Posting{Key: r.Key, URL: r.URL, NeedsDetail: true}
+			pctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			perr := e.Src.DetailFromPage(pctx, &page)
+			cancel()
+			if perr == nil && len(strings.Fields(page.Description)) >= 40 {
+				e.S.SetRoleDetail(id, page.Description, firstOf(page.ApplyURL, r.ApplyURL), firstOf(page.Pay, r.Pay), firstOf(page.Workplace, r.Workplace), r.Applicants, r.PostedAt)
+				r, _ = e.S.Role(id)
+			} else if perr != nil {
+				trace.Log("search", "posting page for role %d not read: %v", id, perr)
+			}
 		}
 	}
 	if len(strings.Fields(r.Description)) < 40 {
-		// Without the posting's text there is nothing to read. Keep it visible
-		// so the person can open it, but don't spend Claude on a guess.
+		// Without the posting's text there is nothing to read, and Claude is
+		// not spent on a guess. It is tried again on the next two passes
+		// (sites have bad minutes); after that it is kept, unscored, for the
+		// person to open.
+		tries := "readtries:" + fmt.Sprint(id)
+		n := e.S.GetInt(tries) + 1
+		e.S.Set(tries, n)
+		if n < 3 && ctx.Err() == nil {
+			trace.Log("search", "role %d has no text yet, try %d of 3", id, n)
+			return false, false, nil
+		}
 		e.S.Advance(id, "found")
 		e.S.SetReading(id, -1, r.Band, brain.Reading{Summary: "Job Hunt couldn't get this posting's text. Open the posting to read it; the extension can send it back."})
 		return true, false, nil

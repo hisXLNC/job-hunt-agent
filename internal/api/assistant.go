@@ -64,6 +64,7 @@ var tools = []tool{
 	{Method: "GET", Pattern: "/api/board", Help: "The first few roles in each stage, with counts."},
 	{Method: "GET", Pattern: "/api/roles/{id}", Kind: "role", Help: "Everything about one role: the posting, how it was read (fit, what it asks for, what the person has), the tailored CV with each change, the letter, the case for the hiring manager, people there, notes, mail, interviews, what happened."},
 	{Method: "GET", Pattern: "/api/radar", Help: "Fresh roles from the last two days, recent searches and what they found, the titles searched for, how many roles were set aside by the rules."},
+	{Method: "GET", Pattern: "/api/companies/{id}", Kind: "company", Help: "One employer: its postings with fit and pay, what the person sent there, people there, what employees say, the person's notes."},
 	{Method: "GET", Pattern: "/api/companies", Help: "Employers being watched. Query: state (following,suggested,muted), q, sort (name,fit,people,newest), page, size."},
 	{Method: "GET", Pattern: "/api/people", Help: "People worth writing to. Query: kind (knows_work,made_move,same_roots,same_craft,mentor,recruiter,manager,contact), q, know=1 (only those who know the person), company, state, page, size."},
 	{Method: "GET", Pattern: "/api/people/{id}", Kind: "person", Help: "One person, the notes drafted or sent to them, and what happened."},
@@ -97,6 +98,7 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/roles/{id}/letter", Class: canDo, Kind: "role", Label: "Rewrite the letter", Help: `Body: {"text": "the whole letter"}. Replaces the letter. Keep it true to the CV and the facts.`},
 	{Method: "POST", Pattern: "/api/roles/{id}/case", Class: canDo, Kind: "role", Label: "Write the case for the hiring manager", Help: "Writes a short note to the hiring manager for this role. Takes a little while."},
 	{Method: "POST", Pattern: "/api/companies", Class: canDo, Label: "Watch an employer", Help: `Body: {"name": "...", "site": "its careers page, if the person gave one"}.`, Show: []string{"name"}},
+	{Method: "POST", Pattern: "/api/companies/{id}/reviews", Class: canDo, Kind: "company", Label: "Look up what employees say", Help: "Reads public employee reviews of the employer. Background."},
 	{Method: "POST", Pattern: "/api/companies/more", Class: canDo, Label: "Find more employers", Help: "Finds more employers that hire people like this one. Background."},
 	{Method: "PUT", Pattern: "/api/companies/{id}", Class: canDo, Kind: "company", Label: "Change how an employer is watched", Help: `Body: {"state": "following|suggested|muted"} and/or {"board": "the address of its job board"} and/or {"about": "what the employer does, in one or two sentences, when the person tells you or corrects it"}. Muted employers are no longer searched.`, Show: []string{"state", "about"}},
 	{Method: "POST", Pattern: "/api/places/switch", Class: canDo, Label: "Switch a job source on or off", Help: `Body: {"id": "the place's id from /api/places", "on": true|false}. Switching on also ends a rest.`, Show: []string{"id", "on"}, Only: true},
@@ -134,7 +136,7 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/roles/{id}/close", Class: mustAsk, Kind: "role", Label: "Close a role", Help: `Body: {"stage": "rejected|withdrawn|expired", "why": "..."}.`, Show: []string{"stage", "why"}},
 	{Method: "POST", Pattern: "/api/roles/{id}/reopen", Class: mustAsk, Kind: "role", Label: "Reopen a role", Help: "Only when the person asks for this role by name."},
 	{Method: "PUT", Pattern: "/api/profile", Class: mustAsk, Label: "Change your profile", Help: `Body: only the fields to change, from GET /api/you: name, headline, summary, years, strengths, rare, home, city, places (other towns that count as the city, besides its own surrounding area listed under "area"), country, arrive_on (YYYY-MM-DD), work_status (citizen|resident|permit|none), start_early, titles {"level": [], "step_up": [], "sideways": []}, domain, avoid, workplaces (remote,hybrid,onsite), pay_floor, pay_unit. A list is replaced whole: send the full new list.`},
-	{Method: "PUT", Pattern: "/api/phone", Class: mustAsk, Label: "Change phone notifications", Help: `Body: any of {"on", "min_fit", "quiet_from", "quiet_to"} (hours 0-23). Where notifications are sent is changed by the person under Settings, Connections.`, Show: []string{"on", "min_fit", "quiet_from", "quiet_to"}, Only: true},
+	{Method: "PUT", Pattern: "/api/phone", Class: mustAsk, Label: "Change phone notifications", Help: `Body: any of {"on", "min_fit", "quiet_from", "quiet_to"} (hours 0-23). Where notifications are sent is changed by the person under You, Connections.`, Show: []string{"on", "min_fit", "quiet_from", "quiet_to"}, Only: true},
 	{Method: "POST", Pattern: "/api/places/remove", Class: mustAsk, Label: "Stop watching a job site", Help: `Body: {"id": "..."}. Roles already found there stay.`, Show: []string{"id"}, Only: true},
 	{Method: "DELETE", Pattern: "/api/cvs/{id}", Class: mustAsk, Kind: "cv", Label: "Remove a CV"},
 	{Method: "DELETE", Pattern: "/api/people/{id}", Class: mustAsk, Kind: "person", Label: "Remove a person"},
@@ -637,7 +639,7 @@ func (s *Server) assistCall(ctx context.Context, c brain.AssistCall, run *assist
 	}
 	t, id := findTool(method, u.Path)
 	if t == nil {
-		note.Result = "Not made: that is not available to you. If it is about a password, a key or a connection, the person does it themselves under Settings, Connections."
+		note.Result = "Not made: that is not available to you. If it is about a password, a key or a connection, the person does it themselves under You, Connections."
 		return note
 	}
 	body := []byte(strings.TrimSpace(c.Body))
