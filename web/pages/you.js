@@ -183,12 +183,12 @@ function ownCalendar(c) {
 }
 const clockOf = ts => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-function connections(d) {
+function connections(d, route) {
   const cl = d.claude, ph = d.phone, m = d.mail, ext = d.ext;
   const usage = Object.entries(d.usage || {}).sort((a, b) => b[1].calls - a[1].calls);
-  return html`<div class="grid2" style="align-items:start">
-    <div class="col" style="gap:14px">
-    <form data-act="savellm" class="card col" style="gap:10px" data-set="claude"><div class="row"><h3 class="grow">Claude</h3><span class="chip ${cl.engine && cl.ok ? 'good' : 'warn'}">${cl.engine ? (cl.ok ? 'Connected' : 'Resting') : 'Not connected'}</span></div>
+  const hit = route.q.hl && SETTINGS.find(x => x.id === route.q.hl);
+  const open = route.q.open || (hit ? { talkset: 'owncal' }[hit.set] || hit.set : '');
+  const claude = html`<form data-act="savellm" class="card col" style="gap:10px" data-set="claude"><div class="row"><h3 class="grow">Claude</h3><span class="chip ${cl.engine && cl.ok ? 'good' : 'warn'}">${cl.engine ? (cl.ok ? 'Connected' : 'Resting') : 'Not connected'}</span></div>
       <p class="s m">Claude does the reading and writing. ${cl.note && !cl.ok ? html`<b style="color:var(--warn)">${cl.note}</b>` : ''}</p>
       <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="claude-code" ${cl.engine === 'claude-code' ? 'checked' : ''} ${d.cli_found ? '' : 'disabled'}> <span><b>Your Claude subscription</b> through Claude Code<br><span class="m">${d.cli_found ? 'Found on this computer. Uses the plan you already pay for.' : 'Claude Code isn\'t installed on this computer. Install it from claude.com/claude-code and sign in.'}</span></span></label>
       <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="api" ${cl.engine === 'api' ? 'checked' : ''}> <span><b>An API key</b><br><span class="m">Pay for what you use. A day of searching costs a few dollars.</span></span></label>
@@ -196,12 +196,8 @@ function connections(d) {
       <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="demo" ${cl.engine === 'demo' ? 'checked' : ''}> <span><b>Sample answers</b><br><span class="m">No Claude. For looking around; the writing is crude.</span></span></label>
       <label class="field" style="max-width:340px">Model<select name="model">${d.models.map(x => html`<option value="${x.ID}" ${cl.model === x.ID ? 'selected' : ''}>${x.Name}: ${x.Note}</option>`)}</select></label>
       <div class="row"><button class="btn p">Save</button><button type="button" class="btn" data-act="testllm" data-busy="Asking Claude…">Test it</button><span class="grow"></span><span class="xs m">${cl.calls} calls today${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)} today · $${cl.week.toFixed(2)} this week` : ''}</span></div>
-      ${usage.length ? html`<details><summary class="s">What Claude was used for this week</summary><table class="tbl" style="margin-top:6px"><tbody>${usage.map(([k, u]) => html`<tr><td class="s">${k.replace(/_/g, ' ')}</td><td class="s">${u.calls} calls</td><td class="s">${u.cost ? '$' + u.cost.toFixed(2) : ''}</td><td class="s m">${u.errors ? u.errors + ' failed' : ''}</td></tr>`)}</tbody></table></details>` : ''}</form>
-    ${moreSources(d)}
-    <div class="card row"><span class="s grow">The browser side panel has its own page.</span><a class="btn sm" href="#/you/panel">Browser side panel</a></div>
-    </div>
-    <div class="col" style="gap:14px">
-    <form data-act="savephone" class="card col" style="gap:10px" data-set="phone"><div class="row"><h3 class="grow">Phone notices</h3><span class="chip ${ph.on ? 'good' : ''}">${ph.on ? 'On' : 'Off'}</span></div>
+      ${usage.length ? html`<details><summary class="s">What Claude was used for this week</summary><table class="tbl" style="margin-top:6px"><tbody>${usage.map(([k, u]) => html`<tr><td class="s">${k.replace(/_/g, ' ')}</td><td class="s">${u.calls} calls</td><td class="s">${u.cost ? '$' + u.cost.toFixed(2) : ''}</td><td class="s m">${u.errors ? u.errors + ' failed' : ''}</td></tr>`)}</tbody></table></details>` : ''}</form>`;
+  const phone = html`<form data-act="savephone" class="card col" style="gap:10px" data-set="phone"><div class="row"><h3 class="grow">Phone notices</h3><span class="chip ${ph.on ? 'good' : ''}">${ph.on ? 'On' : 'Off'}</span></div>
       <p class="s m">A buzz on your phone when a strong role is still fresh, so you can apply inside the first hour. It uses ntfy, a free app that only delivers notices: no account, nothing to pay.</p>
       <ol class="steps s">
         <li><b>On your phone</b>, install the app called <b>ntfy</b> from the App Store or Google Play. Open it and allow notifications when it asks.</li>
@@ -218,9 +214,8 @@ function connections(d) {
       <div class="row wrap"><button class="btn p">Save</button><button type="button" class="btn" data-act="newtopic">Make a topic for me</button><button type="button" class="btn" data-act="testphone">Send a test</button></div>
       <details class="xs m"><summary>No buzz after the test?</summary><p style="margin-top:6px">Check the topic is spelled the same in both places, and that it was saved here before the test. On an iPhone, open Settings → Notifications → ntfy and allow them. On Android, open the phone's Settings → Apps → ntfy → Battery and choose Unrestricted, or notices arrive late. Notices are held back between the two hours above${ph.quiet_from !== ph.quiet_to ? html` (now ${ph.quiet_from}:00 to ${ph.quiet_to}:00)` : ''}; the test is always sent.</p>
         <p style="margin-top:6px">A notice carries the job title, the employer, the fit and how old the posting is, and passes through ntfy's server on its way to your phone.</p>
-        <label class="field" style="margin-top:8px;max-width:300px">Server <span class="h">Leave as it is unless you run your own.</span><input type="url" name="server" value="${ph.server}"></label></details></form>
-    ${phoneAccess(d.phoneaccess)}${ownCalendar(d.owncal)}
-    <form data-act="savemail" data-busy="Checking…" class="card col" style="gap:10px" data-set="mail"><div class="row"><h3 class="grow">Your inbox</h3><span class="chip ${m.on ? (m.note ? 'crit' : 'good') : ''}">${m.on ? (m.note ? 'Problem' : 'Connected') : 'Off'}</span></div>
+        <label class="field" style="margin-top:8px;max-width:300px">Server <span class="h">Leave as it is unless you run your own.</span><input type="url" name="server" value="${ph.server}"></label></details></form>`;
+  const mail = html`<form data-act="savemail" data-busy="Checking…" class="card col" style="gap:10px" data-set="mail"><div class="row"><h3 class="grow">Your inbox</h3><span class="chip ${m.on ? (m.note ? 'crit' : 'good') : ''}">${m.on ? (m.note ? 'Problem' : 'Connected') : 'Off'}</span></div>
       <p class="s m">So replies are noticed the moment they arrive. Job Hunt opens the inbox read-only and reads only mail from employers you applied to, hiring systems, people you wrote to, and job alerts from job sites. It cannot send, move or delete anything. Replies it reads are passed to Claude to be understood; job alerts are not.</p>
       ${m.note ? html`<p class="s" style="color:var(--crit)">${m.note}</p>` : ''}
       <label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${m.on ? 'checked' : ''}> Watch my inbox for replies</label>
@@ -228,9 +223,33 @@ function connections(d) {
       <div class="grid2"><label class="field">Mail server<input type="text" name="host" value="${m.host}"></label><label class="field">Check every <span class="h">Minutes, 5 to 240.</span><input type="number" name="every" value="${m.every || 10}" min="5" max="240"></label></div>
       <p class="xs m">A "we received your application" message marks that role as applied by itself, and adds the role if Job Hunt never found it. With Gmail, archived messages are read too.</p>
       <p class="xs m">Gmail: Google Account → Security → 2-Step Verification → App passwords. The password is kept only in Job Hunt's data file on this computer.</p>
-      <div class="row"><button class="btn p">Save and check</button>${m.last_at ? html`<span class="xs m">Last read ${rel(m.last_at)}</span>` : ''}</div></form>
-    ${thisComputer(d)}${schedule(d)}
-    </div></div>`;
+      <div class="row"><button class="btn p">Save and check</button>${m.last_at ? html`<span class="xs m">Last read ${rel(m.last_at)}</span>` : ''}</div></form>`;
+  const cal = d.owncal || {}, pa = d.phoneaccess, k = d.desk || {}, sc = d.schedule || { full: [] }, more = d.more || [];
+  const keyed = more.filter(x => x.id !== 'alerts'), setUp = keyed.filter(x => x.has_key);
+  const model = (d.models || []).find(x => x.ID === cl.model)?.Name || '';
+  const ts = cal.talkset || {};
+  const rows = [
+    ['claude', 'Claude', cl.engine ? (cl.ok ? ['good', 'Connected'] : ['warn', 'Resting']) : ['warn', 'Not connected'],
+      cl.engine ? `${{ 'claude-code': 'Your Claude subscription', api: 'An API key', demo: 'Sample answers (no Claude)' }[cl.engine] || cl.engine}${model ? ' · ' + model : ''} · ${cl.calls} calls today${cl.note && !cl.ok ? ' · ' + cl.note : ''}` : 'Claude does the reading and writing', claude],
+    ['mail', 'Your inbox', m.on ? (m.note ? ['crit', 'Not working'] : ['good', 'Connected']) : ['', 'Off'],
+      m.on ? (m.note || `${m.host || 'Mail'} · ${m.last_at ? 'checked ' + rel(m.last_at) : 'not checked yet'}${m.every ? `, every ${m.every} minutes` : ''}`) : 'Notices replies the moment they arrive; reads only', mail],
+    ['owncal', 'Your calendar', cal.on ? (cal.note ? ['crit', 'Not working'] : ['good', 'Connected']) : ['', 'Off'],
+      `${cal.on ? (cal.note || 'Read only') : 'Not connected'} · interviews ${ts.from ?? 9} to ${ts.to ?? 17}, ${ts.minutes ?? 60} minutes each, ${ts.offer ?? 3} times offered`, ownCalendar(d.owncal)],
+    ['phone', 'Phone notices', ph.on ? ['good', 'On'] : ['', 'Off'],
+      ph.on ? `For fit ${ph.min_fit} and up${ph.quiet_from !== ph.quiet_to ? ` · quiet ${ph.quiet_from}:00 to ${ph.quiet_to}:00` : ''}${ph.only === 'urgent' ? ' · interviews and offers only' : ''}` : 'A buzz on your phone when a strong role is posted, through the free ntfy app', phone],
+    ['phoneaccess', 'Job Hunt on your phone', pa?.on ? (pa.problem ? ['crit', 'Not working'] : ['good', 'On']) : ['', 'Off'],
+      pa?.on ? `${pa.devices?.length || 0} phone${pa.devices?.length === 1 ? '' : 's'} paired` : 'See Today and act on roles from your phone\'s browser', phoneAccess(d.phoneaccess)],
+    ['sources', 'More job sources', setUp.length ? [setUp.length === keyed.length ? 'good' : 'warn', `${setUp.length} of ${keyed.length}`] : ['', 'None'],
+      keyed.length ? (setUp.length ? `${setUp.map(x => x.name).join(', ')} set up` : 'Each needs a free key') + (keyed.length > setUp.length ? ` · ${keyed.filter(x => !setUp.includes(x)).map(x => x.name).join(', ')} need${keyed.length - setUp.length === 1 ? 's' : ''} a free key` : '') : '', moreSources(d)],
+    ['schedule', 'Search times', ['good', 'On'], `Full searches at ${sc.full.length ? sc.full.map(hhmm).join(', ') : 'no set times'} · quick checks every ${sc.fast_minutes || 20} minutes`, schedule(d)],
+    ['desk', 'On this computer', ['good', 'On'], [d.startup?.on ? 'Starts when you sign in' : 'Does not start by itself', k.notify ? 'Windows notifications on' : 'no Windows notifications', k.morning >= 0 ? `morning summary at ${k.morning}:00` : 'no morning summary'].join(' · '), thisComputer(d)],
+  ];
+  return html`<div class="card" style="padding:0">${rows.map(([key, name, [tone, word], sum, body], i) => {
+      const on = open === key;
+      return html`<div class="fold ${on ? 'open' : ''}" style="${i ? 'border-top:1px solid var(--line2)' : ''}">
+        <a class="foldhead" href="${with_(route, { open: on ? '' : key, hl: '' })}"><b class="foldname">${name}</b><span class="chip ${tone}">${word}</span><span class="grow s m foldsum">${sum}</span><span class="btn sm">${on ? 'Close' : word === 'Off' || word === 'None' || word === 'Not connected' ? 'Set up' : 'Change'}</span></a>
+        ${on ? html`<div class="foldbody">${body}</div>` : ''}</div>`; })}
+    <div class="fold" style="border-top:1px solid var(--line2)"><a class="foldhead" href="#/you/panel"><b class="foldname">Browser side panel</b><span class="chip ${ext?.paired_at ? 'good' : ''}">${ext?.paired_at ? 'Connected' : 'Off'}</span><span class="grow s m foldsum">Fills application forms in your browser; it has its own page</span><span class="btn sm">Open</span></a></div></div>`;
 }
 
 // The searches that take a key, and job-alert e-mails. A saved key is never
@@ -375,7 +394,7 @@ export default {
     const tab = route.parts[1] || '';
     return html`<div class="body"><div class="tabs">${TABS.map(([k, v]) => html`<a class="${k === tab ? 'on' : ''}" href="#/you${k ? '/' + k : ''}">${v}</a>`)}
         <div class="setfind"><input type="text" id="setfind" placeholder="Find a setting" aria-label="Find a setting" autocomplete="off" title="Type what you are looking for, such as dark, salary, backup or phone. Enter opens the first match."><div class="found" id="setfound" hidden></div></div></div>
-      ${tab === 'arriving' ? arriving(d) : tab === 'connections' ? connections(d) : tab === 'panel' ? panel(d) : tab === 'app' ? theApp(d, route) : about(d)}</div>`;
+      ${tab === 'arriving' ? arriving(d) : tab === 'connections' ? connections(d, route) : tab === 'panel' ? panel(d) : tab === 'app' ? theApp(d, route) : about(d)}</div>`;
   },
   // A setting found through the search box is brought into view and marked, once.
   after(root, d, route) {

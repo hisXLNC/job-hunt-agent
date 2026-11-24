@@ -586,7 +586,7 @@ func (e *Engine) Sources() []SourceRow {
 	boards := e.S.Count(`SELECT COUNT(*) FROM companies WHERE state = 'following' AND board_kind != ''`)
 	b := SourceRow{ID: srcBoards, Name: "Employers' own job boards", What: countWord(boards, "employer")}
 	if boards == 0 {
-		b.What, b.State, b.Note = "", "none", "No employer you watch has a job board Job Hunt can read yet. Add employers below."
+		b.What, b.State, b.Note = "", "none", "No employer you watch has a job board Job Hunt can read yet. Add employers under Employers."
 	} else {
 		fromRun(&b, srcBoards)
 		if l, ok := last[srcBoards]; ok && l.Failed > 0 {
@@ -639,7 +639,7 @@ func (e *Engine) Sources() []SourceRow {
 	s := SourceRow{ID: srcSites, Name: "Recruiters and job sites", What: countWord(on, "site")}
 	switch {
 	case len(ps.Sites) == 0:
-		s.What, s.State, s.Note = "", "none", "None added yet. Add one in the list beside this."
+		s.What, s.State, s.Note = "", "none", "None added yet. Add one with the button above this list."
 	case on == 0:
 		s.What, s.State = "", "off"
 	default:

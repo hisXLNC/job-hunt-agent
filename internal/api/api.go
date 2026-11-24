@@ -779,7 +779,7 @@ func (s *Server) Handler() http.Handler {
 		total := len(list)
 		from := min((page-1)*size, total)
 		return map[string]any{"companies": list[from:min(from+size, total)], "total": total, "page": page, "size": size,
-			"suggested": st.Count(`SELECT COUNT(*) FROM companies WHERE state = 'suggested'`), "muted": st.Count(`SELECT COUNT(*) FROM companies WHERE state = 'muted'`)}, nil
+			"following": st.Count(`SELECT COUNT(*) FROM companies WHERE state = 'following'`), "suggested": st.Count(`SELECT COUNT(*) FROM companies WHERE state = 'suggested'`), "muted": st.Count(`SELECT COUNT(*) FROM companies WHERE state = 'muted'`)}, nil
 	})
 	h("POST /api/companies", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {

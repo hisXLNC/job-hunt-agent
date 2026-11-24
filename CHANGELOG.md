@@ -2,6 +2,11 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.36
+
+- **Radar in four tabs: Fresh now, Sources, Employers, Titles.** Sources lists every place Job Hunt looks with the ones that aren't working first, each with what went wrong and a button: **Set it up**, **Try now**, or **Fix the 3** for employers' boards that didn't answer. The tab shows a red count when something is wrong, and the top card links straight to it.
+- **Connections, one row each.** Claude, your inbox, your calendar, phone notices, Job Hunt on your phone, more job sources, search times and this computer are each one line saying whether it is working, and open where they sit. Everything that was on the page is still there. "Find a setting" opens the right row.
+
 ## 26.11.35
 
 - **Which sources aren't working, at a glance.** Radar's top card now says when a source isn't working ("LinkedIn isn't working", "3 sources aren't working") with a link to **Where Job Hunt looks**, which now sits above the employers list instead of below it. Employers' own job boards that didn't answer are named, each with the reason.
