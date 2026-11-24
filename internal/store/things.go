@@ -305,11 +305,36 @@ func (s *Store) SeenRole(key string) (id int64, closed string, ok bool) {
 	return id, closed, err == nil
 }
 
-// SimilarRole finds an open or decided role at the same company with the same
-// title, so the same job seen through two places is one role.
-func (s *Store) SimilarRole(companyID int64, title string) (id int64, closed string, ok bool) {
-	err := s.db.QueryRow(`SELECT id, closed FROM roles WHERE company_id = ? AND lower(title) = lower(?) ORDER BY (closed = 'no') DESC, id DESC LIMIT 1`, companyID, strings.TrimSpace(title)).Scan(&id, &closed)
-	return id, closed, err == nil
+// SimilarRole finds a role at the same company with the same title in the
+// same place, so the same job seen through two places is one role. A role
+// the person said no to is preferred, so a repost of it stays closed.
+func (s *Store) SimilarRole(companyID int64, title, location string) (id int64, closed string, ok bool) {
+	rows, err := s.db.Query(`SELECT id, closed, location FROM roles WHERE company_id = ? AND lower(title) = lower(?) ORDER BY (closed = 'no') DESC, id DESC`, companyID, strings.TrimSpace(title))
+	if err != nil {
+		return 0, "", false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var loc string
+		if rows.Scan(&id, &closed, &loc) == nil && samePlace(loc, location) {
+			return id, closed, true
+		}
+	}
+	return 0, "", false
+}
+
+// samePlace compares two location strings by their first part (the city).
+// An unknown place matches anything.
+func samePlace(a, b string) bool {
+	city := func(x string) string {
+		x = strings.ToLower(strings.TrimSpace(strings.FieldsFunc(x+",", func(r rune) bool { return r == ',' || r == '(' || r == ';' || r == '/' })[0]))
+		return x
+	}
+	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
+		return true
+	}
+	ca, cb := city(a), city(b)
+	return ca == cb || strings.Contains(ca, cb) || strings.Contains(cb, ca)
 }
 
 // AddRole records a newly seen posting.

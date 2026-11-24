@@ -48,6 +48,10 @@ func StandIn() llm.Engine {
 			out = standPrep(req.Input.(prepInput))
 		case "ask":
 			out = standAsk(req.Input.(string))
+		case "mail":
+			out = standMail(req.Input.(mailInput))
+		case "test":
+			out = map[string]string{"word": "ready"}
 		default:
 			return llm.Response{}, fmt.Errorf("stand-in: unknown task %q", req.Task)
 		}
@@ -266,6 +270,7 @@ func standPropose(text string) Proposal {
 	p.StepUp = []string{"Lead " + base, "Director, " + strings.TrimPrefix(base, "Senior ")}
 	p.Sideways = []string{base + " Consultant", "Program Manager"}
 	p.Focus = strings.Join(top[:min(2, len(top))], " ")
+	p.Domain = top[:min(3, len(top))]
 	return p
 }
 
@@ -706,4 +711,42 @@ func standAsk(text string) Reply {
 	}
 	r.Remember = []string{strings.TrimSpace(text)}
 	return r
+}
+
+func standMail(in mailInput) MailReading {
+	text := strings.ToLower(in.Mail.Subject + "\n" + in.Mail.Body)
+	has := func(words ...string) bool {
+		for _, w := range words {
+			if strings.Contains(text, w) {
+				return true
+			}
+		}
+		return false
+	}
+	out := MailReading{Kind: "other"}
+	// The role it is about: the first candidate whose employer is named.
+	for _, c := range in.Roles {
+		if strings.Contains(text, strings.ToLower(c.Company)) || strings.Contains(strings.ToLower(in.Mail.From), strings.ToLower(strings.Fields(c.Company + " x")[0])) {
+			out.RoleID = c.ID
+			break
+		}
+	}
+	first := strings.Fields(in.Mail.From + " there")[0]
+	switch {
+	case has("offer of employment", "pleased to offer", "offer letter"):
+		out.Kind, out.Summary, out.Next = "offer", "They are making you an offer.", "Read the terms before answering; ask for them in writing if they are not attached."
+	case has("unfortunately", "not moving forward", "other candidates", "not be proceeding", "regret to inform"):
+		out.Kind, out.Summary, out.Next = "rejection", "They are not taking this application further.", "Nothing to do. If you spoke to someone there, a short thank-you keeps the door open."
+	case has("interview", "schedule a call", "availability", "speak with you", "meet with", "phone screen", "a quick chat"):
+		out.Kind, out.Summary, out.Next = "interview", "They want to talk to you and are asking when you are free.", "Reply with two or three times, then add it to Interviews."
+		out.Reply = "Hi " + first + ",\n\nThank you for getting back to me. I would be glad to talk. I am free at the following times (Eastern):\n\n- [time 1]\n- [time 2]\n- [time 3]\n\nIf none of these work, I am happy to fit around your calendar.\n\nBest regards,\n" + in.Person.Profile.Name
+	case has("assessment", "take-home", "case study", "complete the test", "online test"):
+		out.Kind, out.Summary, out.Next = "assessment", "They are asking you to complete an assessment.", "Check the deadline and do it; these are usually timed from when you open the link."
+	case has("received your application", "thank you for applying", "thanks for applying", "application has been received"):
+		out.Kind, out.Summary, out.Next = "receipt", "They confirmed they received your application.", "Nothing to do."
+	case strings.Contains(text, "?"):
+		out.Kind, out.Summary, out.Next = "question", "They are asking you something.", "Answer it; a draft is below."
+		out.Reply = "Hi " + first + ",\n\nThank you for your note. [your answer]\n\nBest regards,\n" + in.Person.Profile.Name
+	}
+	return out
 }

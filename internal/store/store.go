@@ -238,6 +238,27 @@ CREATE TABLE changes (
   undone_at INTEGER NOT NULL DEFAULT 0
 );
 `,
+	`
+CREATE TABLE mails (
+  id INTEGER PRIMARY KEY,
+  msg_id TEXT NOT NULL UNIQUE,
+  from_name TEXT NOT NULL DEFAULT '',
+  from_addr TEXT NOT NULL DEFAULT '',
+  subject TEXT NOT NULL DEFAULT '',
+  at INTEGER NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  role_id INTEGER NOT NULL DEFAULT 0,
+  company_id INTEGER NOT NULL DEFAULT 0,
+  person_id INTEGER NOT NULL DEFAULT 0,
+  kind TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  next TEXT NOT NULL DEFAULT '',
+  draft TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'new',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX mails_at ON mails(at DESC);
+`,
 }
 
 // Open opens (creating and upgrading if needed) the database at path.
@@ -453,6 +474,7 @@ type Profile struct {
 	StartEarly bool   `json:"start_early"` // open to starting remotely before arriving
 
 	Titles     Titles   `json:"titles"`
+	Domain     []string `json:"domain"` // words nearly every wanted job has in its title
 	Avoid      []string `json:"avoid"`
 	Workplaces []string `json:"workplaces"` // any of remote, hybrid, onsite; empty = all
 	PayFloor   int      `json:"pay_floor"`
