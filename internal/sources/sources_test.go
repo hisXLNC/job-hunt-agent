@@ -212,14 +212,14 @@ func TestPause(t *testing.T) {
 	ctx := context.Background()
 	tests := []struct {
 		name  string
-		c     Client
+		c     *Client
 		least time.Duration
 		most  time.Duration
 	}{
-		{"test server: none", Client{Base: map[string]string{"workday": "http://127.0.0.1:1"}}, 0, 200 * time.Millisecond},
-		{"switched off", Client{pageDelay: -1}, 0, 200 * time.Millisecond},
-		{"explicit", Client{pageDelay: 30 * time.Millisecond, Base: map[string]string{"workday": "http://127.0.0.1:1"}}, 30 * time.Millisecond, 5 * time.Second},
-		{"real host: default", Client{}, defaultPageDelay, 5 * time.Second},
+		{"test server: none", &Client{Base: map[string]string{"workday": "http://127.0.0.1:1"}}, 0, 200 * time.Millisecond},
+		{"switched off", &Client{pageDelay: -1}, 0, 200 * time.Millisecond},
+		{"explicit", &Client{pageDelay: 30 * time.Millisecond, Base: map[string]string{"workday": "http://127.0.0.1:1"}}, 30 * time.Millisecond, 5 * time.Second},
+		{"real host: default", &Client{}, defaultPageDelay, 5 * time.Second},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -1,12 +1,15 @@
-// Package sources fetches job postings from the public, no-login endpoints of
-// applicant tracking systems (Greenhouse, Lever, Ashby, SmartRecruiters and
-// Workday) and from LinkedIn's public guest job search, and works out which
+// Package sources fetches job postings from places that need no login: the
+// public endpoints of applicant tracking systems (Greenhouse, Lever, Ashby,
+// SmartRecruiters, Workday, Workable, BambooHR, Recruitee), title searches
+// (LinkedIn's public guest search, Canada's Job Bank, FreeHire), and any
+// careers page or job site the person points it at. It also works out which
 // of those systems an employer uses.
 //
 // Everything a posting carries is untrusted text from the internet. The
-// package only ever converts it to plain text: nothing in it is executed,
-// and follow-up requests go to hosts derived from a Board or a job id, never
-// to an address found inside a posting.
+// package only ever converts it to plain text: nothing in it is executed.
+// Follow-up requests go to hosts derived from a Board or a job id; for a page
+// the person pointed at, they stay on that page's own site. No request is
+// ever made to this computer or to a private network (see dial.go).
 package sources
 
 import (
@@ -19,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,6 +34,12 @@ const (
 	kindSmartRecruiters = "smartrecruiters"
 	kindWorkday         = "workday"
 	kindLinkedIn        = "linkedin"
+	kindWorkable        = "workable"
+	kindBambooHR        = "bamboohr"
+	kindRecruitee       = "recruitee"
+	kindPage            = "page" // a careers page read as it stands; the token is its address
+	kindJobBank         = "jobbank"
+	kindFreeHire        = "freehire"
 )
 
 const (
@@ -70,10 +80,12 @@ type Board struct {
 	Token string // greenhouse/lever/ashby/smartrecruiters: the company slug. workday: "tenant.wdN/site", e.g. "td.wd3/TD_Bank_Careers"
 }
 
-// Query is a LinkedIn guest job search.
+// Query is one search for a job title. Each source uses the parts it understands.
 type Query struct {
 	Keywords      string
 	Location      string        // e.g. "Toronto, Ontario, Canada"
+	Province      string        // two letters, e.g. "ON" (Job Bank)
+	Country       string        // two letters, e.g. "CA" (FreeHire)
 	Miles         int           // how far from Location to look (0 = LinkedIn's usual 25)
 	Within        time.Duration // only postings newer than this (0 = any)
 	Remote        bool          // remote jobs only
@@ -91,6 +103,16 @@ type Client struct {
 	// For workday the base replaces "https://{tenant}.{wdN}.myworkdayjobs.com".
 	// Empty or missing = the real host.
 	Base map[string]string
+
+	// Render, when set, loads a page in a real browser and returns what it
+	// shows. It is used for pages that turn a plain request away or build
+	// their list with scripts.
+	Render func(ctx context.Context, url string) (string, error)
+
+	httpOnce sync.Once
+	http     *http.Client
+	paceMu   sync.Mutex
+	paced    map[string]time.Time
 
 	// pageDelay is the pause between the pages of one listing. Zero means
 	// defaultPageDelay against a real host and no pause against a Base
@@ -132,6 +154,14 @@ func (c *Client) List(ctx context.Context, b Board) ([]Posting, error) {
 		return c.listSmartRecruiters(ctx, b)
 	case kindWorkday:
 		return c.ListWorkday(ctx, b, "", c.workdayMax)
+	case kindWorkable:
+		return c.listWorkable(ctx, b)
+	case kindBambooHR:
+		return c.listBambooHR(ctx, b)
+	case kindRecruitee:
+		return c.listRecruitee(ctx, b)
+	case kindPage:
+		return c.ReadSite(ctx, Site{URL: b.Token, Board: true}, "", "")
 	}
 	return nil, fmt.Errorf("sources: unknown board kind %q", b.Kind)
 }
@@ -153,19 +183,53 @@ func (c *Client) Detail(ctx context.Context, p *Posting) error {
 		return c.detailWorkday(ctx, p)
 	case kindLinkedIn:
 		return c.detailLinkedIn(ctx, p)
+	case kindBambooHR:
+		return c.detailBambooHR(ctx, p)
+	case kindJobBank:
+		return c.detailJobBank(ctx, p)
+	case kindPage, kindSite:
+		return c.detailPage(ctx, p)
 	}
 	return fmt.Errorf("sources: no detail lookup for source %q", p.Source)
 }
 
 // ---- shared HTTP ----
 
-var defaultHTTP = &http.Client{Timeout: defaultTimeout}
-
 func (c *Client) httpClient() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
 	}
-	return defaultHTTP
+	c.httpOnce.Do(func() { c.http = c.publicOnly() })
+	return c.http
+}
+
+// wait keeps at least gap between two requests to one source, however many
+// searches are running. A test server (a Base override) is never waited for.
+func (c *Client) wait(ctx context.Context, kind string, gap time.Duration) error {
+	if c.Base[kind] != "" || gap <= 0 {
+		return ctx.Err()
+	}
+	c.paceMu.Lock()
+	if c.paced == nil {
+		c.paced = map[string]time.Time{}
+	}
+	now := time.Now()
+	at := c.paced[kind].Add(gap)
+	if at.Before(now) {
+		at = now
+	}
+	c.paced[kind] = at
+	c.paceMu.Unlock()
+	if d := time.Until(at); d > 0 {
+		t := time.NewTimer(d)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
+	return ctx.Err()
 }
 
 func (c *Client) clock() time.Time {

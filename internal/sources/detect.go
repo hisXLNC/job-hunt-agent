@@ -22,7 +22,7 @@ var careersPaths = []string{"", "/careers", "/jobs", "/about/careers"}
 
 // boardLinkRE finds addresses on the supported systems anywhere in a page:
 // links, iframes, embed scripts and inline configuration alike.
-var boardLinkRE = regexp.MustCompile(`(?i)(?:https?:)?//[a-z0-9.-]*(?:greenhouse\.io|lever\.co|ashbyhq\.com|smartrecruiters\.com|myworkdayjobs\.com)[^\s"'<>\\)]*`)
+var boardLinkRE = regexp.MustCompile(`(?i)(?:https?:)?//[a-z0-9.-]*(?:greenhouse\.io|lever\.co|ashbyhq\.com|smartrecruiters\.com|myworkdayjobs\.com|workable\.com|bamboohr\.com|recruitee\.com)[^\s"'<>\\)]*`)
 
 // unescapeJS undoes the slash escapes of URLs embedded in scripts and JSON.
 var unescapeJS = strings.NewReplacer(`\/`, "/", `/`, "/", `/`, "/")

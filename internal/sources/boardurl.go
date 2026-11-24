@@ -69,6 +69,20 @@ func ParseBoardURL(raw string) (Board, bool) {
 		return slugBoard(kindSmartRecruiters, segmentAfter(segs, "companies"), false)
 	}
 
+	switch {
+	case host == "apply.workable.com":
+		if first == "api" { // /api/v1/widget/accounts/acme
+			return slugBoard(kindWorkable, segmentAfter(segs, "accounts"), true)
+		}
+		return slugBoard(kindWorkable, first, true)
+	case strings.HasSuffix(host, ".workable.com"):
+		return slugBoard(kindWorkable, strings.TrimSuffix(host, ".workable.com"), true)
+	case strings.HasSuffix(host, ".bamboohr.com"):
+		return slugBoard(kindBambooHR, strings.TrimSuffix(host, ".bamboohr.com"), true)
+	case strings.HasSuffix(host, ".recruitee.com"):
+		return slugBoard(kindRecruitee, strings.TrimSuffix(host, ".recruitee.com"), true)
+	}
+
 	if m := workdayHostRE.FindStringSubmatch(host); m != nil {
 		site := first
 		switch {
@@ -133,6 +147,14 @@ func BoardURL(b Board) string {
 		if w, err := parseWorkdayToken(b.Token); err == nil {
 			return w.host() + "/" + w.site
 		}
+	case kindWorkable:
+		return "https://apply.workable.com/" + token + "/"
+	case kindBambooHR:
+		return "https://" + b.Token + ".bamboohr.com/careers"
+	case kindRecruitee:
+		return "https://" + b.Token + ".recruitee.com/"
+	case kindPage:
+		return webURL(b.Token)
 	}
 	return ""
 }
