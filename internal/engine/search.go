@@ -152,21 +152,45 @@ func (e *Engine) DetectBoard(ctx context.Context, id int64) error {
 		c.BoardKind, c.BoardToken, c.BoardNote = b.Kind, b.Token, ""
 	case errors.Is(derr, sources.ErrNoBoard):
 		c.BoardNote = "No public job board found; watched through LinkedIn"
+		// Not on a job system Job Hunt knows: its own careers page may still
+		// list its openings plainly enough to read.
+		if pb, _, perr := e.Src.DetectPage(cctx, c.Site); perr == nil {
+			c.BoardKind, c.BoardToken, c.BoardNote = pb.Kind, pb.Token, ""
+		}
 	default:
 		c.BoardNote = "Couldn't check its careers page; watched through LinkedIn"
 	}
 	return e.S.SaveCompany(c)
 }
 
-// SetBoardFromURL lets the person paste an employer's careers page.
+// KnownBoard reports whether an address is a page of a job system Job Hunt
+// reads directly, which needs no looking at to be sure.
+func KnownBoard(raw string) bool {
+	_, ok := sources.ParseBoardURL(raw)
+	return ok
+}
+
+// SetBoardFromURL lets the person paste an employer's careers page. A page on
+// a job system Job Hunt knows is read through that system; any other page is
+// read as it stands, if it shows postings.
 func (e *Engine) SetBoardFromURL(id int64, raw string) error {
-	b, ok := sources.ParseBoardURL(raw)
-	if !ok {
-		return errors.New("that page isn't one of the job systems Job Hunt can read directly (Workday, Greenhouse, Lever, Ashby, SmartRecruiters). The employer is still watched through LinkedIn")
-	}
 	c, err := e.S.Company(id)
 	if err != nil {
 		return err
+	}
+	b, ok := sources.ParseBoardURL(raw)
+	if !ok {
+		addr, public := sources.PublicURL(raw)
+		if !public {
+			return errors.New("that is not a web address Job Hunt can open")
+		}
+		ctx, cancel := context.WithTimeout(e.ctx, 75*time.Second)
+		defer cancel()
+		posts, rerr := e.Src.ReadSite(ctx, sources.Site{URL: addr, Board: true}, "", "")
+		if rerr != nil || len(posts) == 0 {
+			return errors.New("Job Hunt could not find any postings on that page. Paste the page that lists the openings themselves. The employer is still watched through LinkedIn")
+		}
+		b = sources.Board{Kind: "page", Token: addr}
 	}
 	c.BoardKind, c.BoardToken, c.BoardNote, c.BoardCheckedAt = b.Kind, b.Token, "", e.Now().Unix()
 	return e.S.SaveCompany(c)
@@ -254,7 +278,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			continue
 		}
 		// A fast pass only re-reads boards that are cheap to read whole.
-		if kind == "fast" && c.BoardKind == "workday" {
+		if kind == "fast" && (c.BoardKind == "workday" || c.BoardKind == "page") {
 			continue
 		}
 		stats.Looked++
@@ -277,8 +301,9 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			}
 		}
 		// Whatever was open and is no longer listed has been taken down.
-		// Workday is searched by keyword, so absence proves nothing there.
-		if c.BoardKind != "workday" && len(posts) > 0 {
+		// Workday is searched by keyword, and a careers page read as it stands
+		// may show only its first screen, so absence proves nothing there.
+		if c.BoardKind != "workday" && c.BoardKind != "page" && len(posts) > 0 {
 			for _, id := range open {
 				e.S.MarkGone(id)
 				stats.Gone++
@@ -290,13 +315,16 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 
 	// 2. LinkedIn's public search: every title, step-up and sideways included,
 	// each searched as often as the others.
-	if now.Unix() >= st.LinkedInUntil {
-		within := 26 * time.Hour
-		if st.LastFull == 0 {
-			within = 7 * 24 * time.Hour
-		} else if d := now.Sub(time.Unix(st.LastFull, 0)) + 2*time.Hour; d > within {
-			within = min(d, 14*24*time.Hour)
-		}
+	sinceLast := 26 * time.Hour
+	if st.LastFull == 0 {
+		sinceLast = 7 * 24 * time.Hour
+	} else if d := now.Sub(time.Unix(st.LastFull, 0)) + 2*time.Hour; d > sinceLast {
+		sinceLast = min(d, 14*24*time.Hour)
+	}
+	if e.placeSet().off("linkedin") {
+		// Switched off by the person.
+	} else if now.Unix() >= st.LinkedInUntil {
+		within := sinceLast
 		few := false
 		if kind == "fast" {
 			within, few = 2*time.Hour, true
@@ -355,6 +383,12 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		stats.Problems = append(stats.Problems, firstOf(st.LinkedInNote, "LinkedIn is resting"))
 	}
 
+	// 3. The other title searches, and the job sites and recruiters the person
+	// has Job Hunt watch. Slower places: asked on full searches only.
+	if kind == "full" {
+		e.searchPlaces(ctx, p, sinceLast, &stats, &fresh, note)
+	}
+
 	if kind == "full" {
 		st.LastFull = now.Unix()
 	}
@@ -363,7 +397,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	st.Paused = paused
 	e.S.Set("search", st)
 
-	// 3. Read what is new, freshest first: being early matters more than
+	// 4. Read what is new, freshest first: being early matters more than
 	// anything else Job Hunt does.
 	stats.New = len(fresh) + stats.Cleared
 	e.readAll(ctx, fresh, &stats)

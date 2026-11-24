@@ -20,6 +20,7 @@ import (
 
 	"jobhunt/internal/api"
 	"jobhunt/internal/engine"
+	"jobhunt/internal/sources"
 	"jobhunt/internal/store"
 	"jobhunt/web"
 )
@@ -76,6 +77,11 @@ func main() {
 	}
 	defer s.Close()
 	e := engine.New(s, dir)
+	// Pages that turn a plain request away are opened in the browser already
+	// on this computer, out of sight, when there is one.
+	if b := sources.FindBrowser(); b != "" {
+		e.Src.Render = sources.Renderer(b, filepath.Join(dir, "browser"))
+	}
 	if *demo {
 		if err := seedDemo(e); err != nil {
 			fatal(err)

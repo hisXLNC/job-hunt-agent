@@ -92,7 +92,10 @@ func newEngine(t *testing.T) (*Engine, *world) {
 		}
 	}))
 	e := New(s, t.TempDir())
-	e.Src = &sources.Client{Base: map[string]string{"greenhouse": srv.URL, "linkedin": srv.URL}}
+	// Nothing in a test leaves this computer: every source answers from here,
+	// and the slower places stay off unless a test switches them on.
+	e.Src = &sources.Client{Base: map[string]string{"greenhouse": srv.URL, "linkedin": srv.URL, "jobbank": srv.URL, "freehire": srv.URL, "page": srv.URL}}
+	s.Set(placesKey, placeSet{Off: []string{"jobbank", "freehire"}})
 	t.Cleanup(func() { e.Stop(); srv.Close(); s.Close() })
 	if err := e.SetLLM(LLMSettings{Engine: "demo"}); err != nil {
 		t.Fatal(err)

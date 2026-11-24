@@ -601,7 +601,9 @@ func (s *Server) Handler() http.Handler {
 		if err != nil {
 			return nil, err
 		}
-		if b := safeLink(in.Site); b != "" && e.SetBoardFromURL(c.ID, b) == nil {
+		// A page on a job system Job Hunt knows is settled at once; anything
+		// else is looked at in the background.
+		if b := safeLink(in.Site); b != "" && engine.KnownBoard(b) && e.SetBoardFromURL(c.ID, b) == nil {
 			id := c.ID
 			e.Go(fmt.Sprintf("about:%d", id), "", func(ctx context.Context) error { return e.DescribeEmployers(ctx, id) })
 			return c, nil
@@ -659,6 +661,43 @@ func (s *Server) Handler() http.Handler {
 			}
 		}
 		return nil, nil
+	})
+	// Where Job Hunt looks besides employers' own boards.
+	h("GET /api/places", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.Places(), nil })
+	h("POST /api/places", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			ID, Name, URL string
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(in.ID) == "" && strings.TrimSpace(in.URL) == "" {
+			return nil, bad("Paste the address of the page that lists the jobs.")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		pl, found, note, err := e.AddSite(ctx, strings.TrimSpace(in.ID), in.Name, in.URL)
+		if err != nil {
+			return nil, bad(strings.ToUpper(err.Error()[:1]) + err.Error()[1:] + ".")
+		}
+		return map[string]any{"place": pl, "found": found, "note": note}, nil
+	})
+	h("POST /api/places/switch", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			ID string
+			On bool
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		return nil, e.SetPlaceOn(in.ID, in.On)
+	})
+	h("POST /api/places/remove", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct{ ID string }
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		return nil, e.RemoveSite(in.ID)
 	})
 	h("POST /api/search", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {

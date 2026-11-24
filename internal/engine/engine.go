@@ -266,8 +266,18 @@ func (e *Engine) Status() Status {
 	st.Paused = e.Paused()
 	st.NextFast, st.NextFull = e.nextTimes()
 	st.Sources = e.S.Count(`SELECT COUNT(*) FROM companies WHERE state = 'following' AND board_kind != ''`)
-	p := e.S.Profile()
-	st.Sources += len(p.Titles.All())
+	// Each title on each title search is a place looked at, and so is each site.
+	p, ps := e.S.Profile(), e.placeSet()
+	for _, id := range finders(p) {
+		if !ps.off(id) {
+			st.Sources += len(p.Titles.All())
+		}
+	}
+	for _, site := range ps.Sites {
+		if !site.Off {
+			st.Sources++
+		}
+	}
 	return st
 }
 

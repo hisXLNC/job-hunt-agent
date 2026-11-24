@@ -1,6 +1,6 @@
 import { html, api, post, put, ago, until, when, rings, tile, toast, pager, sortHead, with_, href, freshness, BAND } from '../app.js';
 
-const BOARD = { greenhouse: 'Its own board (Greenhouse)', lever: 'Its own board (Lever)', ashby: 'Its own board (Ashby)', smartrecruiters: 'Its own board (SmartRecruiters)', workday: 'Its own board (Workday)' };
+const BOARD = { greenhouse: 'Its own board (Greenhouse)', lever: 'Its own board (Lever)', ashby: 'Its own board (Ashby)', smartrecruiters: 'Its own board (SmartRecruiters)', workday: 'Its own board (Workday)', workable: 'Its own board (Workable)', bamboohr: 'Its own board (BambooHR)', recruitee: 'Its own board (Recruitee)', page: 'Its own careers page' };
 
 function run(r) {
   const s = r.stats || {}, kind = r.kind === 'search:fast' ? 'Quick check' : 'Full search';
@@ -10,14 +10,33 @@ function run(r) {
       ${probs.length ? html`<details style="margin-top:2px"><summary class="xs" style="color:var(--warn)">${probs.length} place${probs.length === 1 ? '' : 's'} didn't answer</summary><div class="xs m pre">${probs.join('\n')}</div></details>` : ''}</span></div>`;
 }
 
+// Where Job Hunt looks besides employers' own boards. Each place has a
+// switch; the ones the person added can be taken off the list.
+function placesCard(pv) {
+  if (!pv) return '';
+  const row = p => html`<div class="row top-al" style="gap:10px">
+    <button class="switch ${p.on ? 'on' : ''}" role="switch" aria-checked="${p.on ? 'true' : 'false'}" aria-label="Search ${p.name}" data-act="placeon" data-id="${p.id}" data-to="${p.on ? '' : '1'}" style="margin-top:2px"></button>
+    <div class="grow"><div class="s"><b>${p.name}</b> <span class="m">· ${p.kind === 'Search' ? 'every title' : p.kind}</span></div>
+      <div class="xs m">${p.note ? html`<span style="color:var(--warn)">${p.note}${p.rest_until ? html`. Trying again ${until(p.rest_until)}` : ''}</span>` : p.on ? (p.seen ? html`${p.seen} postings last full search, ${p.new} new` : p.about) : 'Off'}</div></div>
+    ${p.mine ? html`<button class="btn sm ghost" data-act="placeoff" data-id="${p.id}" data-confirm="Stop watching ${p.name}? Roles already found there stay.">Remove</button>` : ''}</div>`;
+  return html`<div class="card"><h4>Where Job Hunt looks</h4><p class="xs m" style="margin-top:3px">Besides each employer's own board. Job sites and recruiters are asked on full searches only, slowly.</p>
+    <div class="col" style="margin-top:10px;gap:10px">${pv.places.map(row)}</div>
+    <form data-act="addplace" data-busy="Trying it…" class="col" style="margin-top:12px;gap:6px"><label class="field">Add a job site or recruiter <span class="h">The page that lists the jobs. Put {title} where its search takes a job title.</span>
+      <input type="text" name="url" placeholder="https://example.com/jobs?q={title}" required></label><div class="row"><button class="btn sm">Watch this site</button></div></form>
+    ${pv.suggested?.length ? html`<details style="margin-top:10px"><summary class="s">${pv.suggested.length} recruiters and job sites you could add</summary>
+      <div class="col" style="margin-top:8px;gap:8px">${pv.suggested.map(p => html`<div class="row top-al" style="gap:10px"><div class="grow"><div class="s"><b>${p.name}</b> <span class="m">· ${p.kind}</span></div><div class="xs m">${p.about}</div></div><button class="btn sm" data-act="addknown" data-id="${p.id}" data-busy="Trying it…">Add</button></div>`)}</div></details>` : ''}
+    ${pv.browser ? '' : html`<p class="xs m" style="margin-top:8px">Some sites only open in a real browser. Job Hunt found neither Edge nor Chrome on this computer, so those will not answer.</p>`}</div>`;
+}
+const tried = r => toast(r.found ? `Watching ${r.place.name}: it showed ${r.found} posting${r.found === 1 ? '' : 's'} just now` : `Watching ${r.place.name}, but it ${r.note || 'showed nothing just now'}`);
+
 export default {
   title: 'Radar',
   sub: () => 'What Job Hunt watches, and what just appeared',
   topics: ['roles', 'companies', 'runs', 'status'],
   async load(route) {
     const q = route.q, u = new URLSearchParams({ size: 8, page: q.page || 1, sort: q.sort || '', state: q.state || 'following', q: q.q || '' });
-    const [radar, comp] = await Promise.all([api('radar'), api('companies?' + u)]);
-    return { ...radar, comp };
+    const [radar, comp, places] = await Promise.all([api('radar'), api('companies?' + u), api('places')]);
+    return { ...radar, comp, places };
   },
   view(d, route) {
     const st = d.status, c = d.comp, state = route.q.state || 'following';
@@ -54,6 +73,7 @@ export default {
           <div class="card"><h4>Add an employer</h4><form data-act="addco" class="col" style="margin-top:8px;gap:8px"><label class="field">Name<input type="text" name="name" required></label>
             <label class="field">Careers page <span class="h">Optional. Job Hunt works out where they post.</span><input type="url" name="site" placeholder="https://"></label>
             <div class="row"><button class="btn sm p">Watch this employer</button><button type="button" class="btn sm" data-act="more">Suggest more</button></div></form></div>
+          ${placesCard(d.places)}
           <div class="card"><div class="row"><h4 class="grow">Titles searched</h4><a class="s" href="#/you">Change</a></div>
             <p class="xs m" style="margin-top:3px">Every title is searched equally often, a step up and sideways included.</p>
             <div class="row wrap" style="margin-top:8px;gap:6px">${titles.map(([t, b]) => html`<span class="chip ${b === 'step_up' ? 'blue' : b === 'sideways' ? 'info' : ''}" title="${BAND[b]}">${t}</span>`)}</div>
@@ -67,6 +87,10 @@ export default {
     filter({ f, route }) { location.hash = with_(route, { q: f.q.trim(), page: '' }); return false; },
     state: ({ d }) => put(`companies/${d.id}`, { state: d.state }),
     addco: ({ f, el }) => post('companies', f).then(() => { el.reset(); toast('Watching it from now on'); }),
+    placeon: ({ d }) => post('places/switch', { id: d.id, on: !!d.to }),
+    placeoff: ({ d }) => post('places/remove', { id: d.id }),
+    addplace: ({ f, el }) => post('places', { url: f.url }).then(r => { el.reset(); tried(r); }),
+    addknown: ({ d }) => post('places', { id: d.id }).then(tried),
     more: () => post('companies/more').then(() => toast('Looking for more employers that hire people like you')),
   },
 };

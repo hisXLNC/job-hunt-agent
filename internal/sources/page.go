@@ -113,6 +113,9 @@ func (c *Client) open(ctx context.Context, addr string, browserFirst bool) (body
 		return "", nil, false, err
 	}
 	if c.Render == nil {
+		if he != nil && he.Status == 429 {
+			return "", nil, false, err // asked to slow down: a browser would not change that
+		}
 		return "", nil, false, ErrNeedsBrowser
 	}
 	if body, err = c.Render(ctx, addr); err != nil {
@@ -571,4 +574,49 @@ func (c *Client) Find(ctx context.Context, source string, q Query) ([]Posting, e
 		return c.findFreeHire(ctx, q)
 	}
 	return nil, fmt.Errorf("sources: %q cannot be searched by title", source)
+}
+
+// PublicURL reports whether raw is an http(s) address that is not on this
+// computer or a private network, and returns it tidied.
+func PublicURL(raw string) (string, bool) {
+	u, ok := publicURL(strings.TrimSpace(raw))
+	if !ok {
+		return "", false
+	}
+	return u.String(), true
+}
+
+// DetectPage looks for an employer's own careers page that can be read as it
+// stands, for employers on no job system Job Hunt knows. It returns the
+// board to watch and how many postings it showed.
+func (c *Client) DetectPage(ctx context.Context, site string) (Board, int, error) {
+	root := siteRoot(site)
+	if root == "" {
+		return Board{}, 0, ErrNoBoard
+	}
+	tries := []string{strings.TrimSpace(site)}
+	for _, p := range careersPaths {
+		if p != "" {
+			tries = append(tries, root+p)
+		}
+	}
+	seen := map[string]bool{}
+	for _, addr := range tries {
+		if !strings.Contains(addr, "://") {
+			addr = "https://" + addr
+		}
+		if seen[addr] {
+			continue
+		}
+		seen[addr] = true
+		posts, err := c.ReadSite(ctx, Site{URL: addr, Board: true}, "", "")
+		if ctx.Err() != nil {
+			return Board{}, 0, ctx.Err()
+		}
+		// One link that looks like a job proves little; two is a list.
+		if err == nil && len(posts) >= 2 {
+			return Board{Kind: kindPage, Token: addr}, len(posts), nil
+		}
+	}
+	return Board{}, 0, ErrNoBoard
 }
