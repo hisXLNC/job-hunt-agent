@@ -1,0 +1,15 @@
+{
+  "offset": 2,
+  "limit": 100,
+  "totalFound": 3,
+  "content": [
+    {
+      "id": "744000012347",
+      "name": "Tax Associate",
+      "company": {"name": "Acme", "identifier": "acme"},
+      "releasedDate": "2026-11-10T08:00:00.000Z",
+      "location": {"city": "Calgary", "region": "AB", "country": "ca", "remote": true, "fullLocation": "Calgary, AB, Canada"},
+      "ref": "https://api.smartrecruiters.com/v1/companies/acme/postings/744000012347"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "total": 5,
+  "jobPostings": [
+    {
+      "title": "Senior Manager, Tax",
+      "externalPath": "/job/Toronto-ON/Senior-Manager-Tax_R-12345",
+      "locationsText": "Toronto, ON",
+      "postedOn": "Posted Today",
+      "bulletFields": ["R-12345"]
+    },
+    {
+      "title": "Tax Analyst",
+      "externalPath": "/job/Remote---Canada/Tax-Analyst_R-12399-1",
+      "locationsText": "2 Locations",
+      "postedOn": "Posted 3 Days Ago",
+      "remoteType": "Remote",
+      "bulletFields": ["R-12399"]
+    },
+    {
+      "title": "Director, Internal Audit",
+      "externalPath": "/job/Montreal-QC/Director-Internal-Audit_R-11001",
+      "locationsText": "Montreal, QC",
+      "postedOn": "Posted 30+ Days Ago",
+      "bulletFields": ["R-11001"]
+    },
+    {
+      "title": "Accounting Co-op",
+      "externalPath": "/job/Toronto-ON/accounting-coop",
+      "locationsText": "Toronto, ON",
+      "postedOn": "Posted Yesterday"
+    },
+    {
+      "title": "A posting with no path is skipped",
+      "locationsText": "Nowhere",
+      "postedOn": "Recently"
+    }
+  ],
+  "facets": [],
+  "userAuthenticated": false
+}

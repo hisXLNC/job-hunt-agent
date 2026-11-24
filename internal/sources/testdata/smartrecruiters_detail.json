@@ -1,0 +1,17 @@
+{
+  "id": "744000012345",
+  "name": "Audit Senior",
+  "company": {"name": "Acme", "identifier": "acme"},
+  "releasedDate": "2026-11-20T14:00:00.000Z",
+  "location": {"city": "Toronto", "region": "ON", "country": "ca", "remote": false, "hybrid": true, "fullLocation": "Toronto, ON, Canada"},
+  "applyUrl": "https://jobs.smartrecruiters.com/Acme/744000012345-audit-senior?oga=true",
+  "postingUrl": "https://jobs.smartrecruiters.com/Acme/744000012345-audit-senior",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {"title": "Company Description", "text": "<p>Acme is a national accounting firm.</p>"},
+      "jobDescription": {"title": "Job Description", "text": "<p>You will:</p><ul><li>Lead audits</li><li>Coach juniors</li></ul>"},
+      "qualifications": {"title": "Qualifications", "text": "<ul><li>CPA</li></ul>"},
+      "additionalInformation": {"title": "Additional Information", "text": ""}
+    }
+  }
+}

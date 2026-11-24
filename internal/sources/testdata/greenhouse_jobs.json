@@ -1,0 +1,44 @@
+{
+  "jobs": [
+    {
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/4012345",
+      "data_compliance": [{"type": "gdpr", "requires_consent": false}],
+      "internal_job_id": 2001,
+      "location": {"name": "Toronto, ON"},
+      "metadata": null,
+      "id": 4012345,
+      "updated_at": "2026-11-20T10:00:00-05:00",
+      "requisition_id": "TAX-17",
+      "title": "Senior Manager, Tax",
+      "company_name": "Acme Advisory",
+      "first_published": "2026-11-19T09:30:00-05:00",
+      "content": "&lt;p&gt;Acme &amp;amp; Co is hiring.&lt;/p&gt;&lt;h3&gt;What you will do&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Prepare corporate tax returns&lt;/li&gt;&lt;li&gt;Review T2 filings&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Salary: $120,000&amp;nbsp;&amp;ndash;&amp;nbsp;$150,000&lt;/p&gt;",
+      "departments": [{"id": 77, "name": "Tax", "child_ids": [], "parent_id": null}],
+      "offices": [{"id": 5, "name": "Toronto", "location": "Toronto, Ontario, Canada", "child_ids": [], "parent_id": null}]
+    },
+    {
+      "absolute_url": "https://careers.acme.example/jobs?gh_jid=4012346",
+      "location": {"name": ""},
+      "id": 4012346,
+      "updated_at": "2026-11-18T16:45:00-05:00",
+      "title": "Tax Analyst",
+      "content": "&lt;div&gt;Support the tax team.&lt;/div&gt;&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;",
+      "departments": [],
+      "offices": [
+        {"id": 5, "name": "Toronto", "location": "Toronto, Ontario, Canada"},
+        {"id": 6, "name": "Vancouver", "location": null}
+      ]
+    },
+    {
+      "absolute_url": "javascript:alert(1)",
+      "location": {"name": "Remote - Canada"},
+      "id": 4012347,
+      "updated_at": "not a date",
+      "title": "Bookkeeper",
+      "content": "",
+      "departments": [],
+      "offices": []
+    }
+  ],
+  "meta": {"total": 3}
+}

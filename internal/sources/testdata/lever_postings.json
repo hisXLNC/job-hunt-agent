@@ -1,0 +1,38 @@
+[
+  {
+    "id": "5ac21346-8e0c-4494-8e7a-3eb92ff77902",
+    "text": "Senior Tax Manager",
+    "hostedUrl": "https://jobs.lever.co/acme/5ac21346-8e0c-4494-8e7a-3eb92ff77902",
+    "applyUrl": "https://jobs.lever.co/acme/5ac21346-8e0c-4494-8e7a-3eb92ff77902/apply",
+    "createdAt": 1763640000000,
+    "categories": {
+      "location": "Toronto",
+      "team": "Tax",
+      "commitment": "Full-time",
+      "allLocations": ["Toronto", "Remote - Canada"]
+    },
+    "country": "CA",
+    "workplaceType": "hybrid",
+    "descriptionPlain": "Acme is a tax advisory firm.\n\nWe are growing our Toronto team.\n\n\n\nJoin us.  ",
+    "description": "<div>Acme is a tax advisory firm.</div><div><br></div><div>We are growing our Toronto team.</div>",
+    "lists": [
+      {"text": "Requirements", "content": "<li>CPA designation</li><li>5+ years in corporate tax</li>"},
+      {"text": "Nice to have", "content": "<li>Experience with SR&amp;ED claims</li>"}
+    ],
+    "additionalPlain": "Acme is an equal opportunity employer.\n",
+    "additional": "<div>Acme is an equal opportunity employer.</div>",
+    "salaryRange": {"min": 100000, "max": 140000, "currency": "CAD", "interval": "per-year-salary"}
+  },
+  {
+    "id": "0b6c8f6e-1f0a-4f55-9d2b-6f1f3f1f2a10",
+    "text": "Bookkeeper",
+    "categories": {"location": "Remote - Canada", "team": "Finance", "commitment": "Part-time"},
+    "workplaceType": "unspecified",
+    "description": "<div>We need a <b>bookkeeper</b>.</div><div><br></div><div>Part time.</div>",
+    "lists": [],
+    "salaryRange": {"min": 32.5, "max": 40, "currency": "cad", "interval": "per-hour-wage"}
+  },
+  {
+    "text": "A posting with no id is skipped"
+  }
+]

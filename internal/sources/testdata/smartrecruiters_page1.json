@@ -1,0 +1,26 @@
+{
+  "offset": 0,
+  "limit": 100,
+  "totalFound": 3,
+  "content": [
+    {
+      "id": "744000012345",
+      "name": "Audit Senior",
+      "uuid": "b1c2d3e4-0000-4000-8000-000000000001",
+      "refNumber": "REF1001",
+      "company": {"name": "Acme", "identifier": "acme"},
+      "releasedDate": "2026-11-20T14:00:00.000Z",
+      "location": {"city": "Toronto", "region": "ON", "country": "ca", "remote": false, "hybrid": true, "fullLocation": "Toronto, ON, Canada"},
+      "industry": {"id": "accounting", "label": "Accounting"},
+      "ref": "https://api.smartrecruiters.com/v1/companies/acme/postings/744000012345"
+    },
+    {
+      "id": 744000012346,
+      "name": "Controller",
+      "company": {"name": "Acme", "identifier": "acme"},
+      "releasedDate": "2026-11-18T09:30:00.000Z",
+      "location": {"city": "Montreal", "region": "QC", "country": "ca", "remote": false, "hybrid": false},
+      "ref": "https://api.smartrecruiters.com/v1/companies/acme/postings/744000012346"
+    }
+  ]
+}

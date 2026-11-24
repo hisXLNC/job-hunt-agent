@@ -1,0 +1,19 @@
+{
+  "jobPostingInfo": {
+    "id": "a1b2c3d4e5f6",
+    "title": "Senior Manager, Tax",
+    "jobDescription": "<p><b>Department Overview</b></p><p>The Tax group advises the bank.</p><p></p><ul><li>Lead a team of six</li><li>Own the quarterly provision</li></ul><p>Pay: $110,000 &#8211; $150,000 CAD</p>",
+    "location": "Toronto, ON",
+    "additionalLocations": ["Remote"],
+    "postedOn": "Posted 3 Days Ago",
+    "startDate": "2026-11-20",
+    "timeType": "Full time",
+    "jobReqId": "R-12345",
+    "remoteType": "Hybrid",
+    "country": {"descriptor": "Canada"},
+    "canApply": true,
+    "externalUrl": "https://td.wd3.myworkdayjobs.com/TD_Bank_Careers/job/Toronto-ON/Senior-Manager-Tax_R-12345"
+  },
+  "hiringOrganization": {"name": "TD Bank", "url": ""},
+  "userAuthenticated": false
+}
