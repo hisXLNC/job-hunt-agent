@@ -54,6 +54,9 @@ type Number struct {
 	Value string `json:"value"`
 	Sub   string `json:"sub"`
 	Tone  string `json:"tone,omitempty"`
+	// Of, when above 0, is a goal the figure counts towards, and Done how far along it is.
+	Done int `json:"done,omitempty"`
+	Of   int `json:"of,omitempty"`
 }
 
 // Step is one line of the "before you land" list.
@@ -125,13 +128,14 @@ func (e *Engine) Today() Brief {
 	}
 	// 3. Roles with documents ready: the freshest first, because being
 	// early is worth more than a few points of fit.
-	ready, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"ready"}, Sort: "age", Limit: 40})
+	// A role saved for later stays out until its day comes.
+	ready, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"ready"}, Sort: "age", Limit: 40, NotLater: now.Unix()})
 	sort.SliceStable(ready, func(i, j int) bool { return urgency(ready[i], now) > urgency(ready[j], now) })
 	for _, r := range ready {
 		cards = append(cards, e.roleCard("apply", r, now))
 	}
 	// 4. Strong roles nothing was prepared for.
-	found, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"found"}, MinFit: keepFit, Sort: "fit", Limit: 12})
+	found, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"found"}, MinFit: keepFit, Sort: "fit", Limit: 12, NotLater: now.Unix()})
 	sort.SliceStable(found, func(i, j int) bool { return urgency(found[i], now) > urgency(found[j], now) })
 	for _, r := range found {
 		c := e.roleCard("decide", r, now)
@@ -152,7 +156,18 @@ func (e *Engine) Today() Brief {
 			cards = append(cards, Card{Kind: "nudge", Title: per.Name + " hasn't answered", Sub: joinNonEmpty(" · ", per.Title, per.Company), Why: fmt.Sprintf("You wrote %d days ago. One short follow-up is normal; after that, let it go.", days), PersonID: per.ID, NoteID: n.ID})
 		}
 	}
-	// 6. People worth a first note, when few people know the person yet.
+	// 6. Applications that have gone quiet: one short follow-up, once.
+	for _, r := range e.quietApplications(p, now) {
+		days := int(now.Sub(time.Unix(r.AppliedAt, 0)).Hours() / 24)
+		c := Card{Kind: "chase", Title: r.Title, Sub: fmt.Sprintf("Applied %d days ago, no reply", days), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, Seen: -1,
+			Why: "One short follow-up is normal; after that, let it go.", Company: r.Company, CompanyID: r.CompanyID}
+		var ch ChaseDoc
+		if ok, _ := e.S.Doc(r.ID, "chase", &ch); ok && ch.Body != "" {
+			c.Body = "written"
+		}
+		cards = append(cards, c)
+	}
+	// 7. People worth a first note, when few people know the person yet.
 	know, _ := e.S.KnowYou()
 	if know < 8 {
 		fresh, _ := e.S.People(store.PeopleFilter{States: []string{"new"}})
@@ -172,7 +187,7 @@ func (e *Engine) Today() Brief {
 
 	// Headline figures.
 	counts, _ := e.S.RoleCounts()
-	weekAgo := now.Add(-7 * 24 * time.Hour).Unix()
+	weekAgo := weekStart(now).Unix() // weeks run Monday to Sunday, as on Progress
 	appliedWeek := e.S.Count(`SELECT COUNT(*) FROM roles WHERE applied_at >= ?`, weekAgo)
 	early := e.S.Count(`SELECT COUNT(*) FROM roles WHERE applied_at >= ? AND applied_at - CASE WHEN posted_at > 0 THEN posted_at ELSE first_seen_at END < 86400`, weekAgo)
 	freshReady := 0
@@ -183,7 +198,7 @@ func (e *Engine) Today() Brief {
 	}
 	b.Numbers = []Number{
 		{Label: "Ready to send", Value: fmt.Sprint(counts["ready"]), Sub: fmt.Sprintf("%d posted in the last day", freshReady), Tone: tone(freshReady > 0, "hot")},
-		{Label: "Applied this week", Value: fmt.Sprint(appliedWeek), Sub: fmt.Sprintf("%d within a day of posting", early)},
+		appliedNumber(appliedWeek, early, p.Goal()),
 		{Label: "In conversation", Value: fmt.Sprint(counts["reply"] + counts["interview"] + counts["offer"]), Sub: fmt.Sprintf("%d interviewing", counts["interview"]), Tone: tone(counts["interview"]+counts["offer"] > 0, "good")},
 		{Label: "People who know you", Value: fmt.Sprint(know), Sub: "in " + firstOf(p.City, "your city")},
 	}
@@ -219,6 +234,23 @@ func (e *Engine) Today() Brief {
 		b.Landing = l
 	}
 	return b
+}
+
+// weekStart is the Monday the week of a moment began on.
+func weekStart(now time.Time) time.Time {
+	return dayStart(now).AddDate(0, 0, -(int(now.Weekday())+6)%7)
+}
+
+// appliedNumber is the week's applications, against the goal when there is one.
+func appliedNumber(applied, early, goal int) Number {
+	n := Number{Label: "Applied this week", Value: fmt.Sprint(applied), Sub: fmt.Sprintf("%d within a day of posting", early)}
+	if goal > 0 {
+		n.Value, n.Done, n.Of = fmt.Sprintf("%d of %d", applied, goal), applied, goal
+		if applied >= goal {
+			n.Tone = "good"
+		}
+	}
+	return n
 }
 
 // MarkSeen records that the person looked at Today, so "done while you were
@@ -346,6 +378,7 @@ func (e *Engine) landing(p store.Profile, now time.Time, know int) *Landing {
 type Progress struct {
 	Funnel   []store.Pair   `json:"funnel"`
 	Weeks    []WeekCount    `json:"weeks"`
+	Goal     int            `json:"goal"` // applications a week the person aims for; 0 = none
 	Speed    Speed          `json:"speed"`
 	BySource []Rate         `json:"by_source"`
 	ByBand   []Rate         `json:"by_band"`
@@ -412,8 +445,8 @@ func (e *Engine) Progress() Progress {
 	}
 
 	// Eight weeks, Monday to Sunday.
-	wd := (int(now.Weekday()) + 6) % 7
-	monday := dayStart(now).AddDate(0, 0, -wd)
+	monday := weekStart(now)
+	pr.Goal = s.Profile().Goal()
 	for i := 7; i >= 0; i-- {
 		from := monday.AddDate(0, 0, -7*i).Unix()
 		to := monday.AddDate(0, 0, -7*i+7).Unix()

@@ -92,6 +92,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 .tabs a.on{color:var(--ink);border-color:var(--accent)}.tabs a:hover{text-decoration:none;color:var(--ink)}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:var(--on-ink);border-radius:10px;padding:10px 16px;font-weight:500;box-shadow:0 10px 30px var(--shadow);z-index:50;max-width:640px}
 .toast.bad{background:var(--crit-solid);color:#fff}
+.toast button{margin-left:14px;border:0;background:none;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0}
+.bar.goal{width:64px;height:5px;flex:none}.bar.goal.met i{background:var(--good)}
+.menu>div .mh{padding:8px 10px 2px;margin-top:4px;border-top:1px solid var(--line2);font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap}
+.vbars .vb .goalline{position:absolute;left:-5px;right:-5px;border-top:1.5px dashed var(--warn);pointer-events:none}
 .empty{text-align:center;padding:38px 20px;color:var(--muted)}
 .empty h3{color:var(--ink);margin-bottom:6px}
 .check{width:20px;height:20px;border-radius:50%;border:1.6px solid var(--line);flex:none;display:grid;place-items:center;font-size:12px;color:#fff;margin-top:1px}

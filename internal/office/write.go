@@ -27,10 +27,19 @@ type run struct {
 	bold, italic bool
 }
 
-type docx struct {
-	body  strings.Builder
-	title string
-	who   string
+// para is one paragraph in a named style; doc is a whole document as a list
+// of them. The same list is written as a .docx here and as a PDF in pdf.go,
+// so the two always say the same thing in the same order.
+type para struct {
+	style string
+	runs  []run
+}
+
+type doc struct {
+	paras  []para
+	title  string
+	who    string
+	margin int // page margin, in twentieths of a point
 }
 
 func esc(s string) string {
@@ -48,40 +57,49 @@ func esc(s string) string {
 	return b.String()
 }
 
-func (d *docx) para(style string, runs ...run) {
-	d.body.WriteString(`<w:p><w:pPr><w:pStyle w:val="` + style + `"/>`)
-	if style == "ListParagraph" {
-		// Said on the paragraph as well as in the style: some readers only look here.
-		d.body.WriteString(`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>`)
-	}
-	d.body.WriteString(`</w:pPr>`)
-	for _, r := range runs {
-		if r.text == "" {
-			continue
+func (d *doc) para(style string, runs ...run) {
+	d.paras = append(d.paras, para{style, runs})
+}
+
+// xml is the body of the document in WordprocessingML.
+func (d *doc) xml() string {
+	var body strings.Builder
+	for _, p := range d.paras {
+		body.WriteString(`<w:p><w:pPr><w:pStyle w:val="` + p.style + `"/>`)
+		if p.style == "ListParagraph" {
+			// Said on the paragraph as well as in the style: some readers only look here.
+			body.WriteString(`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>`)
 		}
-		// A tab inside the text becomes a real tab, so dates line up on the right.
-		for i, seg := range strings.Split(r.text, "\t") {
-			if i > 0 {
-				d.body.WriteString(`<w:r><w:tab/></w:r>`)
-			}
-			if seg == "" {
+		body.WriteString(`</w:pPr>`)
+		for _, r := range p.runs {
+			if r.text == "" {
 				continue
 			}
-			d.body.WriteString(`<w:r>`)
-			if r.bold || r.italic {
-				d.body.WriteString(`<w:rPr>`)
-				if r.bold {
-					d.body.WriteString(`<w:b/>`)
+			// A tab inside the text becomes a real tab, so dates line up on the right.
+			for i, seg := range strings.Split(r.text, "\t") {
+				if i > 0 {
+					body.WriteString(`<w:r><w:tab/></w:r>`)
 				}
-				if r.italic {
-					d.body.WriteString(`<w:i/>`)
+				if seg == "" {
+					continue
 				}
-				d.body.WriteString(`</w:rPr>`)
+				body.WriteString(`<w:r>`)
+				if r.bold || r.italic {
+					body.WriteString(`<w:rPr>`)
+					if r.bold {
+						body.WriteString(`<w:b/>`)
+					}
+					if r.italic {
+						body.WriteString(`<w:i/>`)
+					}
+					body.WriteString(`</w:rPr>`)
+				}
+				body.WriteString(`<w:t xml:space="preserve">` + esc(strings.ReplaceAll(seg, "\n", " ")) + `</w:t></w:r>`)
 			}
-			d.body.WriteString(`<w:t xml:space="preserve">` + esc(strings.ReplaceAll(seg, "\n", " ")) + `</w:t></w:r>`)
 		}
+		body.WriteString(`</w:p>`)
 	}
-	d.body.WriteString(`</w:p>`)
+	return body.String()
 }
 
 func clean(s string) string { return strings.Join(strings.Fields(s), " ") }
@@ -97,8 +115,11 @@ func joinNonEmpty(sep string, parts ...string) string {
 }
 
 // RenderCV writes a CV as a .docx.
-func RenderCV(c cv.CV) ([]byte, error) {
-	d := &docx{title: joinNonEmpty(" ", c.Name, "CV"), who: clean(c.Name)}
+func RenderCV(c cv.CV) ([]byte, error) { return cvDoc(c).docx() }
+
+// cvDoc lays a CV out as paragraphs.
+func cvDoc(c cv.CV) *doc {
+	d := &doc{title: joinNonEmpty(" ", c.Name, "CV"), who: clean(c.Name), margin: cvMargin}
 	if n := clean(c.Name); n != "" {
 		d.para("Title", run{text: n})
 	}
@@ -123,10 +144,10 @@ func RenderCV(c cv.CV) ([]byte, error) {
 			d.item(s.Kind, it)
 		}
 	}
-	return d.build(cvMargin)
+	return d
 }
 
-func (d *docx) item(kind string, it cv.Item) {
+func (d *doc) item(kind string, it cv.Item) {
 	head, org, dates, loc, text := clean(it.Heading), clean(it.Org), clean(it.Dates), clean(it.Location), clean(it.Text)
 	if kind == "skills" || (org == "" && dates == "" && loc == "" && len(it.Bullets) == 0) {
 		// "Group: the skills" on one line, or just the text.
@@ -178,11 +199,17 @@ type Letter struct {
 	Subject string   // optional bold subject line
 	Body    string   // paragraphs separated by blank lines; "- " lines are bullets
 	Sign    string   // closing such as "Sincerely,"; "" for none
+	// Signature, when set, is the person's own closing, one line each
+	// ("Kind regards," / "Sam Rivera, CPA"); it takes the place of Sign and the name.
+	Signature []string
 }
 
 // RenderLetter writes a letter as a .docx.
-func RenderLetter(l Letter) ([]byte, error) {
-	d := &docx{title: joinNonEmpty(" ", l.Name, "letter"), who: clean(l.Name)}
+func RenderLetter(l Letter) ([]byte, error) { return letterDoc(l).docx() }
+
+// letterDoc lays a letter out as paragraphs.
+func letterDoc(l Letter) *doc {
+	d := &doc{title: joinNonEmpty(" ", l.Name, "letter"), who: clean(l.Name), margin: lettMargin}
 	if n := clean(l.Name); n != "" {
 		d.para("LetterName", run{text: n})
 	}
@@ -231,13 +258,28 @@ func RenderLetter(l Letter) ([]byte, error) {
 		}
 		flush()
 	}
-	if s := clean(l.Sign); s != "" {
-		d.para("LetterGap", run{text: s})
-		if n := clean(l.Name); n != "" {
-			d.para("LetterLine", run{text: n})
+	var sig []string
+	for _, line := range l.Signature {
+		if line = clean(line); line != "" {
+			sig = append(sig, line)
 		}
 	}
-	return d.build(lettMargin)
+	if len(sig) == 0 {
+		if s := clean(l.Sign); s != "" {
+			sig = append(sig, s, clean(l.Name))
+		}
+	}
+	for i, line := range sig {
+		if line == "" {
+			continue
+		}
+		style := "LetterLine"
+		if i == 0 {
+			style = "LetterGap"
+		}
+		d.para(style, run{text: line})
+	}
+	return d
 }
 
 // ---- the package ----------------------------------------------------------------
@@ -320,8 +362,9 @@ func styles(textWidth int) string {
 // A fixed moment, so the same input always gives the same bytes.
 var epoch = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
-func (d *docx) build(margin int) ([]byte, error) {
-	document := xmlHead + `<w:document ` + wNS + `><w:body>` + d.body.String() +
+func (d *doc) docx() ([]byte, error) {
+	margin := d.margin
+	document := xmlHead + `<w:document ` + wNS + `><w:body>` + d.xml() +
 		fmt.Sprintf(`<w:sectPr><w:pgSz w:w="%d" w:h="%d"/><w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`, pageW, pageH, margin, margin, margin, margin) +
 		`</w:body></w:document>`
 	core := xmlHead + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +

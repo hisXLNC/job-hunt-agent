@@ -288,6 +288,10 @@ CREATE INDEX chat_files_chat ON chat_files(chat_id);
 ALTER TABLE companies ADD COLUMN about TEXT NOT NULL DEFAULT '';
 ALTER TABLE companies ADD COLUMN about_from TEXT NOT NULL DEFAULT '';
 `,
+	// 5: a role the person saved for later stays off Today until this moment.
+	`
+ALTER TABLE roles ADD COLUMN later_until INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 // Open opens (creating and upgrading if needed) the database at path.
@@ -554,8 +558,35 @@ type Profile struct {
 	MayPrepare string `json:"may_prepare"`
 	MayApply   string `json:"may_apply"`
 
+	// How letters are written and signed.
+	LetterStyle string `json:"letter_style"` // "standard", "formal", "short", "warm"
+	Signature   string `json:"signature"`    // the person's own closing, a line each; "" for "Sincerely," and the name
+	// Days after applying, with no reply, before Today suggests a follow-up.
+	// 0 = never. Not set = 8.
+	ChaseDays *int `json:"chase_days"`
+	// Applications the person aims to send each week. 0 = no goal. Not set = 10.
+	WeeklyGoal *int `json:"weekly_goal"`
+
 	SetupDone bool `json:"setup_done"`
 }
+
+// LetterStyles are the ways a cover letter can be written; the first is the usual one.
+var LetterStyles = []string{"standard", "formal", "short", "warm"}
+
+// KnownLetterStyle reports whether s names a letter style.
+func KnownLetterStyle(s string) bool {
+	for _, x := range LetterStyles {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+const (
+	defaultChaseDays  = 8
+	defaultWeeklyGoal = 10
+)
 
 func (s *Store) Profile() Profile {
 	var p Profile
@@ -566,7 +597,35 @@ func (s *Store) Profile() Profile {
 	if p.MayApply == "" {
 		p.MayApply = "ask"
 	}
+	if !KnownLetterStyle(p.LetterStyle) {
+		p.LetterStyle = LetterStyles[0]
+	}
+	if p.ChaseDays == nil || *p.ChaseDays < 0 {
+		n := defaultChaseDays
+		p.ChaseDays = &n
+	}
+	if p.WeeklyGoal == nil || *p.WeeklyGoal < 0 {
+		n := defaultWeeklyGoal
+		p.WeeklyGoal = &n
+	}
 	return p
+}
+
+// ChaseAfter is how many days of silence after applying before a follow-up
+// is suggested; 0 means never.
+func (p Profile) ChaseAfter() int {
+	if p.ChaseDays == nil {
+		return defaultChaseDays
+	}
+	return max(*p.ChaseDays, 0)
+}
+
+// Goal is how many applications a week the person aims for; 0 means no goal.
+func (p Profile) Goal() int {
+	if p.WeeklyGoal == nil {
+		return defaultWeeklyGoal
+	}
+	return max(*p.WeeklyGoal, 0)
 }
 
 func (s *Store) SaveProfile(p Profile) error {

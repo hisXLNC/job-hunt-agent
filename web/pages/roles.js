@@ -1,34 +1,37 @@
-import { html, api, post, rings, tile, toast, pager, sortHead, with_, href, stageChip, freshness, BAND, STAGE, CLOSED, fitColor, employer, shortPay, rowsThatFit, picked, redraw } from '../app.js';
+import { html, api, post, rings, tile, toast, pager, sortHead, with_, href, stageChip, freshness, BAND, STAGE, CLOSED, fitColor, employer, shortPay, rowsThatFit, picked, redraw, LATER, dayName } from '../app.js';
 
 const size = () => rowsThatFit(318, 57, 5, 30);
 const STAGES = ['found', 'ready', 'applied', 'reply', 'interview', 'offer'];
 
 function query(route) {
   const q = route.q, u = new URLSearchParams({ size: size(), page: q.page || 1, sort: q.sort || 'age' });
-  for (const k of ['stage', 'closed', 'band', 'minfit', 'q', 'company', 'saved']) if (q[k]) u.set(k, q[k]);
+  for (const k of ['stage', 'closed', 'band', 'minfit', 'q', 'company', 'saved', 'later']) if (q[k]) u.set(k, q[k]);
   return u.toString();
 }
 
 function filters(d, route) {
   const q = route.q, c = d.counts || {};
   const open = STAGES.reduce((n, s) => n + (c[s] || 0), 0);
-  const chip = (label, n, patch, on) => html`<a class="chip ${on ? 'on' : ''}" href="${with_(route, { stage: '', closed: '', page: '', ...patch })}">${label}${n !== undefined ? html` <span style="opacity:.7">${n}</span>` : ''}</a>`;
-  const closedOn = q.closed && q.closed !== 'all';
+  const chip = (label, n, patch, on) => html`<a class="chip ${on ? 'on' : ''}" href="${with_(route, { stage: '', closed: '', later: '', page: '', ...patch })}">${label}${n !== undefined ? html` <span style="opacity:.7">${n}</span>` : ''}</a>`;
+  const closedOn = q.closed && q.closed !== 'all', ended = q.closed === 'rejected,expired,withdrawn', down = c.taken_down || 0;
   return html`<div class="card col" style="gap:10px;padding:12px 14px">
     <div class="row wrap" style="gap:6px">
-      ${chip('All open', open, {}, !q.stage && !q.closed)}
+      ${chip('All open', open, {}, !q.stage && !q.closed && !q.later)}
       ${STAGES.map(s => chip(STAGE[s], c[s] || 0, { stage: s }, q.stage === s))}
+      ${c.later || q.later ? chip('Saved for later', c.later || 0, { later: 1 }, !!q.later) : ''}
       <span class="m">|</span>
       ${chip('Set aside', c['closed:screened'] || 0, { closed: 'screened' }, q.closed === 'screened')}
       ${chip('Not interested', c['closed:no'] || 0, { closed: 'no' }, q.closed === 'no')}
-      ${chip('Ended', (c['closed:rejected'] || 0) + (c['closed:expired'] || 0) + (c['closed:withdrawn'] || 0), { closed: 'rejected,expired,withdrawn' }, q.closed === 'rejected,expired,withdrawn')}
+      ${chip('Ended', (c['closed:rejected'] || 0) + (c['closed:expired'] || 0) + (c['closed:withdrawn'] || 0), { closed: 'rejected,expired,withdrawn' }, ended)}
+      ${ended ? html`<span class="grow"></span><button class="btn sm" data-act="tidy" ${down ? '' : 'disabled'} data-confirm="Close ${down} role${down === 1 ? '' : 's'} whose posting is gone? Only roles you never prepared or applied to. Nothing is deleted: they are kept here, under Ended."
+        title="Closes open roles whose posting was taken down, or that no search has seen for a month, and that you never prepared or applied to. Roles you applied to or prepared keep everything. ${down ? '' : 'There is nothing to clear right now.'}">Clear taken-down roles${down ? html` <span style="opacity:.7">${down}</span>` : ''}</button>` : ''}
     </div>
     <form data-act="filter" class="row" style="gap:8px">
       <input type="text" name="q" value="${q.q || ''}" placeholder="Filter by title, employer or place" aria-label="Filter by title, employer or place" style="max-width:300px">
       <select name="band" aria-label="Level" style="width:150px" data-on="change" data-act="filterchange"><option value="">Any level</option>${Object.entries(BAND).map(([k, v]) => html`<option value="${k}" ${q.band === k ? 'selected' : ''}>${v}</option>`)}</select>
       <select name="minfit" aria-label="Fit" style="width:130px" data-on="change" data-act="filterchange"><option value="">Any fit</option>${[60, 70, 80, 90].map(n => html`<option value="${n}" ${q.minfit == n ? 'selected' : ''}>Fit ${n} and up</option>`)}</select>
       <button class="btn sm">Filter</button>
-      ${q.q || q.band || q.minfit || q.company || closedOn || q.stage ? html`<a class="btn sm ghost" href="#/roles">Clear</a>` : ''}
+      ${q.q || q.band || q.minfit || q.company || closedOn || q.stage || q.later ? html`<a class="btn sm ghost" href="#/roles">Clear</a>` : ''}
       <span class="grow"></span>
       <a class="btn sm" href="/api/roles.csv" download title="Every role Job Hunt knows, as a file a spreadsheet opens.">Save as a spreadsheet</a><button type="button" class="btn sm" data-act="showadd">Add a role yourself</button>
     </form>
@@ -41,7 +44,7 @@ function filters(d, route) {
 }
 
 function table(d, route) {
-  if (!d.roles.length) return html`<div class="card empty"><h3>No roles here</h3><p>${route.q.q || route.q.band || route.q.minfit ? 'Nothing matches these filters.' : 'Roles appear as Job Hunt finds them. The freshest come first.'}</p></div>`;
+  if (!d.roles.length) return html`<div class="card empty"><h3>No roles here</h3><p>${route.q.later ? 'Nothing is saved for later.' : route.q.q || route.q.band || route.q.minfit ? 'Nothing matches these filters.' : 'Roles appear as Job Hunt finds them. The freshest come first.'}</p></div>`;
   const open = d.roles.filter(r => !r.closed), mine = open.filter(r => picked.has(String(r.id)));
   const toPrepare = mine.filter(r => r.stage === 'found' && !r.preparing).length;
   return html`${mine.length ? html`<div class="bulk"><b>${mine.length} ticked</b>
@@ -56,9 +59,16 @@ function table(d, route) {
       <td>${rings(r.fit, r.fit_tailored, true)}</td>
       <td>${freshness(r, true)}</td>
       <td class="s">${r.applicants >= 0 ? html`<b style="${r.applicants < 10 ? 'color:var(--hot)' : 'font-weight:500'}">${r.applicants}</b>${r.applicants < 10 ? html` <span class="xs" style="color:var(--hot)">be early</span>` : ''}` : html`<span class="m">–</span>`}</td>
-      <td>${stageChip(r)}${r.preparing ? html` <span class="chip blue"><span class="spin" style="width:10px;height:10px"></span>Preparing</span>` : ''}${r.closed === 'screened' ? html`<div class="xs m" style="margin-top:3px">${r.closed_why}</div>` : ''}</td>
-      <td style="text-align:right;white-space:nowrap">${r.closed ? (r.closed !== 'no' ? html`<button class="btn sm" data-act="reopen" data-id="${r.id}">Bring back</button>` : html`<button class="btn sm ghost" data-act="reopen" data-id="${r.id}" data-confirm="Bring this role back? You said you weren't interested.">Bring back</button>`) : r.stage === 'ready' ? html`<a class="btn sm p" href="#/roles/${r.id}">Review and apply</a>` : html`<a class="btn sm" href="#/roles/${r.id}">Open</a>`}</td>
+      <td>${stageChip(r)}${r.preparing ? html` <span class="chip blue"><span class="spin" style="width:10px;height:10px"></span>Preparing</span>` : ''}${r.closed === 'screened' ? html`<div class="xs m" style="margin-top:3px">${r.closed_why}</div>` : ''}${!r.closed && r.later_until > d.now ? html`<div class="xs m" style="margin-top:3px" title="Saved for later. It comes back to Today by itself.">Later · back ${dayName(r.later_until)}</div>` : ''}</td>
+      <td style="text-align:right;white-space:nowrap">${r.closed ? (r.closed !== 'no' ? html`<button class="btn sm" data-act="reopen" data-id="${r.id}">Bring back</button>` : html`<button class="btn sm ghost" data-act="reopen" data-id="${r.id}" data-confirm="Bring this role back? You said you weren't interested.">Bring back</button>`) : r.stage === 'ready' ? html`<a class="btn sm p" href="#/roles/${r.id}">Review and apply</a>` : html`<a class="btn sm" href="#/roles/${r.id}">Open</a>`}${r.closed ? '' : rowMenu(r, d.now)}</td>
     </tr>`)}</tbody></table></div>${pager(d.total, d.page, d.size, route)}`;
+}
+
+// Putting a row away for a few days, behind the three dots.
+function rowMenu(r, now) {
+  return html`<details class="menu" style="display:inline-block;vertical-align:middle;text-align:left"><summary aria-label="More for ${r.title}" title="More: save this role for later.">⋯</summary><div>
+    ${r.later_until > now ? html`<button data-act="later" data-id="${r.id}" data-days="0">Bring back to Today</button>` : ''}
+    <span class="mh" style="${r.later_until > now ? '' : 'border-top:0;margin-top:0'}">Save for later</span>${LATER.map(([days, label]) => html`<button data-act="later" data-id="${r.id}" data-days="${days}" title="Leaves Today and comes back by itself.">${label}</button>`)}</div></details>`;
 }
 
 function board(d) {
@@ -88,8 +98,12 @@ export default {
       const mine = data.roles.filter(r => !r.closed && picked.has(String(r.id)) && (d.do !== 'prepare' || (r.stage === 'found' && !r.preparing)) && (d.do !== 'applied' || !r.applied_at));
       for (const r of mine) await post(`roles/${r.id}/${d.do}`);
       picked.clear();
-      toast({ prepare: `Preparing ${mine.length}. Each takes about a minute.`, applied: `${mine.length} marked as applied`, no: `${mine.length} won't be shown again` }[d.do]);
+      const back = { applied: 'unapply', no: 'reopen' }[d.do];
+      toast({ prepare: `Preparing ${mine.length}. Each takes about a minute.`, applied: `${mine.length} marked as applied`, no: `${mine.length} won't be shown again` }[d.do], false,
+        back && mine.length ? async () => { for (const r of mine) await post(`roles/${r.id}/${back}`); } : undefined);
     },
+    later: ({ d }) => post(`roles/${d.id}/later`, { days: +d.days }).then(() => toast({ 0: 'Back on Today', 1: 'Saved for later. Back tomorrow.', 3: 'Saved for later. Back in 3 days.', 7: 'Saved for later. Back next week.' }[d.days], false, +d.days ? () => post(`roles/${d.id}/later`, { days: 0 }) : undefined)),
+    async tidy() { const r = await post('roles/tidy'); toast(r.closed ? `${r.closed} closed. They are kept here, under Ended.` : 'Nothing to clear'); },
     filter({ f, route }) { location.hash = with_(route, { q: f.q.trim(), band: f.band, minfit: f.minfit, page: '' }); return false; },
     filterchange({ el, route }) { const f = Object.fromEntries(new FormData(el.form)); location.hash = with_(route, { q: f.q.trim(), band: f.band, minfit: f.minfit, page: '' }); return false; },
     showadd() { const f = document.getElementById('addrole'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); return false; },

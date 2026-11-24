@@ -118,7 +118,7 @@ func seedDemo(e *engine.Engine) error {
 		{"Northlight Retail", "Senior Manager, Indirect Tax", "Mississauga, ON", "onsite", 60 * 26, 41, demoBullets["analyst"]},
 		{"Lakeshore Logistics", "Finance Systems Manager", "Toronto, ON", "hybrid", 60 * 50, 58, demoBullets["finance"]},
 		{"Cedar & Pine Advisory", "Senior Manager, Indirect Tax Technology", "Toronto, ON", "hybrid", 60 * 24 * 4, 80, demoBullets["engine"]},
-		{"Harbourfront Bank", "Senior Manager, Indirect Tax", "Toronto, ON", "hybrid", 60 * 24 * 6, 120, demoBullets["analyst"]},
+		{"Harbourfront Bank", "Senior Manager, Indirect Tax", "Toronto, ON", "hybrid", 60 * 24 * 12, 120, demoBullets["analyst"]},
 		{"Maple Ledger", "Tax Technology Intern", "Toronto, ON", "onsite", 300, 12, demoBullets["analyst"]},
 		{"Northlight Retail", "Store Manager", "Toronto, ON", "onsite", 500, 30, demoBullets["finance"]},
 		{"Quill Payments", "Tax Technology Manager", "Berlin, Germany", "onsite", 700, 15, demoBullets["engine"]},
@@ -165,7 +165,12 @@ func seedDemo(e *engine.Engine) error {
 	// Some history: two applied, one of them answered.
 	if len(ids) >= 7 {
 		e.MarkApplied(ids[5], "")
+		// The other went in nine days ago and has been quiet since, so Today
+		// suggests a follow-up.
+		clock := s.Now
+		s.Now = func() time.Time { return now.AddDate(0, 0, -9) }
 		e.MarkApplied(ids[6], "")
+		s.Now = clock
 		e.PasteMail(ctx, "Priya Nair <priya.nair@cedarpine.example>", "Your application: Senior Manager, Indirect Tax Technology",
 			"Hi Sam,\n\nThank you for applying to Cedar & Pine Advisory. Your background with Vertex on S/4HANA is very relevant. Do you have availability for a 30 minute call next week?\n\nPriya", ids[5])
 	}
