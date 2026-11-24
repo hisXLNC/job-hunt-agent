@@ -19,13 +19,25 @@ function placesCard(pv) {
     <div class="grow"><div class="s"><b>${p.name}</b> <span class="m">· ${p.kind === 'Search' ? 'every title' : p.kind}</span></div>
       <div class="xs m">${p.note ? html`<span style="color:var(--warn)">${p.note}${p.rest_until ? html`. Trying again ${until(p.rest_until)}` : ''}</span>` : p.on ? (p.seen ? html`${p.seen} postings last full search, ${p.new} new` : p.about) : 'Off'}</div></div>
     ${p.mine ? html`<button class="btn sm ghost" data-act="placeoff" data-id="${p.id}" data-confirm="Stop watching ${p.name}? Roles already found there stay.">Remove</button>` : ''}</div>`;
-  return html`<div class="card"><h4>Where Job Hunt looks</h4><p class="xs m" style="margin-top:3px">Besides each employer's own board. Job sites and recruiters are asked on full searches only, slowly.</p>
+  return html`<div class="card"><h4>Searches, job sites and recruiters</h4><p class="xs m" style="margin-top:3px">Switch each on or off, or add your own. Job sites and recruiters are asked on full searches only, slowly. <a href="#/you/connections">More job sources</a> take a key.</p>
     <div class="col" style="margin-top:10px;gap:10px">${pv.places.map(row)}</div>
     <form data-act="addplace" data-busy="Trying it…" class="col" style="margin-top:12px;gap:6px"><label class="field">Add a job site or recruiter <span class="h">The page that lists the jobs. Put {title} where its search takes a job title.</span>
       <input type="text" name="url" placeholder="https://example.com/jobs?q={title}" required></label><div class="row"><button class="btn sm">Watch this site</button></div></form>
     ${pv.suggested?.length ? html`<details style="margin-top:10px"><summary class="s">${pv.suggested.length} recruiters and job sites you could add</summary>
       <div class="col" style="margin-top:8px;gap:8px">${pv.suggested.map(p => html`<div class="row top-al" style="gap:10px"><div class="grow"><div class="s"><b>${p.name}</b> <span class="m">· ${p.kind}</span></div><div class="xs m">${p.about}</div></div><button class="btn sm" data-act="addknown" data-id="${p.id}" data-busy="Trying it…">Add</button></div>`)}</div></details>` : ''}
     ${pv.browser ? '' : html`<p class="xs m" style="margin-top:8px">Some sites only open in a real browser. Job Hunt found neither Edge nor Chrome on this computer, so those will not answer.</p>`}</div>`;
+}
+// Every kind of place Job Hunt looks, and how each did the last time it was asked.
+const SRC_STATE = { working: ['good', 'Working'], problem: ['crit', 'Problem'], off: ['', 'Off'], none: ['', 'Not set up'], waiting: ['blue', 'Not run yet'] };
+function sourcesCard(list) {
+  if (!list?.length) return '';
+  const none = html`<span class="m">–</span>`;
+  return html`<div class="card" style="padding:0"><div class="row" style="padding:14px 16px 10px"><h3 class="grow">Where Job Hunt looks</h3><span class="s m">Every kind of source, and how each did last time</span></div>
+    <table class="tbl"><thead><tr><th>Source</th><th>State</th><th>Last looked</th><th>Postings then</th></tr></thead>
+    <tbody>${list.map(s => { const [tone, word] = SRC_STATE[s.state] || SRC_STATE.none; return html`<tr><td class="s"><b>${s.name}</b>${s.what ? html` <span class="m">· ${s.what}</span>` : ''}
+        ${s.note || s.setup ? html`<div class="xs" style="margin-top:2px;color:var(--${s.state === 'problem' ? 'crit' : 'muted'})">${s.note}${s.setup ? html` <a href="${s.setup}">Set it up</a>` : ''}</div>` : ''}</td>
+      <td><span class="chip ${tone}">${word}</span></td><td class="s" style="white-space:nowrap">${s.at ? ago(s.at) : none}</td>
+      <td class="s" style="white-space:nowrap">${s.at ? html`<b>${s.seen}</b> <span class="m">· ${s.new} new</span>` : none}</td></tr>`; })}</tbody></table></div>`;
 }
 const tried = r => toast(r.found ? `Watching ${r.place.name}: it showed ${r.found} posting${r.found === 1 ? '' : 's'} just now` : `Watching ${r.place.name}, but it ${r.note || 'showed nothing just now'}`);
 
@@ -35,8 +47,8 @@ export default {
   topics: ['roles', 'companies', 'runs', 'status'],
   async load(route) {
     const q = route.q, u = new URLSearchParams({ size: 8, page: q.page || 1, sort: q.sort || '', state: q.state || 'following', q: q.q || '' });
-    const [radar, comp, places] = await Promise.all([api('radar'), api('companies?' + u), api('places')]);
-    return { ...radar, comp, places };
+    const [radar, comp, places, src] = await Promise.all([api('radar'), api('companies?' + u), api('places'), api('sources').catch(() => null)]);
+    return { ...radar, comp, places, sources: src?.sources };
   },
   view(d, route) {
     const st = d.status, c = d.comp, state = route.q.state || 'following';
@@ -68,6 +80,7 @@ export default {
               ${x.about ? html`<tr class="about"><td colspan="6" class="s ink2">${x.about}</td></tr>` : ''}`)}
               ${!c.companies.length ? html`<tr><td colspan="6" class="s m" style="padding:22px;text-align:center">No employers here.</td></tr>` : ''}</tbody></table>
             <div style="padding:0 14px 12px">${pager(c.total, c.page, c.size, route)}</div></div>
+          ${sourcesCard(d.sources)}
         </div>
         <div class="col" style="gap:14px">
           <div class="card"><h4>Add an employer</h4><form data-act="addco" class="col" style="margin-top:8px;gap:8px"><label class="field">Name<input type="text" name="name" required></label>

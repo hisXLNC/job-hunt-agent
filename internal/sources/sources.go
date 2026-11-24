@@ -1,9 +1,11 @@
 // Package sources fetches job postings from places that need no login: the
 // public endpoints of applicant tracking systems (Greenhouse, Lever, Ashby,
 // SmartRecruiters, Workday, Workable, BambooHR, Recruitee), title searches
-// (LinkedIn's public guest search, Canada's Job Bank, FreeHire), and any
-// careers page or job site the person points it at. It also works out which
-// of those systems an employer uses.
+// (LinkedIn's public guest search, Canada's Job Bank, FreeHire), the job
+// search services that take a key (Adzuna, Jooble, Google for Jobs), and any
+// careers page or job site the person points it at. It also reads the
+// postings out of job-alert e-mails, and works out which of those systems an
+// employer uses.
 //
 // Everything a posting carries is untrusted text from the internet. The
 // package only ever converts it to plain text: nothing in it is executed.
@@ -40,6 +42,9 @@ const (
 	kindPage            = "page" // a careers page read as it stands; the token is its address
 	kindJobBank         = "jobbank"
 	kindFreeHire        = "freehire"
+	kindAdzuna          = "adzuna"
+	kindJooble          = "jooble"
+	kindJSearch         = "jsearch" // "Google for Jobs"
 )
 
 const (
@@ -91,6 +96,7 @@ type Query struct {
 	Remote        bool          // remote jobs only
 	FewApplicants bool          // LinkedIn's "under 10 applicants"
 	Start         int           // paging offset
+	Max           int           // most results wanted, for the searches that take a key (0 = a full page)
 }
 
 // Client talks to the job sources. The zero value is ready to use.
@@ -187,7 +193,14 @@ func (c *Client) Detail(ctx context.Context, p *Posting) error {
 		return c.detailBambooHR(ctx, p)
 	case kindJobBank:
 		return c.detailJobBank(ctx, p)
-	case kindPage, kindSite:
+	case kindPage, kindSite, kindAdzuna, kindJooble, kindJSearch:
+		return c.detailPage(ctx, p)
+	case alertPrefix + kindLinkedIn:
+		return c.detailLinkedIn(ctx, p)
+	case alertPrefix + kindJobBank:
+		return c.detailJobBank(ctx, p)
+	}
+	if strings.HasPrefix(p.Source, alertPrefix) {
 		return c.detailPage(ctx, p)
 	}
 	return fmt.Errorf("sources: no detail lookup for source %q", p.Source)
@@ -270,13 +283,36 @@ func (c *Client) pause(ctx context.Context, kind string) error {
 // and the URL that finally answered, after redirects. A non-2xx answer is an
 // *HTTPError. There are no retries: a throttled caller must back off.
 func (c *Client) fetch(ctx context.Context, method, rawURL, accept string, body []byte) ([]byte, *url.URL, error) {
+	return c.do(ctx, method, rawURL, accept, body, nil, "")
+}
+
+// shownKey carries, in a request's context, what the debugging record may
+// say about an address that holds a key.
+type shownKey struct{}
+
+// do is fetch with extra headers, for the sources that take a key. When the
+// address itself holds a key, shown is what errors and the debugging record
+// say in its place. The headers are never written anywhere.
+func (c *Client) do(ctx context.Context, method, rawURL, accept string, body []byte, headers map[string]string, shown string) ([]byte, *url.URL, error) {
 	var rd io.Reader
 	if body != nil {
 		rd = bytes.NewReader(body)
 	}
+	if shown != "" {
+		ctx = context.WithValue(ctx, shownKey{}, shown)
+	}
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, rd)
 	if err != nil {
+		if shown != "" {
+			return nil, nil, fmt.Errorf("sources: %s could not be asked", shown)
+		}
 		return nil, nil, fmt.Errorf("sources: %w", err)
+	}
+	if shown != "" {
+		rawURL = shown // from here on only used in messages
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	ua := c.UA
 	if ua == "" {
@@ -291,6 +327,11 @@ func (c *Client) fetch(ctx context.Context, method, rawURL, accept string, body 
 
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
+		// The error names the address asked; one that holds a key is left out.
+		var ue *url.Error
+		if shown != "" && errors.As(err, &ue) {
+			return nil, nil, fmt.Errorf("sources: %s: %w", shown, ue.Err)
+		}
 		return nil, nil, fmt.Errorf("sources: %w", err)
 	}
 	defer resp.Body.Close()

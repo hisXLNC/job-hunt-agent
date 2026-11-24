@@ -233,6 +233,16 @@ func parseHead(raw []byte) mailHead {
 	return h
 }
 
+// bodyParts returns a raw message's plain and HTML forms, either of which
+// may be empty. The message may be cut short.
+func bodyParts(rawMsg []byte) (plain, html string) {
+	msg, err := mail.ReadMessage(bytes.NewReader(rawMsg))
+	if err != nil {
+		return "", ""
+	}
+	return partText(msg.Header.Get("Content-Type"), msg.Header.Get("Content-Transfer-Encoding"), msg.Body, 0)
+}
+
 // bodyText pulls readable text out of a raw message, which may be cut short.
 func bodyText(rawMsg []byte) string {
 	msg, err := mail.ReadMessage(bytes.NewReader(rawMsg))
@@ -316,8 +326,10 @@ func (s *skipNewlines) Read(p []byte) (int, error) {
 
 // CheckMail looks at what arrived since last time. Only messages that are
 // plainly about the search (from an employer the person applied to, from a
-// hiring system, or from someone they wrote to) are opened; everything else
-// in the inbox is left unread and never leaves the computer.
+// hiring system, from someone they wrote to, or a job alert from a job site)
+// are opened; everything else in the inbox is left unread and never leaves
+// the computer. Job alerts are read for their postings here, on this
+// computer, and are not passed to Claude.
 func (e *Engine) CheckMail(ctx context.Context) error {
 	set := e.MailSet()
 	if !set.On {
@@ -370,6 +382,8 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 		uids = uids[len(uids)-400:]
 	}
 	taken := 0
+	alerts, alertSeen, alertNew := e.alertsOn(), 0, 0
+	alertMails := 0
 	for start := 0; start < len(uids) && ctx.Err() == nil; start += 50 {
 		chunk := uids[start:min(start+50, len(uids))]
 		strs := make([]string, len(chunk))
@@ -396,6 +410,17 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 			}
 			if e.S.MailSeen(h.msgID) {
 				continue
+			}
+			// A job alert from a job site is a list of postings, not a reply.
+			if site := sources.AlertSite(h.fromAddr, h.subject); site != "" && alerts {
+				if posts := e.readAlert(c, h, site); len(posts) > 0 {
+					seen, added := e.takeAlert(site, posts)
+					alertSeen, alertNew, alertMails = alertSeen+seen, alertNew+added, alertMails+1
+					// Remembered as seen; its text is not kept.
+					e.S.AddMail(store.Mail{MsgID: h.msgID, FromName: h.fromName, FromAddr: h.fromAddr, Subject: h.subject, At: h.at, Kind: "alert", State: "done",
+						Summary: fmt.Sprintf("%s from a %s job alert, %d new", countWord(seen, "posting"), sources.AlertName(site), added)})
+					continue
+				}
 			}
 			match := e.matchMail(h.fromName, h.fromAddr, h.subject)
 			if !match.relevant {
@@ -430,9 +455,32 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 	}
 	set.LastAt, set.Note = now.Unix(), ""
 	e.S.Set("mail", set)
+	if alertMails > 0 {
+		e.setSourceState(srcAlerts, func(s *SourceState) { s.At, s.Seen, s.New = now.Unix(), alertSeen, alertNew })
+		e.S.Changed("runs")
+		if alertNew > 0 {
+			e.S.Log(store.Activity{Kind: "search", Text: fmt.Sprintf("Job-alert e-mails: %s, %d new", countWord(alertSeen, "posting"), alertNew)})
+		}
+	}
 	e.S.Changed("connections")
 	if taken > 0 {
 		e.S.Log(store.Activity{Kind: "mail", Text: fmt.Sprintf("Read %d new message%s about your search", taken, plural(taken))})
+	}
+	return nil
+}
+
+// readAlert opens one job-alert e-mail and reads the postings out of it.
+// Nothing in the message is followed or obeyed; see sources.ParseAlert.
+func (e *Engine) readAlert(c *imapConn, h mailHead, site string) []sources.Posting {
+	body, err := c.cmd("UID FETCH %d (UID BODY.PEEK[]<0.400000>)", h.uid)
+	if err != nil {
+		return nil
+	}
+	for _, bl := range body {
+		if len(bl.lits) > 0 {
+			plain, html := bodyParts(bl.lits[0])
+			return sources.ParseAlert(site, html, plain)
+		}
 	}
 	return nil
 }

@@ -74,6 +74,7 @@ function connections(d) {
       <label class="field" style="max-width:340px">Model<select name="model">${d.models.map(x => html`<option value="${x.ID}" ${cl.model === x.ID ? 'selected' : ''}>${x.Name}: ${x.Note}</option>`)}</select></label>
       <div class="row"><button class="btn p">Save</button><button type="button" class="btn" data-act="testllm" data-busy="Asking Claude…">Test it</button><span class="grow"></span><span class="xs m">${cl.calls} calls today${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)} today · $${cl.week.toFixed(2)} this week` : ''}</span></div>
       ${usage.length ? html`<details><summary class="s">What Claude was used for this week</summary><table class="tbl" style="margin-top:6px"><tbody>${usage.map(([k, u]) => html`<tr><td class="s">${k.replace(/_/g, ' ')}</td><td class="s">${u.calls} calls</td><td class="s">${u.cost ? '$' + u.cost.toFixed(2) : ''}</td><td class="s m">${u.errors ? u.errors + ' failed' : ''}</td></tr>`)}</tbody></table></details>` : ''}</form>
+    ${moreSources(d)}
     <div class="card row"><span class="s grow">The browser side panel has its own page.</span><a class="btn sm" href="#/you/panel">Browser side panel</a></div>
     </div>
     <div class="col" style="gap:14px">
@@ -84,7 +85,7 @@ function connections(d) {
       <div class="grid3"><label class="field">Only for fit at or above<input type="number" name="min_fit" value="${ph.min_fit}" min="50" max="100"></label><label class="field">Quiet from (hour)<input type="number" name="quiet_from" value="${ph.quiet_from}" min="0" max="23"></label><label class="field">Until (hour)<input type="number" name="quiet_to" value="${ph.quiet_to}" min="0" max="23"></label></div>
       <div class="row"><button class="btn p">Save</button><button type="button" class="btn" data-act="newtopic">Make a topic for me</button><button type="button" class="btn" data-act="testphone">Send a test</button></div></form>
     <form data-act="savemail" data-busy="Checking…" class="card col" style="gap:10px"><div class="row"><h3 class="grow">Your inbox</h3><span class="chip ${m.on ? (m.note ? 'crit' : 'good') : ''}">${m.on ? (m.note ? 'Problem' : 'Connected') : 'Off'}</span></div>
-      <p class="s m">So replies are noticed the moment they arrive. Job Hunt opens the inbox read-only and reads only mail from employers you applied to, hiring systems, and people you wrote to. It cannot send, move or delete anything. Mail it does read is passed to Claude to be understood.</p>
+      <p class="s m">So replies are noticed the moment they arrive. Job Hunt opens the inbox read-only and reads only mail from employers you applied to, hiring systems, people you wrote to, and job alerts from job sites. It cannot send, move or delete anything. Replies it reads are passed to Claude to be understood; job alerts are not.</p>
       ${m.note ? html`<p class="s" style="color:var(--crit)">${m.note}</p>` : ''}
       <label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${m.on ? 'checked' : ''}> Watch my inbox for replies</label>
       <div class="grid2"><label class="field">Address<input type="email" name="user" value="${m.user}" autocomplete="off"></label><label class="field">App password <span class="h">Not your normal password.</span><input type="password" name="pass" placeholder="${d.mail_has_pass ? 'Saved. Paste to replace.' : '16 letters'}" autocomplete="off"></label></div>
@@ -93,6 +94,34 @@ function connections(d) {
       <div class="row"><button class="btn p">Save and check</button>${m.last_at ? html`<span class="xs m">Last read ${ago(m.last_at)}</span>` : ''}</div></form>
     ${thisComputer(d)}${schedule(d)}
     </div></div>`;
+}
+
+// The searches that take a key, and job-alert e-mails. A saved key is never
+// sent back to this page: it only knows whether one is there.
+const SRC_STATE = { working: ['good', 'Working'], problem: ['crit', 'Problem'], off: ['', 'Off'], none: ['', 'Not set up'], waiting: ['blue', 'Not tried yet'] };
+function moreSources(d) {
+  const saved = s => s.has_key ? 'Saved. Paste to replace.' : '';
+  const row = s => {
+    const alerts = s.id === 'alerts', [tone, word] = alerts && s.state === 'waiting' ? ['blue', 'Watching'] : SRC_STATE[s.state] || SRC_STATE.none;
+    return html`<form data-act="savesource" data-id="${s.id}" class="col" style="gap:8px;border-top:1px solid var(--line2);padding-top:12px">
+      <div class="row"><b class="grow">${s.name}</b><span class="chip ${tone}">${word}</span></div>
+      <p class="s m">${s.about}</p>
+      ${s.note ? html`<p class="s" style="color:var(--${s.state === 'problem' ? 'crit' : 'muted'})">${s.note}</p>` : ''}
+      ${alerts ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''}> Take the postings out of job alerts in my inbox</label>` : html`
+        <p class="xs m">${s.get} <a href="${s.link}" target="_blank" rel="noopener noreferrer">Open the page that gives the key</a></p>
+        ${s.id === 'adzuna' ? html`<div class="grid2"><label class="field">Application ID<input type="text" name="app_id" placeholder="${saved(s)}" autocomplete="off"></label><label class="field">Application Key<input type="password" name="key" placeholder="${saved(s)}" autocomplete="off"></label></div>`
+          : s.id === 'jsearch' ? html`<div class="grid2"><label class="field">Key<input type="password" name="key" placeholder="${saved(s)}" autocomplete="off"></label><label class="field">Key from<select name="from"><option value="rapidapi" ${s.from === 'rapidapi' ? 'selected' : ''}>RapidAPI</option><option value="openwebninja" ${s.from === 'openwebninja' ? 'selected' : ''}>OpenWeb Ninja</option></select></label></div>`
+          : html`<label class="field" style="max-width:340px">Key<input type="password" name="key" placeholder="${saved(s)}" autocomplete="off"></label>`}
+        <div class="row wrap" style="gap:14px"><label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''}> Search ${s.name}</label>
+          <label class="row s" style="gap:6px">At most <input type="number" name="limit" value="${s.limit}" min="1" max="5000" style="width:84px;height:30px" aria-label="Most requests a day to ${s.name}"> requests a day</label></div>
+        <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>`}
+      <div class="row"><button class="btn sm p">Save</button>
+        ${!alerts && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="Asking…" title="Runs one small search now and says what came back.">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
+        <span class="grow"></span>${s.at ? html`<span class="xs m">Last answered ${ago(s.at)}: ${s.seen} posting${s.seen === 1 ? '' : 's'}${alerts || s.new ? `, ${s.new} new` : ''}</span>` : ''}</div></form>`;
+  };
+  return html`<div class="card col" style="gap:12px"><div><h3>More job sources</h3>
+    <p class="s m" style="margin-top:4px">Other places Job Hunt can search with your titles and city. Each needs a key that you get yourself, free. A key is kept only in Job Hunt's data file on this computer and is sent only to the service it is for.</p></div>
+    ${(d.more || []).map(row)}</div>`;
 }
 
 const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
@@ -159,7 +188,7 @@ function theApp(d) {
 
 export default {
   title: 'You',
-  sub: (d, route) => ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer', connections: 'Claude, your phone, your inbox, this computer, and when to search', panel: 'Get it, put it in your browser, connect it', app: 'Version, your data, and what Job Hunt has been doing' })[route.parts[1] || ''],
+  sub: (d, route) => ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer', connections: 'Claude, more job sources, your phone, your inbox, this computer, and when to search', panel: 'Get it, put it in your browser, connect it', app: 'Version, your data, and what Job Hunt has been doing' })[route.parts[1] || ''],
   topics: ['you', 'profile', 'connections'],
   load(route) {
     switch (route.parts[1] || '') {
@@ -209,6 +238,9 @@ export default {
     savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0 }).then(() => toast('Saved')),
     newtopic({ el }) { const a = new Uint8Array(12); crypto.getRandomValues(a); el.closest('form').querySelector('[name=topic]').value = 'jobhunt-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); return false; },
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
+    savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(() => toast('Saved')),
+    async testsource({ d }) { const r = await post(`sources/${d.id}/test`); toast(r.message); },
+    delsource: ({ d }) => del(`sources/${d.id}`).then(() => toast('Key removed')),
     savemail: ({ f }) => put('mailset', { on: !!f.on, user: f.user, pass: f.pass || '', host: f.host }).then(() => toast(f.on ? 'Connected. Job Hunt is reading recent replies.' : 'Saved')),
     copytext: ({ d }) => copy(d.text).then(() => false),
     copydebug: () => api('debug').then(g => copy(g.report)).then(() => false),
