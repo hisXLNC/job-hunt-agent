@@ -2,6 +2,26 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.27
+
+Second batch from going through everything the old Job Hunt did.
+
+- **PDF**: your CV and letter download as PDF as well as Word, or both in one PDF (letter first) for forms that take a single file. Files are named "Your Name - Employer - CV.pdf". PDF covers Western European letters; for other scripts use Word.
+- **Letter styles**: Standard, Formal, Short or Warm. Your usual one is set under You and can be changed for any one role, with your own closing line.
+- **Ask for changes** under the letter and the tailored CV: say what you want different and it is written again. "Put it back" restores the one before.
+- **Follow up**: when an application has had no reply after 8 days (your choice under You; 0 turns it off), Today suggests one short follow-up. Job Hunt writes it; you send it. One per application.
+- **Save for later** on a role (tomorrow, in 3 days, next week). It leaves Today and comes back by itself.
+- **Undo**: "I applied" and "Not for me" show Undo for ten seconds, and "I didn't send it" puts an applied role back.
+- **A weekly goal** (10 applications unless you change it): Today shows "4 of 10" and Progress shows the last eight weeks against it.
+- **Clear taken-down roles** under Roles → Ended closes roles whose posting is gone, or that no search has seen for 30 days, and that you never prepared or applied to. Nothing is deleted.
+- **More job sources**: Adzuna, Jooble and Google for Jobs (through JSearch), each with your own free key, under You → Connections. Job-alert e-mails from job sites in your inbox are read for postings too. Radar shows what every source found.
+- **Dark theme** (light, dark, or follow Windows) under You → The app.
+- **The bell** keeps what happened while you were away.
+- **A month calendar** on Interviews, and a calendar file other calendars can read.
+- **Put back a saved copy**: Job Hunt keeps dated copies of your data and can restore one, under You → The app.
+- **Best 10 and Top 5** on Today; **Find a setting** on You; hovering over "3 h ago" shows the exact time.
+- Pages re-fit themselves when the Claude panel opens or the window changes size.
+
 ## 26.11.26
 
 First batch from going through everything the old Job Hunt did.

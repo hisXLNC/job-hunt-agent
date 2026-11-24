@@ -103,7 +103,7 @@ function list(d, route) {
   const page = Math.max(1, Math.min(+q.page || 1, Math.ceil(rows.length / SIZE) || 1)), shown = rows.slice((page - 1) * SIZE, page * SIZE);
   const top5 = rows.filter(c => roleRow(c) && !c.busy && !picked.has(String(c.role_id))).slice(0, TOP);
   const th = (key, label, tip, w, lead) => html`<th style="${w ? `width:${w}px` : ''}">${lead || ''}<a class="${q.sort === key ? 'on' : ''}" href="${with_(route, { sort: key, dir: q.sort === key && q.dir !== 'up' ? 'up' : '', page: '' })}" title="${tip}">${label}${q.sort === key ? (q.dir === 'up' ? ' ▲' : ' ▼') : ''}</a></th>`;
-  const sel = (name, label, opts) => html`<select name="${name}" aria-label="${label}" data-on="change" data-act="filter" class="mini"><option value="">${label}</option>${opts.map(([v, t]) => html`<option value="${v}" ${q[name] == v ? 'selected' : ''}>${t}</option>`)}</select>`;
+  const sel = (name, label, opts) => html`<select name="${name}" aria-label="${label}" data-on="change" data-act="filter" class="mini f"><option value="">${label}</option>${opts.map(([v, t]) => html`<option value="${v}" ${q[name] == v ? 'selected' : ''}>${t}</option>`)}</select>`;
   const ticks = shown.filter(c => c.kind === 'apply' || c.kind === 'decide');
   const types = [...new Set(all.map(c => (c.job_type || '').split(',')[0]).filter(Boolean))];
   const filtered = q.best || q.show || q.where || q.type || q.minfit || q.within || q.minpay;
