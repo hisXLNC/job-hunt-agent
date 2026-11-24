@@ -1503,7 +1503,7 @@ func (s *Server) Handler() http.Handler {
 		if err := e.InstallUpdate(); err != nil {
 			return nil, bad(err.Error())
 		}
-		return nil, nil
+		return map[string]any{"waiting": e.UpdateWaiting() != ""}, nil
 	})
 	h("PUT /api/update", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {

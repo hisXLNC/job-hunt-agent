@@ -126,6 +126,7 @@ func nextFullAt(now time.Time, last int64, fullAt []int) time.Time {
 func (e *Engine) Run() {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
+	e.resumeSearch()
 	e.tick()
 	for {
 		select {
@@ -139,6 +140,17 @@ func (e *Engine) Run() {
 
 func (e *Engine) tick() {
 	defer func() { recover() }()
+	// A version waiting to be installed goes in the moment nothing is
+	// running, and nothing new is started until it has.
+	if e.Busy("update") {
+		return
+	}
+	if e.UpdateWaiting() != "" {
+		if !e.anyJobBut("update") {
+			e.InstallUpdate()
+		}
+		return
+	}
 	now := e.Now()
 	p := e.S.Profile()
 	if !p.SetupDone {
@@ -387,4 +399,18 @@ func (e *Engine) maybePush(r store.Role, fit, tailored int) {
 			e.problem("Sending a phone notice", err)
 		}
 	}()
+}
+
+// resumeSearch runs again the search that was under way when Job Hunt last
+// stopped (an update, a restart, the computer shutting down), so nothing it
+// had not reached yet is missed. Postings it had already taken in are known
+// and are not taken twice.
+func (e *Engine) resumeSearch() {
+	var kind string
+	e.S.Get("search:open", &kind)
+	if kind == "" || e.Paused() || !e.S.Profile().SetupDone || e.LLM().Engine == "" {
+		return
+	}
+	trace.Log("search", "picking up the %s search that was cut short when Job Hunt last stopped", kind)
+	e.StartSearch(kind)
 }

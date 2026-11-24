@@ -58,7 +58,11 @@ func runTray(ctx context.Context, stop func(), url, dir string, e *engine.Engine
 							} else if u := e.NewerVersion(); u == nil {
 								deskNotify("Job Hunt is up to date", "You are on the newest version.", url+"#/you/app")
 							} else if e.InstallUpdate() == nil {
-								deskNotify("Installing Job Hunt "+u.Version, "It comes back by itself in about a minute.", url+"#/you/app")
+								if e.UpdateWaiting() != "" {
+									deskNotify("Job Hunt "+u.Version+" is ready", "It installs as soon as the search in hand has finished.", url+"#/you/app")
+								} else {
+									deskNotify("Installing Job Hunt "+u.Version, "It comes back by itself in about a minute.", url+"#/you/app")
+								}
 							}
 						}()
 					case <-quit.ClickedCh:

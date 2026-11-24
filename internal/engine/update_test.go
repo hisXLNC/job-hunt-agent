@@ -106,3 +106,72 @@ func TestAnUpdateIsCheckedBeforeItIsRun(t *testing.T) {
 		t.Fatal("told twice")
 	}
 }
+
+func TestAnUpdateWaitsForTheWorkInHand(t *testing.T) {
+	e, _ := newEngine(t)
+	installer := []byte("MZ this stands in for the installer")
+	sum := sha256.Sum256(installer)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(installer) }))
+	defer srv.Close()
+	e.UpdateDownload = srv.URL + "/"
+	e.Version = "26.11.24"
+	ran := make(chan string, 1)
+	e.RunInstaller = func(file string) error { ran <- file; return nil }
+	e.S.Set(updateKey, Update{Version: "26.11.25", URL: srv.URL + "/v26.11.25/JobHunt3-Setup.exe", Digest: "sha256:" + hex.EncodeToString(sum[:])})
+
+	// A search is under way.
+	done := make(chan struct{})
+	e.Go("search", "Searching every source", func(ctx context.Context) error { <-done; return nil })
+	if err := e.InstallUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	if e.UpdateWaiting() != "26.11.25" || e.Busy("update") {
+		t.Fatal("the update didn't wait for the search")
+	}
+	e.tick() // still searching: nothing happens
+	select {
+	case <-ran:
+		t.Fatal("the installer ran during a search")
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(done)
+	for i := 0; i < 100 && e.Busy("search"); i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	e.tick()
+	select {
+	case <-ran:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the installer never ran once the search had finished")
+	}
+	if e.UpdateWaiting() != "" {
+		t.Fatal("still marked as waiting")
+	}
+	e.StopJob("update")
+}
+
+func TestASearchCutShortIsPickedUpAtTheNextStart(t *testing.T) {
+	e, _ := newEngine(t)
+	e.resumeSearch()
+	if e.Busy("search") {
+		t.Fatal("a search started with nothing to pick up")
+	}
+	p := e.S.Profile()
+	p.City, p.Country, p.SetupDone = "Toronto", "Canada", true
+	if err := e.S.SaveProfile(p); err != nil {
+		t.Fatal(err)
+	}
+	e.S.Set("search:open", "full")
+	e.resumeSearch()
+	if !e.Busy("search") {
+		t.Fatal("the search that was cut short was not picked up")
+	}
+	for i := 0; i < 500 && e.Busy("search"); i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	var open string
+	e.S.Get("search:open", &open)
+	if open != "" {
+		t.Fatal("a search that finished is still marked as cut short")
+	}
+}

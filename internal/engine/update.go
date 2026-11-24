@@ -116,8 +116,8 @@ func (e *Engine) CheckUpdate(ctx context.Context) error {
 		e.S.Changed("status")
 	}
 	e.S.Set("update:checked", e.Now().Unix())
-	if best.Version != "" && e.AutoUpdate() && !e.anyJobBut("update") {
-		e.InstallUpdate()
+	if best.Version != "" && e.AutoUpdate() && (e.CanInstall() || e.RunInstaller != nil) {
+		e.InstallUpdate() // waits by itself while Job Hunt is busy
 	}
 	return nil
 }
@@ -157,12 +157,32 @@ func (e *Engine) InstallUpdate() error {
 	if !strings.HasPrefix(u.URL, e.downloadPrefix()) {
 		return errors.New("The update's address is not where Job Hunt's installers come from.")
 	}
+	// Never in the middle of a search or of writing a CV: the update waits
+	// for the work in hand, and nothing new is started meanwhile (see tick).
+	if e.anyJobBut("update") {
+		if e.UpdateWaiting() == "" {
+			e.S.Set("update:waiting", updateWait{Version: u.Version, Since: e.Now().Unix()})
+			e.S.Changed("status")
+			trace.Log("app", "version %s waits for the work in hand to finish", u.Version)
+		}
+		return nil
+	}
+	e.S.Set("update:waiting", updateWait{})
 	e.Go("update", "Installing version "+u.Version, func(ctx context.Context) error {
 		e.StepTakes(ctx, 40*time.Second)
 		e.Report(ctx, 0, 3, "Downloading")
 		file, err := e.fetchInstaller(ctx, *u)
 		if err != nil {
 			return fmt.Errorf("the update could not be downloaded: %w", err)
+		}
+		// Something may have started while the installer was coming down.
+		for i := 0; e.anyJobBut("update") && i < 900; i++ {
+			e.Report(ctx, 1, 3, "Waiting for the work in hand to finish")
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
 		}
 		e.Report(ctx, 2, 3, "Starting the installer")
 		e.S.Set("update:from", e.Version)
@@ -286,4 +306,25 @@ func newer(a, b string) bool {
 		}
 	}
 	return false
+}
+
+type updateWait struct {
+	Version string `json:"version"`
+	Since   int64  `json:"since"`
+}
+
+// UpdateWaiting is the version that will be installed as soon as the work
+// in hand is finished, or "". A wait is given up after three hours, so a
+// job that never ends can't hold everything else back.
+func (e *Engine) UpdateWaiting() string {
+	var w updateWait
+	e.S.Get("update:waiting", &w)
+	if w.Version == "" {
+		return ""
+	}
+	if u := e.NewerVersion(); u == nil || u.Version != w.Version || e.Now().Unix()-w.Since > 3*3600 {
+		e.S.Set("update:waiting", updateWait{})
+		return ""
+	}
+	return w.Version
 }

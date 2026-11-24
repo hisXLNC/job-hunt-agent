@@ -364,7 +364,7 @@ document.addEventListener('click', async ev => {
   if (go) { ev.preventDefault(); try { await post('jobs/resume'); } catch (e) { toast(e.message, true); } refreshState(); return; }
   if (ev.target.closest('[data-seen]')) { document.getElementById('whatsnew')?.remove(); post('update/seen').catch(() => {}); return; }
   const upd = ev.target.closest('[data-update]');
-  if (upd) { ev.preventDefault(); upd.disabled = true; try { await post('update/install'); toast('Installing. Job Hunt comes back by itself in about a minute.'); } catch (e) { toast(e.message, true); } refreshState(); return; }
+  if (upd) { ev.preventDefault(); upd.disabled = true; try { const r = await post('update/install'); toast(r?.waiting ? 'It installs as soon as what Job Hunt is doing now has finished. Nothing is cut short.' : 'Installing. Job Hunt comes back by itself in about a minute.'); } catch (e) { toast(e.message, true); } refreshState(); return; }
   const b = ev.target.closest('[data-stop]');
   if (!b) return;
   ev.preventDefault();

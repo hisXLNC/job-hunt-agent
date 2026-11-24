@@ -280,7 +280,14 @@ func (e *Engine) StartSearch(kind string) bool {
 		doing = "Checking for postings under an hour old"
 	}
 	return e.Go("search", doing, func(ctx context.Context) error {
-		return e.Search(ctx, kind)
+		// Kept until the search ends by itself or the person stops it. If
+		// the program stops first, the next start picks it up (resumeSearch).
+		e.S.Set("search:open", kind)
+		err := e.Search(ctx, kind)
+		if e.ctx.Err() == nil {
+			e.S.Set("search:open", "")
+		}
+		return err
 	})
 }
 
