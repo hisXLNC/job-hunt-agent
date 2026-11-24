@@ -142,7 +142,16 @@ jobs:
             State | Out-Null
             $h = Win
             if ($h -eq [IntPtr]::Zero) { throw "Job Hunt's own window did not open" }
-            if (-not (Get-Process msedgewebview2 -ErrorAction SilentlyContinue)) { throw "the window opened with nothing inside it" }
+            $log = "$env:JOBHUNT_HOME\debug.log"
+            $shown = $false
+            for ($i = 0; $i -lt 90 -and -not $shown; $i++) { Start-Sleep -Milliseconds 500; $shown = [bool](Select-String -Path $log -Pattern "window.*showing" -ErrorAction SilentlyContinue) }
+            if (-not $shown) {
+              Get-Content $log -Tail 40 -ErrorAction SilentlyContinue | Write-Host
+              Get-Process | Where-Object { $_.Name -match "webview|JobHunt|msedge" } | Format-Table Name, Id | Out-String | Write-Host
+              throw "the window opened with nothing inside it"
+            }
+            $h = Win
+            if ($h -eq [IntPtr]::Zero) { throw "Job Hunt's own window went away after opening" }
             Start-Process $exe -Wait
             if (@(Get-Process JobHunt3).Count -ne 1) { throw "starting Job Hunt twice left two copies running" }
             [JHWin]::MoveWindow($h, 60, 50, 1000, 700, $true) | Out-Null
@@ -155,7 +164,7 @@ jobs:
             State | Out-Null
             $h = Win
             if ($h -eq [IntPtr]::Zero) { throw "Job Hunt's window did not open the second time" }
-            Start-Sleep -Seconds 1
+            Start-Sleep -Seconds 6
             $r = New-Object JHWin+RECT
             [JHWin]::GetWindowRect($h, [ref]$r) | Out-Null
             Write-Host "Window came back at $($r.L),$($r.T) size $($r.R - $r.L)x$($r.B - $r.T) (left at 60,50 size 1000x700)"

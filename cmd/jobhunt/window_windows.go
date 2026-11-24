@@ -15,6 +15,8 @@ import (
 	webview2 "github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
+
+	"jobhunt/internal/trace"
 )
 
 // Job Hunt's own window: a Windows window with the pages inside it (the
@@ -174,7 +176,8 @@ func (n *nativeWindow) stateFile() string { return filepath.Join(n.dir, "window.
 
 func (n *nativeWindow) open(page string) (ok bool) {
 	defer func() {
-		if recover() != nil {
+		if r := recover(); r != nil {
+			trace.Log("window", "the window could not be made: %v", r)
 			ok = false
 		}
 	}()
@@ -201,6 +204,7 @@ func (n *nativeWindow) open(page string) (ok bool) {
 		WindowOptions: webview2.WindowOptions{Title: "Job Hunt", Width: uint(width), Height: uint(height), IconId: 1, Center: true},
 	})
 	if w == nil {
+		trace.Log("window", "Windows would not draw the pages in Job Hunt's own window; using the browser")
 		// The frame was made before the inside failed: take it away.
 		class, _ := windows.UTF16PtrFromString("webview")
 		title, _ := windows.UTF16PtrFromString("Job Hunt")
@@ -218,7 +222,13 @@ func (n *nativeWindow) open(page string) (ok bool) {
 			exec.Command("rundll32", "url.dll,FileProtocolHandler", u.String()).Start()
 		}
 	})
-	w.Init("window.jhNative = true;")
+	w.Bind("jhShown", func(page string) {
+		if len(page) > 80 {
+			page = page[:80]
+		}
+		trace.Log("window", "showing %q", page)
+	})
+	w.Init("window.jhNative = true; addEventListener('load', function () { if (window.jhShown) window.jhShown(location.hash); });")
 	w.Navigate(n.url + page)
 	n.mu.Lock()
 	n.w, n.hwnd = w, hwnd

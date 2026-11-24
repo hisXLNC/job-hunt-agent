@@ -45,7 +45,7 @@ type Engine struct {
 	CloudRoots func() [][2]string
 	// Tests only: stands in for fetching the person's calendar.
 	OwnCalFetch func(addr string) ([]byte, error)
-	Now       func() time.Time
+	Now         func() time.Time
 
 	meter *llm.Metered
 	brain *brain.Brain
