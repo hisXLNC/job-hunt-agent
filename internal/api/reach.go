@@ -110,7 +110,9 @@ func lanAddresses() []map[string]string {
 		switch {
 		case tail.Contains(ip):
 			out = append(out, map[string]string{"ip": ip.String(), "kind": "anywhere"})
-		case ip.IsPrivate():
+		default:
+			// Nearly always a private address on the home network; a few
+			// networks hand out other ones, and those work the same.
 			out = append(out, map[string]string{"ip": ip.String(), "kind": "home"})
 		}
 	}

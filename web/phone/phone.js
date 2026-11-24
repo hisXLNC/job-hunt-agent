@@ -137,9 +137,10 @@ function fail(e) {
 
 async function show() {
   const h = location.hash.slice(1);
-  if (h === 'old') return unpaired(true);
   try {
-    if (!me) me = await get('phone/me');
+    if (!me) me = await get('phone/me').catch(e => { if (e.pair && h === 'old') return null; throw e; });
+    if (!me) return unpaired(true);
+    if (h === 'old') { history.replaceState(null, '', '/'); }
     const m = /^role\/(\d+)$/.exec(h);
     if (m) await role(m[1]);
     else if (h === 'replies') await replies();

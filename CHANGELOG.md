@@ -2,6 +2,15 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.28
+
+- **Job Hunt on your phone.** Under You → Connections, turn on "Let my phone connect", press "Add a phone" and point the phone's camera at the code. The phone's browser then shows Today, a role with its fit and your letter, the CV and letter as PDF, replies and interviews, and you can mark a role applied, not for you or saved for later. Nothing is installed on the phone. It works on your own Wi-Fi while this computer is on; with Tailscale on both it works from anywhere. A phone can't reach keys, passwords, settings or saved copies.
+- **Your Google Calendar.** Paste your calendar's secret address (the steps are on the card) and Job Hunt reads it, read-only: your own entries show on the month under Interviews, an interview that lands on one is flagged, and the times you are free are listed ready to copy into a reply. What it reads stays on this computer and is never given to Claude. Outlook and iCloud addresses work too. Each interview has an **Add to Google Calendar** button.
+- **Your data in Google Drive or OneDrive.** Under You → The app → Saved copies, "Keep copies in Google Drive" (or OneDrive, Dropbox) puts the saved copies in that drive's folder, refreshed every three hours, so they are off this computer and can be restored on another one.
+- **Phone notices explained step by step**, with what to do when the test doesn't arrive. With phone access on, a notice opens the role in Job Hunt on the phone.
+- **The side panel fills far more forms**: Workday (step by step, with work history, education and skills), Greenhouse, Lever, Ashby, Workable, SmartRecruiters, SuccessFactors, iCIMS and Zoho Recruit, and ordinary forms with custom dropdowns and tick boxes. It says what it filled, what it left for you and what needs a check. It never presses Submit or Next.
+- Side panel: Alt+Shift+F fills the form; right-click a field for "Job Hunt: fill this in"; after you send an application it offers to mark the role applied; answers you typed are offered as "Remember this answer?" (never passwords, ID or bank details); expected salary is filled from the role's pay or your floor and marked for a check; "Copy the panel's log" for reporting a problem.
+
 ## 26.11.27
 
 Second batch from going through everything the old Job Hunt did.

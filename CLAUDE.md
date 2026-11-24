@@ -49,6 +49,12 @@ interface on 127.0.0.1 and talks to Claude. No build step for the interface.
 - The local interface answers only this computer's own pages and the one approved side panel
   (`internal/api`, `guard`). The side panel proves itself with a key it made up; only the key's
   hash is stored. Keep the tests in `internal/api/api_test.go` passing.
+- Phone access is a second door on its own port (`internal/api/reach.go`), shut unless the person
+  turns it on. A phone is paired by a one-time code shown on this computer and can make only the
+  calls in `phoneCalls`: looking, a few role actions, the finished PDFs. Never settings, keys,
+  connections, saved copies or the assistant. Keep `internal/api/reach_test.go` passing.
+- The person's own calendar is read-only through its private address, which is never sent back to
+  the pages and never given to Claude; its entries are not on the assistant's list.
 
 ## Trying it
 

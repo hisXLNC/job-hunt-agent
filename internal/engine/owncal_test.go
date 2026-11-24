@@ -87,7 +87,9 @@ func TestFreeTimesAndClashesComeFromThePersonsCalendar(t *testing.T) {
 func TestCopiesCanBeKeptInACloudDrive(t *testing.T) {
 	e, _ := newEngine(t)
 	drive := t.TempDir()
-	e.CloudRoots = func() [][2]string { return [][2]string{{"Google Drive", drive}, {"OneDrive", filepath.Join(drive, "missing")}} }
+	e.CloudRoots = func() [][2]string {
+		return [][2]string{{"Google Drive", drive}, {"OneDrive", filepath.Join(drive, "missing")}}
+	}
 	found := e.CloudFolders()
 	if len(found) != 1 || found[0].Name != "Google Drive" || found[0].Used {
 		t.Fatalf("%+v", found)

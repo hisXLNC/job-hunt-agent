@@ -154,7 +154,7 @@ function ownCalendar(c) {
   if (!c) return '';
   const slot = t => `${new Date(t.start * 1000).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}, ${clockOf(t.start)} to ${clockOf(t.end)}`;
   return html`<form data-act="savecal" data-busy="Reading…" class="card col" style="gap:10px" data-set="owncal"><div class="row"><h3 class="grow">Your Google Calendar</h3><span class="chip ${c.on ? (c.note ? 'crit' : 'good') : ''}">${c.on ? (c.note ? 'Problem' : 'Connected') : 'Off'}</span></div>
-    <p class="s m">Job Hunt reads your calendar so it knows when you are busy: your own entries show on the month under Interviews, an interview that lands on one is flagged, and it offers times you are free when an employer asks. It reads only. What it reads stays on this computer and is never given to Claude.</p>
+    <p class="s m">Job Hunt reads your calendar so it knows when you are busy: your own entries show on the month under Interviews, an interview that lands on one is flagged, and the times you are free are listed here, ready to copy into a reply. It reads only. What it reads stays on this computer and is never given to Claude.</p>
     ${c.note ? html`<p class="s" style="color:var(--crit)">${c.note}</p>` : ''}
     ${c.on ? html`<p class="s">Read ${rel(c.at)} · ${c.count} ${c.count === 1 ? 'entry' : 'entries'} in the next four months. Read again every half hour.</p>` : html`<ol class="steps s">
       <li>On a computer, open <b>calendar.google.com</b>. Press the cog at the top right, then <b>Settings</b>.</li>
