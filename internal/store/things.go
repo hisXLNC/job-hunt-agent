@@ -364,6 +364,38 @@ func (s *Store) AddRole(r Role) (int64, error) {
 	return res.LastInsertId()
 }
 
+// ImportRole records a role brought over from somewhere else exactly as
+// given: its stage, dates, fit and whether it is closed. Nothing is read or
+// prepared for it afterwards; it arrives as history.
+func (s *Store) ImportRole(r Role) (int64, error) {
+	if stageRank(r.Stage) < 0 {
+		return 0, fmt.Errorf("unknown stage %q", r.Stage)
+	}
+	switch r.Closed {
+	case "", "screened", "no", "rejected", "expired", "withdrawn":
+	default:
+		return 0, fmt.Errorf("unknown way to close a role: %q", r.Closed)
+	}
+	now := s.now()
+	if r.FirstSeenAt == 0 {
+		r.FirstSeenAt = now
+	}
+	if r.LastSeenAt == 0 {
+		r.LastSeenAt = r.FirstSeenAt
+	}
+	if r.StageAt == 0 {
+		r.StageAt = r.LastSeenAt
+	}
+	res, err := s.db.Exec(`INSERT INTO roles(company_id, key, source, title, location, workplace, pay, url, apply_url, description, posted_at, first_seen_at, last_seen_at, applicants, band, stage, stage_at, closed, closed_why, fit, fit_tailored, reading, saved, applied_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.CompanyID, r.Key, r.Source, strings.TrimSpace(r.Title), r.Location, r.Workplace, r.Pay, r.URL, r.ApplyURL, r.Description, r.PostedAt, r.FirstSeenAt, r.LastSeenAt, r.Applicants, r.Band, r.Stage, r.StageAt, r.Closed, r.ClosedWhy, r.Fit, r.FitTailored, rawStr(r.Reading, "{}"), b2i(r.Saved), r.AppliedAt)
+	if err != nil {
+		return 0, err
+	}
+	s.Changed("roles", "today", "progress")
+	return res.LastInsertId()
+}
+
 // TouchRole notes that a posting is still up, and refreshes what can change.
 func (s *Store) TouchRole(id int64, applicants int, description string) {
 	now := s.now()

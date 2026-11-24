@@ -1,9 +1,14 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -195,5 +200,97 @@ func TestEmployerDescriptionOnTheRolePage(t *testing.T) {
 	do(h, call{method: "PUT", path: path, marker: true, body: `{"about":""}`})
 	if c, _ := srv.S.Company(r.CompanyID); c.About != "" || c.AboutFrom != "" {
 		t.Fatalf("an emptied description should be open to filling again: %+v", c)
+	}
+}
+
+// oldBackup builds a backup file the way the old Job Hunt wrote one: its
+// database and the documents beside it.
+func oldBackup(t *testing.T) []byte {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "jobhunt.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`CREATE TABLE jobs (id TEXT PRIMARY KEY, source TEXT, company TEXT, title TEXT, location TEXT, url TEXT, description TEXT, salary TEXT, posted_at TEXT, found_at TEXT, updated_at TEXT,
+			status TEXT, score INTEGER, reasoning TEXT, red_flags TEXT, keywords TEXT, cv_path TEXT, letter_path TEXT, cover_letter TEXT, applied_at TEXT, notes TEXT)`,
+		`CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+		`CREATE TABLE events (id INTEGER PRIMARY KEY, job_id TEXT, kind TEXT NOT NULL, detail TEXT, created_at TEXT NOT NULL)`,
+		`INSERT INTO kv VALUES ('profile', '{"name":"Sam Rivera","locations":["Toronto, ON"],"tracks":[{"name":"main","titles":["Tax Technology Manager"]}]}')`,
+		`INSERT INTO jobs (id, source, company, title, location, description, found_at, updated_at, status, score, cv_path, cover_letter, applied_at) VALUES
+			('linkedin:4012345678', 'linkedin', 'Maple Bank', 'Senior Tax Manager', 'Toronto, ON', 'Own the tax engine. <script>alert(1)</script>', '2026-09-01T10:00:00Z', '2026-09-03T10:00:00Z', 'applied', 82,
+			 'C:\Users\sam\AppData\Local\Job Hunt\data\applications\maple-1\cv.docx', 'Dear Maple Bank.', '2026-09-02T09:00:00Z'),
+			('indeed:1', 'indeed', 'Borealis', 'Tax Analyst', 'Toronto, ON', 'x', '2026-09-01T10:00:00Z', '2026-09-01T10:00:00Z', 'dismissed', 40, '', '', '')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	raw, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("jobhunt.db")
+	w.Write(raw)
+	w, _ = zw.Create("applications/maple-1/cv.docx")
+	w.Write([]byte("PK\x03\x04 the CV that was sent"))
+	zw.Close()
+	return buf.Bytes()
+}
+
+func TestBringOverTheOldJobHunt(t *testing.T) {
+	srv, h := newServer(t)
+	page := func(method, p, body string) *httptest.ResponseRecorder {
+		return do(h, call{method: method, path: p, body: body, marker: true, site: "same-origin"})
+	}
+
+	// Nothing of the old app on this computer: the page is told so, without an error.
+	if w := page("GET", "/api/import/old", ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"found":false`) {
+		t.Fatalf("look: %d %s", w.Code, w.Body)
+	}
+	// Not the old app's data: said in words.
+	if w := page("POST", "/api/import/old?name=holiday.zip", "PK not a backup"); w.Code != 400 || !strings.Contains(w.Body.String(), "not the old Job Hunt") {
+		t.Fatalf("junk: %d %s", w.Code, w.Body)
+	}
+	// A page from somewhere else cannot start it.
+	if w := do(h, call{method: "POST", path: "/api/import/old", origin: "https://evil.example", body: `{"path":"/"}`, marker: true}); w.Code == 200 {
+		t.Fatal("another site started an import")
+	}
+
+	w := page("POST", "/api/import/old?name=Job+Hunt+backup.zip", string(oldBackup(t)))
+	if w.Code != 200 {
+		t.Fatalf("import: %d %s", w.Code, w.Body)
+	}
+	var res engine.OldResult
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Roles != 2 || res.Applied != 1 || res.NotInterested != 1 || res.Where != "Job Hunt backup.zip" {
+		t.Fatalf("result = %+v", res)
+	}
+	if left, _ := os.ReadDir(filepath.Join(srv.E.Dir, "tmp")); len(left) != 0 {
+		t.Errorf("the uploaded backup was left on disk: %v", left)
+	}
+
+	id, _, ok := srv.S.SeenRole("linkedin:4012345678")
+	if !ok {
+		t.Fatal("the applied role did not come over")
+	}
+	detail := page("GET", "/api/roles/"+strconv.FormatInt(id, 10), "")
+	if !strings.Contains(detail.Body.String(), `"old_cv":`) || !strings.Contains(detail.Body.String(), "Dear Maple Bank.") {
+		t.Fatalf("the role does not show what was sent: %s", detail.Body)
+	}
+	file := page("GET", "/api/roles/"+strconv.FormatInt(id, 10)+"/old-cv", "")
+	if file.Code != 200 || !strings.HasPrefix(file.Body.String(), "PK") || !strings.Contains(file.Header().Get("Content-Disposition"), "attachment") {
+		t.Fatalf("old CV download: %d %q", file.Code, file.Header())
+	}
+	// The role that was dismissed is closed for good, and is not among the open roles.
+	if _, closed, ok := srv.S.SeenRole("old:indeed:1"); !ok || closed != "no" {
+		t.Fatalf("the dismissed role: ok=%v closed=%q", ok, closed)
+	}
+	if look := page("GET", "/api/import/old", ""); !strings.Contains(look.Body.String(), `"last":`) {
+		t.Fatalf("the last run is not shown: %s", look.Body)
 	}
 }

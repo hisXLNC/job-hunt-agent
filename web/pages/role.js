@@ -35,6 +35,14 @@ const FROM = { posting: 'From its postings', claude: 'What Claude knows of it; c
 function sent(d) {
   const r = d.role;
   if (d.preparing) return html`<div class="card row"><span class="spin"></span><div><h4>Writing your CV and letter</h4><p class="s m">Both at once. This takes about a minute and the page updates by itself.</p></div></div>`;
+  if (!d.cv && (d.old_cv || d.letter)) return html`<div class="card col" style="gap:12px">
+    <div class="row"><div class="grow"><div class="eb">From the old Job Hunt</div><h3 style="margin-top:4px">What you ${stageOrder(r.stage) >= 3 ? 'sent' : 'prepared'} for this role</h3></div>
+      ${d.old_cv ? html`<a class="btn sm" href="/api/roles/${r.id}/old-cv">Download the CV</a>` : ''}</div>
+    ${d.old_cv ? '' : html`<p class="s m">The CV file written for this role was not in what was brought over.</p>`}
+    ${d.letter ? html`<div class="row"><h4 class="grow">Your letter · ${d.letter.trim().split(/\s+/).filter(Boolean).length} words</h4><button class="btn sm" data-act="copyletter">Copy</button><a class="btn sm" href="/api/roles/${r.id}/letter.docx">Download .docx</a></div>
+      <form data-act="saveletter" class="col" style="gap:6px"><textarea name="text" rows="9" aria-label="Your letter">${d.letter}</textarea><div class="row"><span class="grow"></span><button class="btn sm">Save letter</button></div></form>` : ''}
+    ${!r.closed && stageOrder(r.stage) < 3 ? html`<div class="hr"></div><div class="row"><p class="s m grow">Job Hunt can write both again from your CV as it is now, with every change shown.</p><button class="btn" data-act="prepare">Write them again</button></div>` : ''}
+  </div>`;
   if (!d.cv) {
     if (r.fit < 0) return html`<div class="card row"><span class="spin"></span><div><h4>${d.reading_now ? 'Reading this role against your CV' : 'Not read yet'}</h4><p class="s m">Job Hunt reads each new role as soon as it finds it.</p></div>${d.reading_now ? '' : html`<span class="grow"></span><button class="btn sm" data-act="read">Read it now</button>`}</div>`;
     return html`<div class="card row"><div class="grow"><h4>Nothing is prepared for this role yet</h4><p class="s m">Job Hunt prepares strong fits by itself. Ask and it writes a tailored CV and a letter for this one.</p></div><button class="btn p" data-act="prepare">Prepare CV and letter</button></div>`;

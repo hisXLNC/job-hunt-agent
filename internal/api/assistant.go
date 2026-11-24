@@ -78,6 +78,7 @@ var tools = []tool{
 	{Method: "GET", Pattern: "/api/arriving", Help: "The arrival pack for someone moving to the city: the CV changes proposed for local readers and the plan."},
 	{Method: "GET", Pattern: "/api/connections", Help: "How Claude, the phone, the inbox and the browser side panel are connected, and Claude usage this week. Secrets are left out."},
 	{Method: "GET", Pattern: "/api/app", Help: "The version, where the data is kept, recent changes the program made to its own settings, recent Claude calls and problems."},
+	{Method: "GET", Pattern: "/api/import/old", Help: "Whether the old Job Hunt's data is on this computer and what it holds (jobs applied to, prepared, CVs, people), and what was last brought over from it. Bringing it over is the person's own button under You, The app."},
 	{Method: "GET", Pattern: "/api/find", Help: "Quick search across roles, people and employers. Query: q."},
 
 	// ---- doing ----------------------------------------------------------------

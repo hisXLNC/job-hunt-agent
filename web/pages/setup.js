@@ -1,4 +1,5 @@
 import { html, api, post, put, toast, app } from '../app.js';
+import { oldCard, oldActions } from '../old.js';
 
 const lines = s => (s || '').split(/\n|,/).map(x => x.trim()).filter(Boolean);
 const head = (n, title, done, sub) => html`<div class="row"><div class="num" style="${done ? 'background:var(--good);color:#fff' : ''}">${done ? '✓' : n}</div><div class="grow"><h3>${title}</h3>${sub ? html`<p class="s m">${sub}</p>` : ''}</div></div>`;
@@ -7,13 +8,15 @@ export default {
   title: 'Welcome',
   sub: () => '',
   topics: ['profile', 'connections', 'you'],
-  load: async () => ({ c: await api('connections'), y: await api('you') }),
-  view({ c, y }) {
+  load: async () => ({ c: await api('connections'), y: await api('you'), o: await api('import/old').catch(() => null) }),
+  view({ c, y, o }) {
     const cl = c.claude, p = y.profile, has1 = !!cl.engine, has2 = !!p.city, has3 = y.cvs.length > 0;
     const t = p.titles || {};
     return html`<div class="setup">
       <div><div class="eb">Job Hunt</div><h1 style="font-size:28px;margin-top:6px">Four things, then it works by itself.</h1>
         <p class="m" style="margin-top:6px">It finds roles the hour they are posted, writes your CV and letter for each, and finds the people worth writing to. You read, decide and send. Everything stays on this computer.</p></div>
+
+      ${o?.old?.found || o?.old?.last || o?.old?.busy ? oldCard(o, true) : ''}
 
       <form data-act="llm" class="card col" style="gap:10px">${head(1, 'Connect Claude', has1, 'Claude does the reading and the writing.')}
         <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="claude-code" ${cl.engine === 'claude-code' || (!cl.engine && c.cli_found) ? 'checked' : ''} ${c.cli_found ? '' : 'disabled'}> <span><b>Use my Claude subscription</b><br><span class="m">${c.cli_found ? 'Claude Code is on this computer. Nothing more to pay.' : 'Needs Claude Code installed and signed in on this computer (claude.com/claude-code). Not found.'}</span></span></label>
@@ -39,9 +42,12 @@ export default {
         <label class="field">Never show <span class="h">Titles or employers, comma-separated. Optional.</span><input type="text" name="avoid" value="${(p.avoid || []).join(', ')}"></label>
         <p class="xs m">Job Hunt writes; you send. It never submits an application or messages anyone.</p>
         <div class="row"><button class="btn p">Start looking</button></div></form>` : ''}
+
+      ${o && !(o.old?.found || o.old?.last || o.old?.busy) ? oldCard(o, true) : ''}
     </div>`;
   },
   actions: {
+    ...oldActions,
     async llm({ f }) {
       if (!f.engine) throw new Error('Choose one of the three.');
       await put('llm', { engine: f.engine, key: f.key || '' });

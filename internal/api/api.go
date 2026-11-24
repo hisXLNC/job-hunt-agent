@@ -15,7 +15,9 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +27,7 @@ import (
 	"jobhunt/internal/cv"
 	"jobhunt/internal/engine"
 	"jobhunt/internal/llm"
+	"jobhunt/internal/old"
 	"jobhunt/internal/store"
 )
 
@@ -530,6 +533,10 @@ func (s *Server) Handler() http.Handler {
 	})
 	h("GET /api/roles/{id}/cv.docx", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		f, err := e.CVFile(idOf(r))
+		return sendFile(w, f.Name, f.Data, err)
+	})
+	h("GET /api/roles/{id}/old-cv", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		f, err := e.OldCVFile(idOf(r))
 		return sendFile(w, f.Name, f.Data, err)
 	})
 	h("GET /api/roles/{id}/letter.docx", func(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -1144,6 +1151,59 @@ func (s *Server) Handler() http.Handler {
 		go func() { time.Sleep(300 * time.Millisecond); s.Quit() }()
 		return nil, nil
 	})
+	// What the old Job Hunt left on this computer, and bringing it over. The
+	// body of the POST is nothing (the old app's own folder), {"path": …} (a
+	// folder or file here) or a backup file itself.
+	h("GET /api/import/old", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		look, err := e.LookAtOld("")
+		out := map[string]any{"old": look}
+		if err != nil {
+			out["problem"] = err.Error()
+		}
+		return out, nil
+	})
+	h("POST /api/import/old", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		from, shown := "", ""
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+			var in struct {
+				Path string `json:"path"`
+			}
+			if err := read(r, &in); err != nil {
+				return nil, err
+			}
+			from = strings.TrimSpace(strings.Trim(strings.TrimSpace(in.Path), `"`))
+		} else {
+			dir := filepath.Join(e.Dir, "tmp")
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				return nil, err
+			}
+			f, err := os.CreateTemp(dir, "upload-*")
+			if err != nil {
+				return nil, err
+			}
+			defer os.Remove(f.Name())
+			n, err := io.Copy(f, io.LimitReader(r.Body, 2<<30))
+			f.Close()
+			if err != nil || n == 0 {
+				return nil, bad("That file is empty.")
+			}
+			from = f.Name()
+			shown = path.Base(strings.ReplaceAll(r.URL.Query().Get("name"), `\`, "/"))
+			if shown == "" || shown == "." || shown == "/" {
+				shown = "the backup you chose"
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		defer cancel()
+		res, err := e.ImportOld(ctx, from, shown)
+		if errors.Is(err, old.ErrNotOld) {
+			return nil, bad(strings.ToUpper(err.Error()[:1]) + err.Error()[1:] + ".")
+		}
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	})
 	h("POST /api/backup", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		p, err := e.Backup()
 		return map[string]string{"path": p}, err
@@ -1337,6 +1397,9 @@ func (s *Server) roleDetail(id int64) (any, error) {
 	var letter engine.LetterDoc
 	if ok, _ := st.Doc(id, "letter", &letter); ok {
 		out["letter"] = letter.Text
+	}
+	if f, err := e.OldCVFile(id); err == nil {
+		out["old_cv"] = f.Name
 	}
 	var cs engine.CaseDoc
 	if ok, _ := st.Doc(id, "case", &cs); ok {

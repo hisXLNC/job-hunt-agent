@@ -40,6 +40,10 @@ type Engine struct {
 
 	mailDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
 
+	oldMu     sync.Mutex // one import from the old Job Hunt at a time
+	oldSeen   *OldLook   // the last look at the old data on this computer, kept a minute
+	oldSeenAt time.Time
+
 	// Sample answers in place of Claude when the engine is "demo". Tests set
 	// it to script what Claude says; nil means the built-in stand-in.
 	Sample llm.Engine

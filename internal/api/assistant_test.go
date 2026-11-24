@@ -191,6 +191,7 @@ func TestAssistantCannotReachWhatIsNotOnItsList(t *testing.T) {
 		brain.AssistCall{Method: "PUT", Path: "/api/llm", Body: `{"engine":"api","key":"sk-ant-stolen"}`},
 		brain.AssistCall{Method: "PUT", Path: "/api/mailset", Body: `{"host":"evil.example"}`},
 		brain.AssistCall{Method: "POST", Path: "/api/quit"},
+		brain.AssistCall{Method: "POST", Path: "/api/import/old", Body: `{"path":"/etc"}`},
 		brain.AssistCall{Method: "POST", Path: "/api/ext/pair"},
 		brain.AssistCall{Method: "DELETE", Path: "/api/assistant"},
 		brain.AssistCall{Method: "GET", Path: "/api/roles/../llm"},

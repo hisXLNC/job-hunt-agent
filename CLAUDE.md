@@ -15,6 +15,7 @@ interface on 127.0.0.1 and talks to Claude. No build step for the interface.
 - `internal/brain`   each piece of thinking: read a CV, read a role, tailor, write a note
 - `internal/sources` public job sources (company boards, LinkedIn's public search)
 - `internal/office`  reading CV files, writing .docx
+- `internal/old`     reading the previous app's data folder or backup, for the bring-over at setup (read-only)
 - `internal/engine`  what runs when: searches, preparing, the daily brief
 - `internal/api`     the local HTTP interface the pages and the extension use, and the assistant
 - `web/`             the pages (plain ES modules, embedded into the program)

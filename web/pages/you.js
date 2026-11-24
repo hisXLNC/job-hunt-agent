@@ -1,4 +1,5 @@
 import { html, api, post, put, del, ago, when, toast } from '../app.js';
+import { oldCard, oldActions } from '../old.js';
 
 const TABS = [['', 'About you'], ['arriving', 'Arriving'], ['connections', 'Connections'], ['app', 'The app']];
 const lines = s => (s || '').split(/\n|,/).map(x => x.trim()).filter(Boolean);
@@ -97,6 +98,7 @@ function theApp(d) {
     <div class="card col" style="gap:8px"><h3>Job Hunt ${d.version}</h3><p class="s m">Everything is kept in one folder on this computer:</p><code class="s" style="background:var(--s2);padding:6px 9px;border-radius:7px;word-break:break-all">${d.dir}</code>
       <p class="s m">A copy is saved there every day and the last seven are kept. Job Hunt keeps searching while its window is closed; start it again from the Start menu to bring the window back.</p>
       <div class="row"><button class="btn" data-act="backup">Save a copy now</button><span class="grow"></span><button class="btn danger" data-act="quit" data-confirm="Stop Job Hunt? Searching stops until you start it again.">Stop Job Hunt</button></div></div>
+    ${d.old ? oldCard(d.old, false) : ''}
     ${d.problems?.length ? html`<div class="card"><h4>Recent problems</h4><div class="col s" style="margin-top:10px;gap:8px">${d.problems.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:70px;flex:none">${ago(a.at)}</span><span>${a.text}</span></div>`)}</div></div>` : ''}
   </div><div class="col" style="gap:14px">
     <div class="card"><h4>Claude, lately</h4><p class="xs m" style="margin-top:3px">${d.today.calls} calls in the last day, ${d.week.calls} this week${d.week.cost ? html` · $${d.week.cost.toFixed(2)}` : ''}${d.week.errors ? html` · ${d.week.errors} failed` : ''}</p>
@@ -113,7 +115,7 @@ export default {
     switch (route.parts[1] || '') {
       case 'arriving': return api('arriving');
       case 'connections': return api('connections');
-      case 'app': return api('app');
+      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null)]).then(([a, o]) => ({ ...a, old: o }));
     }
     return api('you');
   },
@@ -123,6 +125,7 @@ export default {
       ${tab === 'arriving' ? arriving(d) : tab === 'connections' ? connections(d) : tab === 'app' ? theApp(d) : about(d)}</div>`;
   },
   actions: {
+    ...oldActions,
     async saveprofile({ f }) {
       const wp = ['remote', 'hybrid', 'onsite'].filter(w => f['wp_' + w]);
       await put('profile', { name: f.name, headline: f.headline, rare: f.rare, city: f.city, places: lines(f.places), country: f.country, home: f.home, arrive_on: f.arrive_on, work_status: f.work_status, pay_floor: +f.pay_floor || 0,
