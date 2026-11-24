@@ -99,6 +99,18 @@ func (e *apiError) Error() string { return e.msg }
 
 func bad(msg string) error { return &apiError{400, msg} }
 
+// sentence writes a reason the way it is shown: a capital first, a full stop last.
+func sentence(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	if !strings.ContainsAny(s[len(s)-1:], ".!?") {
+		s += "."
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
 type handler func(w http.ResponseWriter, r *http.Request) (any, error)
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -1141,7 +1153,46 @@ func (s *Server) Handler() http.Handler {
 		byTask, _ := st.UsageByTask(e.Now().Add(-7 * 24 * time.Hour).Unix())
 		return map[string]any{"claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
-			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil}, nil
+			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources()}, nil
+	})
+	// More job sources: the searches that take a key (Adzuna, Jooble, Google
+	// for Jobs) and job-alert e-mails. A key goes in and never comes out: what
+	// is sent back says only whether one is saved. These calls are for the
+	// person's own hands and are not on the assistant's list.
+	h("GET /api/sources", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		return map[string]any{"sources": e.Sources()}, nil
+	})
+	h("PUT /api/sources/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in engine.SourceKeyInput
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if err := e.SetSource(r.PathValue("id"), in); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+			return nil, bad(sentence(err.Error()))
+		}
+		return nil, nil
+	})
+	h("DELETE /api/sources/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		return nil, e.ForgetSource(r.PathValue("id"))
+	})
+	h("POST /api/sources/{id}/test", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		n, err := e.TestSource(ctx, r.PathValue("id"))
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+			return nil, bad(sentence(err.Error()))
+		}
+		word := "postings"
+		if n == 1 {
+			word = "posting"
+		}
+		return map[string]any{"found": n, "message": fmt.Sprintf("Working: %d %s", n, word)}, nil
 	})
 	h("PUT /api/llm", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		cur := e.LLM()

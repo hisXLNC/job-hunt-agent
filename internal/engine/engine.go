@@ -53,6 +53,8 @@ type Engine struct {
 
 	mailDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
 
+	srcMu sync.Mutex // the keys and the state of the searches that take one
+
 	oldMu     sync.Mutex // one import from the old Job Hunt at a time
 	oldSeen   *OldLook   // the last look at the old data on this computer, kept a minute
 	oldSeenAt time.Time
@@ -285,6 +287,11 @@ func (e *Engine) Status() Status {
 	}
 	for _, site := range ps.Sites {
 		if !site.Off {
+			st.Sources++
+		}
+	}
+	for _, m := range e.MoreSources() {
+		if m.On && m.State != "none" {
 			st.Sources++
 		}
 	}

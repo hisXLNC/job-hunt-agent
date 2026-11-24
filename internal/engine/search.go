@@ -238,6 +238,39 @@ type RunStats struct {
 	Problems  []string          `json:"problems"`   // places that didn't answer
 	ByPlace   map[string][2]int `json:"by_place"`   // place → seen, new
 	ClearedBy map[string]int    `json:"cleared_by"` // reason → count
+	// BySource is the same search seen by kind of source ("boards",
+	// "linkedin", "jobbank", "freehire", "sites", "adzuna", "jooble",
+	// "jsearch"): what Radar's list of sources is drawn from.
+	BySource map[string]SourceRun `json:"by_source,omitempty"`
+}
+
+// SourceRun is what one kind of source gave in one search.
+type SourceRun struct {
+	Looked int    `json:"looked"`          // places of this kind asked
+	Seen   int    `json:"seen"`            // postings they showed
+	New    int    `json:"new"`             // of those, not seen before
+	Failed int    `json:"failed"`          // places that did not answer
+	Error  string `json:"error,omitempty"` // the last one's reason, in plain words
+}
+
+// saw notes that one place of a kind answered.
+func (st *RunStats) saw(kind string, seen, added int) {
+	if st.BySource == nil {
+		st.BySource = map[string]SourceRun{}
+	}
+	r := st.BySource[kind]
+	r.Looked, r.Seen, r.New = r.Looked+1, r.Seen+seen, r.New+added
+	st.BySource[kind] = r
+}
+
+// missed notes that one place of a kind did not answer, and why.
+func (st *RunStats) missed(kind, why string) {
+	if st.BySource == nil {
+		st.BySource = map[string]SourceRun{}
+	}
+	r := st.BySource[kind]
+	r.Looked, r.Failed, r.Error = r.Looked+1, r.Failed+1, why
+	st.BySource[kind] = r
 }
 
 // StartSearch starts a search in the background. Kind is "full" or "fast".
@@ -299,6 +332,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		posts, err := e.listBoard(ctx, c, p)
 		if err != nil {
 			stats.Problems = append(stats.Problems, fmt.Sprintf("%s: %s", c.Name, plainErr(err)))
+			stats.missed(srcBoards, fmt.Sprintf("%s: %s", c.Name, plainErr(err)))
 			continue
 		}
 		open, _ := e.S.OpenRoleKeys(c.ID, c.BoardKind)
@@ -324,6 +358,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			}
 		}
 		stats.Seen += len(posts)
+		stats.saw(srcBoards, len(posts), added)
 		note(c.Name, len(posts), added)
 	}
 
@@ -359,10 +394,12 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 					st.LinkedInUntil = now.Add(2 * time.Hour).Unix()
 					st.LinkedInNote = "LinkedIn asked Job Hunt to slow down; trying again later"
 					stats.Problems = append(stats.Problems, st.LinkedInNote)
+					stats.missed("linkedin", st.LinkedInNote)
 					blocked = true
 					continue
 				}
 				stats.Problems = append(stats.Problems, "LinkedIn, "+bt.Title+": "+plainErr(err))
+				stats.missed("linkedin", "LinkedIn "+plainErr(err))
 				continue
 			}
 			st.LinkedInNote = ""
@@ -389,6 +426,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 				}
 			}
 			stats.Seen += len(posts)
+			stats.saw("linkedin", len(posts), added)
 			note("LinkedIn: "+bt.Title, len(posts), added)
 			select {
 			case <-ctx.Done():
@@ -397,6 +435,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		}
 	} else {
 		stats.Problems = append(stats.Problems, firstOf(st.LinkedInNote, "LinkedIn is resting"))
+		stats.missed("linkedin", firstOf(st.LinkedInNote, "LinkedIn is resting"))
 	}
 
 	// 3. The other title searches, and the job sites and recruiters the person
@@ -405,6 +444,12 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		e.StepTakes(ctx, 40*time.Second)
 		e.Report(ctx, look-2, look, "Job Bank, FreeHire and the job sites you watch")
 		e.searchPlaces(ctx, p, sinceLast, &stats, &fresh, note)
+	}
+	// 3b. The searches that take a key (Adzuna, Jooble, Google for Jobs), for
+	// those who set one up. Each has a daily allowance, so a quick check asks
+	// them sparingly, and only those that can be asked for today's postings.
+	if ctx.Err() == nil {
+		e.searchKeyed(ctx, kind, p, sinceLast, &stats, &fresh, note)
 	}
 	// Stopped part-way: the next search starts where a full one would.
 	if ctx.Err() != nil {

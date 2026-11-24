@@ -78,8 +78,40 @@ func countryCode(country string) string {
 		return "CA"
 	case "united states", "usa", "us", "united states of america":
 		return "US"
-	case "united kingdom", "uk", "great britain", "england":
+	case "united kingdom", "uk", "great britain", "england", "scotland", "wales", "gb":
 		return "GB"
+	case "australia", "au":
+		return "AU"
+	case "new zealand", "nz":
+		return "NZ"
+	case "germany", "deutschland", "de":
+		return "DE"
+	case "france", "fr":
+		return "FR"
+	case "netherlands", "the netherlands", "nl":
+		return "NL"
+	case "india", "in":
+		return "IN"
+	case "singapore", "sg":
+		return "SG"
+	case "south africa", "za":
+		return "ZA"
+	case "austria", "at":
+		return "AT"
+	case "belgium", "be":
+		return "BE"
+	case "brazil", "brasil", "br":
+		return "BR"
+	case "switzerland", "ch":
+		return "CH"
+	case "spain", "es":
+		return "ES"
+	case "italy", "italia", "it":
+		return "IT"
+	case "mexico", "mx":
+		return "MX"
+	case "poland", "polska", "pl":
+		return "PL"
 	}
 	return ""
 }
@@ -360,6 +392,35 @@ func restFor(err error, haveBrowser bool) (time.Duration, string) {
 	return 0, ""
 }
 
+// takeFound records the postings a title search or a job site gave, each
+// under its employer, and adds the ones worth reading to fresh. It reports
+// how many were new.
+func (e *Engine) takeFound(posts []sources.Posting, from string, p store.Profile, stats *RunStats, fresh *[]int64) (added int) {
+	for _, post := range posts {
+		name := firstOf(post.Company, from)
+		comp, _, err := e.S.UpsertCompany(store.Company{Name: name, State: "suggested", Source: "posting"})
+		if err != nil {
+			continue
+		}
+		if comp.State == "muted" {
+			stats.ClearedBy["An employer you muted"]++
+			stats.Cleared++
+			continue
+		}
+		post.Company = comp.Name
+		// These searches match loosely, so the title rules decide what is kept.
+		id, isNew, cleared := e.ingest(comp.ID, post, p, stats)
+		if isNew {
+			added++
+			if !cleared {
+				*fresh = append(*fresh, id)
+			}
+		}
+	}
+	stats.Seen += len(posts)
+	return added
+}
+
 // searchPlaces runs the title searches other than LinkedIn and reads the
 // watched sites. It belongs to a full search: these places are asked a few
 // times a day, slowly, and left alone when they say so.
@@ -389,40 +450,22 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 		}
 		stats.Problems = append(stats.Problems, text)
 	}
-	failed := func(id, name string, err error) (stop bool) {
+	failed := func(kind, id, name string, err error) (stop bool) {
 		d, why := restFor(err, e.Src.Render != nil)
 		if d == 0 {
 			problem(name + ": " + plainErr(err))
+			stats.missed(kind, name+": "+plainErr(err))
 			misses[id]++
 			return misses[id] >= 2 // not answering at all: no point asking for every title
 		}
 		ps.Rest[id] = PlaceRest{Until: now.Add(d).Unix(), Note: name + " " + why}
 		problem(name + " " + why)
+		stats.missed(kind, name+" "+why)
 		return true
 	}
-	take := func(posts []sources.Posting, from string) (added int) {
-		for _, post := range posts {
-			name := firstOf(post.Company, from)
-			comp, _, err := e.S.UpsertCompany(store.Company{Name: name, State: "suggested", Source: "posting"})
-			if err != nil {
-				continue
-			}
-			if comp.State == "muted" {
-				stats.ClearedBy["An employer you muted"]++
-				stats.Cleared++
-				continue
-			}
-			post.Company = comp.Name
-			// These searches match loosely, so the title rules decide what is kept.
-			id, isNew, cleared := e.ingest(comp.ID, post, p, stats)
-			if isNew {
-				added++
-				if !cleared {
-					*fresh = append(*fresh, id)
-				}
-			}
-		}
-		stats.Seen += len(posts)
+	take := func(kind string, posts []sources.Posting, from string) (added int) {
+		added = e.takeFound(posts, from, p, stats, fresh)
+		stats.saw(kind, len(posts), added)
 		return added
 	}
 	var titles []string
@@ -439,6 +482,7 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 		name := finderNames[id][0]
 		if resting(id) {
 			stats.Problems = append(stats.Problems, firstOf(ps.Rest[id].Note, name+" is resting"))
+			stats.missed(id, firstOf(ps.Rest[id].Note, name+" is resting"))
 			continue
 		}
 		asked := titles
@@ -462,13 +506,13 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 			q.Keywords = title
 			posts, err := e.Src.Find(ctx, id, q)
 			if err != nil {
-				if failed(id, name, err) {
+				if failed(id, id, name, err) {
 					break
 				}
 				continue
 			}
 			ok = true
-			note(name+": "+title, len(posts), take(posts, name))
+			note(name+": "+title, len(posts), take(id, posts, name))
 		}
 		if ok {
 			delete(ps.Rest, id)
@@ -481,6 +525,7 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 		}
 		if resting(s.ID) {
 			stats.Problems = append(stats.Problems, firstOf(ps.Rest[s.ID].Note, s.Name+" is resting"))
+			stats.missed(srcSites, firstOf(ps.Rest[s.ID].Note, s.Name+" is resting"))
 			continue
 		}
 		site := s.site()
@@ -504,7 +549,7 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 			posts, err := e.Src.ReadSite(cctx, site, title, city)
 			cancel()
 			if err != nil {
-				if failed(s.ID, s.Name, err) {
+				if failed(srcSites, s.ID, s.Name, err) {
 					break
 				}
 				continue
@@ -515,7 +560,7 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 			if title != "" {
 				where += ": " + title
 			}
-			note(where, len(posts), take(posts, s.Name))
+			note(where, len(posts), take(srcSites, posts, s.Name))
 		}
 		if ok {
 			delete(ps.Rest, s.ID)

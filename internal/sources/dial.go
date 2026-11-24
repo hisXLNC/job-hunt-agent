@@ -77,6 +77,10 @@ func (c *Client) publicOnly() *http.Client {
 		if len(via) >= 6 {
 			return errors.New("sources: too many redirects")
 		}
+		// A request that carries a key is never sent on to another address.
+		if _, keyed := req.Context().Value(shownKey{}).(string); keyed {
+			return http.ErrUseLastResponse
+		}
 		if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
 			return errors.New("sources: redirect to something that is not a web address")
 		}
@@ -122,6 +126,10 @@ func (t traced) RoundTrip(req *http.Request) (*http.Response, error) {
 			q = q[:160] + "…"
 		}
 		u += "?" + q
+	}
+	// An address that holds a key is written the way its caller chose.
+	if shown, ok := req.Context().Value(shownKey{}).(string); ok {
+		u = shown
 	}
 	if err != nil {
 		trace.Log("fetch", "%s %s failed after %s: %v", req.Method, u, trace.Took(time.Since(start)), err)
