@@ -1059,6 +1059,9 @@ type MailReading struct {
 	Summary string `json:"summary"`
 	Next    string `json:"next"`
 	Reply   string `json:"reply"`
+	// For a receipt about none of the listed roles: what was applied to.
+	Company string `json:"company"`
+	Title   string `json:"title"`
 }
 
 var mailShape = llm.Obj(
@@ -1067,6 +1070,8 @@ var mailShape = llm.Obj(
 	"summary", llm.Str("one sentence: what they are saying"),
 	"next", llm.Str("one sentence: what the person should do, with any date or deadline stated in the message; 'Nothing to do.' if nothing"),
 	"reply", llm.Str("a draft reply in the person's voice when one is called for, under 110 words, with [time 1] style gaps where only they know the answer; empty when no reply is needed"),
+	"company", llm.Str("only for a receipt that is about none of the listed roles: the employer the person applied to, as the message names it; empty otherwise"),
+	"title", llm.Str("only for a receipt that is about none of the listed roles: the job title applied for, as the message names it; empty otherwise"),
 )
 
 type mailInput struct {

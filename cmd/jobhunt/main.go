@@ -170,7 +170,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	startWindow(url, dir)
-	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop, Show: showWindow, Restart: func() error {
+	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop, Show: showWindow, Startup: startsWithWindows, SetStartup: setStartsWithWindows, Restart: func() error {
 		noteWindowOpen(dir)
 		return restartSelf(stop)
 	}}

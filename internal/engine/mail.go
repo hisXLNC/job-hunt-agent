@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"jobhunt/internal/brain"
 	"jobhunt/internal/sources"
@@ -38,6 +39,44 @@ type MailSet struct {
 	LastUID  uint32 `json:"last_uid"`
 	LastAt   int64  `json:"last_at"`
 	Note     string `json:"note"`
+	// Box is the folder last read: "All Mail" where the mail service has one,
+	// so a message the person archived is still seen; the inbox otherwise.
+	Box string `json:"box,omitempty"`
+	// Every is how often the inbox is read, in minutes (10 when 0).
+	Every int `json:"every,omitempty"`
+}
+
+// Often is how often the inbox is read.
+func (set MailSet) Often() time.Duration {
+	if set.Every < 5 || set.Every > 240 {
+		return 10 * time.Minute
+	}
+	return time.Duration(set.Every) * time.Minute
+}
+
+var allMailRe = regexp.MustCompile(`(?i)^\* LIST \(([^)]*)\) (?:"[^"]*"|NIL) (.+)$`)
+
+// wholeBox finds the folder that holds every message, archived or not
+// (Gmail's "All Mail"). "" when the service has none.
+func wholeBox(c *imapConn) string {
+	lines, err := c.cmd(`LIST "" "*"`)
+	if err != nil {
+		return ""
+	}
+	for _, l := range lines {
+		m := allMailRe.FindStringSubmatch(l.text)
+		if m == nil || !strings.Contains(strings.ToLower(m[1]), `\all`) {
+			continue
+		}
+		name := strings.TrimSpace(m[2])
+		if u, err := strconv.Unquote(name); err == nil {
+			name = u
+		}
+		if name != "" && !strings.ContainsAny(name, "\r\n{") {
+			return name
+		}
+	}
+	return ""
 }
 
 func (e *Engine) MailSet() MailSet {
@@ -66,7 +105,10 @@ func (e *Engine) SetMail(ctx context.Context, set MailSet) error {
 	if set.User != old.User || set.Host != old.Host {
 		set.Validity, set.LastUID = 0, 0
 	} else {
-		set.Validity, set.LastUID, set.LastAt = old.Validity, old.LastUID, old.LastAt
+		set.Validity, set.LastUID, set.LastAt, set.Box = old.Validity, old.LastUID, old.LastAt, old.Box
+	}
+	if set.Every == 0 {
+		set.Every = old.Every
 	}
 	set.Note = ""
 	if set.On {
@@ -346,9 +388,21 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 		return fail(err)
 	}
 	defer c.close()
-	lines, err := c.cmd("EXAMINE INBOX")
+	box := wholeBox(c)
+	lines, err := []imapLine(nil), errors.New("none")
+	if box != "" {
+		lines, err = c.cmd("EXAMINE %s", imapQuote(box))
+	}
+	if err != nil {
+		box = ""
+		lines, err = c.cmd("EXAMINE INBOX")
+	}
 	if err != nil {
 		return fail(errors.New("couldn't open the inbox"))
+	}
+	if box != set.Box {
+		// Another folder numbers its messages its own way.
+		set.Box, set.LastUID = box, 0
 	}
 	for _, l := range lines {
 		if m := validityRe.FindStringSubmatch(l.text); m != nil {
@@ -410,6 +464,9 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 			}
 			if e.S.MailSeen(h.msgID) {
 				continue
+			}
+			if strings.EqualFold(h.fromAddr, set.User) {
+				continue // the person's own sent mail, when every folder is read
 			}
 			// A job alert from a job site is a list of postings, not a reply.
 			if site := sources.AlertSite(h.fromAddr, h.subject); site != "" && alerts {
@@ -541,7 +598,7 @@ func (e *Engine) matchMail(fromName, fromAddr, subject string) mailMatch {
 		}
 	}
 	hay := " " + store.NormName(fromName+" "+strings.NewReplacer(".", " ", "-", " ").Replace(domain)+" "+subject) + " "
-	rows, _ := e.S.Pairs(`SELECT c.name, c.id FROM companies c WHERE EXISTS (SELECT 1 FROM roles r WHERE r.company_id = c.id AND r.stage IN ('ready','applied','reply','interview','offer') AND r.closed != 'no')`)
+	rows, _ := e.S.Pairs(`SELECT c.name, c.id FROM companies c WHERE EXISTS (SELECT 1 FROM roles r WHERE r.company_id = c.id AND r.stage IN ('found','ready','applied','reply','interview','offer') AND r.closed != 'no')`)
 	for _, row := range rows {
 		n := store.NormName(row.Label)
 		if len(n) >= 3 && strings.Contains(hay, " "+n+" ") {
@@ -555,8 +612,15 @@ func (e *Engine) matchMail(fromName, fromAddr, subject string) mailMatch {
 			return m
 		}
 	}
+	// "Thank you for applying": an application the person sent, perhaps for
+	// a role Job Hunt never found.
+	if receiptRe.MatchString(subject) {
+		m.relevant = true
+	}
 	return m
 }
+
+var receiptRe = regexp.MustCompile(`(?i)\b(thank(?:s| you) for (?:applying|your application|your interest in)|application (?:received|confirmation|submitted|has been received)|we(?: have|'ve)? received your application|your application (?:to|for|with|at|has been)|successfully applied)\b`)
 
 // heardFrom records that someone accepted or answered on LinkedIn.
 func (e *Engine) heardFrom(p store.Person, replied bool) {
@@ -579,6 +643,18 @@ func (e *Engine) heardFrom(p store.Person, replied bool) {
 func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 	var refs []brain.RoleRef
 	roles, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"ready", "applied", "reply", "interview", "offer"}, Sort: "stage", Limit: 80})
+	// A confirmation can be for a role the person applied to before Job Hunt
+	// prepared anything: the roles it kept at the employers the message names.
+	hay := " " + store.NormName(m.FromName+" "+m.Subject+" "+clipText(m.Body, 1500)) + " "
+	found, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"found"}, Sort: "age", Limit: 300})
+	extra := 0
+	for _, r := range found {
+		n := store.NormName(r.Company)
+		if extra < 25 && (r.CompanyID == m.CompanyID && m.CompanyID != 0 || len(n) >= 3 && strings.Contains(hay, " "+n+" ")) {
+			roles = append(roles, r)
+			extra++
+		}
+	}
 	for _, r := range roles {
 		ref := brain.RoleRef{ID: r.ID, Company: r.Company, Title: r.Title, Stage: r.Stage}
 		if r.CompanyID == m.CompanyID {
@@ -618,6 +694,14 @@ func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 			e.heardFrom(p, true)
 		}
 	}
+	if m.RoleID == 0 && m.Kind == "receipt" {
+		// They confirm an application Job Hunt knew nothing about: keep it,
+		// so it is counted, followed up and matched to what they write next.
+		if rid := e.appliedElsewhere(reading.Company, reading.Title, m.At); rid != 0 {
+			m.RoleID = rid
+			e.S.MailRole(id, rid)
+		}
+	}
 	if m.RoleID == 0 {
 		return nil
 	}
@@ -625,8 +709,18 @@ func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 	if err != nil {
 		return nil
 	}
+	if r.Closed == "no" {
+		return nil // the person said no to this one; mail does not bring it back
+	}
 	act := store.Activity{Kind: "mail", RoleID: r.ID, CompanyID: r.CompanyID, Text: firstOf(m.Summary, "They wrote to you")}
 	switch m.Kind {
+	case "receipt":
+		if stageOrder(r.Stage) < stageOrder("applied") {
+			if r.Closed != "" {
+				e.S.Reopen(r.ID) // set aside by the program, but the person applied
+			}
+			e.MarkApplied(r.ID, "(their confirmation arrived by mail)")
+		}
 	case "interview", "assessment":
 		e.S.Advance(r.ID, "interview")
 	case "offer":
@@ -640,13 +734,45 @@ func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 	}
 	e.S.Log(act)
 	if m.State == "new" {
-		set := e.Phone()
-		if set.On && !quiet(set, e.Now().Hour()) {
-			go e.Push(e.ctx, r.Company+" wrote to you", firstOf(m.Summary, m.Subject), "")
-		}
-		e.Tell(r.Company+" wrote to you", firstOf(m.Summary, m.Subject), "#/replies")
+		plain := map[string]string{"interview": "An interview request", "assessment": "An assessment to do", "offer": "An offer"}[m.Kind]
+		e.Say(plain != "", firstOf(plain, "An employer wrote to you"), r.Company+" wrote to you", firstOf(m.Summary, m.Subject), "#/replies")
 	}
 	return nil
+}
+
+// appliedElsewhere records an application the person made that Job Hunt had
+// no role for. It never touches a role the person said no to.
+func (e *Engine) appliedElsewhere(company, title string, at int64) int64 {
+	company, title = clipText(strings.TrimSpace(company), 80), clipText(strings.TrimSpace(title), 120)
+	if company == "" || title == "" || strings.ContainsAny(company+title, "<>\n") {
+		return 0
+	}
+	c, _, err := e.S.UpsertCompany(store.Company{Name: company, State: "suggested", Source: "mail"})
+	if err != nil {
+		return 0
+	}
+	if id, closed, dup := e.S.SimilarRole(c.ID, title, ""); dup {
+		if closed == "no" {
+			return 0
+		}
+		return id
+	}
+	id, err := e.S.AddRole(store.Role{CompanyID: c.ID, Key: "mail:" + store.NormName(company) + ":" + strings.ToLower(title), Source: "mail", Title: title, Applicants: -1, Stage: "found", FirstSeenAt: at})
+	if err != nil {
+		return 0
+	}
+	e.S.Log(store.Activity{Kind: "added", RoleID: id, CompanyID: c.ID, Text: "Added from their confirmation e-mail: you applied to this one yourself"})
+	return id
+}
+
+func clipText(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func stageOrder(st string) int {

@@ -50,6 +50,10 @@ type Server struct {
 	Quit func() // stops the program; set by main
 	// Show opens Job Hunt's own window, or brings it forward, on a page; nil where there is none.
 	Show func(page string)
+	// Startup reads and SetStartup changes whether Job Hunt starts when the
+	// person signs in to Windows; nil where there is no such thing.
+	Startup    func() (on, can bool)
+	SetStartup func(on bool) error
 	// Restart stops the program and starts it again; nil where it can't.
 	Restart func() error
 
@@ -1144,8 +1148,41 @@ func (s *Server) Handler() http.Handler {
 		if err == nil {
 			out["clash"] = e.Clash(t.At, t.Minutes)
 			out["google"] = engine.GoogleCalendarLink(t.Title, t.At, t.Minutes, t.Link, "")
+			out["went"] = e.TalkWent(t.ID)
+			out["thanks"] = e.TalkThanks(t.ID)
+			out["thanking"] = e.Busy(fmt.Sprintf("thanks:%d", t.ID))
 		}
 		return out, err
+	})
+	// After a conversation: how it went (the person's own button, so the
+	// role moves with it) and a thank-you for them to send.
+	h("POST /api/talks/{id}/went", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct{ How string }
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if err := e.SetTalkWent(idOf(r), in.How); err != nil {
+			return nil, bad(err.Error())
+		}
+		return nil, nil
+	})
+	h("POST /api/talks/{id}/thanks", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		id := idOf(r)
+		if _, err := st.Talk(id); err != nil {
+			return nil, err
+		}
+		if e.LLM().Engine == "" {
+			return nil, llm.ErrNotConnected
+		}
+		e.Go(fmt.Sprintf("thanks:%d", id), "Writing a thank-you", func(ctx context.Context) error { return e.WriteThanks(ctx, id) })
+		return nil, nil
+	})
+	h("PUT /api/talks/{id}/thanks", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct{ Subject, Body string }
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		return nil, e.SaveThanks(idOf(r), in.Subject, in.Body)
 	})
 	h("PUT /api/talks/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		t, err := st.Talk(idOf(r))
@@ -1288,7 +1325,11 @@ func (s *Server) Handler() http.Handler {
 		pending := s.pending.Code()
 		s.mu.Unlock()
 		byTask, _ := st.UsageByTask(e.Now().Add(-7 * 24 * time.Hour).Unix())
-		return map[string]any{"claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
+		startOn, startCan := false, false
+		if s.Startup != nil {
+			startOn, startCan = s.Startup()
+		}
+		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
 			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources()}, nil
 	})
@@ -1440,6 +1481,19 @@ func (s *Server) Handler() http.Handler {
 			return nil, err
 		}
 		return nil, e.SetDesk(set)
+	})
+	h("PUT /api/startup", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct{ On bool }
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if s.SetStartup == nil {
+			return nil, bad("Starting with the computer is set up on Windows only.")
+		}
+		if err := s.SetStartup(in.On); err != nil {
+			return nil, bad(err.Error())
+		}
+		return nil, nil
 	})
 	h("POST /api/desk/test", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		if e.Notify == nil {

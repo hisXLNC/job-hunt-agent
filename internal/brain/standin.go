@@ -843,6 +843,8 @@ func standAssist(in AssistInput) AssistStep {
 	return AssistStep{Say: "These are sample answers, so I can only tell you where things stand. " + first + " Connect Claude under [You, Connections](#/you/connections) and I can answer anything and do what the screens do."}
 }
 
+var standApplied = regexp.MustCompile(`(?i)appl(?:ying|ication) (?:for|to) (?:the )?(?:position of |role of )?([^.\n]{3,80}?) (?:position |role )?(?:at|with) ([A-Z][^.,\n]{1,60})`)
+
 func standMail(in mailInput) MailReading {
 	text := strings.ToLower(in.Mail.Subject + "\n" + in.Mail.Body)
 	has := func(words ...string) bool {
@@ -874,6 +876,9 @@ func standMail(in mailInput) MailReading {
 		out.Kind, out.Summary, out.Next = "assessment", "They are asking you to complete an assessment.", "Check the deadline and do it; these are usually timed from when you open the link."
 	case has("received your application", "thank you for applying", "thanks for applying", "application has been received"):
 		out.Kind, out.Summary, out.Next = "receipt", "They confirmed they received your application.", "Nothing to do."
+		if x := standApplied.FindStringSubmatch(in.Mail.Subject + "\n" + in.Mail.Body); x != nil && out.RoleID == 0 {
+			out.Title, out.Company = strings.TrimSpace(x[1]), strings.TrimSpace(x[2])
+		}
 	case strings.Contains(text, "?"):
 		out.Kind, out.Summary, out.Next = "question", "They are asking you something.", "Answer it; a draft is below."
 		out.Reply = "Hi " + first + ",\n\nThank you for your note. [your answer]\n\nBest regards,\n" + in.Person.Profile.Name

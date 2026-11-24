@@ -102,7 +102,9 @@ jobs:
           if ($un.DisplayVersion -ne "${{ steps.v.outputs.version }}") { throw "Windows' list of apps shows version '$($un.DisplayVersion)'" }
           $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3
           if ($run -notlike "*JobHunt3.exe* -no-window") { throw "starting with Windows is not set: '$run'" }
-          Write-Host "Installed: program, side panel, shortcuts, uninstall entry, start with Windows"
+          $proto = (Get-ItemProperty "HKCU:\Software\Classes\jobhunt3\shell\open\command" -ErrorAction SilentlyContinue).'(default)'
+          if ($proto -notlike "*JobHunt3.exe*%1*") { throw "notification clicks are not handed to Job Hunt: '$proto'" }
+          Write-Host "Installed: program, side panel, shortcuts, uninstall entry, start with Windows, notification links"
 
           # 2. It starts, makes its data and says the right version.
           Start-Process $exe -ArgumentList "-no-window"
@@ -154,6 +156,11 @@ jobs:
             if ($h -eq [IntPtr]::Zero) { throw "Job Hunt's own window went away after opening" }
             Start-Process $exe -Wait
             if (@(Get-Process JobHunt3).Count -ne 1) { throw "starting Job Hunt twice left two copies running" }
+            # A click on a notification: Windows starts Job Hunt with the page's link.
+            Start-Process $exe -ArgumentList "jobhunt3://open/roles" -Wait
+            Start-Sleep -Seconds 1
+            if (-not (Select-String -Path $log -Pattern 'brought forward on "#/roles"' -SimpleMatch -ErrorAction SilentlyContinue)) { Get-Content $log -Tail 20 | Write-Host; throw "a notification's link did not open its page in the window" }
+            if (@(Get-Process JobHunt3).Count -ne 1) { throw "a notification's link started a second copy" }
             [JHWin]::MoveWindow($h, 60, 50, 1000, 700, $true) | Out-Null
             Start-Sleep -Seconds 2
             Start-Process $exe -ArgumentList "-quit" -Wait
@@ -188,9 +195,12 @@ jobs:
           # 4b. The way Job Hunt updates itself: quietly, keeping the person's choices, and starting again by itself.
           Remove-Item "$([Environment]::GetFolderPath('Desktop'))\Job Hunt 3.lnk"
           Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name JobHunt3
+          # The window was open when the update began: it must come back afterwards.
+          if ($hasWv) { Set-Content "$env:JOBHUNT_HOME\reopen-window" "1" }
           # Not -Wait: that would also wait for Job Hunt, which the installer starts again.
           (Start-Process dist\JobHunt3-Setup.exe -ArgumentList "/S", "/UPDATE" -PassThru).WaitForExit()
           $st = State
+          if ($hasWv) { if ((Win) -eq [IntPtr]::Zero) { throw "after updating itself Job Hunt did not open its window again" }; Write-Host "Self-update: the window came back" }
           if ($st.version -ne "${{ steps.v.outputs.version }}") { throw "after updating itself the program says it is version '$($st.version)'" }
           if (Test-Path "$([Environment]::GetFolderPath('Desktop'))\Job Hunt 3.lnk") { throw "a self-update put back the desktop shortcut the person removed" }
           if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3) { throw "a self-update turned starting with Windows back on" }
@@ -204,6 +214,7 @@ jobs:
           if (Test-Path "$start\Job Hunt 3.lnk") { throw "removing Job Hunt left its Start menu shortcut" }
           if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\JobHunt3") { throw "removing Job Hunt left its entry in Windows' list of apps" }
           if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3) { throw "removing Job Hunt left it starting with Windows" }
+          if (Test-Path "HKCU:\Software\Classes\jobhunt3") { throw "removing Job Hunt left its notification links registered" }
           if (-not (Test-Path "$env:JOBHUNT_HOME\jobhunt.db")) { throw "removing Job Hunt deleted the data" }
           Write-Host "Removed cleanly; data left alone"
 

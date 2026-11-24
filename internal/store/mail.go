@@ -138,3 +138,10 @@ func (s *Store) Mails(f MailFilter) ([]Mail, int, error) {
 	}
 	return out, total, rows.Err()
 }
+
+// MailRole files a message under a role found for it afterwards.
+func (s *Store) MailRole(id, roleID int64) error {
+	_, err := s.db.Exec(`UPDATE mails SET role_id = ? WHERE id = ?`, roleID, id)
+	s.Changed("mail")
+	return err
+}

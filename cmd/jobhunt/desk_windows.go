@@ -36,8 +36,14 @@ func runTray(ctx context.Context, stop func(), url, dir string, e *engine.Engine
 			systray.SetTooltip("Job Hunt is watching for new roles")
 			open := systray.AddMenuItem("Open Job Hunt", "Shows Job Hunt's window")
 			search := systray.AddMenuItem("Search for jobs now", "Starts a full search")
+			inbox := systray.AddMenuItem("Check my inbox now", "Reads new replies from employers")
 			update := systray.AddMenuItem("Check for updates", "Looks for a newer version and installs it")
 			systray.AddSeparator()
+			startOn, canStart := startsWithWindows()
+			start := systray.AddMenuItemCheckbox("Start when I sign in to Windows", "Job Hunt starts by itself, in the background", startOn)
+			if !canStart {
+				start.Hide()
+			}
 			quit := systray.AddMenuItem("Stop Job Hunt", "Stops searching until you start it again")
 			go func() {
 				for {
@@ -51,6 +57,22 @@ func runTray(ctx context.Context, stop func(), url, dir string, e *engine.Engine
 						e.Resume("")
 						e.StartSearch("full")
 						deskNotify("Job Hunt is searching", "New roles that fit will show up on Today.", url+"#/today")
+					case <-inbox.ClickedCh:
+						if !e.MailSet().On {
+							deskNotify("Your inbox isn't connected", "Connect it under You, Connections, and replies are noticed as they arrive.", url+"#/you/connections")
+						} else {
+							e.Go("mail", "Checking your inbox", func(ctx context.Context) error { return e.CheckMail(ctx) })
+							deskNotify("Checking your inbox", "Anything new from an employer shows up under Replies.", url+"#/replies")
+						}
+					case <-start.ClickedCh:
+						on, _ := startsWithWindows()
+						if setStartsWithWindows(!on) == nil {
+							if on {
+								start.Uncheck()
+							} else {
+								start.Check()
+							}
+						}
 					case <-update.ClickedCh:
 						go func() {
 							if err := e.CheckUpdate(ctx); err != nil {

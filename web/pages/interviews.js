@@ -78,6 +78,7 @@ function one(d) {
       <h2 style="font-size:21px;margin-top:4px">${t.title}</h2><div class="s m">${t.person}${t.person && t.company ? ' · ' : ''}${employer(t.company, t.company_id)}${t.role ? html` · ${t.role_id ? html`<a class="emp" href="#/roles/${t.role_id}">${t.role}</a>` : t.role}` : ''}</div></div>
       <div class="col" style="gap:6px">${link ? html`<a class="btn p" href="${link}" target="_blank" rel="noopener noreferrer">Join</a>` : ''}${d.google && !past ? html`<a class="btn sm" href="${d.google}" target="_blank" rel="noopener noreferrer" title="Opens Google Calendar with this conversation filled in. Press Save there.">Add to Google Calendar</a>` : ''}<a class="btn sm" href="/api/talks/${t.id}/invite.ics" title="${ICS_TIP}">Calendar file</a></div></div>
     ${d.clash && !past ? html`<div class="card row" style="border-color:var(--warn);background:var(--warn-soft)"><div class="grow"><h4>This lands on something in your calendar</h4><p class="s">${d.clash.title || 'An entry'} · ${d.clash.all_day ? 'all day' : html`${when(d.clash.start)} until ${clock(d.clash.end)}`}. Move one of them, or ask for another time.</p></div></div>` : ''}
+    ${past ? after(d) : ''}
     ${d.preparing ? html`<div class="card row"><span class="spin"></span><div><h4>Writing your prep pack</h4><p class="s m">About a minute. The page updates by itself.</p></div></div>` : ''}
     ${p ? html`<div class="card col" style="gap:14px">
       <div><div class="eb">Your opening · 45 seconds</div><p style="margin-top:6px;font-size:14.5px">${p.opening}</p></div>
@@ -96,6 +97,20 @@ function one(d) {
       <div class="row"><button class="btn sm">Save</button>${p ? html`<button type="button" class="btn sm" data-act="prep">Prepare again</button>` : ''}<span class="grow"></span><button type="button" class="btn sm danger" data-act="remove" data-confirm="Remove this conversation?">Remove</button></div></form></div>
     ${t.person_id ? html`<a class="btn" href="#/people/${t.person_id}">Open ${t.person}</a>` : ''}${t.role_id ? html`<a class="btn" href="#/roles/${t.role_id}">Open the role</a>` : ''}
   </div></div>`;
+}
+
+const WENT = { next: 'It went well: another round is coming.', offer: 'They are making an offer.', no: 'They said no.', fine: 'It happened; you are waiting to hear.' };
+// After a conversation: how it went, and a thank-you to send while it is fresh.
+function after(d) {
+  const t = d.talk, th = d.thanks || {}, mail = `mailto:?subject=${encodeURIComponent(th.subject || 'Thank you')}&body=${encodeURIComponent(th.body || '')}`;
+  return html`<div class="card col" style="gap:10px"><div class="row wrap"><h4 class="grow">How did it go?</h4>${d.went ? html`<span class="chip ${d.went === 'no' ? '' : 'good'}">${WENT[d.went]}</span>` : ''}</div>
+    ${d.went ? '' : html`<p class="s m">Say how it went and ${t.role_id ? 'the role moves with it' : 'it is kept with this conversation'}.</p>`}
+    <div class="row wrap"><button class="btn sm ${d.went === 'next' ? 'p' : ''}" data-act="went" data-how="next">Another round</button><button class="btn sm ${d.went === 'offer' ? 'p' : ''}" data-act="went" data-how="offer">They made an offer</button><button class="btn sm ${d.went === 'fine' ? 'p' : ''}" data-act="went" data-how="fine">Waiting to hear</button><button class="btn sm" data-act="went" data-how="no" ${t.role_id ? html`data-confirm="Mark this as a no? The role is closed as rejected; its documents and history stay."` : ''}>They said no</button>
+      ${d.went === 'next' ? html`<a class="btn sm" href="#/interviews?${t.role_id ? 'role=' + t.role_id : t.person_id ? 'person=' + t.person_id : ''}">Add the next conversation</a>` : ''}</div>
+    <div class="eb" style="margin-top:6px">A thank-you</div>
+    ${d.thanking ? html`<div class="row"><span class="spin"></span><span class="s m">Writing it. About half a minute.</span></div>` : th.body ? html`<form data-act="savethanks" class="col" style="gap:8px"><label class="field">Subject<input type="text" name="subject" value="${th.subject}"></label><textarea name="body" rows="7" aria-label="The thank-you">${th.body}</textarea>
+      <div class="row wrap"><button type="button" class="btn sm p" data-act="copythanks">Copy</button><a class="btn sm" href="${mail}" title="Opens a new message in your mail program with this in it. You add who it goes to and send it.">Open in my mail</a><button class="btn sm">Save my wording</button><button type="button" class="btn sm" data-act="thanks">Write it again</button></div><p class="xs m">Job Hunt writes; you send. Best within a day.</p></form>` : html`<div class="row wrap"><p class="s m grow" style="min-width:220px">Three or four sentences, specific to what was said. Your notes on the right are used if you wrote any.</p><button class="btn sm p" data-act="thanks">Write a thank-you</button></div>`}
+  </div>`;
 }
 
 const ts = v => Math.floor(new Date(v).getTime() / 1000);
@@ -127,6 +142,10 @@ export default {
       return false;
     },
     prep: ({ route }) => post(`talks/${route.parts[1]}/prep`),
+    went: ({ route, d }) => post(`talks/${route.parts[1]}/went`, { how: d.how }),
+    thanks: ({ route }) => post(`talks/${route.parts[1]}/thanks`),
+    savethanks: ({ route, f }) => put(`talks/${route.parts[1]}/thanks`, { subject: f.subject, body: f.body }).then(() => toast('Saved')),
+    copythanks: ({ el }) => copy(el.closest('form').querySelector('textarea').value).then(() => false),
     notes: ({ route, f }) => put(`talks/${route.parts[1]}`, { notes: f.notes }).then(() => toast('Saved')),
     edit: ({ route, f }) => put(`talks/${route.parts[1]}`, { title: f.title, at: ts(f.at), minutes: +f.minutes, link: f.link }).then(() => toast('Saved')),
     async remove({ route }) { await del(`talks/${route.parts[1]}`); location.hash = '#/interviews'; return false; },

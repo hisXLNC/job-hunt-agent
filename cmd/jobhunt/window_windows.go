@@ -122,6 +122,7 @@ func showWindow(page string) {
 			pShowWindow.Call(hwnd, 9) // restore
 		}
 		pSetForegroundWindow.Call(hwnd)
+		trace.Log("window", "brought forward on %q", page)
 		if page != "" {
 			js, _ := json.Marshal(page)
 			w.Dispatch(func() { w.Eval("location.hash = " + string(js)) })

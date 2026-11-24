@@ -34,6 +34,9 @@ const SETTINGS = [
   ['connections', 'mail', '', 'Your inbox', 'inbox mail email e-mail gmail imap app password replies'],
   ['connections', 'desk', 'notify', 'Windows notifications', 'notification windows toast alert desktop popup'],
   ['connections', 'desk', 'awake', 'Keep this computer awake', 'awake sleep power standby'],
+  ['connections', 'desk', 'morning', 'Morning summary and reminders', 'morning summary reminder remind interview tomorrow closing weekly review thank you'],
+  ['connections', 'desk', 'startup', 'Start with Windows', 'start startup sign in boot login autostart windows'],
+  ['connections', 'phone', 'detail', 'What phone notices say', 'private privacy urgent only interviews offers names employer'],
   ['connections', 'schedule', '', 'When Job Hunt searches', 'schedule search times when how often quick check full search hours frequency'],
   ['panel', 'panel', '', 'Browser side panel', 'side panel extension browser chrome edge fill forms pair connect'],
   ['app', 'theme', '', 'Light or dark', 'dark light theme colour color night mode appearance look match windows'],
@@ -198,6 +201,9 @@ function connections(d) {
       <label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${ph.on ? 'checked' : ''}> Send notices to my phone</label>
       <label class="field">Topic <span class="h">The same on your phone and here.</span><input type="text" name="topic" value="${ph.topic}" placeholder="Press Make a topic for me" autocomplete="off" spellcheck="false"></label>
       <div class="grid3"><label class="field">Only for fit at or above <span class="h">75 is a good start.</span><input type="number" name="min_fit" value="${ph.min_fit}" min="50" max="100"></label><label class="field">No notices from <span class="h">Hour, 0 to 23.</span><input type="number" name="quiet_from" value="${ph.quiet_from}" min="0" max="23"></label><label class="field">Until <span class="h">Hour, 0 to 23.</span><input type="number" name="quiet_to" value="${ph.quiet_to}" min="0" max="23"></label></div>
+      <label class="field" style="max-width:420px">Which notices <span class="h">Interviews and offers are sent as urgent.</span><select name="only"><option value="" ${ph.only === 'urgent' ? '' : 'selected'}>Fresh roles, replies, reminders and the morning summary</option><option value="urgent" ${ph.only === 'urgent' ? 'selected' : ''}>Only interviews and offers</option></select></label>
+      <label class="row s" style="font-weight:500"><input type="checkbox" name="detail" ${ph.detail ? 'checked' : ''}> Name the role and the employer in the notice</label>
+      <p class="xs m">Off, a notice says only what kind of thing happened ("A strong role, just posted", "An interview request"). The notice travels through the ntfy server, so leave this off unless your topic is long and yours alone.</p>
       <div class="row wrap"><button class="btn p">Save</button><button type="button" class="btn" data-act="newtopic">Make a topic for me</button><button type="button" class="btn" data-act="testphone">Send a test</button></div>
       <details class="xs m"><summary>No buzz after the test?</summary><p style="margin-top:6px">Check the topic is spelled the same in both places, and that it was saved here before the test. On an iPhone, open Settings → Notifications → ntfy and allow them. On Android, open the phone's Settings → Apps → ntfy → Battery and choose Unrestricted, or notices arrive late. Notices are held back between the two hours above${ph.quiet_from !== ph.quiet_to ? html` (now ${ph.quiet_from}:00 to ${ph.quiet_to}:00)` : ''}; the test is always sent.</p>
         <p style="margin-top:6px">A notice carries the job title, the employer, the fit and how old the posting is, and passes through ntfy's server on its way to your phone.</p>
@@ -208,7 +214,8 @@ function connections(d) {
       ${m.note ? html`<p class="s" style="color:var(--crit)">${m.note}</p>` : ''}
       <label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${m.on ? 'checked' : ''}> Watch my inbox for replies</label>
       <div class="grid2"><label class="field">Address<input type="email" name="user" value="${m.user}" autocomplete="off"></label><label class="field">App password <span class="h">Not your normal password.</span><input type="password" name="pass" placeholder="${d.mail_has_pass ? 'Saved. Paste to replace.' : '16 letters'}" autocomplete="off"></label></div>
-      <label class="field" style="max-width:260px">Mail server<input type="text" name="host" value="${m.host}"></label>
+      <div class="grid2"><label class="field">Mail server<input type="text" name="host" value="${m.host}"></label><label class="field">Check every <span class="h">Minutes, 5 to 240.</span><input type="number" name="every" value="${m.every || 10}" min="5" max="240"></label></div>
+      <p class="xs m">A "we received your application" message marks that role as applied by itself, and adds the role if Job Hunt never found it. With Gmail, archived messages are read too.</p>
       <p class="xs m">Gmail: Google Account → Security → 2-Step Verification → App passwords. The password is kept only in Job Hunt's data file on this computer.</p>
       <div class="row"><button class="btn p">Save and check</button>${m.last_at ? html`<span class="xs m">Last read ${rel(m.last_at)}</span>` : ''}</div></form>
     ${thisComputer(d)}${schedule(d)}
@@ -250,6 +257,8 @@ function thisComputer(d) {
     <label class="row s" style="font-weight:500"><input type="checkbox" name="notify" ${k.notify ? 'checked' : ''}> Show a Windows notification for a fresh role that fits, and when someone writes to you</label>
     <p class="xs m">A click opens it in Job Hunt. Job Hunt also sits by the clock (the icon's menu opens it, searches now, checks for updates or stops it).${d.can_notify ? '' : ' Notifications are shown only on Windows.'}</p>
     <label class="field" style="max-width:420px">Keep this computer awake <span class="h">A sleeping computer finds nothing. The screen can still turn off.</span><select name="awake"><option value="working" ${k.awake === 'working' ? 'selected' : ''}>While Job Hunt is working</option><option value="always" ${k.awake === 'always' ? 'selected' : ''}>Always, while searching is on</option><option value="off" ${k.awake === 'off' ? 'selected' : ''}>Never</option></select></label>
+    <label class="field" style="max-width:420px">Morning summary <span class="h">What needs you today, in one notice. Reminders also come the evening before an interview, after one, and two days before a posting closes.</span><select name="morning">${[[-1, 'Never'], [6, '6:00'], [7, '7:00'], [8, '8:00'], [9, '9:00'], [10, '10:00']].map(([v, t]) => html`<option value="${v}" ${k.morning === v ? 'selected' : ''}>${t}</option>`)}</select></label>
+    ${d.startup?.can ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="startup" ${d.startup.on ? 'checked' : ''}> Start Job Hunt when I sign in to Windows <span class="xs m" style="font-weight:400">(in the background, by the clock)</span></label>` : ''}
     <div class="row"><button class="btn p">Save</button>${d.can_notify ? html`<button type="button" class="btn" data-act="testdesk">Show a test</button>` : ''}</div></form>`;
 }
 function schedule(d) {
@@ -398,7 +407,11 @@ export default {
     },
     async checkupdate() { const r = await post('update/check'); toast(r.update ? `Version ${r.update.version} is ready` : 'This is the newest version'); },
     autoupdate: ({ value }) => put('update', { auto: value }).then(() => toast(value ? 'New versions install by themselves' : 'Job Hunt will only tell you about new versions')),
-    savedesk: ({ f }) => put('desk', { notify: !!f.notify, awake: f.awake }).then(() => toast('Saved')),
+    async savedesk({ f, data }) {
+      await put('desk', { notify: !!f.notify, awake: f.awake, morning: +f.morning });
+      if (data.startup?.can && !!f.startup !== !!data.startup.on) await put('startup', { on: !!f.startup });
+      toast('Saved');
+    },
     testdesk: () => post('desk/test').then(() => { toast('Sent. It shows by the clock.'); return false; }),
     async saveschedule({ f }) {
       const full = f.full.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean).map(t => { const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(t); if (!m) throw new Error(`"${t}" isn't a time. Write times like 07:00 or 17:30.`); let h = +m[1]; if (/pm/i.test(m[3] || '') && h < 12) h += 12; if (/am/i.test(m[3] || '') && h === 12) h = 0; return h * 60 + +(m[2] || 0); });
@@ -446,13 +459,13 @@ export default {
     forgetcal: () => del('owncal').then(() => toast('Disconnected')),
     copyfree: ({ d }) => copy(d.text).then(() => false),
     cloudcopies: ({ d }) => post('backups/cloud', { dir: d.dir }).then(() => toast('Copies are kept there from now on. One was saved just now.')),
-    savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0 }).then(() => toast('Saved')),
+    savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0, detail: !!f.detail, only: f.only || '' }).then(() => toast('Saved')),
     newtopic({ el }) { const a = new Uint8Array(12); crypto.getRandomValues(a); el.closest('form').querySelector('[name=topic]').value = 'jobhunt-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); return false; },
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
     savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(() => toast('Saved')),
     async testsource({ d }) { const r = await post(`sources/${d.id}/test`); toast(r.message); },
     delsource: ({ d }) => del(`sources/${d.id}`).then(() => toast('Key removed')),
-    savemail: ({ f }) => put('mailset', { on: !!f.on, user: f.user, pass: f.pass || '', host: f.host }).then(() => toast(f.on ? 'Connected. Job Hunt is reading recent replies.' : 'Saved')),
+    savemail: ({ f }) => put('mailset', { on: !!f.on, user: f.user, pass: f.pass || '', host: f.host, every: Math.min(240, Math.max(5, +f.every || 10)) }).then(() => toast(f.on ? 'Connected. Job Hunt is reading recent replies.' : 'Saved')),
     copytext: ({ d }) => copy(d.text).then(() => false),
     copydebug: () => api('debug').then(g => copy(g.report)).then(() => false),
     openfolder: ({ d }) => post('open-folder', { what: d.what }).then(() => false),

@@ -2,6 +2,17 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.30
+
+Back from the old app (first batch; the full list is kept in `design/parity.md`):
+
+- **A "we received your application" e-mail marks the role as applied**, even if you never pressed "I applied". If Job Hunt never found that role, it is added as applied so it is counted and followed up. A role you marked not interested is never brought back this way.
+- **Archived mail is read too** (Gmail's All Mail), so a confirmation you archived is not missed. Your own sent mail is skipped. You can set how often the inbox is checked (You → Connections → Your inbox).
+- **Reminders**: the evening before an interview (with the prep pack ready), "How did it go?" about an hour and a half after one, two days before a posting closes, and a **morning summary** of what needs you (on Mondays with last week's numbers). Choose the hour, or turn it off, under You → Connections → On this computer.
+- **After an interview**: say how it went (another round, an offer, waiting, a no) and the role moves with it; a **thank-you** is drafted for you to copy or open in your mail.
+- **Phone notices are private by default**: they say what kind of thing happened, not the role or employer, because they pass through the ntfy server. Tick "Name the role and the employer" to get the old wording back. New: "Only interviews and offers", and interviews and offers are sent as urgent. Reminders and replies now reach the phone too.
+- **Start with Windows** is a switch in Job Hunt (You → Connections → On this computer, and the icon by the clock), not only in the installer. The icon's menu also has **Check my inbox now**.
+
 ## 26.11.29
 
 - **Job Hunt has its own window again**, like the old app. It is no longer a browser window, so there is no address bar and none of the browser's extensions or their banners ("... is debugging this browser" came from an extension in your browser). It opens **where you left it, at the size you left it**, maximised if it was. Postings and other outside links open in your normal browser, where the side panel is.

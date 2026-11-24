@@ -210,10 +210,13 @@ func (e *Engine) chores(now time.Time) {
 		// A version found while Job Hunt was busy is installed once it is idle.
 		e.InstallUpdate()
 	}
+	if every("remind", 5*time.Minute) {
+		e.remind(now)
+	}
 	if every("quiet", time.Hour) {
 		e.letGoQuiet(now)
 	}
-	if e.MailSet().On && !e.heldBack("mail") && every("mail", 10*time.Minute) {
+	if e.MailSet().On && !e.heldBack("mail") && every("mail", e.MailSet().Often()) {
 		e.Go("mail", "Checking your inbox", func(ctx context.Context) error { return e.CheckMail(ctx) })
 	}
 	if !e.heldBack("boards") && every("boards", 24*time.Hour) {
@@ -236,10 +239,15 @@ func (e *Engine) letGoQuiet(now time.Time) {
 // PhoneSet is how notices reach the person's phone: a topic on an ntfy
 // server they subscribe to in the ntfy app. Nothing is sent unless On.
 type PhoneSet struct {
-	On        bool   `json:"on"`
-	Server    string `json:"server"`
-	Topic     string `json:"topic"`
-	MinFit    int    `json:"min_fit"`
+	On     bool   `json:"on"`
+	Server string `json:"server"`
+	Topic  string `json:"topic"`
+	MinFit int    `json:"min_fit"`
+	// Detail: the notice names the role and the employer. Off by default,
+	// because it passes through a server that is not the person's own.
+	Detail bool `json:"detail"`
+	// Only: "" for every notice, "urgent" for interviews and offers alone.
+	Only      string `json:"only"`
 	QuietFrom int    `json:"quiet_from"` // hour of day, 0-23
 	QuietTo   int    `json:"quiet_to"`
 }
@@ -278,11 +286,15 @@ func quiet(set PhoneSet, hour int) bool {
 
 // Push sends one notice to the phone.
 func (e *Engine) Push(ctx context.Context, title, message, click string) error {
+	return e.push(ctx, title, message, click, 3)
+}
+
+func (e *Engine) push(ctx context.Context, title, message, click string, priority int) error {
 	set := e.Phone()
 	if set.Topic == "" {
 		return errors.New("choose a topic first")
 	}
-	body, _ := json.Marshal(map[string]any{"topic": set.Topic, "title": title, "message": message, "click": click, "tags": []string{"briefcase"}})
+	body, _ := json.Marshal(map[string]any{"topic": set.Topic, "title": title, "message": message, "click": click, "priority": priority, "tags": []string{"briefcase"}})
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "POST", set.Server, bytes.NewReader(body))
@@ -315,12 +327,14 @@ func ago(d time.Duration) string {
 
 // DeskSet is what Job Hunt does on this computer besides its window.
 type DeskSet struct {
-	Notify bool   `json:"notify"` // Windows notifications for fresh strong roles and replies
-	Awake  string `json:"awake"`  // "off", "working" (while it is busy), "always"
+	Notify bool `json:"notify"` // Windows notifications for fresh strong roles and replies
+	// Morning is the hour the day's summary is said at; -1 for never.
+	Morning int    `json:"morning"`
+	Awake   string `json:"awake"` // "off", "working" (while it is busy), "always"
 }
 
 func (e *Engine) Desk() DeskSet {
-	set := DeskSet{Notify: true, Awake: "working"}
+	set := DeskSet{Notify: true, Awake: "working", Morning: 8}
 	e.S.Get("desk", &set)
 	return set
 }
@@ -389,13 +403,23 @@ func (e *Engine) maybePush(r store.Role, fit, tailored int) {
 		parts = append(parts, fmt.Sprintf("%d applicants so far", r.Applicants))
 	}
 	msg := strings.Join(parts, " · ") + ". CV and letter are ready on your computer."
+	title := r.Title + " at " + r.Company
+	if !set.Detail {
+		title = "A strong role, just posted"
+	}
+	if set.Only == "urgent" {
+		return
+	}
 	go func() {
 		click := firstOf(r.ApplyURL, r.URL)
 		if e.PhoneLink != nil {
 			// With phone access on, the notice opens the role in Job Hunt on the phone.
 			click = firstOf(e.PhoneLink(fmt.Sprintf("#role/%d", r.ID)), click)
 		}
-		if err := e.Push(e.ctx, r.Title+" at "+r.Company, msg, click); err != nil {
+		if !set.Detail && e.PhoneLink == nil {
+			click = "" // the posting's address would name the employer
+		}
+		if err := e.Push(e.ctx, title, msg, click); err != nil {
 			e.problem("Sending a phone notice", err)
 		}
 	}()
