@@ -46,6 +46,7 @@ type Engine struct {
 	oldMu     sync.Mutex // one import from the old Job Hunt at a time
 	oldSeen   *OldLook   // the last look at the old data on this computer, kept a minute
 	oldSeenAt time.Time
+	oldStep   OldStep // how far the bringing over has got
 
 	// Sample answers in place of Claude when the engine is "demo". Tests set
 	// it to script what Claude says; nil means the built-in stand-in.

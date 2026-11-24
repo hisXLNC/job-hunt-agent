@@ -33,6 +33,7 @@ type OldLook struct {
 	People        int        `json:"people"`
 	Claude        string     `json:"claude"` // how the old one reached Claude and whether that can be reused: "", "key", "subscription"
 	Busy          bool       `json:"busy"`   // things are being brought over right now
+	Progress      *OldStep   `json:"progress,omitempty"`
 	Last          *OldResult `json:"last,omitempty"`
 }
 
@@ -82,7 +83,10 @@ func (e *Engine) LookAtOld(path string) (OldLook, error) {
 		}
 	}
 	if !e.oldMu.TryLock() {
-		return OldLook{Busy: true}, nil
+		e.mu.Lock()
+		step := e.oldStep
+		e.mu.Unlock()
+		return OldLook{Busy: true, Progress: &step}, nil
 	}
 	e.oldMu.Unlock()
 	look, err := e.lookAtOld(path)
@@ -214,6 +218,34 @@ func (e *Engine) OldCVFile(roleID int64) (File, error) {
 	return File{Name: doc.Name, Data: doc.Data}, nil
 }
 
+// OldStep is how far the bringing over has got: what it is doing now and
+// how much of the whole that leaves, from 0 to 100.
+type OldStep struct {
+	Text    string `json:"text"`
+	Percent int    `json:"percent"`
+}
+
+// A CV takes Claude about a minute; everything else together takes seconds.
+// The bar is measured in rough seconds so it moves at an even pace.
+const (
+	oldCVCost   = 60.0
+	oldJobsCost = 8.0
+	oldRestCost = 4.0
+)
+
+func (e *Engine) oldSay(text string, done, total float64) {
+	pc := 0
+	if total > 0 {
+		pc = int(done / total * 100)
+	}
+	if pc > 100 {
+		pc = 100
+	}
+	e.mu.Lock()
+	e.oldStep = OldStep{Text: text, Percent: pc}
+	e.mu.Unlock()
+}
+
 // ImportOld brings over what the old Job Hunt kept: how Claude is reached,
 // who the person is and what they look for, their CVs, the jobs they acted
 // on (with the posting text, letter and CV), the people who wrote to them,
@@ -239,6 +271,8 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 	now := e.Now()
 	res := OldResult{At: now.Unix(), Where: firstOf(shown, src.Where)}
 	op := src.Profile()
+	e.oldSay("Opening the old Job Hunt", 0, 1)
+	defer e.oldSay("", 0, 0)
 
 	// 1. Claude, the way the old one reached it, if nothing is set here yet.
 	if e.LLM().Engine == "" {
@@ -289,6 +323,11 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 	// 3. CVs. Each is read by Claude the same way a newly added one is.
 	have, _ := e.S.CVs()
 	connected := e.LLM().Engine != ""
+	type oldCV struct {
+		name string
+		data []byte
+	}
+	var toRead []oldCV
 	for _, t := range op.Tracks {
 		name, data, ok := src.CV(t)
 		if !ok {
@@ -298,14 +337,48 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 		for _, c := range have {
 			dup = dup || strings.EqualFold(c.Filename, name)
 		}
-		if dup {
-			continue
+		for _, c := range toRead {
+			dup = dup || strings.EqualFold(c.name, name)
 		}
+		if !dup {
+			toRead = append(toRead, oldCV{name, data})
+		}
+	}
+	jobsTotal := 0
+	for _, n := range src.Counts() {
+		jobsTotal += n
+	}
+	cvCost := 0.0
+	if connected {
+		cvCost = oldCVCost * float64(len(toRead))
+	}
+	whole := cvCost + oldJobsCost + oldRestCost
+	for i, c := range toRead {
+		name, data := c.name, c.data
 		if !connected {
 			res.CVsWaiting++
 			continue
 		}
-		if _, _, err := e.AddCV(ctx, name, data); err != nil {
+		text, from := fmt.Sprintf("Reading CV %d of %d: %s", i+1, len(toRead), strings.TrimSuffix(name, filepath.Ext(name))), 1+oldCVCost*float64(i)
+		e.oldSay(text, from, whole)
+		// Claude takes about a minute over a CV: the bar keeps moving meanwhile,
+		// slowing as it nears the end of this CV's share.
+		reading := make(chan struct{})
+		go func() {
+			t := time.NewTicker(time.Second)
+			defer t.Stop()
+			for sec := 1.0; ; sec++ {
+				select {
+				case <-reading:
+					return
+				case <-t.C:
+					e.oldSay(text, from+oldCVCost*0.95*(1-1/(1+sec/40)), whole)
+				}
+			}
+		}()
+		_, _, err := e.AddCV(ctx, name, data)
+		close(reading)
+		if err != nil {
 			res.Notes = append(res.Notes, fmt.Sprintf("Your CV %q could not be read: %s", name, plainErr(err)))
 			if stopsWork(err) {
 				res.CVsWaiting++
@@ -354,9 +427,14 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 	}
 	// 6. Jobs.
 	ids := map[string]int64{} // old job id → role here
+	jobsSeen := 0
+	e.oldSay(fmt.Sprintf("Bringing over %s", countWord(jobsTotal, "job")), 2+cvCost, whole)
 	err = src.Jobs(nil, func(j old.Job) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if jobsSeen++; jobsSeen%25 == 0 && jobsTotal > 0 {
+			e.oldSay(fmt.Sprintf("Bringing over jobs: %d of %d", jobsSeen, jobsTotal), 2+cvCost+oldJobsCost*float64(jobsSeen)/float64(jobsTotal), whole)
 		}
 		m := mapOld(j, now)
 		if !m.keep || strings.TrimSpace(j.Company) == "" || strings.TrimSpace(j.Title) == "" {
@@ -478,6 +556,7 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 	}
 
 	// 7. People who wrote to the person.
+	e.oldSay("Bringing over people, interviews and job sites", 2+cvCost+oldJobsCost, whole)
 	for _, rc := range src.Recruiters() {
 		name := strings.TrimSpace(rc.Name)
 		if name == "" {

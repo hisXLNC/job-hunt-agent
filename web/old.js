@@ -17,7 +17,11 @@ function came(r) {
 // old is the answer of GET /api/import/old. first is true on the welcome screen.
 export function oldCard(old, first) {
   const o = old?.old || {}, last = o.last;
-  if (o.busy) return html`<div class="card row"><span class="spin"></span><div><h4>Bringing things over from the old Job Hunt</h4><p class="s m">Reading each CV takes about a minute. The page updates by itself.</p></div></div>`;
+  if (o.busy) {
+    // Opened while things are being brought over (another window started it): follow along.
+    setTimeout(() => watch(true));
+    return html`<div class="card" id="oldcard">${progress(o.progress)}</div>`;
+  }
   const other = html`<details><summary class="s">${o.found ? 'It is somewhere else' : 'Choose where it is'}</summary>
     <div class="col" style="gap:8px;margin-top:8px"><div class="row"><label class="btn sm">Choose a backup (.zip)<input type="file" accept=".zip,.db" hidden data-on="change" data-act="oldfile"></label><span class="xs m">The old app made one under Settings → Back up.</span></div>
     <form data-act="oldpath" data-busy="Bringing it over…" class="row"><input type="text" name="path" placeholder="Or the old data folder, like D:\Job Hunt\data" aria-label="The old data folder" class="grow"><button class="btn sm">Bring over</button></form></div></details>`;
@@ -35,17 +39,49 @@ export function oldCard(old, first) {
 function done(r) {
   toast(`Brought over ${came(r) || 'nothing new'}`);
 }
+// What is being done now and how far along it is, as a bar.
+function progress(p) {
+  const pc = Math.max(2, Math.min(100, p?.percent || 0));
+  return html`<div class="col" style="gap:8px"><div class="row"><span class="spin"></span><h4 class="grow">Bringing things over from the old Job Hunt</h4><b class="s" id="oldpc">${pc}%</b></div>
+    <div class="bar" role="progressbar" aria-label="Bringing things over" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pc}" id="oldbar"><i style="width:${pc}%;transition:width .9s linear"></i></div>
+    <p class="s m" id="oldtext">${p?.text || 'Starting'}. Reading each CV takes about a minute.</p></div>`;
+}
+// While things are brought over, the card shows the bar and keeps it moving.
+let watching = 0;
+function watch(reloadAfter) {
+  clearInterval(watching);
+  watching = setInterval(async () => {
+    const bar = document.getElementById('oldbar');
+    if (!bar) { if (reloadAfter) clearInterval(watching); return; }
+    let o;
+    try { o = (await api('import/old')).old; } catch { return; }
+    if (!o?.busy) {
+      if (reloadAfter) { clearInterval(watching); window.dispatchEvent(new HashChangeEvent('hashchange')); }
+      return;
+    }
+    if (!o.progress) return;
+    const pc = Math.max(2, Math.min(100, o.progress.percent || 0));
+    bar.setAttribute('aria-valuenow', pc);
+    bar.firstElementChild.style.width = pc + '%';
+    document.getElementById('oldpc').textContent = pc + '%';
+    if (o.progress.text) document.getElementById('oldtext').textContent = o.progress.text + '. Reading each CV takes about a minute.';
+  }, 1000);
+}
 function wait() {
   const c = document.getElementById('oldcard');
-  if (c) c.innerHTML = '<div class="row"><span class="spin"></span><span class="s">Bringing things over. Reading each CV takes about a minute.</span></div>';
+  if (c) c.innerHTML = progress(null).s;
+  watch(false);
+}
+async function during(work) {
+  wait();
+  try { return await work(); } finally { clearInterval(watching); }
 }
 export const oldActions = {
-  async oldhere() { wait(); done(await post('import/old', {})); },
-  async oldpath({ f }) { if (!f.path) throw new Error('Type the folder first.'); wait(); done(await post('import/old', { path: f.path })); },
+  async oldhere() { done(await during(() => post('import/old', {}))); },
+  async oldpath({ f }) { if (!f.path) throw new Error('Type the folder first.'); done(await during(() => post('import/old', { path: f.path }))); },
   async oldfile({ el }) {
     const file = el.files[0];
     if (!file) return false;
-    wait();
-    done(await api('import/old?name=' + encodeURIComponent(file.name), { method: 'POST', raw: file }));
+    done(await during(() => api('import/old?name=' + encodeURIComponent(file.name), { method: 'POST', raw: file })));
   },
 };

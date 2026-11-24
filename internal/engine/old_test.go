@@ -350,3 +350,43 @@ func TestBringOverFromABackupAndAnOlderDatabase(t *testing.T) {
 		t.Fatal("a missing folder was accepted")
 	}
 }
+
+func TestBringingOverSaysHowFarItIs(t *testing.T) {
+	e, _ := newEngine(t)
+	var seen []OldStep
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if l, _ := e.LookAtOld(""); l.Busy && l.Progress != nil && l.Progress.Text != "" {
+				if n := len(seen); n == 0 || seen[n-1] != *l.Progress {
+					seen = append(seen, *l.Progress)
+				}
+			}
+			time.Sleep(200 * time.Microsecond)
+		}
+	}()
+	// Reading a CV is made to take a moment, as it does with Claude.
+	e.oldSay("", 0, 0)
+	if _, err := e.ImportOld(context.Background(), oldData(t, true, true, map[string]string{"claude.engine": "api", "claude.key": "sk-ant-old"}), ""); err != nil {
+		t.Fatal(err)
+	}
+	close(stop)
+	<-done
+	last := -1
+	for _, s := range seen {
+		if s.Percent < last || s.Percent > 100 {
+			t.Fatalf("the bar went backwards or past the end: %+v", seen)
+		}
+		last = s.Percent
+	}
+	if l, _ := e.LookAtOld(""); l.Busy || l.Progress != nil {
+		t.Fatalf("still says it is busy: %+v", l)
+	}
+}
