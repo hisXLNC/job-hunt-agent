@@ -54,3 +54,23 @@ func TestHardLimitsSetPostingsAside(t *testing.T) {
 		t.Errorf("a posting that names no pay was set aside: %s", why)
 	}
 }
+
+func TestPayFromText(t *testing.T) {
+	for desc, want := range map[string]string{
+		"About the role.\nSalary range: $85,000 - $105,000 per year, plus benefits.":    "$85,000 - $105,000 per year",
+		"The base pay for this position is CAD 92,000 to 118,000 annually.":             "CAD 92,000 to 118,000 annually",
+		"Pay rate: $42.50/hour. 40 hours a week.":                                       "$42.50/hour",
+		"Compensation: £45k–£55k depending on experience":                               "£45k–£55k",
+		"We offer a salary of 90,000 to 110,000 CAD per year.":                          "90,000 to 110,000 CAD per year",
+		"We raised $40,000,000 in funding and serve 5,000 customers.":                   "",
+		"You will manage a budget of $250,000 a year and a team of 6.":                  "",
+		"A $5,000 signing bonus is paid after 90 days. Join 2,000 to 3,000 colleagues.": "",
+		"Founded in 1998 - 2001 was a big year. Call 416 555 0100.":                     "",
+		"No pay is named here at all.":                                                  "",
+		"Hourly rate between $38 and $46 per hour based on experience.":                 "$38 and $46 per hour",
+	} {
+		if got := PayFromText(desc); got != want {
+			t.Errorf("PayFromText(%q) = %q, want %q", desc, got, want)
+		}
+	}
+}

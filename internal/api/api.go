@@ -561,6 +561,7 @@ func (s *Server) Handler() http.Handler {
 			Ask   string  `json:"ask"`
 			Days  int     `json:"days"`
 			Subj  string  `json:"subject"`
+			Mute  bool    `json:"mute"`
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
@@ -597,7 +598,20 @@ func (s *Server) Handler() http.Handler {
 		case "applied":
 			return nil, e.MarkApplied(id, in.How)
 		case "no":
-			return nil, e.NotInterested(id, in.Why)
+			if err := e.NotInterested(id, in.Why); err != nil {
+				return nil, err
+			}
+			if in.Mute {
+				return nil, e.MuteEmployer(role.CompanyID)
+			}
+			return nil, nil
+		case "notes":
+			return nil, e.SaveRoleNotes(id, in.Text)
+		case "answers":
+			if strings.TrimSpace(in.Text) == "" {
+				return nil, bad("Paste the form's questions, one on each line.")
+			}
+			return rewrite(func(ctx context.Context) error { return e.AnswerQuestions(ctx, id, in.Text) })
 		case "reopen":
 			return nil, st.Reopen(id)
 		case "close":
@@ -910,9 +924,17 @@ func (s *Server) Handler() http.Handler {
 	h("POST /api/pause", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
 			Paused bool `json:"paused"`
+			Days   int  `json:"days"`
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
+		}
+		if in.Paused && in.Days > 0 {
+			if in.Days > 60 {
+				return nil, bad("A pause for a set time is at most 60 days.")
+			}
+			e.PauseFor(in.Days)
+			return nil, nil
 		}
 		e.SetPaused(in.Paused)
 		return nil, nil
@@ -1895,6 +1917,14 @@ func (s *Server) roleDetail(id int64) (any, error) {
 	var cs engine.CaseDoc
 	if ok, _ := st.Doc(id, "case", &cs); ok {
 		out["case"] = cs
+	}
+	var mine engine.RoleNotes
+	if ok, _ := st.Doc(id, "mynotes", &mine); ok {
+		out["my_notes"] = mine.Text
+	}
+	var ans engine.AnswersDoc
+	if ok, _ := st.Doc(id, "answers", &ans); ok {
+		out["answers"] = ans.Answers
 	}
 	out["activity"], _ = st.ActivityList(store.ActivityFilter{RoleID: id, Limit: 30})
 	out["people"] = e.PeopleForRole(id)

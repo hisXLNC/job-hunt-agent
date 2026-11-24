@@ -2,6 +2,17 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.31
+
+More back from the old app (second batch):
+
+- **Pay is read from the posting's own text.** Most sources give no pay field, so the pay floor used to miss most postings. Now "Salary range: $85,000 - $105,000 per year" or "$42.50/hour" in the text counts, for new postings and for the ones already here. It only fills an empty pay, and leaves it empty when it is not sure.
+- **The role page**: your own **notes** on a role; **edit the wording** of any tailored change yourself; **questions on the application form** (paste them, get answers to copy); and **Not for me** now asks why, which the reading of later roles takes into account, with "Never show this employer" in the same list.
+- **The side panel attaches PDFs** (what most forms want) and offers Word as well. It keeps to Word by itself when a PDF could not show every letter. Reload the side panel once after this update.
+- **Four weeks without a reply**: Today offers to close the application as "no reply" or keep waiting a week. It opens again by itself if they write.
+- **Pause searching for a day, three days, a week or two**; it starts again by itself.
+- What Claude writes is cleaned before it is kept: no hidden characters and no long dashes.
+
 ## 26.11.30
 
 Back from the old app (first batch; the full list is kept in `design/parity.md`):

@@ -44,6 +44,9 @@ type extRole struct {
 	Letter    string `json:"letter,omitempty"`
 	Summary   string `json:"summary,omitempty"`
 	Preparing bool   `json:"preparing"`
+	// PDFGap: a PDF made here could not show every letter in these
+	// documents, so the Word files are the ones to attach.
+	PDFGap bool `json:"pdf_gap"`
 }
 
 func (s *Server) extRole(r store.Role) extRole {
@@ -67,6 +70,9 @@ func (s *Server) extRole(r store.Role) extRole {
 			json.Unmarshal(d.Body, &l)
 			out.Letter = l.Text
 		}
+	}
+	if out.HasCV {
+		out.PDFGap = s.E.PDFGap(r.ID)
 	}
 	return out
 }
@@ -195,6 +201,15 @@ func (s *Server) extRoutes(h func(string, handler)) {
 	})
 	h("GET /api/ext/role/{id}/letter.docx", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		f, err := e.LetterFile(idOf(r))
+		return sendFile(w, f.Name, f.Data, err)
+	})
+	// The same two as PDFs: most application forms prefer one.
+	h("GET /api/ext/role/{id}/cv.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		f, err := e.CVPDF(idOf(r))
+		return sendFile(w, f.Name, f.Data, err)
+	})
+	h("GET /api/ext/role/{id}/letter.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		f, err := e.LetterPDF(idOf(r))
 		return sendFile(w, f.Name, f.Data, err)
 	})
 	// Answers for the questions on an application form. The extension types

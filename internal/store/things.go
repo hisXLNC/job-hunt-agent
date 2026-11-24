@@ -577,6 +577,29 @@ func (s *Store) CloseGone(unseenSince int64) (int, error) {
 	return total, nil
 }
 
+// AppliedSilent lists open applications sent before a moment that nobody
+// has answered: no reply in the inbox, no conversation.
+func (s *Store) AppliedSilent(before, now int64, limit int) ([]Role, error) {
+	rows, err := s.db.Query(`SELECT `+roleCols+` FROM roles r JOIN companies c ON c.id = r.company_id
+		WHERE r.closed = '' AND r.stage = 'applied' AND r.applied_at > 0 AND r.applied_at <= ? AND r.later_until <= ?
+		AND NOT EXISTS (SELECT 1 FROM mails m WHERE m.role_id = r.id AND m.kind IN ('interview','assessment','question','offer','rejection','person'))
+		AND NOT EXISTS (SELECT 1 FROM talks t WHERE t.role_id = r.id)
+		ORDER BY r.applied_at ASC, r.id ASC LIMIT ?`, before, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Role
+	for rows.Next() {
+		r, err := scanRole(rows, false)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // AppliedQuiet lists open roles applied to between two moments that have had
 // no answer: no mail from a person or a hiring system beyond a receipt, no
 // conversation, and no follow-up already sent or let go.

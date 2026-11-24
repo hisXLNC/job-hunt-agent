@@ -206,6 +206,8 @@ type SearchState struct {
 	LinkedInUntil int64  `json:"linkedin_until"` // LinkedIn asked us to slow down until then
 	LinkedInNote  string `json:"linkedin_note"`
 	Paused        bool   `json:"paused"`
+	// PausedUntil: the pause ends by itself then; 0 for until the person says.
+	PausedUntil int64 `json:"paused_until"`
 }
 
 func (e *Engine) searchState() SearchState {
@@ -214,12 +216,38 @@ func (e *Engine) searchState() SearchState {
 	return st
 }
 
-func (e *Engine) Paused() bool { return e.searchState().Paused }
+func (e *Engine) Paused() bool {
+	st := e.searchState()
+	if st.Paused && st.PausedUntil > 0 && e.Now().Unix() >= st.PausedUntil {
+		e.SetPaused(false) // a pause for a set time is over
+		return false
+	}
+	return st.Paused
+}
+
+// PausedUntil is when a pause for a set time ends; 0 when there is none.
+func (e *Engine) PausedUntil() int64 {
+	if st := e.searchState(); st.Paused {
+		return st.PausedUntil
+	}
+	return 0
+}
+
+// PauseFor pauses searching for a number of days (a holiday, an exam week).
+func (e *Engine) PauseFor(days int) {
+	st := e.searchState()
+	st.Paused, st.PausedUntil = true, 0
+	if days > 0 {
+		st.PausedUntil = e.Now().Add(time.Duration(days) * 24 * time.Hour).Unix()
+	}
+	e.S.Set("search", st)
+	e.S.Changed("status")
+}
 
 // SetPaused switches all automatic searching on or off.
 func (e *Engine) SetPaused(p bool) {
 	st := e.searchState()
-	st.Paused = p
+	st.Paused, st.PausedUntil = p, 0
 	e.S.Set("search", st)
 	e.S.Changed("status")
 }
@@ -789,6 +817,10 @@ func (e *Engine) ingest(companyID int64, post sources.Posting, p store.Profile, 
 // ingest records a posting if it is new. It reports the role's id, whether it
 // was new, and whether the quick rules set it aside.
 func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profile, stats *RunStats, searchedBand string) (int64, bool, bool) {
+	if post.Pay == "" {
+		// Most sources give no pay of their own; many postings name it in their text.
+		post.Pay = PayFromText(post.Description)
+	}
 	if id, _, seen := e.S.SeenRole(post.Key); seen {
 		e.S.TouchRole(id, post.Applicants, post.Description)
 		return id, false, false
@@ -959,7 +991,7 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 			if applicants == 0 && r.Applicants < 0 {
 				applicants = -1
 			}
-			e.S.SetRoleDetail(id, post.Description, post.ApplyURL, post.Pay, post.Workplace, applicants, posted)
+			e.S.SetRoleDetail(id, post.Description, post.ApplyURL, firstOf(post.Pay, PayFromText(post.Description)), post.Workplace, applicants, posted)
 			r, _ = e.S.Role(id)
 		} else {
 			trace.Log("search", "posting text for role %d (%s) not fetched: %v", id, r.Source, derr)
@@ -1331,7 +1363,7 @@ func (e *Engine) AddRole(company, title, location, url, description, source stri
 		}
 		return id, nil
 	}
-	id, err := e.S.AddRole(store.Role{CompanyID: c.ID, Key: key, Source: source, Title: title, Location: location, URL: url, Description: description, Applicants: -1})
+	id, err := e.S.AddRole(store.Role{CompanyID: c.ID, Key: key, Source: source, Title: title, Location: location, URL: url, Description: description, Pay: PayFromText(description), Applicants: -1})
 	if err != nil {
 		return 0, err
 	}
@@ -1380,9 +1412,101 @@ func (e *Engine) NotInterested(id int64, why string) error {
 	if err != nil {
 		return err
 	}
+	why = clipText(strings.TrimSpace(why), 200)
 	if err := e.S.CloseRole(id, "no", why); err != nil {
 		return err
 	}
 	e.S.Log(store.Activity{Kind: "no", RoleID: id, CompanyID: r.CompanyID, Text: "You said not interested" + map[bool]string{true: ": " + why, false: ""}[why != ""]})
 	return nil
+}
+
+// MuteEmployer stops an employer's roles from being shown again: the person
+// said so. Roles they already applied to or prepared stay as they are.
+func (e *Engine) MuteEmployer(companyID int64) error {
+	c, err := e.S.Company(companyID)
+	if err != nil {
+		return err
+	}
+	c.State = "muted"
+	if err := e.S.SaveCompany(c); err != nil {
+		return err
+	}
+	e.S.Log(store.Activity{Kind: "no", CompanyID: c.ID, Text: "You asked never to be shown " + c.Name + " again"})
+	e.S.Changed("companies", "roles", "today")
+	return nil
+}
+
+// TurnedDown is what the person said no to lately and why, in a few lines:
+// the reading of a new role takes it into account.
+func (e *Engine) TurnedDown() []string {
+	rows, _ := e.S.Pairs(`SELECT r.title || ' at ' || c.name || ': ' || r.closed_why, r.id FROM roles r JOIN companies c ON c.id = r.company_id
+		WHERE r.closed = 'no' AND r.closed_why != '' ORDER BY r.stage_at DESC LIMIT 12`)
+	var out []string
+	for _, row := range rows {
+		out = append(out, clipText(row.Label, 220))
+	}
+	return out
+}
+
+// ---- the person's own notes on a role, and answers for its form -----------------------
+
+// RoleNotes is what the person wrote down about a role.
+type RoleNotes struct {
+	Text string `json:"text"`
+	At   int64  `json:"at"`
+}
+
+func (e *Engine) SaveRoleNotes(id int64, text string) error {
+	if _, err := e.S.Role(id); err != nil {
+		return err
+	}
+	if len(text) > 20000 {
+		text = clipText(text, 20000)
+	}
+	return e.S.SaveDoc(id, "mynotes", RoleNotes{Text: strings.TrimSpace(text), At: e.Now().Unix()})
+}
+
+// AnswersDoc is the questions of a role's application form with answers
+// to copy. The person pastes the questions; Job Hunt never fills or sends.
+type AnswersDoc struct {
+	Answers []brain.FormAnswer `json:"answers"`
+	At      int64              `json:"at"`
+}
+
+func (e *Engine) AnswerQuestions(ctx context.Context, id int64, text string) error {
+	var qs []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "-*•0123456789.) "))
+		if len(line) >= 6 {
+			qs = append(qs, line)
+		}
+	}
+	if len(qs) == 0 {
+		return errors.New("paste the form's questions, one on each line")
+	}
+	out, err := e.FormAnswers(ctx, id, qs, nil)
+	if err != nil {
+		return err
+	}
+	return e.S.SaveDoc(id, "answers", AnswersDoc{Answers: out, At: e.Now().Unix()})
+}
+
+// fillPay reads pay from the text of roles that have none. It only ever
+// fills an empty pay; nothing a role already says is changed.
+func (e *Engine) fillPay() {
+	ids, _ := e.S.Pairs(`SELECT '', id FROM roles WHERE pay = '' AND description != '' ORDER BY id DESC LIMIT 6000`)
+	n := 0
+	for _, row := range ids {
+		r, err := e.S.Role(int64(row.N))
+		if err != nil {
+			continue
+		}
+		if pay := PayFromText(r.Description); pay != "" {
+			e.S.SetRoleDetail(r.ID, "", "", pay, "", -1, 0)
+			n++
+		}
+	}
+	if n > 0 {
+		trace.Log("did", "read the pay out of %d postings' text", n)
+	}
 }

@@ -210,6 +210,10 @@ func (e *Engine) chores(now time.Time) {
 		// A version found while Job Hunt was busy is installed once it is idle.
 		e.InstallUpdate()
 	}
+	if e.S.GetInt("paytext") == 0 {
+		e.S.Set("paytext", now.Unix())
+		go e.fillPay()
+	}
 	if every("remind", 5*time.Minute) {
 		e.remind(now)
 	}

@@ -1,5 +1,6 @@
 import { html, api, post, ago, when, rings, tile, toast, copy, safeUrl, stageChip, freshness, openAssistant, BAND, STAGE, KIND, employer, rel, LATER, dayName } from '../app.js';
 
+const NO = ['No reason', 'Pay too low', 'Too junior', 'Too senior', 'Not my field', 'Wrong place or too far', 'Not this kind of contract', 'Not this employer'];
 const STYLE = { standard: 'Standard', formal: 'Formal', short: 'Short', warm: 'Warm' };
 const words = t => (t || '').trim().split(/\s+/).filter(Boolean).length;
 const days = (from, now) => Math.max(1, Math.floor((now - from) / 86400));
@@ -89,7 +90,8 @@ function sent(d) {
       ${files(r, 'cv', 'Your CV with the changes that are switched on.')}</div>
     <div class="col" style="gap:8px">${doc.changes.map((c, i) => html`<div class="row top-al" style="gap:12px;${c.off ? 'opacity:.55' : ''}">
       <button class="switch ${c.off ? '' : 'on'}" role="switch" aria-checked="${c.off ? 'false' : 'true'}" aria-label="Use this change" data-act="toggle" data-i="${i}" data-off="${c.off ? '' : '1'}"></button>
-      <div class="grow s">${c.before ? html`<div><span class="del">${c.before}</span></div>` : ''}<div>${c.after ? html`<span class="ins">${c.after}</span>` : html`<i class="m">Removed</i>`}</div><div class="xs m" style="margin-top:2px">${c.why}</div></div></div>`)}
+      <div class="grow s">${c.before ? html`<div><span class="del">${c.before}</span></div>` : ''}<div>${c.after ? html`<span class="ins">${c.after}</span>` : html`<i class="m">Removed</i>`}</div><div class="xs m" style="margin-top:2px">${c.why}</div>
+        ${c.after ? html`<details class="xs"><summary class="link">Edit the wording</summary><form data-act="editchange" data-i="${i}" class="col" style="gap:6px;margin-top:6px"><textarea name="after" rows="3" aria-label="Your wording for this change">${c.after}</textarea><div class="row"><span class="m grow">Your words go into the CV as they are; they are not checked against your facts.</span><button class="btn sm">Use my wording</button></div></form></details>` : ''}</div></div>`)}
       ${!doc.changes.length ? html`<p class="s m">No changes were needed: your CV already speaks to this role.</p>` : ''}</div>
     ${doc.left_out?.length ? html`<details><summary class="s">${doc.left_out.length} thing${doc.left_out.length === 1 ? '' : 's'} left out on purpose</summary><ul class="s ink2" style="margin:6px 0 0 18px">${doc.left_out.map(x => html`<li><b>${x.what}</b>: ${x.why}</li>`)}</ul></details>` : ''}
     <details><summary class="s">See the whole CV as it will be sent</summary><div style="margin-top:10px">${cvSheet(d.cv.sent)}</div></details>
@@ -104,7 +106,17 @@ function sent(d) {
     <div class="hr"></div>
     <div class="row"><div class="grow"><h3>A note straight to the hiring manager</h3><p class="s m">Sent alongside your application, not instead of it. Job Hunt writes it; you send it.</p></div><button class="btn sm" data-act="case" data-busy="Writing…">${d.case ? 'Write it again' : 'Write it'}</button></div>
     ${d.case ? html`<div class="quote s pre">${d.case.subject ? html`<b>${d.case.subject}</b>\n\n` : ''}${d.case.body}</div><div class="row"><button class="btn sm" data-act="copycase">Copy</button></div>` : ''}
+    <div class="hr"></div>
+    ${questions(d)}
   </div>`;
+}
+
+// The questions an application form asks, answered from the person's own facts, to copy across.
+function questions(d) {
+  return html`<details ${d.answers?.length ? 'open' : ''}><summary><b>Questions on the application form</b> <span class="s m">· paste them, get answers to copy</span></summary>
+    ${d.answers?.length ? html`<div class="col" style="gap:10px;margin-top:10px">${d.answers.map((a, i) => html`<div class="row top-al" style="gap:10px"><div class="grow s"><b>${a.question}</b><div class="${a.answer ? 'ink2 pre' : 'm'}">${a.answer || 'Only you know this one.'}</div>${a.answer && !a.sure ? html`<div class="xs" style="color:var(--warn)">Check this one: Job Hunt was not sure.</div>` : ''}</div>${a.answer ? html`<button class="btn sm" data-act="copyanswer" data-i="${i}">Copy</button>` : ''}</div>`)}</div>` : ''}
+    <form data-act="answers" class="col" style="gap:6px;margin-top:10px"><textarea name="text" rows="4" placeholder="Why do you want to work here?&#10;Describe a project you led." aria-label="The form's questions, one on each line"></textarea>
+      <div class="row"><span class="xs m grow">One question on each line. The side panel does this for you on the form itself; this is for when you would rather copy.</span><button class="btn sm" data-busy="Writing…">${d.answers?.length ? 'Answer these instead' : 'Answer them'}</button></div></form></details>`;
 }
 
 function side(d) {
@@ -116,6 +128,7 @@ function side(d) {
       <a class="btn sm" style="margin-top:10px" href="https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(r.company + ' ' + r.title.split(/[,(-]/)[0])}" target="_blank" rel="noopener noreferrer">Look for the team on LinkedIn</a></div>
     ${d.mail?.length ? html`<div class="card"><h4>Mail about this role</h4><div class="col" style="margin-top:10px;gap:8px">${d.mail.map(m => html`<a href="#/replies/${m.id}" class="s" style="color:inherit"><b>${m.subject || m.summary}</b><div class="xs m">${m.from_name} · ${rel(m.at)}</div></a>`)}</div></div>` : ''}
     ${d.talks?.length ? html`<div class="card"><h4>Conversations</h4><div class="col" style="margin-top:10px;gap:8px">${d.talks.map(t => html`<a href="#/interviews/${t.id}" class="s" style="color:inherit"><b>${t.title}</b><div class="xs m">${when(t.at)}</div></a>`)}</div></div>` : ''}
+    <div class="card"><h4>Your notes</h4><form data-act="mynotes" class="col" style="margin-top:8px;gap:8px"><textarea name="text" rows="4" placeholder="Who referred you, what the recruiter said, the salary they named…" aria-label="Your notes on this role">${d.my_notes || ''}</textarea><button class="btn sm" style="align-self:flex-end">Save notes</button></form></div>
     <div class="card"><h4>What happened</h4><div class="col s" style="margin-top:10px;gap:8px">${(d.activity || []).map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none;padding-top:1px">${rel(a.at)}</span><span>${a.text}</span></div>`)}${!(d.activity || []).length ? html`<span class="m">Found ${rel(r.first_seen_at)}.</span>` : ''}</div></div>
     <div class="card"><h4>Keep the record straight</h4><p class="xs m" style="margin-top:3px">If something happened outside Job Hunt, set it here.</p>
       <div class="row" style="margin-top:8px"><select aria-label="Stage" data-on="change" data-act="stage">${Object.entries(STAGE).filter(([k]) => k !== 'new').map(([k, v]) => html`<option value="${k}" ${r.stage === k ? 'selected' : ''}>${v}</option>`)}</select></div>
@@ -137,7 +150,7 @@ export default {
         ${rings(r.fit, r.fit_tailored)}
         <div class="col" style="gap:6px">
           ${url ? html`<a class="btn p" href="${url}" target="_blank" rel="noopener noreferrer">Open the posting</a>` : ''}
-          ${r.closed ? html`<button class="btn sm" data-act="reopen">Bring back</button>` : html`<div class="row" style="gap:6px">${stageOrder(r.stage) < 3 ? html`<button class="btn sm" data-act="applied">I applied</button>` : ''}${r.stage === 'applied' ? html`<button class="btn sm" data-act="unapply" title="Marked applied by mistake? This puts the role back where it was.">I didn't send it</button>` : ''}<button class="btn sm ghost" data-act="no" data-confirm="Not interested in this role? It will never be shown again.">Not for me</button></div>
+          ${r.closed ? html`<button class="btn sm" data-act="reopen">Bring back</button>` : html`<div class="row" style="gap:6px">${stageOrder(r.stage) < 3 ? html`<button class="btn sm" data-act="applied">I applied</button>` : ''}${r.stage === 'applied' ? html`<button class="btn sm" data-act="unapply" title="Marked applied by mistake? This puts the role back where it was.">I didn't send it</button>` : ''}<select class="mini" aria-label="Not for me" data-on="change" data-act="no" title="It will never be shown again. Saying why helps Job Hunt read the next ones."><option value="">Not for me…</option>${NO.map(w => html`<option value="${w}">${w}</option>`)}<option value="mute">Never show ${r.company}</option></select></div>
             ${later ? html`<div class="row xs m" style="gap:6px"><span>Saved for later · back ${dayName(r.later_until)}</span><button class="link" data-act="later" data-days="0">Bring back now</button></div>`
               : html`<div class="row" style="justify-content:flex-end"><select class="mini" aria-label="Save for later" data-on="change" data-act="later" title="Leaves Today until then, and comes back by itself."><option value="">Save for later</option>${LATER.map(([n, label]) => html`<option value="${n}">${label}</option>`)}</select></div>`}`}
         </div></div>
@@ -150,7 +163,17 @@ export default {
     read: ({ route }) => post(`roles/${route.parts[1]}/read`),
     applied: ({ route }) => post(`roles/${route.parts[1]}/applied`).then(() => toast('Marked as applied', false, () => post(`roles/${route.parts[1]}/unapply`))),
     unapply: ({ route }) => post(`roles/${route.parts[1]}/unapply`).then(() => toast('Put back. It is no longer counted as applied.')),
-    async no({ route }) { const id = route.parts[1]; await post(`roles/${id}/no`); toast('It won\'t be shown again', false, () => post(`roles/${id}/reopen`)); location.hash = '#/roles'; return false; },
+    async no({ route, value, data }) {
+      if (!value) return false;
+      const id = route.parts[1], mute = value === 'mute';
+      if (mute && !confirm(`Never show roles at ${data.role.company} again? Roles you already applied to or prepared stay. You can undo this on the employer's page.`)) return false;
+      await post(`roles/${id}/no`, { why: mute ? 'Not this employer' : value === 'No reason' ? '' : value, mute });
+      toast(mute ? `You won't be shown ${data.role.company} again` : 'It won\'t be shown again', false, mute ? undefined : () => post(`roles/${id}/reopen`)); location.hash = '#/roles'; return false;
+    },
+    mynotes: ({ route, f }) => post(`roles/${route.parts[1]}/notes`, { text: f.text }).then(() => toast('Saved')),
+    editchange: ({ route, f, d }) => post(`roles/${route.parts[1]}/change`, { index: +d.i, off: false, after: f.after }).then(() => toast('Your wording is in the CV')),
+    answers({ route, f }) { if (!f.text.trim()) throw new Error('Paste the questions first.'); return post(`roles/${route.parts[1]}/answers`, { text: f.text }).then(() => toast('Answered. Check each one before you paste it.')); },
+    copyanswer: ({ d, data }) => { copy(data.answers[+d.i].answer); return false; },
     later({ route, d, value }) {
       const n = +(d.days ?? value);
       if (!(n >= 0) || (value === '' && d.days === undefined)) return false;

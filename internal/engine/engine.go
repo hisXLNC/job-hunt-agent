@@ -273,6 +273,8 @@ type Status struct {
 	NextFast int64     `json:"next_fast"`
 	NextFull int64     `json:"next_full"`
 	Paused   bool      `json:"paused"`
+	// PausedUntil: when a pause for a set time ends by itself; 0 otherwise.
+	PausedUntil int64 `json:"paused_until"`
 	Held     int64     `json:"held,omitempty"`
 	Sources  int       `json:"sources"`
 }
@@ -286,6 +288,7 @@ func (e *Engine) Status() Status {
 	e.mu.Unlock()
 	st.Jobs = e.Jobs()
 	st.Paused = e.Paused()
+	st.PausedUntil = e.PausedUntil()
 	st.Held = e.HeldUntil()
 	st.NextFast, st.NextFull = e.nextTimes()
 	st.Sources = e.S.Count(`SELECT COUNT(*) FROM companies WHERE state = 'following' AND board_kind != ''`)
@@ -315,7 +318,7 @@ func (e *Engine) Status() Status {
 func (e *Engine) Person() brain.Person {
 	cvs, _ := e.S.CVs()
 	facts, _ := e.S.Facts()
-	return brain.Person{Profile: e.S.Profile(), CVs: cvs, Facts: facts, Today: e.Now()}
+	return brain.Person{Profile: e.S.Profile(), CVs: cvs, Facts: facts, Today: e.Now(), TurnedDown: e.TurnedDown()}
 }
 
 // AddCV takes in a CV file: reads it, structures it, and, for the first one,

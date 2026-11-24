@@ -249,12 +249,15 @@ async function run(name, fn) {
 }
 const say = (tone, title, lists) => { flash = { tone, title, lists, url: page.url }; };
 
-async function fetchFile(id, which) {
-  const r = await call(`role/${id}/${which}.docx`, { raw: true });
+// PDF is what most forms want; Word when a PDF made here could not show every letter, or when asked.
+const WORD = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+async function fetchFile(id, which, word) {
+  const ext = word || (page.role && page.role.pdf_gap) ? 'docx' : 'pdf';
+  const r = await call(`role/${id}/${which}.${ext}`, { raw: true });
   const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(r.headers.get('Content-Disposition') || '');
-  let name = which === 'cv' ? 'CV.docx' : 'Cover letter.docx';
+  let name = (which === 'cv' ? 'CV.' : 'Cover letter.') + ext;
   if (m) { try { name = decodeURIComponent(m[1]); } catch (e) { name = m[1]; } }
-  return { name, blob: await r.blob() };
+  return { name, blob: await r.blob(), type: ext === 'pdf' ? 'application/pdf' : WORD };
 }
 function toB64(blob) {
   return new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = () => no(new Error('The file could not be read.')); fr.readAsDataURL(blob); });
@@ -281,8 +284,9 @@ const actions = {
     else if (r.state === 'unsure') say('warn', `This form has more than one upload and Job Hunt couldn't tell which is for the ${what}. Use Download and attach it yourself.`);
     else say('warn', `No upload field found on this page. If the form opens after "Apply", open it first. Or use Download and attach it yourself.`);
   },
-  async download(which) {
-    const f = await fetchFile(page.role.id, which);
+  async download(arg) {
+    const which = arg.which || arg;
+    const f = await fetchFile(page.role.id, which, !!arg.word);
     const a = h('a', { href: URL.createObjectURL(f.blob), download: f.name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 30000);
@@ -414,7 +418,7 @@ function stopApplying() { if (applying) { clearInterval(applying.timer); applyin
 
 async function attachFile(which, replace) {
   const f = await fetchFile(page.role.id, which);
-  const file = { name: f.name, b64: await toB64(f.blob), type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', want: which, replace };
+  const file = { name: f.name, b64: await toB64(f.blob), type: f.type, want: which, replace };
   const res = await inFiller('attach', [file], 'all');
   log(`attach ${which}: ${res.map(r => (r.result.ok ? 'ok' : r.result.why)).join(', ') || 'no answer'}`);
   if (res.some(r => r.result.ok)) return { state: 'ok', name: f.name };
@@ -505,7 +509,8 @@ function roleCard(r) {
     kids.push(h('div', { class: 'eb', style: 'margin-top:4px' }, 'On the application form'),
       btn('Attach my CV', 'attach', 'cv', 'p wide'), btn('Fill in the form', 'fill', null, 'wide'),
       h('div', { class: 'row' }, r.has_letter ? btn('Attach letter', 'attach', 'letter') : null, r.has_letter ? btn('Copy letter', 'copyLetter') : null),
-      h('div', { class: 'row' }, h('button', { class: 'btn ghost', disabled: !!working, onclick: () => run('download', () => actions.download('cv')) }, 'Download CV'), r.has_letter ? h('button', { class: 'btn ghost', disabled: !!working, onclick: () => run('download', () => actions.download('letter')) }, 'Download letter') : null));
+      h('div', { class: 'row' }, h('button', { class: 'btn ghost', disabled: !!working, title: 'As a PDF, the same file that is attached.', onclick: () => run('download', () => actions.download('cv')) }, 'Download CV'), r.has_letter ? h('button', { class: 'btn ghost', disabled: !!working, onclick: () => run('download', () => actions.download('letter')) }, 'Download letter') : null),
+      r.pdf_gap ? h('p', { class: 'hint' }, 'These are Word files: a PDF could not show every letter in them.') : h('div', { class: 'row' }, h('button', { class: 'btn ghost', disabled: !!working, title: 'For a form that asks for Word, or to edit it first.', onclick: () => run('download', () => actions.download({ which: 'cv', word: true })) }, 'CV as Word'), r.has_letter ? h('button', { class: 'btn ghost', disabled: !!working, onclick: () => run('download', () => actions.download({ which: 'letter', word: true })) }, 'Letter as Word') : null));
   }
   if (!r.closed && r.stage !== 'new') {
     kids.push(h('div', { class: 'row', style: 'border-top:1px solid var(--line2);padding-top:8px' },

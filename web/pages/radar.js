@@ -1,4 +1,4 @@
-import { html, api, post, put, ago, until, when, rings, tile, toast, pager, sortHead, with_, href, freshness, BAND, employer, rel, soon } from '../app.js';
+import { html, api, post, put, ago, until, when, rings, tile, toast, pager, sortHead, with_, href, freshness, BAND, employer, rel, soon, dayName } from '../app.js';
 
 const BOARD = { greenhouse: 'Its own board (Greenhouse)', lever: 'Its own board (Lever)', ashby: 'Its own board (Ashby)', smartrecruiters: 'Its own board (SmartRecruiters)', workday: 'Its own board (Workday)', workable: 'Its own board (Workable)', bamboohr: 'Its own board (BambooHR)', recruitee: 'Its own board (Recruitee)', page: 'Its own careers page' };
 
@@ -57,9 +57,9 @@ export default {
       <div class="card row wrap" style="gap:18px">
         <div><div class="eb">Watching</div><div class="big">${st.sources}</div><div class="xs m">sources</div></div>
         <div class="grow s ink2" style="min-width:300px">Full searches run at the times you set; in between, Job Hunt keeps checking for postings under two hours old, so you can be among the first ten applicants. <a href="#/you/connections">Change the times</a>.
-          <div style="margin-top:4px">${st.paused ? html`<b style="color:var(--warn)">Searching is paused.</b>` : html`Next quick check <b>${soon(st.next_fast)}</b> · next full search <b>${soon(st.next_full)}</b>`}${d.search.last_full ? html` · last full search ${rel(d.search.last_full)}` : ''}${d.unread ? html` · ${d.unread} new roles waiting to be read` : ''}</div>
+          <div style="margin-top:4px">${st.paused ? html`<b style="color:var(--warn)">Searching is paused${st.paused_until ? html` until ${dayName(st.paused_until)}, then starts again by itself` : ''}.</b>` : html`Next quick check <b>${soon(st.next_fast)}</b> · next full search <b>${soon(st.next_full)}</b>`}${d.search.last_full ? html` · last full search ${rel(d.search.last_full)}` : ''}${d.unread ? html` · ${d.unread} new roles waiting to be read` : ''}</div>
           ${d.search.linkedin_note ? html`<div style="color:var(--warn);margin-top:2px">${d.search.linkedin_note}</div>` : ''}</div>
-        <div class="row"><button class="btn p" data-act="search" data-kind="full">Search now</button><button class="btn" data-act="pause" data-paused="${st.paused ? '' : '1'}">${st.paused ? 'Resume searching' : 'Pause'}</button></div>
+        <div class="row"><button class="btn p" data-act="search" data-kind="full">Search now</button>${st.paused ? html`<button class="btn" data-act="pause" data-paused="">Resume searching</button>` : html`<select class="mini" style="max-width:150px" aria-label="Pause searching" data-on="change" data-act="pausefor" title="Stops the searches Job Hunt runs by itself. Search now still works."><option value="">Pause…</option><option value="0">Until I turn it back on</option><option value="1">For a day</option><option value="3">For 3 days</option><option value="7">For a week</option><option value="14">For two weeks</option></select>`}</div>
       </div>
       <div class="cols wide">
         <div class="col" style="gap:14px">
@@ -97,6 +97,7 @@ export default {
   actions: {
     search: ({ d }) => post('search', { kind: d.kind }).then(() => toast('Searching. New roles appear as they are read.')),
     pause: ({ d }) => post('pause', { paused: !!d.paused }),
+    pausefor: ({ value }) => value === '' ? false : post('pause', { paused: true, days: +value }),
     filter({ f, route }) { location.hash = with_(route, { q: f.q.trim(), page: '' }); return false; },
     state: ({ d }) => put(`companies/${d.id}`, { state: d.state }),
     addco: ({ f, el }) => post('companies', f).then(() => { el.reset(); toast('Watching it from now on'); }),

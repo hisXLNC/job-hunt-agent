@@ -93,11 +93,26 @@ func JSON[T any](ctx context.Context, e Engine, req Request) (T, Response, error
 	if raw == "" {
 		return out, resp, fmt.Errorf("llm: %s: the answer was not JSON", req.Task)
 	}
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+	if err := json.Unmarshal([]byte(Tidy(raw)), &out); err != nil {
 		return out, resp, fmt.Errorf("llm: %s: %w", req.Task, err)
 	}
 	return out, resp, nil
 }
+
+var tidy = strings.NewReplacer(
+	// Characters nobody can see, which give machine-written text away and
+	// break searches inside application systems.
+	"\u200b", "", "\u200c", "", "\u200d", "", "\u2060", "", "\ufeff", "", "\u00ad", "",
+	"\u202a", "", "\u202b", "", "\u202c", "", "\u202d", "", "\u202e", "", "\u2066", "", "\u2067", "", "\u2068", "", "\u2069", "",
+	"\u00a0", " ", "\u202f", " ",
+	// The long dash, the most recognisable mark of machine writing.
+	" \u2014 ", ", ", "\u2014 ", ", ", " \u2014", ",", "\u2014", ", ",
+)
+
+// Tidy cleans what Claude wrote before it is kept: no hidden characters and
+// no long dashes. It is safe on JSON text, where these only occur inside
+// strings.
+func Tidy(s string) string { return tidy.Replace(s) }
 
 // ExtractJSON finds the JSON object or array in a reply that may have prose
 // or a code fence around it. It returns "" when there is none.

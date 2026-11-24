@@ -192,3 +192,72 @@ func times(n int) string {
 	}
 	return fmt.Sprintf("%d times", n)
 }
+
+// ---- pay named in the posting's own words ---------------------------------------------
+
+const payCur = `(?:CAD|USD|AUD|NZD|GBP|EUR|CHF|SGD|C\$|CA\$|US\$|AU\$|A\$|\$|£|€)`
+const payNum = `\d{1,3}(?:[,.\s]\d{3})+(?:\.\d{2})?|\d{2,3}(?:\.\d{1,2})?\s?[kK]|\d{2,6}(?:\.\d{1,2})?`
+const payPer = `(?:\s?(?:per|a|an|each|/)\s?(?:hour|hr|h|year|yr|annum|month|week|day)\b|\s?(?:annually|hourly|yearly|p\.?a\.?)(?:\b|$))`
+
+var (
+	// "$85,000 - $105,000 a year", "CAD 40.50/hour", "£45k–£55k"
+	payMarkedRe = regexp.MustCompile(`(?i)` + payCur + `\s?(?:` + payNum + `)(?:\s?(?:-|–|—|to|and)\s?` + payCur + `?\s?(?:` + payNum + `))?(?:\s?(?:CAD|USD|AUD|GBP|EUR))?` + payPer + `?`)
+	// "90,000 to 110,000 CAD per year", where no sign comes first
+	payBareRe = regexp.MustCompile(`(?i)(?:` + payNum + `)\s?(?:-|–|—|to)\s?(?:` + payNum + `)(?:\s?(?:CAD|USD|AUD|GBP|EUR|dollars))?` + payPer + `?`)
+	payPerEndRe = regexp.MustCompile(`(?i)` + payPer + `$`)
+	payWordRe = regexp.MustCompile(`(?i)\b(salary|salaries|compensation|pay range|base pay|pay rate|pay:|wage|hourly rate|remuneration|pay band|pay scale|rate of pay|earn|OTE|on-target earnings|per hour|per year|annually|/hr|/hour|/yr|/year)\b`)
+	payNotRe  = regexp.MustCompile(`(?i)\b(revenue|funding|raised|valuation|billion|million|customers|assets|portfolio|budget|turnover|sales of|ARR|bonus of|sign-?on|signing bonus|referral|allowance|stipend|reimburse|tuition|rrsp|401\(?k|coverage|benefit of|up to \$?\d+ (?:for|toward))`)
+)
+
+// PayFromText finds the pay a posting names in its own text, for the many
+// postings whose source gives no pay of its own. "" when it names none it
+// can be sure of: a wrong figure is worse than none.
+func PayFromText(desc string) string {
+	if len(desc) > 60000 {
+		desc = desc[:60000]
+	}
+	best, bestScore := "", 0
+	try := func(loc []int, marked bool) {
+		got := strings.Join(strings.Fields(desc[loc[0]:loc[1]]), " ")
+		from, to := max(0, loc[0]-90), min(len(desc), loc[1]+40)
+		around := desc[from:to]
+		hasPer := payPerEndRe.MatchString(got)
+		worded := payWordRe.MatchString(around)
+		if !hasPer && !worded {
+			return
+		}
+		if payNotRe.MatchString(desc[max(0, loc[0]-45):min(len(desc), loc[1]+25)]) {
+			return
+		}
+		y := PayPerYear(got)
+		if y < 20000 || y > 1500000 {
+			return
+		}
+		score := 1
+		if marked {
+			score++
+		}
+		if hasPer {
+			score++
+		}
+		if worded {
+			score++
+		}
+		if strings.ContainsAny(got, "-–—") || strings.Contains(strings.ToLower(got), " to ") {
+			score++ // a range is what a posting's pay line looks like
+		}
+		if score > bestScore {
+			best, bestScore = got, score
+		}
+	}
+	for _, loc := range payMarkedRe.FindAllStringIndex(desc, 40) {
+		try(loc, true)
+	}
+	for _, loc := range payBareRe.FindAllStringIndex(desc, 40) {
+		try(loc, false)
+	}
+	if bestScore < 3 {
+		return ""
+	}
+	return strings.TrimRight(best, " .,;")
+}

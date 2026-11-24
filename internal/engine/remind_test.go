@@ -184,3 +184,84 @@ func TestReminders(t *testing.T) {
 		t.Errorf("urgent only, with names: %v", got)
 	}
 }
+
+func TestRoleNotesAnswersAndSayingNo(t *testing.T) {
+	e, _ := newEngine(t)
+	setUp(t, e)
+	ctx := context.Background()
+	c, _, _ := e.S.UpsertCompany(store.Company{Name: "Globex", State: "following"})
+	id, _ := e.S.AddRole(store.Role{CompanyID: c.ID, Key: "t:g1", Source: "manual", Title: "Tax Analyst", Stage: "found", Applicants: -1, Description: "Salary: $70,000 - $80,000 per year."})
+	other, _ := e.S.AddRole(store.Role{CompanyID: c.ID, Key: "t:g2", Source: "manual", Title: "Tax Manager", Stage: "found", Applicants: -1})
+	e.MarkApplied(other, "")
+
+	if err := e.SaveRoleNotes(id, "  Referred by Lee.  "); err != nil {
+		t.Fatal(err)
+	}
+	var n RoleNotes
+	if ok, _ := e.S.Doc(id, "mynotes", &n); !ok || n.Text != "Referred by Lee." {
+		t.Errorf("notes: %+v", n)
+	}
+	if err := e.AnswerQuestions(ctx, id, "1. Why do you want to work here?\n- Are you legally entitled to work in Canada?\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	var a AnswersDoc
+	if ok, _ := e.S.Doc(id, "answers", &a); !ok || len(a.Answers) != 2 || a.Answers[0].Question != "Why do you want to work here?" {
+		t.Errorf("answers: %+v", a)
+	}
+	// Pay with no pay field is read from the text, and only fills an empty one.
+	e.fillPay()
+	if r, _ := e.S.Role(id); r.Pay != "$70,000 - $80,000 per year" {
+		t.Errorf("pay from text: %q", r.Pay)
+	}
+
+	// Saying no with a reason is remembered for the next readings; muting
+	// the employer leaves the role already applied to alone.
+	if err := e.NotInterested(id, "Pay too low"); err != nil {
+		t.Fatal(err)
+	}
+	if td := e.TurnedDown(); len(td) != 1 || td[0] != "Tax Analyst at Globex: Pay too low" {
+		t.Errorf("turned down: %v", td)
+	}
+	if !strings.Contains(e.Person().Block(), "Tax Analyst at Globex: Pay too low") {
+		t.Error("the reason is not passed on to the reading of new roles")
+	}
+	if err := e.MuteEmployer(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if x, _ := e.S.Company(c.ID); x.State != "muted" {
+		t.Errorf("employer state %q", x.State)
+	}
+	if r, _ := e.S.Role(other); r.Stage != "applied" || r.Closed != "" {
+		t.Errorf("muting touched an application: %+v", r)
+	}
+}
+
+func TestSilenceAndPause(t *testing.T) {
+	e, _ := newEngine(t)
+	setUp(t, e)
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.Local)
+	e.Now = func() time.Time { return now }
+	e.S.Now = func() time.Time { return now.AddDate(0, 0, -60) }
+	c, _, _ := e.S.UpsertCompany(store.Company{Name: "Initech"})
+	id, _ := e.S.AddRole(store.Role{CompanyID: c.ID, Key: "t:i1", Source: "manual", Title: "Tax Lead", Stage: "found", Applicants: -1})
+	e.MarkApplied(id, "") // sixty days ago
+	e.S.Now = func() time.Time { return now }
+	found := false
+	for _, card := range e.Today().Cards {
+		if card.Kind == "silent" && card.RoleID == id {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("an application unanswered for weeks is not offered for closing")
+	}
+
+	e.PauseFor(3)
+	if !e.Paused() || e.PausedUntil() != now.Add(72*time.Hour).Unix() {
+		t.Errorf("paused for three days: %v until %d", e.Paused(), e.PausedUntil())
+	}
+	now = now.Add(73 * time.Hour)
+	if e.Paused() {
+		t.Error("a pause for a set time did not end by itself")
+	}
+}

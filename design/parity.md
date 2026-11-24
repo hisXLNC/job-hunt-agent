@@ -39,25 +39,25 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 ## C. The role page — about 14 present, 13 gaps
 
 1. **Attach your own CV or letter for a role — MISSING (M).** (1.26, 2.10)
-2. **Edit one tailored paragraph yourself — PARTIAL (S).** The API takes `after` on `POST /api/roles/{id}/change`; `web/pages/role.js` only has the on/off switch.
+2. **Edit one tailored paragraph yourself — DONE 26.11.31, was PARTIAL (S).** The API takes `after` on `POST /api/roles/{id}/change`; `web/pages/role.js` only has the on/off switch.
 3. **Check my CV, ATS check, Ashby notes — MISSING (M).** Old read the tailored CV requirement by requirement (Meets / Undecided / Not shown), reworded undecided ones, and checked base and tailored CVs for ATS problems (1.14, 2.53–2.55; `core/src/ats.rs`, `pipeline/checks.rs`). New has the asks-versus-evidence table from the first read only.
 4. **Keyword coverage with missing keywords to tick — MISSING (S/M).** (2.45) `Reading.Keywords` exists but is not shown or used.
 5. **Fit forecast before tailoring — MISSING (M).** Old showed "95 → ~97" and "Worth a look tailored" on near misses (1.44). New has the tailored score only after preparing.
 6. **Applied here before: stay close to the CV they have — MISSING (M).** Old kept tailoring close to the CV already sent, or reused it, with a word-by-word comparison (2.29; `/api/settings/repeat`). New has the "Applied here once" tag and employer history.
-7. **Application questions in the app — PARTIAL (S).** Old: paste a form's questions, get answers to copy (1.14). New `FormAnswers` is reachable only from the side panel.
+7. **Application questions in the app — DONE 26.11.31, was PARTIAL (S).** Old: paste a form's questions, get answers to copy (1.14). New `FormAnswers` is reachable only from the side panel.
 8. **Copy-and-paste kit — MISSING (M).** (2.36; `/api/jobs/<id>/kit`)
 9. **Offer advice — MISSING (M).** Paste an offer, get comparison, asks and a counter-offer e-mail (1.14). New has only prep for an "offer call".
 10. **Reply to a rejection — MISSING (S).** (2.52)
 11. **Practise this interview — MISSING (S).** (2.51) No button or prompt in new; the assistant could be asked by hand.
-12. **Your own notes on a role — MISSING (S).** New has notes on employers and on conversations, not on roles.
-13. **Not interested: reason, "learn from it", "Never show this company" — PARTIAL (S).** New page sends no reason and nothing learns from it; muting an employer is on Radar only.
+12. **Your own notes on a role — DONE 26.11.31, was MISSING (S).** New has notes on employers and on conversations, not on roles.
+13. **Not interested: reason, "learn from it", "Never show this company" — DONE 26.11.31, was PARTIAL (S).** New page sends no reason and nothing learns from it; muting an employer is on Radar only.
 14. **Find the posting on the company's own site — MISSING (M).** (1.43, 2.6, 2.23) New uses `apply_url` only when a source supplies it.
 15. **Signature picture — PARTIAL (S).** Old placed an image in the letter; new has a text closing.
-16. **Cleaning what Job Hunt writes — PARTIAL (S).** Old removed em dashes, AI stock words and hidden characters from output (1.20). New only instructs "no buzzwords" in the prompt (`internal/brain/brain.go`); invisible characters are stripped from postings read in, not from writing going out.
+16. **Cleaning what Job Hunt writes — DONE 26.11.31, was PARTIAL (S).** Old removed em dashes, AI stock words and hidden characters from output (1.20). New only instructs "no buzzwords" in the prompt (`internal/brain/brain.go`); invisible characters are stripped from postings read in, not from writing going out.
 
 ## D. Search, sources and scoring — about 25 present, 16 gaps
 
-1. **Pay read from the posting's text — MISSING (M).** Old read salaries and hourly rates from the body, looked up pay for postings showing none, and had "Look now" (1.11, 2.24, 2.25, 2.36.8). New takes pay only from the source's salary field; `PayPerYear` parses that field alone, so the pay floor misses most postings.
+1. **Pay read from the posting's text — DONE 26.11.31, was MISSING (M).** Old read salaries and hourly rates from the body, looked up pay for postings showing none, and had "Look now" (1.11, 2.24, 2.25, 2.36.8). New takes pay only from the source's salary field; `PayPerYear` parses that field alone, so the pay floor misses most postings.
 2. **Scoring and tailoring controls — PARTIAL (M).** Old: fit score needed, Tailor by itself (off / strong fits 85 / all), most tailored per search, most scored per search, "What matters to you". New: fixed `keepFit = 55`, `prepareFit = 70` (`internal/engine/search.go`) and one do/ask switch.
 3. **What you want — PARTIAL (M).** Old: level, permanent or contract, industries wanted and not, deal-breakers, career path with On/Off-path tags (2.44, 2.56). New has hard limits and three title bands only.
 4. **Several cities, each searched — PARTIAL (M), needs confirming.** Old searched every title in every listed place. New `Profile` has one City plus "nearby places that also count"; whether those are searched or only accepted I did not trace.
@@ -65,7 +65,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 6. **LinkedIn through Apify — MISSING (S).** (1.31)
 7. **Search one source and see each posting's outcome — PARTIAL (M).** Old gave each source a tab: every posting, its fit, new / already here / skipped and why (2.18, 2.19). New Radar shows counts per source and Test for keyed sources.
 8. **Score again / Force search — PARTIAL (S).** Old re-checked skipped postings in bulk with a request estimate (1.5, 1.22). New: per-role Bring back and Read it now.
-9. **Pause searching for a set time — PARTIAL (S).** Old: a day, a few days, two weeks, or off. New: one indefinite toggle.
+9. **Pause searching for a set time — DONE 26.11.31, was PARTIAL (S).** Old: a day, a few days, two weeks, or off. New: one indefinite toggle.
 10. **Employers found by themselves, dead boards removed — PARTIAL (S/M).** Old ran weekly, after profile changes and after thin searches, and removed boards after two failures (1.16). New `SeedEmployers` runs at setup and on "Suggest more"; I found no removal of dead boards.
 11. **Company ratings in lists and as a filter — PARTIAL (M).** Old looked ratings up by itself, showed ★ in lists and could skip companies rated below a number (1.45, 2.11). New: "Look it up" on the employer page only.
 12. **Old matches cleared by themselves — PARTIAL (S).** Old: unpicked after 60 days set aside; "set aside older than 3 weeks"; remove never-acted-on after 30/60/90 days. New: "Clear taken-down roles" only.
@@ -86,7 +86,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 ## F. Browser extension — about 14 present, 8 gaps
 
 1. **Extension updates itself — MISSING (M).** Old reloaded itself from Job Hunt's folder, checked its version before each fill and showed NEW (2.34, 2.35.3, 2.35.11). New tells the person to press Reload after each update (`web/pages/you.js`).
-2. **Files attached as PDF — PARTIAL (S).** New side panel fetches `.docx` only (`extension/panel.js` line 253; `internal/api/ext.go` has no PDF route).
+2. **Files attached as PDF — DONE 26.11.31, was PARTIAL (S).** New side panel fetches `.docx` only (`extension/panel.js` line 253; `internal/api/ext.go` has no PDF route).
 3. **Fill a job site's profile from the CV — MISSING (M).** (2.48) New "profile" means a LinkedIn person's page.
 4. **Hiring team read from a LinkedIn posting — MISSING (S/M).** (2.46) New adds a person only from a LinkedIn profile page.
 5. **Fill forms on the phone, share a job from the phone — MISSING (M).** Bookmark filler and "Send to Job Hunt" share shortcut (2.36, 2.36.5). Phone access has no add-a-posting call.
@@ -118,7 +118,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 2. **A changed CV re-does waiting work — MISSING (M).** Old rescored and re-tailored waiting applications when a CV was replaced or removed, keeping your own edits (2.14, 2.15). New `DeleteCV` just deletes the row.
 3. **Time zone and interview settings — MISSING (S).** See A5.
 4. **LinkedIn note length by account — PARTIAL (S).** Old 300 or 200; new fixed 300 (`web/pages/people.js`).
-5. **Close as "No response" prompt after four quiet weeks — PARTIAL (S).** (1.25)
+5. **Close as "No response" prompt after four quiet weeks — DONE 26.11.31, was PARTIAL (S).** (1.25)
 6. **A role beside the list — MISSING (S/M).** (2.43) Cosmetic.
 7. **"Write all" follow-ups in one go — MISSING (S).** (2.38)
 

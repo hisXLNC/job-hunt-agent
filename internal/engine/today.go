@@ -167,6 +167,22 @@ func (e *Engine) Today() Brief {
 		}
 		cards = append(cards, c)
 	}
+	// 6b. Four weeks without an answer is nearly always a no: offer to close it.
+	chased := map[int64]bool{}
+	for _, c := range cards {
+		if c.Kind == "chase" {
+			chased[c.RoleID] = true
+		}
+	}
+	silent, _ := e.S.AppliedSilent(now.AddDate(0, 0, -28).Unix(), now.Unix(), 8)
+	for _, r := range silent {
+		if chased[r.ID] {
+			continue
+		}
+		days := int(now.Sub(time.Unix(r.AppliedAt, 0)).Hours() / 24)
+		cards = append(cards, Card{Kind: "silent", Title: r.Title, Sub: fmt.Sprintf("Applied %d days ago, no reply", days), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, Seen: -1,
+			Why: "Four weeks of silence is nearly always a no. Close it, or keep it open another week. If they write after all, it opens again by itself.", Company: r.Company, CompanyID: r.CompanyID})
+	}
 	// 7. People worth a first note, when few people know the person yet.
 	know, _ := e.S.KnowYou()
 	if know < 8 {

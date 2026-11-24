@@ -3,7 +3,7 @@ import { html, api, post, ago, when, tile, toast, copy, safeUrl, app, openAssist
 // What each row asks of the person: the word in the first column and the one main button.
 const TODO = {
   apply: ['Send', 'hot', 'send'], decide: ['Prepare', 'blue', 'prepare'], mail: ['Reply', 'info', 'reply'], talk: ['Interview', 'info', 'talk'],
-  nudge: ['Follow up', 'warn', 'follow'], chase: ['Follow up', 'warn', 'follow'], send: ['Send note', 'good', 'people'], meet: ['Write to', 'good', 'people'],
+  nudge: ['Follow up', 'warn', 'follow'], chase: ['Follow up', 'warn', 'follow'], silent: ['No reply', '', 'follow'], send: ['Send note', 'good', 'people'], meet: ['Write to', 'good', 'people'],
 };
 const GROUPS = [['', 'Everything'], ['send', 'Send'], ['prepare', 'Prepare'], ['reply', 'Replies'], ['talk', 'Interviews'], ['follow', 'Follow up'], ['people', 'People']];
 const WHERE = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On site' };
@@ -28,6 +28,7 @@ function mainButton(c) {
     case 'send': return html`<button class="btn p sm" data-act="copyopen" data-note="${c.note_id}" data-url="${url}" title="Copies your note${url ? ' and opens their profile' : ''}. You paste and send it.">Copy note</button>`;
     case 'nudge': return html`<button class="btn p sm" data-act="nudge" data-id="${c.person_id}" data-busy="Writing…">Write follow-up</button>`;
     case 'chase': return c.body ? html`<a class="btn p sm" href="#/roles/${c.role_id}" title="Your follow-up is written. Read it, then send it from your own mail.">Read and send</a>` : html`<button class="btn p sm" data-act="chase" data-id="${c.role_id}" data-busy="Writing…" title="Writes one short follow-up e-mail for you to read and send yourself.">Write follow-up</button>`;
+    case 'silent': return html`<button class="btn p sm" data-act="silent" data-id="${c.role_id}" title="Closes this application as no reply. Its documents and history stay, and it opens again by itself if they write.">Close as no reply</button>`;
     case 'meet': return html`<button class="btn p sm" data-act="draft" data-id="${c.person_id}" data-busy="Writing…">Write a note</button>`;
   }
   return '';
@@ -50,6 +51,7 @@ function more(c) {
     items.push(html`<span class="mh">Save for later</span>`);
     for (const [days, label] of LATER) items.push(html`<button data-act="later" data-id="${c.role_id}" data-days="${days}" title="Leaves Today and comes back by itself.">${label}</button>`);
   }
+  if (c.kind === 'silent') items.push(html`<button data-act="later" data-id="${c.role_id}" data-days="7" title="Leaves Today for a week, then asks again.">Keep waiting a week</button>`);
   if (c.kind === 'talk' && url) items.push(html`<a href="${url}" target="_blank" rel="noopener noreferrer">Join link</a>`);
   if (c.kind === 'send') { items.push(html`<button data-act="sent" data-id="${c.note_id}">I sent it</button>`); items.push(html`<a href="#/people/${c.person_id}">Edit the note</a>`); }
   if (c.kind === 'nudge') items.push(html`<button data-act="quiet" data-id="${c.note_id}">Let it go</button>`);
@@ -64,7 +66,7 @@ function row(c, f) {
   const isRole = c.kind === 'apply' || c.kind === 'decide';
   const go = c.role_id ? `#/roles/${c.role_id}` : c.mail_id ? `#/replies/${c.mail_id}` : c.talk_id ? `#/interviews/${c.talk_id}` : c.person_id ? `#/people/${c.person_id}` : '';
   const age = Date.now() / 1000 - c.at;
-  const line2 = isRole ? html`${employerLink(c)}${c.place ? html` <span class="m">· ${c.place}</span>` : ''}` : c.kind === 'talk' ? html`${c.sub} <span class="m">· ${when(c.at)}</span>` : c.kind === 'chase' ? html`${employerLink(c)} <span class="m">· ${c.sub}</span>` : html`${c.company_id ? html`${employerLink(c)} <span class="m">·</span> ` : ''}${c.sub}`;
+  const line2 = isRole ? html`${employerLink(c)}${c.place ? html` <span class="m">· ${c.place}</span>` : ''}` : c.kind === 'talk' ? html`${c.sub} <span class="m">· ${when(c.at)}</span>` : c.kind === 'chase' || c.kind === 'silent' ? html`${employerLink(c)} <span class="m">· ${c.sub}</span>` : html`${c.company_id ? html`${employerLink(c)} <span class="m">·</span> ` : ''}${c.sub}`;
   const tick = html`<td class="pick">${isRole ? html`<input type="checkbox" data-on="change" data-act="pick" data-id="${c.role_id}" ${picked.has(String(c.role_id)) ? 'checked' : ''} aria-label="Tick ${c.title}">` : ''}</td>`;
   const first = html`<td><span class="chip ${c.fresh && c.kind === 'apply' ? 'hot' : cls}" title="${c.fresh && c.kind === 'apply' ? 'Still early: few people have applied.' : ''}">${label}</span></td>`;
   const who = html`<div class="row" style="gap:9px">${tile(c.company || c.title, true, c.company_id)}<div class="two"><a class="t" href="${go}" title="${c.title}${c.why ? '\n\n' + c.why : ''}">${c.title}</a><span class="xs ink2">${line2}</span></div></div>`;
@@ -191,6 +193,7 @@ export default {
     async chase({ d }) { await post(`roles/${d.id}/chase`); location.hash = `#/roles/${d.id}`; return false; },
     chasesent: ({ d }) => post(`roles/${d.id}/chasesent`).then(() => toast('Noted in the role\'s history.')),
     chasedrop: ({ d }) => post(`roles/${d.id}/chasedrop`),
+    silent: ({ d }) => post(`roles/${d.id}/close`, { stage: 'expired', why: 'No reply after four weeks' }).then(() => toast('Closed as no reply', false, () => post(`roles/${d.id}/reopen`))),
     prepare: ({ d }) => post(`roles/${d.id}/prepare`),
     async answer({ d, f }) {
       const answer = (d.answer || f?.answer || '').trim();

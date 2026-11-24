@@ -264,7 +264,7 @@ function pilot() {
         ${j.step ? html`<div class="step">${j.step}</div>` : ''}<div class="bar" role="progressbar" aria-label="${j.doing}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${j.percent}"><i style="width:${j.percent}%"></i></div></div>`)}
       ${jobs.length > 3 ? html`<div class="step">and ${jobs.length - 3} more</div>` : ''}${foot}`;
   }
-  if (s.paused) return html`${up}<h6><span class="dot off"></span>Searching is paused</h6><a href="#/radar" style="color:#9DB0FF">Turn it back on in Radar</a>${foot}`;
+  if (s.paused) return html`${up}<h6><span class="dot off"></span>Searching is paused${s.paused_until ? html` until ${dayName(s.paused_until)}` : ''}</h6><a href="#/radar" style="color:#9DB0FF">Turn it back on in Radar</a>${foot}`;
   if (s.held) return html`${up}<h6><span class="dot off"></span>Stopped by you</h6>Job Hunt starts by itself again at ${clock(s.held)}. <button class="stop go" data-resume title="Lets Job Hunt carry on now instead of waiting.">Carry on now</button>${foot}`;
   const next = Math.min(s.next_fast || Infinity, s.next_full || Infinity);
   return html`${up}<h6><span class="dot"></span>Watching for you</h6>${s.doing || html`Next check ${isFinite(next) ? soon(next) : 'soon'}.`}${foot}`;
