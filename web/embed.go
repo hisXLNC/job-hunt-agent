@@ -3,5 +3,5 @@ package web
 
 import "embed"
 
-//go:embed *.html *.css *.js *.svg pages/*.js
+//go:embed *.html *.css *.js *.svg pages/*.js phone/*
 var FS embed.FS

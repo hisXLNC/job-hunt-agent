@@ -56,6 +56,7 @@ type Server struct {
 	mux    *http.ServeMux
 	inner  http.Handler // the guarded routes; the assistant calls them like a page would
 	assist assistState
+	phone  phoneState
 }
 
 // ExtSet is the paired browser extension. The extension makes up a secret
@@ -1134,7 +1135,12 @@ func (s *Server) Handler() http.Handler {
 	})
 	h("GET /api/talks/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		t, err := st.Talk(idOf(r))
-		return map[string]any{"talk": t, "preparing": e.Busy(fmt.Sprintf("prep:%d", t.ID))}, err
+		out := map[string]any{"talk": t, "preparing": e.Busy(fmt.Sprintf("prep:%d", t.ID))}
+		if err == nil {
+			out["clash"] = e.Clash(t.At, t.Minutes)
+			out["google"] = engine.GoogleCalendarLink(t.Title, t.At, t.Minutes, t.Link, "")
+		}
+		return out, err
 	})
 	h("PUT /api/talks/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		t, err := st.Talk(idOf(r))
@@ -1586,6 +1592,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	s.assistRoutes(h, mux)
 	s.moreRoutes(mux, h)
+	s.reachRoutes(h)
 	s.mux = mux
 	s.inner = s.guard(mux)
 	return s.inner

@@ -180,8 +180,17 @@ func (e *Engine) chores(now time.Time) {
 		e.S.Set("chore:"+key, now.Unix())
 		return true
 	}
-	if every("backup", 24*time.Hour) {
+	// Copies kept in a folder that a cloud drive carries elsewhere are
+	// refreshed through the day, so the other place is never far behind.
+	often := 24 * time.Hour
+	if e.BackupSet().Dir != "" {
+		often = 3 * time.Hour
+	}
+	if every("backup", often) {
 		go e.Backup()
+	}
+	if e.OwnCal().On && every("owncal", 30*time.Minute) {
+		go e.ReadOwnCal(e.ctx)
 	}
 	if every("update", 30*time.Minute) {
 		go e.CheckUpdate(e.ctx)
@@ -369,7 +378,12 @@ func (e *Engine) maybePush(r store.Role, fit, tailored int) {
 	}
 	msg := strings.Join(parts, " · ") + ". CV and letter are ready on your computer."
 	go func() {
-		if err := e.Push(e.ctx, r.Title+" at "+r.Company, msg, firstOf(r.ApplyURL, r.URL)); err != nil {
+		click := firstOf(r.ApplyURL, r.URL)
+		if e.PhoneLink != nil {
+			// With phone access on, the notice opens the role in Job Hunt on the phone.
+			click = firstOf(e.PhoneLink(fmt.Sprintf("#role/%d", r.ID)), click)
+		}
+		if err := e.Push(e.ctx, r.Title+" at "+r.Company, msg, click); err != nil {
 			e.problem("Sending a phone notice", err)
 		}
 	}()

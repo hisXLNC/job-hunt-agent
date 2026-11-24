@@ -157,6 +157,7 @@ func main() {
 	defer stop()
 	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop, Restart: func() error { return restartSelf(stop) }}
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	srv.StartPhone()
 	go func() {
 		if err := hs.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Print(err)

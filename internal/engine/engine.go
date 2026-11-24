@@ -37,6 +37,12 @@ type Engine struct {
 	// How this computer is told things; nil where there is no way.
 	Notify  func(title, text, link string) error
 	BaseURL string // where this program's own pages are, for links in notices
+	// Where a paired phone finds a page of this program; "" while phone access is off.
+	PhoneLink func(page string) string
+	// Tests only: the cloud drives on this computer.
+	CloudRoots func() [][2]string
+	// Tests only: stands in for fetching the person's calendar.
+	OwnCalFetch func(addr string) ([]byte, error)
 	Now       func() time.Time
 
 	meter *llm.Metered

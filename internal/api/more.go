@@ -69,8 +69,20 @@ func (s *Server) moreRoutes(mux *http.ServeMux, h func(string, handler)) {
 	backups := func() map[string]any {
 		set := e.BackupSet()
 		return map[string]any{"dir": e.BackupDir(), "default_dir": e.DefaultBackupDir(), "custom": set.Dir != "", "keep": set.Keep,
-			"copies": e.Copies(), "staged": e.StagedRestore(), "can_restart": s.Restart != nil}
+			"copies": e.Copies(), "cloud": e.CloudFolders(), "staged": e.StagedRestore(), "can_restart": s.Restart != nil}
 	}
+	h("POST /api/backups/cloud", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Dir string `json:"dir"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if err := e.KeepCopiesIn(in.Dir); err != nil {
+			return nil, bad(err.Error())
+		}
+		return backups(), nil
+	})
 	h("GET /api/backups", func(w http.ResponseWriter, r *http.Request) (any, error) { return backups(), nil })
 	h("PUT /api/backups", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		set := e.BackupSet()

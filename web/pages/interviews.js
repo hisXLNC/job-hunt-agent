@@ -41,11 +41,11 @@ function month(d, route) {
   const days = [];
   for (let x = new Date(start); x < end; x = new Date(x.getFullYear(), x.getMonth(), x.getDate() + 1)) days.push(x);
   const go = n => with_(route, { m: ym(new Date(first.getFullYear(), first.getMonth() + n, 1)) });
-  const ev = (it, key) => html`<a class="ev k-${it.kind} ${(it.at ? it.at < nowTs - 3600 : key < today) ? 'past' : ''}" href="${/^#\//.test(it.go || '') ? it.go : '#/interviews'}" title="${WHAT[it.kind] || ''}${it.at ? ' · ' + when(it.at) : ''}\n${it.title}${it.sub ? '\n' + it.sub : ''}">${it.at ? clock(it.at) + ' ' : ''}${it.title}</a>`;
+  const ev = (it, key) => it.kind === 'own' ? html`<span class="ev k-own ${(it.at ? it.at < nowTs - 3600 : key < today) ? 'past' : ''}" title="In your own calendar${it.at ? ' · ' + when(it.at) : ''}\n${it.title}\n${it.sub}">${it.at ? clock(it.at) + ' ' : ''}${it.title}</span>` : html`<a class="ev k-${it.kind} ${(it.at ? it.at < nowTs - 3600 : key < today) ? 'past' : ''}" href="${/^#\//.test(it.go || '') ? it.go : '#/interviews'}" title="${WHAT[it.kind] || ''}${it.at ? ' · ' + when(it.at) : ''}\n${it.title}${it.sub ? '\n' + it.sub : ''}">${it.at ? clock(it.at) + ' ' : ''}${it.title}</a>`;
   const feed = location.origin + '/api/calendar.ics';
   return html`<div class="body">${tabs('month', route)}
     <div class="card" style="padding:0"><div class="row wrap" style="padding:12px 16px;gap:10px"><h3 style="min-width:150px">${first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</h3>
-      <span class="row wrap" style="gap:12px">${Object.entries(WHAT).map(([k, v]) => html`<span class="key"><i class="k-${k}"></i>${v}</span>`)}</span><span class="grow"></span>
+      <span class="row wrap" style="gap:12px">${Object.entries(WHAT).map(([k, v]) => html`<span class="key"><i class="k-${k}"></i>${v}</span>`)}${d.own ? html`<span class="key"><i class="k-own"></i>Your own calendar</span>` : html`<a class="xs" href="#/you/connections?hl=owncal">Show my Google Calendar here</a>`}</span><span class="grow"></span>
       <a class="btn sm" href="${go(-1)}" aria-label="Previous month">Previous</a>${ym(first) === ym(new Date()) ? '' : html`<a class="btn sm" href="${with_(route, { m: '' })}">This month</a>`}<a class="btn sm" href="${go(1)}" aria-label="Next month">Next</a></div>
       <div class="cal">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => html`<div class="wd">${w}</div>`)}
         ${days.map(x => { const key = ymd(x), items = by[key] || []; return html`<div class="day ${x.getMonth() === first.getMonth() ? '' : 'out'} ${key === today ? 'today' : ''}"><span class="dn" ${key === today ? html`title="Today"` : ''}>${x.getDate()}</span>${items.slice(0, 5).map(it => ev(it, key))}${items.length > 5 ? html`<span class="xs m" title="${items.slice(5).map(it => it.title).join('\n')}">and ${items.length - 5} more</span>` : ''}</div>`; })}</div></div>
@@ -76,7 +76,8 @@ function one(d) {
   return html`<div class="body cols wide"><div class="col" style="gap:14px">
     <div class="card row" style="gap:16px;padding:20px">${tileDay(t.at, past)}<div class="grow"><div class="row wrap" style="gap:8px"><span class="chip blue">${KINDS[t.kind] || t.kind}</span><span class="s m">${when(t.at)} · ${past ? rel(t.at) : soon(t.at)} · ${t.minutes} min</span></div>
       <h2 style="font-size:21px;margin-top:4px">${t.title}</h2><div class="s m">${t.person}${t.person && t.company ? ' · ' : ''}${employer(t.company, t.company_id)}${t.role ? html` · ${t.role_id ? html`<a class="emp" href="#/roles/${t.role_id}">${t.role}</a>` : t.role}` : ''}</div></div>
-      <div class="col" style="gap:6px">${link ? html`<a class="btn p" href="${link}" target="_blank" rel="noopener noreferrer">Join</a>` : ''}<a class="btn sm" href="/api/talks/${t.id}/invite.ics" title="${ICS_TIP}">Add to my calendar</a></div></div>
+      <div class="col" style="gap:6px">${link ? html`<a class="btn p" href="${link}" target="_blank" rel="noopener noreferrer">Join</a>` : ''}${d.google && !past ? html`<a class="btn sm" href="${d.google}" target="_blank" rel="noopener noreferrer" title="Opens Google Calendar with this conversation filled in. Press Save there.">Add to Google Calendar</a>` : ''}<a class="btn sm" href="/api/talks/${t.id}/invite.ics" title="${ICS_TIP}">Calendar file</a></div></div>
+    ${d.clash && !past ? html`<div class="card row" style="border-color:var(--warn);background:var(--warn-soft)"><div class="grow"><h4>This lands on something in your calendar</h4><p class="s">${d.clash.title || 'An entry'} · ${d.clash.all_day ? 'all day' : html`${when(d.clash.start)} until ${clock(d.clash.end)}`}. Move one of them, or ask for another time.</p></div></div>` : ''}
     ${d.preparing ? html`<div class="card row"><span class="spin"></span><div><h4>Writing your prep pack</h4><p class="s m">About a minute. The page updates by itself.</p></div></div>` : ''}
     ${p ? html`<div class="card col" style="gap:14px">
       <div><div class="eb">Your opening · 45 seconds</div><p style="margin-top:6px;font-size:14.5px">${p.opening}</p></div>
@@ -107,7 +108,13 @@ export default {
     if (route.parts[1]) return api('talks/' + route.parts[1]);
     if (route.q.view !== 'month') return api('talks');
     const [start, end] = gridOf(monthOf(route.q));
-    return api(`calendar?from=${Math.floor(start / 1000)}&to=${Math.floor(end / 1000)}`);
+    const span = `from=${Math.floor(start / 1000)}&to=${Math.floor(end / 1000)}`;
+    // The person's own entries come by a route of their own: Claude can read the month, not these.
+    return Promise.all([api('calendar?' + span), api('owncal?' + span).catch(() => null)]).then(([c, o]) => {
+      const own = (o?.events || []).map(x => ({ kind: 'own', day: ymd(new Date(x.start * 1000)), at: x.all_day ? 0 : x.start, title: x.title || 'Busy', sub: x.all_day ? 'All day' : `until ${clock(x.end)}` }));
+      const items = [...(c.items || []), ...own].sort((a, b) => a.day < b.day ? -1 : a.day > b.day ? 1 : (a.at || 9e12) - (b.at || 9e12));
+      return { ...c, items, own: !!o?.on };
+    });
   },
   view: (d, route) => route.parts[1] ? one(d) : route.q.view === 'month' ? month(d, route) : list(d, route),
   actions: {

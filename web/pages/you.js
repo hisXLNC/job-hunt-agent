@@ -28,6 +28,9 @@ const SETTINGS = [
   ['connections', 'claude', '', 'Claude: subscription, API key, model', 'claude api key model subscription sign in connect anthropic ai'],
   ['connections', 'claude', 'daily_limit', 'Daily spending limit', 'limit budget spend cost dollars money cap'],
   ['connections', 'phone', '', 'Phone notices', 'phone ntfy notice notification push buzz mobile topic quiet hours'],
+  ['connections', 'phoneaccess', '', 'Job Hunt on your phone', 'phone mobile access remote browser wifi tailscale away qr code pair'],
+  ['connections', 'owncal', '', 'Your Google Calendar', 'google calendar sync busy free times outlook icloud ical ics availability'],
+  ['app', 'cloud', '', 'Copies in Google Drive or OneDrive', 'sync google drive onedrive dropbox cloud another computer second pc laptop move'],
   ['connections', 'mail', '', 'Your inbox', 'inbox mail email e-mail gmail imap app password replies'],
   ['connections', 'desk', 'notify', 'Windows notifications', 'notification windows toast alert desktop popup'],
   ['connections', 'desk', 'awake', 'Keep this computer awake', 'awake sleep power standby'],
@@ -124,6 +127,48 @@ function arriving(d) {
     <div class="col" style="margin-top:10px;gap:12px">${(doc.screening || []).map(q => html`<div class="s"><b>${q.q}</b><div class="ink2 quote" style="margin-top:3px">${q.a}</div></div>`)}</div></div></div></div>`;
 }
 
+// Job Hunt on the phone: a second door, shut unless the person opens it.
+function phoneAccess(p) {
+  if (!p) return '';
+  const home = p.addresses.find(a => a.kind === 'home'), away = p.addresses.find(a => a.kind === 'anywhere');
+  return html`<div class="card col" style="gap:10px" data-set="phoneaccess"><div class="row"><h3 class="grow">Job Hunt on your phone</h3><span class="chip ${p.on ? (p.problem ? 'crit' : 'good') : ''}">${p.on ? (p.problem ? 'Problem' : p.devices.length ? 'On' : 'On, no phone yet') : 'Off'}</span></div>
+    <p class="s m">See Today, open a role, read your letter, download the CV and letter, and mark a role applied, not for you or saved for later, from your phone's browser. Nothing is installed on the phone. Your data stays on this computer, so <b>this computer has to be on with Job Hunt running</b>.</p>
+    ${p.problem ? html`<p class="s" style="color:var(--crit)">${p.problem}</p>` : ''}
+    <label class="row s" style="font-weight:500"><input type="checkbox" data-on="change" data-act="phoneon" ${p.on ? 'checked' : ''}> Let my phone connect</label>
+    ${p.on ? html`<ol class="steps s">
+        <li>Put your phone on <b>the same Wi-Fi</b> as this computer.</li>
+        <li>Press <b>Add a phone</b> and point the phone's camera at the code. It opens Job Hunt in the phone's browser and stays paired.</li>
+        <li>The first time, Windows may ask whether Job Hunt may be reached on your network. Choose <b>Allow</b> (private networks).</li>
+      </ol>
+      <div class="row wrap"><button class="btn p" data-act="phonecode" data-kind="home" ${home ? '' : 'disabled'} title="${home ? 'Shows a code for a phone on the same Wi-Fi.' : 'This computer is not on a network a phone could reach.'}">Add a phone</button>
+        ${away ? html`<button class="btn" data-act="phonecode" data-kind="anywhere" title="Tailscale is running on this computer. A phone that also runs Tailscale, signed in to the same account, reaches Job Hunt from anywhere.">Add a phone through Tailscale</button>` : ''}</div>
+      <div id="phonecode"></div>
+      ${p.devices.length ? html`<div class="col" style="gap:6px">${p.devices.map(x => html`<div class="row s"><span class="grow"><b>${x.name}</b> <span class="m">· added ${rel(x.added)} · last used ${rel(x.seen)}</span></span><button class="btn sm danger" data-act="phoneforget" data-id="${x.id}" data-confirm="Remove this phone? It will have to scan a new code to connect again.">Remove</button></div>`)}</div>` : ''}
+      <details class="xs m"><summary>Away from home, and how safe this is</summary>
+        <p style="margin-top:6px"><b>Away from home.</b> The code above works on your own Wi-Fi only. To reach Job Hunt from anywhere, install the free program Tailscale on this computer and on your phone and sign in to both with the same account${away ? '' : '; an "Add a phone through Tailscale" button then appears here'}. Job Hunt is never put on the open internet.</p>
+        <p style="margin-top:6px"><b>How safe.</b> Only a phone that scanned a code shown on this screen can connect; a code works once, for ten minutes. The phone can look and do the few things listed above. It cannot reach your keys, passwords, connections, saved copies or settings. On your own Wi-Fi the pages are not encrypted, so don't turn this on where you share the network with strangers; through Tailscale they are.</p></details>` : ''}</div>`;
+}
+
+// The person's own calendar, read-only, through its private address.
+function ownCalendar(c) {
+  if (!c) return '';
+  const slot = t => `${new Date(t.start * 1000).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}, ${clockOf(t.start)} to ${clockOf(t.end)}`;
+  return html`<form data-act="savecal" data-busy="Reading…" class="card col" style="gap:10px" data-set="owncal"><div class="row"><h3 class="grow">Your Google Calendar</h3><span class="chip ${c.on ? (c.note ? 'crit' : 'good') : ''}">${c.on ? (c.note ? 'Problem' : 'Connected') : 'Off'}</span></div>
+    <p class="s m">Job Hunt reads your calendar so it knows when you are busy: your own entries show on the month under Interviews, an interview that lands on one is flagged, and it offers times you are free when an employer asks. It reads only. What it reads stays on this computer and is never given to Claude.</p>
+    ${c.note ? html`<p class="s" style="color:var(--crit)">${c.note}</p>` : ''}
+    ${c.on ? html`<p class="s">Read ${rel(c.at)} · ${c.count} ${c.count === 1 ? 'entry' : 'entries'} in the next four months. Read again every half hour.</p>` : html`<ol class="steps s">
+      <li>On a computer, open <b>calendar.google.com</b>. Press the cog at the top right, then <b>Settings</b>.</li>
+      <li>On the left, under <b>Settings for my calendars</b>, press your calendar's name.</li>
+      <li>Scroll down to <b>Integrate calendar</b>. Copy the address under <b>Secret address in iCal format</b> (press the eye or the copy sign beside it).</li>
+      <li>Paste it below and press <b>Connect</b>.</li></ol>`}
+    <label class="field">${c.has_url ? 'Secret address' : 'Secret address in iCal format'} <span class="h">Works like a password: anyone who has it can read your calendar. It is kept only in Job Hunt's data file on this computer.</span><input type="password" name="url" placeholder="${c.has_url ? 'Saved. Paste to replace.' : 'https://calendar.google.com/calendar/ical/…/basic.ics'}" autocomplete="off"></label>
+    <div class="row wrap"><button class="btn p">${c.on ? 'Read it now' : 'Connect'}</button>${c.has_url ? html`<button type="button" class="btn danger" data-act="forgetcal" data-confirm="Stop reading your calendar? The address and everything read from it are removed from Job Hunt.">Disconnect</button>` : ''}</div>
+    ${c.on && c.free?.length ? html`<div><div class="eb">When you are free</div><p class="xs m" style="margin-top:3px">Working hours on the coming working days with nothing in your calendar or in Job Hunt.</p><ul class="s" style="margin:6px 0 0 18px">${c.free.map(t => html`<li>${slot(t)}</li>`)}</ul>
+      <button type="button" class="btn sm" style="margin-top:8px" data-act="copyfree" data-text="${c.free.map(slot).join('\n')}">Copy these times</button></div>` : ''}
+    <p class="xs m">Outlook and iCloud calendars have such an address too (Outlook: Settings → Calendar → Shared calendars → Publish a calendar → ICS). To put an interview <b>into</b> Google Calendar, open it under Interviews and press <b>Add to Google Calendar</b>.</p></form>`;
+}
+const clockOf = ts => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
 function connections(d) {
   const cl = d.claude, ph = d.phone, m = d.mail, ext = d.ext;
   const usage = Object.entries(d.usage || {}).sort((a, b) => b[1].calls - a[1].calls);
@@ -143,11 +188,21 @@ function connections(d) {
     </div>
     <div class="col" style="gap:14px">
     <form data-act="savephone" class="card col" style="gap:10px" data-set="phone"><div class="row"><h3 class="grow">Phone notices</h3><span class="chip ${ph.on ? 'good' : ''}">${ph.on ? 'On' : 'Off'}</span></div>
-      <p class="s m">A buzz when a strong role is still fresh, so you can apply inside the first hour. Uses the free ntfy app: install it, subscribe to the topic below, done. The notice carries the job title and employer and passes through ntfy's server.</p>
+      <p class="s m">A buzz on your phone when a strong role is still fresh, so you can apply inside the first hour. It uses ntfy, a free app that only delivers notices: no account, nothing to pay.</p>
+      <ol class="steps s">
+        <li><b>On your phone</b>, install the app called <b>ntfy</b> from the App Store or Google Play. Open it and allow notifications when it asks.</li>
+        <li><b>Here</b>, press <b>Make a topic for me</b>, then <b>Save</b>. A topic is the name of your private channel. Anyone who knows the name could read your notices, which is why it is long and random.</li>
+        <li><b>On your phone</b>, in ntfy press <b>+</b> (Subscribe to topic) and type the topic exactly as it is written below${ph.topic ? html`: <b class="mono">${ph.topic}</b>` : ''}. Leave everything else as it is and press <b>Subscribe</b>.</li>
+        <li><b>Here</b>, tick <b>Send notices to my phone</b>, press <b>Save</b>, then <b>Send a test</b>. Your phone should buzz within a few seconds.</li>
+      </ol>
       <label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${ph.on ? 'checked' : ''}> Send notices to my phone</label>
-      <div class="grid2"><label class="field">Topic <span class="h">Works like a password. Make it long.</span><input type="text" name="topic" value="${ph.topic}" placeholder="jobhunt-…"></label><label class="field">Server<input type="url" name="server" value="${ph.server}"></label></div>
-      <div class="grid3"><label class="field">Only for fit at or above<input type="number" name="min_fit" value="${ph.min_fit}" min="50" max="100"></label><label class="field">Quiet from (hour)<input type="number" name="quiet_from" value="${ph.quiet_from}" min="0" max="23"></label><label class="field">Until (hour)<input type="number" name="quiet_to" value="${ph.quiet_to}" min="0" max="23"></label></div>
-      <div class="row"><button class="btn p">Save</button><button type="button" class="btn" data-act="newtopic">Make a topic for me</button><button type="button" class="btn" data-act="testphone">Send a test</button></div></form>
+      <label class="field">Topic <span class="h">The same on your phone and here.</span><input type="text" name="topic" value="${ph.topic}" placeholder="Press Make a topic for me" autocomplete="off" spellcheck="false"></label>
+      <div class="grid3"><label class="field">Only for fit at or above <span class="h">75 is a good start.</span><input type="number" name="min_fit" value="${ph.min_fit}" min="50" max="100"></label><label class="field">No notices from <span class="h">Hour, 0 to 23.</span><input type="number" name="quiet_from" value="${ph.quiet_from}" min="0" max="23"></label><label class="field">Until <span class="h">Hour, 0 to 23.</span><input type="number" name="quiet_to" value="${ph.quiet_to}" min="0" max="23"></label></div>
+      <div class="row wrap"><button class="btn p">Save</button><button type="button" class="btn" data-act="newtopic">Make a topic for me</button><button type="button" class="btn" data-act="testphone">Send a test</button></div>
+      <details class="xs m"><summary>No buzz after the test?</summary><p style="margin-top:6px">Check the topic is spelled the same in both places, and that it was saved here before the test. On an iPhone, open Settings → Notifications → ntfy and allow them. On Android, open the phone's Settings → Apps → ntfy → Battery and choose Unrestricted, or notices arrive late. Notices are held back between the two hours above${ph.quiet_from !== ph.quiet_to ? html` (now ${ph.quiet_from}:00 to ${ph.quiet_to}:00)` : ''}; the test is always sent.</p>
+        <p style="margin-top:6px">A notice carries the job title, the employer, the fit and how old the posting is, and passes through ntfy's server on its way to your phone.</p>
+        <label class="field" style="margin-top:8px;max-width:300px">Server <span class="h">Leave as it is unless you run your own.</span><input type="url" name="server" value="${ph.server}"></label></details></form>
+    ${phoneAccess(d.phoneaccess)}${ownCalendar(d.owncal)}
     <form data-act="savemail" data-busy="Checking…" class="card col" style="gap:10px" data-set="mail"><div class="row"><h3 class="grow">Your inbox</h3><span class="chip ${m.on ? (m.note ? 'crit' : 'good') : ''}">${m.on ? (m.note ? 'Problem' : 'Connected') : 'Off'}</span></div>
       <p class="s m">So replies are noticed the moment they arrive. Job Hunt opens the inbox read-only and reads only mail from employers you applied to, hiring systems, people you wrote to, and job alerts from job sites. It cannot send, move or delete anything. Replies it reads are passed to Claude to be understood; job alerts are not.</p>
       ${m.note ? html`<p class="s" style="color:var(--crit)">${m.note}</p>` : ''}
@@ -247,6 +302,11 @@ function copies(b, route) {
       ${all.length > COPIES ? html`<div class="pager s" style="padding-top:0"><span class="m">${(page - 1) * COPIES + 1}–${Math.min(page * COPIES, all.length)} of ${all.length}</span>${page > 1 ? html`<a class="btn sm" href="${with_(route, { copies: page - 1, hl: '' })}">Previous</a>` : html`<span class="btn sm" disabled>Previous</span>`}${page < pages ? html`<a class="btn sm" href="${with_(route, { copies: page + 1, hl: '' })}">Next</a>` : html`<span class="btn sm" disabled>Next</span>`}</div>` : ''}`
       : html`<p class="s m">No copies yet. The first is saved within a day, or press Save a copy now.</p>`}
     <div class="hr"></div>
+    <div class="col" style="gap:6px" data-set="cloud"><h4>On another computer, or safe if this one breaks</h4>
+      <p class="xs m">Keep the copies inside a cloud drive's folder and the drive's own program carries them off this computer. On another computer, install Job Hunt, point "Where copies are kept" at the same folder and restore the newest copy. Use Job Hunt on one computer at a time: two running at once would each overwrite the other's copy.</p>
+      ${(b.cloud || []).length ? html`<div class="row wrap">${b.cloud.map(c => c.used ? html`<span class="chip good" title="${c.dir}">Copies are kept in ${c.name}</span>` : html`<button class="btn sm" data-act="cloudcopies" data-dir="${c.dir}" title="Makes the folder ${c.dir} and keeps the copies there, refreshed every three hours.">Keep copies in ${c.name}</button>`)}</div>`
+        : html`<p class="xs m">No Google Drive, OneDrive or Dropbox folder was found on this computer. Install Google Drive for desktop (or OneDrive) and come back, or paste any folder below.</p>`}</div>
+    <div class="hr"></div>
     <form data-act="savebackups" class="col" style="gap:8px"><div class="grid2" style="grid-template-columns:minmax(0,1fr) 150px"><label class="field">Where copies are kept <span class="h">The whole path of a folder that is already there, such as one on another drive. Leave empty for the data folder.</span><input type="text" name="dir" value="${b.custom ? b.dir : ''}" placeholder="${b.default_dir}" autocomplete="off" spellcheck="false"></label>
       <label class="field">Keep the newest<select name="keep">${[7, 14, 30].map(n => html`<option value="${n}" ${b.keep === n ? 'selected' : ''}>${n} copies</option>`)}</select></label></div>
       <div class="row wrap"><button class="btn sm p">Save</button><button type="button" class="btn sm" data-act="openfolder" data-what="backups" title="Opens the folder the copies are in.">Open the folder</button><span class="xs m grow" style="word-break:break-all">Now in ${b.dir}</span></div></form></div>`;
@@ -287,7 +347,8 @@ export default {
   load(route) {
     switch (route.parts[1] || '') {
       case 'arriving': return api('arriving');
-      case 'connections': case 'panel': return api('connections');
+      case 'panel': return api('connections');
+      case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null)]).then(([c, pa, oc]) => ({ ...c, phoneaccess: pa, owncal: oc }));
       case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null)]).then(([a, o, g, h, b]) => ({ ...a, old: o, debug: g, history: h, backups: b }));
     }
     return api('you');
@@ -366,6 +427,25 @@ export default {
       toast('Saved');
     },
     async testllm() { const r = await post('llm/test'); toast(r.message); return false; },
+    async phoneon({ el }) { await put('phoneaccess', { on: el.checked }); toast(el.checked ? 'On. Now add a phone.' : 'Off. No phone can connect.'); },
+    async phonecode({ d }) {
+      const r = await post('phoneaccess/code', { kind: d.kind });
+      const box = document.getElementById('phonecode');
+      box.innerHTML = '';
+      const img = new Image(220, 220); img.alt = 'A code for your phone\'s camera'; img.src = 'data:image/svg+xml;base64,' + btoa(r.qr); img.style.cssText = 'border-radius:10px;border:1px solid var(--line);background:#fff';
+      const p = document.createElement('p'); p.className = 'xs m'; p.style.marginTop = '6px';
+      p.textContent = `Point your phone's camera at this and open the link it shows. It works once, for the next ${r.minutes} minutes. Afterwards the phone opens Job Hunt at ${r.address}`;
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.style.marginTop = '6px'; b.textContent = 'Copy the link instead';
+      b.title = 'For when the camera won\'t read the code: send the link to your phone yourself and open it there.';
+      b.addEventListener('click', () => copy(r.link));
+      box.append(img, p, b);
+      return false;
+    },
+    phoneforget: ({ d }) => del('phoneaccess/devices/' + d.id).then(() => toast('Removed')),
+    async savecal({ f }) { await put('owncal', { url: f.url }); toast('Connected. Your entries are on the month under Interviews.'); },
+    forgetcal: () => del('owncal').then(() => toast('Disconnected')),
+    copyfree: ({ d }) => copy(d.text).then(() => false),
+    cloudcopies: ({ d }) => post('backups/cloud', { dir: d.dir }).then(() => toast('Copies are kept there from now on. One was saved just now.')),
     savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0 }).then(() => toast('Saved')),
     newtopic({ el }) { const a = new Uint8Array(12); crypto.getRandomValues(a); el.closest('form').querySelector('[name=topic]').value = 'jobhunt-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); return false; },
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
