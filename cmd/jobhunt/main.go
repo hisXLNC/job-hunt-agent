@@ -78,6 +78,7 @@ func main() {
 	demo := flag.Bool("demo", false, "fill an empty data folder with sample data and use the stand-in instead of Claude")
 	quit := flag.Bool("quit", false, "stop the Job Hunt that is running, then leave")
 	version := flag.Bool("version", false, "print the version and leave")
+	restarted := flag.Bool("restarted", false, "started by Job Hunt itself, to take over from the copy that is stopping")
 	flag.Parse()
 	if p, err := strconv.Atoi(os.Getenv("JOBHUNT_PORT")); err == nil && p > 0 {
 		*port = p
@@ -92,7 +93,19 @@ func main() {
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", *port)
 
+	if *restarted {
+		// The copy that started this one is on its way out. Nothing is
+		// touched until it has gone: two programs never have the data open.
+		waitForParent(30 * time.Second)
+	}
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
+	for i := 0; err != nil && *restarted && i < 60; i++ {
+		time.Sleep(250 * time.Millisecond)
+		ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
+	}
+	if err != nil && *restarted {
+		os.Exit(1)
+	}
 	if err != nil {
 		// Already running: bring up its window and leave.
 		c := http.Client{Timeout: 3 * time.Second}
@@ -118,6 +131,9 @@ func main() {
 	trace.Log("app", "Job Hunt %s starting on %s/%s, demo=%v", api.Version, runtime.GOOS, runtime.GOARCH, *demo)
 	defer trace.Close()
 	defer trace.Log("app", "Job Hunt stopping")
+	// A saved copy the person chose to put back takes the data's place now,
+	// before anything has it open.
+	restored := engine.ApplyStagedRestore(dir, filepath.Join(dir, "jobhunt.db"), time.Now())
 	s, err := store.Open(filepath.Join(dir, "jobhunt.db"))
 	if err != nil {
 		fatal(fmt.Errorf("Job Hunt couldn't open its data in %s: %w", dir, err))
@@ -125,6 +141,7 @@ func main() {
 	defer s.Close()
 	e := engine.New(s, dir)
 	e.Version = api.Version
+	e.Restored(restored)
 	// Pages that turn a plain request away are opened in the browser already
 	// on this computer, out of sight, when there is one.
 	if b := sources.FindBrowser(); b != "" {
@@ -138,7 +155,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop}
+	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop, Restart: func() error { return restartSelf(stop) }}
 	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := hs.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -153,12 +170,12 @@ func main() {
 		runTray(ctx, stop, url, dir, e)
 	}
 	keepAwake(ctx, e.WantsAwake)
-	if from := e.WhatsNew(); from != "" && e.Desk().Notify {
-		go deskNotify("Job Hunt updated to "+api.Version, "It installed by itself. Open it to see what changed.", url)
+	if from := e.WhatsNew(); from != "" {
+		e.Tell("Job Hunt updated to "+api.Version, "It installed by itself. Open it to see what changed.", "#/you/app")
 	}
 	go e.Run()
 	log.Printf("Job Hunt %s listening on %s, data in %s", api.Version, url, dir)
-	if !*noWindow {
+	if !*noWindow && !*restarted {
 		openWindow(url, dir)
 	}
 	<-ctx.Done()

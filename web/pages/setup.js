@@ -2,7 +2,7 @@ import { html, api, post, put, toast, app } from '../app.js';
 import { oldCard, oldActions } from '../old.js';
 
 const lines = s => (s || '').split(/\n|,/).map(x => x.trim()).filter(Boolean);
-const head = (n, title, done, sub) => html`<div class="row"><div class="num" style="${done ? 'background:var(--good);color:#fff' : ''}">${done ? '✓' : n}</div><div class="grow"><h3>${title}</h3>${sub ? html`<p class="s m">${sub}</p>` : ''}</div></div>`;
+const head = (n, title, done, sub) => html`<div class="row"><div class="num" style="${done ? 'background:var(--good-solid);color:#fff' : ''}">${done ? '✓' : n}</div><div class="grow"><h3>${title}</h3>${sub ? html`<p class="s m">${sub}</p>` : ''}</div></div>`;
 
 export default {
   title: 'Welcome',

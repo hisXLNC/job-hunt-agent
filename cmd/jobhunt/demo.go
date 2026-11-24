@@ -144,8 +144,13 @@ func seedDemo(e *engine.Engine) error {
 		case strings.Contains(r.location, "Berlin"):
 			closed, why = "screened", "Based somewhere else"
 		}
+		ad := demoAd(kind, r.company, r.title)
+		// Two of the postings say when they stop taking applications.
+		if i == 1 || i == 3 {
+			ad += "\n\nClosing date: " + now.AddDate(0, 0, 4+3*i).Format("January 2, 2006") + "."
+		}
 		id, err := s.AddRole(store.Role{CompanyID: c.ID, Key: "demo:" + string(rune('a'+i)), Source: firstBoard(c), Title: r.title, Location: r.location, Workplace: r.workplace,
-			URL: "https://example.com/jobs/" + string(rune('a'+i)), Description: demoAd(kind, r.company, r.title), PostedAt: now.Add(-time.Duration(r.minsAgo) * time.Minute).Unix(),
+			URL: "https://example.com/jobs/" + string(rune('a'+i)), Description: ad, PostedAt: now.Add(-time.Duration(r.minsAgo) * time.Minute).Unix(),
 			Applicants: r.applicants, Closed: closed, ClosedWhy: why})
 		if err != nil {
 			return err
@@ -199,6 +204,11 @@ func seedDemo(e *engine.Engine) error {
 	// A conversation coming up.
 	if tid, err := s.AddTalk(store.Talk{PersonID: pids[1], Kind: "chat", Title: "Video call with Leila", At: now.Add(26 * time.Hour).Truncate(30 * time.Minute).Unix(), Minutes: 30, Link: "https://meet.example.com/abc"}); err == nil {
 		e.PrepTalk(ctx, tid)
+	}
+	// And an interview next week for one of the roles applied to.
+	if len(ids) >= 7 {
+		at := time.Date(now.Year(), now.Month(), now.Day(), 14, 0, 0, 0, now.Location()).AddDate(0, 0, 6)
+		s.AddTalk(store.Talk{RoleID: ids[5], Kind: "interview", Title: "First interview", At: at.Unix(), Minutes: 45, Link: "https://meet.example.com/xyz"})
 	}
 	e.BuildArriving(ctx)
 	s.Log(store.Activity{Kind: "search", Text: "Searched 14 places: 212 postings, 10 new, 7 worth a look"})

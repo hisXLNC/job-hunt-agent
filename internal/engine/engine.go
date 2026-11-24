@@ -207,7 +207,9 @@ func (e *Engine) Go(name, doing string, fn func(ctx context.Context) error) bool
 		defer func() {
 			if r := recover(); r != nil {
 				trace.Log("problem", "panic in job %s: %v ⏎ %s", name, r, debug.Stack())
-				e.S.Log(store.Activity{Kind: "problem", Text: fmt.Sprintf("Something went wrong while %s: %v", strings.ToLower(doing), r)})
+				text := fmt.Sprintf("Something went wrong while %s: %v", strings.ToLower(doing), r)
+				e.S.Log(store.Activity{Kind: "problem", Text: text})
+				e.keepProblem(text)
 			}
 			e.endJob(j)
 		}()
@@ -245,6 +247,7 @@ func (e *Engine) problem(doing string, err error) {
 		}
 	}
 	e.S.Log(store.Activity{Kind: "problem", Text: text})
+	e.keepProblem(text)
 }
 
 // Busy reports whether a named job is running.

@@ -1,4 +1,4 @@
-import { html, api, ago, app, KIND } from '../app.js';
+import { html, api, ago, app, KIND, rel } from '../app.js';
 
 const pct = (a, b) => (b ? Math.round(a * 100 / b) + '%' : '–');
 
@@ -32,7 +32,7 @@ export default {
           ${Object.keys(p.people.by_kind || {}).length ? html`<div class="row wrap" style="margin-top:10px;gap:6px">${Object.entries(p.people.by_kind).map(([k, n]) => html`<span class="chip">${KIND[k] || k} ${n}</span>`)}</div>` : ''}
           ${p.people.waiting ? html`<p class="xs m" style="margin-top:8px">${p.people.waiting} note${p.people.waiting === 1 ? '' : 's'} out with no answer yet.</p>` : ''}</div>
         ${p.cleared?.length ? html`<div class="card"><div class="row"><h4 class="grow">Set aside without bothering you</h4><a class="s" href="#/roles?closed=screened">See them</a></div><div class="col s" style="margin-top:10px;gap:6px">${p.cleared.map(c => html`<div class="row"><span class="grow ink2">${c.label || 'Other'}</span><b>${c.n}</b></div>`)}</div></div>` : ''}
-        <div class="card"><h4>Lately</h4><div class="col s" style="margin-top:10px;gap:8px">${acts.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none">${ago(a.at)}</span><span>${a.text}</span></div>`)}</div></div>
+        <div class="card"><h4>Lately</h4><div class="col s" style="margin-top:10px;gap:8px">${acts.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none">${rel(a.at)}</span><span>${a.text}</span></div>`)}</div></div>
       </div></div></div>`;
   },
 };

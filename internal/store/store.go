@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"jobhunt/internal/trace"
 	"os"
 	"path/filepath"
@@ -357,6 +358,42 @@ func (s *Store) Backup(dst string) error {
 	os.Remove(dst)
 	_, err := s.db.Exec(`VACUUM INTO ?`, dst)
 	return err
+}
+
+// Check says whether the file at path is a whole Job Hunt database this
+// program can open: used before a saved copy is put back. The file is only
+// read.
+func Check(path string) error {
+	head := make([]byte, 16)
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	_, err = io.ReadFull(f, head)
+	f.Close()
+	if err != nil || string(head) != "SQLite format 3\x00" {
+		return errors.New("that file is not a Job Hunt copy")
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?mode=ro&_pragma=busy_timeout(5000)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var ok string
+	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&ok); err != nil || ok != "ok" {
+		return errors.New("that copy is damaged and can't be put back")
+	}
+	var v, n int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return err
+	}
+	if v > len(migrations) {
+		return errors.New("that copy was saved by a newer Job Hunt than this one")
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('kv', 'roles', 'cvs')`).Scan(&n); err != nil || n != 3 {
+		return errors.New("that file is not a Job Hunt copy")
+	}
+	return nil
 }
 
 func (s *Store) now() int64 { return s.Now().Unix() }

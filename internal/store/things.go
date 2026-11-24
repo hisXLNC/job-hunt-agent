@@ -626,6 +626,28 @@ func (s *Store) Roles(f RoleFilter) ([]Role, int, error) {
 	return out, total, rows.Err()
 }
 
+// RolesNamingADate lists open roles not yet applied to whose posting speaks
+// of a closing date, with the posting's words, so the date can be read out.
+func (s *Store) RolesNamingADate() ([]Role, error) {
+	rows, err := s.db.Query(`SELECT r.id, r.title, c.name, r.description FROM roles r JOIN companies c ON c.id = r.company_id
+		WHERE r.closed = '' AND r.stage IN ('found', 'ready')
+		AND (r.description LIKE '%clos%' OR r.description LIKE '%deadline%' OR r.description LIKE '%apply by%' OR r.description LIKE '%applications due%' OR r.description LIKE '%application due%' OR r.description LIKE '%posting end date%')
+		ORDER BY r.id DESC LIMIT 2000`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Role
+	for rows.Next() {
+		var r Role
+		if err := rows.Scan(&r.ID, &r.Title, &r.Company, &r.Description); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // RoleCounts gives the number of roles per stage (open ones), plus each way
 // of being closed under "closed:<how>".
 func (s *Store) RoleCounts() (map[string]int, error) {
