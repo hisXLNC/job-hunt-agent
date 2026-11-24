@@ -31,9 +31,9 @@ const EOPEN = [['Senior Product Manager, Tax Workflows', 'Tax &amp; Accounting',
   ['Product Owner, Tax Content', 'Tax &amp; Accounting', 'Remote', 'Full-time', 'Not named', 71, 0, '14 Oct', '—', 'Taken down', '']];
 S.push(shell('roles', 'Thomson Reuters', 'Employer', `<div class="body" style="grid-template-columns:1.45fr 1fr;grid-template-rows:auto auto 1fr;gap:10px;padding:12px 18px 22px">
 <div class="card row" style="grid-column:1/3;gap:12px;padding:9px 14px">${pic('TR', 44)}
- <div class="grow"><div class="row" style="gap:8px"><h3 style="font-size:17px;white-space:nowrap">Thomson Reuters</h3>${tag('Watching', TAG.good)}${tag('Information services')}${tag('You applied here before', TAG.info)}</div>
-  <div class="xs m" style="margin-top:1px">Toronto head office · about 26,000 people · thomsonreuters.com · careers page checked 12 min ago · pay named in postings $98k to $165k</div></div>
- <div class="row" style="gap:16px;margin-right:6px">${[['3', 'open for you'], ['2', 'applications'], ['1', 'interview'], ['3', 'people']].map(x => `<div class="row" style="gap:5px"><b style="font-size:16px">${x[0]}</b><span class="xs m">${x[1]}</span></div>`).join('')}</div>
+ <div class="grow" style="min-width:0"><div class="row" style="gap:8px"><h3 style="font-size:17px;white-space:nowrap">Thomson Reuters</h3>${tag('Watching', TAG.good)}<span style="color:#B7791F;font-weight:700;font-size:14px;white-space:nowrap">★ 3.9</span><span class="xs m" style="white-space:nowrap">4,210 employee reviews</span></div>
+  <div class="xs m" style="margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Information services · Toronto · about 26,000 people · thomsonreuters.com · pays $98k to $165k</div></div>
+ <div class="row" style="gap:14px;margin-right:6px;white-space:nowrap">${[['3', 'open for you'], ['2', 'applications'], ['1', 'interview'], ['3', 'people']].map(x => `<div class="row" style="gap:5px"><b style="font-size:16px">${x[0]}</b><span class="xs m">${x[1]}</span></div>`).join('')}</div>
  ${sbtn('Their careers page ↗')}${sbtn('Stop watching')}${sbtn('<span style="color:var(--crit)">Never show</span>')}</div>
 
 <div class="card" style="padding:0;overflow:hidden;grid-column:1/3">
@@ -47,19 +47,18 @@ S.push(shell('roles', 'Thomson Reuters', 'Employer', `<div class="body" style="g
   ${[['21 Nov', 'Applied', '', 'Product Manager, Indirect Tax (ONESOURCE)', 'CV "Tax technology", tailored · letter sent · follow up 28 Nov'],
     ['18 Nov', 'They said no', 'crit', 'Senior Analyst, Tax Data', '"Moved ahead with an internal candidate"'],
     ['12 Nov', 'Interview', 'info', 'Senior Analyst, Tax Data', 'First call with Priya Nair, 30 min · your notes are saved'],
-    ['9 Nov', 'Message', 'blue', 'Priya Nair wrote to you', '"Thanks for applying, are you free Thursday…"'],
-    ['3 Nov', 'Applied', '', 'Senior Analyst, Tax Data', 'CV "Tax technology" · applied 2 hours after it was posted']].map(x => `<div style="display:grid;grid-template-columns:50px 96px 1fr 1.25fr;gap:10px;padding:5px 14px;border-top:1px solid var(--line2);align-items:center" class="s"><span class="xs m">${x[0]}</span><span>${tag(x[1], TAG[x[2]])}</span><b style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${x[3]}</b><span class="xs m" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${x[4]}</span></div>`).join('')}</div>
+    ['9 Nov', 'Message', 'blue', 'Priya Nair wrote to you', '"Thanks for applying, are you free Thursday…"']].map(x => `<div style="display:grid;grid-template-columns:50px 96px 1fr 1.25fr;gap:10px;padding:5px 14px;border-top:1px solid var(--line2);align-items:center" class="s"><span class="xs m">${x[0]}</span><span>${tag(x[1], TAG[x[2]])}</span><b style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${x[3]}</b><span class="xs m" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${x[4]}</span></div>`).join('')}</div>
 
  <div class="card" style="padding:0;overflow:hidden"><div class="row" style="padding:8px 14px"><h4 class="grow">People here</h4>${sbtn('Find more people here')}</div>
-  ${[['Priya Nair', 'Recruiter', 'Recruiter', 'Wrote to you 9 Nov · 416 555 0100', 'Write a note'], ['Daniel Okafor', 'Director, Tax Product', 'Made the same move', 'Big Four to product, 2021', 'Write a note'], ['Sofia Lindqvist', 'Senior PM, ONESOURCE', 'Shares your roots', 'Relocated to Toronto in 2023', 'Note drafted']].map(p => `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) 136px minmax(0,1.5fr) 96px;gap:8px;padding:5px 14px;border-top:1px solid var(--line2);align-items:center;white-space:nowrap;overflow:hidden" class="s"><b>${p[0]}</b><span>${p[1]}</span><span>${tag(p[2])}</span><span class="xs m">${p[3]}</span><span style="justify-self:end">${sbtn(p[4])}</span></div>`).join('')}</div>
+  ${[['Priya Nair', 'Recruiter', 'Recruiter', 'Wrote to you 9 Nov', 'Write a note'], ['Daniel Okafor', 'Director, Tax Product', 'Made the same move', 'Big Four to product, 2021', 'Write a note'], ['Sofia Lindqvist', 'Senior PM, ONESOURCE', 'Shares your roots', 'Relocated to Toronto in 2023', 'Note drafted']].map(p => `<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) 136px minmax(0,1.5fr) 96px;gap:8px;padding:5px 14px;border-top:1px solid var(--line2);align-items:center;white-space:nowrap;overflow:hidden" class="s"><b>${p[0]}</b><span>${p[1]}</span><span>${tag(p[2])}</span><span class="xs m">${p[3]}</span><span style="justify-self:end">${sbtn(p[4])}</span></div>`).join('')}</div>
  <div class="card col" style="gap:5px;padding:10px 14px"><h4>Your notes</h4><div class="s m" style="border:1px solid var(--line);border-radius:7px;padding:6px 9px;background:var(--s2);min-height:48px">Priya said the ONESOURCE team is growing in the new year…</div></div>
 </div>
 
 <div class="col" style="gap:10px;min-height:0">
  <div class="card col" style="gap:5px;padding:10px 14px"><div class="row"><h4 class="grow">About</h4><span class="xs m">from their site and postings · 22 Nov</span></div>
-  <p class="s" style="color:var(--ink2)">Sells software and information to tax, legal, accounting and news professionals. Most revenue is subscriptions; the Toronto office builds much of the tax and accounting product line.</p>
-  <div class="s"><b>Tax &amp; Accounting Professionals</b> <span class="m">Software for accounting firms: tax preparation, workflow and audit.</span></div>
-  <div class="s"><b>Corporates (ONESOURCE)</b> <span class="m">Indirect tax, trade and compliance software for large companies' tax departments.</span></div></div>
+  <p class="s" style="color:var(--ink2)">Sells software and information to tax, legal, accounting and news professionals. The Toronto office builds much of the tax product line.</p>
+  <div class="s"><b>Tax &amp; Accounting Professionals</b> <span class="m">Tax preparation and audit software for accounting firms.</span></div>
+  <div class="s"><b>Corporates (ONESOURCE)</b> <span class="m">Indirect tax software for large companies.</span></div></div>
 
  <div class="card col" style="gap:6px;padding:10px 14px"><div class="row"><h4 class="grow">What working there is like</h4>${sbtn('Look again')}</div>
   <div class="row" style="gap:6px">${tag('Glassdoor 3.9 of 5 ↗')}${tag('Indeed 3.8 of 5 ↗')}${tag('Blind ↗')}</div>
@@ -69,6 +68,6 @@ S.push(shell('roles', 'Thomson Reuters', 'Employer', `<div class="body" style="g
   <div class="xs m">Claude's summary of public employee reviews, read 22 Nov.</div></div>
 
  <div class="card col" style="gap:4px;padding:10px 14px"><h4>Lately</h4>
-  ${[['19 Nov', 'Opened 4 product roles in Toronto this week, the most since June'], ['6 Nov', 'Third-quarter results: tax and accounting revenue up 10%']].map(x => `<div class="row s" style="align-items:flex-start;gap:8px"><span class="xs m" style="width:40px;padding-top:1px">${x[0]}</span><span class="grow">${x[1]}</span></div>`).join('')}</div>
+  ${[['19 Nov', '4 new product roles this week']].map(x => `<div class="row s" style="align-items:flex-start;gap:8px"><span class="xs m" style="width:40px;padding-top:1px">${x[0]}</span><span class="grow">${x[1]}</span></div>`).join('')}</div>
 
 </div></div>`, WORKING));
