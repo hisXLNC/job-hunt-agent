@@ -2,6 +2,19 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.26
+
+First batch from going through everything the old Job Hunt did.
+
+- **Windows notifications**: a fresh role that fits (with its fit, age and applicant count) and "X wrote to you". A click opens it in Job Hunt. Switch and "Show a test" under You → Connections → On this computer.
+- **An icon by the clock**: its menu opens Job Hunt, searches now, checks for updates or stops it.
+- **Keeps the computer awake** while it is working (or always, or never: your choice). A sleeping computer finds nothing.
+- **You set when it searches**: the times of the full searches, how often the quick check for brand-new postings runs (10 minutes to 2 hours, or off) and between which hours. You → Connections → When Job Hunt searches.
+- **Hard limits** under You: postings older than a number of days, roles that pay under your floor, and contract, part-time or internship roles can be set aside without being read. Until now the pay floor only put a tag on the role.
+- **Keyboard**: j and k move through a list, Enter opens, x ticks, p prepares, a marks applied, n is "not for me", o opens the posting, c asks Claude, / goes to the find box, ? lists the keys.
+- **Save as a spreadsheet** on Roles: every role as a file Excel opens.
+- **What changed in each version** is listed under You → The app. Job Hunt now looks for a newer version every half hour.
+
 ## 26.11.25
 
 - **Job Hunt updates itself.** It looks for a newer version every few hours. When there is one it downloads the installer, checks it is exactly the file that was published, installs it quietly while it isn't in the middle of something, and comes back by itself on the new version. Your data, your desktop shortcut and your "start with Windows" choice are left as they are.

@@ -23,6 +23,10 @@ function about(d) {
       <div class="grid2"><label class="field">Words that mark your field <span class="h">A title with one of these is always read. Comma-separated.</span><input type="text" name="domain" value="${(p.domain || []).join(', ')}"></label>
         <label class="field">Never show <span class="h">Titles or employers. Comma-separated.</span><input type="text" name="avoid" value="${(p.avoid || []).join(', ')}"></label></div>
       <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Ways of working:</span>${['remote', 'hybrid', 'onsite'].map(w => html`<label class="row s" style="gap:5px"><input type="checkbox" name="wp_${w}" ${!p.workplaces?.length || p.workplaces.includes(w) ? 'checked' : ''}> ${w === 'onsite' ? 'On site' : w[0].toUpperCase() + w.slice(1)}</label>`)}</div>
+      <div class="hr"></div><h3>Hard limits</h3><p class="s m">A posting that breaks one of these is set aside without being read. You can still see them under Roles → Set aside.</p>
+      <div class="grid3"><label class="field">Posted no longer ago than<select name="max_age_days">${[[0, 'Any age'], [1, '1 day'], [3, '3 days'], [7, '1 week'], [14, '2 weeks'], [30, '1 month']].map(([v, t]) => html`<option value="${v}" ${(p.max_age_days || 0) === v ? 'selected' : ''}>${t}</option>`)}</select></label>
+        <label class="row s" style="gap:6px;font-weight:500;align-self:end;height:36px"><input type="checkbox" name="pay_strict" ${p.pay_strict ? 'checked' : ''}> Set aside roles that pay under your floor</label></div>
+      <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Never show:</span>${[['contract', 'Contract'], ['part-time', 'Part-time'], ['internship', 'Internships']].map(([k, t]) => html`<label class="row s" style="gap:5px"><input type="checkbox" name="no_${k}" ${(p.no_types || []).includes(k) ? 'checked' : ''}> ${t}</label>`)}</div>
       <label class="field" style="max-width:420px">When a strong role appears<select name="may_prepare"><option value="do" ${p.may_prepare !== 'ask' ? 'selected' : ''}>Write the CV and letter straight away</option><option value="ask" ${p.may_prepare === 'ask' ? 'selected' : ''}>Ask me before writing anything</option></select></label>
       <p class="xs m">Job Hunt never submits an application or sends a message. That is always you.</p>
       <div class="row"><button class="btn p">Save</button></div></form>
@@ -87,7 +91,27 @@ function connections(d) {
       <label class="field" style="max-width:260px">Mail server<input type="text" name="host" value="${m.host}"></label>
       <p class="xs m">Gmail: Google Account → Security → 2-Step Verification → App passwords. The password is kept only in Job Hunt's data file on this computer.</p>
       <div class="row"><button class="btn p">Save and check</button>${m.last_at ? html`<span class="xs m">Last read ${ago(m.last_at)}</span>` : ''}</div></form>
+    ${thisComputer(d)}${schedule(d)}
     </div></div>`;
+}
+
+const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+function thisComputer(d) {
+  const k = d.desk || {};
+  return html`<form data-act="savedesk" class="card col" style="gap:10px"><div class="row"><h3 class="grow">On this computer</h3><span class="chip ${k.notify && d.can_notify ? 'good' : ''}">${k.notify && d.can_notify ? 'Notifications on' : 'Notifications off'}</span></div>
+    <label class="row s" style="font-weight:500"><input type="checkbox" name="notify" ${k.notify ? 'checked' : ''}> Show a Windows notification for a fresh role that fits, and when someone writes to you</label>
+    <p class="xs m">A click opens it in Job Hunt. Job Hunt also sits by the clock (the icon's menu opens it, searches now, checks for updates or stops it).${d.can_notify ? '' : ' Notifications are shown only on Windows.'}</p>
+    <label class="field" style="max-width:420px">Keep this computer awake <span class="h">A sleeping computer finds nothing. The screen can still turn off.</span><select name="awake"><option value="working" ${k.awake === 'working' ? 'selected' : ''}>While Job Hunt is working</option><option value="always" ${k.awake === 'always' ? 'selected' : ''}>Always, while searching is on</option><option value="off" ${k.awake === 'off' ? 'selected' : ''}>Never</option></select></label>
+    <div class="row"><button class="btn p">Save</button>${d.can_notify ? html`<button type="button" class="btn" data-act="testdesk">Show a test</button>` : ''}</div></form>`;
+}
+function schedule(d) {
+  const sc = d.schedule || { full: [] };
+  const hour = (name, v) => html`<select name="${name}" style="width:92px">${Array.from({ length: 24 }, (_, h) => html`<option value="${h}" ${v === h ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`)}</select>`;
+  return html`<form data-act="saveschedule" class="card col" style="gap:10px"><h3>When Job Hunt searches</h3>
+    <label class="field">Full searches at <span class="h">Every source, every title. Times of day, comma-separated; up to six.</span><input type="text" name="full" value="${sc.full.map(hhmm).join(', ')}" placeholder="07:00, 12:30, 17:30"></label>
+    <label class="field" style="max-width:420px">Quick check for brand-new postings <span class="h">Only postings a couple of hours old with few applicants. This is what gets you in early.</span><select name="fast_minutes">${[[10, 'Every 10 minutes'], [15, 'Every 15 minutes'], [20, 'Every 20 minutes'], [30, 'Every 30 minutes'], [60, 'Every hour'], [120, 'Every 2 hours'], [0, 'Off']].map(([v, t]) => html`<option value="${v}" ${sc.fast_minutes === v ? 'selected' : ''}>${t}</option>`)}</select></label>
+    <div class="row s" style="gap:8px"><span style="font-weight:600">Quick checks between</span>${hour('from', sc.from)}<span>and</span>${hour('to', sc.to)}<span class="m">Same time twice means all day.</span></div>
+    <div class="row"><button class="btn p">Save</button></div></form>`;
 }
 
 function panel(d) {
@@ -118,6 +142,8 @@ function theApp(d) {
       <p class="s m">Everything is kept in one folder on this computer:</p><code class="s" style="background:var(--s2);padding:6px 9px;border-radius:7px;word-break:break-all">${d.dir}</code>
       <p class="s m">A copy is saved there every day and the last seven are kept. Job Hunt keeps searching while its window is closed; start it again from the Start menu to bring the window back.</p>
       <div class="row"><button class="btn" data-act="backup">Save a copy now</button><span class="grow"></span><button class="btn danger" data-act="quit" data-confirm="Stop Job Hunt? Searching stops until you start it again.">Stop Job Hunt</button></div></div>
+    ${d.history?.length ? html`<div class="card col" style="gap:6px"><h4>What changed in each version</h4>${d.history.slice(0, 3).map(h => html`<details ${h.version === d.version ? 'open' : ''}><summary class="s">${h.version}${h.version === d.version ? ' · this one' : ''}</summary><div class="news" style="margin-top:6px"><ul>${h.text.split('\n').filter(l => l.trim()).map(l => html`<li>${l.replace(/^[-*]\s+/, '').replace(/\*\*/g, '')}</li>`)}</ul></div></details>`)}
+      ${d.history.length > 3 ? html`<details><summary class="s">Earlier versions (${d.history.length - 3})</summary>${d.history.slice(3).map(h => html`<div class="news" style="margin-top:8px"><h4>${h.version}</h4><ul>${h.text.split('\n').filter(l => l.trim()).map(l => html`<li>${l.replace(/^[-*]\s+/, '').replace(/\*\*/g, '')}</li>`)}</ul></div>`)}</details>` : ''}</div>` : ''}
     ${d.old ? oldCard(d.old, false) : ''}
     ${d.problems?.length ? html`<div class="card"><h4>Recent problems</h4><div class="col s" style="margin-top:10px;gap:8px">${d.problems.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:70px;flex:none">${ago(a.at)}</span><span>${a.text}</span></div>`)}</div></div>` : ''}
     ${d.debug ? html`<div class="card col" style="gap:8px"><div class="row"><h4 class="grow">Debugging</h4><button class="btn sm p" data-act="copydebug" title="Copies the report below so you can paste it when reporting a problem. It leaves out your name, e-mail addresses and keys.">Copy debug details</button><a class="btn sm" href="/api/debug/report" download title="Saves a longer report (the newest 4,000 lines) as a text file.">Save as a file</a><button class="btn sm" data-act="openfolder" data-what="data" title="Opens the folder that holds your data and debug.log.">Open the folder</button></div>
@@ -133,13 +159,13 @@ function theApp(d) {
 
 export default {
   title: 'You',
-  sub: (d, route) => ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer', connections: 'Claude, your phone, your inbox', panel: 'Get it, put it in your browser, connect it', app: 'Version, your data, and what Job Hunt has been doing' })[route.parts[1] || ''],
+  sub: (d, route) => ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer', connections: 'Claude, your phone, your inbox, this computer, and when to search', panel: 'Get it, put it in your browser, connect it', app: 'Version, your data, and what Job Hunt has been doing' })[route.parts[1] || ''],
   topics: ['you', 'profile', 'connections'],
   load(route) {
     switch (route.parts[1] || '') {
       case 'arriving': return api('arriving');
       case 'connections': case 'panel': return api('connections');
-      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null)]).then(([a, o, g]) => ({ ...a, old: o, debug: g }));
+      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => [])]).then(([a, o, g, h]) => ({ ...a, old: o, debug: g, history: h }));
     }
     return api('you');
   },
@@ -152,10 +178,18 @@ export default {
     ...oldActions,
     async checkupdate() { const r = await post('update/check'); toast(r.update ? `Version ${r.update.version} is ready` : 'This is the newest version'); },
     autoupdate: ({ value }) => put('update', { auto: value }).then(() => toast(value ? 'New versions install by themselves' : 'Job Hunt will only tell you about new versions')),
+    savedesk: ({ f }) => put('desk', { notify: !!f.notify, awake: f.awake }).then(() => toast('Saved')),
+    testdesk: () => post('desk/test').then(() => { toast('Sent. It shows by the clock.'); return false; }),
+    async saveschedule({ f }) {
+      const full = f.full.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean).map(t => { const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(t); if (!m) throw new Error(`"${t}" isn't a time. Write times like 07:00 or 17:30.`); let h = +m[1]; if (/pm/i.test(m[3] || '') && h < 12) h += 12; if (/am/i.test(m[3] || '') && h === 12) h = 0; return h * 60 + +(m[2] || 0); });
+      await put('schedule', { full, fast_minutes: +f.fast_minutes, from: +f.from, to: +f.to });
+      toast('Saved. The next searches follow this.');
+    },
     async saveprofile({ f }) {
       const wp = ['remote', 'hybrid', 'onsite'].filter(w => f['wp_' + w]);
       await put('profile', { name: f.name, headline: f.headline, rare: f.rare, city: f.city, places: lines(f.places), country: f.country, home: f.home, arrive_on: f.arrive_on, work_status: f.work_status, pay_floor: +f.pay_floor || 0,
-        start_early: !!f.start_early, titles: { level: lines(f.level), step_up: lines(f.step_up), sideways: lines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid), workplaces: wp.length === 3 ? [] : wp, may_prepare: f.may_prepare });
+        start_early: !!f.start_early, titles: { level: lines(f.level), step_up: lines(f.step_up), sideways: lines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid), workplaces: wp.length === 3 ? [] : wp, may_prepare: f.may_prepare,
+        pay_strict: !!f.pay_strict, max_age_days: +f.max_age_days || 0, no_types: ['contract', 'part-time', 'internship'].filter(k => f['no_' + k]) });
       toast('Saved. The next search uses this.');
     },
     async addcv({ el }) { const file = el.files[0]; if (!file) return false; toast('Reading your CV. About a minute.'); await api('cvs?name=' + encodeURIComponent(file.name), { method: 'POST', raw: file }); toast('CV added'); },

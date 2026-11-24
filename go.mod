@@ -3,6 +3,7 @@ module jobhunt
 go 1.26.0
 
 require (
+	fyne.io/systray v1.11.0
 	github.com/anthropics/anthropic-sdk-go/v2 v2.13.0
 	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	modernc.org/sqlite v1.63.0
@@ -14,6 +15,7 @@ require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

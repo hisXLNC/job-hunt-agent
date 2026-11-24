@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"jobhunt/internal/store"
+	"jobhunt/internal/trace"
 )
 
 // Full searches run at these minutes after midnight; the fast check for
@@ -22,21 +23,82 @@ var fullAt = []int{7 * 60, 12*60 + 30, 17*60 + 30}
 
 const fastEvery = 20 * time.Minute
 
+// Schedule is when Job Hunt searches, as the person set it.
+type Schedule struct {
+	Full        []int `json:"full"`         // full searches, minutes after midnight
+	FastMinutes int   `json:"fast_minutes"` // the quick check for brand-new postings; 0 = off
+	From        int   `json:"from"`         // quick checks only between these hours; equal = all day
+	To          int   `json:"to"`
+}
+
+func (e *Engine) Schedule() Schedule {
+	sc := Schedule{Full: fullAt, FastMinutes: int(fastEvery / time.Minute)}
+	e.S.Get("schedule", &sc)
+	return sc
+}
+
+func (e *Engine) SetSchedule(sc Schedule) error {
+	var full []int
+	seen := map[int]bool{}
+	for _, m := range sc.Full {
+		if m >= 0 && m < 24*60 && !seen[m] {
+			seen[m] = true
+			full = append(full, m)
+		}
+	}
+	if len(full) == 0 {
+		return errors.New("Keep at least one full search a day.")
+	}
+	if len(full) > 6 {
+		return errors.New("Six full searches a day is the most; the quick check covers the time between.")
+	}
+	sort.Ints(full)
+	sc.Full = full
+	if sc.FastMinutes != 0 && (sc.FastMinutes < 10 || sc.FastMinutes > 240) {
+		return errors.New("The quick check can run every 10 minutes to every 4 hours, or be off.")
+	}
+	sc.From, sc.To = min(max(sc.From, 0), 23), min(max(sc.To, 0), 23)
+	if err := e.S.Set("schedule", sc); err != nil {
+		return err
+	}
+	e.S.Changed("status", "radar")
+	return nil
+}
+
 // nextTimes says when the next fast check and the next full search are due.
 func (e *Engine) nextTimes() (fast, full int64) {
 	st := e.searchState()
 	now := e.Now()
-	if st.LastFast == 0 {
+	sc := e.Schedule()
+	switch {
+	case sc.FastMinutes == 0:
+		fast = now.Add(24 * time.Hour).Unix()
+	case st.LastFast == 0:
 		fast = now.Unix()
-	} else {
-		fast = st.LastFast + int64(fastEvery/time.Second)
+	default:
+		fast = st.LastFast + int64(sc.FastMinutes)*60
 	}
-	return fast, nextFull(now, st.LastFull).Unix()
+	// Outside the hours the person chose, the quick check waits for them.
+	if sc.FastMinutes != 0 && sc.From != sc.To {
+		at := time.Unix(max(fast, now.Unix()), 0).In(now.Location())
+		h := at.Hour()
+		in := (sc.From < sc.To && h >= sc.From && h < sc.To) || (sc.From > sc.To && (h >= sc.From || h < sc.To))
+		if !in {
+			next := time.Date(at.Year(), at.Month(), at.Day(), sc.From, 0, 0, 0, at.Location())
+			if !next.After(at) {
+				next = next.AddDate(0, 0, 1)
+			}
+			fast = next.Unix()
+		}
+	}
+	return fast, nextFullAt(now, st.LastFull, sc.Full).Unix()
 }
 
 // nextFull is the first scheduled time after the last full search; if one was
 // missed (the computer was off), that is now.
-func nextFull(now time.Time, last int64) time.Time {
+func nextFull(now time.Time, last int64) time.Time { return nextFullAt(now, last, fullAt) }
+
+func nextFullAt(now time.Time, last int64, fullAt []int) time.Time {
 	day := dayStart(now)
 	var prev time.Time // the most recent scheduled time at or before now
 	for d := -1; d <= 0; d++ {
@@ -123,7 +185,7 @@ func (e *Engine) chores(now time.Time) {
 	if every("backup", 24*time.Hour) {
 		go e.Backup()
 	}
-	if every("update", 4*time.Hour) {
+	if every("update", 30*time.Minute) {
 		go e.CheckUpdate(e.ctx)
 	} else if u := e.NewerVersion(); u != nil && e.AutoUpdate() && e.CanInstall() && !e.anyJobBut("") && every("update-try:"+u.Version, 6*time.Hour) {
 		// A version found while Job Hunt was busy is installed once it is idle.
@@ -254,15 +316,68 @@ func ago(d time.Duration) string {
 	return fmt.Sprintf("%d days ago", int(d.Hours()/24+0.5))
 }
 
-// maybePush tells the phone about a strong role that is still fresh: the
-// whole point is to apply while the applicant count is in single digits.
+// DeskSet is what Job Hunt does on this computer besides its window.
+type DeskSet struct {
+	Notify bool   `json:"notify"` // Windows notifications for fresh strong roles and replies
+	Awake  string `json:"awake"`  // "off", "working" (while it is busy), "always"
+}
+
+func (e *Engine) Desk() DeskSet {
+	set := DeskSet{Notify: true, Awake: "working"}
+	e.S.Get("desk", &set)
+	return set
+}
+
+func (e *Engine) SetDesk(set DeskSet) error {
+	if set.Awake != "off" && set.Awake != "always" {
+		set.Awake = "working"
+	}
+	err := e.S.Set("desk", set)
+	e.S.Changed("connections")
+	return err
+}
+
+// WantsAwake says whether the computer should be kept from sleeping right now.
+func (e *Engine) WantsAwake() bool {
+	switch e.Desk().Awake {
+	case "always":
+		return !e.Paused()
+	case "off":
+		return false
+	}
+	return e.anyJobBut("")
+}
+
+// Tell shows a notification on this computer, if they are on. page is the
+// part of Job Hunt it opens, like "#/roles/12".
+func (e *Engine) Tell(title, text, page string) {
+	if e.Notify == nil || !e.Desk().Notify {
+		return
+	}
+	go func() {
+		if err := e.Notify(title, text, e.BaseURL+page); err != nil {
+			trace.Log("problem", "notification: %v", err)
+		}
+	}()
+}
+
+// maybePush tells the person about a strong role that is still fresh, on
+// this computer and on their phone: the whole point is to apply while the
+// applicant count is in single digits.
 func (e *Engine) maybePush(r store.Role, fit, tailored int) {
 	set := e.Phone()
 	now := e.Now()
+	age := now.Sub(time.Unix(r.Age(), 0))
+	if age <= 6*time.Hour && fit >= set.MinFit {
+		line := fmt.Sprintf("Fit %d · posted %s", fit, ago(age))
+		if r.Applicants >= 0 {
+			line += fmt.Sprintf(" · %d applicants so far", r.Applicants)
+		}
+		e.Tell(r.Title+" at "+r.Company, line+". Your CV and letter are ready.", fmt.Sprintf("#/roles/%d", r.ID))
+	}
 	if !set.On || set.Topic == "" || fit < set.MinFit || quiet(set, now.Hour()) {
 		return
 	}
-	age := now.Sub(time.Unix(r.Age(), 0))
 	if age > 6*time.Hour {
 		return
 	}

@@ -146,6 +146,16 @@ func main() {
 			stop()
 		}
 	}()
+	// On this computer: notifications, the icon by the clock, and staying awake to search.
+	e.BaseURL = url
+	e.Notify = deskNotify
+	if !*demo {
+		runTray(ctx, stop, url, dir, e)
+	}
+	keepAwake(ctx, e.WantsAwake)
+	if from := e.WhatsNew(); from != "" && e.Desk().Notify {
+		go deskNotify("Job Hunt updated to "+api.Version, "It installed by itself. Open it to see what changed.", url)
+	}
 	go e.Run()
 	log.Printf("Job Hunt %s listening on %s, data in %s", api.Version, url, dir)
 	if !*noWindow {

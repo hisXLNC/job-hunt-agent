@@ -35,6 +35,16 @@ func Changes(from, to string) []Section {
 	return out
 }
 
+// History is every version's changes, newest first.
+func History() []Section {
+	var out []Section
+	for _, part := range strings.Split("\n"+changelog, "\n## ")[1:] {
+		head, body, _ := strings.Cut(part, "\n")
+		out = append(out, Section{Version: strings.TrimSpace(head), Text: strings.TrimSpace(body)})
+	}
+	return out
+}
+
 type Section struct {
 	Version string `json:"version"`
 	Text    string `json:"text"`

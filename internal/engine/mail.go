@@ -596,6 +596,7 @@ func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 		if set.On && !quiet(set, e.Now().Hour()) {
 			go e.Push(e.ctx, r.Company+" wrote to you", firstOf(m.Summary, m.Subject), "")
 		}
+		e.Tell(r.Company+" wrote to you", firstOf(m.Summary, m.Subject), "#/replies")
 	}
 	return nil
 }

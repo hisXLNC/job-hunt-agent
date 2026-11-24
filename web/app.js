@@ -318,6 +318,7 @@ export async function reload(quiet) {
     document.getElementById('title').textContent = typeof page.title === 'function' ? page.title(data, route) : page.title;
     document.getElementById('sub').textContent = page.sub ? page.sub(data, route) : '';
     page.after?.(root, data, route);
+    if (cursor >= 0) { if (quiet) moveCursor(cursor); else cursor = -1; }
   } catch (e) {
     if (seq !== loadSeq) return;
     document.getElementById('title').textContent = typeof page.title === 'string' ? page.title : 'Job Hunt';
@@ -334,6 +335,7 @@ export function redraw() {
   root.innerHTML = app.page.view(app.data, app.route).s;
   root.scrollTop = keep;
   app.page.after?.(root, app.data, app.route);
+  if (cursor >= 0) moveCursor(cursor);
 }
 let sizeTimer, lastSize = '';
 window.addEventListener('resize', () => {
@@ -426,6 +428,39 @@ document.addEventListener('keydown', ev => {
   if (ev.key === 'Escape') { document.getElementById('found')?.setAttribute('hidden', ''); }
   if (ev.key === 'Enter' && ev.target.id === 'find') { const a = document.querySelector('#found a'); if (a) { location.hash = a.getAttribute('href'); ev.target.value = ''; document.getElementById('found').hidden = true; } }
 });
+// Keyboard flow in lists: j and k move, Enter opens, x ticks, p prepares, a marks applied, n is "not for me", ? shows the keys.
+let cursor = -1;
+function listRows() { return [...document.querySelectorAll('#page table.tbl tbody tr')].filter(r => r.querySelector('a.t')); }
+function moveCursor(to) {
+  const rows = listRows();
+  if (!rows.length) return;
+  cursor = Math.max(0, Math.min(rows.length - 1, to));
+  rows.forEach((r, i) => r.classList.toggle('cur', i === cursor));
+  rows[cursor].scrollIntoView({ block: 'nearest' });
+}
+document.addEventListener('keydown', ev => {
+  const t = ev.target;
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable || document.getElementById('whatsnew')) return;
+  const rows = listRows(), row = rows[cursor];
+  const press = sel => { const b = row?.querySelector(sel); if (b) { b.click(); return true; } return false; };
+  switch (ev.key) {
+    case 'j': case 'ArrowDown': if (rows.length) { ev.preventDefault(); moveCursor(cursor + 1); } break;
+    case 'k': case 'ArrowUp': if (rows.length) { ev.preventDefault(); moveCursor(cursor - 1); } break;
+    case 'Enter': if (row && t === document.body) { const a = row.querySelector('a.t'); if (a) location.hash = a.getAttribute('href'); } break;
+    case 'x': if (press('td.pick input')) ev.preventDefault(); break;
+    case 'p': press('[data-act=prepare]'); break;
+    case 'a': press('[data-act=applied]'); break;
+    case 'n': press('[data-act=no]'); break;
+    case 'o': { const a = row?.querySelector('a[target=_blank]'); if (a) window.open(a.href, '_blank', 'noopener'); break; }
+    case 'c': ev.preventDefault(); openAssistant(); break;
+    case '/': ev.preventDefault(); document.getElementById('find')?.focus(); break;
+    case '?': toast('Keys: j/k move · Enter open · c ask Claude · x tick · p prepare · a I applied · n not for me · o open the posting · / find · g then t/r/p for Today/Roles/People'); break;
+    case 'g': goKey = Date.now(); break;
+    case 't': if (Date.now() - goKey < 1200) location.hash = '#/today'; break;
+    case 'r': if (Date.now() - goKey < 1200) location.hash = '#/roles'; break;
+  }
+});
+let goKey = 0;
 window.addEventListener('hashchange', () => { const f = document.getElementById('find'); if (f) f.value = ''; document.getElementById('found')?.setAttribute('hidden', ''); navigate(); });
 
 // The program says when something changed; open pages bring themselves up to date.

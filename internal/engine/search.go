@@ -711,6 +711,22 @@ func screen(p store.Profile, post sources.Posting, searched bool) (reason, band 
 			return "Not a way of working you chose (" + post.Workplace + ")", band
 		}
 	}
+	if p.PayStrict && p.PayFloor > 0 {
+		if y := PayPerYear(post.Pay); y > 0 && y < p.PayFloor {
+			return "Pays under your floor", band
+		}
+	}
+	if p.MaxAgeDays > 0 && !post.PostedAt.IsZero() && time.Since(post.PostedAt) > time.Duration(p.MaxAgeDays)*24*time.Hour {
+		return fmt.Sprintf("Posted more than %d days ago", p.MaxAgeDays), band
+	}
+	if len(p.NoTypes) > 0 {
+		kind := strings.ToLower(JobType(post.Title, post.Description))
+		for _, t := range p.NoTypes {
+			if t = strings.ToLower(strings.TrimSpace(t)); t != "" && strings.HasPrefix(kind, t) {
+				return "A kind of job you ruled out (" + t + ")", band
+			}
+		}
+	}
 	return "", band
 }
 

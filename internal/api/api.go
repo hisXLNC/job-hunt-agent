@@ -3,9 +3,11 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -1138,7 +1140,8 @@ func (s *Server) Handler() http.Handler {
 		s.mu.Unlock()
 		byTask, _ := st.UsageByTask(e.Now().Add(-7 * 24 * time.Hour).Unix())
 		return map[string]any{"claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
-			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask}, nil
+			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
+			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil}, nil
 	})
 	h("PUT /api/llm", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		cur := e.LLM()
@@ -1238,6 +1241,73 @@ func (s *Server) Handler() http.Handler {
 		}
 		read(r, &in)
 		return map[string]any{"stopped": e.StopJob(in.Name)}, nil
+	})
+	// This computer: notifications, staying awake, and when searches run.
+	h("GET /api/desk", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		return map[string]any{"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil}, nil
+	})
+	h("PUT /api/desk", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		set := e.Desk()
+		if err := read(r, &set); err != nil {
+			return nil, err
+		}
+		return nil, e.SetDesk(set)
+	})
+	h("POST /api/desk/test", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if e.Notify == nil {
+			return nil, bad("Notifications aren't available on this computer.")
+		}
+		if err := e.Notify("Job Hunt can reach you here", "Fresh roles that fit, and replies, show up like this.", e.BaseURL+"#/today"); err != nil {
+			return nil, bad(err.Error())
+		}
+		return nil, nil
+	})
+	h("PUT /api/schedule", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		sc := e.Schedule()
+		if err := read(r, &sc); err != nil {
+			return nil, err
+		}
+		if err := e.SetSchedule(sc); err != nil {
+			return nil, bad(err.Error())
+		}
+		return e.Schedule(), nil
+	})
+	h("GET /api/changes", func(w http.ResponseWriter, r *http.Request) (any, error) { return jobhunt.History(), nil })
+	// Every role as a spreadsheet file.
+	mux.HandleFunc("GET /api/roles.csv", func(w http.ResponseWriter, r *http.Request) {
+		roles, _, err := st.Roles(store.RoleFilter{Closed: []string{"*"}, Unread: true, Sort: "age", Limit: 20000})
+		if err != nil {
+			http.Error(w, "couldn't read the roles", 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="JobHunt-roles.csv"`)
+		w.Write([]byte("\xEF\xBB\xBF"))
+		cw := csv.NewWriter(w)
+		day := func(t int64) string {
+			if t <= 0 {
+				return ""
+			}
+			return time.Unix(t, 0).Format("2006-01-02")
+		}
+		num := func(n int) string {
+			if n < 0 {
+				return ""
+			}
+			return strconv.Itoa(n)
+		}
+		// A cell that starts like a formula is text from a posting: it is kept from running in a spreadsheet.
+		safe := func(s string) string {
+			if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
+				return "'" + s
+			}
+			return s
+		}
+		cw.Write([]string{"Title", "Employer", "Place", "Way of working", "Pay", "Fit now", "Fit tailored", "Stage", "Closed", "Why", "Posted", "First seen", "Applied", "Applicants", "Source", "Link"})
+		for _, x := range roles {
+			cw.Write([]string{safe(x.Title), safe(x.Company), safe(x.Location), x.Workplace, safe(x.Pay), num(x.Fit), num(x.FitTailored), x.Stage, x.Closed, safe(x.ClosedWhy), day(x.PostedAt), day(x.FirstSeenAt), day(x.AppliedAt), num(x.Applicants), x.Source, safe(cmp.Or(x.ApplyURL, x.URL))})
+		}
+		cw.Flush()
 	})
 	// Updates: look now, install now, and whether they install by themselves.
 	h("POST /api/update/check", func(w http.ResponseWriter, r *http.Request) (any, error) {

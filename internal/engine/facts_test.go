@@ -1,6 +1,12 @@
 package engine
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"jobhunt/internal/sources"
+	"jobhunt/internal/store"
+)
 
 func TestQuickFactsAreReadFromThePosting(t *testing.T) {
 	for _, c := range []struct{ title, desc, want string }{
@@ -24,5 +30,27 @@ func TestQuickFactsAreReadFromThePosting(t *testing.T) {
 	}
 	if _, ok := Closes("We close deals fast."); ok {
 		t.Error("found a closing date where there is none")
+	}
+}
+
+func TestHardLimitsSetPostingsAside(t *testing.T) {
+	p := store.Profile{Titles: store.Titles{Level: []string{"Tax Manager"}}, PayFloor: 100000, PayStrict: true, MaxAgeDays: 7, NoTypes: []string{"contract"}}
+	base := sources.Posting{Title: "Tax Manager", Company: "Acme", Pay: "$120,000 a year", PostedAt: time.Now().Add(-time.Hour)}
+	if why, _ := screen(p, base, true); why != "" {
+		t.Fatalf("a posting inside every limit was set aside: %s", why)
+	}
+	low, old, contract := base, base, base
+	low.Pay = "$70,000–$85,000 a year"
+	old.PostedAt = time.Now().Add(-9 * 24 * time.Hour)
+	contract.Title = "Tax Manager (12 month contract)"
+	for name, post := range map[string]sources.Posting{"pay": low, "age": old, "type": contract} {
+		if why, _ := screen(p, post, true); why == "" {
+			t.Errorf("the %s limit let a posting through", name)
+		}
+	}
+	// With no stated pay, nothing is assumed.
+	base.Pay = ""
+	if why, _ := screen(p, base, true); why != "" {
+		t.Errorf("a posting that names no pay was set aside: %s", why)
 	}
 }

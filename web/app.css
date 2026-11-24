@@ -252,3 +252,4 @@ a.emp{color:inherit}a.emp:hover{color:var(--accent);text-decoration:underline}
 .modal{position:fixed;inset:0;background:rgba(18,24,41,.45);z-index:60;display:grid;place-items:center;padding:24px}
 .modal .card{width:min(680px,100%);max-height:80vh;overflow:auto;display:flex;flex-direction:column;gap:10px;box-shadow:0 24px 60px rgba(18,24,41,.3)}
 .news ul{margin:0 0 6px 18px;display:grid;gap:6px;font-size:13px}.news h4{margin:8px 0 4px}
+.tbl tbody tr.cur{box-shadow:inset 3px 0 0 var(--accent);background:#F6F8FE}

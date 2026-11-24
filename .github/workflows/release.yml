@@ -112,6 +112,10 @@ jobs:
           $page = Invoke-WebRequest "http://127.0.0.1:47700/" -UseBasicParsing -TimeoutSec 5
           if ($page.Content -notmatch "Job Hunt") { throw "the first page did not load" }
           Write-Host "Started: version $($st.version), data created, pages served"
+          # The icon by the clock and notifications must not stop the program. A build machine has
+          # nobody signed in at a screen, so a notification that can't be shown is only noted.
+          try { Invoke-RestMethod "http://127.0.0.1:47700/api/desk/test" -Method Post -Headers @{ "X-JobHunt" = "1" } -TimeoutSec 30 | Out-Null; Write-Host "A Windows notification was shown" } catch { Write-Host "Notification not shown here: $($_.ErrorDetails.Message)" }
+          State | Out-Null
 
           # 3. Asked to stop, it stops.
           Start-Process $exe -ArgumentList "-quit" -Wait

@@ -44,7 +44,7 @@ export default {
     return html`<div class="body">
       <div class="card row wrap" style="gap:18px">
         <div><div class="eb">Watching</div><div class="big">${st.sources}</div><div class="xs m">sources</div></div>
-        <div class="grow s ink2" style="min-width:300px">A full search runs three times a day. In between, Job Hunt checks every 20 minutes for postings under two hours old, so you can be among the first ten applicants.
+        <div class="grow s ink2" style="min-width:300px">Full searches run at the times you set; in between, Job Hunt keeps checking for postings under two hours old, so you can be among the first ten applicants. <a href="#/you/connections">Change the times</a>.
           <div style="margin-top:4px">${st.paused ? html`<b style="color:var(--warn)">Searching is paused.</b>` : html`Next quick check <b>${until(st.next_fast)}</b> · next full search <b>${until(st.next_full)}</b>`}${d.search.last_full ? html` · last full search ${ago(d.search.last_full)}` : ''}${d.unread ? html` · ${d.unread} new roles waiting to be read` : ''}</div>
           ${d.search.linkedin_note ? html`<div style="color:var(--warn);margin-top:2px">${d.search.linkedin_note}</div>` : ''}</div>
         <div class="row"><button class="btn p" data-act="search" data-kind="full">Search now</button><button class="btn" data-act="pause" data-paused="${st.paused ? '' : '1'}">${st.paused ? 'Resume searching' : 'Pause'}</button></div>

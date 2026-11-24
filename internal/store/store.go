@@ -508,6 +508,10 @@ type Profile struct {
 	Workplaces []string `json:"workplaces"` // any of remote, hybrid, onsite; empty = all
 	PayFloor   int      `json:"pay_floor"`
 	PayUnit    string   `json:"pay_unit"`
+	// Hard limits: a posting that breaks one is set aside without being read.
+	PayStrict  bool     `json:"pay_strict"`   // set aside roles whose stated pay tops out under the floor
+	MaxAgeDays int      `json:"max_age_days"` // set aside postings older than this; 0 = any age
+	NoTypes    []string `json:"no_types"`     // any of "contract", "part-time", "internship"
 
 	// How far Job Hunt may go on its own in each area: "ask", "do".
 	MayPrepare string `json:"may_prepare"`
