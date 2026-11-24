@@ -36,6 +36,16 @@ type Card struct {
 	URL      string `json:"url,omitempty"`
 	Channel  string `json:"channel,omitempty"`
 	Busy     bool   `json:"busy,omitempty"`
+
+	// At a glance, for the list.
+	Company   string `json:"company,omitempty"`
+	CompanyID int64  `json:"company_id,omitempty"`
+	Place     string `json:"place,omitempty"`
+	Workplace string `json:"workplace,omitempty"`
+	JobType   string `json:"job_type,omitempty"`
+	Pay       string `json:"pay,omitempty"`
+	PayYear   int    `json:"pay_year,omitempty"`
+	Tags      []Tag  `json:"tags,omitempty"`
 }
 
 // Number is one headline figure.
@@ -106,12 +116,12 @@ func (e *Engine) Today() Brief {
 		if len(t.Prep) < 5 {
 			why = "Job Hunt is writing your prep pack."
 		}
-		cards = append(cards, Card{Kind: "talk", Title: t.Title, Sub: who, Why: why, TalkID: t.ID, RoleID: t.RoleID, At: t.At, URL: safeURL(t.Link)})
+		cards = append(cards, Card{Kind: "talk", Title: t.Title, Sub: who, Why: why, TalkID: t.ID, RoleID: t.RoleID, At: t.At, URL: safeURL(t.Link), Company: t.Company})
 	}
 	// 2. Mail that needs an answer.
 	mails, _, _ := e.S.Mails(store.MailFilter{State: "new", Limit: 6})
 	for _, m := range mails {
-		cards = append(cards, Card{Kind: "mail", Title: firstOf(m.Company, m.FromName, "A reply") + " wrote to you", Sub: m.Subject, Why: firstOf(m.Next, m.Summary), MailID: m.ID, RoleID: m.RoleID, At: m.At})
+		cards = append(cards, Card{Kind: "mail", Title: firstOf(m.Company, m.FromName, "A reply") + " wrote to you", Sub: m.Subject, Why: firstOf(m.Next, m.Summary), MailID: m.ID, RoleID: m.RoleID, At: m.At, Company: m.Company})
 	}
 	// 3. Roles with documents ready: the freshest first, because being
 	// early is worth more than a few points of fit.
@@ -132,7 +142,7 @@ func (e *Engine) Today() Brief {
 	drafts, _ := e.S.NotesInState("draft")
 	for _, n := range drafts {
 		if per, err := e.S.Person(n.PersonID); err == nil {
-			cards = append(cards, Card{Kind: "send", Title: "Send your note to " + per.Name, Sub: joinNonEmpty(" · ", per.Title, per.Company), Why: per.Why, PersonID: per.ID, NoteID: n.ID, Body: n.Body, URL: per.URL, Channel: n.Channel})
+			cards = append(cards, Card{Kind: "send", Title: "Send your note to " + per.Name, Sub: joinNonEmpty(" · ", per.Title, per.Company), Why: per.Why, PersonID: per.ID, NoteID: n.ID, Body: n.Body, URL: per.URL, Channel: n.Channel, Company: per.Company, CompanyID: per.CompanyID})
 		}
 	}
 	due, _ := e.S.NotesDue(now.Unix())
@@ -150,10 +160,10 @@ func (e *Engine) Today() Brief {
 			if i >= 3 {
 				break
 			}
-			cards = append(cards, Card{Kind: "meet", Title: per.Name, Sub: joinNonEmpty(" · ", per.Title, per.Company), Why: per.Why, PersonID: per.ID, URL: per.URL, Band: per.Kind})
+			cards = append(cards, Card{Kind: "meet", Title: per.Name, Sub: joinNonEmpty(" · ", per.Title, per.Company), Why: per.Why, PersonID: per.ID, URL: per.URL, Band: per.Kind, Company: per.Company, CompanyID: per.CompanyID})
 		}
 	}
-	const show = 9
+	const show = 200
 	if len(cards) > show {
 		b.More = len(cards) - show
 		cards = cards[:show]
@@ -288,12 +298,17 @@ func urgency(r store.Role, now time.Time) float64 {
 func (e *Engine) roleCard(kind string, r store.Role, now time.Time) Card {
 	c := Card{Kind: kind, Title: r.Title, Sub: joinNonEmpty(" · ", r.Company, r.Location), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, At: r.Age(), Seen: r.Applicants, Band: r.Band, URL: firstOf(r.ApplyURL, r.URL)}
 	c.Fresh = now.Sub(time.Unix(r.Age(), 0)) < freshFor || (r.Applicants >= 0 && r.Applicants < 10)
+	var rd *brain.Reading
+	desc := ""
 	if full, err := e.S.Role(r.ID); err == nil {
-		var rd brain.Reading
-		if json.Unmarshal(full.Reading, &rd) == nil {
-			c.Why = rd.Summary
+		desc = full.Description
+		var got brain.Reading
+		if json.Unmarshal(full.Reading, &got) == nil {
+			c.Why = got.Summary
+			rd = &got
 		}
 	}
+	e.roleFacts(&c, r, desc, rd, e.S.Profile().PayFloor, now)
 	return c
 }
 
