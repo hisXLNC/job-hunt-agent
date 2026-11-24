@@ -2,7 +2,12 @@
 
 This branch (`redesign`) is a ground-up rewrite. The previous app lives untouched on `main`
 (also saved as branch `claude/backup-before-redesign-26.11.21`).
-Nothing on this branch publishes a release; do not push it to `main`.
+Never push it to `main`.
+
+A release of the rewrite is made by changing `VERSION` (and the top of `CHANGELOG.md`) on this
+branch: `.github/workflows/release.yml` builds, tests on Windows and publishes `v<version>` with
+`JobHunt3-Setup.exe`. See `installer/README.md`. It installs as "Job Hunt 3", next to the old app,
+and never publishes to the old app's update feed.
 
 ## Shape
 
@@ -20,6 +25,7 @@ interface on 127.0.0.1 and talks to Claude. No build step for the interface.
 - `internal/api`     the local HTTP interface the pages and the extension use, and the assistant
 - `web/`             the pages (plain ES modules, embedded into the program)
 - `extension/`       the browser side panel
+- `installer/`       the Windows installer and the app icon
 - `design/mockups/`  the screens the person approved; the reference for look and wording
 
 ## Rules
@@ -44,6 +50,6 @@ interface on 127.0.0.1 and talks to Claude. No build step for the interface.
     go run ./cmd/jobhunt -demo        # a fictional person, searching paused, sample answers
     go run ./cmd/jobhunt              # the real thing; first run asks four things
 
-Data lives in `<user config dir>/Job Hunt 2` (`JOBHUNT_HOME` overrides it, `JOBHUNT_PORT` or
+Data lives in `<user config dir>/Job Hunt 3` (`JOBHUNT_HOME` overrides it, `JOBHUNT_PORT` or
 `-port` moves it off 47700; the side panel expects 47700). The side panel is loaded from
 `extension/` with "Load unpacked".

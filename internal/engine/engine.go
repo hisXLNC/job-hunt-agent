@@ -26,7 +26,10 @@ type Engine struct {
 	S   *store.Store
 	Src *sources.Client
 	Dir string // the data folder
-	Now func() time.Time
+
+	Version   string // this program's version; empty or a word for a build without one
+	UpdateURL string // where newer versions are listed (tests point it elsewhere)
+	Now       func() time.Time
 
 	meter *llm.Metered
 	brain *brain.Brain

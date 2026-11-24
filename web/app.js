@@ -204,7 +204,8 @@ function pilot() {
   const st = app.state, cl = st.claude;
   const head = cl.engine ? (st.status.paused ? 'Paused' : 'Working for you') : 'Not connected';
   const how = { 'claude-code': 'your Claude sign-in', api: 'your API key', demo: 'sample answers (no Claude)' }[cl.engine] || '';
-  return html`<h6><span class="dot ${cl.engine && cl.ok && !st.status.paused ? '' : 'off'}"></span>${head}</h6>
+  const up = st.update ? html`<a href="${st.update.url}" style="display:block;margin-bottom:8px;padding:7px 9px;border-radius:8px;background:rgba(157,176,255,.16);color:#DCE3FF;text-decoration:none" title="Downloads the installer. Run it and Job Hunt restarts on the new version; your data stays.">Version ${st.update.version} is ready · Download</a>` : '';
+  return html`${up}<h6><span class="dot ${cl.engine && cl.ok && !st.status.paused ? '' : 'off'}"></span>${head}</h6>
     ${cl.engine ? html`Watching ${st.status.sources} sources. ${st.status.doing || ''}<div style="margin-top:6px;color:#8F98B3">${cl.calls} Claude calls today via ${how}${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)}` : ''}</div>` : html`<a href="#/you/connections" style="color:#9DB0FF">Connect Claude</a> and Job Hunt starts searching.`}`;
 }
 

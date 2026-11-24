@@ -1096,7 +1096,7 @@ func (s *Server) Handler() http.Handler {
 		s.mu.Unlock()
 		byTask, _ := st.UsageByTask(e.Now().Add(-7 * 24 * time.Hour).Unix())
 		return map[string]any{"claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
-			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "usage": byTask}, nil
+			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask}, nil
 	})
 	h("PUT /api/llm", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		cur := e.LLM()
@@ -1180,7 +1180,7 @@ func (s *Server) Handler() http.Handler {
 		changes, _ := st.Changes(20)
 		calls, _ := st.LastCalls(12)
 		acts, _ := st.ActivityList(store.ActivityFilter{Kinds: []string{"problem"}, Limit: 10})
-		return map[string]any{"version": Version, "dir": e.Dir, "changes": changes, "calls": calls, "problems": acts,
+		return map[string]any{"version": Version, "update": e.NewerVersion(), "dir": e.Dir, "changes": changes, "calls": calls, "problems": acts,
 			"week": st.UsageSince(e.Now().Add(-7 * 24 * time.Hour).Unix()), "today": st.UsageSince(e.Now().Add(-24 * time.Hour).Unix())}, nil
 	})
 	h("POST /api/quit", func(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -1343,6 +1343,7 @@ type State struct {
 	Status     engine.Status      `json:"status"`
 	ExtPending bool               `json:"ext_pending"`
 	Version    string             `json:"version"`
+	Update     *engine.Update     `json:"update,omitempty"`
 }
 
 func (s *Server) state() State {
@@ -1356,7 +1357,7 @@ func (s *Server) state() State {
 	s.mu.Unlock()
 	qs, _ := st.OpenQuestions()
 	return State{
-		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version,
+		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(),
 		Counts: map[string]int{
 			"ready":     counts["ready"],
 			"fresh":     st.Count(`SELECT COUNT(*) FROM roles WHERE closed = '' AND stage IN ('found','ready') AND CASE WHEN posted_at > 0 THEN posted_at ELSE first_seen_at END > ?`, now.Add(-24*time.Hour).Unix()),
@@ -1463,4 +1464,17 @@ func (s *Server) roleDetail(id int64) (any, error) {
 		out["company"] = c
 	}
 	return out, nil
+}
+
+// extDir is where the side panel's files were installed, next to the program.
+func extDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	d := filepath.Join(filepath.Dir(exe), "extension")
+	if _, err := os.Stat(filepath.Join(d, "manifest.json")); err != nil {
+		return ""
+	}
+	return d
 }

@@ -1,0 +1,165 @@
+name: Release Job Hunt for Windows
+
+# A change to VERSION on the redesign branch is a release. Everything is
+# tested on Windows before anything is published.
+on:
+  push:
+    branches: [redesign]
+    paths: ["VERSION", ".github/workflows/release.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Which version
+        id: v
+        shell: bash
+        run: |
+          v=$(tr -d ' \r\n' < VERSION)
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "VERSION must look like 3.0.0, not '$v'"; exit 1; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" > /dev/null 2>&1; then
+            echo "v$v is already published: nothing to do."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-go@v5
+        if: steps.v.outputs.publish == 'true'
+        with:
+          go-version-file: go.mod
+
+      - name: Tests, on Windows
+        if: steps.v.outputs.publish == 'true'
+        shell: bash
+        run: go vet ./... && go test ./...
+
+      - name: Build the program
+        if: steps.v.outputs.publish == 'true'
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w -H=windowsgui -X jobhunt/internal/api.Version=${{ steps.v.outputs.version }}" -o dist/JobHunt3.exe ./cmd/jobhunt
+
+      - name: Build the installer
+        if: steps.v.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress | Out-Host }
+          if (-not (Test-Path $nsis)) { throw "the installer builder (NSIS) is not on this machine" }
+          & $nsis /V2 "/DVERSION=${{ steps.v.outputs.version }}" "/DEXE=..\dist\JobHunt3.exe" "/DOUT=..\dist\JobHunt3-Setup.exe" "/DEXT=..\extension" installer\jobhunt.nsi
+          if ($LASTEXITCODE -ne 0) { throw "the installer did not build" }
+          Write-Host "Installer: $([math]::Round((Get-Item dist\JobHunt3-Setup.exe).Length / 1MB, 1)) MB"
+
+      - name: Install it, start it, update over it, remove it
+        if: steps.v.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dir = "$env:LOCALAPPDATA\Programs\Job Hunt 3"
+          $exe = "$dir\JobHunt3.exe"
+          $env:JOBHUNT_HOME = "$env:RUNNER_TEMP\jobhunt-trial"
+          function Running { [bool](Get-Process JobHunt3 -ErrorAction SilentlyContinue) }
+          function State {
+            for ($i = 0; $i -lt 40; $i++) {
+              try { return Invoke-RestMethod "http://127.0.0.1:47700/api/state" -TimeoutSec 3 } catch { Start-Sleep -Milliseconds 500 }
+            }
+            throw "Job Hunt did not answer on this computer"
+          }
+
+          # 1. A silent install puts everything in place.
+          Start-Process dist\JobHunt3-Setup.exe -ArgumentList "/S" -Wait
+          if (-not (Test-Path $exe)) { throw "the program was not installed" }
+          if (-not (Test-Path "$dir\extension\manifest.json")) { throw "the side panel's files were not installed" }
+          if (-not (Test-Path "$dir\Uninstall.exe")) { throw "there is no uninstaller" }
+          $start = [Environment]::GetFolderPath("Programs")
+          if (-not (Test-Path "$start\Job Hunt 3.lnk")) { throw "there is no Start menu shortcut" }
+          if (-not (Test-Path "$([Environment]::GetFolderPath('Desktop'))\Job Hunt 3.lnk")) { throw "there is no desktop shortcut" }
+          $un = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\JobHunt3"
+          if ($un.DisplayVersion -ne "${{ steps.v.outputs.version }}") { throw "Windows' list of apps shows version '$($un.DisplayVersion)'" }
+          $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3
+          if ($run -notlike "*JobHunt3.exe* -no-window") { throw "starting with Windows is not set: '$run'" }
+          Write-Host "Installed: program, side panel, shortcuts, uninstall entry, start with Windows"
+
+          # 2. It starts, makes its data and says the right version.
+          Start-Process $exe -ArgumentList "-no-window"
+          $st = State
+          if ($st.version -ne "${{ steps.v.outputs.version }}") { throw "the program says it is version '$($st.version)'" }
+          if (-not (Test-Path "$env:JOBHUNT_HOME\jobhunt.db")) { throw "Job Hunt did not create its data" }
+          $page = Invoke-WebRequest "http://127.0.0.1:47700/" -UseBasicParsing -TimeoutSec 5
+          if ($page.Content -notmatch "Job Hunt") { throw "the first page did not load" }
+          Write-Host "Started: version $($st.version), data created, pages served"
+
+          # 3. Asked to stop, it stops.
+          Start-Process $exe -ArgumentList "-quit" -Wait
+          Start-Sleep -Seconds 1
+          if (Running) { throw "Job Hunt was asked to stop and is still running" }
+          Write-Host "Stopped when asked"
+
+          # 4. Installing over a running copy (an update) stops it, replaces it and keeps the data.
+          Start-Process $exe -ArgumentList "-no-window"
+          State | Out-Null
+          Start-Process dist\JobHunt3-Setup.exe -ArgumentList "/S" -Wait
+          if (Running) { throw "the installer left the old copy running" }
+          if ((Get-FileHash $exe).Hash -ne (Get-FileHash dist\JobHunt3.exe).Hash) { throw "the installed program is not the one just built" }
+          if (-not (Test-Path "$env:JOBHUNT_HOME\jobhunt.db")) { throw "the update removed the data" }
+          Start-Process $exe -ArgumentList "-no-window"
+          State | Out-Null
+          Write-Host "Updated over a running copy; data kept; starts again"
+
+          # 5. Removing it stops it and takes everything out except the person's data.
+          Start-Process "$dir\Uninstall.exe" -ArgumentList "/S", "_?=$dir" -Wait
+          if (Running) { throw "removing Job Hunt left it running" }
+          if (Test-Path $exe) { throw "removing Job Hunt left the program behind" }
+          if (Test-Path "$start\Job Hunt 3.lnk") { throw "removing Job Hunt left its Start menu shortcut" }
+          if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\JobHunt3") { throw "removing Job Hunt left its entry in Windows' list of apps" }
+          if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3) { throw "removing Job Hunt left it starting with Windows" }
+          if (-not (Test-Path "$env:JOBHUNT_HOME\jobhunt.db")) { throw "removing Job Hunt deleted the data" }
+          Write-Host "Removed cleanly; data left alone"
+
+      - name: Scan with Windows Defender
+        if: steps.v.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $mp = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $mp)) { Write-Warning "Defender is not on this machine"; exit 0 }
+          & $mp -SignatureUpdate | Out-Host
+          & $mp -Scan -ScanType 3 -File "$PWD\dist" -DisableRemediation | Out-Host
+          $code = $LASTEXITCODE
+          if ($code -eq 2) { throw "Windows Defender flagged the build; not publishing it" }
+          if ($code -ne 0) { Write-Warning "the Defender scan ended with $code" } else { Write-Host "Defender: nothing found" }
+          exit 0
+
+      - name: Publish
+        if: steps.v.outputs.publish == 'true'
+        shell: bash
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          # The top section of CHANGELOG.md is this version's notes.
+          awk -v want="## $v" '$0 == want {on=1; next} /^## / {on=0} on' CHANGELOG.md > dist/notes.md
+          if ! grep -q '[^[:space:]]' dist/notes.md; then echo "CHANGELOG.md has no section for $v"; exit 1; fi
+          {
+            echo
+            echo "**To install:** download \`JobHunt3-Setup.exe\` below and run it. Windows may say the publisher is unknown, because the installer is not signed: choose **More info**, then **Run anyway**."
+            echo
+            echo "Built from ${GITHUB_SHA::7}. Tested on Windows (installed, started, updated, removed) and scanned with Windows Defender."
+            echo
+            echo "SHA-256 of JobHunt3-Setup.exe: \`$(sha256sum dist/JobHunt3-Setup.exe | cut -d' ' -f1)\`"
+          } >> dist/notes.md
+          gh release create "v$v" dist/JobHunt3-Setup.exe --title "Job Hunt $v" --notes-file dist/notes.md --target "$GITHUB_SHA" --latest

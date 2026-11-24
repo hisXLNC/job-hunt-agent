@@ -123,6 +123,9 @@ func (e *Engine) chores(now time.Time) {
 	if every("backup", 24*time.Hour) {
 		go e.Backup()
 	}
+	if every("update", 24*time.Hour) {
+		go e.CheckUpdate(e.ctx)
+	}
 	if every("quiet", time.Hour) {
 		e.letGoQuiet(now)
 	}

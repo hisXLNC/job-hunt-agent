@@ -33,17 +33,61 @@ func dataDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	d := filepath.Join(base, "Job Hunt 2")
+	d := filepath.Join(base, "Job Hunt 3")
+	// The trial builds kept their data under an earlier name: carry on with it.
+	if _, err := os.Stat(d); os.IsNotExist(err) {
+		if was := filepath.Join(base, "Job Hunt 2"); exists(filepath.Join(was, "jobhunt.db")) {
+			os.Rename(was, d)
+		}
+	}
 	return d, os.MkdirAll(d, 0o700)
+}
+
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// askToStop tells the Job Hunt already running on this port to stop, and
+// waits until it has. The installer uses it before replacing the program.
+func askToStop(port int) {
+	url := fmt.Sprintf("http://127.0.0.1:%d/api/quit", port)
+	req, _ := http.NewRequest("POST", url, nil)
+	req.Header.Set("X-JobHunt", "1")
+	c := http.Client{Timeout: 3 * time.Second}
+	resp, err := c.Do(req)
+	if err != nil {
+		return // nothing is running
+	}
+	resp.Body.Close()
+	for i := 0; i < 40; i++ {
+		time.Sleep(250 * time.Millisecond)
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err == nil {
+			ln.Close()
+			return
+		}
+	}
+	os.Exit(1)
 }
 
 func main() {
 	port := flag.Int("port", 47700, "port on this computer")
 	noWindow := flag.Bool("no-window", false, "don't open a window")
 	demo := flag.Bool("demo", false, "fill an empty data folder with sample data and use the stand-in instead of Claude")
+	quit := flag.Bool("quit", false, "stop the Job Hunt that is running, then leave")
+	version := flag.Bool("version", false, "print the version and leave")
 	flag.Parse()
 	if p, err := strconv.Atoi(os.Getenv("JOBHUNT_PORT")); err == nil && p > 0 {
 		*port = p
+	}
+	if *version {
+		fmt.Println(api.Version)
+		return
+	}
+	if *quit {
+		askToStop(*port)
+		return
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", *port)
 
@@ -77,6 +121,7 @@ func main() {
 	}
 	defer s.Close()
 	e := engine.New(s, dir)
+	e.Version = api.Version
 	// Pages that turn a plain request away are opened in the browser already
 	// on this computer, out of sight, when there is one.
 	if b := sources.FindBrowser(); b != "" {
