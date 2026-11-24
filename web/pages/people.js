@@ -1,4 +1,4 @@
-import { html, api, post, put, del, ago, tile, toast, copy, pager, with_, safeUrl, app, KIND, employer, rel } from '../app.js';
+import { html, api, post, put, del, ago, tile, toast, copy, listSize, endless, with_, safeUrl, app, KIND, employer, rel } from '../app.js';
 
 const FIVE = ['knows_work', 'made_move', 'same_roots', 'same_craft', 'mentor'];
 const HINT = {
@@ -25,17 +25,17 @@ function list(d, route) {
       <div class="grow"><h2 style="font-size:20px">Newcomers get hired through conversations.</h2><p class="m" style="margin-top:4px;max-width:640px">Five kinds of people answer a short, specific note from someone new. Job Hunt finds them and writes the note; you read it, change what you like, and send it yourself.</p></div>
       <button class="btn p" data-act="find">${d.finding ? html`<span class="spin"></span>Looking…` : 'Find people for me'}</button></div>
     <div class="cols wide"><div class="col" style="gap:14px">
-      <div class="card col" style="gap:10px;padding:12px 14px"><div class="row wrap" style="gap:6px">
+      <div class="stick"><div class="card col" style="gap:10px;padding:12px 14px"><div class="row wrap" style="gap:6px">
         <a class="chip ${!q.kind && !q.know ? 'on' : ''}" href="#/people">Everyone</a>
-        ${FIVE.map(k => html`<a class="chip ${q.kind === k ? 'on' : ''}" href="${with_(route, { kind: k, know: '', page: '' })}" title="${HINT[k]}">${KIND[k]} <span style="opacity:.7">${count(k)}</span></a>`)}
-        <a class="chip ${q.kind === 'recruiter' ? 'on' : ''}" href="${with_(route, { kind: 'recruiter', know: '', page: '' })}">Recruiters ${count('recruiter')}</a>
-        <a class="chip ${q.kind === 'contact' ? 'on' : ''}" href="${with_(route, { kind: 'contact', know: '', page: '' })}">You know them ${count('contact')}</a>
-        <a class="chip ${q.know ? 'on' : ''}" href="${with_(route, { know: 1, kind: '', page: '' })}">Know you ${d.know}</a></div>
-        ${q.kind && HINT[q.kind] ? html`<p class="s m">${HINT[q.kind]}</p>` : ''}</div>
-      ${d.people.length ? html`<div class="card" style="padding:0"><table class="tbl"><thead><tr><th>Person</th><th>Why they would answer</th><th>Where it stands</th><th></th></tr></thead><tbody>
+        ${FIVE.map(k => html`<a class="chip ${q.kind === k ? 'on' : ''}" href="${with_(route, { kind: k, know: ''})}" title="${HINT[k]}">${KIND[k]} <span style="opacity:.7">${count(k)}</span></a>`)}
+        <a class="chip ${q.kind === 'recruiter' ? 'on' : ''}" href="${with_(route, { kind: 'recruiter', know: ''})}">Recruiters ${count('recruiter')}</a>
+        <a class="chip ${q.kind === 'contact' ? 'on' : ''}" href="${with_(route, { kind: 'contact', know: ''})}">You know them ${count('contact')}</a>
+        <a class="chip ${q.know ? 'on' : ''}" href="${with_(route, { know: 1, kind: ''})}">Know you ${d.know}</a></div>
+        ${q.kind && HINT[q.kind] ? html`<p class="s m">${HINT[q.kind]}</p>` : ''}</div></div>
+      ${d.people.length ? html`<div class="card" style="padding:0"><table class="tbl long"><thead><tr><th>Person</th><th>Why they would answer</th><th>Where it stands</th><th></th></tr></thead><tbody>
         ${d.people.map(p => html`<tr><td style="width:30%"><div class="row">${tile(p.name, true)}<div><a class="t" href="#/people/${p.id}">${p.name}</a><span class="xs m">${p.title}${p.title && p.company ? ' · ' : ''}${employer(p.company, p.company_id)}</span></div></div></td>
           <td class="s ink2"><span class="chip" style="margin-bottom:3px">${KIND[p.kind] || 'Contact'}</span><div>${p.why}</div></td><td>${status(p)}</td>
-          <td style="text-align:right;white-space:nowrap">${p.note?.state === 'draft' ? html`<a class="btn sm p" href="#/people/${p.id}">Read and send</a>` : p.note ? html`<a class="btn sm" href="#/people/${p.id}">Open</a>` : html`<button class="btn sm" data-act="draft" data-id="${p.id}" data-busy="Writing…">Write a note</button>`}</td></tr>`)}</tbody></table></div>${pager(d.total, d.page, d.size, route)}`
+          <td style="text-align:right;white-space:nowrap">${p.note?.state === 'draft' ? html`<a class="btn sm p" href="#/people/${p.id}">Read and send</a>` : p.note ? html`<a class="btn sm" href="#/people/${p.id}">Open</a>` : html`<button class="btn sm" data-act="draft" data-id="${p.id}" data-busy="Writing…">Write a note</button>`}</td></tr>`)}</tbody></table></div>${endless('people', (d.people || []).length, d.total)}`
         : html`<div class="card empty"><h3>Nobody here yet</h3><p>Press “Find people for me”, or add someone you came across.</p></div>`}
     </div>
     <div class="col" style="gap:14px">
@@ -93,7 +93,7 @@ export default {
   topics: ['people'],
   load(route) {
     if (route.parts[1]) return api('people/' + route.parts[1]);
-    const q = route.q, u = new URLSearchParams({ size: 7, page: q.page || 1, kind: q.kind || '', know: q.know || '' });
+    const q = route.q, u = new URLSearchParams({ size: listSize('people'), page: 1, kind: q.kind || '', know: q.know || '' });
     return api('people?' + u);
   },
   view: (d, route) => route.parts[1] ? one(d) : list(d, route),

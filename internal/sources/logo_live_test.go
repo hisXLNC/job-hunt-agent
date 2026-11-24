@@ -22,11 +22,11 @@ func TestAnEmployersPictureComesFromItsOwnSite(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}), "logo")
-	b, kind, err := c.Logo(context.Background(), "acme.example")
+	b, kind, err := c.Logo(context.Background(), "acme.example", "")
 	if err != nil || kind != "image/png" || len(b) < 70 {
 		t.Fatalf("Logo = %d bytes, %q, %v (asked %v)", len(b), kind, err, asked)
 	}
-	if _, _, err := c.Logo(context.Background(), "boards.greenhouse.io"); err == nil {
+	if _, _, err := c.Logo(context.Background(), "boards.greenhouse.io", ""); err == nil {
 		t.Error("a site that hosts many employers gave a picture")
 	}
 }

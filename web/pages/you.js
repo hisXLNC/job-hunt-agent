@@ -306,12 +306,10 @@ function looks() {
 }
 
 const bytes = n => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
-const COPIES = 7;
 // The saved copies of the data, and putting one back.
 function copies(b, route) {
   if (!b) return '';
-  const all = b.copies || [], pages = Math.max(1, Math.ceil(all.length / COPIES)), page = Math.max(1, Math.min(+route.q.copies || 1, pages));
-  const shown = all.slice((page - 1) * COPIES, page * COPIES), st = b.staged;
+  const all = b.copies || [], shown = all, st = b.staged;
   return html`<div class="card col" style="gap:10px;padding-bottom:14px" data-set="copies"><div class="row"><div class="grow"><h4>Saved copies</h4><p class="xs m" style="margin-top:3px">A copy of all your data is saved every day and the newest ${b.keep} are kept.</p></div>
       <button class="btn sm" data-act="backup" title="Saves a copy of all your data now, as today's copy.">Save a copy now</button></div>
     ${st ? html`<div class="s" style="background:var(--warn-soft);padding:10px 12px;border-radius:8px"><b>The copy from ${st.at ? exact(st.at) : 'earlier'} is ready to be put back.</b> It takes the place of your data the next time Job Hunt starts. What you have now is saved first, as a copy of its own.
@@ -319,7 +317,7 @@ function copies(b, route) {
     ${all.length ? html`<table class="tbl" style="margin:0 -6px;width:calc(100% + 12px)"><thead><tr><th>Saved</th><th>What</th><th>Size</th><th></th></tr></thead><tbody>
       ${shown.map(c => html`<tr><td class="s" style="white-space:nowrap" title="${exact(c.at)}"><b>${new Date(c.at * 1000).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</b> <span class="m">${new Date(c.at * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span></td><td class="s m" title="${c.name}">${c.before ? 'Before a restore' : 'Daily copy'}</td><td class="s m" style="white-space:nowrap">${bytes(c.size)}</td>
         <td style="text-align:right">${st && st.name === c.name ? html`<span class="chip warn">Waiting</span>` : html`<button class="btn sm" data-act="restore" data-name="${c.name}" data-busy="Checking…" data-confirm="Put back the copy from ${exact(c.at)}?\n\nEverything added or changed since then is replaced. What you have now is saved first, as a copy of its own, so you can come back to it.\n\nNothing changes until Job Hunt next starts." title="Checks this copy and gets it ready. It takes the place of your data when Job Hunt next starts; what you have now is saved first.">Restore this copy</button>`}</td></tr>`)}</tbody></table>
-      ${all.length > COPIES ? html`<div class="pager s" style="padding-top:0"><span class="m">${(page - 1) * COPIES + 1}–${Math.min(page * COPIES, all.length)} of ${all.length}</span>${page > 1 ? html`<a class="btn sm" href="${with_(route, { copies: page - 1, hl: '' })}">Previous</a>` : html`<span class="btn sm" disabled>Previous</span>`}${page < pages ? html`<a class="btn sm" href="${with_(route, { copies: page + 1, hl: '' })}">Next</a>` : html`<span class="btn sm" disabled>Next</span>`}</div>` : ''}`
+`
       : html`<p class="s m">No copies yet. The first is saved within a day, or press Save a copy now.</p>`}
     <div class="hr"></div>
     <div class="col" style="gap:6px" data-set="cloud"><h4>On another computer, or safe if this one breaks</h4>

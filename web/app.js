@@ -98,6 +98,19 @@ document.addEventListener('error', ev => {
   const t = ev.target;
   if (t?.tagName === 'IMG' && t.classList.contains('lgi')) { noLogo.add(t.dataset.co); t.remove(); }
 }, true);
+// A row's "⋯" menu opens upward when the window has no room below it.
+document.addEventListener('toggle', ev => {
+  const m = ev.target;
+  if (!(m instanceof HTMLDetailsElement) || !m.classList.contains('menu')) return;
+  m.classList.remove('up');
+  if (!m.open) return;
+  document.querySelectorAll('details.menu[open]').forEach(o => { if (o !== m) o.open = false; });
+  const box = m.querySelector(':scope>div');
+  if (box && box.getBoundingClientRect().bottom > window.innerHeight - 8 && m.getBoundingClientRect().top > box.offsetHeight + 40) m.classList.add('up');
+}, true);
+document.addEventListener('click', ev => {
+  document.querySelectorAll('details.menu[open]').forEach(m => { if (!m.contains(ev.target)) m.open = false; });
+});
 document.addEventListener('load', ev => {
   const t = ev.target;
   if (t?.tagName === 'IMG' && t.classList.contains('lgi')) t.parentElement.classList.add('has');
@@ -117,8 +130,6 @@ export function shortPay(p) {
   if (!p) return '';
   return String(p).replace(/(\d{2,3}),000(\.00)?/g, '$1k').replace(/(\d),(\d)00(?!\d)/g, '$1.$2k').replace(/\.0k/g, 'k').replace(/\s*(a|per|\/)\s*(year|yr|annum)\b\.?/gi, '').replace(/\s*(a|per|\/)\s*(hour|hr)\b\.?/gi, '/h').replace(/\s+(to|-|–|—)\s+/g, '–').trim();
 }
-// How many rows of a list fit the window, so lists page instead of scrolling.
-export const rowsThatFit = (used, rowHeight, min = 6, max = 40) => Math.max(min, Math.min(max, Math.floor((window.innerHeight - used) / rowHeight)));
 // Rows ticked in a list, kept while the page redraws.
 export const picked = new Set();
 
@@ -155,12 +166,37 @@ export function href(path, q = {}) {
 export function with_(route, patch) {
   return href(route.parts.join('/'), { ...route.q, ...patch });
 }
-export function pager(total, page, size, route) {
-  if (total <= size) return total ? html`<div class="pager s m">${total} in all</div>` : '';
-  const from = (page - 1) * size + 1, to = Math.min(page * size, total);
-  return html`<div class="pager s"><span class="m">${from}–${to} of ${total}</span>
-    ${page > 1 ? html`<a class="btn sm" href="${with_(route, { page: page - 1 })}">Previous</a>` : html`<span class="btn sm" disabled>Previous</span>`}
-    ${to < total ? html`<a class="btn sm" href="${with_(route, { page: page + 1 })}">Next</a>` : html`<span class="btn sm" disabled>Next</span>`}</div>`;
+// Long lists are one list: the whole page scrolls, the filters and the
+// header row stay in view, and more rows come in as the end comes near.
+// Nothing to click to see the next lot.
+const STEP = 60;
+const grown = new Map();
+const places = new Map();
+export const listSize = key => grown.get(key) || STEP;
+const MOST = 1000; // what the program hands over at once
+export function endless(key, shown, total, local) {
+  if (!total) return '';
+  // More only while the last lot came in full: a list that gave less has nothing more to give.
+  const capped = !local && shown >= MOST, more = shown < total && !capped && shown >= listSize(key);
+  return html`<div class="endless xs m" data-key="${key}" ${more ? 'data-more' : ''} data-local="${local ? 1 : ''}">${capped && shown < total ? html`The first ${MOST.toLocaleString()} of ${total.toLocaleString()} are shown · use the filters to find the rest` : more ? html`${shown} of ${total.toLocaleString()} shown · more appear as you scroll` : total > 1 ? html`All ${total.toLocaleString()} shown` : ''}</div>`;
+}
+let endWatch;
+function watchEnd(root) {
+  endWatch?.disconnect();
+  const end = root.querySelector('.endless[data-more]');
+  if (!end || !window.IntersectionObserver) return;
+  endWatch = new IntersectionObserver(seen => {
+    if (!seen.some(s => s.isIntersecting)) return;
+    endWatch.disconnect();
+    grown.set(end.dataset.key, Math.min(MOST, listSize(end.dataset.key) + STEP));
+    end.dataset.local ? redraw() : reload(true);
+  }, { root, rootMargin: '0px 0px 900px 0px' });
+  endWatch.observe(end);
+}
+// The filters that stay in view are as tall as they are: the header row sits under them.
+function stickHeight(root) {
+  const st = root.querySelector('.stick');
+  root.style.setProperty('--stick', st ? st.offsetHeight + 'px' : '0px');
 }
 // A column heading that sorts; clicking again reverses.
 export function sortHead(label, key, route, def) {
@@ -398,6 +434,7 @@ export async function reload(quiet) {
     document.getElementById('title').textContent = typeof page.title === 'function' ? page.title(data, route) : page.title;
     document.getElementById('sub').textContent = page.sub ? page.sub(data, route) : '';
     page.after?.(root, data, route);
+    stickHeight(root); watchEnd(root);
     if (cursor >= 0) { if (quiet) moveCursor(cursor); else cursor = -1; }
   } catch (e) {
     if (seq !== loadSeq || !root.isConnected) return;
@@ -415,6 +452,7 @@ export function redraw() {
   root.innerHTML = app.page.view(app.data, app.route).s;
   root.scrollTop = keep;
   app.page.after?.(root, app.data, app.route);
+  stickHeight(root); watchEnd(root);
   if (cursor >= 0) moveCursor(cursor);
 }
 let sizeTimer, lastSize = '';
@@ -449,6 +487,15 @@ async function navigate() {
   if (key === 'roles' && route.parts[1] && route.parts[1] !== 'board') key = 'role';
   if (!PAGES[key]) { location.hash = '#/today'; return; }
   if (app.route?.parts.join('/') !== route.parts.join('/')) picked.clear();
+  // Each list remembers how far it had grown and where it was scrolled, so
+  // opening a role and coming back lands on the same rows.
+  const pg = document.getElementById('page');
+  if (app.hash !== undefined && pg) places.set(app.hash, { grown: new Map(grown), top: pg.scrollTop });
+  if (places.size > 30) places.delete(places.keys().next().value);
+  app.hash = location.hash;
+  const back = places.get(location.hash);
+  grown.clear();
+  back?.grown.forEach((v, k) => grown.set(k, v));
   app.route = route;
   const mod = (await PAGES[key]()).default;
   app.page = mod;
@@ -460,7 +507,7 @@ async function navigate() {
   }
   document.title = 'Job Hunt';
   await reload();
-  document.getElementById('page').scrollTop = 0;
+  document.getElementById('page').scrollTop = back?.top || 0;
   assistantRoute();
 }
 

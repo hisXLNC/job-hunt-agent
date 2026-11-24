@@ -114,13 +114,10 @@ func (e *Engine) Employer(id int64) (EmployerPage, error) {
 			p.Talks++
 			p.History = append(p.History, HistoryItem{At: t.At, Kind: "Interview", Tone: "info", Title: firstOf(t.Title, r.Title), Detail: joinNonEmpty(" · ", t.Person, minutesWords(t.Minutes)), RoleID: r.ID, TalkID: t.ID})
 		}
-		if p.Site == "" {
-			p.Site = firstOf(sources.OwnSite(r.ApplyURL), sources.OwnSite(r.URL))
-		}
 		p.Roles = append(p.Roles, er)
 	}
-	if s := sources.OwnSite(c.Site); s != "" {
-		p.Site = s
+	if sites, _ := e.employerSites(id); len(sites) > 0 {
+		p.Site = sites[0]
 	}
 	mails, _, _ := e.S.Mails(store.MailFilter{Limit: 200})
 	for _, m := range mails {
@@ -226,7 +223,7 @@ var logoSlots = make(chan struct{}, 3)
 // Logo returns an employer's picture from its own site, kept on disk after
 // the first time. ok is false when it has none (the letter tile is shown).
 func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, ok bool) {
-	dir := filepath.Join(e.Dir, "logos")
+	dir := filepath.Join(e.Dir, "logos2") // "logos" held pictures of job sites taken for employers
 	file := filepath.Join(dir, fmt.Sprint(id))
 	if b, err := os.ReadFile(file); err == nil {
 		if len(b) == 0 {
@@ -239,27 +236,33 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	}
 	logoMu.Lock()
 	if logoBusy[id] {
+		// Another page asked a moment ago: wait for that look rather than answer "none".
 		logoMu.Unlock()
+		for range 60 {
+			select {
+			case <-ctx.Done():
+				return nil, "", false
+			case <-time.After(500 * time.Millisecond):
+			}
+			if b, err := os.ReadFile(file); err == nil {
+				if len(b) == 0 {
+					return nil, "", false
+				}
+				return b, httpKind(b), true
+			}
+		}
 		return nil, "", false
 	}
 	logoBusy[id] = true
 	logoMu.Unlock()
 	defer func() { logoMu.Lock(); delete(logoBusy, id); logoMu.Unlock() }()
+	// The look goes on when the page that asked is redrawn and stops waiting,
+	// so the answer is kept for the next time.
+	ctx = context.WithoutCancel(ctx)
 
-	site := ""
-	if c, err := e.S.Company(id); err == nil {
-		site = sources.OwnSite(c.Site)
-	}
-	if site == "" {
-		roles, _, _ := e.S.Roles(store.RoleFilter{CompanyID: id, Closed: []string{"", "no", "rejected", "expired", "withdrawn", "aside"}, Unread: true, Limit: 20})
-		for _, r := range roles {
-			if site = firstOf(sources.OwnSite(r.ApplyURL), sources.OwnSite(r.URL)); site != "" {
-				break
-			}
-		}
-	}
+	sites, guesses := e.employerSites(id)
 	os.MkdirAll(dir, 0o700)
-	if site == "" {
+	if len(sites)+len(guesses) == 0 {
 		os.WriteFile(file, nil, 0o600)
 		return nil, "", false
 	}
@@ -269,11 +272,34 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	case <-ctx.Done():
 		return nil, "", false
 	}
-	cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
-	defer cancel()
-	b, kind, err := e.Src.Logo(cctx, site)
-	if err != nil {
-		trace.Log("fetch", "no picture for employer %d from %s: %v", id, site, err)
+	name := ""
+	if c, err := e.S.Company(id); err == nil {
+		name = c.Name
+	}
+	var b []byte
+	var err error
+	try := func(site, mustName string) bool {
+		cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		defer cancel()
+		b, kind, err = e.Src.Logo(cctx, site, mustName)
+		if err != nil {
+			trace.Log("fetch", "no picture for employer %d from %s: %v", id, site, err)
+		}
+		return err == nil
+	}
+	found := false
+	for _, s := range sites {
+		if found = try(s, ""); found {
+			break
+		}
+	}
+	for _, s := range guesses {
+		if found || ctx.Err() != nil {
+			break
+		}
+		found = try(s, name)
+	}
+	if !found {
 		if ctx.Err() == nil {
 			os.WriteFile(file, nil, 0o600)
 		}
@@ -284,3 +310,35 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 }
 
 func httpKind(b []byte) string { return http.DetectContentType(b) }
+
+// employerSites are the employer's own sites, surest first: the one kept for
+// it, then the sites its postings link to that carry its name. guesses are
+// addresses made from its name, to be checked before use.
+func (e *Engine) employerSites(id int64) (sites, guesses []string) {
+	c, err := e.S.Company(id)
+	if err != nil {
+		return nil, nil
+	}
+	seen := map[string]bool{}
+	add := func(s string) {
+		if s != "" && !seen[s] && sources.Belongs(s, c.Name) {
+			seen[s] = true
+			sites = append(sites, s)
+		}
+	}
+	if s := sources.OwnSite(c.Site); s != "" && (c.Source == "you" || sources.Belongs(s, c.Name)) { // the person's own choice stands
+		seen[s] = true
+		sites = append(sites, s)
+	}
+	roles, _, _ := e.S.Roles(store.RoleFilter{CompanyID: id, Closed: []string{"", "no", "rejected", "expired", "withdrawn", "aside"}, Unread: true, Limit: 20})
+	for _, r := range roles {
+		add(sources.OwnSite(r.ApplyURL))
+		add(sources.OwnSite(r.URL))
+	}
+	for _, g := range sources.Guesses(c.Name) {
+		if !seen[g] {
+			guesses = append(guesses, g)
+		}
+	}
+	return sites, guesses
+}

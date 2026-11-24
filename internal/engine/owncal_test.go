@@ -74,6 +74,22 @@ func TestFreeTimesAndClashesComeFromThePersonsCalendar(t *testing.T) {
 			t.Errorf("offered a busy time: %v", a)
 		}
 	}
+	// The person's own interview hours and the number of times to offer.
+	if err := e.SetTalkSet(TalkSet{From: 13, To: 16, Minutes: 30, Offer: 2}); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range e.FreeTimes(4) {
+		if a := time.Unix(s.Start, 0).UTC(); a.Hour() < 13 || time.Unix(s.End, 0).UTC().Hour() > 16 || s.End-s.Start != 1800 {
+			t.Errorf("outside the hours asked for: %v", a)
+		}
+	}
+	reply := e.fillTimes("Could we speak at [time 1] or [time 2]?")
+	if strings.Contains(reply, "[time") || !strings.Contains(reply, " to ") {
+		t.Errorf("gaps not filled: %q", reply)
+	}
+	if e.SetTalkSet(TalkSet{From: 17, To: 9, Minutes: 30, Offer: 2}) == nil {
+		t.Error("hours running backwards were kept")
+	}
 	if err := e.ForgetOwnCal(); err != nil || e.OwnCal().URL != "" || len(e.OwnEvents(0, 1<<40)) != 0 {
 		t.Fatal("disconnecting left something behind")
 	}

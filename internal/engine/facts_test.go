@@ -74,3 +74,15 @@ func TestPayFromText(t *testing.T) {
 		}
 	}
 }
+
+func TestTheFitBarsFollowThePersonsChoice(t *testing.T) {
+	var p store.Profile
+	if p.Keep() != 55 || p.PrepareAt() != 70 {
+		t.Fatalf("defaults %d %d", p.Keep(), p.PrepareAt())
+	}
+	keep, prep := 75, 60
+	p.KeepFit, p.PrepareFit = &keep, &prep
+	if p.Keep() != 75 || p.PrepareAt() != 75 {
+		t.Fatalf("preparing below the keeping bar: %d %d", p.Keep(), p.PrepareAt())
+	}
+}

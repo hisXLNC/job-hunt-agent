@@ -493,7 +493,7 @@ func (s *Server) Handler() http.Handler {
 	// ---- roles ---------------------------------------------------------------------
 	h("GET /api/roles", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		q := r.URL.Query()
-		size := min(max(qInt(r, "size", 12), 1), 100)
+		size := min(max(qInt(r, "size", 12), 1), 1000)
 		page := max(qInt(r, "page", 1), 1)
 		f := store.RoleFilter{Search: q.Get("q"), Band: q.Get("band"), MinFit: qInt(r, "minfit", 0), Sort: q.Get("sort"), Limit: size, Offset: (page - 1) * size,
 			CompanyID: int64(qInt(r, "company", 0)), Saved: q.Get("saved") == "1"}
@@ -774,7 +774,7 @@ func (s *Server) Handler() http.Handler {
 			}
 		}
 		sortCompanies(list, q.Get("sort"))
-		size := min(max(qInt(r, "size", 10), 1), 100)
+		size := min(max(qInt(r, "size", 10), 1), 1000)
 		page := max(qInt(r, "page", 1), 1)
 		total := len(list)
 		from := min((page-1)*size, total)
@@ -964,7 +964,7 @@ func (s *Server) Handler() http.Handler {
 		if err != nil {
 			return nil, err
 		}
-		size := min(max(qInt(r, "size", 8), 1), 100)
+		size := min(max(qInt(r, "size", 8), 1), 1000)
 		page := max(qInt(r, "page", 1), 1)
 		total := len(all)
 		from := min((page-1)*size, total)
@@ -1094,7 +1094,7 @@ func (s *Server) Handler() http.Handler {
 	// ---- replies -------------------------------------------------------------------
 	h("GET /api/mail", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		q := r.URL.Query()
-		size := min(max(qInt(r, "size", 8), 1), 100)
+		size := min(max(qInt(r, "size", 8), 1), 1000)
 		page := max(qInt(r, "page", 1), 1)
 		f := store.MailFilter{State: q.Get("state"), Limit: size, Offset: (page - 1) * size}
 		if v := q.Get("kind"); v != "" {

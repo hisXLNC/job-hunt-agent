@@ -41,7 +41,8 @@ interface on 127.0.0.1 and talks to Claude. No build step for the interface.
 - Job Hunt writes; the person sends. It never messages anyone or presses Submit by itself.
 - The person's e-mail address and other personal details never go into code, tests, commits or
   requests to outside services other than the ones they chose.
-- Lists page; they do not scroll inside the page. Sort header rows and filters stay.
+- A list is one list: the whole page scrolls (nothing scrolls inside a box), more rows come in as the
+  end comes near (`endless` in `web/app.js`), and no Next button. Sort header rows and filters stay in view.
 - The assistant (the Claude panel) can only make the calls listed in `internal/api/assistant.go`.
   Looking is free, changes that can be undone are made at once, and removals, closing or reopening
   a role and profile changes wait for the person's button. Keys, passwords and connections are not

@@ -2,6 +2,15 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.32
+
+- **No more Next button.** Today, Roles, Radar, Replies, People and an employer's roles are each one list: the whole page scrolls, and the filters and the sort header row stay at the top while it does. More rows come in by themselves as you near the end. Sorting and filters work across everything.
+- **Employer logos**: a logo is only taken from a site that carries the employer's name, so a job site's or Telegram's icon no longer stands in for an employer. Employers with no known site have their own address tried (for example cibc.com), and used only when the page there names them. Logos are looked up again once after this update.
+- **The "⋯" menu opens upward** when the row is near the bottom of the window, and closes when you click elsewhere.
+- The "Posted" filter on Today is no longer cut off, and "While you were away" no longer says the first search hasn't run when there are roles in the list.
+- **Your own fit bars** (You → Profile): the fit from which a role is kept, the fit from which Job Hunt prepares the CV and letter by itself, and how many it prepares per search. Also "what matters to you in a job", which Claude reads with every role.
+- **Interview hours** (You → Connections → Your calendar): the hours and length you can do, and how many times to offer. Replies to interview invitations come with those free times filled in, and an interview time and link in an e-mail is put on your Interviews page by itself.
+
 ## 26.11.31
 
 More back from the old app (second batch):

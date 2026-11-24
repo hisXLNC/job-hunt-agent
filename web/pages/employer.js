@@ -1,4 +1,4 @@
-import { html, api, post, put, tile, toast, day, ago, safeUrl, href, with_, fitColor, stageChip, shortPay, rowsThatFit, KIND, exact } from '../app.js';
+import { html, api, post, put, tile, toast, day, ago, safeUrl, href, with_, fitColor, stageChip, shortPay, listSize, endless, KIND, exact } from '../app.js';
 
 // One employer: its postings, what you sent there, who you know, what working there is like.
 const WHERE = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On site' };
@@ -15,23 +15,22 @@ function postings(d, route) {
   const SORT = { fit: r => -Math.max(r.fit, r.fit_tailored), posted: r => -(r.posted_at || r.first_seen_at), pay: r => -(r.pay_year || 0), applicants: r => (r.applicants >= 0 ? r.applicants : 1e9), role: r => r.title.toLowerCase() };
   const by = SORT[q.sort];
   if (by) { const dir = q.dir === 'up' ? -1 : 1; rows = rows.map((r, i) => [by(r), i, r]).sort((a, b) => (a[0] < b[0] ? -dir : a[0] > b[0] ? dir : a[1] - b[1])).map(x => x[2]); }
-  const size = rowsThatFit(560, 37, 5, 15), page = Math.max(1, +q.page || 1), shown = rows.slice((page - 1) * size, page * size);
+  const shown = rows.slice(0, listSize('employer'));
   const wide = window.innerWidth >= 1280;
-  const chip = (key, label, n) => html`<a class="chip ${(q.show || '') === key ? 'on' : ''}" href="${with_(route, { show: key, page: '' })}">${label} ${n}</a>`;
-  const th = (key, label, w) => html`<th style="${w ? `width:${w}` : ''}"><a class="${q.sort === key ? 'on' : ''}" href="${with_(route, { sort: key, dir: q.sort === key && q.dir !== 'up' ? 'up' : '', page: '' })}">${label}${q.sort === key ? (q.dir === 'up' ? ' ▲' : ' ▼') : ''}</a></th>`;
+  const chip = (key, label, n) => html`<a class="chip ${(q.show || '') === key ? 'on' : ''}" href="${with_(route, { show: key})}">${label} ${n}</a>`;
+  const th = (key, label, w) => html`<th style="${w ? `width:${w}` : ''}"><a class="${q.sort === key ? 'on' : ''}" href="${with_(route, { sort: key, dir: q.sort === key && q.dir !== 'up' ? 'up' : ''})}">${label}${q.sort === key ? (q.dir === 'up' ? ' ▲' : ' ▼') : ''}</a></th>`;
   const sel = (name, label, opts) => html`<select name="${name}" aria-label="${label}" data-on="change" data-act="filter" class="mini"><option value="">${label}: any</option>${opts.map(([v, t]) => html`<option value="${v}" ${q[name] == v ? 'selected' : ''}>${t}</option>`)}</select>`;
   const types = [...new Set(all.map(r => (r.job_type || '').split(',')[0]).filter(Boolean))];
   return html`<div class="card span" style="padding:0">
     <div class="row wrap" style="padding:8px 14px;gap:6px"><h4 class="grow">Postings</h4>${chip('', 'All', all.length)}${chip('open', 'Open', open.length)}${chip('applied', 'Applied', applied.length)}${chip('earlier', 'Earlier', earlier.length)}
       ${sel('where', 'Where', Object.entries(WHERE))}${types.length ? sel('type', 'Type', types.map(t => [t, t])) : ''}</div>
-    <table class="tbl today"><thead><tr>${th('role', 'Role')}${wide ? html`<th style="width:15%">Part of the company</th>` : ''}<th style="width:68px">Where</th><th style="width:104px">Type</th>${th('pay', 'Pay', '118px')}${th('fit', 'Fit', '76px')}${th('posted', 'Posted', '70px')}${th('applicants', 'Applicants', '90px')}<th style="width:158px">Where it stands</th></tr></thead>
+    <table class="tbl today long"><thead><tr>${th('role', 'Role')}${wide ? html`<th style="width:15%">Part of the company</th>` : ''}<th style="width:68px">Where</th><th style="width:104px">Type</th>${th('pay', 'Pay', '118px')}${th('fit', 'Fit', '76px')}${th('posted', 'Posted', '70px')}${th('applicants', 'Applicants', '90px')}<th style="width:158px">Where it stands</th></tr></thead>
       <tbody>${shown.length ? shown.map(r => html`<tr><td><a class="t" href="#/roles/${r.id}" title="${r.title}">${r.title}</a></td>${wide ? html`<td class="ink2" title="${r.division}">${r.division || ''}</td>` : ''}
         <td>${WHERE[r.workplace] || ''}</td><td>${r.job_type || ''}</td><td title="${r.pay}">${shortPay(r.pay) || html`<span class="m">Not named</span>`}</td><td>${pair(r)}</td>
         <td title="${exact(r.posted_at || r.first_seen_at)}">${short(r.posted_at || r.first_seen_at)}</td><td>${r.applicants >= 0 ? html`<span style="${r.applicants < 10 ? 'color:var(--hot);font-weight:600' : ''}">${r.applicants}</span>` : html`<span class="m">—</span>`}</td>
         <td>${r.gone_at && !r.closed ? html`<span class="chip">Taken down</span>` : r.applied_at && !r.closed && r.stage === 'applied' ? html`<span class="chip blue">Applied ${day(r.applied_at)}</span>` : stageChip(r)}</td></tr>`)
         : html`<tr><td colspan="9"><div class="empty" style="padding:22px"><h3>${all.length ? 'Nothing matches' : 'No postings seen yet'}</h3><p>${all.length ? html`<a href="${href(route.parts.join('/'))}">Show all</a>` : 'When this employer posts something that could suit you, it shows up here.'}</p></div></td></tr>`}</tbody></table>
-    <div class="row xs m" style="padding:6px 14px;border-top:1px solid var(--line2)">${rows.length ? html`${(page - 1) * size + 1} to ${Math.min(page * size, rows.length)} of ${rows.length}` : ''}<span class="grow"></span>
-      ${page > 1 ? html`<a class="btn sm" href="${with_(route, { page: page - 1 })}">Previous</a>` : ''}${page * size < rows.length ? html`<a class="btn sm" href="${with_(route, { page: page + 1 })}">Next</a>` : ''}</div></div>`;
+    ${endless('employer', shown.length, rows.length, true)}</div>`;
 }
 
 function history(d) {
@@ -92,7 +91,7 @@ export default {
       </div></div>`;
   },
   actions: {
-    filter({ el, route }) { location.hash = with_(route, { [el.name]: el.value, page: '' }); return false; },
+    filter({ el, route }) { location.hash = with_(route, { [el.name]: el.value}); return false; },
     look: ({ route }) => post(`companies/${route.parts[1]}/reviews`),
     note: ({ route, f }) => put(`companies/${route.parts[1]}/note`, { text: f.text }).then(() => toast('Saved')),
     state: ({ route, d }) => put(`companies/${route.parts[1]}`, { state: d.state }),

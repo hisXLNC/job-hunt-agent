@@ -16,8 +16,8 @@ Limits: I did not read the old `fill.js`/`fill.rs`, `sources.rs`, `cv.rs`, `goog
 2. **Archived mail is not seen — DONE 26.11.30, was PARTIAL (S).** Old read confirmations "archived or not". New `CheckMail` does `EXAMINE INBOX` only.
 3. **Reply drafts saved in Gmail, in the thread — MISSING (M).** Old saved replies, follow-ups, thank-yous, rejection replies and recruiter notes as Gmail drafts (`core/src/google.rs`). New is IMAP read-only; drafts leave via Copy or `mailto:` (`web/pages/replies.js`, `role.js`). A draft is not a send, so this is not excluded by the rule.
 4. **Gmail labels — MISSING (S).** Old labelled JobHunt/Applied and JobHunt/Recruiters.
-5. **Interview request answered with times that suit you — PARTIAL (M).** Old drafted the reply with offered slots, driven by settings (interview hours, length, how many times to offer, time zone). New lists free times on the calendar settings card to copy by hand (`FreeTimes` in `internal/engine/owncal.go`); the drafted reply has [brackets] and no slots, and none of those settings exist.
-6. **Confirmed interview goes into the calendar by itself — PARTIAL (M).** Old `book_interview` created the interview, prep block and reminders from the mail. New advances the stage to interview; the person presses "Add the conversation to Interviews" and fills in the time.
+5. **Interview request answered with times that suit you — DONE 26.11.32, was PARTIAL (M).** Old drafted the reply with offered slots, driven by settings (interview hours, length, how many times to offer, time zone). New lists free times on the calendar settings card to copy by hand (`FreeTimes` in `internal/engine/owncal.go`); the drafted reply has [brackets] and no slots, and none of those settings exist.
+6. **Confirmed interview goes into the calendar by itself — DONE 26.11.32 (onto Interviews; Google Calendar stays one-way), was PARTIAL (M).** Old `book_interview` created the interview, prep block and reminders from the mail. New advances the stage to interview; the person presses "Add the conversation to Interviews" and fills in the time.
 7. **Two-way Google Calendar sync — PARTIAL (L).** Old pushed interviews to Google, pulled moves and deletes back with a note on the application, and offered "Link to application" for look-alike events (1.29). New reads a secret iCal address and has a per-interview "Add to Google Calendar" link plus .ics files. No write-back, no move/delete detection, no linking.
 8. **Recruiters found from two years of mail — MISSING (M).** Old scanned Gmail, saved each recruiter's e-mail, phone and LinkedIn from the signature, linked them to applications, added their companies' boards, and filtered system senders (1.38, 1.39, 2.34.5). New `matchMail` only recognises people already in People.
 9. **Mail-check interval setting — DONE 26.11.30, was MISSING (S).** Old "Check email every (minutes)". New is fixed at 10 minutes in `chores` (`internal/engine/loop.go`).
@@ -58,7 +58,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 ## D. Search, sources and scoring — about 25 present, 16 gaps
 
 1. **Pay read from the posting's text — DONE 26.11.31, was MISSING (M).** Old read salaries and hourly rates from the body, looked up pay for postings showing none, and had "Look now" (1.11, 2.24, 2.25, 2.36.8). New takes pay only from the source's salary field; `PayPerYear` parses that field alone, so the pay floor misses most postings.
-2. **Scoring and tailoring controls — PARTIAL (M).** Old: fit score needed, Tailor by itself (off / strong fits 85 / all), most tailored per search, most scored per search, "What matters to you". New: fixed `keepFit = 55`, `prepareFit = 70` (`internal/engine/search.go`) and one do/ask switch.
+2. **Scoring and tailoring controls — DONE 26.11.32 (one model, one posting per read stay; see D14), was PARTIAL (M).** Old: fit score needed, Tailor by itself (off / strong fits 85 / all), most tailored per search, most scored per search, "What matters to you". New: fixed `keepFit = 55`, `prepareFit = 70` (`internal/engine/search.go`) and one do/ask switch.
 3. **What you want — PARTIAL (M).** Old: level, permanent or contract, industries wanted and not, deal-breakers, career path with On/Off-path tags (2.44, 2.56). New has hard limits and three title bands only.
 4. **Several cities, each searched — PARTIAL (M), needs confirming.** Old searched every title in every listed place. New `Profile` has one City plus "nearby places that also count"; whether those are searched or only accepted I did not trace.
 5. **Indeed through the Claude connector — MISSING (M).** (1.4) Indeed appears in new only as job-alert mail.
@@ -116,7 +116,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 
 1. **Per-CV controls — PARTIAL (M).** Old: titles and keywords per CV, Find more titles, Replace file, letter style per CV, ATS check, what Claude read from it. New UI has add / download / remove; name and focus are settable only through the API.
 2. **A changed CV re-does waiting work — MISSING (M).** Old rescored and re-tailored waiting applications when a CV was replaced or removed, keeping your own edits (2.14, 2.15). New `DeleteCV` just deletes the row.
-3. **Time zone and interview settings — MISSING (S).** See A5.
+3. **Time zone and interview settings — DONE 26.11.32 (interview hours, length, how many; the computer's own time zone), was MISSING (S).** See A5.
 4. **LinkedIn note length by account — PARTIAL (S).** Old 300 or 200; new fixed 300 (`web/pages/people.js`).
 5. **Close as "No response" prompt after four quiet weeks — DONE 26.11.31, was PARTIAL (S).** (1.25)
 6. **A role beside the list — MISSING (S/M).** (2.43) Cosmetic.

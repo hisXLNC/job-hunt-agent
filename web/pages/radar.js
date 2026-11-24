@@ -1,4 +1,4 @@
-import { html, api, post, put, ago, until, when, rings, tile, toast, pager, sortHead, with_, href, freshness, BAND, employer, rel, soon, dayName } from '../app.js';
+import { html, api, post, put, ago, until, when, rings, tile, toast, listSize, endless, sortHead, with_, href, freshness, BAND, employer, rel, soon, dayName } from '../app.js';
 
 const BOARD = { greenhouse: 'Its own board (Greenhouse)', lever: 'Its own board (Lever)', ashby: 'Its own board (Ashby)', smartrecruiters: 'Its own board (SmartRecruiters)', workday: 'Its own board (Workday)', workable: 'Its own board (Workable)', bamboohr: 'Its own board (BambooHR)', recruitee: 'Its own board (Recruitee)', page: 'Its own careers page' };
 
@@ -46,7 +46,7 @@ export default {
   sub: () => 'What Job Hunt watches, and what just appeared',
   topics: ['roles', 'companies', 'runs', 'status'],
   async load(route) {
-    const q = route.q, u = new URLSearchParams({ size: 8, page: q.page || 1, sort: q.sort || '', state: q.state || 'following', q: q.q || '' });
+    const q = route.q, u = new URLSearchParams({ size: listSize('radar'), page: 1, sort: q.sort || '', state: q.state || 'following', q: q.q || '' });
     const [radar, comp, places, src] = await Promise.all([api('radar'), api('companies?' + u), api('places'), api('sources').catch(() => null)]);
     return { ...radar, comp, places, sources: src?.sources };
   },
@@ -67,11 +67,11 @@ export default {
             ${d.fresh?.length ? html`<div class="col" style="margin-top:12px;gap:12px">${d.fresh.map(r => html`<div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a href="#/roles/${r.id}"><b>${r.title}</b></a><div class="s m">${employer(r.company, r.company_id)}${r.location ? html` · ${r.location}` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}</div><div>${freshness(r)}</div></div>${rings(r.fit, r.fit_tailored, true)}<a class="btn sm ${r.stage === 'ready' ? 'p' : ''}" href="#/roles/${r.id}">${r.stage === 'ready' ? 'Review and apply' : 'Open'}</a></div>`)}</div>`
               : html`<p class="s m" style="margin-top:8px">Nothing new in the last two days that fits. ${d.cleared} postings have been set aside by the rules so far; see them under <a href="${href('roles', { closed: 'screened' })}">Roles → Set aside</a>.</p>`}</div>
           <div class="card" style="padding:0"><div class="row" style="padding:14px 16px 10px"><h3 class="grow">Employers</h3>
-              <a class="chip ${state === 'following' ? 'on' : ''}" href="${with_(route, { state: '', page: '' })}">Watching</a>
-              <a class="chip ${state === 'suggested' ? 'on' : ''}" href="${with_(route, { state: 'suggested', page: '' })}">Seen in searches ${c.suggested}</a>
-              <a class="chip ${state === 'muted' ? 'on' : ''}" href="${with_(route, { state: 'muted', page: '' })}">Muted ${c.muted}</a>
+              <a class="chip ${state === 'following' ? 'on' : ''}" href="${with_(route, { state: ''})}">Watching</a>
+              <a class="chip ${state === 'suggested' ? 'on' : ''}" href="${with_(route, { state: 'suggested'})}">Seen in searches ${c.suggested}</a>
+              <a class="chip ${state === 'muted' ? 'on' : ''}" href="${with_(route, { state: 'muted'})}">Muted ${c.muted}</a>
               <form data-act="filter" class="row" style="gap:6px"><input type="text" name="q" value="${route.q.q || ''}" placeholder="Filter employers" aria-label="Filter employers" style="width:170px;height:30px"><button class="btn sm">Filter</button></form></div>
-            <table class="tbl emp"><thead><tr><th>${sortHead('Employer', 'name', route, 'open')}</th><th>Where it posts</th><th>${sortHead('Open roles', 'open', route, 'open')}</th><th>${sortHead('Best fit', 'fit', route, 'open')}</th><th>${sortHead('People', 'people', route, 'open')}</th><th></th></tr></thead>
+            <table class="tbl emp long"><thead><tr><th>${sortHead('Employer', 'name', route, 'open')}</th><th>Where it posts</th><th>${sortHead('Open roles', 'open', route, 'open')}</th><th>${sortHead('Best fit', 'fit', route, 'open')}</th><th>${sortHead('People', 'people', route, 'open')}</th><th></th></tr></thead>
             <tbody>${c.companies.map(x => html`<tr class="${x.about ? 'has-about' : ''}"><td><div class="row">${tile(x.name, true, x.id)}<div><a class="t" href="#/employer/${x.id}" title="Opens ${x.name}: its postings, your history there, people, and what working there is like.">${x.name}</a><span class="xs m">${x.sector || x.why}</span></div></div></td>
               <td class="s">${BOARD[x.board_kind] || html`<span class="m">${x.board_note || 'LinkedIn search'}</span>`}</td>
               <td class="s"><b>${x.open_roles}</b>${x.applied ? html` <span class="m">· ${x.applied} applied</span>` : ''}</td><td class="s">${x.best_fit > 0 ? x.best_fit : html`<span class="m">–</span>`}</td>
@@ -79,7 +79,7 @@ export default {
               <td style="text-align:right;white-space:nowrap">${x.state === 'following' ? html`<button class="btn sm ghost" data-act="state" data-id="${x.id}" data-state="muted">Mute</button>` : html`<button class="btn sm" data-act="state" data-id="${x.id}" data-state="following">Watch</button>`}</td></tr>
               ${x.about ? html`<tr class="about"><td colspan="6" class="s ink2">${x.about}</td></tr>` : ''}`)}
               ${!c.companies.length ? html`<tr><td colspan="6" class="s m" style="padding:22px;text-align:center">No employers here.</td></tr>` : ''}</tbody></table>
-            <div style="padding:0 14px 12px">${pager(c.total, c.page, c.size, route)}</div></div>
+            <div style="padding:0 14px 12px">${endless('radar', (c.companies || []).length, c.total)}</div></div>
           ${sourcesCard(d.sources)}
         </div>
         <div class="col" style="gap:14px">
@@ -98,7 +98,7 @@ export default {
     search: ({ d }) => post('search', { kind: d.kind }).then(() => toast('Searching. New roles appear as they are read.')),
     pause: ({ d }) => post('pause', { paused: !!d.paused }),
     pausefor: ({ value }) => value === '' ? false : post('pause', { paused: true, days: +value }),
-    filter({ f, route }) { location.hash = with_(route, { q: f.q.trim(), page: '' }); return false; },
+    filter({ f, route }) { location.hash = with_(route, { q: f.q.trim()}); return false; },
     state: ({ d }) => put(`companies/${d.id}`, { state: d.state }),
     addco: ({ f, el }) => post('companies', f).then(() => { el.reset(); toast('Watching it from now on'); }),
     placeon: ({ d }) => post('places/switch', { id: d.id, on: !!d.to }),
