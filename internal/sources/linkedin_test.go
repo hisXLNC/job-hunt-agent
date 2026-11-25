@@ -192,7 +192,7 @@ func TestLinkedInDetail(t *testing.T) {
 				"We thank all applicants.",
 			Pay:        "CA$120,000.00/yr - CA$150,000.00/yr",
 			PostedAt:   testNow.Add(-2 * time.Hour), // "2 hours ago" is sharper than the search's date
-			Applicants: 200,
+			Applicants: 201,
 		})
 	})
 
@@ -239,17 +239,20 @@ func TestParseApplicants(t *testing.T) {
 	}{
 		{"47 applicants", 47, true},
 		{"1 applicant", 1, true},
-		{"Over 200 applicants", 200, true},
+		{"Over 200 applicants", 201, true},
+		{"Over 100 applicants", 101, true},
+		{"Over 100 people clicked apply", 101, true},
 		{"1,024 applicants", 1024, true},
 		{"Be among the first 25 applicants", 24, true},
 		{"", 0, false},
 		{"Actively hiring", 0, false},
 		{"applicants", 0, false},
-		{"25 people clicked apply", 0, false},
+		{"12 people clicked apply", 12, true},
+		{"Promoted by hirer", 0, false},
 	}
 	for _, tt := range tests {
-		if got, ok := parseApplicants(tt.in); got != tt.want || ok != tt.ok {
-			t.Errorf("parseApplicants(%q) = %d, %v; want %d, %v", tt.in, got, ok, tt.want, tt.ok)
+		if got, ok := ParseApplicants(tt.in); got != tt.want || ok != tt.ok {
+			t.Errorf("ParseApplicants(%q) = %d, %v; want %d, %v", tt.in, got, ok, tt.want, tt.ok)
 		}
 	}
 }

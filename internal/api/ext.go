@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"jobhunt/internal/sources"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -259,6 +260,24 @@ func (s *Server) extRoutes(h func(string, handler)) {
 			return nil, bad("Job Hunt doesn't keep that kind of answer.")
 		}
 		return nil, st.SaveAnswer(q, a)
+	})
+	// The count LinkedIn shows the person signed in, read off the posting they
+	// are looking at: it is exact under 100, where the public page says only
+	// "Be among the first 25".
+	h("POST /api/ext/role/{id}/applicants", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct{ Text string }
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		n, ok := sources.ParseApplicants(clipRunes(in.Text, 120))
+		if !ok {
+			return nil, bad("That doesn't say how many have applied.")
+		}
+		if _, err := st.Role(idOf(r)); err != nil {
+			return nil, err
+		}
+		st.SetApplicants(idOf(r), n)
+		return map[string]int{"applicants": n}, nil
 	})
 	h("POST /api/ext/role/{id}/applied", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, e.MarkApplied(idOf(r), "")

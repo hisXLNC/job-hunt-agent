@@ -37,6 +37,19 @@ function pageGrabPosting() {
   return out;
 }
 
+// Reads how many have applied, as LinkedIn shows it to the person signed in
+// ("47 applicants", "Over 100 people clicked apply"). Only the posting's top
+// card is read, so a number in the description is never taken for it.
+function pageGrabApplicants() {
+  const RE = /(?:over\s+|more than\s+)?\d[\d,]*\s+(?:applicants?|people clicked apply)|be among the first \d+ applicants/i;
+  const cards = document.querySelectorAll('.job-details-jobs-unified-top-card__container--two-pane, .job-details-jobs-unified-top-card__primary-description-container, .job-details-jobs-unified-top-card__tertiary-description-container, .jobs-unified-top-card, .top-card-layout, [class*="top-card"]');
+  for (const c of cards) {
+    const m = (c.innerText || c.textContent || '').match(RE);
+    if (m) return m[0].slice(0, 120);
+  }
+  return null;
+}
+
 // Reads the person's name and headline from a LinkedIn profile.
 function pageGrabProfile() {
   const text = el => (el ? (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : '');

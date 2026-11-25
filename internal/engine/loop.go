@@ -399,7 +399,7 @@ func (e *Engine) maybePush(r store.Role, fit, tailored int) {
 	if age <= 6*time.Hour && fit >= set.MinFit {
 		line := fmt.Sprintf("Fit %d · posted %s", fit, ago(age))
 		if r.Applicants >= 0 {
-			line += fmt.Sprintf(" · %d applicants so far", r.Applicants)
+			line += " · " + ApplicantsText(r.Applicants) + " applicants so far"
 		}
 		e.Tell(r.Title+" at "+r.Company, line+". Your CV and letter are ready.", fmt.Sprintf("#/roles/%d", r.ID))
 	}
@@ -415,7 +415,7 @@ func (e *Engine) maybePush(r store.Role, fit, tailored int) {
 	}
 	parts = append(parts, "posted "+ago(age))
 	if r.Applicants >= 0 {
-		parts = append(parts, fmt.Sprintf("%d applicants so far", r.Applicants))
+		parts = append(parts, ApplicantsText(r.Applicants)+" applicants so far")
 	}
 	msg := strings.Join(parts, " · ") + ". CV and letter are ready on your computer."
 	title := r.Title + " at " + r.Company

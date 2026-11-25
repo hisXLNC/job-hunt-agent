@@ -1416,7 +1416,7 @@ func (e *Engine) MarkApplied(id int64, how string) error {
 	if moved {
 		text := "You applied"
 		if r.Applicants >= 0 {
-			text += fmt.Sprintf(" (about %d applicants at the time)", r.Applicants)
+			text += " (" + ApplicantsText(r.Applicants) + " applicants at the time)"
 		}
 		if age := e.Now().Unix() - r.Age(); age > 0 && age < 3600 {
 			text += ", inside its first hour"

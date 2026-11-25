@@ -75,6 +75,9 @@ export const day = ts => new Date(ts * 1000).toLocaleDateString('en-GB', { day: 
 export const clock = ts => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 // "3 days ago" on the page, the exact day and time when the pointer rests on it.
 export const exact = ts => new Date(ts * 1000).toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+// LinkedIn's bounds are kept one off the number: "Be among the first 25" is 24
+// ("under 25"), "Over 100" is 101 ("100+"). 200 is "Over 200" from before.
+export const applicantsText = n => (n === 24 ? 'under 25' : n === 200 || (n > 100 && n % 100 === 1) ? `${n - n % 100}+` : String(n));
 export const rel = ts => (ts ? html`<span class="rel" title="${exact(ts)}">${ago(ts)}</span>` : '');
 export const soon = ts => (ts ? html`<span class="rel" title="${exact(ts)}">${until(ts)}</span>` : '');
 
@@ -147,7 +150,7 @@ export function stageChip(r) {
 export function freshness(r, timeOnly) {
   const at = r.posted_at || r.first_seen_at, age = Date.now() / 1000 - at;
   const hot = age < 86400, few = r.applicants >= 0 && r.applicants < 10;
-  return html`<span class="s m">${r.posted_at ? 'Posted' : 'Seen'} <b style="${hot ? 'color:var(--hot)' : ''}">${rel(at)}</b>${!timeOnly && r.applicants >= 0 ? html` · <b style="${few ? 'color:var(--hot)' : ''}">${r.applicants} applicant${r.applicants === 1 ? '' : 's'}</b>` : ''}</span>`;
+  return html`<span class="s m">${r.posted_at ? 'Posted' : 'Seen'} <b style="${hot ? 'color:var(--hot)' : ''}">${rel(at)}</b>${!timeOnly && r.applicants >= 0 ? html` · <b style="${few ? 'color:var(--hot)' : ''}">${applicantsText(r.applicants)} applicant${r.applicants === 1 ? '' : 's'}</b>` : ''}</span>`;
 }
 
 // ---- routing ----------------------------------------------------------------------

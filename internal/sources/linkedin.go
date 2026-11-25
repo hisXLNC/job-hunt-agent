@@ -220,7 +220,7 @@ func applyLinkedInDetail(body string, p *Posting, now time.Time) bool {
 	}
 	p.Description = HTMLToText(d.inner(markup))
 
-	if n, ok := parseApplicants(d.textOf(0, all, withClass("num-applicants__caption"))); ok {
+	if n, ok := ParseApplicants(d.textOf(0, all, withClass("num-applicants__caption"))); ok {
 		p.Applicants = n
 	}
 	if pay := d.textOf(0, all, withClass("compensation__salary")); pay != "" {
@@ -256,20 +256,24 @@ func applyLinkedInDetail(body string, p *Posting, now time.Time) bool {
 	return true
 }
 
-// parseApplicants reads LinkedIn's applicant captions: "47 applicants" is
-// 47, "Over 200 applicants" is 200, and "Be among the first 25 applicants"
-// is 24, the most there can be.
-func parseApplicants(s string) (int, bool) {
+// ParseApplicants reads LinkedIn's applicant captions. "47 applicants" and
+// "47 people clicked apply" are 47. A bound is kept as one past or one short
+// of it, so it can be told from a count: "Be among the first 25 applicants"
+// is 24 ("under 25"), "Over 100 applicants" is 101 ("100+"), "Over 200" 201.
+func ParseApplicants(s string) (int, bool) {
 	lower := strings.ToLower(s)
-	if !strings.Contains(lower, "applicant") {
+	if !strings.Contains(lower, "applicant") && !strings.Contains(lower, "clicked apply") {
 		return 0, false
 	}
 	n, err := strconv.Atoi(strings.ReplaceAll(countRE.FindString(s), ",", ""))
 	if err != nil {
 		return 0, false
 	}
-	if strings.Contains(lower, "among the first") && n > 0 {
+	switch {
+	case strings.Contains(lower, "among the first") && n > 0:
 		n--
+	case strings.Contains(lower, "over ") || strings.Contains(lower, "more than "):
+		n++
 	}
 	return n, true
 }

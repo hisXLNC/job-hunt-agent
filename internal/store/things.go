@@ -404,11 +404,22 @@ func (s *Store) TouchRole(id int64, applicants int, description string) {
 	now := s.now()
 	s.db.Exec(`UPDATE roles SET last_seen_at = ?, gone_at = 0 WHERE id = ?`, now, id)
 	if applicants >= 0 {
-		s.db.Exec(`UPDATE roles SET applicants = ? WHERE id = ?`, applicants, id)
+		s.SetApplicants(id, applicants)
 	}
 	if description != "" {
 		s.db.Exec(`UPDATE roles SET description = ? WHERE id = ? AND description = ''`, description, id)
 	}
+}
+
+// SetApplicants records how many have applied. "Under 25" (24), the most
+// LinkedIn says without signing in, never replaces a smaller count read
+// signed in.
+func (s *Store) SetApplicants(id int64, n int) {
+	if n < 0 {
+		return
+	}
+	s.db.Exec(`UPDATE roles SET applicants = ? WHERE id = ? AND NOT (? = 24 AND applicants BETWEEN 0 AND 23)`, n, id, n)
+	s.Changed("roles", "today")
 }
 
 // SetRoleDetail stores what a detail fetch learned.
@@ -417,9 +428,9 @@ func (s *Store) SetRoleDetail(id int64, description, applyURL, pay, workplace st
 		apply_url = CASE WHEN ? != '' THEN ? ELSE apply_url END,
 		pay = CASE WHEN ? != '' THEN ? ELSE pay END,
 		workplace = CASE WHEN ? != '' THEN ? ELSE workplace END,
-		applicants = CASE WHEN ? >= 0 THEN ? ELSE applicants END,
+		applicants = CASE WHEN ? >= 0 AND NOT (? = 24 AND applicants BETWEEN 0 AND 23) THEN ? ELSE applicants END,
 		posted_at = CASE WHEN ? > 0 THEN ? ELSE posted_at END WHERE id = ?`,
-		description, description, applyURL, applyURL, pay, pay, workplace, workplace, applicants, applicants, postedAt, postedAt, id)
+		description, description, applyURL, applyURL, pay, pay, workplace, workplace, applicants, applicants, applicants, postedAt, postedAt, id)
 	s.Changed("roles")
 }
 

@@ -81,3 +81,16 @@ func (e *Engine) ApplyLimits() (aside, back int, err error) {
 	}
 	return aside, back, nil
 }
+
+// ApplicantsText words an applicant count. LinkedIn's bounds are kept one off
+// the number: "Be among the first 25" is 24, "Over 100" 101, "Over 200" 201
+// (200 before that was so).
+func ApplicantsText(n int) string {
+	switch {
+	case n == 24:
+		return "under 25"
+	case n == 200 || (n > 100 && n%100 == 1):
+		return fmt.Sprintf("%d+", n-n%100)
+	}
+	return fmt.Sprint(n)
+}

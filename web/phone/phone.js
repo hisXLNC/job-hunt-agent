@@ -87,7 +87,7 @@ async function role(id) {
   const kids = [
     el('div', { class: 'card' }, el('div', { class: 'row' }, el('div', { class: 'grow' }, el('h2', {}, r.title), el('div', { class: 's', style: 'margin-top:4px' }, r.company), facts ? el('div', { class: 'm' }, facts) : ''),
       r.fit >= 0 ? el('div', { class: 'fit', style: 'color:' + fitTone(r.fit) }, r.fit_tailored > r.fit ? `${r.fit} → ${r.fit_tailored}` : r.fit, el('small', {}, r.fit_tailored > r.fit ? 'fit, tailored' : 'fit')) : ''),
-      el('div', { class: 'm', style: 'margin-top:8px' }, [r.posted_at ? 'Posted ' + ago(r.posted_at, now) : '', r.applicants >= 0 ? r.applicants + ' applicants' : '', r.applied_at ? 'You applied ' + ago(r.applied_at, now) : '', r.closed ? 'Closed: ' + (r.closed_why || r.closed) : '', later ? 'Saved for later' : ''].filter(Boolean).join(' · ')),
+      el('div', { class: 'm', style: 'margin-top:8px' }, [r.posted_at ? 'Posted ' + ago(r.posted_at, now) : '', r.applicants >= 0 ? (r.applicants === 24 ? 'under 25' : r.applicants === 200 || (r.applicants > 100 && r.applicants % 100 === 1) ? `${r.applicants - r.applicants % 100}+` : r.applicants) + ' applicants' : '', r.applied_at ? 'You applied ' + ago(r.applied_at, now) : '', r.closed ? 'Closed: ' + (r.closed_why || r.closed) : '', later ? 'Saved for later' : ''].filter(Boolean).join(' · ')),
       d.reading?.summary ? el('p', { class: 's', style: 'margin-top:10px' }, d.reading.summary) : ''),
   ];
   if (!r.closed) {

@@ -1,4 +1,4 @@
-import { html, api, post, put, tile, toast, day, ago, safeUrl, href, with_, fitColor, stageChip, shortPay, listSize, endless, KIND, exact } from '../app.js';
+import { html, api, post, put, tile, toast, day, ago, safeUrl, href, with_, fitColor, stageChip, shortPay, listSize, endless, KIND, exact, applicantsText } from '../app.js';
 
 // One employer: its postings, what you sent there, who you know, what working there is like.
 const WHERE = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On site' };
@@ -27,7 +27,7 @@ function postings(d, route) {
     <table class="tbl today long"><thead><tr>${th('role', 'Role')}${wide ? html`<th style="width:15%">Part of the company</th>` : ''}<th style="width:68px">Where</th><th style="width:104px">Type</th>${th('pay', 'Pay', '118px')}${th('fit', 'Fit', '76px')}${th('posted', 'Posted', '70px')}${th('applicants', 'Applicants', '90px')}<th style="width:158px">Where it stands</th></tr></thead>
       <tbody>${shown.length ? shown.map(r => html`<tr><td><a class="t" href="#/roles/${r.id}" title="${r.title}">${r.title}</a></td>${wide ? html`<td class="ink2" title="${r.division}">${r.division || ''}</td>` : ''}
         <td>${WHERE[r.workplace] || ''}</td><td>${r.job_type || ''}</td><td title="${r.pay}">${shortPay(r.pay) || html`<span class="m">Not named</span>`}</td><td>${pair(r)}</td>
-        <td title="${exact(r.posted_at || r.first_seen_at)}">${short(r.posted_at || r.first_seen_at)}</td><td>${r.applicants >= 0 ? html`<span style="${r.applicants < 10 ? 'color:var(--hot);font-weight:600' : ''}">${r.applicants}</span>` : html`<span class="m">—</span>`}</td>
+        <td title="${exact(r.posted_at || r.first_seen_at)}">${short(r.posted_at || r.first_seen_at)}</td><td>${r.applicants >= 0 ? html`<span style="${r.applicants < 10 ? 'color:var(--hot);font-weight:600' : ''}">${applicantsText(r.applicants)}</span>` : html`<span class="m">—</span>`}</td>
         <td>${r.gone_at && !r.closed ? html`<span class="chip">Taken down</span>` : r.applied_at && !r.closed && r.stage === 'applied' ? html`<span class="chip blue">Applied ${day(r.applied_at)}</span>` : stageChip(r)}</td></tr>`)
         : html`<tr><td colspan="9"><div class="empty" style="padding:22px"><h3>${all.length ? 'Nothing matches' : 'No postings seen yet'}</h3><p>${all.length ? html`<a href="${href(route.parts.join('/'))}">Show all</a>` : 'When this employer posts something that could suit you, it shows up here.'}</p></div></td></tr>`}</tbody></table>
     ${endless('employer', shown.length, rows.length, true)}</div>`;

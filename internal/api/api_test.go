@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -408,5 +409,35 @@ func TestBringOverTheOldJobHunt(t *testing.T) {
 	}
 	if look := page("GET", "/api/import/old", ""); !strings.Contains(look.Body.String(), `"last":`) {
 		t.Fatalf("the last run is not shown: %s", look.Body)
+	}
+}
+
+// The side panel sends the count LinkedIn shows the person signed in. A later
+// search that sees only "Be among the first 25" does not overwrite it.
+func TestTheSidePanelSendsTheApplicantCount(t *testing.T) {
+	srv, h := newServer(t)
+	c, _, _ := srv.S.UpsertCompany(store.Company{Name: "Acme", State: "following"})
+	id, _ := srv.S.AddRole(store.Role{CompanyID: c.ID, Key: "linkedin:1", Title: "Tax Manager", Applicants: 24})
+	path := fmt.Sprintf("/api/ext/role/%d/applicants", id)
+	if got := do(h, call{method: "POST", path: path, body: `{"text":"12 applicants"}`, marker: true}).Code; got != 403 {
+		t.Fatalf("own page sending a count: got %d, want 403", got)
+	}
+	panel := approvedPanel(t, h)
+	if w := panel("POST", path, `{"text":"12 people clicked apply"}`); w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	srv.S.TouchRole(id, 24, "")
+	srv.S.SetRoleDetail(id, "", "", "", "", 24, 0)
+	if r, _ := srv.S.Role(id); r.Applicants != 12 {
+		t.Fatalf("applicants = %d, want 12", r.Applicants)
+	}
+	if w := panel("POST", path, `{"text":"Over 100 applicants"}`); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if r, _ := srv.S.Role(id); r.Applicants != 101 {
+		t.Fatalf("applicants = %d, want 101", r.Applicants)
+	}
+	if w := panel("POST", path, `{"text":"Promoted by hirer"}`); w.Code != 400 {
+		t.Fatalf("no count: got %d", w.Code)
 	}
 }

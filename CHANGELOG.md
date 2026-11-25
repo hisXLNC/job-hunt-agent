@@ -2,6 +2,10 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.47
+
+- **Applicant counts are honest, and exact when you open the posting.** Job Hunt reads LinkedIn without signing in, where a new posting only says "Be among the first 25 applicants"; that was kept as 24 and shown as "24 applicants", so every fresh role looked the same. It now says "under 25 applicants" (and "100+" or "200+" where LinkedIn gives only a bound). When you open a LinkedIn posting with the side panel open, it reads the exact count LinkedIn shows you signed in (exact under 100) and Job Hunt keeps it; a later search that sees only "under 25" does not overwrite it. Update the side panel too: Load unpacked again, or reload it on the extensions page.
+
 ## 26.11.46
 
 - **Long requests through your Claude sign-in no longer fail on Windows.** Reading your career path stopped with "The filename or extension is too long": Job Hunt put your CV and profile on Claude Code's command line, which Windows caps at about 32,000 characters. They now go through a private file that is removed straight after.

@@ -1,4 +1,4 @@
-import { html, api, post, rings, tile, toast, listSize, endless, sortHead, with_, href, stageChip, freshness, BAND, STAGE, CLOSED, fitColor, employer, shortPay, picked, redraw, LATER, dayName } from '../app.js';
+import { html, api, post, rings, tile, toast, listSize, endless, sortHead, with_, href, stageChip, freshness, BAND, STAGE, CLOSED, fitColor, employer, shortPay, picked, redraw, LATER, dayName, applicantsText } from '../app.js';
 
 const STAGES = ['found', 'ready', 'applied', 'reply', 'interview', 'offer'];
 
@@ -63,7 +63,7 @@ function table(d, route) {
       <td><div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a class="t" href="#/roles/${r.id}">${r.title}</a><span class="s m">${employer(r.company, r.company_id)}${r.location ? html` · ${r.location}` : ''}${r.workplace ? html` · ${r.workplace}` : ''}${r.pay ? html` · <b style="font-weight:600;color:var(--ink2)" title="${r.pay}">${shortPay(r.pay)}</b>` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}</span></div></div></td>
       <td>${rings(r.fit, r.fit_tailored, true)}</td>
       <td>${freshness(r, true)}</td>
-      <td class="s">${r.applicants >= 0 ? html`<b style="${r.applicants < 10 ? 'color:var(--hot)' : 'font-weight:500'}">${r.applicants}</b>${r.applicants < 10 ? html` <span class="xs" style="color:var(--hot)">be early</span>` : ''}` : html`<span class="m">–</span>`}</td>
+      <td class="s">${r.applicants >= 0 ? html`<b style="${r.applicants < 10 ? 'color:var(--hot)' : 'font-weight:500'}">${applicantsText(r.applicants)}</b>${r.applicants < 10 ? html` <span class="xs" style="color:var(--hot)">be early</span>` : ''}` : html`<span class="m">–</span>`}</td>
       <td>${stageChip(r)}${r.preparing ? html` <span class="chip blue"><span class="spin" style="width:10px;height:10px"></span>Preparing</span>` : ''}${r.closed === 'screened' ? html`<div class="xs m" style="margin-top:3px">${r.closed_why}</div>` : ''}${!r.closed && r.later_until > d.now ? html`<div class="xs m" style="margin-top:3px" title="Saved for later. It comes back to Today by itself.">Later · back ${dayName(r.later_until)}</div>` : ''}</td>
       <td style="text-align:right;white-space:nowrap">${r.closed ? (r.closed !== 'no' ? html`<button class="btn sm" data-act="reopen" data-id="${r.id}">Bring back</button>` : html`<button class="btn sm ghost" data-act="reopen" data-id="${r.id}" data-confirm="Bring this role back? You said you weren't interested.">Bring back</button>`) : r.stage === 'ready' ? html`<a class="btn sm p" href="#/roles/${r.id}">Review and apply</a>` : html`<a class="btn sm" href="#/roles/${r.id}">Open</a>`}${r.closed ? '' : rowMenu(r, d.now)}</td>
     </tr>`)}</tbody></table>${endless('roles', d.roles.length, d.total)}</div>`;

@@ -194,6 +194,22 @@ function hold(list) {
 }
 function showOffers() { if (held.length) { offers = held.slice(0, 8); held = []; } }
 
+// LinkedIn shows the person, signed in, the exact count under 100; Job Hunt
+// reads it without signing in and gets only "under 25". The count on the page
+// they are looking at is sent back, at most every ten minutes a role.
+const countRead = {};
+async function readApplicants(role) {
+  if (Date.now() - (countRead[role.id] || 0) < 10 * 60 * 1000) return;
+  countRead[role.id] = Date.now();
+  try {
+    const [got] = await inPage(pageGrabApplicants);
+    if (got && got.result) {
+      const r = await call('role/' + role.id + '/applicants', { method: 'POST', body: { text: got.result } });
+      if (r && r.applicants >= 0 && page.kind === 'role' && page.role.id === role.id && page.role.applicants !== r.applicants) { page.role.applicants = r.applicants; render(); }
+    }
+  } catch (e) { /* the page may still be loading; the next look tries again */ countRead[role.id] = Date.now() - 9 * 60 * 1000; }
+}
+
 let seq = 0;
 async function refresh(force) {
   const mine = ++seq;
@@ -225,6 +241,7 @@ async function refresh(force) {
     if (flash && flash.url !== url) flash = null;
     if (person && person.url !== url) person = null;
     tab = t; page = p; next = n;
+    if (p.kind === 'role' && /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/jobs\//.test(url)) readApplicants(p.role);
     if (p.kind === 'profile' && !person) grabProfile();
     if (p.carried && KNOWN_DONE.test(url)) sentFrom(t.id);
   } catch (e) {
@@ -499,7 +516,7 @@ function roleCard(r) {
   const at = r.posted_at || r.first_seen_at, early = r.applicants >= 0 && r.applicants < 10;
   const kids = [
     h('div', { class: 'row' }, h('span', { class: 'chip ' + (r.closed ? '' : r.stage === 'ready' ? 'hot' : r.stage === 'applied' ? 'blue' : '') }, r.closed ? CLOSED[r.closed] || 'Closed' : STAGE[r.stage] || r.stage),
-      h('span', { class: 's m' }, `${r.posted_at ? 'Posted' : 'Seen'} ${ago(at)}`, r.applicants >= 0 ? [' · ', h('b', { style: early ? 'color:var(--hot)' : '' }, plural(r.applicants, 'applicant', 'applicants'))] : null)),
+      h('span', { class: 's m' }, `${r.posted_at ? 'Posted' : 'Seen'} ${ago(at)}`, r.applicants >= 0 ? [' · ', h('b', { style: early ? 'color:var(--hot)' : '' }, r.applicants === 24 ? 'under 25 applicants' : r.applicants === 200 || (r.applicants > 100 && r.applicants % 100 === 1) ? `${r.applicants - r.applicants % 100}+ applicants` : plural(r.applicants, 'applicant', 'applicants'))] : null)),
     h('div', { class: 'row', style: 'align-items:flex-start' }, h('div', { class: 'grow' }, h('h2', {}, r.title), h('div', { class: 's m' }, [r.company, r.location].filter(Boolean).join(' · '))), r.fit ? fitBox(r) : null),
     r.summary ? h('p', { class: 's ink2' }, r.summary) : null,
   ];
