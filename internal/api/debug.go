@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -123,19 +122,9 @@ func (s *Server) debugRoutes(mux *http.ServeMux, h func(string, handler)) {
 		if dir == "" {
 			return nil, bad("There is no such folder on this computer.")
 		}
-		var cmd *exec.Cmd
-		switch runtime.GOOS {
-		case "windows":
-			cmd = exec.Command("explorer", dir)
-		case "darwin":
-			cmd = exec.Command("open", dir)
-		default:
-			cmd = exec.Command("xdg-open", dir)
+		if err := openDir(dir); err != nil {
+			return nil, err
 		}
-		if err := cmd.Start(); err != nil {
-			return nil, bad("Couldn't open the folder: " + dir)
-		}
-		go cmd.Wait()
 		return map[string]string{"dir": dir}, nil
 	})
 	// The side panel as one file to unpack, numbered like the program.

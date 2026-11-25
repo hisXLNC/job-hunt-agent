@@ -3,8 +3,15 @@
 // asked; the panel does the work, since it alone holds the key Job Hunt knows.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(details => {
   chrome.contextMenus.create({ id: 'fill-one', title: 'Job Hunt: fill this in', contexts: ['editable'] }, () => void chrome.runtime.lastError);
+  // Updated itself from Job Hunt's folder: NEW on the button until the panel is opened.
+  const now = chrome.runtime.getManifest().version;
+  if (details && details.reason === 'update' && details.previousVersion && details.previousVersion !== now) {
+    chrome.action.setBadgeText({ text: 'NEW' }).catch(() => {});
+    chrome.action.setBadgeBackgroundColor({ color: '#2B5BD7' }).catch(() => {});
+    chrome.storage.local.set({ updatedFrom: details.previousVersion }).catch(() => {});
+  }
 });
 
 function hand(todo, tab) {

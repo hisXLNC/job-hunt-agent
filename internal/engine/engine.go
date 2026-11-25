@@ -42,6 +42,9 @@ type Engine struct {
 	BaseURL string // where this program's own pages are, for links in notices
 	// Where a paired phone finds a page of this program; "" while phone access is off.
 	PhoneLink func(page string) string
+	// FilesHome is where tailored CVs and letters are also kept as files,
+	// unless the person chose another folder (Documents\Job Hunt); "" for nowhere.
+	FilesHome string
 	// Tests only: the cloud drives on this computer.
 	CloudRoots func() [][2]string
 	// Tests only: stands in for fetching the person's calendar.

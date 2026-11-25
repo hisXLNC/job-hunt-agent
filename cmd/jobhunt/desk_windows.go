@@ -139,34 +139,3 @@ func clip(s string, n int) string {
 	}
 	return s
 }
-
-var setExecState = syscall.NewLazyDLL("kernel32.dll").NewProc("SetThreadExecutionState")
-
-// keepAwake stops Windows from sleeping while want() says so. The screen may
-// still turn off. It ends, and lets the computer sleep again, with ctx.
-func keepAwake(ctx context.Context, want func() bool) {
-	go func() {
-		runtime.LockOSThread()
-		const continuous, system = 0x80000000, 0x00000001
-		on := false
-		t := time.NewTicker(20 * time.Second)
-		defer t.Stop()
-		for {
-			if w := want(); w != on {
-				on = w
-				if on {
-					setExecState.Call(continuous | system)
-				} else {
-					setExecState.Call(continuous)
-				}
-				trace.Log("app", "keeping the computer awake: %v", on)
-			}
-			select {
-			case <-ctx.Done():
-				setExecState.Call(continuous)
-				return
-			case <-t.C:
-			}
-		}
-	}()
-}

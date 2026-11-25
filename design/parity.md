@@ -85,24 +85,24 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 
 ## F. Browser extension — about 14 present, 8 gaps
 
-1. **Extension updates itself — MISSING (M).** Old reloaded itself from Job Hunt's folder, checked its version before each fill and showed NEW (2.34, 2.35.3, 2.35.11). New tells the person to press Reload after each update (`web/pages/you.js`).
+1. **Extension updates itself — DONE 26.11.49, was MISSING (M).** Old reloaded itself from Job Hunt's folder, checked its version before each fill and showed NEW (2.34, 2.35.3, 2.35.11). New tells the person to press Reload after each update (`web/pages/you.js`).
 2. **Files attached as PDF — DONE 26.11.31, was PARTIAL (S).** New side panel fetches `.docx` only (`extension/panel.js` line 253; `internal/api/ext.go` has no PDF route).
-3. **Fill a job site's profile from the CV — MISSING (M).** (2.48) New "profile" means a LinkedIn person's page.
-4. **Hiring team read from a LinkedIn posting — MISSING (S/M).** (2.46) New adds a person only from a LinkedIn profile page.
+3. **Fill a job site's profile from the CV — DONE 26.11.49, was MISSING (M).** (2.48) New "profile" means a LinkedIn person's page.
+4. **Hiring team read from a LinkedIn posting — DONE 26.11.49, was MISSING (S/M).** (2.46) New adds a person only from a LinkedIn profile page.
 5. **Fill forms on the phone, share a job from the phone — MISSING (M).** Bookmark filler and "Send to Job Hunt" share shortcut (2.36, 2.36.5). Phone access has no add-a-posting call.
-6. **Bookmark button and clipboard pick-up — MISSING (S).** For browsers without the extension (1.13; `clip_watch`).
-7. **Choose the browser links open in — MISSING (S).** (2.32)
+6. **Bookmark button and clipboard pick-up — DONE 26.11.49 (clipboard off by default), was MISSING (S).** For browsers without the extension (1.13; `clip_watch`).
+7. **Choose the browser links open in — DONE 26.11.49, was MISSING (S).** (2.32)
 8. **Workday skills by real clicks — not determined.** Old used `chrome.debugger`; new has no debugger permission and handles skills in `filler.js`. I could not judge equivalence.
 
 ## G. Desktop shell — about 8 present, 7 gaps
 
 1. **Start with Windows switch — DONE 26.11.30, was PARTIAL (S).** Old: Settings and tray "Start when I sign in". New: installer tick box only (`installer/jobhunt.nsi`).
-2. **Wake the PC for scheduled work — MISSING (M).** Wake timers plus powercfg (1.32, 2.58). New only keeps it awake.
-3. **Keep-awake on Modern Standby, and "Windows slept during work" — PARTIAL (S).** Old also used power requests and reported a sleep. New uses `SetThreadExecutionState` only (`cmd/jobhunt/desk_windows.go`).
+2. **Wake the PC for scheduled work — DONE 26.11.49, was MISSING (M).** Wake timers plus powercfg (1.32, 2.58). New only keeps it awake.
+3. **Keep-awake on Modern Standby, and "Windows slept during work" — DONE 26.11.49, was PARTIAL (S).** Old also used power requests and reported a sleep. New uses `SetThreadExecutionState` only (`cmd/jobhunt/desk_windows.go`).
 4. **Tray "Check email now" — DONE 26.11.30, was MISSING (S).**
-5. **One-button Claude Code install and sign-in — MISSING (M).** (1.40) New says to install it from claude.com.
-6. **Folder picker — PARTIAL (S).** New has a typed path for the copies folder.
-7. **Files kept in a folder you choose — PARTIAL (M).** Old wrote every tailored CV and letter to Documents\Job Hunt, with Show files and a Tailored files list. New builds files on download; no folder, no documents list.
+5. **One-button Claude Code install and sign-in — DONE 26.11.49, was MISSING (M).** (1.40) New says to install it from claude.com.
+6. **Folder picker — DONE 26.11.49, was PARTIAL (S).** New has a typed path for the copies folder.
+7. **Files kept in a folder you choose — DONE 26.11.49, was PARTIAL (M).** Old wrote every tailored CV and letter to Documents\Job Hunt, with Show files and a Tailored files list. New builds files on download; no folder, no documents list.
 
 ## H. Sync, backup and phone — about 7 present, 5 gaps
 

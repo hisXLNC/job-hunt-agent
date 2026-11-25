@@ -1434,6 +1434,7 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 	e.S.Advance(id, "ready")
 	e.S.Log(store.Activity{Kind: "prepared", RoleID: id, CompanyID: r.CompanyID, Text: fmt.Sprintf("CV and letter ready (%d changes)", len(tail.Changes))})
 	e.maybePush(r, reading.Fit, tail.FitAfter)
+	e.keepFilesQuietly(id)
 	return nil
 }
 

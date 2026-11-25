@@ -57,6 +57,8 @@ type Server struct {
 	SetStartup func(on bool) error
 	// Restart stops the program and starts it again; nil where it can't.
 	Restart func() error
+	// PC is what only this computer can do (wake timers, folders, Claude Code).
+	PC Machine
 
 	mu      sync.Mutex
 	pending ExtSet // the extension asking to connect, if any
@@ -1612,7 +1614,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "other_ai": e.OtherAIState(), "other_services": llm.OtherServices, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
-			"desk": e.Desk(), "schedule": e.Schedule(), "suggest": e.SuggestTimes(), "can_notify": e.Notify != nil, "more": e.MoreSources(), "recruiter_scan": e.RecruiterScan()}, nil
+			"desk": e.Desk(), "schedule": e.Schedule(), "suggest": e.SuggestTimes(), "can_notify": e.Notify != nil, "more": e.MoreSources(), "recruiter_scan": e.RecruiterScan(), "pc": s.pc()}, nil
 	})
 	// More job sources: the searches that take a key (Adzuna, Jooble, Google
 	// for Jobs) and job-alert e-mails. A key goes in and never comes out: what
@@ -2023,6 +2025,7 @@ func (s *Server) Handler() http.Handler {
 		s.Show(in.Page)
 		return nil, nil
 	})
+	s.deskRoutes(h)
 	s.reachRoutes(h)
 	s.googleRoutes(h)
 	s.mux = mux

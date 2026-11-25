@@ -97,3 +97,32 @@ function pageGrabPosts() {
   }
   return out;
 }
+
+// Reads "Meet the hiring team" on a LinkedIn posting: each person's name, role
+// and profile link. Only that part of the page is read.
+function pageGrabHiringTeam() {
+  const lines = el => (el.innerText || el.textContent || '').split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const NOISE = /^(message|follow|connect|job poster|verified|premium|•|·|\d+(st|nd|rd|th)\+?|\d+(st|nd|rd|th) degree connection|show more|see more|meet the hiring team|people you can reach out to)$/i;
+  const head = [...document.querySelectorAll('h2,h3,span,div')].find(el => el.children.length <= 1 && /^(meet the hiring team|people you can reach out to)$/i.test((el.textContent || '').trim()));
+  if (!head) return [];
+  let box = head;
+  for (let i = 0; i < 6 && box && !box.querySelector('a[href*="/in/"]'); i++) box = box.parentElement;
+  if (!box) return [];
+  const out = [], seen = new Set();
+  for (const a of box.querySelectorAll('a[href*="/in/"]')) {
+    let url;
+    try { const u = new URL(a.href, location.href); if (!/(^|\.)linkedin\.com$/.test(u.hostname)) continue; url = u.origin + u.pathname.replace(/\/+$/, ''); } catch (e) { continue; }
+    if (seen.has(url)) continue;
+    // The person's own card: the nearest part around the link that holds their words.
+    let card = a;
+    for (let i = 0; i < 4 && card.parentElement && card.parentElement !== box && lines(card).length < 2; i++) card = card.parentElement;
+    const words = lines(card).map(s => s.replace(/\s*[•·]\s*(1st|2nd|3rd\+?)$/i, '')).filter(s => !NOISE.test(s));
+    const name = (lines(a).filter(s => !NOISE.test(s))[0] || words[0] || '').replace(/\s*[•·].*$/, '');
+    if (!name || name.length > 120) continue;
+    seen.add(url);
+    const title = words.find(s => s !== name && !s.startsWith(name)) || '';
+    out.push({ name, title: title.slice(0, 160), url });
+    if (out.length >= 6) break;
+  }
+  return out;
+}
