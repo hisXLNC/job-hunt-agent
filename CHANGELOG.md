@@ -2,6 +2,14 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.49
+
+- Testing a job source under Connections (Google for Jobs and the others) no longer breaks the
+  page with "ago is not defined". A new check stops a page that uses a missing helper from
+  being released.
+- Releases no longer download the installer builder, which failed when its site was down, and a
+  release that fails for an outside reason is tried once more by itself.
+
 ## 26.11.48
 
 - The old Job Hunt's keys for Adzuna, Jooble, Google for Jobs and Apify now come over. If you

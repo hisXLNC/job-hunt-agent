@@ -1,4 +1,4 @@
-import { html, api, post, put, del, when, toast, copy, app, rel, exact, with_, applyTheme } from '../app.js';
+import { html, api, post, put, del, when, toast, copy, app, rel, exact, ago, with_, applyTheme } from '../app.js';
 import { oldCard, oldActions } from '../old.js';
 
 const TABS = [['', 'About you'], ['arriving', 'Arriving'], ['connections', 'Connections'], ['panel', 'Browser side panel'], ['app', 'The app and debugging']];
