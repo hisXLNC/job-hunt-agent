@@ -1,6 +1,8 @@
 // Package llm is how Job Hunt reaches Claude. There are three ways: an
 // Anthropic API key, the person's own Claude Code sign-in, and a stand-in
-// used by tests and the demo. The rest of the program only sees Engine.
+// used by tests and the demo. Another AI service can take part of the work
+// (openai.go), with Claude answering whenever it fails. The rest of the
+// program only sees Engine.
 package llm
 
 import (
@@ -205,6 +207,11 @@ type Metered struct {
 	Record Recorder
 	Slots  int // calls at once; 0 = 3
 
+	// Other, when set, names another AI to ask first for this request, or
+	// returns nil to go straight to Claude. Its failures never pause Claude
+	// or count against Claude's budget: Claude answers instead.
+	Other func(Request) Engine
+
 	// Budget returns how much may still be spent today in dollars; a negative
 	// number means no limit.
 	Budget func() float64
@@ -241,6 +248,22 @@ func (m *Metered) Wake() {
 }
 
 func (m *Metered) Do(ctx context.Context, req Request) (Response, error) {
+	if m.Other != nil {
+		if o := m.Other(req); o != nil {
+			start := time.Now()
+			resp, err := o.Do(ctx, req)
+			if m.Record != nil && !errors.Is(err, context.Canceled) {
+				errText := ""
+				if err != nil {
+					errText = err.Error() + " (passed to Claude)"
+				}
+				m.Record(req.Task, o.Name(), resp.Model, resp.TokensIn, resp.TokensOut, resp.TokensCached, resp.Cost, time.Since(start).Milliseconds(), errText)
+			}
+			if err == nil || ctx.Err() != nil {
+				return resp, err
+			}
+		}
+	}
 	if rest, msg, until := m.Resting(); rest {
 		return Response{}, &LimitError{Msg: msg, Until: until}
 	}
