@@ -2,6 +2,10 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.41
+
+- **A sharp icon on the taskbar.** Job Hunt's window took its icon at the smallest size and Windows stretched it on a scaled screen, so it looked blurred next to other apps. It now takes the size your screen draws.
+
 ## 26.11.40
 
 - **Words a screening system looks for** now matches whole words only. Short ones like "AI" or "ERP" were being ticked when they only appeared inside other words ("trained", "enterprise").

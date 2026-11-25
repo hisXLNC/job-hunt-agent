@@ -38,7 +38,32 @@ var (
 	pSetDpiAwarenessCtx  = user32.NewProc("SetProcessDpiAwarenessContext")
 	pFindWindowW         = user32.NewProc("FindWindowW")
 	pDestroyWindow       = user32.NewProc("DestroyWindow")
+	pGetDpiForWindow     = user32.NewProc("GetDpiForWindow")
+	pLoadImageW          = user32.NewProc("LoadImageW")
+	pSendMessageW        = user32.NewProc("SendMessageW")
 )
+
+// sharpIcons gives the window its icon at the sizes this screen draws it.
+// Loaded at Windows' default size, the 32-pixel picture was stretched on the
+// taskbar of a scaled screen and looked blurred.
+func sharpIcons(hwnd uintptr) {
+	dpi, _, _ := pGetDpiForWindow.Call(hwnd)
+	if dpi == 0 {
+		dpi = 96
+	}
+	var inst windows.Handle
+	if windows.GetModuleHandleEx(0, nil, &inst) != nil {
+		return
+	}
+	const imageIcon, wmSetIcon, iconSmall, iconBig = 1, 0x0080, 0, 1
+	for _, s := range []struct{ which, px uintptr }{{iconBig, 32}, {iconSmall, 16}} {
+		size := s.px * dpi / 96
+		// The file holds 16 to 256 pixels; Windows takes the nearest and shrinks it, never stretches.
+		if h, _, _ := pLoadImageW.Call(uintptr(inst), 1, imageIcon, size, size, 0); h != 0 {
+			pSendMessageW.Call(hwnd, wmSetIcon, s.which, h)
+		}
+	}
+}
 
 type winPoint struct{ X, Y int32 }
 type winRect struct{ L, T, R, B int32 }
@@ -217,6 +242,7 @@ func (n *nativeWindow) open(page string) (ok bool) {
 		return false
 	}
 	hwnd := uintptr(w.Window())
+	sharpIcons(hwnd)
 	last, had := n.restore(hwnd)
 	// A posting, LinkedIn, a download page: those open in the person's own
 	// browser, where the side panel is. Only Job Hunt's pages live here.
