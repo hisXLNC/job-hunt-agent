@@ -45,6 +45,9 @@ type placeSet struct {
 	Off   []string             `json:"off"` // title searches switched off
 	Sites []PlaceSite          `json:"sites"`
 	Rest  map[string]PlaceRest `json:"rest"`
+	// Turn: for a place that cannot be asked about every title in every
+	// place in one search, which one is next.
+	Turn map[string]int `json:"turn,omitempty"`
 }
 
 func (e *Engine) placeSet() placeSet {
@@ -52,6 +55,9 @@ func (e *Engine) placeSet() placeSet {
 	e.S.Get(placesKey, &ps)
 	if ps.Rest == nil {
 		ps.Rest = map[string]PlaceRest{}
+	}
+	if ps.Turn == nil {
+		ps.Turn = map[string]int{}
 	}
 	return ps
 }
@@ -405,6 +411,7 @@ func (e *Engine) takeFound(posts []sources.Posting, from string, p store.Profile
 		if comp.State == "muted" {
 			stats.ClearedBy["An employer you muted"]++
 			stats.Cleared++
+			stats.decided(PostingOutcome{Title: post.Title, Company: comp.Name, Location: post.Location, Outcome: "skipped", Why: "An employer you muted"})
 			continue
 		}
 		post.Company = comp.Name
@@ -472,8 +479,33 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 	for _, bt := range p.Titles.All() {
 		titles = append(titles, bt.Title)
 	}
-	city := strings.TrimSpace(strings.Split(p.City, ",")[0])
-	place := strings.TrimSpace(strings.Trim(p.City+", "+p.Country, ", "))
+	places := searchedPlaces(p)
+	// ask is one request: a title, and the place it is asked about.
+	type ask struct {
+		title string
+		at    where
+	}
+	pairs := func(titles []string, at []where) []ask {
+		var out []ask
+		for _, t := range titles {
+			for _, w := range at {
+				out = append(out, ask{t, w})
+			}
+		}
+		return out
+	}
+	// Job Bank is asked by province and FreeHire by country, so a second
+	// town in the same province would only ask the same thing again.
+	provinces := []where{places[0]}
+	for _, w := range places[1:] {
+		dup := w.Province == ""
+		for _, x := range provinces {
+			dup = dup || x.Province == w.Province
+		}
+		if !dup {
+			provinces = append(provinces, w)
+		}
+	}
 
 	for _, id := range finders(p) {
 		if id == "linkedin" || ps.off(id) || ctx.Err() != nil {
@@ -485,17 +517,16 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 			stats.missed(id, firstOf(ps.Rest[id].Note, name+" is resting"))
 			continue
 		}
-		asked := titles
-		q := sources.Query{Location: place, Province: provinceOf(p), Country: countryCode(p.Country), Within: within}
+		all := pairs(titles, places[:1])
+		most, w := 10, within
 		if id == "jobbank" {
 			// Job Bank matches words loosely and limits how often it is asked.
-			asked = sources.JobBankTitles(titles, 6)
-			q.Within = max(within, 3*24*time.Hour)
-		} else if len(asked) > 10 {
-			asked = asked[:10]
+			all, most = pairs(sources.JobBankTitles(titles, 6), provinces), 6
+			w = max(within, 3*24*time.Hour)
 		}
-		ok := false
-		for i, title := range asked {
+		asked := turnOf(all, ps.Turn[id], most)
+		ok, n := false, 0
+		for i, a := range asked {
 			if ctx.Err() != nil {
 				break
 			}
@@ -503,7 +534,12 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 				pause(2 * time.Second)
 			}
 			stats.Looked++
-			q.Keywords = title
+			n++
+			stats.reading(id, a.title)
+			if a.at.Province != places[0].Province {
+				stats.from += " in " + a.at.Town
+			}
+			q := sources.Query{Keywords: a.title, Location: a.at.Loc, Province: a.at.Province, Country: countryCode(p.Country), Within: w}
 			posts, err := e.Src.Find(ctx, id, q)
 			if err != nil {
 				if failed(id, id, name, err) {
@@ -512,7 +548,14 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 				continue
 			}
 			ok = true
-			note(name+": "+title, len(posts), take(id, posts, name))
+			label := a.title
+			if a.at.Province != places[0].Province {
+				label += " in " + a.at.Town
+			}
+			note(name+": "+label, len(posts), take(id, posts, name))
+		}
+		if len(all) > 0 {
+			ps.Turn[id] = (ps.Turn[id] + n) % len(all)
 		}
 		if ok {
 			delete(ps.Rest, id)
@@ -529,15 +572,18 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 			continue
 		}
 		site := s.site()
-		asked := []string{""}
+		all := []ask{{"", places[0]}}
 		if site.Searches() {
-			asked = titles
-			if len(asked) > 6 {
-				asked = asked[:6]
+			all = pairs(titles, places[:1])
+			if strings.Contains(s.URL, "{place") {
+				// A site whose own search takes a place is asked about each.
+				all = pairs(titles, places)
 			}
 		}
-		ok, seen := false, 0
-		for i, title := range asked {
+		asked := turnOf(all, ps.Turn[s.ID], 6)
+		ok, seen, n := false, 0, 0
+		for i, a := range asked {
+			title := a.title
 			if ctx.Err() != nil {
 				break
 			}
@@ -545,8 +591,13 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 				pause(4 * time.Second)
 			}
 			stats.Looked++
+			n++
+			stats.reading(srcSites, s.Name)
+			if title != "" {
+				stats.from += ": " + titleAt{Title: title, At: a.at}.label(places[0])
+			}
 			cctx, cancel := context.WithTimeout(ctx, 75*time.Second)
-			posts, err := e.Src.ReadSite(cctx, site, title, city)
+			posts, err := e.Src.ReadSite(cctx, site, title, a.at.Town)
 			cancel()
 			if err != nil {
 				if failed(srcSites, s.ID, s.Name, err) {
@@ -556,11 +607,14 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 			}
 			ok = true
 			seen += len(posts)
-			where := s.Name
+			from := s.Name
 			if title != "" {
-				where += ": " + title
+				from += ": " + titleAt{Title: title, At: a.at}.label(places[0])
 			}
-			note(where, len(posts), take(srcSites, posts, s.Name))
+			note(from, len(posts), take(srcSites, posts, s.Name))
+		}
+		if len(all) > 1 {
+			ps.Turn[s.ID] = (ps.Turn[s.ID] + n) % len(all)
 		}
 		if ok {
 			delete(ps.Rest, s.ID)
@@ -573,6 +627,6 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 	// Only the resting notes changed here; the person may have switched
 	// things meanwhile, so theirs are kept.
 	cur := e.placeSet()
-	cur.Rest = ps.Rest
+	cur.Rest, cur.Turn = ps.Rest, ps.Turn
 	e.S.Set(placesKey, cur)
 }

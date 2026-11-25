@@ -208,6 +208,9 @@ type SearchState struct {
 	Paused        bool   `json:"paused"`
 	// PausedUntil: the pause ends by itself then; 0 for until the person says.
 	PausedUntil int64 `json:"paused_until"`
+	// LinkedInTurn: which title in which place LinkedIn is asked about next,
+	// when they do not all fit in one search.
+	LinkedInTurn int `json:"linkedin_turn,omitempty"`
 }
 
 func (e *Engine) searchState() SearchState {
@@ -270,6 +273,11 @@ type RunStats struct {
 	// "linkedin", "jobbank", "freehire", "sites", "adzuna", "jooble",
 	// "jsearch"): what Radar's list of sources is drawn from.
 	BySource map[string]SourceRun `json:"by_source,omitempty"`
+
+	// What was decided about each posting, by kind of source: kept apart
+	// from the run (see keepOutcomes), as it can run to thousands.
+	src, from string
+	outcomes  map[string]*SourceLog
 }
 
 // SourceRun is what one kind of source gave in one search.
@@ -338,10 +346,16 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		stats.ByPlace[place] = [2]int{v[0] + seen, v[1] + added}
 	}
 
+	// LinkedIn is asked about every title in every place the person named,
+	// up to its share of one search.
+	places := searchedPlaces(p)
+	liAll := titlesAt(p.Titles.All(), places)
+	liAsk := turnOf(liAll, st.LinkedInTurn, linkedInMost(kind, len(p.Titles.All()), len(places)))
+
 	// 1. Employers' own boards: the earliest place a posting appears.
 	companies, _ := e.S.Companies("following")
 	// How many places there are to look at, for the progress bar.
-	look, at := len(p.Titles.All()), 0
+	look, at := len(liAsk), 0
 	for _, c := range companies {
 		if c.BoardKind != "" && !(kind == "fast" && (c.BoardKind == "workday" || c.BoardKind == "page")) {
 			look++
@@ -365,6 +379,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		e.Report(ctx, at, look, c.Name)
 		at++
 		stats.Looked++
+		stats.reading(srcBoards, c.Name)
 		posts, err := e.listBoard(ctx, c, p)
 		if err != nil {
 			stats.Problems = append(stats.Problems, fmt.Sprintf("%s: %s", c.Name, plainErr(err)))
@@ -414,16 +429,18 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		if kind == "fast" {
 			within, few = 2*time.Hour, true
 		}
-		place := strings.TrimSpace(strings.Trim(p.City+", "+p.Country, ", "))
 		blocked := false
-		for _, bt := range p.Titles.All() {
+		asked := 0
+		for _, bt := range liAsk {
 			if ctx.Err() != nil || blocked {
 				break
 			}
-			e.Report(ctx, at, look, "LinkedIn: "+bt.Title)
+			e.Report(ctx, at, look, "LinkedIn: "+bt.label(places[0]))
 			at++
 			stats.Looked++
-			posts, err := e.Src.Search(ctx, sources.Query{Keywords: bt.Title, Location: place, Miles: metros[cityOf(p)].Miles, Within: within, FewApplicants: few})
+			asked++
+			stats.reading("linkedin", bt.label(places[0]))
+			posts, err := e.Src.Search(ctx, sources.Query{Keywords: bt.Title, Location: bt.At.Loc, Miles: metros[strings.ToLower(bt.At.Town)].Miles, Within: within, FewApplicants: few})
 			if err != nil {
 				var he *sources.HTTPError
 				if errors.As(err, &he) && (he.Status == 429 || he.Status == 999 || he.Status == 403) {
@@ -434,7 +451,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 					blocked = true
 					continue
 				}
-				stats.Problems = append(stats.Problems, "LinkedIn, "+bt.Title+": "+plainErr(err))
+				stats.Problems = append(stats.Problems, "LinkedIn, "+bt.label(places[0])+": "+plainErr(err))
 				stats.missed("linkedin", "LinkedIn "+plainErr(err))
 				continue
 			}
@@ -451,6 +468,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 				if comp.State == "muted" {
 					stats.ClearedBy["An employer you muted"]++
 					stats.Cleared++
+					stats.decided(PostingOutcome{Title: post.Title, Company: comp.Name, Location: post.Location, Outcome: "skipped", Why: "An employer you muted"})
 					continue
 				}
 				id, isNew, cleared := e.ingestBand(comp.ID, post, p, &stats, bt.Band)
@@ -463,11 +481,14 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			}
 			stats.Seen += len(posts)
 			stats.saw("linkedin", len(posts), added)
-			note("LinkedIn: "+bt.Title, len(posts), added)
+			note("LinkedIn: "+bt.label(places[0]), len(posts), added)
 			select {
 			case <-ctx.Done():
 			case <-time.After(e.linkedInPause()):
 			}
+		}
+		if len(liAll) > 0 {
+			st.LinkedInTurn = (st.LinkedInTurn + asked) % len(liAll)
 		}
 	} else {
 		stats.Problems = append(stats.Problems, firstOf(st.LinkedInNote, "LinkedIn is resting"))
@@ -489,6 +510,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	}
 	// Stopped part-way: the next search starts where a full one would.
 	if ctx.Err() != nil {
+		e.keepOutcomes(&stats)
 		e.S.EndRun(runID, "stopped", stats, "You stopped it")
 		return ctx.Err()
 	}
@@ -510,11 +532,27 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	if ctx.Err() != nil {
 		state = "stopped"
 	}
+	e.keepOutcomes(&stats)
 	e.S.EndRun(runID, state, stats, strings.Join(stats.Problems, "\n"))
 	if stats.Kept > 0 || kind == "full" {
 		e.S.Log(store.Activity{Kind: "search", Text: fmt.Sprintf("Searched %d places: %d postings, %d new, %d worth a look", stats.Looked, stats.Seen, stats.New, stats.Kept)})
 	}
 	return nil
+}
+
+// linkedInMost is how many LinkedIn searches one search makes: every title,
+// and, when the person named more places than their city, every title in
+// every place up to a share LinkedIn puts up with. A quick check, which runs
+// many times a day, takes half that share.
+func linkedInMost(kind string, titles, places int) int {
+	most := 30
+	if kind == "fast" {
+		most = 15
+	}
+	if places <= 1 {
+		return titles
+	}
+	return max(titles, min(titles*places, most))
 }
 
 func (e *Engine) linkedInPause() time.Duration {
@@ -822,18 +860,24 @@ func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profi
 		// Most sources give no pay of their own; many postings name it in their text.
 		post.Pay = PayFromText(post.Description)
 	}
+	seenAs := PostingOutcome{Title: post.Title, Company: post.Company, Location: post.Location}
 	if id, _, seen := e.S.SeenRole(post.Key); seen {
 		e.S.TouchRole(id, post.Applicants, post.Description)
+		seenAs.RoleID, seenAs.Outcome = id, "here"
+		stats.decided(seenAs)
 		return id, false, false
 	}
 	// The same job seen through another place is the same role; and a role
 	// the person said no to stays said no to, however it reappears.
 	if id, closed, dup := e.S.SimilarRole(companyID, post.Title, post.Location); dup {
+		seenAs.RoleID, seenAs.Outcome = id, "here"
 		if closed == "no" {
 			stats.Cleared++
 			stats.ClearedBy["You said no to this one before"]++
+			seenAs.Outcome, seenAs.Why = "skipped", "You said no to this one before"
 		}
 		e.S.TouchRole(id, post.Applicants, "")
+		stats.decided(seenAs)
 		return id, false, false
 	}
 	reason, band := screen(p, post, searchedBand != "")
@@ -856,11 +900,16 @@ func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profi
 	if err != nil {
 		return 0, false, false
 	}
+	seenAs.RoleID = id
 	if reason != "" {
 		stats.Cleared++
 		stats.ClearedBy[reason]++
+		seenAs.Outcome, seenAs.Why = "skipped", reason
+		stats.decided(seenAs)
 		return id, true, true
 	}
+	seenAs.Outcome = "new"
+	stats.decided(seenAs)
 	return id, true, false
 }
 

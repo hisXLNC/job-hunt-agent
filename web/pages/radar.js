@@ -21,9 +21,9 @@ function sourcesCard(list, pv, route) {
   const sites = (pv?.places || []).filter(p => p.kind !== 'Search');
   const rows = [...list].sort((a, b) => (bad(a) ? 0 : ORDER[a.state] ?? 6) - (bad(b) ? 0 : ORDER[b.state] ?? 6));
   const sw = p => p ? html`<button class="switch ${p.on ? 'on' : ''}" role="switch" aria-checked="${p.on ? 'true' : 'false'}" aria-label="Search ${p.name}" data-act="placeon" data-id="${p.id}" data-to="${p.on ? '' : '1'}"></button>` : '';
-  const act = s => s.setup ? html`<a class="btn sm" href="${s.setup}">Set it up</a>`
+  const act = s => html`${s.at && s.id !== 'alerts' ? html`<a class="btn sm ghost" href="${with_(route, { src: s.id, show: '' })}" title="Every posting it gave last time: new, already here, or skipped and why.">Postings</a> ` : ''}${s.setup ? html`<a class="btn sm" href="${s.setup}">Set it up</a>`
     : s.failed?.length ? html`<button class="btn sm p" data-act="showfailed" data-id="${s.id}">Fix the ${s.failed.length}</button>`
-    : s.state === 'problem' ? html`<button class="btn sm p" data-act="search" data-kind="fast" title="Asks again now, with a quick check.">Try now</button>` : '';
+    : s.state === 'problem' ? html`<button class="btn sm p" data-act="search" data-kind="fast" title="Asks again now, with a quick check.">Try now</button>` : ''}`;
   const adding = route.q.add === '1';
   return html`<div class="card" style="padding:0" id="sources">
     <div class="row wrap" style="padding:12px 16px;gap:8px"><span class="grow s m">Every place Job Hunt looks, worst first. A switch turns one off.</span>
@@ -43,6 +43,21 @@ Each employer's page has its careers page address, which you can correct.</div>`
       <td class="s" style="white-space:nowrap">${s.at ? html`<b>${s.seen}</b> <span class="m">· ${s.new} new</span>` : none}</td>
       <td style="text-align:right;white-space:nowrap">${act(s)}</td></tr>`; })}</tbody></table>
     ${pv && !pv.browser ? html`<p class="xs m" style="padding:10px 16px">Some sites only open in a real browser. Job Hunt found neither Edge nor Chrome on this computer, so those will not answer.</p>` : ''}</div>`;
+}
+// Every posting one source gave the last time it was asked, and what became of each.
+const SHOW = [['', 'All'], ['new', 'New'], ['here', 'Already here'], ['skipped', 'Skipped']];
+const SAY_TONE = { new: 'good', here: '', skipped: 'warn' };
+function sourcePostings(sp, route) {
+  const show = route.q.show || '', c = sp.counts || {};
+  const all = (c.new || 0) + (c.here || 0) + (c.skipped || 0);
+  return html`<div class="col" style="gap:14px" id="srcposts"><div class="stick"><div class="card row wrap" style="gap:6px;padding:12px 14px"><a class="btn sm ghost" href="${with_(route, { src: '', show: '' })}">← All sources</a><b class="grow" style="margin-left:6px">${sp.name}</b>
+      ${SHOW.map(([k, v]) => html`<a class="chip ${show === k ? 'on' : ''}" href="${with_(route, { show: k })}">${v} ${k ? c[k] || 0 : all}</a>`)}</div></div>
+    <div class="card" style="padding:0"><p class="s m" style="padding:12px 16px">${sp.at ? html`Every posting it gave in the ${sp.run === 'fast' ? 'quick check' : 'full search'} ${rel(sp.at)}, and what Job Hunt did with each. The fit is from reading it against your CV.${sp.kept < sp.total ? ` The first ${sp.kept.toLocaleString()} of ${sp.total.toLocaleString()} are kept.` : ''}` : 'No search has asked it since Job Hunt began keeping this list. It fills in after the next search.'}</p>
+    ${sp.postings.length ? html`<table class="tbl long"><thead><tr><th>Posting</th><th>Seen through</th><th>Fit</th><th>What happened</th></tr></thead>
+    <tbody>${sp.postings.map(x => html`<tr><td class="s">${x.role_id ? html`<a class="t" href="#/roles/${x.role_id}">${x.title}</a>` : html`<b>${x.title}</b>`}<div class="xs m">${x.company}${x.location ? ` · ${x.location}` : ''}</div></td>
+      <td class="s m">${x.from || '–'}</td><td class="s">${x.fit >= 0 ? html`<b>${x.fit}</b>` : html`<span class="m">–</span>`}</td>
+      <td class="s"><span class="chip ${SAY_TONE[x.outcome] ?? ''}">${x.saying}</span></td></tr>`)}</tbody></table>
+    <div style="padding:0 14px 12px">${endless('srcposts', sp.postings.length, sp.shown)}</div>` : sp.at ? html`<p class="s m" style="padding:0 16px 16px">Nothing here.</p>` : ''}</div></div>`;
 }
 // Adding a job site or recruiter: your own address, or one of the suggested.
 function addSite(pv) {
@@ -66,8 +81,9 @@ export default {
   topics: ['roles', 'companies', 'runs', 'status'],
   async load(route) {
     const q = route.q, u = new URLSearchParams({ size: listSize('radar'), page: 1, sort: q.sort || '', state: q.state || 'following', q: q.q || '' });
-    const [radar, comp, places, src] = await Promise.all([api('radar'), api('companies?' + u), api('places'), api('sources').catch(() => null)]);
-    return { ...radar, comp, places, sources: src?.sources };
+    const one = q.tab === 'sources' && q.src ? api(`sources/${encodeURIComponent(q.src)}/postings?` + new URLSearchParams({ size: listSize('srcposts'), show: q.show || '' })).catch(() => null) : null;
+    const [radar, comp, places, src, srcposts] = await Promise.all([api('radar'), api('companies?' + u), api('places'), api('sources').catch(() => null), one]);
+    return { ...radar, comp, places, sources: src?.sources, srcposts };
   },
   view(d, route) {
     const st = d.status, c = d.comp, state = route.q.state || 'following', tab = TABS.some(([k]) => k === route.q.tab) ? route.q.tab : 'fresh';
@@ -82,7 +98,7 @@ export default {
         <div class="row"><button class="btn p" data-act="search" data-kind="full">Search now</button>${st.paused ? html`<button class="btn" data-act="pause" data-paused="">Resume searching</button>` : html`<select class="mini" style="max-width:150px" aria-label="Pause searching" data-on="change" data-act="pausefor" title="Stops the searches Job Hunt runs by itself. Search now still works."><option value="">Pause…</option><option value="0">Until I turn it back on</option><option value="1">For a day</option><option value="3">For 3 days</option><option value="7">For a week</option><option value="14">For two weeks</option></select>`}</div>
       </div>
       <div class="tabs">${TABS.map(([k, v]) => html`<a class="${k === tab ? 'on' : ''}" href="${href('radar', k === 'fresh' ? {} : { tab: k })}">${v}${k === 'fresh' && d.fresh?.length ? html` <span class="m">${d.fresh.length}</span>` : ''}${k === 'sources' && probs ? html` <span class="chip crit" style="margin-left:4px;padding:1px 7px">${probs}</span>` : ''}${k === 'employers' && c.following ? html` <span class="m">${c.following}</span>` : ''}</a>`)}</div>
-      ${tab === 'sources' ? sourcesCard(d.sources, d.places, route) : tab === 'employers' ? html`<div class="cols wide"><div class="col" style="gap:14px">
+      ${tab === 'sources' ? (d.srcposts ? sourcePostings(d.srcposts, route) : sourcesCard(d.sources, d.places, route)) : tab === 'employers' ? html`<div class="cols wide"><div class="col" style="gap:14px">
           <div class="card" style="padding:0"><div class="row" style="padding:14px 16px 10px"><h3 class="grow">Employers</h3>
               <a class="chip ${state === 'following' ? 'on' : ''}" href="${with_(route, { state: ''})}">Watching</a>
               <a class="chip ${state === 'suggested' ? 'on' : ''}" href="${with_(route, { state: 'suggested'})}">Seen in searches ${c.suggested}</a>
@@ -103,7 +119,7 @@ export default {
             <div class="row"><button class="btn sm p">Watch this employer</button><button type="button" class="btn sm" data-act="more">Suggest more</button></div></form></div>
         </div></div>` : tab === 'titles' ? html`<div class="cols wide"><div class="col" style="gap:14px">
           <div class="card"><div class="row"><h4 class="grow">Titles searched</h4><a class="s" href="#/you">Change</a></div>
-            <p class="xs m" style="margin-top:3px">Every title is searched equally often, a step up and sideways included.</p>
+            <p class="xs m" style="margin-top:3px">Every title is searched equally often, a step up and sideways included${d.searched_in?.length > 1 ? `, in each of ${d.searched_in.join(', ')}` : ''}.</p>
             <div class="row wrap" style="margin-top:8px;gap:6px">${titles.map(([t, b]) => html`<span class="chip ${b === 'step_up' ? 'blue' : b === 'sideways' ? 'info' : ''}" title="${BAND[b]}">${t}</span>`)}</div>
             ${d.avoid?.length ? html`<p class="xs m" style="margin-top:8px">Never shown: ${d.avoid.join(', ')}</p>` : ''}</div>
         </div><div class="col" style="gap:14px"><div class="card"><h4>When Job Hunt searches</h4><p class="s ink2" style="margin-top:6px">Full searches run at the times you set; in between, Job Hunt keeps checking for postings under two hours old, so you can be among the first ten applicants.</p><p class="s" style="margin-top:8px"><a href="#/you/connections">Change the times</a></p></div></div></div>` : html`<div class="cols wide"><div class="col" style="gap:14px">

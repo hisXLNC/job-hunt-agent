@@ -330,9 +330,9 @@ func keyedPlain(id string, err error) (string, time.Duration) {
 	return name + " couldn't be reached from this computer just now", 0
 }
 
-// keyedQuery is the search asked of a keyed source for one title.
-func keyedQuery(p store.Profile, title string, within time.Duration) sources.Query {
-	return sources.Query{Keywords: title, Location: strings.TrimSpace(strings.Split(p.City, ",")[0]), Country: countryCode(p.Country), Within: within}
+// keyedQuery is the search asked of a keyed source for one title in one town.
+func keyedQuery(p store.Profile, title, town string, within time.Duration) sources.Query {
+	return sources.Query{Keywords: title, Location: town, Country: countryCode(p.Country), Within: within}
 }
 
 // TestSource runs one tiny search with the saved key, so the person knows
@@ -376,7 +376,7 @@ func (e *Engine) tryKey(ctx context.Context, id string, keys sources.Keys) (int,
 		e.S.Changed("connections", "runs")
 		return 0, nil
 	}
-	q := keyedQuery(p, title, 7*24*time.Hour)
+	q := keyedQuery(p, title, searchedPlaces(p)[0].Town, 7*24*time.Hour)
 	q.Max = 5
 	if id == "adzuna" && !sources.AdzunaCovers(q.Country) {
 		// The key can still be tried, somewhere Adzuna does have listings.
@@ -422,10 +422,9 @@ func (e *Engine) tryKey(ctx context.Context, id string, keys sources.Keys) (int,
 func (e *Engine) searchKeyed(ctx context.Context, kind string, p store.Profile, within time.Duration, stats *RunStats, fresh *[]int64, note func(place string, seen, added int)) {
 	k := e.sourceKeys()
 	keys := k.forSources()
-	var titles []string
-	for _, bt := range p.Titles.All() {
-		titles = append(titles, bt.Title)
-	}
+	// Every title in every place the person named, taken in turn.
+	places := searchedPlaces(p)
+	titles := titlesAt(p.Titles.All(), places)
 	if len(titles) == 0 {
 		return
 	}
@@ -467,16 +466,18 @@ func (e *Engine) searchKeyed(ctx context.Context, kind string, p store.Profile, 
 				case <-time.After(2 * time.Second):
 				}
 			}
-			title := titles[(st.Turn+i)%len(titles)]
+			ta := titles[(st.Turn+i)%len(titles)]
+			title := ta.label(places[0])
 			e.Report(ctx, i, n, src.name+": "+title)
 			stats.Looked++
+			stats.reading(id, title)
 			used++
 			wait := 40 * time.Second
 			if id == "apify" {
 				wait = 5 * time.Minute // a scraper run takes a minute or two
 			}
 			cctx, cancel := context.WithTimeout(ctx, wait)
-			posts, err := e.Src.FindKeyed(cctx, id, keys, keyedQuery(p, title, w))
+			posts, err := e.Src.FindKeyed(cctx, id, keys, keyedQuery(p, ta.Title, ta.At.Town, w))
 			cancel()
 			if err != nil {
 				if ctx.Err() != nil {

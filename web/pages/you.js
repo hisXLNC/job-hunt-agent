@@ -13,7 +13,7 @@ const SETTINGS = [
   ['', 'profile', 'name', 'Your name and how you describe yourself', 'name headline title describe'],
   ['', 'profile', 'rare', 'The one thing few other applicants have', 'rare strength lead unique'],
   ['', 'profile', 'city', 'City, country and where you live now', 'city country town location place toronto home live'],
-  ['', 'profile', 'places', 'Nearby places that also count', 'nearby places area towns commute region'],
+  ['', 'profile', 'places', 'Other places to search', 'nearby places area towns cities commute region several more'],
   ['', 'profile', 'arrive_on', 'Arrival date', 'arrive arrival landing date move moving relocate'],
   ['', 'profile', 'work_status', 'Allowed to work', 'work permit visa citizen resident status authorization authorisation sponsorship'],
   ['', 'profile', 'pay_floor', 'Lowest yearly salary', 'salary pay floor minimum money wage compensation'],
@@ -101,7 +101,7 @@ function about(d, route) {
       form('me', html`<div class="grid2"><label class="field">Name<input type="text" name="name" value="${p.name}"></label><label class="field">How you describe yourself<input type="text" name="headline" value="${p.headline}"></label></div>
       <label class="field">The one thing few other applicants have <span class="h">Job Hunt leads with this.</span><input type="text" name="rare" value="${p.rare}"></label>
       <div class="grid3"><label class="field">City you want to work in<input type="text" name="city" value="${p.city}"></label><label class="field">Country<input type="text" name="country" value="${p.country}"></label><label class="field">Where you live now<input type="text" name="home" value="${p.home}"></label></div>
-      <label class="field">Nearby places that also count <span class="h">${d.area?.length ? html`<details style="display:inline"><summary style="display:inline;cursor:pointer;color:var(--accent)">${p.city} already includes ${d.area.length} places</summary> ${d.area.join(', ')}.</details> Add any others here, comma-separated.` : 'Other towns you would work in. Comma-separated.'}</span><input type="text" name="places" value="${(p.places || []).join(', ')}" placeholder="${d.area?.length ? 'Hamilton, Guelph' : ''}"></label>
+      <label class="field">Other places to search <span class="h">${d.area?.length ? html`<details style="display:inline"><summary style="display:inline;cursor:pointer;color:var(--accent)">${p.city} already includes ${d.area.length} places</summary> ${d.area.join(', ')}.</details> Add any others here, comma-separated. Each is searched for every title.` : 'Other towns you would work in, comma-separated. Each is searched for every title.'}</span><input type="text" name="places" value="${(p.places || []).join(', ')}" placeholder="${d.area?.length ? 'Hamilton, Guelph' : ''}"></label>
       <div class="grid3"><label class="field">You arrive on <span class="h">Leave empty if you are there.</span><input type="date" name="arrive_on" value="${p.arrive_on}"></label>
         <label class="field">Allowed to work there on arrival<select name="work_status">${Object.entries(WORK).map(([k, v]) => html`<option value="${k}" ${p.work_status === k ? 'selected' : ''}>${v}</option>`)}</select></label>
         <label class="field">Lowest yearly salary<input type="number" name="pay_floor" value="${p.pay_floor || ''}" placeholder="No floor"></label></div>

@@ -60,10 +60,10 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 1. **Pay read from the posting's text — DONE 26.11.31, was MISSING (M).** Old read salaries and hourly rates from the body, looked up pay for postings showing none, and had "Look now" (1.11, 2.24, 2.25, 2.36.8). New takes pay only from the source's salary field; `PayPerYear` parses that field alone, so the pay floor misses most postings.
 2. **Scoring and tailoring controls — DONE 26.11.32 (one model, one posting per read stay; see D14), was PARTIAL (M).** Old: fit score needed, Tailor by itself (off / strong fits 85 / all), most tailored per search, most scored per search, "What matters to you". New: fixed `keepFit = 55`, `prepareFit = 70` (`internal/engine/search.go`) and one do/ask switch.
 3. **What you want — PARTIAL (M).** Old: level, permanent or contract, industries wanted and not, deal-breakers, career path with On/Off-path tags (2.44, 2.56). New has hard limits and three title bands only.
-4. **Several cities, each searched — PARTIAL (M), needs confirming.** Old searched every title in every listed place. New `Profile` has one City plus "nearby places that also count"; whether those are searched or only accepted I did not trace.
+4. **Several cities, each searched — DONE 26.11.49 (they were only accepted; now every title is searched in each, within each source's share of a search), was PARTIAL (M).** Old searched every title in every listed place. New `Profile` has one City plus "nearby places that also count"; whether those are searched or only accepted I did not trace.
 5. **Indeed through the Claude connector — MISSING (M).** (1.4) Indeed appears in new only as job-alert mail.
 6. **LinkedIn through Apify — MISSING (S).** (1.31)
-7. **Search one source and see each posting's outcome — PARTIAL (M).** Old gave each source a tab: every posting, its fit, new / already here / skipped and why (2.18, 2.19). New Radar shows counts per source and Test for keyed sources.
+7. **Search one source and see each posting's outcome — DONE 26.11.49 (the list per source, from what each search decided; no extra search of one source, which would add requests), was PARTIAL (M).** Old gave each source a tab: every posting, its fit, new / already here / skipped and why (2.18, 2.19). New Radar shows counts per source and Test for keyed sources.
 8. **Score again / Force search — PARTIAL (S).** Old re-checked skipped postings in bulk with a request estimate (1.5, 1.22). New: per-role Bring back and Read it now.
 9. **Pause searching for a set time — DONE 26.11.31, was PARTIAL (S).** Old: a day, a few days, two weeks, or off. New: one indefinite toggle.
 10. **Employers found by themselves, dead boards removed — PARTIAL (S/M).** Old ran weekly, after profile changes and after thin searches, and removed boards after two failures (1.16). New `SeedEmployers` runs at setup and on "Suggest more"; I found no removal of dead boards.
@@ -142,7 +142,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 
 ## Could not determine
 
-- Whether new `places` are searched or only accepted (D4).
+- Whether new `places` are searched or only accepted (D4). Settled in 26.11.49: they were only accepted; now they are searched.
 - Workday skills, Field of Study, month/year dates and "I currently work here" on the real site: new has its own test pages, which I did not run.
 - Whether new interview prep includes web research on the company with links (old did, 1.13).
 - Whether the new letter keeps the old layout (date, ATTN line, bold Subject with reference number, 1.3).

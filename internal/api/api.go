@@ -824,7 +824,7 @@ func (s *Server) Handler() http.Handler {
 		var search engine.SearchState
 		st.Get("search", &search)
 		p := st.Profile()
-		return map[string]any{"fresh": recent, "runs": runs, "search": search, "status": e.Status(), "titles": p.Titles, "domain": p.Domain, "avoid": p.Avoid,
+		return map[string]any{"fresh": recent, "runs": runs, "search": search, "status": e.Status(), "titles": p.Titles, "domain": p.Domain, "avoid": p.Avoid, "searched_in": engine.SearchedPlaces(p),
 			"unread":  st.Count(`SELECT COUNT(*) FROM roles WHERE stage = 'new' AND closed = ''`),
 			"cleared": st.Count(`SELECT COUNT(*) FROM roles WHERE closed = 'screened'`)}, nil
 	})
@@ -1495,6 +1495,12 @@ func (s *Server) Handler() http.Handler {
 			return map[string]any{"warning": sentence(warning)}, nil
 		}
 		return nil, nil
+	})
+	// Every posting one kind of source gave in the last search that asked it,
+	// with what was decided about each.
+	h("GET /api/sources/{id}/postings", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		size, _ := strconv.Atoi(r.URL.Query().Get("size"))
+		return e.PostingsFrom(r.PathValue("id"), r.URL.Query().Get("show"), min(max(size, 60), 1000))
 	})
 	h("DELETE /api/sources/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, e.ForgetSource(r.PathValue("id"))
