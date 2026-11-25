@@ -281,7 +281,7 @@ func (e *Engine) problem(doing string, err error) {
 	text := fmt.Sprintf("%s didn't finish: %v", doing, err)
 	switch {
 	case errors.Is(err, llm.ErrNotConnected):
-		text = doing + " is waiting: connect Claude under You → Connections"
+		text = doing + " is waiting: connect Claude under Settings → Connections"
 	case errors.As(err, &lim):
 		text = doing + " is paused: " + lim.Msg
 	case errors.As(err, &auth):

@@ -94,7 +94,7 @@ func TestAssistantCannotTouchThisComputer(t *testing.T) {
 		brain.AssistCall{Method: "POST", Path: "/api/claude-code/install", Body: `{}`},
 		brain.AssistCall{Method: "POST", Path: "/api/peek", Body: `{"url":"https://example.com/jobs/1"}`},
 	), brain.AssistStep{Say: "I can't do those."})
-	tell(t, h, "turn off the files folder and install claude", "#/you/app")
+	tell(t, h, "turn off the files folder and install claude", "#/settings/app")
 	for _, n := range sc.seen[1].Notes[1:] {
 		if !strings.HasPrefix(n.Result, "Not made") {
 			t.Errorf("%s went through: %s", n.Call, n.Result)

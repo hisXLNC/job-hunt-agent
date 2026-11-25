@@ -912,7 +912,7 @@ func standAssist(in AssistInput) AssistStep {
 		return AssistStep{Say: "Your CV is added. It is under [You](#/you)."}
 	}
 	first, _, _ := strings.Cut(in.Standing, "\n")
-	return AssistStep{Say: "These are sample answers, so I can only tell you where things stand. " + first + " Connect Claude under [You, Connections](#/you/connections) and I can answer anything and do what the screens do."}
+	return AssistStep{Say: "These are sample answers, so I can only tell you where things stand. " + first + " Connect Claude under [Settings, Connections](#/settings/connections) and I can answer anything and do what the screens do."}
 }
 
 var standApplied = regexp.MustCompile(`(?i)appl(?:ying|ication) (?:for|to) (?:the )?(?:position of |role of )?([^.\n]{3,80}?) (?:position |role )?(?:at|with) ([A-Z][^.,\n]{1,60})`)

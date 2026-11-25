@@ -396,7 +396,7 @@ func TestJobAlertMailBecomesPostings(t *testing.T) {
 	if n := e.S.Count(`SELECT COUNT(*) FROM llm_calls WHERE task = 'mail'`); n != 0 {
 		t.Errorf("Claude was asked about mail %d times", n)
 	}
-	for _, l := range f.log {
+	for _, l := range f.lines() {
 		if strings.Contains(l, "BODY.PEEK[]") && !strings.Contains(l, "FETCH 1 ") && !strings.Contains(l, "FETCH 3 ") {
 			t.Errorf("opened mail that is no job alert: %s", l)
 		}
@@ -438,7 +438,7 @@ func TestJobAlertMailBecomesPostings(t *testing.T) {
 	if n := e2.S.Count(`SELECT COUNT(*) FROM roles WHERE source LIKE 'alert:%'`); n != 0 {
 		t.Errorf("%d roles from alerts while switched off", n)
 	}
-	for _, l := range f2.log {
+	for _, l := range f2.lines() {
 		if strings.Contains(l, "BODY.PEEK[]") {
 			t.Errorf("opened mail while job alerts are off: %s", l)
 		}

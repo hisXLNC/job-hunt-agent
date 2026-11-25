@@ -99,7 +99,7 @@ func keepAwake(ctx context.Context, e *engine.Engine) {
 				trace.Log("app", "Windows slept for %s while Job Hunt was working", howLong(d))
 				if now.Sub(toldAt) > time.Hour {
 					toldAt = now
-					e.Tell("Windows slept during work", "Job Hunt was working when this computer slept for "+howLong(d)+". Under You, Connections, On this computer, set Keep this computer awake to Always, or plug it in.", "#/you/connections?open=desk")
+					e.Tell("Windows slept during work", "Job Hunt was working when this computer slept for "+howLong(d)+". Under Settings, Connections, On this computer, set Keep this computer awake to Always, or plug it in.", "#/settings/connections?open=desk")
 				}
 			}
 			last = now

@@ -56,7 +56,7 @@ export default {
   view(d, route) {
     const lookBtn = d.looking ? html`<span class="btn" disabled><span class="spin"></span>Reading</span>`
       : d.can_look ? html`<button class="btn" data-act="look" data-busy title="Claude reads your CV against what employers post. About two minutes.">${d.has ? 'Look again now' : 'Look now'}</button>`
-      : html`<a class="btn" href="#/you/connections?open=claude">Connect Claude</a>`;
+      : html`<a class="btn" href="#/settings/connections?open=claude">Connect Claude</a>`;
     if (!d.has) {
       return html`<div class="body col" style="gap:14px"><div class="card row wrap" style="gap:20px;align-items:center">
         <div class="grow" style="min-width:280px"><h3>Where can your CV take you?</h3><p class="s ink2" style="margin-top:6px">${d.looking ? 'Claude is reading your CV against the postings Job Hunt has seen. This page fills in when it is done.' : 'Claude reads your CV and what employers post, and shows three ways your career can go from here: what each pays, what is missing, and the smallest steps that close the gap. It is read again every Monday.'}</p></div>${lookBtn}</div></div>`;

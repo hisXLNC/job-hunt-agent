@@ -34,7 +34,7 @@ func TestNoticesAreKeptUnderTheBell(t *testing.T) {
 	if len(list) != 3 || unread != 3 {
 		t.Fatalf("kept %d, unread %d: %+v", len(list), unread, list)
 	}
-	if list[0].Kind != "problem" || list[0].Page != "#/you/app" || list[1].Kind != "mail" || list[2].Kind != "role" {
+	if list[0].Kind != "problem" || list[0].Page != "#/settings/app" || list[1].Kind != "mail" || list[2].Kind != "role" {
 		t.Fatalf("newest first, each with its kind and page: %+v", list)
 	}
 	e.ReadNotices(list[2].ID)

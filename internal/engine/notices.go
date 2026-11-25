@@ -105,9 +105,9 @@ func noticeKind(page string) string {
 // keepProblem puts a "Needs attention" problem under the bell, opening the
 // page where it can be dealt with.
 func (e *Engine) keepProblem(text string) {
-	page := "#/you/app"
-	if strings.Contains(text, "You → Connections") || strings.Contains(text, "phone notice") {
-		page = "#/you/connections"
+	page := "#/settings/app"
+	if strings.Contains(text, "Settings → Connections") || strings.Contains(text, "phone notice") {
+		page = "#/settings/connections"
 	}
 	e.Keep("problem", "Needs attention", text, page)
 }

@@ -222,7 +222,7 @@ func TestUpdateRemindersOnceADay(t *testing.T) {
 	e.remindUpdate(now)
 	e.remindUpdate(now.Add(time.Hour))
 	list, _ := e.Notices()
-	if len(list) != 1 || !strings.Contains(list[0].Title, "26.11.49") || list[0].Page != "#/you/app" {
+	if len(list) != 1 || !strings.Contains(list[0].Title, "26.11.49") || list[0].Page != "#/settings/app" {
 		t.Fatalf("one reminder a day: %+v", list)
 	}
 	e.ReadNotices(0)

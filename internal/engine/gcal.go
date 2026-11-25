@@ -824,6 +824,17 @@ func (e *Engine) syncGoogle(ctx context.Context) error {
 			delete(links, id)
 			save()
 			if t.At >= now.Add(-time.Hour).Unix() {
+				// What the person wrote about it is kept with the role's own notes.
+				if strings.TrimSpace(t.Notes) != "" && t.RoleID != 0 {
+					var mine RoleNotes
+					e.S.Doc(t.RoleID, "mynotes", &mine)
+					kept := strings.TrimSpace(mine.Text)
+					if kept != "" {
+						kept += "\n\n"
+					}
+					kept += fmt.Sprintf("From the %s on %s (removed in Google Calendar):\n%s", strings.ToLower(firstOf(t.Title, "conversation")), time.Unix(t.At, 0).In(loc).Format("2 January"), strings.TrimSpace(t.Notes))
+					e.SaveRoleNotes(t.RoleID, kept)
+				}
 				e.S.DeleteTalk(t.ID)
 				e.S.Log(store.Activity{Kind: "talk", RoleID: t.RoleID, PersonID: t.PersonID, CompanyID: t.CompanyID,
 					Text: fmt.Sprintf("Removed in Google Calendar: %s on %s", strings.ToLower(firstOf(t.Title, "conversation")), time.Unix(t.At, 0).In(loc).Format("Monday 2 January at 15:04"))})

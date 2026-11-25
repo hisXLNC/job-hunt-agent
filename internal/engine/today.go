@@ -396,7 +396,7 @@ func (e *Engine) landing(p store.Profile, now time.Time, know int) *Landing {
 	add("Have five people who know who you are", know >= 5, fmt.Sprintf("%d so far: they answered or you have spoken.", know), "#/people")
 	add("Send your first ten applications", applied >= 10, fmt.Sprintf("%d sent.", applied), "#/roles")
 	add("Have one conversation booked for your first week", talks > 0, "A coffee counts. Add it under Interviews and Job Hunt prepares you.", "#/interviews")
-	add("Get phone notices for brand-new roles", e.Phone().On, "So you can apply in the first hour from wherever you are.", "#/you/connections")
+	add("Get phone notices for brand-new roles", e.Phone().On, "So you can apply in the first hour from wherever you are.", "#/settings/connections")
 	return l
 }
 

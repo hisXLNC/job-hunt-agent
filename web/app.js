@@ -264,13 +264,14 @@ const IC = {
   progress: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   career: '<svg viewBox="0 0 24 24"><path d="M4 20c2-6 6-9 12-10M13 6l4 4-4 4"/><circle cx="4" cy="20" r="1.2"/></svg>',
   you: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.200 4-6 8-6s7 1.800 8 6"/></svg>',
+  settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.700 1.700 0 0 0 .3 1.800l.1.1a2 2 0 1 1-2.800 2.800l-.1-.1a1.700 1.700 0 0 0-1.800-.3 1.700 1.700 0 0 0-1 1.500V21a2 2 0 1 1-4 0v-.1a1.700 1.700 0 0 0-1.100-1.500 1.700 1.700 0 0 0-1.800.3l-.1.1a2 2 0 1 1-2.800-2.800l.1-.1a1.700 1.700 0 0 0 .3-1.800 1.700 1.700 0 0 0-1.500-1H3a2 2 0 1 1 0-4h.1a1.700 1.700 0 0 0 1.500-1.100 1.700 1.700 0 0 0-.3-1.800l-.1-.1a2 2 0 1 1 2.800-2.800l.1.1a1.700 1.700 0 0 0 1.800.3H9a1.700 1.700 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.700 1.700 0 0 0 1 1.500 1.700 1.700 0 0 0 1.800-.3l.1-.1a2 2 0 1 1 2.800 2.800l-.1.1a1.700 1.700 0 0 0-.3 1.800V9a1.700 1.700 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.700 1.700 0 0 0-1.500 1z"/></svg>',
 };
-const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['leads', 'Leads'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['career', 'Career path'], ['you', 'You']];
+const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['leads', 'Leads'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['career', 'Career path'], ['you', 'You'], ['settings', 'Settings']];
 const PAGES = {
   today: () => import('./pages/today.js'), radar: () => import('./pages/radar.js'), roles: () => import('./pages/roles.js'),
   role: () => import('./pages/role.js'), people: () => import('./pages/people.js'), leads: () => import('./pages/leads.js'), replies: () => import('./pages/replies.js'),
   employer: () => import('./pages/employer.js'),
-  interviews: () => import('./pages/interviews.js'), progress: () => import('./pages/progress.js'), career: () => import('./pages/career.js'), you: () => import('./pages/you.js'),
+  interviews: () => import('./pages/interviews.js'), progress: () => import('./pages/progress.js'), career: () => import('./pages/career.js'), you: () => import('./pages/you.js'), settings: () => import('./pages/you.js'),
   setup: () => import('./pages/setup.js'),
 };
 
@@ -307,11 +308,11 @@ function pilot() {
   const up = !st.update || installing ? '' : st.can_install
     ? html`<button class="upd" data-update title="Downloads version ${st.update.version}, checks it and installs it. Job Hunt comes back by itself in about a minute; your data stays.">Version ${st.update.version} is ready · Install now</button>`
     : html`<a class="upd" href="${st.update.url}" title="Downloads the installer. Run it and Job Hunt restarts on the new version; your data stays.">Version ${st.update.version} is ready · Download</a>`;
-  const ver = html`<a class="ver" href="#/you/app" title="The version you are running. Opens You, The app: updates, your data folder and the debugging record.">Job Hunt ${st.version}</a>`;
-  if (!cl.engine) return html`${up}<h6><span class="dot off"></span>Not connected</h6><a href="#/you/connections" style="color:#9DB0FF">Connect Claude</a> and Job Hunt starts searching.${ver}`;
+  const ver = html`<a class="ver" href="#/settings/app" title="The version you are running. Opens Settings, The app: updates, your data folder and copies.">Job Hunt ${st.version}</a>`;
+  if (!cl.engine) return html`${up}<h6><span class="dot off"></span>Not connected</h6><a href="#/settings/connections" style="color:#9DB0FF">Connect Claude</a> and Job Hunt starts searching.${ver}`;
   const jobs = s.jobs || [];
   const foot = html`<div class="foot">Watching ${s.sources} sources · ${cl.calls} Claude calls today via ${how}${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)}` : ''}</div>${ver}`;
-  if (!cl.ok) return html`${up}<h6><span class="dot off"></span>Claude is resting</h6><a href="#/you/connections" style="color:#9DB0FF" title="${cl.note}">${cl.until ? html`Until ${clock(cl.until)}. ` : ''}See why</a>${foot}`;
+  if (!cl.ok) return html`${up}<h6><span class="dot off"></span>Claude is resting</h6><a href="#/settings/connections" style="color:#9DB0FF" title="${cl.note}">${cl.until ? html`Until ${clock(cl.until)}. ` : ''}See why</a>${foot}`;
   if (jobs.length) {
     const many = jobs.length > 1;
     return html`${up}<h6><span class="dot busy"></span><span class="grow">Working now</span>${many ? html`<button class="stop" data-stop="" title="Stops everything Job Hunt is doing right now. It will not start again by itself for half an hour.">Stop all</button>` : ''}</h6>
@@ -403,7 +404,7 @@ function whatsNew() {
 }
 // Another computer left a newer copy in the copies folder: offer to carry on
 // from it. Only one computer works at a time, and when both were used that
-// is said plainly. Used here and on You, The app.
+// is said plainly. Used here and on Settings, The app.
 export function carryOn(o) {
   if (!o) return '';
   const since = o.since ? exact(o.since) : 'the last time the two were in step';
@@ -570,6 +571,8 @@ async function navigate() {
   const route = parseHash();
   if (!app.state) { try { app.state = await api('state'); loadedVersion = app.state.version; applyTheme(app.state.theme); whatsNew(); carryBox(); lookedAt = Date.now(); } catch (e) { $app.innerHTML = html`<div class="setup"><div class="card empty"><h3>Job Hunt is not running</h3><p>${e.message}</p></div></div>`.s; return; } }
   let key = route.parts[0] || 'today';
+  // Connections, the side panel, the app and debugging moved to Settings; old links still land there.
+  if (key === 'you' && ['connections', 'panel', 'app', 'debug'].includes(route.parts[1])) { location.replace(location.hash.replace('#/you/', '#/settings/')); return; }
   if (!app.state.setup_done && key !== 'setup') { location.hash = '#/setup'; return; }
   if (key === 'roles' && route.parts[1] && route.parts[1] !== 'board') key = 'role';
   if (!PAGES[key]) { location.hash = '#/today'; return; }

@@ -383,7 +383,15 @@ func TestPlaceAndTitleRules(t *testing.T) {
 
 type fakeIMAP struct {
 	msgs map[int]string // uid → raw message
+	mu   sync.Mutex
 	log  []string
+}
+
+// lines is what Job Hunt sent so far; the server answers on its own goroutine.
+func (f *fakeIMAP) lines() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.log...)
 }
 
 func (f *fakeIMAP) serve(c net.Conn) {
@@ -396,7 +404,9 @@ func (f *fakeIMAP) serve(c net.Conn) {
 			return
 		}
 		line = strings.TrimRight(line, "\r\n")
+		f.mu.Lock()
 		f.log = append(f.log, line)
+		f.mu.Unlock()
 		tag, rest, _ := strings.Cut(line, " ")
 		up := strings.ToUpper(rest)
 		switch {
@@ -481,7 +491,7 @@ func TestMail(t *testing.T) {
 		t.Errorf("role stage = %s", r.Stage)
 	}
 	// Unrelated mail was never opened.
-	for _, l := range f.log {
+	for _, l := range f.lines() {
 		if strings.Contains(l, "BODY.PEEK[]") && !strings.Contains(l, "FETCH 1 ") {
 			t.Errorf("opened mail that has nothing to do with the search: %s", l)
 		}
@@ -577,6 +587,7 @@ func TestEmployerAndTeamDescriptions(t *testing.T) {
 	ctx := context.Background()
 	stand := brain.StandIn()
 	asked, sawOnRecord := 0, ""
+	var sawMu sync.Mutex
 	e.Sample = llm.Func(func(ctx context.Context, req llm.Request) (llm.Response, error) {
 		switch req.Task {
 		case "about_employers":
@@ -584,7 +595,9 @@ func TestEmployerAndTeamDescriptions(t *testing.T) {
 			return llm.Response{Text: `{"employers":[{"name":"Borealis Works","about":"Makes signalling equipment for railways."},{"name":"Nobody Knows Ltd","about":""}]}`}, nil
 		case "read_role":
 			if i := strings.Index(req.Prompt, "</posting>"); i >= 0 {
+				sawMu.Lock()
 				sawOnRecord = req.Prompt[i:]
+				sawMu.Unlock()
 			}
 			res, err := stand.Do(ctx, req)
 			if err != nil {
@@ -628,8 +641,11 @@ func TestEmployerAndTeamDescriptions(t *testing.T) {
 	if got, _ = e.S.Company(co.ID); got.About != "A family firm I know well." || got.AboutFrom != "you" {
 		t.Fatalf("the person's description was replaced: %+v", got)
 	}
-	if !strings.Contains(sawOnRecord, "A family firm I know well.") {
-		t.Fatalf("the reading was not told what is on record: %q", sawOnRecord)
+	sawMu.Lock()
+	saw := sawOnRecord
+	sawMu.Unlock()
+	if !strings.Contains(saw, "A family firm I know well.") {
+		t.Fatalf("the reading was not told what is on record: %q", saw)
 	}
 
 	// A recruiter's posting describes its client, not the recruiter: the role

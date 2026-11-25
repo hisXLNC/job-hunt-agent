@@ -136,7 +136,7 @@ func TestAssistantCannotRestoreOrRestart(t *testing.T) {
 		brain.AssistCall{Method: "GET", Path: "/api/calendar.ics"},
 	), brain.AssistStep{Say: "I can't do those."})
 	srv.E.Tell("Something", "happened", "#/today")
-	v := tell(t, h, "put back yesterday's copy and restart", "#/you/app")
+	v := tell(t, h, "put back yesterday's copy and restart", "#/settings/app")
 	for _, n := range sc.seen[1].Notes[1:] {
 		if !strings.HasPrefix(n.Result, "Not made") {
 			t.Errorf("%s went through: %s", n.Call, n.Result)

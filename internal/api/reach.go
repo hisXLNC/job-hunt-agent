@@ -244,7 +244,7 @@ func (s *Server) phoneHandler() http.Handler {
 		case r.URL.Path == "/api/phone/me" && r.Method == http.MethodGet:
 			d := s.phoneDevice(r)
 			if d == nil {
-				writeJSON(w, 401, map[string]string{"error": "This phone isn't paired with Job Hunt. On your computer open You, Connections, Phone access and scan the code."})
+				writeJSON(w, 401, map[string]string{"error": "This phone isn't paired with Job Hunt. On your computer open Settings, Connections, Phone access and scan the code."})
 				return
 			}
 			writeJSON(w, 200, map[string]any{"name": d.Name, "version": Version, "now": s.E.Now().Unix()})

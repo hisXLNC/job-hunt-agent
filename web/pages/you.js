@@ -1,7 +1,11 @@
 import { html, api, post, put, del, when, toast, copy, app, rel, exact, ago, with_, applyTheme, listSize, endless, carryOn } from '../app.js';
 import { oldCard, oldActions } from '../old.js';
 
-const TABS = [['', 'About you'], ['arriving', 'Arriving'], ['connections', 'Connections'], ['panel', 'Browser side panel'], ['app', 'The app and debugging']];
+const TABS = [['', 'About you'], ['arriving', 'Arriving']];
+// Settings has its own page, with a menu down the side.
+const SECTIONS = [['connections', 'Connections', 'Claude, job sources, phone, inbox, calendar, this computer, when to search'], ['panel', 'Browser side panel', 'Fills application forms in your browser'], ['app', 'The app', 'Version, updates, look, copies and files'], ['debug', 'Debugging', 'The record to send with a problem, and what Claude did']];
+const inSettings = tab => SECTIONS.some(x => x[0] === tab);
+export const placeOf = tab => inSettings(tab) ? `#/settings/${tab}` : `#/you${tab ? '/' + tab : ''}`;
 const lines = s => (s || '').split(/\n|,/).map(x => x.trim()).filter(Boolean);
 // Titles are one per line and may hold a comma: "Director, Tax Technology".
 const titleLines = s => (s || '').split('\n').map(x => x.trim()).filter(Boolean);
@@ -61,8 +65,8 @@ const SETTINGS = [
   ['app', 'version', '', 'Version and updates', 'version update upgrade new install automatic auto-update check'],
   ['app', 'version', '', 'Your data folder', 'data folder files where stored directory'],
   ['app', 'version', '', 'Stop Job Hunt', 'stop quit exit close shut down'],
-  ['app', 'debug', '', 'Debugging record', 'debug log report problem error bug support'],
-  ['app', 'calls', '', 'Claude, lately: calls and cost', 'usage calls cost spent tokens'],
+  ['debug', 'debug', '', 'Debugging record', 'debug log report problem error bug support'],
+  ['debug', 'calls', '', 'Claude, lately: calls and cost', 'usage calls cost spent tokens'],
 ].map(([tab, set, field, label, words], i) => ({ id: 's' + i, tab, set, field, label, hay: (label + ' ' + words).toLowerCase() }));
 
 function findSettings(text) {
@@ -70,10 +74,10 @@ function findSettings(text) {
   if (!want.length) return [];
   return SETTINGS.filter(x => want.every(w => x.hay.includes(w))).slice(0, 8);
 }
-const tabName = k => (TABS.find(t => t[0] === k) || TABS[0])[1];
+const tabName = k => ([...TABS, ...SECTIONS].find(t => t[0] === k) || TABS[0])[1];
 function drawFound(box, text) {
   const hits = findSettings(text);
-  box.innerHTML = (hits.length ? html`${hits.map(x => html`<a href="#/you${x.tab ? '/' + x.tab : ''}?hl=${x.id}"><b>${x.label}</b> <span class="m">· ${tabName(x.tab)}</span></a>`)}` : html`<div class="s m" style="padding:10px">No setting matches “${text}”.</div>`).s;
+  box.innerHTML = (hits.length ? html`${hits.map(x => html`<a href="${placeOf(x.tab)}?hl=${x.id}"><b>${x.label}</b> <span class="m">· ${tabName(x.tab)}</span></a>`)}` : html`<div class="s m" style="padding:10px">No setting matches “${text}”.</div>`).s;
   box.hidden = !text.trim();
 }
 document.addEventListener('input', ev => { if (ev.target.id === 'setfind') drawFound(document.getElementById('setfound'), ev.target.value); });
@@ -381,8 +385,7 @@ function connections(d, route) {
       const on = open === key;
       return html`<div class="fold ${on ? 'open' : ''}" style="${i ? 'border-top:1px solid var(--line2)' : ''}">
         <a class="foldhead" href="${with_(route, { open: on ? '' : key, hl: '' })}"><b class="foldname">${name}</b><span class="chip ${tone}">${word}</span><span class="grow s m foldsum">${sum}</span><span class="btn sm">${on ? 'Close' : word === 'Off' || word === 'None' || word === 'Not connected' ? 'Set up' : 'Change'}</span></a>
-        ${on ? html`<div class="foldbody">${body}</div>` : ''}</div>`; })}
-    <div class="fold" style="border-top:1px solid var(--line2)"><a class="foldhead" href="#/you/panel"><b class="foldname">Browser side panel</b><span class="chip ${ext?.paired_at ? 'good' : ''}">${ext?.paired_at ? 'Connected' : 'Off'}</span><span class="grow s m foldsum">Fills application forms in your browser; it has its own page</span><span class="btn sm">Open</span></a></div></div>`;
+        ${on ? html`<div class="foldbody">${body}</div>` : ''}</div>`; })}</div>`;
 }
 
 // Another AI in Claude's place, for the searching or for everything. The key
@@ -425,7 +428,7 @@ function moreSources(d) {
           <label class="row s" style="gap:6px">At most <input type="number" name="limit" value="${s.limit}" min="1" max="5000" style="width:84px;height:30px" aria-label="Most requests a day to ${s.name}"> requests a day</label></div>
         <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>`}
       <div class="row"><button class="btn sm p" data-busy="${alerts || indeed ? 'Saving…' : 'Trying the key…'}">Save</button>
-        ${!alerts && !indeed && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="Asking…" title="Runs one small search now and says what came back.">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
+        ${!alerts && !indeed && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="${s.id === 'apify' ? 'Searching LinkedIn, about a minute…' : 'Asking…'}" title="${s.id === 'apify' ? 'Runs one real LinkedIn search for 10 postings through your scraper (about a cent) and says what came back.' : 'Runs one small search now and says what came back.'}">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
         <span class="grow"></span>${s.at ? html`<span class="xs m">Last answered ${ago(s.at)}: ${s.seen} posting${s.seen === 1 ? '' : 's'}${alerts || s.new ? `, ${s.new} new` : ''}</span>` : ''}</div></form>`;
   };
   return html`<div class="card col" style="gap:12px"><div><h3>More job sources</h3>
@@ -586,15 +589,24 @@ function theApp(d, route) {
       <p class="s m">Everything is kept in one folder on this computer:</p><code class="s" style="background:var(--s2);padding:6px 9px;border-radius:7px;word-break:break-all">${d.dir}</code>
       <p class="s m">Job Hunt keeps searching while its window is closed; start it again from the Start menu to bring the window back.</p>
       <div class="row"><span class="grow"></span><button class="btn danger" data-act="quit" data-confirm="Stop Job Hunt? Searching stops until you start it again.">Stop Job Hunt</button></div></div>
-    ${looks()}${copies(d.backups, route, d.files?.pick)}${filesCard(d.files)}
+    ${looks()}${copies(d.backups, route, d.files?.pick)}
+  </div><div class="col" style="gap:14px">
+    ${filesCard(d.files)}
     ${d.history?.length ? html`<div class="card col" style="gap:6px"><h4>What changed in each version</h4>${d.history.slice(0, 3).map(h => html`<details ${h.version === d.version ? 'open' : ''}><summary class="s">${h.version}${h.version === d.version ? ' · this one' : ''}</summary><div class="news" style="margin-top:6px"><ul>${h.text.split('\n').filter(l => l.trim()).map(l => html`<li>${l.replace(/^[-*]\s+/, '').replace(/\*\*/g, '')}</li>`)}</ul></div></details>`)}
       ${d.history.length > 3 ? html`<details><summary class="s">Earlier versions (${d.history.length - 3})</summary>${d.history.slice(3).map(h => html`<div class="news" style="margin-top:8px"><h4>${h.version}</h4><ul>${h.text.split('\n').filter(l => l.trim()).map(l => html`<li>${l.replace(/^[-*]\s+/, '').replace(/\*\*/g, '')}</li>`)}</ul></div>`)}</details>` : ''}</div>` : ''}
     ${d.old ? oldCard(d.old, false) : ''}
-    ${d.problems?.length ? html`<div class="card"><h4>Recent problems</h4><div class="col s" style="margin-top:10px;gap:8px">${d.problems.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:70px;flex:none">${rel(a.at)}</span><span>${a.text}</span></div>`)}</div></div>` : ''}
+  </div></div>`;
+}
+
+// Debugging: the record to copy when reporting a problem, recent problems,
+// what Claude was used for, and changes Job Hunt made to settings by itself.
+function debugging(d) {
+  return html`<div class="grid2" style="align-items:start"><div class="col" style="gap:14px">
     ${d.debug ? html`<div class="card col" style="gap:8px" data-set="debug"><div class="row"><h4 class="grow">Debugging</h4><button class="btn sm p" data-act="copydebug" title="Copies the report below so you can paste it when reporting a problem. It leaves out your name, e-mail addresses and keys.">Copy debug details</button><a class="btn sm" href="/api/debug/report" download title="Saves a longer report (the newest 4,000 lines) as a text file.">Save as a file</a><button class="btn sm" data-act="openfolder" data-what="data" title="Opens the folder that holds your data and debug.log.">Open the folder</button></div>
       <p class="xs m">Job Hunt writes down everything it does: each search and page it fetches, each call to Claude, each background job, each error in the program or in a page. Your name, e-mail addresses and keys are left out. The file is debug.log in your data folder.</p>
       <pre class="xs" style="margin:0;background:var(--s2);border-radius:8px;padding:9px 10px;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Consolas,monospace;line-height:1.45">${d.debug.report.split('\n').slice(-45).join('\n')}</pre>
       <p class="xs m">The newest 45 lines. Copy or save for the rest.</p></div>` : ''}
+    ${d.problems?.length ? html`<div class="card"><h4>Recent problems</h4><div class="col s" style="margin-top:10px;gap:8px">${d.problems.map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:70px;flex:none">${rel(a.at)}</span><span>${a.text}</span></div>`)}</div></div>` : ''}
   </div><div class="col" style="gap:14px">
     <div class="card" data-set="calls"><h4>Claude, lately</h4><p class="xs m" style="margin-top:3px">${d.today.calls} calls in the last day, ${d.week.calls} this week${d.week.cost ? html` · $${d.week.cost.toFixed(2)}` : ''}${d.week.errors ? html` · ${d.week.errors} failed` : ''}</p>
       <table class="tbl" style="margin-top:8px"><tbody>${(d.calls || []).map(c => html`<tr><td class="xs m" style="white-space:nowrap">${when(c.at)}</td><td class="s">${c.task.replace(/_/g, ' ')}</td><td class="xs m">${(c.ms / 1000).toFixed(1)} s</td><td class="xs" style="color:var(--crit)">${c.error ? c.error.slice(0, 80) : ''}</td></tr>`)}</tbody></table></div>
@@ -603,24 +615,34 @@ function theApp(d, route) {
 }
 
 export default {
-  title: 'You',
-  sub: (d, route) => ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer', connections: 'Claude, more job sources, your phone, your inbox, this computer, and when to search', panel: 'Get it, put it in your browser, connect it', app: 'Version, your data, and what Job Hunt has been doing' })[route.parts[1] || ''],
+  title: (d, route) => route.parts[0] === 'settings' ? 'Settings' : 'You',
+  sub: (d, route) => route.parts[0] === 'settings' ? ({ connections: 'Claude, more job sources, your phone, your inbox, this computer, and when to search', panel: 'Get it, put it in your browser, connect it', app: 'Version, updates, your data and saved copies', debug: 'What Job Hunt has been doing, and the record to send with a problem' })[route.parts[1] || 'connections']
+    : ({ '': 'What Job Hunt knows and looks for', arriving: 'Closing the gap for a newcomer' })[route.parts[1] || ''],
   topics: ['you', 'profile', 'connections', 'app'],
   load(route) {
-    switch (route.parts[1] || '') {
+    const tab = route.parts[0] === 'settings' ? route.parts[1] || 'connections' : route.parts[1] || '';
+    switch (tab) {
       case 'arriving': return api('arriving');
       case 'panel': return api('connections');
       case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null), api('google').catch(() => null), api('searchset').catch(() => null)]).then(([c, pa, oc, g, ss]) => ({ ...c, phoneaccess: pa, owncal: oc, google: g, searchset: ss }));
-      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null), api('files').catch(() => null)]).then(([a, o, g, h, b, fl]) => ({ ...a, old: o, debug: g, history: h, backups: b, files: fl }));
+      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null), api('files').catch(() => null)]).then(([a, o, h, b, fl]) => ({ ...a, old: o, history: h, backups: b, files: fl }));
+      case 'debug': return Promise.all([api('app'), api('debug').catch(() => null)]).then(([a, g]) => ({ ...a, debug: g }));
     }
     if (route.q.cv) return Promise.all([api('you'), api(`cvs/${route.q.cv}/look`).catch(() => null)]).then(([y, k]) => ({ ...y, cvlook: k }));
     return api('you');
   },
   view(d, route) {
+    const find = html`<div class="setfind"><input type="text" id="setfind" placeholder="Find a setting" aria-label="Find a setting" autocomplete="off" title="Type what you are looking for, such as dark, salary, backup or phone. Enter opens the first match."><div class="found" id="setfound" hidden></div></div>`;
+    if (route.parts[0] === 'settings') {
+      const tab = route.parts[1] || 'connections';
+      return html`<div class="body"><div class="setwrap"><nav class="setmenu" aria-label="Settings">${find}
+        ${SECTIONS.map(([k, v, w]) => html`<a class="${k === tab ? 'on' : ''}" href="#/settings/${k}" ${k === tab ? 'aria-current="page"' : ''}><b>${v}</b><span class="xs m">${w}</span></a>`)}</nav>
+        <div class="setbody">${tab === 'panel' ? panel(d) : tab === 'app' ? theApp(d, route) : tab === 'debug' ? debugging(d) : connections(d, route)}</div></div></div>`;
+    }
     const tab = route.parts[1] || '';
     return html`<div class="body"><div class="tabs">${TABS.map(([k, v]) => html`<a class="${k === tab ? 'on' : ''}" href="#/you${k ? '/' + k : ''}">${v}</a>`)}
-        <div class="setfind"><input type="text" id="setfind" placeholder="Find a setting" aria-label="Find a setting" autocomplete="off" title="Type what you are looking for, such as dark, salary, backup or phone. Enter opens the first match."><div class="found" id="setfound" hidden></div></div></div>
-      ${tab === 'arriving' ? arriving(d) : tab === 'connections' ? connections(d, route) : tab === 'panel' ? panel(d) : tab === 'app' ? theApp(d, route) : about(d, route)}</div>`;
+        <a href="#/settings/connections" title="Connections, the browser side panel, the app and debugging have their own page">Settings →</a>${find}</div>
+      ${tab === 'arriving' ? arriving(d) : about(d, route)}</div>`;
   },
   // A setting found through the search box is brought into view and marked, once.
   after(root, d, route) {
@@ -652,7 +674,7 @@ export default {
         let up = false;
         try { up = (await fetch('/api/state', { cache: 'no-store' })).ok; } catch { up = false; }
         if (!up) gone = true;
-        if (up && (gone || Date.now() - began > 6000)) { location.hash = '#/you/app'; location.reload(); return; }
+        if (up && (gone || Date.now() - began > 6000)) { location.hash = '#/settings/app'; location.reload(); return; }
         if (Date.now() - began > 60000) { document.body.innerHTML = '<div class="setup"><div class="card empty"><h3>Job Hunt did not come back</h3><p>Start it again from the Start menu. A copy that was waiting is put back then.</p></div></div>'; return; }
         setTimeout(look, 700);
       };

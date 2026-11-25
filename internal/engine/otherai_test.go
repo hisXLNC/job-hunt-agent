@@ -152,3 +152,12 @@ func TestAnotherAIDoesOnlyItsShareAndClaudeTakesOver(t *testing.T) {
 		t.Fatalf("the other AI's cost was counted: %v", u.Cost)
 	}
 }
+
+// Mail from the inbox is promised to Claude alone, whatever the other AI is set to do.
+func TestOtherAINeverReadsMail(t *testing.T) {
+	for _, task := range []string{"mail", "mail_reply", "senders", "rejection_reply", "assist", "indeed_search", "find_news"} {
+		if !keepWithClaude[task] {
+			t.Errorf("%s could go to the other AI", task)
+		}
+	}
+}

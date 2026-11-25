@@ -364,9 +364,9 @@ func (e *Engine) remindUpdate(now time.Time) {
 		return
 	}
 	e.S.Set("update:told", day)
-	text := "Install it under You, The app. It takes about a minute and your data stays."
+	text := "Install it under Settings, The app. It takes about a minute and your data stays."
 	if !e.CanInstall() && e.RunInstaller == nil {
-		text = "Download the installer under You, The app, and run it. Your data stays."
+		text = "Download the installer under Settings, The app, and run it. Your data stays."
 	}
-	e.Tell("Job Hunt "+u.Version+" is ready to install", text, "#/you/app")
+	e.Tell("Job Hunt "+u.Version+" is ready to install", text, "#/settings/app")
 }

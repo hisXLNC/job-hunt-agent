@@ -7,7 +7,7 @@ const chip = k => { const [l, c] = KINDS[k] || [k, '']; return html`<span class=
 function list(d, route) {
   const q = route.q;
   return html`<div class="body cols wide"><div class="col" style="gap:14px">
-    ${!d.on ? html`<div class="card row"><div class="grow"><h4>Your inbox isn't connected</h4><p class="s m">Connect it and Job Hunt notices replies by itself: it opens only mail from employers you applied to, hiring systems and people you wrote to. It never sends anything. Or paste a message on the right.</p></div><a class="btn p" href="#/you/connections">Connect inbox</a></div>` : ''}
+    ${!d.on ? html`<div class="card row"><div class="grow"><h4>Your inbox isn't connected</h4><p class="s m">Connect it and Job Hunt notices replies by itself: it opens only mail from employers you applied to, hiring systems and people you wrote to. It sends nothing by itself: a reply goes only when you press Send, and only if you switched that on. Or paste a message on the right.</p></div><a class="btn p" href="#/settings/connections">Connect inbox</a></div>` : ''}
     ${d.note ? html`<div class="card" style="border-color:var(--crit)"><p class="s"><b style="color:var(--crit)">The inbox couldn't be read.</b> ${d.note}</p></div>` : ''}
     <div class="stick"><div class="card row wrap" style="gap:6px;padding:12px 14px">
       <a class="chip ${!q.state && !q.kind ? 'on' : ''}" href="#/replies">Needs you <span style="opacity:.7">${d.waiting}</span></a>

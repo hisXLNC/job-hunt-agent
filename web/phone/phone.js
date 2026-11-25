@@ -239,7 +239,7 @@ async function replies() {
     const [word, tone] = KIND[m.kind] || [m.kind || 'Mail', ''];
     return el(m.role_id ? 'a' : 'div', { class: 'card', href: m.role_id ? '#role/' + m.role_id : null }, el('div', { class: 'row', style: 'gap:6px;margin-bottom:4px' }, el('span', { class: 'chip ' + tone }, word), el('span', { class: 'm' }, ago(m.at, now))),
       el('div', { class: 't' }, m.subject), el('div', { class: 's' }, m.from_name || m.from_addr), m.summary ? el('p', { class: 's', style: 'margin-top:8px' }, m.summary) : '');
-  }) : [el('div', { class: 'empty' }, d.on ? 'No replies yet.' : 'Job Hunt isn\'t watching your inbox. Turn it on under You, Connections on your computer.')]));
+  }) : [el('div', { class: 'empty' }, d.on ? 'No replies yet.' : 'Job Hunt isn\'t watching your inbox. Turn it on under Settings, Connections on your computer.')]));
 }
 
 async function interviews() {

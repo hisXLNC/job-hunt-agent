@@ -258,7 +258,7 @@ func (e *Engine) SetSource(ctx context.Context, id string, in SourceKeyInput) (w
 		// Tried before it is kept. This happens outside the lock: trying
 		// writes the source's state, which takes it too.
 		before := e.sourceStates()[id]
-		_, terr := e.tryKey(ctx, id, try.forSources())
+		_, terr := e.tryKey(ctx, id, try.forSources(), false)
 		switch {
 		case terr == nil:
 			tried = true
@@ -368,7 +368,7 @@ func (e *Engine) TestSource(ctx context.Context, id string) (int, error) {
 	if !keys.Has(id) {
 		return 0, errors.New("save the key first")
 	}
-	n, err := e.tryKey(ctx, id, keys)
+	n, err := e.tryKey(ctx, id, keys, true)
 	if err != nil {
 		why, _ := keyedPlain(id, err)
 		return 0, errors.New(why)
@@ -378,14 +378,16 @@ func (e *Engine) TestSource(ctx context.Context, id string) (int, error) {
 
 // tryKey runs one tiny search with these keys and notes what happened in the
 // source's state. It reports how many postings came back; the error is the
-// service's own (sources.ErrKeyRefused and the like).
-func (e *Engine) tryKey(ctx context.Context, id string, keys sources.Keys) (int, error) {
+// service's own (sources.ErrKeyRefused and the like). Real is the person's
+// Test button: for Apify that runs the scraper for a few postings (about half
+// a cent), the only way to know LinkedIn answers; saving a key only checks it.
+func (e *Engine) tryKey(ctx context.Context, id string, keys sources.Keys, real bool) (int, error) {
 	p := e.S.Profile()
 	title := "manager"
 	if all := p.Titles.All(); len(all) > 0 {
 		title = all[0].Title
 	}
-	if id == "apify" {
+	if id == "apify" && !real {
 		// Checked without running a scraper, which would cost.
 		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
@@ -401,11 +403,18 @@ func (e *Engine) tryKey(ctx context.Context, id string, keys sources.Keys) (int,
 	}
 	q := keyedQuery(p, title, searchedPlaces(p)[0].Town, 7*24*time.Hour)
 	q.Max = 5
+	if id == "apify" {
+		q.Max = 10 // some scrapers will not run for fewer; about a cent
+	}
 	if id == "adzuna" && !sources.AdzunaCovers(q.Country) {
 		// The key can still be tried, somewhere Adzuna does have listings.
 		q.Country, q.Location = "GB", ""
 	}
-	cctx, cancel := context.WithTimeout(ctx, 40*time.Second)
+	wait := 40 * time.Second
+	if id == "apify" {
+		wait = 5 * time.Minute // a scraper run starts, works and finishes
+	}
+	cctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	posts, err := e.Src.FindKeyed(cctx, id, keys, q)
 	now := e.Now().Unix()
@@ -428,9 +437,7 @@ func (e *Engine) tryKey(ctx context.Context, id string, keys sources.Keys) (int,
 	e.setSourceState(id, func(s *SourceState) {
 		s.Used++
 		s.Error, s.ErrorAt, s.RestUntil = "", 0, 0
-		if s.At == 0 {
-			s.At, s.Seen, s.New = now, len(posts), 0
-		}
+		s.At, s.Seen, s.New = now, len(posts), 0
 	})
 	e.S.Changed("connections", "runs")
 	return len(posts), nil
@@ -777,7 +784,7 @@ func (e *Engine) Sources() []SourceRow {
 			}
 		}
 		if m.State == "none" {
-			r.Setup = "#/you/connections"
+			r.Setup = "#/settings/connections"
 		}
 		rows = append(rows, r)
 	}

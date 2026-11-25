@@ -396,7 +396,7 @@ func (e *Engine) Restored(out *RestoreOutcome) {
 	if out.Error != "" {
 		text := fmt.Sprintf("The copy from %s was not put back: %s. Your data is as it was.", when, out.Error)
 		e.S.Log(store.Activity{Kind: "problem", Text: text})
-		e.Keep("problem", "Needs attention", text, "#/you/app")
+		e.Keep("problem", "Needs attention", text, "#/settings/app")
 		return
 	}
 	// Where copies are kept is a choice about this computer, not part of the
@@ -409,5 +409,5 @@ func (e *Engine) Restored(out *RestoreOutcome) {
 		text += fmt.Sprintf(" What you had before is saved as %s.", filepath.Base(out.Saved))
 	}
 	e.S.Log(store.Activity{Kind: "restore", Text: text})
-	e.Keep("app", "A saved copy was put back", text, "#/you/app")
+	e.Keep("app", "A saved copy was put back", text, "#/settings/app")
 }

@@ -142,7 +142,7 @@ func (s *Server) deskRoutes(h func(string, handler)) {
 			return nil, bad(sentence(err.Error()))
 		}
 		if folder == "" {
-			return nil, bad("Keeping files in a folder is off. Switch it on under You, The app.")
+			return nil, bad("Keeping files in a folder is off. Switch it on under Settings, The app.")
 		}
 		return map[string]string{"dir": folder}, openDir(folder)
 	})
@@ -182,10 +182,10 @@ func (s *Server) deskRoutes(h func(string, handler)) {
 			ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 			defer cancel()
 			if err := s.PC.InstallClaude(ctx); err != nil {
-				e.Tell("Claude Code didn't install", sentence(err.Error()), "#/you/connections?open=claude")
+				e.Tell("Claude Code didn't install", sentence(err.Error()), "#/settings/connections?open=claude")
 				return err
 			}
-			e.Tell("Claude Code is installed", "Press Sign in to Claude next.", "#/you/connections?open=claude")
+			e.Tell("Claude Code is installed", "Press Sign in to Claude next.", "#/settings/connections?open=claude")
 			e.S.Changed("connections")
 			return nil
 		})

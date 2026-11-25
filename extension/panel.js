@@ -624,7 +624,7 @@ function versionCard() {
   if (!newer(extVersion, MINE) && !newer(appVersion, MINE)) return null;
   const v = newer(extVersion, MINE) ? extVersion : appVersion;
   return h('div', { class: 'note warn', role: 'status' }, h('b', {}, `Job Hunt has side panel ${v}; this one is ${MINE}.`),
-    h('div', { class: 's', style: 'margin-top:4px' }, "It couldn't update itself, so it was probably not loaded from Job Hunt's folder. In Job Hunt open You, Browser side panel, and load the panel from the folder shown there. It keeps itself up to date from then on."),
+    h('div', { class: 's', style: 'margin-top:4px' }, "It couldn't update itself, so it was probably not loaded from Job Hunt's folder. In Job Hunt open Settings, Browser side panel, and load the panel from the folder shown there. It keeps itself up to date from then on."),
     h('div', { style: 'margin-top:8px' }, btn('Reload this panel', 'reloadPanel')));
 }
 
@@ -778,7 +778,7 @@ function render() {
   } else if (state === 'pair') {
     kids = [h('section', { class: 'card ask' }, h('h2', {}, 'Approve this panel in Job Hunt'), h('div', { class: 'code', 'aria-label': 'Code ' + code.split('').join(' ') }, code),
       h('p', { class: 's' }, 'In Job Hunt open You, then Connections. Check that it shows this code and press Approve.'),
-      h('a', { class: 'btn wide', href: `${APP}#/you/connections`, target: '_blank', rel: 'noopener' }, 'Open Job Hunt'))];
+      h('a', { class: 'btn wide', href: `${APP}#/settings/connections`, target: '_blank', rel: 'noopener' }, 'Open Job Hunt'))];
   } else {
     kids = [newCard(), versionCard(), applyingCard(), flashCard(), submitCard(), offersCard(), pageCard(), nextCard(), logLink()];
   }

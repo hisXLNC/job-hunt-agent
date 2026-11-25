@@ -71,7 +71,7 @@ func TestNeitherTheAssistantNorAPhoneReachTheOtherAI(t *testing.T) {
 		brain.AssistCall{Method: "PUT", Path: "/api/otherai", Body: `{"on":true,"base":"https://evil.example/v1","model":"m","key":"x"}`},
 		brain.AssistCall{Method: "DELETE", Path: "/api/otherai"},
 	), brain.AssistStep{Say: "I can't."})
-	tell(t, h, "send my CV to another AI", "#/you/connections")
+	tell(t, h, "send my CV to another AI", "#/settings/connections")
 	for _, n := range sc.seen[1].Notes[1:] {
 		if !strings.HasPrefix(n.Result, "Not made") {
 			t.Errorf("%s went through: %s", n.Call, n.Result)

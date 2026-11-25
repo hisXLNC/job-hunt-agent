@@ -49,7 +49,7 @@ func TestPagesImportTheHelpersTheyUse(t *testing.T) {
 			if regexp.MustCompile(`(?:function|const|let|var)\s+` + q + `\b|[,(]\s*` + q + `\s*(?:=[^=]|[,)])`).MatchString(s) {
 				continue
 			}
-			for _, m := range regexp.MustCompile(`(^|[^\w.$])` + q + `\(([^)]*)\)\s*(\{)?`).FindAllStringSubmatchIndex(s, -1) {
+			for _, m := range regexp.MustCompile(`(^|[^\w.$])`+q+`\(([^)]*)\)\s*(\{)?`).FindAllStringSubmatchIndex(s, -1) {
 				if m[6] >= 0 { // name(...) { ... } is a method being defined
 					continue
 				}

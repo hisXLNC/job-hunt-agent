@@ -241,7 +241,7 @@ type HandedOver struct {
 func (e *Engine) HandOver() (*HandedOver, error) {
 	dir := e.sharedDir()
 	if dir == "" {
-		return nil, errors.New("Keep your copies in a cloud drive first (You, The app, Saved copies), so the other computer can see them.")
+		return nil, errors.New("Keep your copies in a cloud drive first (Settings, The app, Saved copies), so the other computer can see them.")
 	}
 	dst, err := e.backup(true)
 	if err != nil {

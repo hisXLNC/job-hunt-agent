@@ -28,7 +28,7 @@ function list(d, route) {
   const show = route.q.show || 'open', c = d.counts || {};
   const look = d.looking ? html`<span class="btn" disabled><span class="spin"></span>Looking…</span>`
     : d.can_search ? html`<button class="btn" data-act="find" data-busy="Starting…" title="Claude searches the news for employers in your field and city that raised money or are growing. About two minutes.">Look for news now</button>`
-    : html`<a class="btn" href="#/you/connections?open=claude" title="Searching the web needs your Claude sign-in or an API key.">Connect Claude</a>`;
+    : html`<a class="btn" href="#/settings/connections?open=claude" title="Searching the web needs your Claude sign-in or an API key.">Connect Claude</a>`;
   return html`<div class="body">
     <div class="card row wrap" style="gap:20px;padding:20px">
       <div class="grow" style="min-width:260px"><h2 style="font-size:20px">Write before the posting goes up.</h2>

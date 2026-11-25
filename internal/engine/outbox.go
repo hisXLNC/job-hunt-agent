@@ -344,7 +344,7 @@ func (e *Engine) keepWording(o Outgoing) error {
 func (e *Engine) SaveDraft(ctx context.Context, o Outgoing) error {
 	set := e.MailSet()
 	if !set.On || !set.Drafts {
-		return errors.New("turn on “Save replies as drafts in my mail” on the inbox card under You → Connections first")
+		return errors.New("turn on “Save replies as drafts in my mail” on the inbox card under Settings → Connections first")
 	}
 	f, err := e.outFor(o)
 	if err != nil {
@@ -447,7 +447,7 @@ type sentMark struct {
 func (e *Engine) SendMail(ctx context.Context, o Outgoing) error {
 	set := e.MailSet()
 	if !set.On || !set.Send {
-		return errors.New("turn on “Let me send mail from Job Hunt” on the inbox card under You → Connections first")
+		return errors.New("turn on “Let me send mail from Job Hunt” on the inbox card under Settings → Connections first")
 	}
 	to, err := oneAddress(o.To)
 	if err != nil {

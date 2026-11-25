@@ -1,4 +1,4 @@
-/* Colours. Light is the default; dark is chosen under You, The app, or follows Windows. A CV shown as paper (.sheet) is always light. */
+/* Colours. Light is the default; dark is chosen under Settings, The app, or follows Windows. A CV shown as paper (.sheet) is always light. */
 :root,.sheet{--bg:#EEF0F5;--surface:#fff;--s2:#F5F6FA;--ink:#161B2B;--ink2:#4A5168;--muted:#69718A;--line:#DDE1EB;--line2:#EBEEF4;--accent:#2F4FC4;--accent-soft:#E4E9FB;--side:#121829;--good:#0B7A3B;--good-soft:#DDF1E4;--warn:#8F5B00;--warn-soft:#FBEFD3;--crit:#B42D2D;--crit-soft:#F8E1DF;--info:#2C5C9E;--info-soft:#E2EAF6;--hot:#C2410C;--hot-soft:#FFE8D9;--raised:#fff;--field:#fff;--on-ink:#fff;--accent-solid:#2F4FC4;--accent-solid-hover:#2743AB;--ask-hover:#D6DEFA;--good-solid:#0B7A3B;--crit-solid:#B42D2D;--hot-solid:#C2410C;--row-hover:#FAFBFD;--row-sel:#F1F4FE;--row-cur:#F6F8FE;--warn-card:#FFFDF6;--crit-card:#FFF8F7;--bulk:#161B2B;--ring-track:#E8EBF2;--fit-good:#0B7A3B;--fit-ok:#8F5B00;--fit-ok-ring:#D49A1E;--fit-low:#B42D2D;--stars:#B7791F;--shadow:rgba(20,27,43,.14);--veil:rgba(18,24,41,.45);color-scheme:light}
 :root[data-theme=dark]{--bg:#0E121A;--surface:#171C28;--s2:#1F2535;--ink:#E9ECF4;--ink2:#BCC3D4;--muted:#939CB2;--line:#2E364A;--line2:#242B3C;--accent:#9DB0FF;--accent-soft:#232D55;--side:#090C13;--good:#57C990;--good-soft:#15332A;--warn:#E5AC45;--warn-soft:#3A2E13;--crit:#F48279;--crit-soft:#421F1F;--info:#86B6EE;--info-soft:#1B2D47;--hot:#FF9257;--hot-soft:#43240F;--raised:#222939;--field:#11151F;--on-ink:#11151F;--accent-solid:#3F5DDB;--accent-solid-hover:#4C6AE8;--ask-hover:#2C3868;--good-solid:#0E8A44;--crit-solid:#C23A3A;--hot-solid:#C2410C;--row-hover:#1B2130;--row-sel:#1F2847;--row-cur:#1C2440;--warn-card:#2A2413;--crit-card:#2C1919;--bulk:#2A3352;--ring-track:#2E364A;--fit-good:#57C990;--fit-ok:#E5AC45;--fit-ok-ring:#E5AC45;--fit-low:#F48279;--stars:#E5AC45;--shadow:rgba(0,0,0,.5);--veil:rgba(0,0,0,.6);color-scheme:dark}
 @media(prefers-color-scheme:dark){:root[data-theme=system]{--bg:#0E121A;--surface:#171C28;--s2:#1F2535;--ink:#E9ECF4;--ink2:#BCC3D4;--muted:#939CB2;--line:#2E364A;--line2:#242B3C;--accent:#9DB0FF;--accent-soft:#232D55;--side:#090C13;--good:#57C990;--good-soft:#15332A;--warn:#E5AC45;--warn-soft:#3A2E13;--crit:#F48279;--crit-soft:#421F1F;--info:#86B6EE;--info-soft:#1B2D47;--hot:#FF9257;--hot-soft:#43240F;--raised:#222939;--field:#11151F;--on-ink:#11151F;--accent-solid:#3F5DDB;--accent-solid-hover:#4C6AE8;--ask-hover:#2C3868;--good-solid:#0E8A44;--crit-solid:#C23A3A;--hot-solid:#C2410C;--row-hover:#1B2130;--row-sel:#1F2847;--row-cur:#1C2440;--warn-card:#2A2413;--crit-card:#2C1919;--bulk:#2A3352;--ring-track:#2E364A;--fit-good:#57C990;--fit-ok:#E5AC45;--fit-ok-ring:#E5AC45;--fit-low:#F48279;--stars:#E5AC45;--shadow:rgba(0,0,0,.5);--veil:rgba(0,0,0,.6);color-scheme:dark}}
@@ -338,3 +338,16 @@ ol.steps{margin:0 0 0 20px;padding:0;display:flex;flex-direction:column;gap:5px;
 .foldbody>.card,.foldbody>form.card{border:0;background:none;padding:0;box-shadow:none}
 .foldbody>.card>.row:first-child:has(h3),.foldbody>.card>h3:first-child,.foldbody>.card>div:first-child>h3:first-child{display:none}
 @media(max-width:1100px){.foldbody{padding-left:18px}.foldname{width:140px}}
+/* Settings: a menu down the side, the chosen part beside it */
+.setwrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:22px;align-items:start}
+.setmenu{position:sticky;top:0;display:flex;flex-direction:column;gap:2px;padding-top:2px}
+.setmenu .setfind{position:relative;margin-bottom:10px}
+.setmenu .setfind input{height:32px;font-size:12.5px;width:100%}
+.setmenu .setfind .found{top:36px;left:0;right:auto;width:300px}
+.setmenu .setfind .found a{padding:7px 9px;font-weight:400;color:var(--ink)}
+.setmenu>a{display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-radius:8px;color:var(--ink2);border-left:3px solid transparent}
+.setmenu>a b{font-weight:600}
+.setmenu>a:hover{text-decoration:none;background:var(--row-hover);color:var(--ink)}
+.setmenu>a.on{background:var(--surface);color:var(--ink);border-left-color:var(--accent);box-shadow:0 1px 2px var(--shadow)}
+.setbody{min-width:0}
+@media(max-width:900px){.setwrap{grid-template-columns:1fr}.setmenu{position:static;flex-direction:row;flex-wrap:wrap}.setmenu .setfind{width:100%}.setmenu>a span{display:none}}

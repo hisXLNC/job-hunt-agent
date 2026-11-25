@@ -59,7 +59,7 @@ func runTray(ctx context.Context, stop func(), url, dir string, e *engine.Engine
 						deskNotify("Job Hunt is searching", "New roles that fit will show up on Today.", url+"#/today")
 					case <-inbox.ClickedCh:
 						if !e.MailSet().On {
-							deskNotify("Your inbox isn't connected", "Connect it under You, Connections, and replies are noticed as they arrive.", url+"#/you/connections")
+							deskNotify("Your inbox isn't connected", "Connect it under Settings, Connections, and replies are noticed as they arrive.", url+"#/settings/connections")
 						} else {
 							e.Go("mail", "Checking your inbox", func(ctx context.Context) error { return e.CheckMail(ctx) })
 							deskNotify("Checking your inbox", "Anything new from an employer shows up under Replies.", url+"#/replies")
@@ -76,14 +76,14 @@ func runTray(ctx context.Context, stop func(), url, dir string, e *engine.Engine
 					case <-update.ClickedCh:
 						go func() {
 							if err := e.CheckUpdate(ctx); err != nil {
-								deskNotify("Job Hunt couldn't look for updates", "It tries again by itself.", url+"#/you/app")
+								deskNotify("Job Hunt couldn't look for updates", "It tries again by itself.", url+"#/settings/app")
 							} else if u := e.NewerVersion(); u == nil {
-								deskNotify("Job Hunt is up to date", "You are on the newest version.", url+"#/you/app")
+								deskNotify("Job Hunt is up to date", "You are on the newest version.", url+"#/settings/app")
 							} else if e.InstallUpdate() == nil {
 								if e.UpdateWaiting() != "" {
-									deskNotify("Job Hunt "+u.Version+" is ready", "It installs as soon as the search in hand has finished.", url+"#/you/app")
+									deskNotify("Job Hunt "+u.Version+" is ready", "It installs as soon as the search in hand has finished.", url+"#/settings/app")
 								} else {
-									deskNotify("Installing Job Hunt "+u.Version, "It comes back by itself in about a minute.", url+"#/you/app")
+									deskNotify("Installing Job Hunt "+u.Version, "It comes back by itself in about a minute.", url+"#/settings/app")
 								}
 							}
 						}()

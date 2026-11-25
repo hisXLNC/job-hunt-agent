@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"jobhunt/internal/brain"
@@ -168,6 +169,10 @@ func (e *Engine) readLeadsSoon() {
 }
 
 // ReadLeads sizes up every lead not read yet.
+// leadMu keeps one change to a lead's reading at a time, so a size-up that
+// finishes while the person writes a note never puts back an older one.
+var leadMu sync.Mutex
+
 func (e *Engine) ReadLeads(ctx context.Context) error {
 	if e.LLM().Engine == "" {
 		return llm.ErrNotConnected
@@ -188,9 +193,13 @@ func (e *Engine) ReadLeads(ctx context.Context) error {
 				return err
 			}
 			rd = tidyLead(rd)
-			// Notes the person asked for (and their own wording) outlive a new size-up.
+			// Notes the person asked for (and their own wording) outlive a new
+			// size-up: read as they are now, not as they were when it began.
+			leadMu.Lock()
 			var was brain.LeadReading
-			json.Unmarshal(l.Reading, &was)
+			if now, err := e.S.Lead(l.ID); err == nil {
+				json.Unmarshal(now.Reading, &was)
+			}
 			rd.Note, rd.FollowUp, rd.Edited = was.Note, was.FollowUp, was.Edited
 			state := "open"
 			if !rd.Hiring && l.Source != "you" {
@@ -201,7 +210,9 @@ func (e *Engine) ReadLeads(ctx context.Context) error {
 				// An employer the person chose never to see stays out of sight.
 				state = "dismissed"
 			}
-			if err := e.S.SetLeadReading(l.ID, rd.Fit, rd.Company, state, rd); err != nil {
+			err = e.S.SetLeadReading(l.ID, rd.Fit, rd.Company, state, rd)
+			leadMu.Unlock()
+			if err != nil {
 				return err
 			}
 		}
@@ -473,6 +484,8 @@ func (e *Engine) LeadStep(id int64, step string, on bool) error {
 
 // SaveLeadNote keeps the person's own wording of the note or the follow-up.
 func (e *Engine) SaveLeadNote(id int64, which, subject, body string) error {
+	leadMu.Lock()
+	defer leadMu.Unlock()
 	l, err := e.S.Lead(id)
 	if err != nil {
 		return err
@@ -523,6 +536,8 @@ func (e *Engine) WriteLeadNote(ctx context.Context, id int64, which string) (bra
 	}
 	m.Subject, m.Body = clipRunes(m.Subject, 200), clipRunes(m.Body, 4000)
 	// Read again: the person may have changed the other note meanwhile.
+	leadMu.Lock()
+	defer leadMu.Unlock()
 	if l, err = e.S.Lead(id); err != nil {
 		return brain.Message{}, err
 	}

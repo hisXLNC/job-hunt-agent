@@ -2,6 +2,53 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.50
+
+The rest of the old Job Hunt, rebuilt.
+
+- **Settings** has its own page, with a menu down the side: Connections, Browser side panel, The
+  app, Debugging. Old links still land in the right place.
+- **Mail.** Job Hunt writes a reply, follow-up or thank-you only when you press Write it. New
+  switches on the inbox card, all off at first: save drafts in Gmail in the thread; send one
+  message with one press from your own address (it shows who, the subject and the text first);
+  label the mail it reads (JobHunt/Applied, JobHunt/Recruiters); find recruiters in two years of
+  mail. Recruiters can be saved as a spreadsheet.
+- **Submit application.** After the side panel fills a form, it lists what was filled and a Submit
+  button that sends that one form when you press it, then marks the role applied.
+- **Google Calendar, both ways**, with a key you make once (steps in Settings, Connections):
+  interviews go in with a prep block and reminders; moves and deletions there come back here.
+  An interview deleted there keeps its notes with the role.
+- **Another AI** (ChatGPT, Gemini, Grok, Groq, OpenRouter or a model on your computer) can do the
+  searching or everything; Claude takes over whenever it fails.
+- **Search.** Say what you want (level, permanent or contract, industries, deal-breakers, career
+  path) and roles are tagged On path / Off path. Every place you list is searched for every
+  title. Each source shows what became of each posting. Set-aside roles can be scored again;
+  Search now ignores the schedule; search times are suggested from when roles were posted; a
+  pasted key is tried before it is saved. New employers are found by themselves, dead job boards
+  dropped, company ratings looked up (★, and an optional floor), untouched roles cleared after
+  30/60/90 days (off at first), budget mode (off at first), a model per task, and Indeed through
+  your Claude account's connector (Claude Code sign-in).
+- **Leads**: a new page for hiring posts the side panel reads on LinkedIn, funding news, and leads
+  you paste. Each is sized up with who to write to; the note is written when you ask.
+- **Progress** goes deeper: 7/30/90 days, results by CV, fit, kind of role and pay, where roles
+  turn up, Claude's weekly reading, and what your no's say, fed into tailoring (can be switched off).
+- **This computer.** Wakes the PC for searches and says when Windows slept; keeps your tailored
+  CVs and letters in a folder; installs and signs in to Claude Code with one button; a folder
+  picker; a choice of browser; a "Send to Job Hunt" bookmark and optional pick-up of copied job links.
+- **Side panel** updates itself, fills a job site's own profile from your CV, and adds a
+  posting's hiring team to People.
+- **Two computers.** Carry on where you left off on another computer; "Hand over" saves a fresh
+  copy; an applications spreadsheet is kept in the copies folder.
+- **Phone.** Edit letters, ask for changes, write follow-ups, People, add a role from a link,
+  search now, and add Job Hunt to the home screen.
+- **CVs.** Each CV has its own titles, words and letter style, Find more titles, Replace file, a
+  screening check and what Claude read. Replacing a CV rewrites waiting roles and keeps your edits.
+- **LinkedIn through Apify.** Test now runs one real search (10 postings, about a cent) and marks
+  the source Working, or says plainly when nothing came back. Saving a key only checks the key.
+- A note you write on a lead is no longer lost if the lead is being sized up at the same moment.
+- Also: LinkedIn note length 300 or 200, Write all follow-ups, a role beside the list on wide
+  screens, and a daily reminder until an update is installed.
+
 ## 26.11.49
 
 - Testing a job source under Connections (Google for Jobs and the others) no longer breaks the

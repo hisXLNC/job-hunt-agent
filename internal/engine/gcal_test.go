@@ -340,7 +340,12 @@ func TestGoogleCalendarBothWays(t *testing.T) {
 		t.Error("a dismissed entry is still offered")
 	}
 
-	// Removed in Google Calendar: removed here, with a note.
+	// Removed in Google Calendar: removed here, with a note, and what the
+	// person wrote about it kept with the role.
+	if tk, err := e.S.Talk(tid); err == nil {
+		tk.Notes = "Ask about the team's size"
+		e.S.SaveTalk(tk)
+	}
 	g.mu.Lock()
 	g.events[l.Event]["status"] = "cancelled"
 	g.mu.Unlock()
@@ -356,6 +361,10 @@ func TestGoogleCalendarBothWays(t *testing.T) {
 	acts, _ = e.S.ActivityList(store.ActivityFilter{RoleID: rid, Limit: 20})
 	if !hasActivity(acts, "Removed in Google Calendar") {
 		t.Errorf("no note about the removal: %+v", acts)
+	}
+	var mine RoleNotes
+	if e.S.Doc(rid, "mynotes", &mine); !strings.Contains(mine.Text, "Ask about the team's size") {
+		t.Errorf("the interview's notes were lost: %q", mine.Text)
 	}
 
 	// Removed here: Job Hunt's prep block goes, the person's own entry stays.

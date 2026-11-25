@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"jobhunt/internal/trace"
 )
 
 // LinkedIn through Apify (apify.com): a scraper there runs LinkedIn's job
@@ -76,14 +79,30 @@ func (c *Client) findApify(ctx context.Context, k Keys, q Query) ([]Posting, err
 		}
 	}
 	if run.Data.Status != "SUCCEEDED" {
-		return nil, fmt.Errorf("sources: the Apify scraper stopped (%s)", strings.ToLower(run.Data.Status))
+		why := strings.ToLower(run.Data.Status)
+		if m := strings.TrimSpace(run.Data.Message); m != "" {
+			why += ": " + m[:min(len(m), 200)]
+		}
+		return nil, fmt.Errorf("sources: the Apify scraper stopped (%s)", why)
 	}
 	var items []map[string]any
 	path = "/v2/datasets/" + url.PathEscape(run.Data.Dataset) + "/items?clean=true&format=json"
 	if err := c.keyedJSON(ctx, "GET", base+path, "api.apify.com/v2/datasets/…/items", headers, nil, &items); err != nil {
 		return nil, err
 	}
-	return parseApify(items), nil
+	posts := parseApify(items)
+	// What the scraper gave back, so a problem can be told from "nothing new".
+	if len(posts) < len(items) {
+		var keys []string
+		for k := range items[0] {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		trace.Log("search", "apify: %d items, %d read as postings; first item has %s", len(items), len(posts), strings.Join(keys, ","))
+	} else {
+		trace.Log("search", "apify: %d postings", len(posts))
+	}
+	return posts, nil
 }
 
 type apifyRun struct {
@@ -91,6 +110,7 @@ type apifyRun struct {
 		ID      string `json:"id"`
 		Status  string `json:"status"`
 		Dataset string `json:"defaultDatasetId"`
+		Message string `json:"statusMessage"`
 	} `json:"data"`
 }
 

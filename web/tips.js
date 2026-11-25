@@ -15,7 +15,7 @@ const BY_WORDS = {
   'i withdrew': 'Close this role because you pulled out. It stays in your history.',
   'bring back': 'Reopen this role and put it back where it was.',
   'they answered': 'Mark that this person replied, so no follow-up is drafted.',
-  'i sent it': 'Mark this note as sent. Job Hunt never sends anything itself.',
+  'i sent it': 'Mark this note as sent. Job Hunt sends nothing by itself; only your press on Send does.',
   'let it go': 'Stop following up on this note.',
   'write a note': 'Claude drafts a short note to this person for you to read, change and send yourself.',
   'write a follow-up': 'Claude drafts a polite follow-up for you to send yourself.',

@@ -37,19 +37,19 @@ type LeadWho struct {
 
 // LeadReading is Claude's sizing-up of a lead.
 type LeadReading struct {
-	Hiring   bool      `json:"hiring"`
-	Company  string    `json:"company"`
-	Role     string    `json:"role"`
-	Place    string    `json:"place"`
-	Worth    string    `json:"worth"` // yes, maybe, no
-	Fit      int       `json:"fit"`
-	Why      string    `json:"why"`
-	Help     []string  `json:"help"`
-	Who      []LeadWho `json:"who"`
+	Hiring  bool      `json:"hiring"`
+	Company string    `json:"company"`
+	Role    string    `json:"role"`
+	Place   string    `json:"place"`
+	Worth   string    `json:"worth"` // yes, maybe, no
+	Fit     int       `json:"fit"`
+	Why     string    `json:"why"`
+	Help    []string  `json:"help"`
+	Who     []LeadWho `json:"who"`
 	// Note and FollowUp are written only when the person asks (WriteLeadNote);
 	// the size-up never fills them.
-	Note     Message   `json:"note"`
-	FollowUp Message   `json:"follow_up"`
+	Note     Message `json:"note"`
+	FollowUp Message `json:"follow_up"`
 	// Edited: the person changed the note or the follow-up themselves.
 	Edited bool `json:"edited,omitempty"`
 }

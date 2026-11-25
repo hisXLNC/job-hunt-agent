@@ -201,7 +201,7 @@ func main() {
 	watchClipboard(ctx, e)
 	linkBrowser = func() string { return e.Desk().Browser }
 	if from := e.WhatsNew(); from != "" {
-		e.Tell("Job Hunt updated to "+api.Version, "It installed by itself. Open it to see what changed.", "#/you/app")
+		e.Tell("Job Hunt updated to "+api.Version, "It installed by itself. Open it to see what changed.", "#/settings/app")
 	}
 	go e.Run()
 	log.Printf("Job Hunt %s listening on %s, data in %s", api.Version, url, dir)

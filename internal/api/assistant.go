@@ -79,7 +79,7 @@ var tools = []tool{
 	{Method: "GET", Pattern: "/api/arriving", Help: "The arrival pack for someone moving to the city: the CV changes proposed for local readers and the plan."},
 	{Method: "GET", Pattern: "/api/connections", Help: "How Claude, the phone, the inbox and the browser side panel are connected, and Claude usage this week. Secrets are left out."},
 	{Method: "GET", Pattern: "/api/app", Help: "The version, where the data is kept, recent changes the program made to its own settings, recent Claude calls and problems."},
-	{Method: "GET", Pattern: "/api/import/old", Help: "Whether the old Job Hunt's data is on this computer and what it holds (jobs applied to, prepared, CVs, people), and what was last brought over from it. Bringing it over is the person's own button under You, The app."},
+	{Method: "GET", Pattern: "/api/import/old", Help: "Whether the old Job Hunt's data is on this computer and what it holds (jobs applied to, prepared, CVs, people), and what was last brought over from it. Bringing it over is the person's own button under Settings, The app."},
 	{Method: "GET", Pattern: "/api/places", Help: "Where Job Hunt looks besides employers' own boards: the title searches (LinkedIn, Job Bank, FreeHire), the job sites and recruiters being watched, whether each is on, what each found in the last full search, any that is resting and why, and the sites that could be added (suggested)."},
 	{Method: "GET", Pattern: "/api/notices", Help: "What is under the bell: the last fifty things Job Hunt told the person (a fresh strong role, someone wrote, a new version, a problem), newest first, each with the page it opens and whether it was read."},
 	{Method: "GET", Pattern: "/api/calendar", Help: "Everything with a date around a month: interviews, booked conversations, the days follow-ups are due and the days postings close. Query: from, to (unix seconds, at most 100 days apart); left out means this month."},
@@ -150,7 +150,7 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/roles/{id}/reopen", Class: mustAsk, Kind: "role", Label: "Reopen a role", Help: "Only when the person asks for this role by name."},
 	{Method: "POST", Pattern: "/api/roles/tidy", Class: mustAsk, Label: "Clear taken-down roles", Help: `Closes (never deletes) every role whose posting was taken down, or that no search has seen for a month, and that the person never prepared or applied to. "counts.taken_down" in GET /api/roles says how many that is.`},
 	{Method: "PUT", Pattern: "/api/profile", Class: mustAsk, Label: "Change your profile", Help: `Body: only the fields to change, from GET /api/you: name, headline, summary, years, strengths, rare, home, city, places (other towns that count as the city, besides its own surrounding area listed under "area"), country, arrive_on (YYYY-MM-DD), work_status (citizen|resident|permit|none), start_early, titles {"level": [], "step_up": [], "sideways": []}, domain, avoid, workplaces (remote,hybrid,onsite), pay_floor, pay_unit, letter_style (standard|formal|short|warm: how new letters are written), signature (their own closing under a letter, one line each, "" for the usual), chase_days (days of silence after applying before a follow-up is suggested; 0 = never), weekly_goal (applications a week they aim for; 0 = no goal). A list is replaced whole: send the full new list.`},
-	{Method: "PUT", Pattern: "/api/phone", Class: mustAsk, Label: "Change phone notifications", Help: `Body: any of {"on", "min_fit", "quiet_from", "quiet_to"} (hours 0-23). Where notifications are sent is changed by the person under You, Connections.`, Show: []string{"on", "min_fit", "quiet_from", "quiet_to"}, Only: true},
+	{Method: "PUT", Pattern: "/api/phone", Class: mustAsk, Label: "Change phone notifications", Help: `Body: any of {"on", "min_fit", "quiet_from", "quiet_to"} (hours 0-23). Where notifications are sent is changed by the person under Settings, Connections.`, Show: []string{"on", "min_fit", "quiet_from", "quiet_to"}, Only: true},
 	{Method: "POST", Pattern: "/api/places/remove", Class: mustAsk, Label: "Stop watching a job site", Help: `Body: {"id": "..."}. Roles already found there stay.`, Show: []string{"id"}, Only: true},
 	{Method: "DELETE", Pattern: "/api/cvs/{id}", Class: mustAsk, Kind: "cv", Label: "Remove a CV"},
 	{Method: "DELETE", Pattern: "/api/people/{id}", Class: mustAsk, Kind: "person", Label: "Remove a person"},
@@ -662,7 +662,7 @@ func (s *Server) assistCall(ctx context.Context, c brain.AssistCall, run *assist
 	}
 	t, id := findTool(method, u.Path)
 	if t == nil {
-		note.Result = "Not made: that is not available to you. If it is about a password, a key or a connection, the person does it themselves under You, Connections."
+		note.Result = "Not made: that is not available to you. If it is about a password, a key or a connection, the person does it themselves under Settings, Connections."
 		return note
 	}
 	body := []byte(strings.TrimSpace(c.Body))
