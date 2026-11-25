@@ -2,6 +2,10 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.45
+
+- **Career path shows where each route leads, and its ceiling.** Pay in 3, 5 and 10 years was the starting role with raises, which kept the numbers low. It is now the pay of the role you would hold by then as you are promoted, named under each figure, with a new Ceiling column: the top of the route as people usually reach it and what it pays. The currency is written out (C$, and "in Canadian dollars"), not a bare $. Your career page reads itself again once to fill these in.
+
 ## 26.11.44
 
 - **Today's numbers sit in the top bar, beside "Today".** Ready to send, applied this week, in conversation and people who know you no longer take a row of their own, so the list starts higher. On a narrower window the ones that don't fit drop out whole; hover a number for its detail.

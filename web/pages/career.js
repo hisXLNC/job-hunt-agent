@@ -4,7 +4,7 @@ import { html, api, post, toast, day, rel, with_, BAND } from '../app.js';
 // Claude reads the routes and the gaps; every count of postings is Job Hunt's own.
 
 const TONE = { step_up: 'blue', sideways: 'info', level: '' };
-const SIGN = { CAD: '$', USD: '$', AUD: '$', NZD: '$', GBP: '£', EUR: '€' };
+const SIGN = { CAD: 'C$', USD: 'US$', AUD: 'A$', NZD: 'NZ$', GBP: '£', EUR: '€' };
 const money = (n, cur) => (n > 0 ? `${SIGN[cur] ?? (cur ? cur + ' ' : '')}${n >= 10000 ? Math.round(n / 1000) + 'k' : n.toLocaleString()}` : '–');
 // "Indirect tax" reads as "indirect tax" mid-sentence; "SAP" stays.
 const lower = s => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
@@ -21,8 +21,8 @@ function routeCard(r, i, d, chosen, at) {
     <div class="row" style="gap:6px"><span class="chip ${TONE[r.band]}">${BAND[r.band] || r.band}</span>${r.recommended ? html`<span class="chip good">Recommended</span>` : ''}<span class="grow"></span><span class="s m" style="white-space:nowrap" title="Claude's judgement of how your CV as it stands would do for this role">fit today</span><b style="font-size:17px;color:var(--${fitTone(r.fit)})">${r.fit}</b></div>
     <h3 style="font-size:17px">${r.title}</h3>
     <p class="s ink2">${r.why} <span class="m">${seenLine(r)}</span></p>
-    <table class="tbl" style="margin:0 -2px"><thead><tr><th>Now</th><th>In 3 years</th><th>In 5</th><th>In 10</th></tr></thead>
-      <tbody><tr><td class="s">${money(d.now.pay, cur)}</td><td class="s"><b>${money(r.pay3, cur)}</b></td><td class="s"><b>${money(r.pay5, cur)}</b></td><td class="s"><b>${money(r.pay10, cur)}</b></td></tr></tbody></table>
+    <table class="tbl ladder" style="margin:0 -2px;table-layout:fixed"><thead><tr><th>Now</th><th>In 3 years</th><th>In 5</th><th>In 10</th><th title="The top of this path as people usually reach it, and the most it typically pays">Ceiling</th></tr></thead>
+      <tbody><tr><td class="s" style="vertical-align:top">${money(d.now.pay, cur)}</td>${[[r.pay3, r.title3], [r.pay5, r.title5], [r.pay10, r.title10], [r.ceiling, r.ceiling_title]].map(([p, t]) => html`<td class="s" style="vertical-align:top;overflow-wrap:anywhere" title="${t || ''}"><b>${money(p, cur)}</b>${t ? html`<span class="xs m" style="display:block;white-space:normal;line-height:1.25;margin-top:2px">${t}</span>` : ''}</td>`)}</tr></tbody></table>
     ${r.gaps.length ? html`<div><div class="eb" style="margin-bottom:4px">What's missing</div>${r.gaps.map(g => html`<div class="s row" style="gap:6px"><span style="color:var(--${g.done ? 'good' : 'warn'})">${g.done ? '✓' : '●'}</span><span style="${g.done ? 'text-decoration:line-through;color:var(--muted)' : ''}">${g.gap}</span></div>`)}</div>` : ''}
     <div class="row wrap" style="gap:6px;margin-top:auto">
       ${r.searching ? html`<span class="btn sm p" title="${r.titles.join(', ')}" aria-disabled="true">Searching these titles</span>` : html`<button class="btn sm" data-act="search" data-route="${i}" data-busy title="Adds ${r.titles.join(', ')} to what Job Hunt searches for. Change them under Radar → Titles.">Search these titles</button>`}
@@ -68,7 +68,7 @@ export default {
       <div class="card row wrap" style="gap:24px;align-items:center">
         <div><div class="eb">Where you are</div><div style="font-size:19px;font-weight:700;margin-top:2px">${n.title}</div>
           <div class="s m">${[n.pay ? `About ${money(n.pay, n.currency)} a year` : '', n.years ? `${n.years} year${n.years === 1 ? '' : 's'}${n.summary ? ' in ' + lower(n.summary) : ''}` : n.summary].filter(Boolean).join(' · ')}</div></div>
-        <div class="grow s ink2" style="min-width:300px">Three ways your CV can go from here. Pay is Claude's estimate${d.web ? ' from public pay data' : ''}; check it before you rely on it. Read ${day(d.at)} (${rel(d.at)}), and again every Monday.${d.note ? html`<div class="m" style="margin-top:4px">${d.note}</div>` : ''}</div>
+        <div class="grow s ink2" style="min-width:300px">Three ways your CV can go from here. Pay is yearly base pay in ${{ CAD: 'Canadian dollars', USD: 'US dollars', GBP: 'pounds', EUR: 'euros', AUD: 'Australian dollars' }[d.now?.currency] || d.now?.currency || 'local currency'}, Claude's estimate${d.web ? ' from public pay data' : ''}; check it before you rely on it. Read ${day(d.at)} (${rel(d.at)}), and again every Monday.${d.note ? html`<div class="m" style="margin-top:4px">${d.note}</div>` : ''}</div>
         ${lookBtn}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px;align-items:stretch">${d.routes.map((x, i) => routeCard(x, i, d, chosen, route))}</div>
       <div class="cols wide"><div class="col" style="gap:14px">${r ? plan(r, d) : ''}</div>

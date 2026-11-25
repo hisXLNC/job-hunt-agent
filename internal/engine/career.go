@@ -275,6 +275,7 @@ func (e *Engine) readCareer(ctx context.Context) error {
 		return errors.New("Claude's answer held no routes")
 	}
 	e.S.Set("career", careerDoc{Career: out, At: e.Now().Unix(), Web: web})
+	e.S.Set("career:ladder", e.Now().Unix())
 	// Marks stay on the gaps that are still there.
 	keep := map[string]int64{}
 	for _, r := range out.Routes {
@@ -498,5 +499,10 @@ func (e *Engine) SearchCareerTitles(route int, title string) ([]string, error) {
 // careerDue: the reading is from before this week's Monday.
 func (e *Engine) careerDue(now time.Time) bool {
 	d, _ := e.careerDoc()
-	return d.At < weekStart(now).Unix()
+	if d.At < weekStart(now).Unix() {
+		return true
+	}
+	// A reading from before each route named its titles and ceiling is read
+	// again once, so the pay shows where the route leads.
+	return len(d.Routes) > 0 && d.Routes[0].CeilingTitle == "" && e.S.GetInt("career:ladder") == 0
 }

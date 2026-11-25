@@ -30,16 +30,22 @@ type CareerGap struct {
 
 // CareerRoute is one way the CV can go.
 type CareerRoute struct {
-	Title       string      `json:"title"`
-	Band        string      `json:"band"` // step_up, sideways, level
-	Why         string      `json:"why"`
-	Fit         int         `json:"fit"`
-	Recommended bool        `json:"recommended"`
-	Pay3        int         `json:"pay3"`
-	Pay5        int         `json:"pay5"`
-	Pay10       int         `json:"pay10"`
-	Titles      []string    `json:"titles"` // what to search for to find it
-	Gaps        []CareerGap `json:"gaps"`
+	Title       string `json:"title"`
+	Band        string `json:"band"` // step_up, sideways, level
+	Why         string `json:"why"`
+	Fit         int    `json:"fit"`
+	Recommended bool   `json:"recommended"`
+	Pay3        int    `json:"pay3"`
+	Pay5        int    `json:"pay5"`
+	Pay10       int    `json:"pay10"`
+	// The title usually held at each point, with steady progress.
+	Title3       string      `json:"title3"`
+	Title5       string      `json:"title5"`
+	Title10      string      `json:"title10"`
+	CeilingTitle string      `json:"ceiling_title"` // the top of this path as people usually reach it
+	Ceiling      int         `json:"ceiling"`       // the most that top role usually pays
+	Titles       []string    `json:"titles"`        // what to search for to find it
+	Gaps         []CareerGap `json:"gaps"`
 }
 
 // CareerTitle is a title worth adding to the search.
@@ -82,9 +88,14 @@ var careerShape = llm.Obj(
 		"why", llm.Str("one or two plain sentences: why this route suits this CV, and what the work is like. No numbers of postings; Job Hunt counts those itself"),
 		"fit", llm.Int("0 to 100: how well the CV as it stands would do for this role today"),
 		"recommended", llm.Bool("true for the one route you recommend, false for the others"),
-		"pay3", llm.Int("typical yearly pay three years along this route, same currency, whole units; 0 if you cannot judge it"),
-		"pay5", llm.Int("the same, five years along"),
-		"pay10", llm.Int("the same, ten years along"),
+		"title3", llm.Str("the title someone taking this route from their position usually holds three years on, with steady progress (promotions included, not the same job with raises)"),
+		"pay3", llm.Int("the typical yearly base pay of that title3 role where they want to work, same currency, whole units; 0 if you cannot judge it"),
+		"title5", llm.Str("the same, five years on"),
+		"pay5", llm.Int("the typical yearly base pay of the title5 role"),
+		"title10", llm.Str("the same, ten years on"),
+		"pay10", llm.Int("the typical yearly base pay of the title10 role"),
+		"ceiling_title", llm.Str("the top of this path as people usually reach it, such as Director of Tax Technology or VP Product"),
+		"ceiling", llm.Int("the most that top role typically pays a year where they want to work, base pay, whole units, not counting rare outliers"),
 		"titles", llm.Arr("2 to 4 job titles to search for to find this route's roles, as postings word them", llm.Str("a title")),
 		"gaps", llm.Arr("2 to 4 things postings for this route ask for that the CV does not show yet, the most asked-for first", llm.Obj(
 			"id", llm.Str("a short lowercase id with hyphens. Keep the id of a gap from last week that still applies, even if you word it differently; a new one for a new gap"),
@@ -126,7 +137,7 @@ func (b *Brain) Career(ctx context.Context, in CareerInput) (Career, error) {
 		Task: "career",
 		System: house + `
 
-Your task: show the person where their CV can take them in the place they want to work, and the smallest honest steps that get them there. Read the CV closely: the routes must follow from what they have actually done. Prefer routes that employers there post often. Do not suggest a title they asked never to be shown. Gaps are what postings ask for and the CV does not show; when the CV has the evidence but buries it, the step is to bring it forward. ` + pay + `
+Your task: show the person where their CV can take them in the place they want to work, and the smallest honest steps that get them there. Read the CV closely: the routes must follow from what they have actually done. Prefer routes that employers there post often. Do not suggest a title they asked never to be shown. Gaps are what postings ask for and the CV does not show; when the CV has the evidence but buries it, the step is to bring it forward. Pay along a route is the pay of the role they would hold by then as they are promoted, not the starting role with raises; weigh where each route leads and its ceiling, not only the next job. All pay is yearly base pay in the currency of the place they want to work. ` + pay + `
 
 ` + in.Person.Block(),
 		Prompt: pr.String(),

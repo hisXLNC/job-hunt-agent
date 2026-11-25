@@ -925,9 +925,9 @@ func standCareer(in CareerInput) Career {
 	return Career{
 		Now: CareerNow{Title: now, Pay: 98000, Currency: "CAD", Years: max(pr.Years, 1), Summary: firstNonEmpty(strings.Join(pr.Strengths[:min(2, len(pr.Strengths))], " and "), "your field")},
 		Routes: []CareerRoute{
-			{Title: up, Band: "step_up", Why: "The shortest step: the same work, leading it.", Fit: 82, Recommended: true, Pay3: 118000, Pay5: 132000, Pay10: 155000, Titles: []string{up, up2}, Gaps: gaps("lead-team", "budget")},
-			{Title: side, Band: "sideways", Why: "Your experience, used for several clients rather than one employer.", Fit: 76, Pay3: 108000, Pay5: 122000, Pay10: 145000, Titles: []string{side, now + " Advisor"}, Gaps: gaps("product", "data")},
-			{Title: up2, Band: "step_up", Why: "A longer step: setting direction for a whole function.", Fit: 64, Pay3: 125000, Pay5: 145000, Pay10: 175000, Titles: []string{up2}, Gaps: gaps("lead-team", "data")},
+			{Title: up, Band: "step_up", Why: "The shortest step: the same work, leading it.", Fit: 82, Recommended: true, Title3: up, Pay3: 128000, Title5: up2, Pay5: 150000, Title10: "Director, " + now, Pay10: 185000, CeilingTitle: "VP, " + now, Ceiling: 240000, Titles: []string{up, up2}, Gaps: gaps("lead-team", "budget")},
+			{Title: side, Band: "sideways", Why: "Your experience, used for several clients rather than one employer.", Fit: 76, Title3: side, Pay3: 112000, Title5: "Senior " + side, Pay5: 130000, Title10: "Partner, " + side, Pay10: 175000, CeilingTitle: "Partner, " + side, Ceiling: 260000, Titles: []string{side, now + " Advisor"}, Gaps: gaps("product", "data")},
+			{Title: up2, Band: "step_up", Why: "A longer step: setting direction for a whole function.", Fit: 64, Title3: up, Pay3: 125000, Title5: up2, Pay5: 150000, Title10: "VP, " + now, Pay10: 210000, CeilingTitle: "Chief Tax Officer", Ceiling: 300000, Titles: []string{up2}, Gaps: gaps("lead-team", "data")},
 		},
 		Try: []CareerTitle{{Title: now + " Lead", Band: "step_up"}, {Title: "Senior " + now, Band: "level"}, {Title: now + " Specialist", Band: "sideways"}},
 	}
