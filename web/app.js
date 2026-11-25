@@ -415,9 +415,10 @@ let carryShown = '';
 function carryBox() {
   const o = app.state?.other_computer, key = o ? o.copy + ':' + o.at : '';
   if (key === carryShown) return;
+  if (o && document.getElementById('whatsnew')) return; // offered once "what's new" is closed
   carryShown = key;
   document.getElementById('carryon')?.remove();
-  if (!o || document.getElementById('whatsnew')) return;
+  if (!o) return;
   const box = document.createElement('div');
   box.id = 'carryon';
   box.className = 'modal';
@@ -481,7 +482,7 @@ async function refreshState() {
 document.addEventListener('click', async ev => {
   const go = ev.target.closest('[data-resume]');
   if (go) { ev.preventDefault(); try { await post('jobs/resume'); } catch (e) { toast(e.message, true); } refreshState(); return; }
-  if (ev.target.closest('[data-seen]')) { document.getElementById('whatsnew')?.remove(); post('update/seen').catch(() => {}); return; }
+  if (ev.target.closest('[data-seen]')) { document.getElementById('whatsnew')?.remove(); post('update/seen').catch(() => {}); carryBox(); return; }
   const upd = ev.target.closest('[data-update]');
   if (upd) { ev.preventDefault(); upd.disabled = true; try { const r = await post('update/install'); toast(r?.waiting ? 'It installs as soon as what Job Hunt is doing now has finished. Nothing is cut short.' : 'Installing. Job Hunt comes back by itself in about a minute.'); } catch (e) { toast(e.message, true); } refreshState(); return; }
   const b = ev.target.closest('[data-stop]');
