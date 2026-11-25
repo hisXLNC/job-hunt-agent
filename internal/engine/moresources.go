@@ -481,7 +481,7 @@ type MoreSource struct {
 	Get    string `json:"get,omitempty"`
 	Link   string `json:"link,omitempty"`
 	HasKey bool   `json:"has_key"`
-	From   string `json:"from,omitempty"` // jsearch: where the key is from
+	From   string `json:"from,omitempty"`  // jsearch: where the key is from
 	Actor  string `json:"actor,omitempty"` // apify: the scraper chosen, if not the usual one
 	On     bool   `json:"on"`
 	State  string `json:"state"` // "working" | "problem" | "off" | "none" | "waiting"

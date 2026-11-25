@@ -56,9 +56,9 @@ type OldResult struct {
 	Employers     int      `json:"employers"`
 	Muted         int      `json:"muted"`
 	Sites         int      `json:"sites"`
-	Claude        string   `json:"claude"` // "" or how Claude was connected from the old settings
+	Claude        string   `json:"claude"`             // "" or how Claude was connected from the old settings
 	Searches      []string `json:"searches,omitempty"` // job searches whose keys came over
-	Notes         []string `json:"notes"`  // anything that did not come over, in words
+	Notes         []string `json:"notes"`              // anything that did not come over, in words
 }
 
 const oldDoneKey = "old.imported"

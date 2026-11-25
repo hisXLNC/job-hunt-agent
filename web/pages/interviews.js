@@ -54,10 +54,22 @@ function month(d, route) {
       <a class="btn sm" href="/api/calendar.ics" download title="Downloads job-hunt.ics: interviews and conversations with their times, follow-ups and closing dates as whole-day entries.">Download the next 90 days</a><button type="button" class="btn sm" data-act="copyfeed" data-text="${feed}" title="Copies ${feed}. In Outlook or another calendar program on this computer, choose to add a calendar from the internet and paste it.">Copy the address</button></div></div>`;
 }
 
+// Entries in the person's Google Calendar that name an employer they applied
+// to. Their words are outside text: shown, never acted on. Linking is the
+// person's button.
+function lookalikes(looks) {
+  if (!looks?.length) return '';
+  return html`<div class="card"><h3>In your Google Calendar</h3><p class="xs m" style="margin-top:3px">These entries name an employer you applied to. Link one and it becomes an interview here: Job Hunt prepares you for it and follows it if it moves.</p>
+    <div class="col" style="margin-top:12px;gap:14px">${looks.map(x => html`<form class="row wrap" data-act="linkgoogle" data-id="${x.id}">${tileDay(x.start)}<div class="grow" style="min-width:200px"><b>${x.title || 'An entry with no title'}</b><div class="s m">${when(x.start)} · ${Math.round((x.end - x.start) / 60)} min · ${employer(x.company, x.company_id)}</div></div>
+      ${x.roles.length > 1 ? html`<select name="role_id" aria-label="Which role it is for">${x.roles.map(r => html`<option value="${r.id}">${r.title}</option>`)}</select>` : html`<input type="hidden" name="role_id" value="${x.roles[0]?.id || ''}">`}
+      <button class="btn sm p" title="Makes this an interview for ${x.roles.length > 1 ? 'the role you choose' : x.roles[0]?.title}, and moves the role to Interview.">Link to application</button><button type="button" class="btn sm ghost" data-act="dismissgoogle" data-id="${x.id}">Not an interview</button></form>`)}</div></div>`;
+}
+
 function list(d, route) {
   const q = route.q;
   const soon = new Date(Date.now() + 86400000); soon.setMinutes(0, 0, 0);
   return html`<div class="body">${tabs('list', route)}<div class="cols wide"><div class="col" style="gap:14px">
+    ${lookalikes(d.looks)}
     <div class="card"><h3>Coming up</h3>${d.upcoming?.length ? html`<div class="col" style="margin-top:12px;gap:14px">${d.upcoming.map(t => row(t))}</div>` : html`<p class="s m" style="margin-top:8px">Nothing booked. A coffee with someone in your field counts: add it and Job Hunt prepares you for it.</p>`}</div>
     ${d.past?.length ? html`<div class="card"><h3>Behind you</h3><div class="col" style="margin-top:12px;gap:14px">${d.past.map(t => row(t, true))}</div></div>` : ''}
   </div>
@@ -76,7 +88,7 @@ function one(d) {
   return html`<div class="body cols wide"><div class="col" style="gap:14px">
     <div class="card row" style="gap:16px;padding:20px">${tileDay(t.at, past)}<div class="grow"><div class="row wrap" style="gap:8px"><span class="chip blue">${KINDS[t.kind] || t.kind}</span><span class="s m">${when(t.at)} · ${past ? rel(t.at) : soon(t.at)} · ${t.minutes} min</span></div>
       <h2 style="font-size:21px;margin-top:4px">${t.title}</h2><div class="s m">${t.person}${t.person && t.company ? ' · ' : ''}${employer(t.company, t.company_id)}${t.role ? html` · ${t.role_id ? html`<a class="emp" href="#/roles/${t.role_id}">${t.role}</a>` : t.role}` : ''}</div></div>
-      <div class="col" style="gap:6px">${link ? html`<a class="btn p" href="${link}" target="_blank" rel="noopener noreferrer">Join</a>` : ''}${d.google && !past ? html`<a class="btn sm" href="${d.google}" target="_blank" rel="noopener noreferrer" title="Opens Google Calendar with this conversation filled in. Press Save there.">Add to Google Calendar</a>` : ''}<a class="btn sm" href="/api/talks/${t.id}/invite.ics" title="${ICS_TIP}">Calendar file</a></div></div>
+      <div class="col" style="gap:6px">${link ? html`<a class="btn p" href="${link}" target="_blank" rel="noopener noreferrer">Join</a>` : ''}${d.in_google ? html`<span class="chip good" title="Job Hunt keeps this in your Google Calendar, with a prep block before it. Move or delete it there and it changes here too.">In Google Calendar</span>` : d.google && !past ? html`<a class="btn sm" href="${d.google}" target="_blank" rel="noopener noreferrer" title="Opens Google Calendar with this conversation filled in. Press Save there.">Add to Google Calendar</a>` : ''}<a class="btn sm" href="/api/talks/${t.id}/invite.ics" title="${ICS_TIP}">Calendar file</a></div></div>
     ${d.clash && !past ? html`<div class="card row" style="border-color:var(--warn);background:var(--warn-soft)"><div class="grow"><h4>This lands on something in your calendar</h4><p class="s">${d.clash.title || 'An entry'} · ${d.clash.all_day ? 'all day' : html`${when(d.clash.start)} until ${clock(d.clash.end)}`}. Move one of them, or ask for another time.</p></div></div>` : ''}
     ${past ? after(d) : ''}
     ${d.preparing ? html`<div class="card row"><span class="spin"></span><div><h4>Writing your prep pack</h4><p class="s m">About a minute. The page updates by itself.</p></div></div>` : ''}
@@ -121,19 +133,27 @@ export default {
   topics: ['talks', 'people', 'roles'],
   load(route) {
     if (route.parts[1]) return api('talks/' + route.parts[1]);
-    if (route.q.view !== 'month') return api('talks');
+    if (route.q.view !== 'month') return Promise.all([api('talks'), api('google/lookalikes').catch(() => null)]).then(([t, g]) => ({ ...t, looks: g?.lookalikes || [] }));
     const [start, end] = gridOf(monthOf(route.q));
     const span = `from=${Math.floor(start / 1000)}&to=${Math.floor(end / 1000)}`;
     // The person's own entries come by a route of their own: Claude can read the month, not these.
     return Promise.all([api('calendar?' + span), api('owncal?' + span).catch(() => null)]).then(([c, o]) => {
       const own = (o?.events || []).map(x => ({ kind: 'own', day: ymd(new Date(x.start * 1000)), at: x.all_day ? 0 : x.start, title: x.title || 'Busy', sub: x.all_day ? 'All day' : `until ${clock(x.end)}` }));
       const items = [...(c.items || []), ...own].sort((a, b) => a.day < b.day ? -1 : a.day > b.day ? 1 : (a.at || 9e12) - (b.at || 9e12));
-      return { ...c, items, own: !!o?.on };
+      return { ...c, items, own: !!(o?.known ?? o?.on) };
     });
   },
   view: (d, route) => route.parts[1] ? one(d) : route.q.view === 'month' ? month(d, route) : list(d, route),
   actions: {
     copyfeed: ({ d }) => copy(d.text).then(() => false),
+    async linkgoogle({ f, d }) {
+      if (!+f.role_id) throw new Error('Choose the role it is for.');
+      const r = await post(`google/lookalikes/${encodeURIComponent(d.id)}/link`, { role_id: +f.role_id });
+      toast('Linked. Job Hunt is preparing you for it.');
+      location.hash = `#/interviews/${r.id}`;
+      return false;
+    },
+    dismissgoogle: ({ d }) => post(`google/lookalikes/${encodeURIComponent(d.id)}/dismiss`),
     async add({ f }) {
       const at = ts(f.at);
       if (!at) throw new Error('Choose when it is.');
