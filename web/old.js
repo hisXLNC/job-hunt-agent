@@ -11,7 +11,7 @@ function holds(o) {
 }
 function came(r) {
   return list([n(r.roles, 'role'), r.applied ? `${r.applied} applied to` : '', r.prepared ? `${r.prepared} prepared` : '', r.not_interested ? `${r.not_interested} you said no to` : '',
-    n(r.cvs, 'CV'), n(r.people, 'person', 'people'), n(r.talks, 'interview'), n(r.facts, 'fact about you', 'facts about you'), n(r.employers, 'employer to watch', 'employers to watch'), n(r.sites, 'job site to search', 'job sites to search'), n(r.muted, 'employer never to show', 'employers never to show')]);
+    n(r.cvs, 'CV'), n(r.people, 'person', 'people'), n(r.talks, 'interview'), n(r.facts, 'fact about you', 'facts about you'), n(r.employers, 'employer to watch', 'employers to watch'), n(r.sites, 'job site to search', 'job sites to search'), n(r.muted, 'employer never to show', 'employers never to show'), r.searches?.length ? `the keys for ${r.searches.join(', ')}` : '']);
 }
 
 // old is the answer of GET /api/import/old. first is true on the welcome screen.

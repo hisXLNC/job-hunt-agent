@@ -135,7 +135,7 @@ func TestKeyedSourcesAreSearched(t *testing.T) {
 		t.Fatalf("test of a refused key: %v", err)
 	}
 	for _, m := range e.MoreSources() {
-		want := map[string]string{"adzuna": "working", "jooble": "problem", "jsearch": "waiting", "alerts": "none"}[m.ID]
+		want := map[string]string{"adzuna": "working", "jooble": "problem", "jsearch": "waiting", "apify": "none", "alerts": "none"}[m.ID]
 		if m.State != want {
 			t.Errorf("%s: state %q, want %q (%s)", m.ID, m.State, want, m.Note)
 		}
@@ -192,7 +192,7 @@ func TestKeyedSourcesAreSearched(t *testing.T) {
 		rows[r.ID] = r
 		order = append(order, r.ID)
 	}
-	if got := strings.Join(order, ","); got != "boards,linkedin,jobbank,freehire,sites,adzuna,jooble,jsearch,alerts" {
+	if got := strings.Join(order, ","); got != "boards,linkedin,jobbank,freehire,sites,adzuna,jooble,jsearch,apify,alerts" {
 		t.Errorf("sources listed: %s", got)
 	}
 	for id, want := range map[string]string{"boards": "working", "jobbank": "off", "freehire": "off", "sites": "none", "adzuna": "working", "jooble": "working", "jsearch": "working", "alerts": "none"} {

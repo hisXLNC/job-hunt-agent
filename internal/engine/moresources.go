@@ -39,12 +39,14 @@ type SourceKeys struct {
 	Jooble      string         `json:"jooble,omitempty"`
 	JSearch     string         `json:"jsearch,omitempty"`
 	JSearchFrom string         `json:"jsearch_from,omitempty"` // "rapidapi" or "openwebninja"
+	Apify       string         `json:"apify,omitempty"`        // an Apify API token
+	ApifyActor  string         `json:"apify_actor,omitempty"`  // the scraper; empty means the default
 	Off         []string       `json:"off,omitempty"`          // sources switched off: "adzuna", "jooble", "jsearch", "alerts"
 	Limit       map[string]int `json:"limit,omitempty"`        // most requests a day, where the person set one
 }
 
 func (k SourceKeys) forSources() sources.Keys {
-	return sources.Keys{AdzunaID: k.AdzunaID, AdzunaKey: k.AdzunaKey, Jooble: k.Jooble, JSearch: k.JSearch, JSearchFrom: k.JSearchFrom}
+	return sources.Keys{AdzunaID: k.AdzunaID, AdzunaKey: k.AdzunaKey, Jooble: k.Jooble, JSearch: k.JSearch, JSearchFrom: k.JSearchFrom, Apify: k.Apify, ApifyActor: k.ApifyActor}
 }
 
 func (k SourceKeys) off(id string) bool {
@@ -92,6 +94,10 @@ var keyedSources = map[string]keyedSource{
 		about: "What Google shows when you search for jobs: postings from LinkedIn, Indeed, Glassdoor, ZipRecruiter and employers' own sites, read through a service called JSearch.",
 		get:   "Subscribe to JSearch on RapidAPI (the free plan gives about 200 requests a month) and copy the key it shows as X-RapidAPI-Key. A key bought from OpenWeb Ninja works too.",
 		link:  "https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch"},
+	"apify": {name: "LinkedIn through Apify", perDay: 24,
+		about: "LinkedIn's own job search, run for you by a scraper on Apify: every posting comes with its whole description, and LinkedIn never sees Job Hunt asking. One request is one title on a full search; quick checks stay on LinkedIn's free public search.",
+		get:   "Apify charges per posting after its free monthly credit (about $1 for 1,000 with the usual scraper). Sign up, then copy your API token from Settings, API & Integrations.",
+		link:  "https://console.apify.com/settings/integrations"},
 }
 
 // SourceState is what happened the last time one of these was asked.
@@ -175,6 +181,11 @@ func (e *Engine) SetSource(id string, in SourceKeyInput) error {
 		}
 	case "jooble":
 		k.Jooble = firstOf(key, k.Jooble)
+	case "apify":
+		k.Apify = firstOf(key, k.Apify)
+		if appID != "" {
+			k.ApifyActor = appID
+		}
 	case "jsearch":
 		k.JSearch = firstOf(key, k.JSearch)
 		from := sources.FromRapidAPI
@@ -239,6 +250,8 @@ func (e *Engine) ForgetSource(id string) error {
 		k.Jooble = ""
 	case "jsearch":
 		k.JSearch, k.JSearchFrom = "", ""
+	case "apify":
+		k.Apify, k.ApifyActor = "", ""
 	}
 	delete(k.Limit, id)
 	err := e.S.Set(sourceKeysKey, k)
@@ -259,6 +272,8 @@ func keyedPlain(id string, err error) (string, time.Duration) {
 		hint := "Copy it again from where you got it and save it here"
 		if id == "adzuna" {
 			hint = "The Application ID and the Application Key go together: copy both again"
+		} else if id == "apify" {
+			hint = "Copy the API token again from Apify's Settings, API & Integrations"
 		} else if id == "jsearch" {
 			hint = "Check that you are subscribed to JSearch, and that the right place is chosen under \"Key from\""
 		}
@@ -296,6 +311,20 @@ func (e *Engine) TestSource(ctx context.Context, id string) (int, error) {
 	title := "manager"
 	if all := p.Titles.All(); len(all) > 0 {
 		title = all[0].Title
+	}
+	if id == "apify" {
+		// Checked without running a scraper, which would cost.
+		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		if err := e.Src.TestApify(cctx, keys.Apify); err != nil {
+			why, _ := keyedPlain(id, err)
+			e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt = why, e.Now().Unix() })
+			e.S.Changed("connections", "runs")
+			return 0, errors.New(why)
+		}
+		e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt, s.RestUntil = "", 0, 0 })
+		e.S.Changed("connections", "runs")
+		return 0, nil
 	}
 	q := keyedQuery(p, title, 7*24*time.Hour)
 	q.Max = 5
@@ -392,7 +421,11 @@ func (e *Engine) searchKeyed(ctx context.Context, kind string, p store.Profile, 
 			e.Report(ctx, i, n, src.name+": "+title)
 			stats.Looked++
 			used++
-			cctx, cancel := context.WithTimeout(ctx, 40*time.Second)
+			wait := 40 * time.Second
+			if id == "apify" {
+				wait = 5 * time.Minute // a scraper run takes a minute or two
+			}
+			cctx, cancel := context.WithTimeout(ctx, wait)
 			posts, err := e.Src.FindKeyed(cctx, id, keys, keyedQuery(p, title, w))
 			cancel()
 			if err != nil {
@@ -449,6 +482,7 @@ type MoreSource struct {
 	Link   string `json:"link,omitempty"`
 	HasKey bool   `json:"has_key"`
 	From   string `json:"from,omitempty"` // jsearch: where the key is from
+	Actor  string `json:"actor,omitempty"` // apify: the scraper chosen, if not the usual one
 	On     bool   `json:"on"`
 	State  string `json:"state"` // "working" | "problem" | "off" | "none" | "waiting"
 	Note   string `json:"note,omitempty"`
@@ -473,6 +507,9 @@ func (e *Engine) MoreSources() []MoreSource {
 			Limit: k.limit(id), Fast: src.fast}
 		if st.Day == today {
 			m.Used = st.Used
+		}
+		if id == "apify" {
+			m.Actor = k.ApifyActor
 		}
 		if id == "jsearch" {
 			m.From = firstOf(k.JSearchFrom, sources.FromRapidAPI)

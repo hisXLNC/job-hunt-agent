@@ -465,3 +465,31 @@ func TestClearingOutTheOldJobsKeepsWhatWasAppliedTo(t *testing.T) {
 		t.Fatal("the clear-out ran twice")
 	}
 }
+
+func TestTheSearchKeysComeOver(t *testing.T) {
+	e, _ := newEngine(t)
+	e.SetSource("jooble", SourceKeyInput{Key: "jooble-mine"})
+	dir := oldData(t, true, false, map[string]string{
+		"adzuna.id": "adz-id", "adzuna.key": "adz-key", "jooble.key": "jooble-old",
+		"jsearch.key": "js-key", "jsearch.provider": "rapidapi", "apify.key": "apify-token", "apify.actor": "someone/other-scraper",
+	})
+	res, err := e.ImportOld(context.Background(), dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	k := e.sourceKeys()
+	if k.AdzunaID != "adz-id" || k.AdzunaKey != "adz-key" || k.JSearch != "js-key" || k.JSearchFrom != "rapidapi" || k.Apify != "apify-token" || k.ApifyActor != "someone/other-scraper" {
+		t.Fatalf("keys = %+v", k)
+	}
+	if k.Jooble != "jooble-mine" {
+		t.Fatal("a key saved here was replaced")
+	}
+	if len(res.Searches) != 3 {
+		t.Fatalf("searches = %v", res.Searches)
+	}
+	for _, s := range e.MoreSources() {
+		if (s.ID == "apify" || s.ID == "adzuna") && !s.HasKey {
+			t.Errorf("%s shows no key", s.ID)
+		}
+	}
+}

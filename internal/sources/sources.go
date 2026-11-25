@@ -45,6 +45,7 @@ const (
 	kindAdzuna          = "adzuna"
 	kindJooble          = "jooble"
 	kindJSearch         = "jsearch" // "Google for Jobs"
+	kindApify           = "apify"   // LinkedIn, through a scraper on Apify
 )
 
 const (

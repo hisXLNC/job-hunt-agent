@@ -36,7 +36,7 @@ const (
 )
 
 // Keyed lists the searches that need a key.
-var Keyed = []string{kindAdzuna, kindJooble, kindJSearch}
+var Keyed = []string{kindAdzuna, kindJooble, kindJSearch, kindApify}
 
 var (
 	// ErrNoKey means a search was asked for without its key.
@@ -56,6 +56,8 @@ type Keys struct {
 	Jooble      string
 	JSearch     string
 	JSearchFrom string // FromRapidAPI (the default) or FromOpenWebNinja
+	Apify       string // an Apify API token, for LinkedIn through a scraper there
+	ApifyActor  string // the scraper, as "user/name"; empty means ApifyActor
 }
 
 // Has reports whether everything one search needs is there.
@@ -67,6 +69,8 @@ func (k Keys) Has(source string) bool {
 		return strings.TrimSpace(k.Jooble) != ""
 	case kindJSearch:
 		return strings.TrimSpace(k.JSearch) != ""
+	case kindApify:
+		return strings.TrimSpace(k.Apify) != ""
 	}
 	return false
 }
@@ -87,6 +91,8 @@ func (c *Client) FindKeyed(ctx context.Context, source string, k Keys, q Query) 
 		out, err = c.findJooble(ctx, k, q)
 	case kindJSearch:
 		out, err = c.findJSearch(ctx, k, q)
+	case kindApify:
+		out, err = c.findApify(ctx, k, q)
 	default:
 		return nil, fmt.Errorf("sources: %q is not a search that takes a key", source)
 	}
@@ -115,6 +121,8 @@ func keyedErr(source string, err error) error {
 	switch {
 	case he.Status == 401 || he.Status == 403, source == kindJooble && he.Status == 404:
 		return fmt.Errorf("%w (%d)", ErrKeyRefused, he.Status)
+	case source == kindApify && he.Status == 402:
+		return fmt.Errorf("%w (%d)", ErrOutOfRequests, he.Status)
 	case he.Status == 429:
 		return fmt.Errorf("%w (%d)", ErrOutOfRequests, he.Status)
 	}

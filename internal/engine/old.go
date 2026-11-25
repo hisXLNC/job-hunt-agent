@@ -15,6 +15,7 @@ import (
 	"jobhunt/internal/old"
 	"jobhunt/internal/sources"
 	"jobhunt/internal/store"
+	"jobhunt/internal/trace"
 )
 
 // Bringing things over from the previous Job Hunt. The old data is only
@@ -56,6 +57,7 @@ type OldResult struct {
 	Muted         int      `json:"muted"`
 	Sites         int      `json:"sites"`
 	Claude        string   `json:"claude"` // "" or how Claude was connected from the old settings
+	Searches      []string `json:"searches,omitempty"` // job searches whose keys came over
 	Notes         []string `json:"notes"`  // anything that did not come over, in words
 }
 
@@ -301,6 +303,10 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 			}
 		}
 	}
+
+	// The keys for the other job searches (Adzuna, Jooble, Google for Jobs,
+	// LinkedIn through Apify), where none is saved here yet.
+	res.Searches = e.oldKeys(src)
 
 	// 2. Who the person is and where they look. Only blanks are filled:
 	// anything already said here stands.
@@ -886,4 +892,69 @@ func (e *Engine) oldWasCleared() bool {
 	var c OldCleared
 	ok, _ := e.S.Get(oldClearedKey, &c)
 	return ok
+}
+
+// oldKeys copies the keys the old Job Hunt had for the job searches that take
+// one, where nothing is saved here for that search. It names those it copied.
+// (A backup the old app made leaves the keys out; its data folder has them.)
+func (e *Engine) oldKeys(src *old.Source) []string {
+	e.srcMu.Lock()
+	k := e.sourceKeys()
+	var got []string
+	kv := func(key string) string { return strings.TrimSpace(src.KV(key)) }
+	ok := func(s string) bool { t, err := tidyKey(s); return err == nil && t != "" }
+	if k.AdzunaKey == "" && ok(kv("adzuna.key")) && ok(kv("adzuna.id")) {
+		k.AdzunaID, k.AdzunaKey = kv("adzuna.id"), kv("adzuna.key")
+		got = append(got, keyedSources["adzuna"].name)
+	}
+	if k.Jooble == "" && ok(kv("jooble.key")) {
+		k.Jooble = kv("jooble.key")
+		got = append(got, keyedSources["jooble"].name)
+	}
+	if k.JSearch == "" && ok(kv("jsearch.key")) {
+		k.JSearch, k.JSearchFrom = kv("jsearch.key"), sources.FromOpenWebNinja
+		if kv("jsearch.provider") == "rapidapi" {
+			k.JSearchFrom = sources.FromRapidAPI
+		}
+		got = append(got, keyedSources["jsearch"].name)
+	}
+	if k.Apify == "" && ok(kv("apify.key")) {
+		k.Apify = kv("apify.key")
+		if a := kv("apify.actor"); ok(a) && a != sources.ApifyActor {
+			k.ApifyActor = a
+		}
+		got = append(got, keyedSources["apify"].name)
+	}
+	if len(got) > 0 {
+		e.S.Set(sourceKeysKey, k)
+	}
+	e.srcMu.Unlock()
+	if len(got) > 0 {
+		e.S.Log(store.Activity{Kind: "source", Text: "Brought over from the old Job Hunt the keys for " + strings.Join(got, ", ")})
+		e.S.Changed("connections", "status")
+	}
+	return got
+}
+
+// oldKeysOnce brings over, once, the search keys a bring-over from before
+// 26.11.48 left behind. Only the old app's own data folder is read.
+func (e *Engine) oldKeysOnce() {
+	if e.S.GetInt("old.keys") != 0 || e.Busy("old") {
+		return
+	}
+	var last OldResult
+	if ok, _ := e.S.Get(oldDoneKey, &last); !ok {
+		return
+	}
+	e.S.Set("old.keys", e.Now().Unix())
+	if old.Default() == "" {
+		return
+	}
+	src, err := e.oldOpen("")
+	if err != nil {
+		trace.Log("problem", "reading the old Job Hunt's search keys: %v", err)
+		return
+	}
+	defer src.Close()
+	e.oldKeys(src)
 }

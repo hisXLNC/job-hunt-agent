@@ -2,6 +2,15 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.48
+
+- The old Job Hunt's keys for Adzuna, Jooble, Google for Jobs and Apify now come over. If you
+  already brought your data over, they come over once on the next start. A key you already set
+  here is never replaced.
+- New source: LinkedIn through Apify (You, Connections, More job sources). It runs LinkedIn's own
+  search through a scraper on Apify, so postings arrive with their whole description and
+  applicant count. It is used on full searches only, one run per title. Apify bills per posting.
+
 ## 26.11.47
 
 - **Applicant counts are honest, and exact when you open the posting.** Job Hunt reads LinkedIn without signing in, where a new posting only says "Be among the first 25 applicants"; that was kept as 24 and shown as "24 applicants", so every fresh role looked the same. It now says "under 25 applicants" (and "100+" or "200+" where LinkedIn gives only a bound). When you open a LinkedIn posting with the side panel open, it reads the exact count LinkedIn shows you signed in (exact under 100) and Job Hunt keeps it; a later search that sees only "under 25" does not overwrite it. Update the side panel too: Load unpacked again, or reload it on the extensions page.
