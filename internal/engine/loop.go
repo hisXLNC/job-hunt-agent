@@ -235,6 +235,7 @@ func (e *Engine) chores(now time.Time) {
 			e.Go("career", "Reading where your CV can go", func(ctx context.Context) error { return e.readCareer(ctx) })
 		}
 	}
+	e.discoverEmployers(now)
 	if !e.heldBack("boards") && every("boards", 24*time.Hour) {
 		e.Go("boards", "Looking for employers' job boards", func(ctx context.Context) error { e.DetectBoards(ctx); return e.DescribeEmployers(ctx) })
 	}

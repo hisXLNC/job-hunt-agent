@@ -34,6 +34,7 @@ func (e *Engine) SeedEmployers(ctx context.Context, n int) error {
 	if err != nil {
 		return err
 	}
+	e.seeded()
 	added := 0
 	for _, emp := range list {
 		if strings.TrimSpace(emp.Name) == "" {
@@ -351,6 +352,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		look += 2
 	}
 	e.StepTakes(ctx, 4*time.Second)
+	boardFailed, boardOK := map[int64]error{}, []int64{}
 	for _, c := range companies {
 		if ctx.Err() != nil {
 			break
@@ -366,6 +368,11 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		at++
 		stats.Looked++
 		posts, err := e.listBoard(ctx, c, p)
+		if err != nil && ctx.Err() == nil {
+			boardFailed[c.ID] = err
+		} else if err == nil {
+			boardOK = append(boardOK, c.ID)
+		}
 		if err != nil {
 			stats.Problems = append(stats.Problems, fmt.Sprintf("%s: %s", c.Name, plainErr(err)))
 			stats.missed(srcBoards, fmt.Sprintf("%s: %s", c.Name, plainErr(err)))
@@ -397,6 +404,8 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		stats.saw(srcBoards, len(posts), added)
 		note(c.Name, len(posts), added)
 	}
+
+	e.boardStrikes(boardFailed, boardOK)
 
 	// 2. LinkedIn's public search: every title, step-up and sideways included,
 	// each searched as often as the others.
@@ -511,6 +520,9 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		state = "stopped"
 	}
 	e.S.EndRun(runID, state, stats, strings.Join(stats.Problems, "\n"))
+	if state == "done" {
+		e.noteThin(stats)
+	}
 	if stats.Kept > 0 || kind == "full" {
 		e.S.Log(store.Activity{Kind: "search", Text: fmt.Sprintf("Searched %d places: %d postings, %d new, %d worth a look", stats.Looked, stats.Seen, stats.New, stats.Kept)})
 	}
