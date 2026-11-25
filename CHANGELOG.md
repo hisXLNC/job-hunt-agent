@@ -2,6 +2,10 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.46
+
+- **Long requests through your Claude sign-in no longer fail on Windows.** Reading your career path stopped with "The filename or extension is too long": Job Hunt put your CV and profile on Claude Code's command line, which Windows caps at about 32,000 characters. They now go through a private file that is removed straight after.
+
 ## 26.11.45
 
 - **Career path shows where each route leads, and its ceiling.** Pay in 3, 5 and 10 years was the starting role with raises, which kept the numbers low. It is now the pay of the role you would hold by then as you are promoted, named under each figure, with a new Ceiling column: the top of the route as people usually reach it and what it pays. The currency is written out (C$, and "in Canadian dollars"), not a bare $. Your career page reads itself again once to fill these in.

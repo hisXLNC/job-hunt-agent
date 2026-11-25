@@ -94,8 +94,16 @@ func (c *CLI) Do(ctx context.Context, req Request) (Response, error) {
 	if effort == "" {
 		effort = "medium"
 	}
+	// The system prompt holds the person's CV and profile: it goes in a
+	// private file, not on the command line, which Windows caps at 32,767
+	// characters and which other programs can read.
+	sysFile, err := writeSystem(c.Dir, req.System)
+	if err != nil {
+		return Response{}, err
+	}
+	defer os.Remove(sysFile)
 	args := []string{"-p", "--output-format", "json", "--model", model, "--effort", effort,
-		"--setting-sources", "", "--system-prompt", req.System}
+		"--setting-sources", "", "--system-prompt-file", sysFile}
 	// Pictures can only go in as a typed message, which needs the streaming
 	// formats on both sides. The last line of the stream is the same result.
 	var stdin io.Reader = strings.NewReader(req.Prompt)
@@ -261,4 +269,28 @@ func CheckCLI(ctx context.Context, path string) (string, error) {
 		return "", fmt.Errorf("Claude Code is installed but didn't start: %w", err)
 	}
 	return strings.TrimSpace(string(b)), nil
+}
+
+// writeSystem puts a system prompt in a file only this user can read.
+func writeSystem(dir, text string) (string, error) {
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(dir, "system-*.txt")
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.WriteString(text); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
