@@ -193,24 +193,35 @@ func (e *Engine) LookUpReviews(id int64) error {
 	if !e.canSearchWeb() && e.LLM().Engine != "demo" {
 		return errors.New("Claude needs to be connected to look this up")
 	}
-	place := e.S.Profile().City
 	e.Go(fmt.Sprintf("reviews:%d", id), "Reading what employees say about "+c.Name, func(ctx context.Context) error {
-		e.StepTakes(ctx, 45*time.Second)
-		e.Report(ctx, 0, 1, "Looking at public employee reviews")
-		rv, err := e.brain.Reviews(ctx, c.Name, c.Site, place)
-		if err != nil {
-			return err
-		}
-		for i := range rv.Sources {
-			rv.Sources[i].URL = safeURL(rv.Sources[i].URL)
-		}
-		if rv.Rating < 0 || rv.Rating > 5 {
-			rv.Rating = 0
-		}
-		e.S.Set(fmt.Sprintf("coreviews:%d", id), EmployerReviews{Reviews: rv, At: e.Now().Unix()})
-		e.S.Changed("companies", "today")
-		return nil
+		return e.lookUpReviews(ctx, id)
 	})
+	return nil
+}
+
+// lookUpReviews reads what employees say about one employer, keeps it, and
+// applies the person's lowest rating to its roles. Both the "Look it up"
+// button and the lookups Job Hunt makes by itself come here.
+func (e *Engine) lookUpReviews(ctx context.Context, id int64) error {
+	c, err := e.S.Company(id)
+	if err != nil {
+		return err
+	}
+	e.StepTakes(ctx, 45*time.Second)
+	e.Report(ctx, 0, 1, "Looking at public employee reviews")
+	rv, err := e.brain.Reviews(ctx, c.Name, c.Site, e.S.Profile().City)
+	if err != nil {
+		return err
+	}
+	for i := range rv.Sources {
+		rv.Sources[i].URL = safeURL(rv.Sources[i].URL)
+	}
+	if rv.Rating < 0 || rv.Rating > 5 {
+		rv.Rating = 0
+	}
+	e.S.Set(fmt.Sprintf("coreviews:%d", id), EmployerReviews{Reviews: rv, At: e.Now().Unix()})
+	e.applyRatingFloor([]int64{id})
+	e.S.Changed("companies", "today", "roles")
 	return nil
 }
 

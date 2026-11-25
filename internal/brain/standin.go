@@ -31,6 +31,15 @@ func StandIn() llm.Engine {
 		case "read_role":
 			in := req.Input.(readInput)
 			out = standRead(in.Person, in.Posting)
+		case "read_roles":
+			in := req.Input.(readGroupInput)
+			var list []map[string]any
+			for i, post := range in.Postings {
+				list = append(list, map[string]any{"posting": i + 1, "reading": standRead(in.Person, post)})
+			}
+			out = map[string]any{"readings": list}
+		case "indeed_search":
+			out = standIndeed(req.Input.(IndeedQuery))
 		case "tailor":
 			out = standTailor(req.Input.(tailorInput))
 		case "letter":

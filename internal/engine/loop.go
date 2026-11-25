@@ -179,7 +179,7 @@ func (e *Engine) tick() {
 		if rest, _, _ := e.meter.Resting(); rest {
 			return
 		}
-		if !e.heldBack("read") && e.S.Count(`SELECT COUNT(*) FROM roles WHERE stage = 'new' AND closed = ''`) > 0 {
+		if n := e.S.Count(`SELECT COUNT(*) FROM roles WHERE stage = 'new' AND closed = ''`); !e.heldBack("read") && n > 0 && !e.budgetHolds(n) {
 			e.Go("read", "Reading new roles", func(ctx context.Context) error {
 				e.ReadUnread(ctx)
 				return nil
@@ -239,6 +239,11 @@ func (e *Engine) chores(now time.Time) {
 		if cvs, _ := e.S.CVs(); len(cvs) > 0 {
 			e.Go("career", "Reading where your CV can go", func(ctx context.Context) error { return e.readCareer(ctx) })
 		}
+	}
+	e.discoverEmployers(now)
+	e.lookUpRatings(now)
+	if every("clearold", 6*time.Hour) {
+		e.clearUnacted(now)
 	}
 	if !e.heldBack("boards") && every("boards", 24*time.Hour) {
 		e.Go("boards", "Looking for employers' job boards", func(ctx context.Context) error { e.DetectBoards(ctx); return e.DescribeEmployers(ctx) })

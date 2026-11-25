@@ -31,6 +31,7 @@ const SETTINGS = [
   ['arriving', '', '', 'Arriving: your CV in local form', 'arriving arrival pack newcomer local cv terms'],
   ['connections', 'claude', '', 'Claude: subscription, API key, model', 'claude api key model subscription sign in connect anthropic ai'],
   ['connections', 'claude', 'daily_limit', 'Daily spending limit', 'limit budget spend cost dollars money cap'],
+  ['connections', 'claude', 'score_model', 'A model for each kind of work, effort, four postings per request', 'model scoring reading tailoring writing effort grouped batch cheaper haiku sonnet opus'],
   ['connections', 'otherai', '', 'Another AI: ChatGPT, Grok, Gemini, OpenRouter or a model on this computer', 'another other ai openai chatgpt gpt grok xai gemini groq openrouter ollama lm studio local model llm'],
   ['connections', 'phone', '', 'Phone notices', 'phone ntfy notice notification push buzz mobile topic quiet hours'],
   ['connections', 'phoneaccess', '', 'Job Hunt on your phone', 'phone mobile access remote browser wifi tailscale away qr code pair'],
@@ -44,6 +45,7 @@ const SETTINGS = [
   ['connections', 'desk', 'morning', 'Morning summary and reminders', 'morning summary reminder remind interview tomorrow closing weekly review thank you'],
   ['connections', 'desk', 'startup', 'Start with Windows', 'start startup sign in boot login autostart windows'],
   ['connections', 'phone', 'detail', 'What phone notices say', 'private privacy urgent only interviews offers names employer'],
+  ['connections', 'tidy', '', 'Employee ratings, setting aside old roles, budget mode', 'rating ratings stars glassdoor reviews employees skip below old roles clear tidy 30 60 90 days budget night cheap batch'],
   ['connections', 'schedule', '', 'When Job Hunt searches', 'schedule search times when how often quick check full search hours frequency'],
   ['panel', 'panel', '', 'Browser side panel', 'side panel extension browser chrome edge fill forms pair connect'],
   ['app', 'theme', '', 'Light or dark', 'dark light theme colour color night mode appearance look match windows'],
@@ -256,6 +258,10 @@ function connections(d, route) {
       <div class="grid2" style="padding-left:24px"><label class="field">API key<input type="password" name="key" placeholder="${cl.has_key ? 'Saved. Paste to replace.' : 'sk-ant-…'}" autocomplete="off"></label><label class="field">Stop at this much a day (USD)<input type="number" name="daily_limit" value="${cl.limit || ''}" placeholder="No limit" step="0.5" min="0"></label></div>
       <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="demo" ${cl.engine === 'demo' ? 'checked' : ''}> <span><b>Sample answers</b><br><span class="m">No Claude. For looking around; the writing is crude.</span></span></label>
       <label class="field" style="max-width:340px">Model<select name="model">${d.models.map(x => html`<option value="${x.ID}" ${cl.model === x.ID ? 'selected' : ''}>${x.Name}: ${x.Note}</option>`)}</select></label>
+      <details ${cl.score_model || cl.write_model || cl.effort || cl.grouped ? 'open' : ''}><summary class="s">A model for each kind of work</summary>
+        <div class="grid3" style="margin-top:8px">${[['score_model', 'Reading roles', 'Most of the calls. A cheaper model saves the most here.'], ['write_model', 'Tailoring and writing', 'What employers read.']].map(([k, label, h]) => html`<label class="field">${label} <span class="h">${h}</span><select name="${k}"><option value="">The model above</option>${d.models.map(x => html`<option value="${x.ID}" ${cl[k] === x.ID ? 'selected' : ''}>${x.Name}</option>`)}</select></label>`)}
+          <label class="field">Effort <span class="h">How hard Claude thinks. Lower is faster and cheaper.</span><select name="effort">${[['', 'As each task needs'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']].map(([v, t]) => html`<option value="${v}" ${(cl.effort || '') === v ? 'selected' : ''}>${t}</option>`)}</select></label></div>
+        <label class="row top-al s" style="gap:8px;margin-top:8px"><input type="checkbox" name="grouped" ${cl.grouped ? 'checked' : ''}> <span><b>Read four postings in one request</b><br><span class="m">Cheaper, but a new role waits for three others before it is scored, so you hear about it later. Off keeps you among the first applicants.</span></span></label></details>
       <div class="row"><button class="btn p">Save</button><button type="button" class="btn" data-act="testllm" data-busy="Asking Claude…">Test it</button><span class="grow"></span><span class="xs m">${cl.calls} calls today${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)} today · $${cl.week.toFixed(2)} this week` : ''}</span></div>
       ${usage.length ? html`<details><summary class="s">What Claude was used for this week</summary><table class="tbl" style="margin-top:6px"><tbody>${usage.map(([k, u]) => html`<tr><td class="s">${k.replace(/_/g, ' ')}</td><td class="s">${u.calls} calls</td><td class="s">${u.cost ? '$' + u.cost.toFixed(2) : ''}</td><td class="s m">${u.errors ? u.errors + ' failed' : ''}</td></tr>`)}</tbody></table></details>` : ''}</form>`;
   const phone = html`<form data-act="savephone" class="card col" style="gap:10px" data-set="phone"><div class="row"><h3 class="grow">Phone notices</h3><span class="chip ${ph.on ? 'good' : ''}">${ph.on ? 'On' : 'Off'}</span></div>
@@ -287,9 +293,9 @@ function connections(d, route) {
       <div class="row"><button class="btn p">Save and check</button>${m.last_at ? html`<span class="xs m">Last read ${rel(m.last_at)}</span>` : ''}</div></form>`;
   const oa = d.other_ai || {};
   const cal = d.owncal || {}, pa = d.phoneaccess, k = d.desk || {}, sc = d.schedule || { full: [] }, more = d.more || [];
-  const keyed = more.filter(x => x.id !== 'alerts'), setUp = keyed.filter(x => x.has_key);
+  const keyed = more.filter(x => x.id !== 'alerts' && x.id !== 'indeed'), setUp = keyed.filter(x => x.has_key);
   const model = (d.models || []).find(x => x.ID === cl.model)?.Name || '';
-  const ts = cal.talkset || {};
+  const ts = cal.talkset || {}, ss = d.searchset?.set || {};
   const rows = [
     ['claude', 'Claude', cl.engine ? (cl.ok ? ['good', 'Connected'] : ['warn', 'Resting']) : ['warn', 'Not connected'],
       cl.engine ? `${{ 'claude-code': 'Your Claude subscription', api: 'An API key', demo: 'Sample answers (no Claude)' }[cl.engine] || cl.engine}${model ? ' · ' + model : ''} · ${cl.calls} calls today${cl.note && !cl.ok ? ' · ' + cl.note : ''}` : 'Claude does the reading and writing', claude],
@@ -308,6 +314,7 @@ function connections(d, route) {
     ['sources', 'More job sources', setUp.length ? [setUp.length === keyed.length ? 'good' : 'warn', `${setUp.length} of ${keyed.length}`] : ['', 'None'],
       keyed.length ? (setUp.length ? `${setUp.map(x => x.name).join(', ')} set up` + (keyed.length > setUp.length ? ` · ${keyed.filter(x => !setUp.includes(x)).map(x => x.name).join(', ')} need${keyed.length - setUp.length === 1 ? 's' : ''} a key` : '') : `${keyed.map(x => x.name).join(', ')}: each needs a key`) : '', moreSources(d)],
     ['schedule', 'Search times', ['good', 'On'], `Full searches at ${sc.full.length ? sc.full.map(hhmm).join(', ') : 'no set times'} · quick checks every ${sc.fast_minutes || 20} minutes`, schedule(d)],
+    ['tidy', 'Ratings, old roles and budget', ss.min_rating || ss.clear_days || ss.budget ? ['blue', 'On'] : ['', 'Off'], tidySum(d), tidyCard(d)],
     ['desk', 'On this computer', ['good', 'On'], [d.startup?.on ? 'Starts when you sign in' : 'Does not start by itself', k.notify ? 'Windows notifications on' : 'no Windows notifications', k.morning >= 0 ? `morning summary at ${k.morning}:00` : 'no morning summary'].join(' · '), thisComputer(d)],
   ];
   return html`<div class="card" style="padding:0">${rows.map(([key, name, [tone, word], sum, body], i) => {
@@ -341,12 +348,14 @@ const SRC_STATE = { working: ['good', 'Working'], problem: ['crit', 'Problem'], 
 function moreSources(d) {
   const saved = s => s.has_key ? 'Saved. Paste to replace.' : '';
   const row = s => {
-    const alerts = s.id === 'alerts', [tone, word] = alerts && s.state === 'waiting' ? ['blue', 'Watching'] : SRC_STATE[s.state] || SRC_STATE.none;
+    const alerts = s.id === 'alerts', indeed = s.id === 'indeed', [tone, word] = alerts && s.state === 'waiting' ? ['blue', 'Watching'] : SRC_STATE[s.state] || SRC_STATE.none;
     return html`<form data-act="savesource" data-id="${s.id}" class="col" style="gap:8px;border-top:1px solid var(--line2);padding-top:12px">
       <div class="row"><b class="grow">${s.name}</b><span class="chip ${tone}">${word}</span></div>
       <p class="s m">${s.about}</p>
       ${s.note ? html`<p class="s" style="color:var(--${s.state === 'problem' ? 'crit' : 'muted'})">${s.note}</p>` : ''}
-      ${alerts ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''}> Take the postings out of job alerts in my inbox</label>` : html`
+      ${indeed ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''} ${s.state === 'none' && !s.on ? 'disabled' : ''}> Search Indeed through my Claude account</label>
+        <p class="xs m">Needs Indeed connected in claude.ai: Settings, Connectors, Indeed. Only your titles and city are sent with each search. ${s.used} used today.</p>`
+      : alerts ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''}> Take the postings out of job alerts in my inbox</label>` : html`
         <p class="xs m">${s.get} <a href="${s.link}" target="_blank" rel="noopener noreferrer">Open the page that gives the key</a></p>
         ${s.id === 'adzuna' ? html`<div class="grid2"><label class="field">Application ID<input type="text" name="app_id" placeholder="${saved(s)}" autocomplete="off"></label><label class="field">Application Key<input type="password" name="key" placeholder="${saved(s)}" autocomplete="off"></label></div>`
           : s.id === 'apify' ? html`<div class="grid2"><label class="field">API token<input type="password" name="key" placeholder="${saved(s)}" autocomplete="off"></label><label class="field">Scraper <span class="h">Leave empty for the usual one</span><input type="text" name="app_id" placeholder="${s.actor || 'curious_coder/linkedin-jobs-scraper'}" autocomplete="off"></label></div>`
@@ -356,11 +365,11 @@ function moreSources(d) {
           <label class="row s" style="gap:6px">At most <input type="number" name="limit" value="${s.limit}" min="1" max="5000" style="width:84px;height:30px" aria-label="Most requests a day to ${s.name}"> requests a day</label></div>
         <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>`}
       <div class="row"><button class="btn sm p">Save</button>
-        ${!alerts && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="Asking…" title="Runs one small search now and says what came back.">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
+        ${!alerts && !indeed && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="Asking…" title="Runs one small search now and says what came back.">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
         <span class="grow"></span>${s.at ? html`<span class="xs m">Last answered ${ago(s.at)}: ${s.seen} posting${s.seen === 1 ? '' : 's'}${alerts || s.new ? `, ${s.new} new` : ''}</span>` : ''}</div></form>`;
   };
   return html`<div class="card col" style="gap:12px"><div><h3>More job sources</h3>
-    <p class="s m" style="margin-top:4px">Other places Job Hunt can search with your titles and city. Each needs a key that you get yourself, free. A key is kept only in Job Hunt's data file on this computer and is sent only to the service it is for.</p></div>
+    <p class="s m" style="margin-top:4px">Other places Job Hunt can search with your titles and city. Most need a key that you get yourself, free. A key is kept only in Job Hunt's data file on this computer and is sent only to the service it is for.</p></div>
     ${(d.more || []).map(row)}</div>`;
 }
 
@@ -375,6 +384,23 @@ function thisComputer(d) {
     ${d.startup?.can ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="startup" ${d.startup.on ? 'checked' : ''}> Start Job Hunt when I sign in to Windows <span class="xs m" style="font-weight:400">(in the background, by the clock)</span></label>` : ''}
     <div class="row"><button class="btn p">Save</button>${d.can_notify ? html`<button type="button" class="btn" data-act="testdesk">Show a test</button>` : ''}</div></form>`;
 }
+// Employee ratings, roles set aside when nobody acted on them, and budget mode.
+function tidySum(d) {
+  const ss = d.searchset?.set || {}, b = d.searchset?.budget || {};
+  return [ss.ratings_off ? 'ratings not looked up' : `ratings looked up by themselves${d.searchset?.rated ? ` (${d.searchset.rated} so far)` : ''}`, ss.min_rating ? `skips employers rated under ${ss.min_rating.toFixed(1)}★` : '',
+    ss.clear_days ? `sets aside roles untouched for ${ss.clear_days} days` : '', ss.budget ? (b.run_at ? `${b.waiting} wait for the night` : 'budget mode on') : ''].filter(Boolean).join(' · ');
+}
+function tidyCard(d) {
+  const ss = d.searchset?.set || {};
+  return html`<form data-act="savesearchset" class="card col" style="gap:10px" data-set="tidy"><h3>Ratings, old roles and budget</h3>
+    <label class="row s" style="font-weight:500"><input type="checkbox" name="ratings" ${ss.ratings_off ? '' : 'checked'}> Look up what employees rate each employer, by itself</label>
+    <p class="xs m">For employers of roles worth a look, a few a day, through Claude's web search. The ★ shows beside the employer in Roles. Needs your Claude subscription or an API key.</p>
+    <div class="grid3"><label class="field">Skip employers rated under <span class="h">Their roles are set aside with the reason; never ones you saved, applied to or added.</span><select name="min_rating">${[[0, 'Don\'t skip any'], [2.5, '2.5★'], [3, '3.0★'], [3.3, '3.3★'], [3.5, '3.5★'], [3.8, '3.8★'], [4, '4.0★']].map(([v, t]) => html`<option value="${v}" ${(ss.min_rating || 0) === v ? 'selected' : ''}>${t}</option>`)}</select></label>
+      <label class="field">Set aside roles nobody acted on <span class="h">Never ones you saved, prepared, applied to or added. Nothing is deleted.</span><select name="clear_days">${[[0, 'Never'], [30, 'After 30 days'], [60, 'After 60 days'], [90, 'After 90 days']].map(([v, t]) => html`<option value="${v}" ${(ss.clear_days || 0) === v ? 'selected' : ''}>${t}</option>`)}</select></label></div>
+    <label class="row top-al s" style="gap:8px"><input type="checkbox" name="budget" ${ss.budget ? 'checked' : ''}> <span><b>Budget mode</b><br><span class="m">When a search brings in more than 12 new postings, they wait to be read at night (from 01:00), with Run now and Cancel on Radar. Off reads every posting at once, so you can be among the first ten applicants.</span></span></label>
+    <div class="row"><button class="btn p">Save</button></div></form>`;
+}
+
 function schedule(d) {
   const sc = d.schedule || { full: [] };
   const hour = (name, v) => html`<select name="${name}" style="width:92px">${Array.from({ length: 24 }, (_, h) => html`<option value="${h}" ${v === h ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`)}</select>`;
@@ -469,7 +495,7 @@ export default {
     switch (route.parts[1] || '') {
       case 'arriving': return api('arriving');
       case 'panel': return api('connections');
-      case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null), api('google').catch(() => null)]).then(([c, pa, oc, g]) => ({ ...c, phoneaccess: pa, owncal: oc, google: g }));
+      case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null), api('google').catch(() => null), api('searchset').catch(() => null)]).then(([c, pa, oc, g, ss]) => ({ ...c, phoneaccess: pa, owncal: oc, google: g, searchset: ss }));
       case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null)]).then(([a, o, g, h, b]) => ({ ...a, old: o, debug: g, history: h, backups: b }));
     }
     return api('you');
@@ -525,6 +551,7 @@ export default {
       toast('Saved');
     },
     testdesk: () => post('desk/test').then(() => { toast('Sent. It shows by the clock.'); return false; }),
+    savesearchset: ({ f }) => put('searchset', { ratings_off: !f.ratings, min_rating: +f.min_rating || 0, clear_days: +f.clear_days || 0, budget: !!f.budget }).then(() => toast('Saved')),
     async saveschedule({ f }) {
       const full = f.full.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean).map(t => { const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(t); if (!m) throw new Error(`"${t}" isn't a time. Write times like 07:00 or 17:30.`); let h = +m[1]; if (/pm/i.test(m[3] || '') && h < 12) h += 12; if (/am/i.test(m[3] || '') && h === 12) h = 0; return h * 60 + +(m[2] || 0); });
       await put('schedule', { full, fast_minutes: +f.fast_minutes, from: +f.from, to: +f.to });
@@ -558,7 +585,7 @@ export default {
     apply: () => post('arriving/apply').then(() => toast('A copy of your CV in local form was added under You')),
     async savellm({ f }) {
       if (!f.engine) throw new Error('Choose how to reach Claude.');
-      await put('llm', { engine: f.engine, key: f.key || '', model: f.model, daily_limit: +f.daily_limit || 0 });
+      await put('llm', { engine: f.engine, key: f.key || '', model: f.model, daily_limit: +f.daily_limit || 0, score_model: f.score_model || '', write_model: f.write_model || '', effort: f.effort || '', grouped: !!f.grouped });
       toast('Saved');
     },
     async testllm() { const r = await post('llm/test'); toast(r.message); return false; },
@@ -605,7 +632,7 @@ export default {
     savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0, detail: !!f.detail, only: f.only || '' }).then(() => toast('Saved')),
     newtopic({ el }) { const a = new Uint8Array(12); crypto.getRandomValues(a); el.closest('form').querySelector('[name=topic]').value = 'jobhunt-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); return false; },
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
-    savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(() => toast('Saved')),
+    savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' || d.id === 'indeed' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(() => toast('Saved')),
     async testsource({ d }) { const r = await post(`sources/${d.id}/test`); toast(r.message); },
     delsource: ({ d }) => del(`sources/${d.id}`).then(() => toast('Key removed')),
     savemail: ({ f }) => put('mailset', { on: !!f.on, user: f.user, pass: f.pass || '', host: f.host, every: Math.min(240, Math.max(5, +f.every || 10)) }).then(() => toast(f.on ? 'Connected. Job Hunt is reading recent replies.' : 'Saved')),

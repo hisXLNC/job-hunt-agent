@@ -87,12 +87,11 @@ func (c *CLI) Do(ctx context.Context, req Request) (Response, error) {
 		path = p
 	}
 	model := c.Model
+	if req.Model != "" {
+		model = req.Model
+	}
 	if model == "" {
 		model = DefaultModel
-	}
-	effort := req.Effort
-	if effort == "" {
-		effort = "medium"
 	}
 	// The system prompt holds the person's CV and profile: it goes in a
 	// private file, not on the command line, which Windows caps at 32,767
@@ -102,14 +101,11 @@ func (c *CLI) Do(ctx context.Context, req Request) (Response, error) {
 		return Response{}, err
 	}
 	defer os.Remove(sysFile)
-	args := []string{"-p", "--output-format", "json", "--model", model, "--effort", effort,
-		"--setting-sources", "", "--system-prompt-file", sysFile}
+	args := cliArgs(model, sysFile, req)
 	// Pictures can only go in as a typed message, which needs the streaming
 	// formats on both sides. The last line of the stream is the same result.
 	var stdin io.Reader = strings.NewReader(req.Prompt)
 	if len(req.Images) > 0 {
-		args[2] = "stream-json"
-		args = append(args, "--input-format", "stream-json", "--verbose")
 		var content []map[string]any
 		for _, im := range req.Images {
 			content = append(content, map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": im.Mime, "data": base64.StdEncoding.EncodeToString(im.Data)}})
@@ -118,18 +114,9 @@ func (c *CLI) Do(ctx context.Context, req Request) (Response, error) {
 		line, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": content}})
 		stdin = bytes.NewReader(append(line, '\n'))
 	}
-	if req.Web {
-		args = append(args, "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch")
-	} else {
-		args = append(args, "--tools", "")
-	}
-	if req.Schema != nil {
-		shape, _ := json.Marshal(req.Schema)
-		args = append(args, "--json-schema", string(shape))
-	}
 
 	limit := 6 * time.Minute
-	if req.Web {
+	if req.Web || len(req.Tools) > 0 {
 		limit = 12 * time.Minute
 	}
 	cctx, cancel := context.WithTimeout(ctx, limit)
@@ -185,6 +172,47 @@ func (c *CLI) Do(ctx context.Context, req Request) (Response, error) {
 	}
 	return out, nil
 }
+
+// cliArgs is the command line for one request. Built-in tools are off; the
+// web is allowed only when the request asks for it, and a connector's tools
+// only when the request names them. Nothing may skip the permission check:
+// in a run without a person, a tool not named here is refused.
+func cliArgs(model, sysFile string, req Request) []string {
+	effort := req.Effort
+	if effort == "" {
+		effort = "medium"
+	}
+	args := []string{"-p", "--output-format", "json", "--model", model, "--effort", effort,
+		"--setting-sources", "", "--system-prompt-file", sysFile}
+	if len(req.Images) > 0 {
+		args[2] = "stream-json"
+		args = append(args, "--input-format", "stream-json", "--verbose")
+	}
+	var allow []string
+	if req.Web {
+		args = append(args, "--tools", "WebSearch,WebFetch")
+		allow = append(allow, "WebSearch", "WebFetch")
+	} else {
+		args = append(args, "--tools", "")
+	}
+	for _, t := range req.Tools {
+		if connectorTool.MatchString(t) {
+			allow = append(allow, t)
+		}
+	}
+	if len(allow) > 0 {
+		args = append(args, "--allowedTools", strings.Join(allow, ","))
+	}
+	if req.Schema != nil {
+		shape, _ := json.Marshal(req.Schema)
+		args = append(args, "--json-schema", string(shape))
+	}
+	return args
+}
+
+// connectorTool is the shape of a connector's tool name, mcp__server__tool,
+// with nothing in it that could widen a permission rule.
+var connectorTool = regexp.MustCompile(`^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$`)
 
 func lastJSONLine(b []byte) []byte {
 	b = bytes.TrimSpace(b)

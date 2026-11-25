@@ -25,6 +25,13 @@ type Request struct {
 	MaxTokens int            // 0 = a sensible default
 	Web       bool           // Claude may search the web for this one
 	Images    []Image        // pictures to look at along with the prompt
+	// Model, when set, is used for this request in place of the engine's own.
+	// Job Hunt sets it from the person's choice of model per kind of task.
+	Model string
+	// Tools names the tools of the person's own claude.ai connectors that
+	// Claude may use for this one request (Claude Code only), such as
+	// Indeed's job search. Nothing else is allowed alongside them.
+	Tools []string
 
 	// Input is the same material as Prompt in typed form. Real engines ignore
 	// it; the stand-in used by tests and the demo works from it.
@@ -216,6 +223,10 @@ type Metered struct {
 	// number means no limit.
 	Budget func() float64
 
+	// Shape, when set, adjusts each request before it goes out: the model
+	// and effort the person chose for that kind of task.
+	Shape func(*Request)
+
 	mu      sync.Mutex
 	sem     chan struct{}
 	resting time.Time
@@ -275,6 +286,9 @@ func (m *Metered) Do(ctx context.Context, req Request) (Response, error) {
 	e, err := m.Pick()
 	if err != nil {
 		return Response{}, err
+	}
+	if m.Shape != nil {
+		m.Shape(&req)
 	}
 	m.mu.Lock()
 	if m.sem == nil {
@@ -349,6 +363,16 @@ var Models = []struct{ ID, Name, Note string }{
 	{"claude-fable-5-2", "Claude Fable 5.2", "The most capable, about twice the price"},
 	{"claude-sonnet-5-5", "Claude Sonnet 5.5", "Faster and half the price"},
 	{"claude-haiku-5-5", "Claude Haiku 5.5", "Very cheap; weaker at tailoring"},
+}
+
+// KnownModel reports whether id is one of Models.
+func KnownModel(id string) bool {
+	for _, m := range Models {
+		if m.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultModel is used until the person picks another.
