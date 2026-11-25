@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -396,6 +397,25 @@ func (s *Server) Handler() http.Handler {
 			return nil, bad("Keep what matters to you under 1,500 characters.")
 		}
 		p.Matters = strings.TrimSpace(p.Matters)
+		// What the person wants: a few short lines each.
+		if p.Seniority != "" && !slices.Contains(store.Seniorities, p.Seniority) {
+			return nil, bad("The level is one of: " + strings.Join(store.Seniorities, ", ") + ".")
+		}
+		if p.Terms != "" && p.Terms != "permanent" && p.Terms != "contract" {
+			return nil, bad("Permanent or contract: permanent, contract, or empty for either.")
+		}
+		for _, list := range []*[]string{&p.Industries, &p.NoIndustries, &p.DealBreakers} {
+			var keep []string
+			for _, x := range *list {
+				if x = strings.Join(strings.Fields(x), " "); x != "" && len(keep) < 20 {
+					keep = append(keep, string([]rune(x)[:min(len([]rune(x)), 100)]))
+				}
+			}
+			*list = keep
+		}
+		if p.CareerPath = strings.TrimSpace(p.CareerPath); len(p.CareerPath) > 300 {
+			return nil, bad("Keep the career path under 300 characters.")
+		}
 		if p.Goal() > 100 || (p.WeeklyGoal != nil && *p.WeeklyGoal < 0) {
 			return nil, bad("Applications a week is 0 to 100 (0 means no goal).")
 		}
@@ -826,7 +846,7 @@ func (s *Server) Handler() http.Handler {
 		var search engine.SearchState
 		st.Get("search", &search)
 		p := st.Profile()
-		return map[string]any{"fresh": recent, "runs": runs, "search": search, "status": e.Status(), "titles": p.Titles, "domain": p.Domain, "avoid": p.Avoid,
+		return map[string]any{"fresh": recent, "runs": runs, "search": search, "status": e.Status(), "titles": p.Titles, "domain": p.Domain, "avoid": p.Avoid, "searched_in": engine.SearchedPlaces(p),
 			"unread":  st.Count(`SELECT COUNT(*) FROM roles WHERE stage = 'new' AND closed = ''`),
 			"cleared": st.Count(`SELECT COUNT(*) FROM roles WHERE closed = 'screened'`)}, nil
 	})
@@ -1005,6 +1025,35 @@ func (s *Server) Handler() http.Handler {
 		}
 		if !e.StartSearch(in.Kind) {
 			return nil, bad("A search is already running.")
+		}
+		return nil, nil
+	})
+	// Search now, ignoring the schedule: a week back, then the roles the rules
+	// set aside lately are checked again. For the person's own button only: it
+	// can bring set-aside roles back, so it is not on the assistant's list.
+	h("POST /api/search/force", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		e.Resume("search")
+		if e.LLM().Engine == "" {
+			return nil, llm.ErrNotConnected
+		}
+		if !e.StartSearch("force") {
+			return nil, bad("A search is already running.")
+		}
+		return nil, nil
+	})
+	// Score again: first what it would do, then doing it. Like the search
+	// above, for the person's own button only.
+	h("GET /api/rescore", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.RescoreEstimate() })
+	h("POST /api/rescore", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			All bool `json:"all"`
+		}
+		read(r, &in)
+		if e.LLM().Engine == "" {
+			return nil, llm.ErrNotConnected
+		}
+		if !e.StartRescore(in.All) {
+			return nil, bad("Job Hunt is already scoring them again.")
 		}
 		return nil, nil
 	})
@@ -1563,7 +1612,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "other_ai": e.OtherAIState(), "other_services": llm.OtherServices, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
-			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources(), "recruiter_scan": e.RecruiterScan()}, nil
+			"desk": e.Desk(), "schedule": e.Schedule(), "suggest": e.SuggestTimes(), "can_notify": e.Notify != nil, "more": e.MoreSources(), "recruiter_scan": e.RecruiterScan()}, nil
 	})
 	// More job sources: the searches that take a key (Adzuna, Jooble, Google
 	// for Jobs) and job-alert e-mails. A key goes in and never comes out: what
@@ -1577,13 +1626,26 @@ func (s *Server) Handler() http.Handler {
 		if err := read(r, &in); err != nil {
 			return nil, err
 		}
-		if err := e.SetSource(r.PathValue("id"), in); err != nil {
+		// A new key is tried before it is kept.
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		warning, err := e.SetSource(ctx, r.PathValue("id"), in)
+		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return nil, err
 			}
 			return nil, bad(sentence(err.Error()))
 		}
+		if warning != "" {
+			return map[string]any{"warning": sentence(warning)}, nil
+		}
 		return nil, nil
+	})
+	// Every posting one kind of source gave in the last search that asked it,
+	// with what was decided about each.
+	h("GET /api/sources/{id}/postings", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		size, _ := strconv.Atoi(r.URL.Query().Get("size"))
+		return e.PostingsFrom(r.PathValue("id"), r.URL.Query().Get("show"), min(max(size, 60), 1000))
 	})
 	h("DELETE /api/sources/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, e.ForgetSource(r.PathValue("id"))

@@ -32,7 +32,7 @@ func TestIndeedThroughClaude(t *testing.T) {
 	on := true
 
 	// With sample answers (or an API key) it can't be turned on, and says why.
-	if err := e.SetSource(srcIndeed, SourceKeyInput{On: &on}); err == nil || !strings.Contains(err.Error(), "Claude Code") {
+	if _, err := e.SetSource(context.Background(), srcIndeed, SourceKeyInput{On: &on}); err == nil || !strings.Contains(err.Error(), "Claude Code") {
 		t.Fatalf("turning Indeed on without Claude Code: %v", err)
 	}
 	if m := indeedRowOf(e); m.State != "none" || m.On {
@@ -69,7 +69,7 @@ func TestIndeedThroughClaude(t *testing.T) {
 	if m := indeedRowOf(e); m.State != "off" {
 		t.Errorf("row before it is on: %+v", m)
 	}
-	if err := e.SetSource(srcIndeed, SourceKeyInput{On: &on}); err != nil {
+	if _, err := e.SetSource(context.Background(), srcIndeed, SourceKeyInput{On: &on}); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.Search(ctx, "full"); err != nil {

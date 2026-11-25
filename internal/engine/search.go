@@ -209,6 +209,9 @@ type SearchState struct {
 	Paused        bool   `json:"paused"`
 	// PausedUntil: the pause ends by itself then; 0 for until the person says.
 	PausedUntil int64 `json:"paused_until"`
+	// LinkedInTurn: which title in which place LinkedIn is asked about next,
+	// when they do not all fit in one search.
+	LinkedInTurn int `json:"linkedin_turn,omitempty"`
 }
 
 func (e *Engine) searchState() SearchState {
@@ -271,6 +274,11 @@ type RunStats struct {
 	// "linkedin", "jobbank", "freehire", "sites", "adzuna", "jooble",
 	// "jsearch"): what Radar's list of sources is drawn from.
 	BySource map[string]SourceRun `json:"by_source,omitempty"`
+
+	// What was decided about each posting, by kind of source: kept apart
+	// from the run (see keepOutcomes), as it can run to thousands.
+	src, from string
+	outcomes  map[string]*SourceLog
 }
 
 // SourceRun is what one kind of source gave in one search.
@@ -302,11 +310,16 @@ func (st *RunStats) missed(kind, why string) {
 	st.BySource[kind] = r
 }
 
-// StartSearch starts a search in the background. Kind is "full" or "fast".
+// StartSearch starts a search in the background. Kind is "full" or "fast",
+// or "force": a full search the person asked for that ignores the schedule,
+// looks back a week rather than to the last search, and then checks the
+// roles set aside lately against the rules as they are now.
 func (e *Engine) StartSearch(kind string) bool {
 	doing := "Searching every source"
 	if kind == "fast" {
 		doing = "Checking for postings under an hour old"
+	} else if kind == "force" {
+		doing = "Searching every source, a week back"
 	}
 	return e.Go("search", doing, func(ctx context.Context) error {
 		// Kept until the search ends by itself or the person stops it. If
@@ -327,6 +340,10 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	if !p.SetupDone {
 		return nil
 	}
+	force := kind == "force"
+	if force {
+		kind = "full"
+	}
 	e.preparedNow.Store(0)
 	runID := e.S.StartRun("search:" + kind)
 	stats := RunStats{Kind: kind, ByPlace: map[string][2]int{}, ClearedBy: map[string]int{}}
@@ -339,10 +356,16 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		stats.ByPlace[place] = [2]int{v[0] + seen, v[1] + added}
 	}
 
+	// LinkedIn is asked about every title in every place the person named,
+	// up to its share of one search.
+	places := searchedPlaces(p)
+	liAll := titlesAt(p.Titles.All(), places)
+	liAsk := turnOf(liAll, st.LinkedInTurn, linkedInMost(kind, len(p.Titles.All()), len(places)))
+
 	// 1. Employers' own boards: the earliest place a posting appears.
 	companies, _ := e.S.Companies("following")
 	// How many places there are to look at, for the progress bar.
-	look, at := len(p.Titles.All()), 0
+	look, at := len(liAsk), 0
 	for _, c := range companies {
 		if c.BoardKind != "" && !(kind == "fast" && (c.BoardKind == "workday" || c.BoardKind == "page")) {
 			look++
@@ -367,6 +390,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		e.Report(ctx, at, look, c.Name)
 		at++
 		stats.Looked++
+		stats.reading(srcBoards, c.Name)
 		posts, err := e.listBoard(ctx, c, p)
 		if err != nil && ctx.Err() == nil {
 			boardFailed[c.ID] = err
@@ -410,7 +434,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	// 2. LinkedIn's public search: every title, step-up and sideways included,
 	// each searched as often as the others.
 	sinceLast := 26 * time.Hour
-	if st.LastFull == 0 {
+	if st.LastFull == 0 || force {
 		sinceLast = 7 * 24 * time.Hour
 	} else if d := now.Sub(time.Unix(st.LastFull, 0)) + 2*time.Hour; d > sinceLast {
 		sinceLast = min(d, 14*24*time.Hour)
@@ -423,16 +447,18 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		if kind == "fast" {
 			within, few = 2*time.Hour, true
 		}
-		place := strings.TrimSpace(strings.Trim(p.City+", "+p.Country, ", "))
 		blocked := false
-		for _, bt := range p.Titles.All() {
+		asked := 0
+		for _, bt := range liAsk {
 			if ctx.Err() != nil || blocked {
 				break
 			}
-			e.Report(ctx, at, look, "LinkedIn: "+bt.Title)
+			e.Report(ctx, at, look, "LinkedIn: "+bt.label(places[0]))
 			at++
 			stats.Looked++
-			posts, err := e.Src.Search(ctx, sources.Query{Keywords: bt.Title, Location: place, Miles: metros[cityOf(p)].Miles, Within: within, FewApplicants: few})
+			asked++
+			stats.reading("linkedin", bt.label(places[0]))
+			posts, err := e.Src.Search(ctx, sources.Query{Keywords: bt.Title, Location: bt.At.Loc, Miles: metros[strings.ToLower(bt.At.Town)].Miles, Within: within, FewApplicants: few})
 			if err != nil {
 				var he *sources.HTTPError
 				if errors.As(err, &he) && (he.Status == 429 || he.Status == 999 || he.Status == 403) {
@@ -443,7 +469,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 					blocked = true
 					continue
 				}
-				stats.Problems = append(stats.Problems, "LinkedIn, "+bt.Title+": "+plainErr(err))
+				stats.Problems = append(stats.Problems, "LinkedIn, "+bt.label(places[0])+": "+plainErr(err))
 				stats.missed("linkedin", "LinkedIn "+plainErr(err))
 				continue
 			}
@@ -460,6 +486,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 				if comp.State == "muted" {
 					stats.ClearedBy["An employer you muted"]++
 					stats.Cleared++
+					stats.decided(PostingOutcome{Title: post.Title, Company: comp.Name, Location: post.Location, Outcome: "skipped", Why: "An employer you muted"})
 					continue
 				}
 				id, isNew, cleared := e.ingestBand(comp.ID, post, p, &stats, bt.Band)
@@ -472,11 +499,14 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			}
 			stats.Seen += len(posts)
 			stats.saw("linkedin", len(posts), added)
-			note("LinkedIn: "+bt.Title, len(posts), added)
+			note("LinkedIn: "+bt.label(places[0]), len(posts), added)
 			select {
 			case <-ctx.Done():
 			case <-time.After(e.linkedInPause()):
 			}
+		}
+		if len(liAll) > 0 {
+			st.LinkedInTurn = (st.LinkedInTurn + asked) % len(liAll)
 		}
 	} else {
 		stats.Problems = append(stats.Problems, firstOf(st.LinkedInNote, "LinkedIn is resting"))
@@ -502,6 +532,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	}
 	// Stopped part-way: the next search starts where a full one would.
 	if ctx.Err() != nil {
+		e.keepOutcomes(&stats)
 		e.S.EndRun(runID, "stopped", stats, "You stopped it")
 		return ctx.Err()
 	}
@@ -526,6 +557,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	if ctx.Err() != nil {
 		state = "stopped"
 	}
+	e.keepOutcomes(&stats)
 	e.S.EndRun(runID, state, stats, strings.Join(stats.Problems, "\n"))
 	if state == "done" {
 		e.noteThin(stats)
@@ -533,7 +565,28 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	if stats.Kept > 0 || kind == "full" {
 		e.S.Log(store.Activity{Kind: "search", Text: fmt.Sprintf("Searched %d places: %d postings, %d new, %d worth a look", stats.Looked, stats.Seen, stats.New, stats.Kept)})
 	}
+	if force && ctx.Err() == nil {
+		// Then what the rules set aside lately, against the rules as they are now.
+		if _, err := e.ScoreAgain(ctx, false); err != nil && !errors.Is(err, context.Canceled) {
+			e.problem("Scoring again", err)
+		}
+	}
 	return nil
+}
+
+// linkedInMost is how many LinkedIn searches one search makes: every title,
+// and, when the person named more places than their city, every title in
+// every place up to a share LinkedIn puts up with. A quick check, which runs
+// many times a day, takes half that share.
+func linkedInMost(kind string, titles, places int) int {
+	most := 30
+	if kind == "fast" {
+		most = 15
+	}
+	if places <= 1 {
+		return titles
+	}
+	return max(titles, min(titles*places, most))
 }
 
 func (e *Engine) linkedInPause() time.Duration {
@@ -841,19 +894,25 @@ func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profi
 		// Most sources give no pay of their own; many postings name it in their text.
 		post.Pay = PayFromText(post.Description)
 	}
+	seenAs := PostingOutcome{Title: post.Title, Company: post.Company, Location: post.Location}
 	if id, _, seen := e.S.SeenRole(post.Key); seen {
 		e.S.TouchRole(id, post.Applicants, post.Description)
+		seenAs.RoleID, seenAs.Outcome = id, "here"
+		stats.decided(seenAs)
 		return id, false, false
 	}
 	// The same job seen through another place is the same role; and a role
 	// the person said no to stays said no to, however it reappears.
 	if id, closed, dup := e.S.SimilarRole(companyID, post.Title, post.Location); dup {
+		seenAs.RoleID, seenAs.Outcome = id, "here"
 		if closed == "no" {
 			stats.Cleared++
 			stats.ClearedBy["You said no to this one before"]++
+			seenAs.Outcome, seenAs.Why = "skipped", "You said no to this one before"
 		}
 		e.S.TouchRole(id, post.Applicants, "")
 		e.S.SeenThrough(id, post.Source) // for the overlap between sources, on Progress
+		stats.decided(seenAs)
 		return id, false, false
 	}
 	reason, band := screen(p, post, searchedBand != "")
@@ -879,11 +938,16 @@ func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profi
 	if err != nil {
 		return 0, false, false
 	}
+	seenAs.RoleID = id
 	if reason != "" {
 		stats.Cleared++
 		stats.ClearedBy[reason]++
+		seenAs.Outcome, seenAs.Why = "skipped", reason
+		stats.decided(seenAs)
 		return id, true, true
 	}
+	seenAs.Outcome = "new"
+	stats.decided(seenAs)
 	return id, true, false
 }
 
@@ -988,7 +1052,7 @@ func (e *Engine) readGroup(ctx context.Context, ids []int64) []readResult {
 	var ready []store.Role
 	var at []int
 	for i, id := range ids {
-		r, ok, kept, err := e.textToRead(ctx, id)
+		r, ok, kept, err := e.textToRead(ctx, id, false)
 		if !ok {
 			out[i] = readResult{kept: kept, err: err}
 			continue
@@ -1028,7 +1092,7 @@ func (e *Engine) readGroup(ctx context.Context, ids []int64) []readResult {
 				}
 				continue
 			}
-			k, pr, terr := e.takeReading(ctx, r, rd)
+			k, pr, terr := e.takeReading(ctx, r, rd, false)
 			out[at[j]] = readResult{k, pr, terr}
 		}
 		return out
@@ -1040,7 +1104,7 @@ func (e *Engine) readGroup(ctx context.Context, ids []int64) []readResult {
 		return out
 	}
 	for j, r := range ready {
-		k, pr, terr := e.takeReading(ctx, r, readings[j])
+		k, pr, terr := e.takeReading(ctx, r, readings[j], false)
 		out[at[j]] = readResult{k, pr, terr}
 	}
 	return out
@@ -1080,7 +1144,14 @@ const (
 // ReadRole reads one role against the person: fetches the full posting if
 // needed, scores it, and either sets it aside or moves it to "found".
 func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, err error) {
-	r, ready, kept, err := e.textToRead(ctx, id)
+	return e.readRole(ctx, id, false)
+}
+
+// readRole reads one role. Again, the role is one set aside earlier, read
+// once more because the person asked: it stays set aside unless the reading
+// now clears the bar, and nothing is written for it by itself.
+func (e *Engine) readRole(ctx context.Context, id int64, again bool) (kept, prepared bool, err error) {
+	r, ready, kept, err := e.textToRead(ctx, id, again)
 	if !ready {
 		return kept, false, err
 	}
@@ -1092,7 +1163,7 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 	if err != nil {
 		return false, false, err
 	}
-	return e.takeReading(ctx, r, reading)
+	return e.takeReading(ctx, r, reading, again)
 }
 
 // postingToRead is a role as Claude is shown it, with what is on record
@@ -1108,12 +1179,12 @@ func (e *Engine) postingToRead(r store.Role) brain.Posting {
 // textToRead makes sure a role has its posting's text. ready is false when
 // there is nothing to read (yet); kept then says whether the role was kept
 // for the person to open anyway.
-func (e *Engine) textToRead(ctx context.Context, id int64) (r store.Role, ready, kept bool, err error) {
+func (e *Engine) textToRead(ctx context.Context, id int64, again bool) (r store.Role, ready, kept bool, err error) {
 	r, err = e.S.Role(id)
 	if err != nil {
 		return r, false, false, err
 	}
-	if r.Closed == "no" {
+	if r.Closed == "no" || (again && r.Closed != "screened") {
 		return r, false, false, nil
 	}
 	if len(strings.Fields(r.Description)) < 40 {
@@ -1150,6 +1221,10 @@ func (e *Engine) textToRead(ctx context.Context, id int64) (r store.Role, ready,
 			}
 		}
 	}
+	if len(strings.Fields(r.Description)) < 40 && again {
+		// Still nothing to read: it stays where it was.
+		return r, false, false, nil
+	}
 	if len(strings.Fields(r.Description)) < 40 {
 		// Without the posting's text there is nothing to read, and Claude is
 		// not spent on a guess. It is tried again on the next two passes
@@ -1171,7 +1246,7 @@ func (e *Engine) textToRead(ctx context.Context, id int64) (r store.Role, ready,
 
 // takeReading keeps Claude's reading of a role, sets the role aside or moves
 // it to "found", and prepares it when it is strong enough.
-func (e *Engine) takeReading(ctx context.Context, r store.Role, reading brain.Reading) (kept, prepared bool, err error) {
+func (e *Engine) takeReading(ctx context.Context, r store.Role, reading brain.Reading, again bool) (kept, prepared bool, err error) {
 	id := r.ID
 	// The first posting that says what an employer does describes it from then
 	// on; what the person wrote themselves is never replaced. A recruiter's
@@ -1201,6 +1276,12 @@ func (e *Engine) takeReading(ctx context.Context, r store.Role, reading brain.Re
 			return false, false, nil
 		}
 	}
+	if again {
+		// Back among the roles worth a look; a "no" is never undone here.
+		if ok, err := e.S.Unscreen(id); err != nil || !ok {
+			return false, false, err
+		}
+	}
 	e.S.Advance(id, "found")
 	text := fmt.Sprintf("Scored %d against your %s", reading.Fit, e.cvName(reading.CVID))
 	if nearMiss {
@@ -1211,7 +1292,7 @@ func (e *Engine) takeReading(ctx context.Context, r store.Role, reading brain.Re
 	// One search prepares at most as many as the person allowed; the rest
 	// wait on Today with a Prepare button.
 	full := prof.PrepareMax > 0 && e.Busy("search") && int(e.preparedNow.Load()) >= prof.PrepareMax
-	if reading.Fit >= prof.PrepareAt() && prof.MayPrepare != "ask" && !full {
+	if reading.Fit >= prof.PrepareAt() && prof.MayPrepare != "ask" && !full && !again {
 		if perr := e.Prepare(ctx, id); perr == nil {
 			prepared = true
 			e.preparedNow.Add(1)

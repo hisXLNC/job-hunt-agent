@@ -22,6 +22,7 @@ function filters(d, route) {
       ${chip('Set aside', c['closed:screened'] || 0, { closed: 'screened' }, q.closed === 'screened')}
       ${chip('Not interested', c['closed:no'] || 0, { closed: 'no' }, q.closed === 'no')}
       ${chip('Ended', (c['closed:rejected'] || 0) + (c['closed:expired'] || 0) + (c['closed:withdrawn'] || 0), { closed: 'rejected,expired,withdrawn' }, ended)}
+      ${q.closed === 'screened' && d.rescore ? again(d.rescore) : ''}
       ${ended ? html`<span class="grow"></span><button class="btn sm" data-act="tidy" ${down ? '' : 'disabled'} data-confirm="Close ${down} role${down === 1 ? '' : 's'} whose posting is gone? Only roles you never prepared or applied to. Nothing is deleted: they are kept here, under Ended."
         title="Closes open roles whose posting was taken down, or that no search has seen for a month, and that you never prepared or applied to. Roles you applied to or prepared keep everything. ${down ? '' : 'There is nothing to clear right now.'}">Clear taken-down roles${down ? html` <span style="opacity:.7">${down}</span>` : ''}</button>` : ''}
     </div>
@@ -42,6 +43,20 @@ function filters(d, route) {
     </form>`;
 }
 
+// Score again: the roles set aside lately, against the rules, CVs and settings
+// as they are now, with what it costs said first. Roles said no to are never among them.
+function again(rs) {
+  const fetch = rs.fetch ? `, and ${rs.fetch} posting${rs.fetch === 1 ? '' : 's'} fetched again from ${rs.fetch === 1 ? 'its site' : 'their sites'}` : '';
+  const reqs = n => `about ${n} request${n === 1 ? '' : 's'} to Claude`;
+  return html`<span class="grow"></span>
+    <button class="btn sm" data-act="rescore" ${rs.pass ? '' : 'disabled'} data-busy="Starting…" data-confirm="${rs.pass} of the ${rs.by_rules} roles the rules set aside in the last ${rs.days} days pass the rules as they are now. Reading them takes ${reqs(rs.requests)}${fetch}. Roles that fit come back; the rest stay set aside."
+      title="Checks the roles the rules set aside in the last ${rs.days} days against your rules as they are now, which costs nothing, and reads the ones that now pass: ${reqs(rs.requests)}.">Score again${rs.pass ? html` <span style="opacity:.7">${rs.pass}</span>` : ''}</button>
+    <button class="btn sm" data-act="rescore" data-all="1" ${rs.pass + rs.by_claude ? '' : 'disabled'} data-busy="Starting…" data-confirm="Read again the ${rs.pass + rs.by_claude} roles set aside in the last ${rs.days} days that pass the rules, including the ${rs.by_claude} Claude set aside? It takes ${reqs(rs.requests_all)}${fetch}."
+      title="Also reads again the roles Claude set aside after reading them: ${reqs(rs.requests_all)}.">Score all again</button>
+    <button class="btn sm ghost" data-act="force" data-busy="Starting…" data-confirm="Search every source now, whatever the schedule says, looking back a week instead of to the last search? Then the roles the rules set aside are checked again (${reqs(rs.requests)}, as well as reading what the search finds)."
+      title="Searches now, looking back a week, then scores the set-aside roles again with today's rules.">Search now, ignore the schedule</button>`;
+}
+
 // What can be done to every ticked role in one go; it stays in view with the filters.
 function bulk(d) {
   const mine = (d.roles || []).filter(r => !r.closed && picked.has(String(r.id)));
@@ -60,7 +75,7 @@ function table(d, route) {
   return html`    <div class="card" style="padding:0"><table class="tbl long">
     <thead><tr><th class="pick" style="width:34px"><input type="checkbox" data-on="change" data-act="pickall" ${open.length && open.every(r => picked.has(String(r.id))) ? 'checked' : ''} ${open.length ? '' : 'disabled'} aria-label="Tick every open role in this list" title="Tick every open role in this list"></th><th>${sortHead('Role', 'title', route, 'age')} · ${sortHead('Employer', 'company', route, 'age')}</th><th>${sortHead('Fit now', 'fit', route, 'age')} · Tailored</th><th>${sortHead('Posted', 'age', route, 'age')}</th><th>${sortHead('Applicants', 'applicants', route, 'age')}</th><th>${sortHead('Stage', 'stage', route, 'age')}</th><th></th></tr></thead>
     <tbody>${d.roles.map(r => html`<tr class="${picked.has(String(r.id)) ? 'sel' : ''}"><td class="pick">${r.closed ? '' : html`<input type="checkbox" data-on="change" data-act="pick" data-id="${r.id}" ${picked.has(String(r.id)) ? 'checked' : ''} aria-label="Tick ${r.title}">`}</td>
-      <td><div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a class="t" href="#/roles/${r.id}">${r.title}</a><span class="s m">${employer(r.company, r.company_id)}${r.rating ? html` <span class="xs" title="What employees rate ${r.company}, out of 5">★ ${r.rating.toFixed(1)}</span>` : ''}${r.location ? html` · ${r.location}` : ''}${r.workplace ? html` · ${r.workplace}` : ''}${r.pay ? html` · <b style="font-weight:600;color:var(--ink2)" title="${r.pay}">${shortPay(r.pay)}</b>` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}</span></div></div></td>
+      <td><div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a class="t" href="#/roles/${r.id}">${r.title}</a><span class="s m">${employer(r.company, r.company_id)}${r.rating ? html` <span class="xs" title="What employees rate ${r.company}, out of 5">★ ${r.rating.toFixed(1)}</span>` : ''}${r.location ? html` · ${r.location}` : ''}${r.workplace ? html` · ${r.workplace}` : ''}${r.pay ? html` · <b style="font-weight:600;color:var(--ink2)" title="${r.pay}">${shortPay(r.pay)}</b>` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}${r.path ? html` <span class="chip ${r.path === 'on' ? 'good' : ''}" style="padding:0 7px" title="${r.path === 'on' ? 'Moves you along the career path you want' : 'Leads away from the career path you want'}">${r.path === 'on' ? 'On path' : 'Off path'}</span>` : ''}</span></div></div></td>
       <td>${rings(r.fit, r.fit_tailored, true)}</td>
       <td>${freshness(r, true)}</td>
       <td class="s">${r.applicants >= 0 ? html`<b style="${r.applicants < 10 ? 'color:var(--hot)' : 'font-weight:500'}">${applicantsText(r.applicants)}</b>${r.applicants < 10 ? html` <span class="xs" style="color:var(--hot)">be early</span>` : ''}` : html`<span class="m">–</span>`}</td>
@@ -88,7 +103,11 @@ export default {
   sub: (d, route) => route.parts[1] === 'board' ? 'Where every role stands' : 'Everything Job Hunt found, freshest first',
   topics: ['roles'],
   sized: true,
-  load: route => route.parts[1] === 'board' ? api('board') : api('roles?' + query(route)),
+  async load(route) {
+    if (route.parts[1] === 'board') return api('board');
+    const [d, rescore] = await Promise.all([api('roles?' + query(route)), route.q.closed === 'screened' ? api('rescore').catch(() => null) : null]);
+    return { ...d, rescore };
+  },
   view(d, route) {
     const isBoard = route.parts[1] === 'board';
     return html`<div class="body">
@@ -114,5 +133,7 @@ export default {
     showadd() { const f = document.getElementById('addrole'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); return false; },
     async add({ f }) { const r = await post('roles', f); toast('Added. Job Hunt is reading it.'); location.hash = `#/roles/${r.id}`; return false; },
     reopen: ({ d }) => post(`roles/${d.id}/reopen`).then(() => toast('Brought back')),
+    rescore: ({ d }) => post('rescore', { all: !!d.all }).then(() => toast('Scoring them again. Those that fit come back as they are read.')),
+    force: () => post('search/force').then(() => toast('Searching every source, a week back. Then the set-aside roles are checked again.')),
   },
 };

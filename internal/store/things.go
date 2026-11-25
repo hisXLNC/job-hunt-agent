@@ -279,6 +279,9 @@ type Role struct {
 	// LaterUntil: the person saved the role for later; it stays off Today
 	// until this moment. 0 when not saved for later.
 	LaterUntil int64 `json:"later_until"`
+	// Path: "on" or "off" the career path the person wants, from the
+	// role's reading; "" when there is no path or it could not tell.
+	Path string `json:"path,omitempty"`
 }
 
 // Age is when the posting went up, or when Job Hunt first saw it.
@@ -289,18 +292,21 @@ func (r Role) Age() int64 {
 	return r.FirstSeenAt
 }
 
-const roleCols = `r.id, r.company_id, c.name, r.key, r.source, r.title, r.location, r.workplace, r.pay, r.url, r.apply_url, r.posted_at, r.first_seen_at, r.last_seen_at, r.gone_at, r.applicants, r.band, r.stage, r.stage_at, r.closed, r.closed_why, r.fit, r.fit_tailored, r.saved, r.auto, r.applied_at, r.later_until`
+const roleCols = `r.id, r.company_id, c.name, r.key, r.source, r.title, r.location, r.workplace, r.pay, r.url, r.apply_url, r.posted_at, r.first_seen_at, r.last_seen_at, r.gone_at, r.applicants, r.band, r.stage, r.stage_at, r.closed, r.closed_why, r.fit, r.fit_tailored, r.saved, r.auto, r.applied_at, r.later_until, CASE WHEN json_valid(r.reading) THEN COALESCE(json_extract(r.reading, '$.path'), '') ELSE '' END`
 
 func scanRole(sc interface{ Scan(...any) error }, full bool) (Role, error) {
 	var r Role
 	var saved, auto int
-	dst := []any{&r.ID, &r.CompanyID, &r.Company, &r.Key, &r.Source, &r.Title, &r.Location, &r.Workplace, &r.Pay, &r.URL, &r.ApplyURL, &r.PostedAt, &r.FirstSeenAt, &r.LastSeenAt, &r.GoneAt, &r.Applicants, &r.Band, &r.Stage, &r.StageAt, &r.Closed, &r.ClosedWhy, &r.Fit, &r.FitTailored, &saved, &auto, &r.AppliedAt, &r.LaterUntil}
+	dst := []any{&r.ID, &r.CompanyID, &r.Company, &r.Key, &r.Source, &r.Title, &r.Location, &r.Workplace, &r.Pay, &r.URL, &r.ApplyURL, &r.PostedAt, &r.FirstSeenAt, &r.LastSeenAt, &r.GoneAt, &r.Applicants, &r.Band, &r.Stage, &r.StageAt, &r.Closed, &r.ClosedWhy, &r.Fit, &r.FitTailored, &saved, &auto, &r.AppliedAt, &r.LaterUntil, &r.Path}
 	var reading string
 	if full {
 		dst = append(dst, &r.Description, &reading)
 	}
 	err := sc.Scan(dst...)
 	r.Saved, r.Auto = saved != 0, auto != 0
+	if r.Path != "on" && r.Path != "off" {
+		r.Path = ""
+	}
 	if full {
 		r.Reading = raw(reading)
 	}
@@ -515,6 +521,43 @@ func (s *Store) Reopen(id int64) error {
 	_, err := s.db.Exec(`UPDATE roles SET closed = '', closed_why = '', later_until = 0, stage = CASE WHEN stage = 'new' THEN 'found' ELSE stage END, stage_at = ? WHERE id = ?`, s.now(), id)
 	s.Changed("roles", "today")
 	return err
+}
+
+// Unscreen brings back a role that was set aside by the rules or by its
+// reading, now that it clears them. Only a set-aside role comes back: one the
+// person said no to, or closed in any other way, is left as it is. It reports
+// whether the role came back.
+func (s *Store) Unscreen(id int64) (bool, error) {
+	res, err := s.db.Exec(`UPDATE roles SET closed = '', closed_why = '', stage_at = ? WHERE id = ? AND closed = 'screened'`, s.now(), id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	s.Changed("roles", "today")
+	return n > 0, nil
+}
+
+// SetAside lists the roles set aside (by the rules or by their reading) that
+// were first seen since a moment, newest first: the person never saved or
+// applied to them, their posting is still up, and their employer is not
+// muted.
+func (s *Store) SetAside(since int64, limit int) ([]Role, error) {
+	rows, err := s.db.Query(`SELECT `+roleCols+`, r.description, r.reading FROM roles r JOIN companies c ON c.id = r.company_id
+		WHERE r.closed = 'screened' AND r.saved = 0 AND r.applied_at = 0 AND r.gone_at = 0 AND c.state != 'muted' AND r.first_seen_at >= ?
+		ORDER BY r.first_seen_at DESC LIMIT ?`, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Role
+	for rows.Next() {
+		r, err := scanRole(rows, true)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // SetLater keeps an open role off Today until a moment (0 brings it back

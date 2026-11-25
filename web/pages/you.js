@@ -13,7 +13,7 @@ const SETTINGS = [
   ['', 'profile', 'name', 'Your name and how you describe yourself', 'name headline title describe'],
   ['', 'profile', 'rare', 'The one thing few other applicants have', 'rare strength lead unique'],
   ['', 'profile', 'city', 'City, country and where you live now', 'city country town location place toronto home live'],
-  ['', 'profile', 'places', 'Nearby places that also count', 'nearby places area towns commute region'],
+  ['', 'profile', 'places', 'Other places to search', 'nearby places area towns cities commute region several more'],
   ['', 'profile', 'arrive_on', 'Arrival date', 'arrive arrival landing date move moving relocate'],
   ['', 'profile', 'work_status', 'Allowed to work', 'work permit visa citizen resident status authorization authorisation sponsorship'],
   ['', 'profile', 'pay_floor', 'Lowest yearly salary', 'salary pay floor minimum money wage compensation'],
@@ -24,6 +24,7 @@ const SETTINGS = [
   ['', 'profile', 'max_age_days', 'Hard limits: age of posting, pay, contract, part-time', 'hard limits old postings age contract part-time internship strict'],
   ['', 'profile', 'keep_fit', 'Fit score a role needs, and when documents are written', 'fit score needed threshold tailor automatically strong fits all limit per search most tailored scored'],
   ['', 'profile', 'matters', 'What matters to you in a job', 'matters priorities preferences values what i want'],
+  ['', 'profile', 'seniority', 'What you want: level, permanent or contract, industries, deal-breakers, career path', 'level seniority permanent contract industry industries sector deal-breakers dealbreakers career path on path off path want'],
   ['', 'profile', 'may_prepare', 'When a strong role appears: write straight away or ask', 'prepare automatically ask before writing tailor auto'],
   ['', 'cvs', '', 'Your CVs', 'cv resume résumé upload add file word pdf'],
   ['', 'facts', '', 'What Job Hunt knows about you', 'facts know about me remember forget'],
@@ -80,9 +81,10 @@ document.addEventListener('keydown', ev => {
 document.addEventListener('click', ev => { if (!ev.target.closest('.setfind')) document.getElementById('setfound')?.setAttribute('hidden', ''); });
 
 // Which group of About you holds a field the settings search points at.
-const GROUP_OF = { name: 'me', rare: 'me', city: 'me', places: 'me', arrive_on: 'me', work_status: 'me', pay_floor: 'me', level: 'look', domain: 'look', avoid: 'look', wp_remote: 'look', max_age_days: 'limits', matters: 'matters', letter_style: 'letters', keep_fit: 'auto', may_prepare: 'auto' };
+const GROUP_OF = { name: 'me', rare: 'me', city: 'me', places: 'me', arrive_on: 'me', work_status: 'me', pay_floor: 'me', level: 'look', domain: 'look', avoid: 'look', wp_remote: 'look', max_age_days: 'limits', matters: 'matters', seniority: 'wants', letter_style: 'letters', keep_fit: 'auto', may_prepare: 'auto' };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
 const longDay = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const SEN = { mid: 'Mid-level', senior: 'Senior', lead: 'Team lead', manager: 'Manager', director: 'Director', executive: 'Executive' };
 const LETTER = { standard: 'Standard', formal: 'Formal', short: 'Short and direct', warm: 'Warm' };
 
 function about(d, route) {
@@ -97,6 +99,8 @@ function about(d, route) {
   const hidden = types.filter(([k]) => (p.no_types || []).includes(k)).map(x => x[1]);
   const limits = [p.max_age_days ? `Postings up to ${p.max_age_days === 1 ? '1 day' : p.max_age_days === 7 ? 'a week' : p.max_age_days === 14 ? '2 weeks' : p.max_age_days === 30 ? 'a month' : p.max_age_days + ' days'} old` : 'Any age of posting',
     hidden.length ? `no ${hidden.join(', ')}` : 'contract, part-time and internships all shown', p.pay_strict && p.pay_floor ? 'nothing under your pay floor' : ''].filter(Boolean);
+  const wants = [p.seniority ? SEN[p.seniority] : '', p.terms === 'permanent' ? 'permanent only' : p.terms === 'contract' ? 'contract' : '', p.industries?.length ? `in ${p.industries.join(', ')}` : '',
+    p.no_industries?.length ? `not in ${p.no_industries.join(', ')}` : '', p.deal_breakers?.length ? plural(p.deal_breakers.length, 'deal-breaker') : '', p.career_path ? `path: ${p.career_path}` : ''].filter(Boolean);
   const sign = (p.signature || '').split('\n').map(x => x.trim()).filter(Boolean).join(' ');
   const save = html`<div class="row" style="gap:8px;margin-top:4px"><button class="btn sm p">Save</button><a class="btn sm ghost" href="${with_(route, { open: '' })}">Cancel</a></div>`;
   const form = (group, body) => html`<form data-act="saveprofile" data-group="${group}" class="col" style="gap:12px" data-set="profile">${body}${save}</form>`;
@@ -105,7 +109,7 @@ function about(d, route) {
       form('me', html`<div class="grid2"><label class="field">Name<input type="text" name="name" value="${p.name}"></label><label class="field">How you describe yourself<input type="text" name="headline" value="${p.headline}"></label></div>
       <label class="field">The one thing few other applicants have <span class="h">Job Hunt leads with this.</span><input type="text" name="rare" value="${p.rare}"></label>
       <div class="grid3"><label class="field">City you want to work in<input type="text" name="city" value="${p.city}"></label><label class="field">Country<input type="text" name="country" value="${p.country}"></label><label class="field">Where you live now<input type="text" name="home" value="${p.home}"></label></div>
-      <label class="field">Nearby places that also count <span class="h">${d.area?.length ? html`<details style="display:inline"><summary style="display:inline;cursor:pointer;color:var(--accent)">${p.city} already includes ${d.area.length} places</summary> ${d.area.join(', ')}.</details> Add any others here, comma-separated.` : 'Other towns you would work in. Comma-separated.'}</span><input type="text" name="places" value="${(p.places || []).join(', ')}" placeholder="${d.area?.length ? 'Hamilton, Guelph' : ''}"></label>
+      <label class="field">Other places to search <span class="h">${d.area?.length ? html`<details style="display:inline"><summary style="display:inline;cursor:pointer;color:var(--accent)">${p.city} already includes ${d.area.length} places</summary> ${d.area.join(', ')}.</details> Add any others here, comma-separated. Each is searched for every title.` : 'Other towns you would work in, comma-separated. Each is searched for every title.'}</span><input type="text" name="places" value="${(p.places || []).join(', ')}" placeholder="${d.area?.length ? 'Hamilton, Guelph' : ''}"></label>
       <div class="grid3"><label class="field">You arrive on <span class="h">Leave empty if you are there.</span><input type="date" name="arrive_on" value="${p.arrive_on}"></label>
         <label class="field">Allowed to work there on arrival<select name="work_status">${Object.entries(WORK).map(([k, v]) => html`<option value="${k}" ${p.work_status === k ? 'selected' : ''}>${v}</option>`)}</select></label>
         <label class="field">Lowest yearly salary<input type="number" name="pay_floor" value="${p.pay_floor || ''}" placeholder="No floor"></label></div>
@@ -123,6 +127,14 @@ function about(d, route) {
       <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Never show:</span>${[['contract', 'Contract'], ['part-time', 'Part-time'], ['internship', 'Internships']].map(([k, x]) => html`<label class="row s" style="gap:5px"><input type="checkbox" name="no_${k}" ${(p.no_types || []).includes(k) ? 'checked' : ''}> ${x}</label>`)}</div>`)],
     ['matters', 'What matters to you', p.matters ? ['good', 'Written'] : ['warn', 'Not yet'], p.matters ? `“${p.matters.length > 150 ? p.matters.slice(0, 150) + '…' : p.matters}”` : 'In your own words; Claude weighs every role by it',
       form('matters', html`<label class="field">What matters to you in a job <span class="h">In your own words. Claude weighs every role by it.</span><textarea name="matters" rows="3" maxlength="1500" placeholder="A team that ships; no on-call; within 40 minutes by train; a manager who was an accountant.">${p.matters || ''}</textarea></label>`)],
+    ['wants', 'What you want', wants.length ? ['good', 'Said'] : ['warn', 'Not yet'], wants.length ? wants.join(' · ') : 'Level, permanent or contract, industries, deal-breakers and your career path; Claude weighs every role by them',
+      form('wants', html`<p class="xs m">Claude weighs every role by these when it reads it. A role that clearly has a deal-breaker, or is in an industry you don't want, is set aside with the reason; you can still see it under Roles → Set aside.</p>
+      <div class="grid2"><label class="field">Level you want<select name="seniority"><option value="">Not said</option>${Object.entries(SEN).map(([k, v]) => html`<option value="${k}" ${p.seniority === k ? 'selected' : ''}>${v}</option>`)}</select></label>
+        <label class="field">Permanent or contract <span class="h">To never see contracts, use Hard limits.</span><select name="terms">${[['', 'Either'], ['permanent', 'Permanent'], ['contract', 'Contract']].map(([k, v]) => html`<option value="${k}" ${(p.terms || '') === k ? 'selected' : ''}>${v}</option>`)}</select></label></div>
+      <div class="grid2"><label class="field">Industries you want <span class="h">Comma-separated.</span><input type="text" name="industries" value="${(p.industries || []).join(', ')}" placeholder="Banking, insurance"></label>
+        <label class="field">Industries you don't want <span class="h">Comma-separated.</span><input type="text" name="no_industries" value="${(p.no_industries || []).join(', ')}" placeholder="Gambling, tobacco"></label></div>
+      <label class="field">Deal-breakers <span class="h">One per line.</span><textarea name="deal_breakers" rows="3" placeholder="On-call rota&#10;More than two days a week away from home">${(p.deal_breakers || []).join('\n')}</textarea></label>
+      <label class="field">The career path you want <span class="h">Roles are tagged On path or Off path. <a href="#/career">Career path</a> can set it from one of its routes.</span><input type="text" name="career_path" maxlength="300" value="${p.career_path || ''}" placeholder="Head of Tax Technology"></label>`)],
     ['letters', 'Letters and follow-ups', ['', LETTER[p.letter_style] || 'Standard'], [(p.chase_days ?? 8) ? `Follow up after ${p.chase_days ?? 8} days` : 'No follow-ups', sign ? `signed “${sign}”` : 'signed “Sincerely,” and your name', (p.weekly_goal ?? 10) ? `goal ${p.weekly_goal ?? 10} applications a week` : 'no weekly goal'].join(' · '),
       form('letters', html`<div class="grid3"><label class="field">Letter style <span class="h">You can change it for any one role.</span><select name="letter_style">${[['standard', 'Standard'], ['formal', 'Formal: banks, government, law'], ['short', 'Short and direct'], ['warm', 'Warm and personal']].map(([k, x]) => html`<option value="${k}" ${p.letter_style === k ? 'selected' : ''}>${x}</option>`)}</select></label>
         <label class="field">Follow up on an application <span class="h">When there has been no reply.</span><select name="chase_days">${[...new Set([0, 5, 8, 10, 14, 21, p.chase_days ?? 8])].sort((a, b) => a - b).map(n => html`<option value="${n}" ${(p.chase_days ?? 8) === n ? 'selected' : ''}>${n ? `After ${n} days` : 'Never'}</option>`)}</select></label>
@@ -370,12 +382,12 @@ function moreSources(d) {
         <div class="row wrap" style="gap:14px"><label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''}> Search ${s.name}</label>
           <label class="row s" style="gap:6px">At most <input type="number" name="limit" value="${s.limit}" min="1" max="5000" style="width:84px;height:30px" aria-label="Most requests a day to ${s.name}"> requests a day</label></div>
         <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>`}
-      <div class="row"><button class="btn sm p">Save</button>
+      <div class="row"><button class="btn sm p" data-busy="${alerts || indeed ? 'Saving…' : 'Trying the key…'}">Save</button>
         ${!alerts && !indeed && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="Asking…" title="Runs one small search now and says what came back.">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
         <span class="grow"></span>${s.at ? html`<span class="xs m">Last answered ${ago(s.at)}: ${s.seen} posting${s.seen === 1 ? '' : 's'}${alerts || s.new ? `, ${s.new} new` : ''}</span>` : ''}</div></form>`;
   };
   return html`<div class="card col" style="gap:12px"><div><h3>More job sources</h3>
-    <p class="s m" style="margin-top:4px">Other places Job Hunt can search with your titles and city. Most need a key that you get yourself, free. A key is kept only in Job Hunt's data file on this computer and is sent only to the service it is for.</p></div>
+    <p class="s m" style="margin-top:4px">Other places Job Hunt can search with your titles and city. Each needs a key that you get yourself, free. A new key is tried with one small search before it is saved. A key is kept only in Job Hunt's data file on this computer and is sent only to the service it is for.</p></div>
     ${(d.more || []).map(row)}</div>`;
 }
 
@@ -414,7 +426,20 @@ function schedule(d) {
     <label class="field">Full searches at <span class="h">Every source, every title. Times of day, comma-separated; up to six.</span><input type="text" name="full" value="${sc.full.map(hhmm).join(', ')}" placeholder="07:00, 12:30, 17:30"></label>
     <label class="field" style="max-width:420px">Quick check for brand-new postings <span class="h">Only postings a couple of hours old with few applicants. This is what gets you in early.</span><select name="fast_minutes">${[[10, 'Every 10 minutes'], [15, 'Every 15 minutes'], [20, 'Every 20 minutes'], [30, 'Every 30 minutes'], [60, 'Every hour'], [120, 'Every 2 hours'], [0, 'Off']].map(([v, t]) => html`<option value="${v}" ${sc.fast_minutes === v ? 'selected' : ''}>${t}</option>`)}</select></label>
     <div class="row s" style="gap:8px"><span style="font-weight:600">Quick checks between</span>${hour('from', sc.from)}<span>and</span>${hour('to', sc.to)}<span class="m">Same time twice means all day.</span></div>
-    <div class="row"><button class="btn p">Save</button></div></form>`;
+    <div class="row"><button class="btn p">Save</button></div>${suggested(d)}</form>`;
+}
+// Search times suggested from when the roles found for you were posted.
+function suggested(d) {
+  const sg = d.suggest, sc = d.schedule || {};
+  if (!sg) return '';
+  if (!sg.ready) return html`<p class="xs m" style="border-top:1px solid var(--line2);padding-top:10px">Once Job Hunt has seen ${sg.need} postings that say the time they went up (${sg.seen} so far), it suggests search times from them.</p>`;
+  const top = Math.max(...sg.hours.map(h => h.n), 1), hh = h => String(h).padStart(2, '0') + ':00';
+  const span = sg.from === sg.to ? 'all day' : `between ${hh(sg.from)} and ${hh(sg.to)}`;
+  return html`<div class="col" style="gap:8px;border-top:1px solid var(--line2);padding-top:10px"><b class="s">Suggested from your own postings</b>
+    <div class="row" style="gap:2px;align-items:end;height:44px" role="img" aria-label="How many of your postings went up in each hour of the day">${sg.hours.map(h => html`<span title="${hh(h.hour)}: ${h.n} posting${h.n === 1 ? '' : 's'}" style="flex:1;min-width:3px;height:${Math.max(2, Math.round(40 * h.n / top))}px;border-radius:2px;background:var(--${sg.peaks.includes(h.hour) ? 'accent' : 'line'})"></span>`)}</div>
+    <div class="row xs m" style="justify-content:space-between"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
+    <p class="s ink2">Of the ${sg.seen} roles found for you lately that say when they went up, most went up around ${sg.peaks.map(hh).join(', ')}. Full searches at <b>${sg.full.map(hhmm).join(', ')}</b> and quick checks <b>${span}</b> would find them while few have applied.</p>
+    <div class="row">${sg.same ? html`<span class="chip good">Your times follow this</span>` : html`<button type="button" class="btn sm" data-act="usesuggest" data-busy="Saving…">Use these times</button>`}</div></div>`;
 }
 
 function panel(d) {
@@ -558,6 +583,7 @@ export default {
     },
     testdesk: () => post('desk/test').then(() => { toast('Sent. It shows by the clock.'); return false; }),
     savesearchset: ({ f }) => put('searchset', { ratings_off: !f.ratings, min_rating: +f.min_rating || 0, clear_days: +f.clear_days || 0, budget: !!f.budget }).then(() => toast('Saved')),
+    usesuggest: ({ data }) => put('schedule', { full: data.suggest.full, fast_minutes: data.schedule?.fast_minutes ?? 20, from: data.suggest.from, to: data.suggest.to }).then(() => toast('Saved. The next searches follow these times.')),
     async saveschedule({ f }) {
       const full = f.full.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean).map(t => { const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(t); if (!m) throw new Error(`"${t}" isn't a time. Write times like 07:00 or 17:30.`); let h = +m[1]; if (/pm/i.test(m[3] || '') && h < 12) h += 12; if (/am/i.test(m[3] || '') && h === 12) h = 0; return h * 60 + +(m[2] || 0); });
       await put('schedule', { full, fast_minutes: +f.fast_minutes, from: +f.from, to: +f.to });
@@ -571,6 +597,7 @@ export default {
         look: () => ({ titles: { level: titleLines(f.level), step_up: titleLines(f.step_up), sideways: titleLines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid), workplaces: wp.length === 3 ? [] : wp }),
         limits: () => ({ pay_strict: !!f.pay_strict, max_age_days: +f.max_age_days || 0, no_types: ['contract', 'part-time', 'internship'].filter(k => f['no_' + k]) }),
         matters: () => ({ matters: f.matters }),
+        wants: () => ({ seniority: f.seniority, terms: f.terms, industries: lines(f.industries), no_industries: lines(f.no_industries), deal_breakers: titleLines(f.deal_breakers), career_path: f.career_path.trim() }),
         letters: () => ({ letter_style: f.letter_style, signature: f.signature, chase_days: Math.max(0, +f.chase_days || 0), weekly_goal: Math.max(0, Math.round(+f.weekly_goal) || 0) }),
         auto: () => ({ keep_fit: Math.min(95, Math.max(30, Math.round(+f.keep_fit) || 55)), prepare_fit: Math.min(100, Math.max(30, Math.round(+f.prepare_fit) || 70)), prepare_max: Math.max(0, Math.round(+f.prepare_max) || 0), may_prepare: f.may_prepare }),
       }[d.group];
@@ -638,7 +665,8 @@ export default {
     savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0, detail: !!f.detail, only: f.only || '' }).then(() => toast('Saved')),
     newtopic({ el }) { const a = new Uint8Array(12); crypto.getRandomValues(a); el.closest('form').querySelector('[name=topic]').value = 'jobhunt-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); return false; },
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
-    savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' || d.id === 'indeed' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(() => toast('Saved')),
+    // A new key is tried with one small search first; one the service refuses is not saved.
+    savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' || d.id === 'indeed' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(r => toast(r?.warning || ((f.key || '').trim() ? 'Tried and saved. The key works.' : 'Saved'))),
     async testsource({ d }) { const r = await post(`sources/${d.id}/test`); toast(r.message); },
     delsource: ({ d }) => del(`sources/${d.id}`).then(() => toast('Key removed')),
     scanrecruiters: () => post('mail/recruiters').then(() => toast('Looking through your mail for recruiters. This takes a few minutes.')),
