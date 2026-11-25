@@ -21,8 +21,8 @@ import (
 //
 // Ways in that are not postings: hiring posts the side panel reads on
 // LinkedIn, funding and growth news from a web search a few times a week, and
-// leads the person pastes in. Claude sizes each one up and writes a first note
-// and one follow-up. Job Hunt writes; the person sends.
+// leads the person pastes in. Claude sizes each one up. A first note and one
+// follow-up are written only when the person asks for each; they send them.
 
 // newsEvery is how often the web is searched for news, when that is on:
 // a little over twice a week.
@@ -188,6 +188,10 @@ func (e *Engine) ReadLeads(ctx context.Context) error {
 				return err
 			}
 			rd = tidyLead(rd)
+			// Notes the person asked for (and their own wording) outlive a new size-up.
+			var was brain.LeadReading
+			json.Unmarshal(l.Reading, &was)
+			rd.Note, rd.FollowUp, rd.Edited = was.Note, was.FollowUp, was.Edited
 			state := "open"
 			if !rd.Hiring && l.Source != "you" {
 				state = "not_hiring"
@@ -488,7 +492,53 @@ func (e *Engine) SaveLeadNote(id int64, which, subject, body string) error {
 	return e.S.SaveLeadReading(id, rd)
 }
 
-// ReadLeadAgain asks Claude to size the lead up again, with fresh notes.
+// WriteLeadNote writes the first note ("note") or the one follow-up
+// ("follow_up") for a lead: one Claude request, only because the person
+// pressed the button. It replaces what was there.
+func (e *Engine) WriteLeadNote(ctx context.Context, id int64, which string) (brain.Message, error) {
+	if e.LLM().Engine == "" {
+		return brain.Message{}, llm.ErrNotConnected
+	}
+	l, err := e.S.Lead(id)
+	if err != nil {
+		return brain.Message{}, err
+	}
+	if l.ReadAt == 0 {
+		return brain.Message{}, errors.New("Job Hunt is still sizing this lead up. Try again in a moment.")
+	}
+	var rd brain.LeadReading
+	json.Unmarshal(l.Reading, &rd)
+	switch which {
+	case "note":
+	case "follow_up":
+		if strings.TrimSpace(rd.Note.Body) == "" {
+			return brain.Message{}, errors.New("Write the first note first.")
+		}
+	default:
+		return brain.Message{}, errors.New("unknown note")
+	}
+	m, err := e.brain.WriteLeadNote(ctx, e.Person(), brain.LeadIn{Kind: l.Kind, Company: l.Company, Author: l.Author, AuthorTitle: l.AuthorTitle, Headline: l.Headline, Text: l.Text, URL: l.URL}, rd, which)
+	if err != nil {
+		return brain.Message{}, err
+	}
+	m.Subject, m.Body = clipRunes(m.Subject, 200), clipRunes(m.Body, 4000)
+	// Read again: the person may have changed the other note meanwhile.
+	if l, err = e.S.Lead(id); err != nil {
+		return brain.Message{}, err
+	}
+	json.Unmarshal(l.Reading, &rd)
+	if which == "note" {
+		rd.Note = m
+	} else {
+		rd.FollowUp = m
+	}
+	if err := e.S.SaveLeadReading(id, rd); err != nil {
+		return brain.Message{}, err
+	}
+	return m, nil
+}
+
+// ReadLeadAgain asks Claude to size the lead up again. Notes already written stay.
 func (e *Engine) ReadLeadAgain(id int64) error {
 	if e.LLM().Engine == "" {
 		return llm.ErrNotConnected

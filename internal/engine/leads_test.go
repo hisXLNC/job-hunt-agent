@@ -2,10 +2,14 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"jobhunt/internal/brain"
+	"jobhunt/internal/llm"
 	"jobhunt/internal/store"
 )
 
@@ -60,7 +64,7 @@ func TestLeadsFromPostsAreSizedUpOnce(t *testing.T) {
 		t.Fatalf("open leads: %d", pg.Total)
 	}
 	l := pg.Leads[0]
-	if l.ReadAt == 0 || !l.Read.Hiring || l.Read.Note.Body == "" || l.Read.FollowUp.Body == "" || len(l.Read.Who) == 0 || l.Read.Who[0].Name != "Hannah Morales" {
+	if l.ReadAt == 0 || !l.Read.Hiring || l.Read.Note.Body != "" || l.Read.FollowUp.Body != "" || len(l.Read.Who) == 0 || l.Read.Who[0].Name != "Hannah Morales" {
 		t.Fatalf("reading: %+v", l.Read)
 	}
 	if l.Company == "" {
@@ -99,6 +103,9 @@ func TestOwnLeadAndFollowUp(t *testing.T) {
 	}
 	if err := e.LeadStep(id, "followed", true); err == nil {
 		t.Fatal("a follow-up was marked before the note")
+	}
+	if _, err := e.WriteLeadNote(ctx, id, "note"); err != nil {
+		t.Fatal(err)
 	}
 	if err := e.LeadStep(id, "sent", true); err != nil {
 		t.Fatal(err)
@@ -218,5 +225,66 @@ func TestNewsLeads(t *testing.T) {
 	e.SetLeadsAuto(false)
 	if e.LeadsAuto() {
 		t.Fatal("switch")
+	}
+}
+
+// Sizing a lead up writes no message. A note and the follow-up are each one
+// request, made only when the person asks; reading the lead again keeps them.
+func TestLeadNotesOnlyWhenAsked(t *testing.T) {
+	e, _ := newEngine(t)
+	setUp(t, e)
+	ctx := context.Background()
+	var mu sync.Mutex
+	asked := map[string]int{}
+	e.Sample = llm.Func(func(ctx context.Context, req llm.Request) (llm.Response, error) {
+		mu.Lock()
+		asked[req.Task]++
+		mu.Unlock()
+		if req.Task == "lead" && strings.Contains(fmt.Sprint(req.Schema), "follow_up") {
+			t.Error("the size-up asks Claude for a follow-up")
+		}
+		return brain.StandIn().Do(ctx, req)
+	})
+	count := func(task string) int { mu.Lock(); defer mu.Unlock(); return asked[task] }
+	if _, err := e.AddLeadPosts([]LeadPost{{Author: "Hannah Morales", Headline: "VP Finance at Brightwater", Text: "We're hiring a Tax Technology Lead to own our indirect tax engine."}}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.ReadLeads(ctx); err != nil {
+		t.Fatal(err)
+	}
+	e.findNews(ctx)
+	id := e.Leads("open", 60).Leads[0].ID
+	if count("lead") == 0 || count("lead_note") != 0 {
+		t.Fatalf("calls: %+v", asked)
+	}
+	if l, _ := e.Lead(id); l.Read.Note.Body != "" || l.Read.FollowUp.Body != "" {
+		t.Fatalf("a note was written unasked: %+v", l.Read)
+	}
+	if _, err := e.WriteLeadNote(ctx, id, "follow_up"); err == nil {
+		t.Fatal("a follow-up was written before the note")
+	}
+	if count("lead_note") != 0 {
+		t.Fatal("Claude was asked anyway")
+	}
+	m, err := e.WriteLeadNote(ctx, id, "note")
+	if err != nil || !strings.HasPrefix(m.Body, "Hi Hannah") || count("lead_note") != 1 {
+		t.Fatalf("note: %+v %v (%d calls)", m, err, count("lead_note"))
+	}
+	if l, _ := e.Lead(id); l.Read.Note.Body != m.Body || l.Read.FollowUp.Body != "" {
+		t.Fatalf("stored: %+v", l.Read)
+	}
+	if f, err := e.WriteLeadNote(ctx, id, "follow_up"); err != nil || f.Body == "" || count("lead_note") != 2 {
+		t.Fatalf("follow-up: %+v %v", f, err)
+	}
+	// Read again: the size-up is new, the notes stay.
+	e.ReadLeadAgain(id)
+	if err := e.ReadLeads(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := e.Lead(id); l.ReadAt == 0 || l.Read.Note.Body != m.Body || l.Read.FollowUp.Body == "" {
+		t.Fatalf("after reading again: %+v", l.Read)
+	}
+	if count("lead_note") != 2 {
+		t.Fatal("reading again wrote a note")
 	}
 }

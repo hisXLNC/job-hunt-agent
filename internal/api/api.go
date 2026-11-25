@@ -1488,8 +1488,9 @@ func (s *Server) Handler() http.Handler {
 	h("POST /api/leads/{id}/{action}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		id := idOf(r)
 		var in struct {
-			On  *bool `json:"on"`
-			Who int   `json:"who"`
+			On    *bool  `json:"on"`
+			Who   int    `json:"who"`
+			Which string `json:"which"`
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
@@ -1504,6 +1505,11 @@ func (s *Server) Handler() http.Handler {
 			return nil, e.LeadStep(id, r.PathValue("action"), on)
 		case "again":
 			return nil, e.ReadLeadAgain(id)
+		case "write":
+			// Written only because the person pressed the button: one request.
+			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+			defer cancel()
+			return e.WriteLeadNote(ctx, id, in.Which)
 		case "role":
 			rid, err := e.LeadToRole(id)
 			return map[string]int64{"id": rid}, err
