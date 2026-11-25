@@ -6,6 +6,8 @@ on:
   push:
     branches: [redesign]
     paths: ["VERSION", ".github/workflows/release.yml"]
+  # A release whose tests failed is tried again by fixing the cause and running this by hand.
+  workflow_dispatch:
 
 permissions:
   contents: write

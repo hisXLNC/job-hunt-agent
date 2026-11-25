@@ -103,7 +103,12 @@ func TestCarryOnWhereYouLeftOffOnAnotherComputer(t *testing.T) {
 	}
 
 	// At the next start it is put back the safe way: what was there is saved first.
-	out := ApplyStagedRestore(laptop.Dir, filepath.Join(laptop.Dir, "jobhunt.db"), time.Now())
+	// The program does this before it opens its data, so the laptop's file is closed here
+	// (Windows won't move a file that is open).
+	laptop.Stop()
+	time.Sleep(50 * time.Millisecond)
+	laptop.S.Close()
+	out :=ApplyStagedRestore(laptop.Dir, filepath.Join(laptop.Dir, "jobhunt.db"), time.Now())
 	if out == nil || out.Error != "" || out.Saved == "" {
 		t.Fatalf("restore: %+v", out)
 	}
