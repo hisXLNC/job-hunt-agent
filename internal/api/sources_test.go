@@ -43,7 +43,7 @@ func TestSourceKeysGoInAndNeverComeOut(t *testing.T) {
 		var v struct {
 			More []map[string]any `json:"more"`
 		}
-		if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || len(v.More) != 5 {
+		if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || len(v.More) != 6 {
 			t.Fatalf("connections: %v %s", err, w.Body.String())
 		}
 		out := map[string]map[string]any{}

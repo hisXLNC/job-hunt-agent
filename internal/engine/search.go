@@ -496,6 +496,10 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	if ctx.Err() == nil {
 		e.searchKeyed(ctx, kind, p, sinceLast, &stats, &fresh, note)
 	}
+	// 3c. Indeed through the person's Claude connector, on full searches.
+	if kind == "full" && ctx.Err() == nil {
+		e.searchIndeed(ctx, p, &stats, &fresh, note)
+	}
 	// Stopped part-way: the next search starts where a full one would.
 	if ctx.Err() != nil {
 		e.S.EndRun(runID, "stopped", stats, "You stopped it")

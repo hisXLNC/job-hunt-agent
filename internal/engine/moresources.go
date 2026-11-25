@@ -43,6 +43,9 @@ type SourceKeys struct {
 	ApifyActor  string         `json:"apify_actor,omitempty"`  // the scraper; empty means the default
 	Off         []string       `json:"off,omitempty"`          // sources switched off: "adzuna", "jooble", "jsearch", "alerts"
 	Limit       map[string]int `json:"limit,omitempty"`        // most requests a day, where the person set one
+	// Indeed: search Indeed through the person's Claude connector. Off
+	// unless the person turns it on (see indeed.go).
+	Indeed bool `json:"indeed,omitempty"`
 }
 
 func (k SourceKeys) forSources() sources.Keys {
@@ -158,8 +161,28 @@ func tidyKey(s string) (string, error) {
 // switches job-alert e-mails on or off.
 func (e *Engine) SetSource(id string, in SourceKeyInput) error {
 	_, keyed := keyedSources[id]
-	if !keyed && id != srcAlerts {
+	if !keyed && id != srcAlerts && id != srcIndeed {
 		return store.ErrNotFound
+	}
+	if id == srcIndeed {
+		if in.On == nil {
+			return nil
+		}
+		if *in.On {
+			if why := e.indeedReady(); why != "" {
+				return errors.New(strings.TrimSuffix(why, "."))
+			}
+		}
+		e.srcMu.Lock()
+		k := e.sourceKeys()
+		k.Indeed = *in.On
+		err := e.S.Set(sourceKeysKey, k)
+		e.srcMu.Unlock()
+		if *in.On {
+			e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt, s.RestUntil = "", 0, 0 })
+		}
+		e.S.Changed("connections", "runs", "status")
+		return err
 	}
 	key, err := tidyKey(in.Key)
 	if err != nil {
@@ -481,7 +504,7 @@ type MoreSource struct {
 	Get    string `json:"get,omitempty"`
 	Link   string `json:"link,omitempty"`
 	HasKey bool   `json:"has_key"`
-	From   string `json:"from,omitempty"` // jsearch: where the key is from
+	From   string `json:"from,omitempty"`  // jsearch: where the key is from
 	Actor  string `json:"actor,omitempty"` // apify: the scraper chosen, if not the usual one
 	On     bool   `json:"on"`
 	State  string `json:"state"` // "working" | "problem" | "off" | "none" | "waiting"
@@ -528,6 +551,7 @@ func (e *Engine) MoreSources() []MoreSource {
 		}
 		out = append(out, m)
 	}
+	out = append(out, e.indeedRow(k, states[srcIndeed]))
 	mail, st := e.MailSet(), states[srcAlerts]
 	a := MoreSource{ID: srcAlerts, Name: "Job-alert e-mails", On: !k.off(srcAlerts), At: st.At, Seen: st.Seen, New: st.New,
 		About: "The lists of new postings that LinkedIn, Indeed, Glassdoor, Job Bank, Eluta, Workopolis and ZipRecruiter send you. Job Hunt takes the postings out of them on this computer; the e-mails themselves are not passed to Claude."}
@@ -689,7 +713,7 @@ func (e *Engine) Sources() []SourceRow {
 
 	for _, m := range e.MoreSources() {
 		r := SourceRow{ID: m.ID, Name: m.Name, State: m.State, Note: m.Note, At: m.At, Seen: m.Seen, New: m.New}
-		if m.ID != srcAlerts {
+		if m.ID != srcAlerts && m.ID != srcIndeed {
 			// A search says more than the Test button did.
 			if l, ok := last[m.ID]; ok && l.At >= m.At && l.Failed < l.Looked {
 				r.At, r.Seen, r.New = l.At, l.Seen, l.New
