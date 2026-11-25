@@ -68,12 +68,23 @@ func (s *Server) phoneAccess() PhoneAccess {
 func (s *Server) PhonePort() int { return s.Port + 1 }
 
 // phoneCalls is everything a paired phone may ask for. Looking, the role
-// actions the person takes on the move, and the finished documents. No
-// settings, keys, connections, saved copies, updates or the assistant.
+// actions the person takes on the move (the letter and the CV's changes,
+// follow-ups, their notes), people and the notes to them, adding a posting
+// from a link, searching now, and the finished documents. No settings,
+// keys, connections, saved copies, updates or the assistant; nothing that
+// removes, closes or reopens.
 var phoneCalls = []*regexp.Regexp{
 	regexp.MustCompile(`^GET /api/today$`),
 	regexp.MustCompile(`^GET /api/roles/\d+$`),
 	regexp.MustCompile(`^POST /api/roles/\d+/(applied|no|later|unapply|prepare)$`),
+	regexp.MustCompile(`^POST /api/roles/\d+/(letter|askletter|askcv|undoletter|undocv|change|notes|chase|chasesave|chasesent|chasedrop)$`),
+	regexp.MustCompile(`^POST /api/roles/(link|chaseall)$`),
+	regexp.MustCompile(`^POST /api/search$`),
+	regexp.MustCompile(`^GET /api/people$`),
+	regexp.MustCompile(`^GET /api/people/\d+$`),
+	regexp.MustCompile(`^POST /api/people/\d+/note$`),
+	regexp.MustCompile(`^PUT /api/notes/\d+$`),
+	regexp.MustCompile(`^POST /api/notes/\d+/(sent|replied|quiet|later)$`),
 	regexp.MustCompile(`^GET /api/roles/\d+/(cv|letter|both)\.pdf$`),
 	regexp.MustCompile(`^GET /api/mail$`),
 	regexp.MustCompile(`^GET /api/mail/\d+$`),

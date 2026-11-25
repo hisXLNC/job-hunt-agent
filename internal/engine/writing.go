@@ -105,6 +105,7 @@ func (e *Engine) SaveLetter(roleID int64, text string) error {
 		return err
 	}
 	doc.Text = strings.TrimSpace(text)
+	doc.Own = true
 	return e.S.SaveDoc(roleID, "letter", doc)
 }
 

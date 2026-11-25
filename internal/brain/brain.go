@@ -97,6 +97,12 @@ func (p Person) Block() string {
 		if c.Focus != "" {
 			fmt.Fprintf(&b, " (leans towards: %s)", c.Focus)
 		}
+		if len(c.Titles) > 0 {
+			fmt.Fprintf(&b, "\nThe person uses this CV for: %s", strings.Join(c.Titles, "; "))
+		}
+		if len(c.Keywords) > 0 {
+			fmt.Fprintf(&b, "\nAnd for postings that mention: %s", strings.Join(c.Keywords, ", "))
+		}
 		fmt.Fprintf(&b, "\n<cv>\n%s\n</cv>\n", strings.TrimSpace(c.Text))
 	}
 	if len(p.TurnedDown) > 0 {
@@ -762,7 +768,7 @@ var kindAngle = map[string]string{
 func (b *Brain) Note(ctx context.Context, p Person, t Target, purpose, channel string, post *Posting, earlier string) (Message, error) {
 	limit := "Under 90 words."
 	if channel == "linkedin" {
-		limit = "This is a LinkedIn connection note: the body must be under 290 characters including spaces. Count carefully. No subject."
+		limit = fmt.Sprintf("This is a LinkedIn connection note: the body must be under %d characters including spaces. Count carefully. No subject.", p.Profile.NoteLimit()-10)
 	}
 	angle := kindAngle[t.Kind]
 	if angle == "" {
@@ -801,8 +807,27 @@ Your task: write a short note from the person to a stranger or acquaintance, whi
 	out.Body = strings.TrimSpace(out.Body)
 	if channel == "linkedin" {
 		out.Subject = ""
+		out.Body = fitNote(out.Body, p.Profile.NoteLimit())
 	}
 	return out, err
+}
+
+// fitNote keeps a LinkedIn note inside the account's limit: whole sentences
+// where it can, else whole words.
+func fitNote(body string, limit int) string {
+	r := []rune(body)
+	if len(r) <= limit {
+		return body
+	}
+	cut := string(r[:limit])
+	if i := strings.LastIndexAny(cut, ".!?"); i > limit/2 {
+		return strings.TrimSpace(cut[:i+1])
+	}
+	cut = string(r[:limit-1])
+	if i := strings.LastIndex(cut, " "); i > 0 {
+		cut = cut[:i]
+	}
+	return strings.TrimSpace(cut) + "…"
 }
 
 // ---- finding people ----------------------------------------------------------------

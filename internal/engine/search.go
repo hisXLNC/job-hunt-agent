@@ -1124,6 +1124,7 @@ type CVBefore struct {
 type LetterDoc struct {
 	Text  string `json:"text"`
 	Style string `json:"style,omitempty"` // one of store.LetterStyles; "" reads as the first
+	Own   bool   `json:"own,omitempty"`   // the person edited it themselves
 	// Prev is the letter as it was before it was last written again.
 	Prev *LetterBefore `json:"prev,omitempty"`
 }
@@ -1172,8 +1173,12 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 		return err
 	}
 	post := postingOf(r)
-	// A role that already has a letter keeps the style chosen for it.
+	// A role that already has a letter keeps the style chosen for it; else
+	// the CV's own style, when the person chose one for it.
 	style := p.Profile.LetterStyle
+	if s := e.CVSet(cvID).LetterStyle; s != "" {
+		style = s
+	}
 	var had LetterDoc
 	if ok, _ := e.S.Doc(id, "letter", &had); ok && store.KnownLetterStyle(had.Style) {
 		style = had.Style
@@ -1243,6 +1248,7 @@ func (e *Engine) SetChange(roleID int64, index int, off bool, after *string) err
 	doc.Changes[index].Off = off
 	if after != nil {
 		doc.Changes[index].After = strings.TrimSpace(*after)
+		doc.Changes[index].Mine = true
 	}
 	return e.S.SaveDoc(roleID, "cv", doc)
 }

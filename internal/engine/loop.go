@@ -206,10 +206,14 @@ func (e *Engine) chores(now time.Time) {
 	}
 	if every("backup", often) {
 		go e.Backup()
+	} else if e.BackupSet().Dir != "" && every("appsheet", 30*time.Minute) {
+		// The applications spreadsheet in the copies folder keeps up between copies.
+		go e.KeepApplicationsSheet()
 	}
 	if e.OwnCal().On && every("owncal", 30*time.Minute) {
 		go e.ReadOwnCal(e.ctx)
 	}
+	e.remindUpdate(now)
 	if every("update", 30*time.Minute) {
 		go e.CheckUpdate(e.ctx)
 	} else if u := e.NewerVersion(); u != nil && e.AutoUpdate() && e.CanInstall() && !e.anyJobBut("") && every("update-try:"+u.Version, 6*time.Hour) {
@@ -222,6 +226,10 @@ func (e *Engine) chores(now time.Time) {
 	}
 	if every("remind", 5*time.Minute) {
 		e.remind(now)
+	}
+	// Roles waiting on a CV that changed, left half done when Job Hunt stopped.
+	if every("cvredo", 10*time.Minute) {
+		e.RunRedo()
 	}
 	if every("quiet", time.Hour) {
 		e.letGoQuiet(now)

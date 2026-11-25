@@ -69,8 +69,40 @@ func (s *Server) moreRoutes(mux *http.ServeMux, h func(string, handler)) {
 	backups := func() map[string]any {
 		set := e.BackupSet()
 		return map[string]any{"dir": e.BackupDir(), "default_dir": e.DefaultBackupDir(), "custom": set.Dir != "", "keep": set.Keep,
-			"copies": e.Copies(), "cloud": e.CloudFolders(), "staged": e.StagedRestore(), "can_restart": s.Restart != nil}
+			"copies": e.Copies(), "cloud": e.CloudFolders(), "staged": e.StagedRestore(), "can_restart": s.Restart != nil,
+			"computer": e.Computer(), "other": e.OtherComputer()}
 	}
+	// ---- carrying on on another computer -------------------------------------------
+	// Another computer's newer copy is put back the safe way (what is here is
+	// saved first) when Job Hunt next starts; the page offers to restart.
+	h("POST /api/backups/continue", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Copy string `json:"copy"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if e.Busy("update") {
+			return nil, bad("An update is being installed. Try again when Job Hunt is back.")
+		}
+		if _, err := e.ContinueFrom(in.Copy); err != nil {
+			return nil, bad(err.Error())
+		}
+		return backups(), nil
+	})
+	h("POST /api/backups/stay", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		e.StayHere()
+		return backups(), nil
+	})
+	h("POST /api/backups/handover", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		done, err := e.HandOver()
+		if err != nil {
+			return nil, bad(err.Error())
+		}
+		out := backups()
+		out["handed"] = done
+		return out, nil
+	})
 	h("POST /api/backups/cloud", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
 			Dir string `json:"dir"`

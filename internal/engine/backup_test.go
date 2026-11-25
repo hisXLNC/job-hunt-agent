@@ -91,14 +91,17 @@ func TestWhereCopiesAreKept(t *testing.T) {
 		t.Fatalf("backup: %s %v", p, err)
 	}
 	copies := e.Copies()
-	daily := 0
+	daily, latest := 0, 0
 	for _, c := range copies {
-		if !c.Before {
+		switch {
+		case dailyCopy.MatchString(c.Name):
 			daily++
+		case onCopy.MatchString(c.Name) && c.What == "This computer's latest":
+			latest++ // in a folder the person chose, for another computer to carry on from
 		}
 	}
-	if daily != 14 || len(copies) != 15 {
-		t.Fatalf("%d daily copies of %d listed", daily, len(copies))
+	if daily != 14 || latest != 1 || len(copies) != 16 {
+		t.Fatalf("%d daily copies and %d latest of %d listed", daily, latest, len(copies))
 	}
 	if _, err := os.Stat(filepath.Join(other, "holiday.jpg")); err != nil {
 		t.Fatal("a file that isn't a copy was removed")

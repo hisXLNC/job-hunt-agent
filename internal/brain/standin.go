@@ -691,8 +691,8 @@ func standNote(in noteInput) Message {
 	default:
 		body = fmt.Sprintf("Hi %s, %s I'm moving to %s and would value fifteen minutes on how you found your way in.%s", first, lowerFirst(in.Target.Why), firstNonEmpty(in.Person.Profile.City, "your city"), sign)
 	}
-	if in.Channel == "linkedin" && len(body) > 290 {
-		body = body[:287] + "…"
+	if in.Channel == "linkedin" {
+		body = fitNote(body, in.Person.Profile.NoteLimit()-10)
 	}
 	m := Message{Body: body}
 	if in.Channel != "linkedin" {

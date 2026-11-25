@@ -117,7 +117,13 @@ func TestCopiesCanBeKeptInACloudDrive(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, _ := os.ReadDir(found[0].Dir)
-	if len(files) != 1 || !e.CloudFolders()[0].Used {
+	daily := 0
+	for _, f := range files {
+		if dailyCopy.MatchString(f.Name()) {
+			daily++
+		}
+	}
+	if daily != 1 || !e.CloudFolders()[0].Used {
 		t.Fatalf("no copy was saved there: %v", files)
 	}
 }

@@ -103,7 +103,12 @@ func (e *Engine) SetBackup(set BackupSet) error {
 }
 
 // Backup writes today's copy of the data and keeps the newest few.
-func (e *Engine) Backup() (string, error) {
+func (e *Engine) Backup() (string, error) { return e.backup(false) }
+
+// backup makes the copy; in a folder the person chose it also becomes this
+// computer's latest copy there, for another computer to carry on from
+// (handed: the person handed over with it).
+func (e *Engine) backup(handed bool) (string, error) {
 	if e.Dir == "" {
 		return "", errors.New("no data folder")
 	}
@@ -136,6 +141,14 @@ func (e *Engine) Backup() (string, error) {
 	}
 	prune(dir, dailyCopy, set.Keep)
 	prune(dir, beforeCopy, beforeKept)
+	if set.Dir != "" && filepath.Clean(dir) == filepath.Clean(set.Dir) {
+		if err := e.keepOwnCopy(dir, dst, handed); err != nil {
+			trace.Log("problem", "this computer's latest copy wasn't kept in %s: %v", dir, err)
+		}
+		if err := e.KeepApplicationsSheet(); err != nil {
+			trace.Log("problem", "the applications spreadsheet wasn't written: %v", err)
+		}
+	}
 	e.S.Changed("app")
 	return dst, nil
 }
@@ -163,8 +176,8 @@ func (e *Engine) Copies() []Copy {
 	out := []Copy{}
 	for _, en := range entries {
 		name := en.Name()
-		daily, before := dailyCopy.MatchString(name), beforeCopy.MatchString(name)
-		if en.IsDir() || (!daily && !before) {
+		daily, before, on := dailyCopy.MatchString(name), beforeCopy.MatchString(name), onCopy.MatchString(name)
+		if en.IsDir() || (!daily && !before && !on) {
 			continue
 		}
 		info, err := en.Info()
@@ -177,6 +190,13 @@ func (e *Engine) Copies() []Copy {
 			c.What = "Before clearing the old Job Hunt's jobs"
 		case before:
 			c.What = "Before a restore"
+		case on && name == e.ownCopyName():
+			c.What = "This computer's latest"
+		case on:
+			c.What = "The latest from another computer"
+			if n, ok := notesIn(e.BackupDir())[name]; ok && n.Computer != "" {
+				c.What = "The latest from " + n.Computer
+			}
 		}
 		out = append(out, c)
 	}
@@ -200,7 +220,7 @@ func (e *Engine) StageRestore(name string) (*StagedRestore, error) {
 	if e.Dir == "" {
 		return nil, errors.New("no data folder")
 	}
-	if !dailyCopy.MatchString(name) && !beforeCopy.MatchString(name) {
+	if !dailyCopy.MatchString(name) && !beforeCopy.MatchString(name) && !onCopy.MatchString(name) {
 		return nil, errors.New("That is not one of the saved copies.")
 	}
 	src := filepath.Join(e.BackupDir(), name)
