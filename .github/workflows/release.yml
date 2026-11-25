@@ -68,7 +68,20 @@ jobs:
         shell: pwsh
         run: |
           $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
-          if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress | Out-Host }
+          # The package site is sometimes away (503, 504): try twice, then
+          # NSIS's own download.
+          for ($i = 1; $i -le 2 -and -not (Test-Path $nsis); $i++) {
+            choco install nsis -y --no-progress | Out-Host
+            if (-not (Test-Path $nsis)) { Start-Sleep -Seconds 20 }
+          }
+          if (-not (Test-Path $nsis)) {
+            $zip = "$env:RUNNER_TEMP\nsis.zip"
+            for ($i = 1; $i -le 3; $i++) {
+              try { Invoke-WebRequest -Uri "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip" -OutFile $zip -UserAgent "curl/8" -MaximumRedirection 10; break } catch { Start-Sleep -Seconds 20 }
+            }
+            Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\nsis" -Force
+            $nsis = "$env:RUNNER_TEMP\nsis\nsis-3.10\makensis.exe"
+          }
           if (-not (Test-Path $nsis)) { throw "the installer builder (NSIS) is not on this machine" }
           & $nsis /V2 "/DVERSION=${{ steps.v.outputs.version }}" "/DEXE=..\dist\JobHunt3.exe" "/DOUT=..\dist\JobHunt3-Setup.exe" "/DEXT=..\extension" installer\jobhunt.nsi
           if ($LASTEXITCODE -ne 0) { throw "the installer did not build" }
