@@ -235,6 +235,18 @@ func (e *Engine) chores(now time.Time) {
 			e.Go("career", "Reading where your CV can go", func(ctx context.Context) error { return e.readCareer(ctx) })
 		}
 	}
+	// Leads: news from the web a little over twice a week, when that is on;
+	// leads that came in while Claude was away are sized up when it is back.
+	if e.LLM().Engine != "" && e.newsDue(now) && every("leads", 6*time.Hour) {
+		e.Go("leads", "Looking for employers about to hire", func(ctx context.Context) error { return e.findNews(ctx) })
+	}
+	if e.LLM().Engine != "" && !e.heldBack("leads-read") && every("leads-read", 30*time.Minute) && e.S.Count(`SELECT COUNT(*) FROM leads WHERE state = 'open' AND read_at = 0`) > 0 {
+		e.readLeadsSoon()
+	}
+	// Claude's short reading of the results, at most once a week.
+	if e.LLM().Engine != "" && !e.heldBack("results") && e.resultsDue(now) && every("results", 6*time.Hour) {
+		e.Go("results", "Reading your results", func(ctx context.Context) error { return e.readResults(ctx) })
+	}
 	if !e.heldBack("boards") && every("boards", 24*time.Hour) {
 		e.Go("boards", "Looking for employers' job boards", func(ctx context.Context) error { e.DetectBoards(ctx); return e.DescribeEmployers(ctx) })
 	}

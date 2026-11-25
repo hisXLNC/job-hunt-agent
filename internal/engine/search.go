@@ -834,6 +834,7 @@ func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profi
 			stats.ClearedBy["You said no to this one before"]++
 		}
 		e.S.TouchRole(id, post.Applicants, "")
+		e.S.SeenThrough(id, post.Source) // for the overlap between sources, on Progress
 		return id, false, false
 	}
 	reason, band := screen(p, post, searchedBand != "")

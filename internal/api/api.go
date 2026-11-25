@@ -1369,6 +1369,85 @@ func (s *Server) Handler() http.Handler {
 		added, err := e.SearchCareerTitles(route, in.Title)
 		return map[string]any{"added": added}, err
 	})
+	// ---- insights: Progress in depth -------------------------------------------------
+	h("GET /api/insights", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.Insights(qInt(r, "days", 30)), nil })
+	h("POST /api/insights/read", func(w http.ResponseWriter, r *http.Request) (any, error) { return nil, e.LookAtResults() })
+	h("PUT /api/insights/guidance", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			On bool `json:"on"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		return nil, e.SetGuidance(in.On)
+	})
+
+	// ---- leads ---------------------------------------------------------------------
+	// Job Hunt writes the notes; the person sends them. Nothing here sends anything.
+	h("GET /api/leads", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		return e.Leads(r.URL.Query().Get("show"), min(max(qInt(r, "size", 60), 1), 1000)), nil
+	})
+	h("POST /api/leads", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Text, URL, Company string
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		id, err := e.AddOwnLead(in.Text, in.URL, in.Company)
+		return map[string]int64{"id": id}, err
+	})
+	h("POST /api/leads/find", func(w http.ResponseWriter, r *http.Request) (any, error) { return nil, e.LookForNews() })
+	h("PUT /api/leads/auto", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			On bool `json:"on"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		return nil, e.SetLeadsAuto(in.On)
+	})
+	h("GET /api/leads/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.Lead(idOf(r)) })
+	h("PUT /api/leads/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Which, Subject, Body string
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		return nil, e.SaveLeadNote(idOf(r), in.Which, in.Subject, in.Body)
+	})
+	h("POST /api/leads/{id}/{action}", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		id := idOf(r)
+		var in struct {
+			On  *bool `json:"on"`
+			Who int   `json:"who"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		on := in.On == nil || *in.On
+		switch r.PathValue("action") {
+		case "dismiss":
+			return nil, e.SetLeadState(id, "dismissed")
+		case "restore":
+			return nil, e.SetLeadState(id, "open")
+		case "sent", "followed", "replied":
+			return nil, e.LeadStep(id, r.PathValue("action"), on)
+		case "again":
+			return nil, e.ReadLeadAgain(id)
+		case "role":
+			rid, err := e.LeadToRole(id)
+			return map[string]int64{"id": rid}, err
+		case "employer":
+			cid, err := e.LeadToEmployer(id)
+			return map[string]int64{"id": cid}, err
+		case "person":
+			pid, err := e.LeadToPerson(id, in.Who)
+			return map[string]int64{"id": pid}, err
+		}
+		return nil, bad("unknown action")
+	})
 	h("GET /api/activity", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return st.ActivityList(store.ActivityFilter{Limit: min(max(qInt(r, "limit", 40), 1), 200)})
 	})

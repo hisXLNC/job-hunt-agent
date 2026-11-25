@@ -64,3 +64,36 @@ function pageGrabProfile() {
   if (at) { title = at[1]; company = at[2]; }
   return { name: name.slice(0, 120), title: title.slice(0, 160), company: company.slice(0, 120), url: location.origin + location.pathname.replace(/\/+$/, '') };
 }
+
+// Reads the posts on a LinkedIn feed, post search or single post: who wrote
+// each, their headline, the text and the post's own address. Only reads; Job
+// Hunt keeps the ones that read like someone hiring.
+function pageGrabPosts() {
+  const flat = el => (el ? (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : '');
+  const body = el => (el ? (el.innerText || el.textContent || '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() : '');
+  // LinkedIn repeats a name for screen readers; the visible copy is the one marked aria-hidden.
+  const shown = el => (el ? flat(el.querySelector('span[aria-hidden="true"]') || el) : '');
+  const out = [], seen = new Set();
+  const boxes = document.querySelectorAll('[data-urn*="urn:li:activity:"], [data-id*="urn:li:activity:"], .feed-shared-update-v2');
+  for (const b of boxes) {
+    const urn = ((b.getAttribute('data-urn') || b.getAttribute('data-id') || '').match(/urn:li:activity:\d+/) || [])[0] || '';
+    if (urn && seen.has(urn)) continue;
+    const t = body(b.querySelector('.update-components-text, .feed-shared-update-v2__description, .feed-shared-text, .update-components-update-v2__commentary'));
+    if (!t) continue;
+    if (urn) seen.add(urn);
+    const actor = b.querySelector('.update-components-actor__title, .update-components-actor__name, .feed-shared-actor__name');
+    const desc = b.querySelector('.update-components-actor__description, .feed-shared-actor__description');
+    const link = b.querySelector('a.update-components-actor__meta-link, a.update-components-actor__image, a[href*="/in/"]');
+    out.push({
+      author: shown(actor).slice(0, 120), headline: shown(desc).slice(0, 200), text: t.slice(0, 6000),
+      url: urn ? `https://www.linkedin.com/feed/update/${urn}/` : '',
+      author_url: link && /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/in\//.test(link.href) ? link.href.split('?')[0] : '',
+    });
+    if (out.length >= 50) break;
+  }
+  if (!out.length && /\/posts\/|\/feed\/update\//.test(location.pathname)) {
+    const t = body(document.querySelector('main, article'));
+    if (t) out.push({ author: '', headline: '', text: t.slice(0, 6000), url: location.origin + location.pathname, author_url: '' });
+  }
+  return out;
+}

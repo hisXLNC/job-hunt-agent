@@ -210,6 +210,10 @@ async function readApplicants(role) {
   } catch (e) { /* the page may still be loading; the next look tries again */ countRead[role.id] = Date.now() - 9 * 60 * 1000; }
 }
 
+// LinkedIn pages that show posts: the feed, a post search, one post.
+const POSTS = /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/(feed\/?$|feed\/update\/|search\/results\/(content|all)\/|posts\/)/;
+const ONE_POST = /linkedin\.com\/(feed\/update\/|posts\/)/;
+
 let seq = 0;
 async function refresh(force) {
   const mine = ++seq;
@@ -222,6 +226,7 @@ async function refresh(force) {
     else if (!url) p = { kind: 'blind' };
     else if (!/^https?:/.test(url) || url.startsWith(APP)) p = { kind: 'other' };
     else if (/^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/in\/[^/]+/.test(url)) p = { kind: 'profile', url };
+    else if (POSTS.test(url)) p = { kind: 'posts', url };
     else {
       const r = await call('role?url=' + encodeURIComponent(url));
       p = r.known ? { kind: 'role', role: r.role, url } : { kind: 'unknown', url };
@@ -412,6 +417,15 @@ const actions = {
     const r = await call('person', { method: 'POST', body: { name: f.name.trim(), title: f.title.trim(), company: f.company.trim(), kind: f.kind, url: person.url, draft: true } });
     person = { ...person, name: f.name, title: f.title, company: f.company, kind: f.kind, id: r.id, note: r.note };
   },
+  async sendPosts() {
+    const got = await inPage(pageGrabPosts);
+    const posts = (got[0] && got[0].result) || [];
+    if (!posts.length) { say('warn', 'No posts found on this page yet. Scroll a little so they load, then try again.'); return; }
+    const r = await call('leads', { method: 'POST', body: { posts, chosen: ONE_POST.test(page.url) && posts.length === 1 } });
+    if (r.added) say('good', `${plural(r.added, 'new lead', 'new leads')} from ${plural(r.seen, 'post', 'posts')} read. Job Hunt sizes them up and writes a note for each.`);
+    else if (r.hiring) say('good', `Read ${plural(r.seen, 'post', 'posts')}. The hiring ones are already in Leads.`);
+    else say('warn', `Read ${plural(r.seen, 'post', 'posts')}. None read like someone hiring.`);
+  },
   async copyNote() {
     await navigator.clipboard.writeText(document.getElementById('note').value);
     say('good', "Copied. On their profile choose Connect, then Add a note, and paste it.");
@@ -567,6 +581,10 @@ function pageCard() {
   switch (page.kind) {
     case 'role': return roleCard(page.role);
     case 'profile': return personCard();
+    case 'posts': return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'This page'), h('h2', {}, 'Hiring posts'),
+      h('p', { class: 's m' }, 'Job Hunt reads the posts on this page and keeps the ones where someone says they are hiring. Each one is sized up, with who to write to and a short note. You send it yourself.'),
+      btn('Send hiring posts to Leads', 'sendPosts', null, 'p wide'),
+      h('a', { class: 's', href: `${APP}#/leads`, target: '_blank', rel: 'noopener' }, 'Open Leads in Job Hunt'));
     case 'unknown': return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'This page'), h('h2', {}, 'Is this a job posting?'),
       h('p', { class: 's m' }, 'Send it to Job Hunt and it is scored against your CV, with a CV and letter written if it fits.'), btn('Send this posting to Job Hunt', 'send', null, 'p wide'),
       btn('Fill in a form on this page', 'fill', null, 'wide'));
@@ -579,7 +597,7 @@ function pageCard() {
 
 function nextCard() {
   const rest = next.filter(r => !(page.kind === 'role' && page.role.id === r.id)).slice(0, 6);
-  if (!rest.length) return page.kind === 'role' || page.kind === 'profile' ? null : h('section', { class: 'card' }, h('h3', {}, 'Nothing is waiting to be sent'), h('p', { class: 's m' }, 'New roles appear here the moment their CV and letter are written.'));
+  if (!rest.length) return page.kind === 'role' || page.kind === 'profile' || page.kind === 'posts' ? null : h('section', { class: 'card' }, h('h3', {}, 'Nothing is waiting to be sent'), h('p', { class: 's m' }, 'New roles appear here the moment their CV and letter are written.'));
   return h('section', { class: 'card next' }, h('div', { class: 'eb' }, 'Ready to send · freshest first'), h('ul', { class: 'plain' }, rest.map(r => {
     const link = safeUrl(r.apply_url) || safeUrl(r.url), early = r.applicants >= 0 && r.applicants < 10;
     return h('li', {}, link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, r.title) : h('b', {}, r.title),

@@ -28,6 +28,10 @@ type Person struct {
 	Today   time.Time
 	// TurnedDown: roles the person said no to lately, each with their reason.
 	TurnedDown []string
+	// Guidance: a short note on tailoring, from what the person's rejections
+	// say (Progress). Used only when tailoring; empty when there is none or
+	// the person switched it off.
+	Guidance string
 }
 
 // rules that hold for every task
@@ -534,6 +538,10 @@ func (b *Brain) Tailor(ctx context.Context, p Person, base cv.CV, post Posting, 
 	prompt := post.block() + "\n\n# What the posting asks for, and the evidence found\n" + asks.String() +
 		"\nTerms a screening system will look for: " + strings.Join(r.Keywords, ", ") + "\n" + facts +
 		"\n# The CV, one addressed piece of text per line\n" + units.String()
+	if g := strings.TrimSpace(p.Guidance); g != "" {
+		prompt += "\n\n# What the person's rejections so far suggest for tailoring (Job Hunt's own note)\n" + clip(g, 600) +
+			"\nFollow it where it fits this posting. It changes emphasis and order, never what is true."
+	}
 	in := tailorInput{CV: base, Reading: r, Posting: post, Person: p}
 	if again != nil && strings.TrimSpace(again.Ask) != "" {
 		in.Ask, in.Current = strings.TrimSpace(again.Ask), again.Changes
