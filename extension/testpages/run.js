@@ -124,7 +124,7 @@ const PAGES = [
     [heard('g-notice')]: '2 weeks', [val('g-shift')]: '', [heard('g-sin')]: '', [val('g-letter')]: ROLE.letter, 'document.getElementById("more").open': true, [heard('g-site')]: 'https://samrivera.example.com',
     'document.querySelector("[role=group] [aria-pressed=true]").textContent': 'Yes', 'document.querySelector("[role=radio][aria-checked=true]").textContent': 'French',
     'document.getElementById("g-agree").checked': false, 'document.querySelector("[name=q]").value': '', 'document.querySelector("[name=newsletter]").value': '', 'window.sends': 0,
-  }, left: ['Social Insurance Number', 'Earliest start date', 'I agree to the privacy policy', 'Which shift do you prefer'], check: ['Expected salary'], attach: { ok: true }, after: sendIt },
+  }, left: ['Social Insurance Number', 'Earliest start date', 'I agree to the privacy policy', 'Which shift do you prefer'], check: ['Expected salary'], attach: { ok: true }, after: async (page, fail) => { await notYet(page, fail); await sendIt(page, fail); await sendFromPanel(page, fail); } },
 ];
 
 // The person corrects one answer, fills one Job Hunt left, and presses Submit: the page must
@@ -146,6 +146,39 @@ async function sendIt(page, fail) {
   if (!sent.some(m => m.kind === 'submitted')) fail('the thank-you page was not noticed');
   if (await page.evaluate(() => window.sends) !== 1) fail('the person\'s own Submit did not go through once');
   if (!(await page.evaluate(() => window.__jobhuntFiller.check(null, 0))).done) fail('check() does not see the thank-you page');
+}
+
+// The side panel's "Submit application" while required fields are empty: it says
+// which, and the form is not sent.
+async function notYet(page, fail) {
+  const r = await page.evaluate(() => window.__jobhuntFiller.review());
+  if (r.button !== 'Submit application') fail('review() found the button as ' + JSON.stringify(r.button));
+  for (const l of ['Earliest start date', 'I agree to the privacy policy']) if (!r.missing.some(m => m.includes(l))) fail(`review() does not list the empty "${l}": ` + JSON.stringify(r.missing));
+  const no = await page.evaluate(() => window.__jobhuntFiller.send());
+  if (no.ok || no.why !== 'missing') fail('send() went ahead with required fields empty: ' + JSON.stringify(no));
+  if (await page.evaluate(() => window.sends) !== 0 || (await page.evaluate(() => window.__jobhuntFiller.sent)).some(m => m.kind === 'pressed')) fail('something was sent while required fields were empty');
+}
+
+// The same form, filled by the person, sent by their press of "Submit application": once.
+async function sendFromPanel(page, fail) {
+  await page.goto('file://' + path.join(__dirname, 'generic.html'));
+  await page.addScriptTag({ path: path.join(EXT, 'filler.js') });
+  const empty = await page.evaluate(() => window.__jobhuntFiller.review());
+  for (const m of empty.missing) {
+    const id = await page.evaluate(label => { const l = [...document.querySelectorAll('label')].find(x => x.textContent.trim().startsWith(label.replace(/\s*\*$/, ''))); return l ? l.htmlFor : ''; }, m);
+    const kind = id ? await page.evaluate(i => document.getElementById(i).type || document.getElementById(i).tagName, id) : '';
+    if (kind === 'checkbox') await page.check('#' + id);
+    else if (kind === 'date') await page.fill('#' + id, '2027-01-04');
+    else if (kind === 'email') await page.fill('#' + id, 'sam.rivera@example.com');
+    else if (/^select/i.test(kind)) await page.selectOption('#' + id, { index: 1 });
+    else if (id) await page.fill('#' + id, 'Sam Rivera');
+  }
+  const r = await page.evaluate(() => window.__jobhuntFiller.review());
+  if (r.missing.length) return fail('review() still lists: ' + JSON.stringify(r.missing));
+  const yes = await page.evaluate(() => window.__jobhuntFiller.send());
+  if (!yes.ok) fail('send() did not press Submit: ' + JSON.stringify(yes));
+  if (await page.evaluate(() => window.sends) !== 1) fail('send() did not send the form exactly once');
+  if (!(await page.evaluate(() => window.__jobhuntFiller.sent)).some(m => m.kind === 'pressed')) fail('the send was not told to the panel');
 }
 
 (async () => {

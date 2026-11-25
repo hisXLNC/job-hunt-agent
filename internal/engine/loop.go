@@ -30,7 +30,8 @@ type Schedule struct {
 }
 
 func (e *Engine) Schedule() Schedule {
-	sc := Schedule{Full: fullAt, FastMinutes: int(fastEvery / time.Minute)}
+	// A copy: reading the saved schedule into the shared one would change the default.
+	sc := Schedule{Full: append([]int(nil), fullAt...), FastMinutes: int(fastEvery / time.Minute)}
 	e.S.Get("schedule", &sc)
 	return sc
 }
@@ -347,6 +348,12 @@ type DeskSet struct {
 	// Morning is the hour the day's summary is said at; -1 for never.
 	Morning int    `json:"morning"`
 	Awake   string `json:"awake"` // "off", "working" (while it is busy), "always"
+	// Wake wakes a sleeping computer for the next full search (Windows wake timers).
+	Wake bool `json:"wake"`
+	// Clip notices a job link the person copies and offers to add it. Off unless they turn it on.
+	Clip bool `json:"clip"`
+	// Browser is the one links from Job Hunt's window open in; "" is Windows' own choice.
+	Browser string `json:"browser"`
 }
 
 func (e *Engine) Desk() DeskSet {
@@ -358,6 +365,9 @@ func (e *Engine) Desk() DeskSet {
 func (e *Engine) SetDesk(set DeskSet) error {
 	if set.Awake != "off" && set.Awake != "always" {
 		set.Awake = "working"
+	}
+	if !browserID.MatchString(set.Browser) {
+		set.Browser = ""
 	}
 	err := e.S.Set("desk", set)
 	e.S.Changed("connections")

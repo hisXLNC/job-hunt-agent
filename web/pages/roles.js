@@ -95,6 +95,35 @@ export default {
       <div class="tabs"><a class="${isBoard ? '' : 'on'}" href="#/roles">List</a><a class="${isBoard ? 'on' : ''}" href="#/roles/board">Board</a></div>
       ${isBoard ? board(d) : html`${filters(d, route)}${table(d, route)}`}</div>`;
   },
+  // Sent here by the "Send to Job Hunt" bookmark (add=link) or by a job link the
+  // person copied (add=copied): the add form opens filled in. What came from the
+  // other page only fills the boxes; nothing is added until the person presses Add.
+  after(root, d, route) {
+    const how = route.q.add;
+    if ((how !== 'link' && how !== 'copied') || route.addDone) return;
+    route.addDone = true;
+    const f = root.querySelector('#addrole');
+    if (!f) return;
+    f.hidden = false;
+    const q = route.q;
+    const set = (n, v) => { if (v && !f.elements[n].value) f.elements[n].value = String(v).slice(0, n === 'description' ? 60000 : 300); };
+    const fill = async url => {
+      set('url', url); set('title', q.title); set('company', q.company); set('description', q.text);
+      history.replaceState(null, '', '#/roles');
+      f.scrollIntoView({ block: 'start' });
+      if (!url || q.text) return;
+      const note = document.createElement('p');
+      note.className = 'xs m';
+      note.textContent = 'Reading the posting…';
+      f.prepend(note);
+      try {
+        const p = await post('peek', { url });
+        set('title', p.title); set('company', p.company); set('location', p.location); set('description', p.description);
+        note.textContent = p.known ? 'Job Hunt already has this role; adding it again opens it.' : 'Read from the posting. Check the boxes and press Add.';
+      } catch (e) { note.textContent = e.message; }
+    };
+    if (how === 'copied') api('copied').then(r => fill(r.url)).catch(() => {}); else fill(q.url);
+  },
   actions: {
     pick({ d, value }) { value ? picked.add(d.id) : picked.delete(d.id); redraw(); return false; },
     pickall({ value }) { document.querySelectorAll('.tbl td.pick input').forEach(i => (value ? picked.add(i.dataset.id) : picked.delete(i.dataset.id))); redraw(); return false; },

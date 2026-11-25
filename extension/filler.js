@@ -3,13 +3,15 @@
 // the few functions at the bottom. It reads the form, types answers in,
 // chooses from lists and attaches files.
 //
-// It never sends anything: it will not press Submit, Apply, Next or Save and
-// Continue, and a form that tries to send itself because of a click made here
-// is stopped. The only buttons it presses are the ones that open a list, the
-// choices in it, Yes/No answer buttons and "Add another" under work history
-// or education.
+// It never sends anything by itself: while filling it will not press Submit,
+// Apply, Next or Save and Continue, and a form that tries to send itself
+// because of a click made here is stopped. The only buttons it presses while
+// filling are the ones that open a list, the choices in it, Yes/No answer
+// buttons and "Add another" under work history or education. The one
+// exception is send(), called only when the person presses "Submit
+// application" in the side panel: it presses this form's own Submit, once.
 (() => {
-  const BUILD = 1;
+  const BUILD = 2;
   const old = window.__jobhuntFiller;
   const alive = () => typeof chrome === 'undefined' || !chrome.runtime || !!chrome.runtime.id;
   if (old) { if (old.build === BUILD && old.alive()) return; old.retire(); }
@@ -957,9 +959,47 @@
     return { done: !!done };
   }
 
+  // ---- sending, only when the person presses "Submit application" in the side panel ----
+  // The form's own last button: "Submit", "Submit application", "Send application".
+  const SUBMIT = /^\s*(submit|send)( (my |your |the |this )?application)?\s*$|^\s*submit (and|&) (apply|finish)\s*$|^\s*complete (my |your )?application\s*$/i;
+  const words = b => clean(b.textContent || b.value || b.getAttribute('aria-label'));
+  function sendButtons() {
+    return all('button,input[type=submit],[role="button"]').filter(b => shown(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && !notTheForm(b) && SUBMIT.test(words(b)));
+  }
+  // What the panel shows before the person decides: the form's Submit button,
+  // and every required field that is still empty. It reads; it changes nothing.
+  function review() {
+    if (covered()) return { covered: true };
+    collect();
+    const missing = fields.filter(f => f.required && !f.filled && !(f.kind === 'checkbox' && f.els.some(isOn))).map(f => f.label || 'A field without a name');
+    const buttons = sendButtons();
+    note('looked over the form', null, `${missing.length} required and empty; ${buttons.length} send buttons`);
+    return { site, url: location.href, fields: fields.length, missing: [...new Set(missing)].slice(0, 30), button: buttons.length === 1 ? words(buttons[0]) : '', many: buttons.length > 1 };
+  }
+  // Presses this form's one Submit button. Asked for only by the person's own
+  // press of "Submit application" in the side panel, for this one form.
+  function send() {
+    const r = review();
+    if (r.covered || !r.button) return { ok: false, why: r.many ? 'many' : 'none' };
+    if (r.missing.length) return { ok: false, why: 'missing', missing: r.missing };
+    const b = sendButtons()[0];
+    // The browser's own check of the form: a field it would refuse is not sent past.
+    if (b.form && !b.form.noValidate && !b.formNoValidate && !b.form.checkValidity()) return { ok: false, why: 'invalid' };
+    watching = true;
+    onPressed('Submit application in the side panel');
+    note('pressed Submit for the person', b, r.button);
+    const w = win(b), o = { bubbles: true, cancelable: true, composed: true, view: w };
+    if (w.PointerEvent) b.dispatchEvent(new w.PointerEvent('pointerdown', o));
+    b.dispatchEvent(new w.MouseEvent('mousedown', o));
+    if (w.PointerEvent) b.dispatchEvent(new w.PointerEvent('pointerup', o));
+    b.dispatchEvent(new w.MouseEvent('mouseup', o));
+    b.click();
+    return { ok: true, button: r.button };
+  }
+
   window.__jobhuntFiller = {
     build: BUILD, alive, retire: () => { retired = true; watching = false; },
-    scan, scanOne, fill, addEntry, attach, watch, check,
+    scan, scanOne, fill, addEntry, attach, watch, check, review, send,
     log: () => ({ site, url: location.origin + location.pathname, rows: trail.slice(-300) }),
     sent, learned,
   };

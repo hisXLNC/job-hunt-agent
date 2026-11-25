@@ -170,12 +170,15 @@ func main() {
 		if err := seedDemo(e); err != nil {
 			fatal(err)
 		}
+	} else {
+		// Every tailored CV and letter is also kept as files, in Documents unless the person chose elsewhere.
+		e.FilesHome = filepath.Join(documentsDir(), "Job Hunt")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	startWindow(url, dir)
-	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop, Show: showWindow, Startup: startsWithWindows, SetStartup: setStartsWithWindows, Restart: func() error {
+	srv := &api.Server{E: e, S: s, Web: web.FS, Port: *port, Quit: stop, Show: showWindow, Startup: startsWithWindows, SetStartup: setStartsWithWindows, PC: machine(), Restart: func() error {
 		noteWindowOpen(dir)
 		return restartSelf(stop)
 	}}
@@ -194,7 +197,9 @@ func main() {
 	if !*demo {
 		runTray(ctx, stop, url, dir, e)
 	}
-	keepAwake(ctx, e.WantsAwake)
+	keepAwake(ctx, e)
+	watchClipboard(ctx, e)
+	linkBrowser = func() string { return e.Desk().Browser }
 	if from := e.WhatsNew(); from != "" {
 		e.Tell("Job Hunt updated to "+api.Version, "It installed by itself. Open it to see what changed.", "#/you/app")
 	}

@@ -1,4 +1,4 @@
-import { html, api, post, put, del, when, toast, copy, app, rel, exact, with_, applyTheme } from '../app.js';
+import { html, api, post, put, del, when, toast, copy, app, rel, exact, with_, applyTheme, listSize, endless } from '../app.js';
 import { oldCard, oldActions } from '../old.js';
 
 const TABS = [['', 'About you'], ['arriving', 'Arriving'], ['connections', 'Connections'], ['panel', 'Browser side panel'], ['app', 'The app and debugging']];
@@ -48,6 +48,11 @@ const SETTINGS = [
   ['app', 'copies', '', 'Saved copies: restore one', 'backup backups copy copies restore put back recover undo lost'],
   ['app', 'copies', 'dir', 'Where copies are kept', 'backup folder where location drive path onedrive usb'],
   ['app', 'copies', 'keep', 'How many copies are kept', 'backup keep how many 7 14 30 days'],
+  ['connections', 'desk', 'wake', 'Wake this computer for searches', 'wake sleep timer power standby night'],
+  ['connections', 'desk', 'browser', 'Browser that links open in', 'browser chrome edge firefox brave links open default'],
+  ['connections', 'claude', '', 'Install Claude Code and sign in', 'claude code install sign in login subscription cli'],
+  ['panel', 'bookmark', '', 'Bookmark button and copied job links', 'bookmarklet bookmark clipboard copy link firefox safari without extension'],
+  ['app', 'files', 'dir', 'Folder for your CVs and letters as files', 'files folder documents word pdf tailored show files cv letter'],
   ['app', 'version', '', 'Version and updates', 'version update upgrade new install automatic auto-update check'],
   ['app', 'version', '', 'Your data folder', 'data folder files where stored directory'],
   ['app', 'version', '', 'Stop Job Hunt', 'stop quit exit close shut down'],
@@ -221,7 +226,9 @@ function connections(d, route) {
   const open = route.q.open || (hit ? { talkset: 'owncal' }[hit.set] || hit.set : '');
   const claude = html`<form data-act="savellm" class="card col" style="gap:10px" data-set="claude"><div class="row"><h3 class="grow">Claude</h3><span class="chip ${cl.engine && cl.ok ? 'good' : 'warn'}">${cl.engine ? (cl.ok ? 'Connected' : 'Resting') : 'Not connected'}</span></div>
       <p class="s m">Claude does the reading and writing. ${cl.note && !cl.ok ? html`<b style="color:var(--warn)">${cl.note}</b>` : ''}</p>
-      <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="claude-code" ${cl.engine === 'claude-code' ? 'checked' : ''} ${d.cli_found ? '' : 'disabled'}> <span><b>Your Claude subscription</b> through Claude Code<br><span class="m">${d.cli_found ? 'Found on this computer. Uses the plan you already pay for.' : 'Claude Code isn\'t installed on this computer. Install it from claude.com/claude-code and sign in.'}</span></span></label>
+      <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="claude-code" ${cl.engine === 'claude-code' ? 'checked' : ''} ${d.cli_found ? '' : 'disabled'}> <span><b>Your Claude subscription</b> through Claude Code<br><span class="m">${d.cli_found ? 'Found on this computer. Uses the plan you already pay for.' : d.pc?.claude_install ? 'Not on this computer yet. Press Install Claude Code, then Sign in to Claude.' : 'Claude Code isn\'t installed on this computer. Install it from claude.com/claude-code and sign in.'}</span></span></label>
+      ${d.pc?.claude_install ? html`<div class="col" style="gap:6px;padding-left:24px"><div class="row wrap" style="gap:8px">${d.cli_found ? '' : html`<button type="button" class="btn sm" data-act="installclaude" data-busy="Starting…" title="Runs Claude Code's own installer from claude.ai. About a minute; a notice says when it is done.">Install Claude Code</button>`}<button type="button" class="btn sm" data-act="signinclaude" ${d.cli_found ? '' : 'disabled'} title="Opens Claude Code in a window of its own, where you sign in with your Claude account.">Sign in to Claude</button></div>
+        <p class="xs m">Sign in opens a black window. Pick a look, then your Claude account; your browser opens to sign in. When it says you are signed in, close that window, choose this option here, Save and press Test it. You need a paid Claude plan (Pro or Max).</p></div>` : ''}
       <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="api" ${cl.engine === 'api' ? 'checked' : ''}> <span><b>An API key</b><br><span class="m">Pay for what you use. A day of searching costs a few dollars.</span></span></label>
       <div class="grid2" style="padding-left:24px"><label class="field">API key<input type="password" name="key" placeholder="${cl.has_key ? 'Saved. Paste to replace.' : 'sk-ant-…'}" autocomplete="off"></label><label class="field">Stop at this much a day (USD)<input type="number" name="daily_limit" value="${cl.limit || ''}" placeholder="No limit" step="0.5" min="0"></label></div>
       <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="demo" ${cl.engine === 'demo' ? 'checked' : ''}> <span><b>Sample answers</b><br><span class="m">No Claude. For looking around; the writing is crude.</span></span></label>
@@ -319,9 +326,18 @@ function thisComputer(d) {
     <label class="row s" style="font-weight:500"><input type="checkbox" name="notify" ${k.notify ? 'checked' : ''}> Show a Windows notification for a fresh role that fits, and when someone writes to you</label>
     <p class="xs m">A click opens it in Job Hunt. Job Hunt also sits by the clock (the icon's menu opens it, searches now, checks for updates or stops it).${d.can_notify ? '' : ' Notifications are shown only on Windows.'}</p>
     <label class="field" style="max-width:420px">Keep this computer awake <span class="h">A sleeping computer finds nothing. The screen can still turn off.</span><select name="awake"><option value="working" ${k.awake === 'working' ? 'selected' : ''}>While Job Hunt is working</option><option value="always" ${k.awake === 'always' ? 'selected' : ''}>Always, while searching is on</option><option value="off" ${k.awake === 'off' ? 'selected' : ''}>Never</option></select></label>
+    ${d.pc?.power ? wakeBlock(k, d.pc.power) : ''}
+    ${(d.pc?.browsers || []).length ? html`<label class="field" style="max-width:420px">Open links in <span class="h">Postings, LinkedIn and other sites you open from Job Hunt's window. The side panel works in Chrome and Edge.</span><select name="browser"><option value="">Windows' own choice</option>${d.pc.browsers.map(b => html`<option value="${b.id}" ${k.browser === b.id ? 'selected' : ''}>${b.name}</option>`)}</select></label>` : ''}
     <label class="field" style="max-width:420px">Morning summary <span class="h">What needs you today, in one notice. Reminders also come the evening before an interview, after one, and two days before a posting closes.</span><select name="morning">${[[-1, 'Never'], [6, '6:00'], [7, '7:00'], [8, '8:00'], [9, '9:00'], [10, '10:00']].map(([v, t]) => html`<option value="${v}" ${k.morning === v ? 'selected' : ''}>${t}</option>`)}</select></label>
     ${d.startup?.can ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="startup" ${d.startup.on ? 'checked' : ''}> Start Job Hunt when I sign in to Windows <span class="xs m" style="font-weight:400">(in the background, by the clock)</span></label>` : ''}
     <div class="row"><button class="btn p">Save</button>${d.can_notify ? html`<button type="button" class="btn" data-act="testdesk">Show a test</button>` : ''}</div></form>`;
+}
+// Waking a sleeping computer for the full searches, and what Windows' settings allow.
+function wakeBlock(k, pw) {
+  return html`<div class="col" style="gap:6px"><label class="row s" style="font-weight:500"><input type="checkbox" name="wake" ${k.wake ? 'checked' : ''}> Wake this computer for the full searches <span class="xs m" style="font-weight:400">(from sleep; not when it is shut down)</span></label>
+    ${k.wake && pw.wake_at ? html`<p class="xs m">Next wake: ${when(pw.wake_at)}, a minute before the search.</p>` : ''}
+    ${k.wake && pw.known && pw.blocked ? html`<div class="row wrap" style="gap:8px"><p class="s grow" style="color:var(--warn);min-width:220px">Windows' power settings don't allow wake timers, so this computer stays asleep.</p>${pw.can_allow ? html`<button type="button" class="btn sm" data-act="allowwake" data-busy="Asking Windows…">Allow wake timers</button>` : ''}</div>` : ''}
+    ${k.wake && pw.modern ? html`<p class="xs m">This computer uses Modern Standby, where Windows may not wake it for a program. Keep it plugged in, and set Keep this computer awake to Always if searches are missed.</p>` : ''}</div>`;
 }
 function schedule(d) {
   const sc = d.schedule || { full: [] };
@@ -346,7 +362,21 @@ function panel(d) {
       <div class="s"><b>3. Switch on "Developer mode"</b>, press <b>Load unpacked</b> and pick the folder from step 1.</div>
       <div class="s"><b>4. Open the side panel</b> by pressing the Job Hunt icon in the browser's toolbar (pin it from the puzzle-piece menu). It shows a code.</div>
       <div class="s"><b>5. Come back to this page</b> and press Approve when the same code appears here.</div>
-      <p class="xs m">After a Job Hunt update, press the round-arrow "Reload" on the extensions page so the side panel is the new version too.</p></div></div>`;
+      <p class="xs m">${d.ext_dir ? 'Loaded from this folder, the side panel keeps itself up to date: after Job Hunt updates, it reloads itself and shows NEW on its icon.' : 'After a Job Hunt update, download the zip again, unpack it over the old folder and press the round-arrow Reload on the extensions page.'}</p></div>
+    ${noPanel(d)}</div>`;
+}
+
+// "Send to Job Hunt" as a bookmark: on a posting's page it opens Job Hunt with
+// the role filled in. Nothing is added until the person presses Add there.
+const bookmarklet = port => `javascript:(()=>{const d=document,g=s=>d.querySelector(s)||{},m=n=>g('meta[property="'+n+'"]').content||'';let j={};d.querySelectorAll('script[type="application/ld+json"]').forEach(x=>{try{[].concat(JSON.parse(x.textContent)).forEach(y=>[].concat(y&&y['@graph']||y).forEach(z=>{if(z&&z['@type']==='JobPosting')j=z}))}catch(e){}});const q=new URLSearchParams({add:'link',url:location.href.split('#')[0],title:String(j.title||g('h1').innerText||m('og:title')||d.title||'').trim().slice(0,200),company:String((j.hiringOrganization||{}).name||m('og:site_name')||'').trim().slice(0,120),text:String(getSelection()).trim().slice(0,12000)});open('http://127.0.0.1:${port}/#/roles?'+q,'_blank')})()`;
+function noPanel(d) {
+  const code = bookmarklet(location.port || '47700');
+  return html`<div class="card col" style="gap:10px" data-set="bookmark"><h3>No side panel in this browser?</h3>
+    <p class="s m">For Firefox, Safari or a browser at work: a bookmark that sends the posting you are looking at to Job Hunt. Job Hunt opens with the role filled in; you press Add.</p>
+    <div class="row wrap" style="gap:8px"><a class="btn p" href="${code}" data-act="bookmarkhelp" title="Drag this to your browser's bookmarks bar">Send to Job Hunt</a><span class="xs m grow">Drag the button to your browser's bookmarks bar.</span><button type="button" class="btn sm" data-act="copytext" data-text="${code}" title="For a browser you can't drag to: make a new bookmark and paste this as its address.">Copy its address</button></div>
+    <p class="xs m">If the site needs you to sign in to see the posting, select the posting's text before you press it. It works while Job Hunt is running on this computer.</p>
+    ${d.pc?.clip ? html`<div class="hr"></div><label class="row s" style="font-weight:500"><input type="checkbox" data-on="change" data-act="saveclip" ${d.desk?.clip ? 'checked' : ''}> Notice job links I copy</label>
+      <p class="xs m">Copy a link to a posting anywhere on this computer and Job Hunt offers to add it, under the bell and as a notification. Only a single job link is acted on; nothing else you copy is kept or sent anywhere. Off unless you turn it on.</p>` : ''}</div>`;
 }
 
 const THEMES = [['light', 'Light', 'Light pages, as Job Hunt has always looked.'], ['dark', 'Dark', 'Dark pages, easier on the eyes at night.'], ['system', 'Match Windows', 'Follows the light or dark setting of this computer, and changes with it.']];
@@ -358,7 +388,7 @@ function looks() {
 
 const bytes = n => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 // The saved copies of the data, and putting one back.
-function copies(b, route) {
+function copies(b, route, pick) {
   if (!b) return '';
   const all = b.copies || [], shown = all, st = b.staged;
   return html`<div class="card col" style="gap:10px;padding-bottom:14px" data-set="copies"><div class="row"><div class="grow"><h4>Saved copies</h4><p class="xs m" style="margin-top:3px">A copy of all your data is saved every day and the newest ${b.keep} are kept.</p></div>
@@ -378,7 +408,20 @@ function copies(b, route) {
     <div class="hr"></div>
     <form data-act="savebackups" class="col" style="gap:8px"><div class="grid2" style="grid-template-columns:minmax(0,1fr) 150px"><label class="field">Where copies are kept <span class="h">The whole path of a folder that is already there, such as one on another drive. Leave empty for the data folder.</span><input type="text" name="dir" value="${b.custom ? b.dir : ''}" placeholder="${b.default_dir}" autocomplete="off" spellcheck="false"></label>
       <label class="field">Keep the newest<select name="keep">${[7, 14, 30].map(n => html`<option value="${n}" ${b.keep === n ? 'selected' : ''}>${n} copies</option>`)}</select></label></div>
-      <div class="row wrap"><button class="btn sm p">Save</button><button type="button" class="btn sm" data-act="openfolder" data-what="backups" title="Opens the folder the copies are in.">Open the folder</button><span class="xs m grow" style="word-break:break-all">Now in ${b.dir}</span></div></form></div>`;
+      <div class="row wrap"><button class="btn sm p">Save</button>${pick ? html`<button type="button" class="btn sm" data-act="pickfolder" data-for="dir" data-title="Where should Job Hunt keep the copies of your data?">Choose a folder…</button>` : ''}<button type="button" class="btn sm" data-act="openfolder" data-what="backups" title="Opens the folder the copies are in.">Open the folder</button><span class="xs m grow" style="word-break:break-all">Now in ${b.dir}</span></div></form></div>`;
+}
+
+// Every tailored CV and letter, also kept as files in a folder of the person's choosing.
+function filesCard(fl) {
+  if (!fl) return '';
+  const shown = fl.folders.slice(0, listSize('files'));
+  return html`<div class="card col" style="gap:10px" data-set="files"><div class="row"><div class="grow"><h4>Your CVs and letters as files</h4><p class="xs m" style="margin-top:3px">Each CV and letter Job Hunt writes is also saved as Word and PDF, in a folder of its own for each role.</p></div>${fl.dir ? html`<button class="btn sm" data-act="showfiles" data-folder="">Show files</button>` : ''}</div>
+    <form data-act="savefiles" class="col" style="gap:8px">
+      <label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${fl.off ? '' : 'checked'}> Keep every CV and letter in a folder</label>
+      <label class="field">Folder <span class="h">The whole path. Leave empty for ${fl.default || 'Documents'}.</span><input type="text" name="dir" value="${fl.custom ? fl.dir : ''}" placeholder="${fl.default}" autocomplete="off" spellcheck="false"></label>
+      <div class="row wrap"><button class="btn sm p">Save</button>${fl.pick ? html`<button type="button" class="btn sm" data-act="pickfolder" data-for="dir" data-title="Where should Job Hunt keep your CVs and letters?">Choose a folder…</button>` : ''}</div></form>
+    ${fl.folders.length ? html`<div class="eb">Tailored files</div><div class="col" style="gap:8px">${shown.map(f => html`<div class="row" style="gap:8px"><div class="grow" style="min-width:0"><div class="s">${f.name}</div><div class="xs m">${rel(f.at)} · ${f.files.map(x => x.name).join(' · ')}</div></div><button class="btn sm ghost" data-act="showfiles" data-folder="${f.name}">Show</button></div>`)}</div>${endless('files', shown.length, fl.folders.length, true)}`
+      : html`<p class="xs m">${fl.off ? 'Off.' : 'No files yet. They appear as roles are prepared.'}</p>`}</div>`;
 }
 
 function theApp(d, route) {
@@ -393,7 +436,7 @@ function theApp(d, route) {
       <p class="s m">Everything is kept in one folder on this computer:</p><code class="s" style="background:var(--s2);padding:6px 9px;border-radius:7px;word-break:break-all">${d.dir}</code>
       <p class="s m">Job Hunt keeps searching while its window is closed; start it again from the Start menu to bring the window back.</p>
       <div class="row"><span class="grow"></span><button class="btn danger" data-act="quit" data-confirm="Stop Job Hunt? Searching stops until you start it again.">Stop Job Hunt</button></div></div>
-    ${looks()}${copies(d.backups, route)}
+    ${looks()}${copies(d.backups, route, d.files?.pick)}${filesCard(d.files)}
     ${d.history?.length ? html`<div class="card col" style="gap:6px"><h4>What changed in each version</h4>${d.history.slice(0, 3).map(h => html`<details ${h.version === d.version ? 'open' : ''}><summary class="s">${h.version}${h.version === d.version ? ' · this one' : ''}</summary><div class="news" style="margin-top:6px"><ul>${h.text.split('\n').filter(l => l.trim()).map(l => html`<li>${l.replace(/^[-*]\s+/, '').replace(/\*\*/g, '')}</li>`)}</ul></div></details>`)}
       ${d.history.length > 3 ? html`<details><summary class="s">Earlier versions (${d.history.length - 3})</summary>${d.history.slice(3).map(h => html`<div class="news" style="margin-top:8px"><h4>${h.version}</h4><ul>${h.text.split('\n').filter(l => l.trim()).map(l => html`<li>${l.replace(/^[-*]\s+/, '').replace(/\*\*/g, '')}</li>`)}</ul></div>`)}</details>` : ''}</div>` : ''}
     ${d.old ? oldCard(d.old, false) : ''}
@@ -418,7 +461,7 @@ export default {
       case 'arriving': return api('arriving');
       case 'panel': return api('connections');
       case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null)]).then(([c, pa, oc]) => ({ ...c, phoneaccess: pa, owncal: oc }));
-      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null)]).then(([a, o, g, h, b]) => ({ ...a, old: o, debug: g, history: h, backups: b }));
+      case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null), api('files').catch(() => null)]).then(([a, o, g, h, b, fl]) => ({ ...a, old: o, debug: g, history: h, backups: b, files: fl }));
     }
     return api('you');
   },
@@ -468,7 +511,10 @@ export default {
     async checkupdate() { const r = await post('update/check'); toast(r.update ? `Version ${r.update.version} is ready` : 'This is the newest version'); },
     autoupdate: ({ value }) => put('update', { auto: value }).then(() => toast(value ? 'New versions install by themselves' : 'Job Hunt will only tell you about new versions')),
     async savedesk({ f, data }) {
-      await put('desk', { notify: !!f.notify, awake: f.awake, morning: +f.morning });
+      const set = { notify: !!f.notify, awake: f.awake, morning: +f.morning };
+      if (data.pc?.power) set.wake = !!f.wake;
+      if (f.browser !== undefined) set.browser = f.browser;
+      await put('desk', set);
       if (data.startup?.can && !!f.startup !== !!data.startup.on) await put('startup', { on: !!f.startup });
       toast('Saved');
     },
@@ -540,6 +586,19 @@ export default {
     copytext: ({ d }) => copy(d.text).then(() => false),
     copydebug: () => api('debug').then(g => copy(g.report)).then(() => false),
     openfolder: ({ d }) => post('open-folder', { what: d.what }).then(() => false),
+    async pickfolder({ el, d }) {
+      const f = el.closest('form'), box = f.elements[d.for];
+      const r = await post('pick-folder', { title: d.title, start: box.value || box.placeholder });
+      if (r.dir) box.value = r.dir;
+      return false;
+    },
+    savefiles: ({ f }) => put('files', { off: !f.on, dir: (f.dir || '').trim() }).then(() => toast(f.on ? 'Saved. New CVs and letters are kept there.' : 'Saved. No more files are written.')),
+    showfiles: ({ d }) => post('files/show', { folder: d.folder }).then(() => false),
+    saveclip: ({ value }) => put('desk', { clip: value }).then(() => toast(value ? 'On. Copy a link to a posting and Job Hunt offers to add it.' : 'Off. Copied links are left alone.')),
+    allowwake: () => post('desk/allow-wake').then(() => toast('Wake timers are allowed while this computer is plugged in')),
+    installclaude: () => post('claude-code/install').then(() => toast('Installing Claude Code. A notice says when it is done, in about a minute.')),
+    signinclaude: () => post('claude-code/signin').then(() => { toast('Claude Code opened in its own window. Sign in there, then come back and press Test it.'); return false; }),
+    bookmarkhelp: () => { toast('Drag this button to your bookmarks bar, then press it there on a posting.'); return false; },
     pair: () => post('ext/pair').then(() => toast('The side panel is connected')),
     unpair: () => post('ext/unpair'),
     async backup() { const r = await post('backup'); toast('Saved to ' + r.path); return false; },

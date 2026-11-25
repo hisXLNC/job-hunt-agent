@@ -114,7 +114,7 @@ const SOURCE = /how did you (hear|find|learn)|where did you (hear|find|learn|see
 const WHY = {
   yours: 'yours to answer', unknown: "Job Hunt doesn't know it", asked: 'no answer yet: it is now a question in Job Hunt', unsure: 'Job Hunt was not sure: it is now a question in Job Hunt',
   choice: 'the answer is not one of its choices', closed: "its list wouldn't open", ignored: "the page didn't take it", date: 'a date for you', tick: 'yours to tick',
-  letter: 'no letter is written for this role', gone: 'the page changed', error: 'something went wrong on this field', number: 'it wants a number', many: 'more questions than Job Hunt answers at once',
+  letter: 'no letter is written for this role', cv: 'not on your CV: yours to fill in', gone: 'the page changed', error: 'something went wrong on this field', number: 'it wants a number', many: 'more questions than Job Hunt answers at once',
 };
 
 // A field of one job or school ("Degree") is asked about with its entry's name in front.
@@ -142,6 +142,7 @@ function planFill(fields, me, role, opts) {
     if (f.kind === 'checkbox') { if (f.required) plan.left.push({ label: f.label, why: WHY.tick }); continue; }
     if (f.kind === 'date' || f.type === 'date' || f.type === 'month') { if (f.required) plan.left.push({ label: f.label, why: WHY.date }); continue; }
     if (f.label.length < 4 && !opts.over) continue;
+    if (opts.profile) { if (f.required) plan.left.push({ label: f.label, why: WHY.cv }); continue; } // a profile is filled from the CV alone
     if (plan.ask.length >= 30) { plan.left.push({ label: f.label, why: WHY.many }); continue; }
     const choices = ['select', 'radio', 'checks', 'drop'].includes(f.kind) ? (f.options || []).filter(o => o && !NO_CHOICE.test(o)) : [];
     plan.ask.push({ f, q: askText(f), options: choices.length <= 60 ? choices : [] });
@@ -213,7 +214,8 @@ async function fillRound(io, fields, me, role, opts) {
 
 // The whole form: a place for every job and school on the CV, then the answers, and again
 // for the questions those answers bring onto the page. Nothing here sends the form.
-async function fillForm(io, me, role) {
+// `opts.profile`: a job site's own profile of the person, filled from the CV alone.
+async function fillForm(io, me, role, opts) {
   const known = [];
   let best = await io.scan({ lists: false, skip: known });
   if (!best || !best.fields.length) return null;
@@ -235,7 +237,7 @@ async function fillForm(io, me, role) {
   for (let round = 0; round < 3; round++) {
     const fresh = best.fields.filter(f => !seen.has(sig(f)));
     if (!fresh.length) break;
-    const sum = await fillRound({ ...io, frame: best.frame }, fresh, me, role);
+    const sum = await fillRound({ ...io, frame: best.frame }, fresh, me, role, opts);
     fresh.forEach(f => { seen.add(sig(f)); known.push(`${f.section}|${f.label}`); });
     total.filled += sum.filled; total.check.push(...sum.check); total.left.push(...sum.left);
     if (!sum.filled || round === 2) break;

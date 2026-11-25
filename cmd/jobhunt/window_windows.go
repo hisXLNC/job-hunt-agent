@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -248,7 +247,7 @@ func (n *nativeWindow) open(page string) (ok bool) {
 	// browser, where the side panel is. Only Job Hunt's pages live here.
 	w.Bind("jhOpen", func(link string) {
 		if u, err := url.Parse(link); err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
-			exec.Command("rundll32", "url.dll,FileProtocolHandler", u.String()).Start()
+			openLink(u.String())
 		}
 	})
 	w.Bind("jhShown", func(page string) {

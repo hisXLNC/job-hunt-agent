@@ -12,6 +12,7 @@ import (
 
 	"jobhunt/internal/brain"
 	"jobhunt/internal/cv"
+	"jobhunt/internal/engine"
 	"jobhunt/internal/store"
 )
 
@@ -144,7 +145,7 @@ func (s *Server) extRoutes(h func(string, handler)) {
 	h("POST /api/ext/hello", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		p := st.Profile()
 		counts, _ := st.RoleCounts()
-		return map[string]any{"ok": true, "name": p.Name, "ready": counts["ready"], "version": Version}, nil
+		return map[string]any{"ok": true, "name": p.Name, "ready": counts["ready"], "version": Version, "ext_version": extVersion()}, nil
 	})
 	// The roles ready to apply to, most urgent first.
 	h("GET /api/ext/next", func(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -311,6 +312,21 @@ func (s *Server) extRoutes(h func(string, handler)) {
 			out["note"] = n
 		}
 		return out, nil
+	})
+	// The people a LinkedIn posting names under "Meet the hiring team", read
+	// off the page when the person pressed the button, added to People.
+	h("POST /api/ext/role/{id}/team", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			People []engine.TeamMember `json:"people"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if len(in.People) == 0 {
+			return nil, bad("No one to add.")
+		}
+		n, err := e.AddHiringTeam(idOf(r), in.People)
+		return map[string]int{"added": n}, err
 	})
 	h("POST /api/ext/note/{id}/sent", func(w http.ResponseWriter, r *http.Request) (any, error) { return nil, e.NoteSent(idOf(r)) })
 }

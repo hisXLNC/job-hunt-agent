@@ -2,7 +2,8 @@
 // writes a page only when the person asks: a button here, the keyboard
 // shortcut, or "Job Hunt: fill this in" on a field. Everything that comes
 // from a page or a posting is put on screen as text, never as markup.
-// It fills in and attaches; it never presses Submit.
+// It fills in and attaches. It presses a form's Submit only when the person
+// presses "Submit application" here, for that one form; never by itself.
 
 const BASE = 'http://127.0.0.1:47700/api/ext/';
 const APP = 'http://127.0.0.1:47700/';
@@ -25,6 +26,12 @@ let offers = [], held = [];   // answers the person typed themselves; offered on
 const offered = new Set();    // roles the countdown has been shown for
 const plog = [];              // what the panel did, for bug reports. Never what was typed.
 const MINE = chrome.runtime.getManifest().version;
+let extVersion = '';          // the side panel Job Hunt holds now, in its own folder
+let updatedFrom = '';         // this panel reloaded itself from that version: shows NEW
+const teams = {}, teamAdded = {}; // role id → the hiring team read off its LinkedIn posting, and whether it was added
+const ready = {};             // tab id → a form filled there, to look over and send: { at, role, filled, attached, left, check, review }
+// "26.11.48" against "26.11.5": is a newer?
+const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); if (x.length !== 3 || y.length !== 3 || x.some(isNaN) || y.some(isNaN)) return false; for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
 const log = line => { plog.push(`${new Date().toISOString().slice(11, 19)} ${line}`); if (plog.length > 200) plog.shift(); };
 
 // ---- small helpers ----------------------------------------------------------------
@@ -138,6 +145,8 @@ const ATS = /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrec
 // Addresses the main hiring systems show once an application is in.
 const KNOWN_DONE = /greenhouse\.io\/.+\/confirmation|lever\.co\/.+\/thanks|myworkday(jobs|site)\.com\/.+\/jobTasks\/completed|ashbyhq\.com\/.+\/application\/(confirmation|success)|workable\.com\/.+\/(thank-you|thanks)/i;
 const hostOf = u => { try { return new URL(u).hostname; } catch (e) { return ''; } };
+// A hiring system's own page of the person: work history, schools, skills.
+const PROFILE = /\/(userhome|candidatehome|myprofile|my-profile|profile|candidateprofile|candidate\/profile|account\/profile)(\/|$|\?)|career_ns=profile|\/jobs\/candidate\b|^https:\/\/my\.greenhouse\.io\//i;
 const sameTrip = (now, then) => hostOf(now) === hostOf(then) || ATS.test(hostOf(now));
 function remember(tabId, id, url, at) {
   tabRoles[tabId] = { id, url, at: at || Date.now() };
@@ -210,11 +219,32 @@ async function readApplicants(role) {
   } catch (e) { /* the page may still be loading; the next look tries again */ countRead[role.id] = Date.now() - 9 * 60 * 1000; }
 }
 
+async function hello() {
+  const hi = await call('hello', { method: 'POST', body: {} });
+  appVersion = String((hi && hi.version) || '');
+  extVersion = String((hi && hi.ext_version) || '');
+  helloAt = Date.now();
+  state = 'ok';
+}
+
+// The installer puts the newest side panel in Job Hunt's folder. Loaded from
+// there, a reload picks it up. Tried once for each version: loaded from
+// somewhere else, the reload changes nothing and the note says what to do.
+async function selfUpdate() {
+  if (!newer(extVersion, MINE) || working || applying || Object.keys(ready).length || Object.values(pressed).some(x => Date.now() - x.at < 10 * 60 * 1000)) return false;
+  const { reloadedFor } = await chrome.storage.local.get('reloadedFor').catch(() => ({}));
+  if (reloadedFor === extVersion) return false;
+  await chrome.storage.local.set({ reloadedFor: extVersion, updatedFrom: MINE });
+  log(`reloading to take ${extVersion}`);
+  chrome.runtime.reload();
+  return true;
+}
+
 let seq = 0;
 async function refresh(force) {
   const mine = ++seq;
   try {
-    if (state !== 'ok' || Date.now() - helloAt > 60000) { const hi = await call('hello', { method: 'POST', body: {} }); appVersion = String((hi && hi.version) || ''); helloAt = Date.now(); state = 'ok'; }
+    if (state !== 'ok' || Date.now() - helloAt > 60000) await hello();
     const t = await activeTab();
     const url = t && t.url ? t.url.split('#')[0] : '';
     let p;
@@ -224,7 +254,7 @@ async function refresh(force) {
     else if (/^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/in\/[^/]+/.test(url)) p = { kind: 'profile', url };
     else {
       const r = await call('role?url=' + encodeURIComponent(url));
-      p = r.known ? { kind: 'role', role: r.role, url } : { kind: 'unknown', url };
+      p = r.known ? { kind: 'role', role: r.role, url } : PROFILE.test(url) && ATS.test(hostOf(url)) ? { kind: 'siteprofile', url } : { kind: 'unknown', url };
       if (r.known) remember(t.id, r.role.id, url);
       else {
         // The later pages of an application have their own addresses: the role
@@ -241,7 +271,8 @@ async function refresh(force) {
     if (flash && flash.url !== url) flash = null;
     if (person && person.url !== url) person = null;
     tab = t; page = p; next = n;
-    if (p.kind === 'role' && /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/jobs\//.test(url)) readApplicants(p.role);
+    if (p.kind === 'role' && /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/jobs\//.test(url)) { readApplicants(p.role); readTeam(p.role); }
+    keepReady(t, p);
     if (p.kind === 'profile' && !person) grabProfile();
     if (p.carried && KNOWN_DONE.test(url)) sentFrom(t.id);
   } catch (e) {
@@ -251,6 +282,19 @@ async function refresh(force) {
   // Don't redraw under someone who is typing, unless they pressed something.
   const typing = ['TEXTAREA', 'INPUT', 'SELECT'].includes(document.activeElement && document.activeElement.tagName);
   if (force || !typing) render();
+  if (state === 'ok') selfUpdate();
+}
+
+// The people LinkedIn names under "Meet the hiring team", read at most every ten minutes a role.
+const teamRead = {};
+async function readTeam(role) {
+  if (Date.now() - (teamRead[role.id] || 0) < 10 * 60 * 1000) return;
+  teamRead[role.id] = Date.now();
+  try {
+    const [got] = await inPage(pageGrabHiringTeam);
+    const list = (got && Array.isArray(got.result) ? got.result : []).filter(x => x && typeof x.name === 'string' && x.name.trim()).slice(0, 6);
+    if (list.length) { teams[role.id] = list; if (page.kind === 'role' && page.role.id === role.id) render(); }
+  } catch (e) { teamRead[role.id] = Date.now() - 9 * 60 * 1000; }
 }
 let soon;
 const refreshSoon = () => { clearTimeout(soon); soon = setTimeout(() => refresh(), 350); };
@@ -317,6 +361,7 @@ const actions = {
   // Fills the form beside the panel: the person's details, each job and school,
   // Job Hunt's answers to the questions, and the CV and letter. Then stops.
   async fill() {
+    if (!(await upToDate())) return;
     const role = page.kind === 'role' ? page.role : null;
     const got = await fillForm(fillIO(role), await call('me'), role);
     if (!got) { say('warn', 'No form found on this page. If it opens after "Apply", open it first.'); return; }
@@ -339,7 +384,50 @@ const actions = {
     if (total.left.length) lists.push(['Left for you', total.left.map(line)]);
     const n = total.filled, more = best.result.site === 'workday' ? ' On the next step, fill again (Alt+Shift+F).' : '';
     say(n || attached.length ? 'good' : 'warn', n ? `Filled ${plural(n, 'field', 'fields')}, outlined in blue. Read them before you submit.${more}` : attached.length ? 'Attached your files. The fields are already filled in or are yours to answer.' : 'Nothing to fill: the fields are already filled in or are yours to answer.', lists);
+    // A form of a hiring system the filler knows can then be sent from here, by the person's press alone.
+    if (best.result.site) {
+      ready[tab.id] = { at: Date.now(), role: role ? role.id : 0, url: page.url, filled: total.filled, attached, left: total.left.map(line), frame: best.result.frame, site: best.result.site };
+      await reviewForm(tab.id).catch(() => {});
+    }
   },
+  // A hiring system's profile of the person, from the CV alone: no questions to Claude, no files.
+  async fillProfile() {
+    if (!(await upToDate())) return;
+    const got = await fillForm({ ...fillIO(null), ask: async () => [] }, await call('me'), null, { profile: true });
+    if (!got) { say('warn', 'No form found on this page. Open the part of your profile to fill in (Experience, Education, Skills) and press again.'); return; }
+    const total = got.total, line = x => `${short(x.label, 70)}: ${x.why}`, lists = [];
+    log(`profile: ${got.last.site || 'no known system'}; filled ${total.filled}; left ${total.left.length}`);
+    if (total.check.length) lists.push(['Needs a check (outlined in amber)', total.check.map(line)]);
+    if (total.left.length) lists.push(['Left for you', total.left.map(line)]);
+    say(total.filled ? 'good' : 'warn', total.filled ? `Filled ${plural(total.filled, 'field', 'fields')} from your CV, outlined in blue. Read them, then save the profile on the page yourself.` : 'Nothing to fill: the fields are already filled in or are not on your CV.', lists);
+  },
+  async addTeam() {
+    const list = teams[page.role.id] || [];
+    const r = await call(`role/${page.role.id}/team`, { method: 'POST', body: { people: list } });
+    teamAdded[page.role.id] = true;
+    say('good', r.added ? `Added ${plural(r.added, 'person', 'people')} to People, linked to this role.` : 'They are already in People.');
+  },
+  // Looks the form over again: what is filled, what is still empty.
+  async review() { await reviewForm(tab.id); },
+  // The person pressed "Submit application": this one form is sent, then the role marked applied.
+  async submit() {
+    const rd = readyHere(tab.id);
+    if (!rd) { say('warn', 'This is not the form Job Hunt filled. Fill it first.'); return; }
+    const r = await reviewForm(tab.id);
+    if (!r || !r.button || r.missing.length) { say('warn', r && r.missing.length ? 'Some required fields are still empty. Fill them in, then press Submit application again.' : 'No Submit button found on this page.'); return; }
+    const sent = (await inFiller('send', [], typeof rd.frame === 'number' ? rd.frame : 0))[0];
+    if (!sent || !sent.result.ok) { say('warn', sent && sent.result.why === 'invalid' ? 'The page says a field is not filled in right. Fix it there (it is usually marked in red), then press Submit application again.' : "Job Hunt couldn't press this form's Submit. Press it on the page yourself."); return; }
+    delete ready[tab.id];
+    log('the person submitted the form from the panel');
+    if (rd.role) {
+      offered.add(rd.role);
+      stopApplying();
+      await call(`role/${rd.role}/applied`, { method: 'POST', body: {} });
+      say('good', 'Submitted and marked as applied. If the page shows a problem, fix it there and press its own Submit.');
+    } else say('good', 'Submitted. If the page shows a problem, fix it there and press its own Submit.');
+  },
+  async notNow() { delete ready[tab.id]; },
+  async seenNew() { updatedFrom = ''; chrome.storage.local.remove('updatedFrom').catch(() => {}); chrome.action.setBadgeText({ text: '' }).catch(() => {}); },
   // One field, the one the person right-clicked.
   async fillOne(frame) {
     const role = page.kind === 'role' ? page.role : null;
@@ -435,6 +523,42 @@ async function grabProfile() {
 
 function stopApplying() { if (applying) { clearInterval(applying.timer); applying = null; } }
 
+// Before a fill: is this panel the newest? If Job Hunt holds a newer one, it reloads into it first.
+async function upToDate() {
+  if (Date.now() - helloAt > 10000) await hello();
+  if (await selfUpdate()) return false;
+  return true;
+}
+
+// The Submit card belongs to the one application it was filled for: another
+// role, or another site, in this tab and it goes. A later step of the same
+// application (Workday's Review) is looked over again.
+function readyHere(tabId) {
+  const rd = ready[tabId];
+  if (!rd || !tab || tab.id !== tabId) return rd || null;
+  const role = page.kind === 'role' ? page.role.id : 0;
+  if (Date.now() - rd.at > 2 * 3600 * 1000 || !['role', 'unknown'].includes(page.kind) || role !== rd.role || !page.url || !sameTrip(page.url, rd.url)) { delete ready[tabId]; return null; }
+  return rd;
+}
+function keepReady(t, p) {
+  const rd = t && ready[t.id];
+  if (!rd || !readyHere(t.id) || p.url === rd.url) return;
+  rd.url = p.url;
+  rd.review = null;
+  reviewForm(t.id).then(render).catch(() => {});
+}
+
+// Reads the form again for the Submit card: its Submit button and the required fields still empty.
+async function reviewForm(tabId) {
+  const rd = ready[tabId];
+  if (!rd) return null;
+  const got = (await inFiller('review', [], 'all', tabId)).filter(g => g.result && !g.result.covered);
+  const best = got.find(g => g.result.button) || got.sort((a, b) => b.result.fields - a.result.fields)[0];
+  rd.review = best ? best.result : { missing: [], button: '' };
+  if (best) rd.frame = best.frame;
+  return rd.review;
+}
+
 async function attachFile(which, replace) {
   const f = await fetchFile(page.role.id, which);
   const file = { name: f.name, b64: await toB64(f.blob), type: f.type, want: which, replace };
@@ -479,13 +603,49 @@ function flashCard() {
     flash.also ? h('div', { class: 's', style: 'margin-top:6px' }, flash.also) : null);
 }
 
-// The program and this panel are numbered alike; when they differ, one of them is old.
+// The program and this panel are numbered alike. A newer panel in Job Hunt's
+// folder is taken by itself (selfUpdate); this note is for when that can't work.
 function versionCard() {
   // (A copy of the program built by hand has no number.)
-  if (!/^\d+\.\d+\.\d+$/.test(appVersion) || appVersion === MINE) return null;
-  return h('div', { class: 'note warn', role: 'status' }, h('b', {}, `Job Hunt is ${appVersion}; this panel is ${MINE}.`),
-    h('div', { class: 's', style: 'margin-top:4px' }, 'Press Reload, then open the panel again. If this note comes back, get the new panel in Job Hunt under You, Connections.'),
+  if (!newer(extVersion, MINE) && !newer(appVersion, MINE)) return null;
+  const v = newer(extVersion, MINE) ? extVersion : appVersion;
+  return h('div', { class: 'note warn', role: 'status' }, h('b', {}, `Job Hunt has side panel ${v}; this one is ${MINE}.`),
+    h('div', { class: 's', style: 'margin-top:4px' }, "It couldn't update itself, so it was probably not loaded from Job Hunt's folder. In Job Hunt open You, Browser side panel, and load the panel from the folder shown there. It keeps itself up to date from then on."),
     h('div', { style: 'margin-top:8px' }, btn('Reload this panel', 'reloadPanel')));
+}
+
+// Shown once after the panel updated itself.
+function newCard() {
+  if (!updatedFrom || updatedFrom === MINE) return null;
+  return h('div', { class: 'note good', role: 'status' }, h('div', { class: 'row' }, h('span', { class: 'chip hot' }, 'NEW'), h('b', { class: 'grow' }, `The side panel updated itself to ${MINE}.`), btn('OK', 'seenNew', null, 'ghost s')));
+}
+
+// After a fill on a hiring system the filler knows: what was done, what is
+// still empty, and the one button that sends this form. Disabled while a
+// required field is empty. Pressed by the person only; nothing counts down.
+function submitCard() {
+  const rd = tab && readyHere(tab.id);
+  if (!rd) return null;
+  const rv = rd.review || { missing: [], button: '' }, missing = rv.missing || [];
+  const lists = [];
+  if (rd.attached.length) lists.push(['Attached', rd.attached]);
+  if (rd.left.length) lists.push(['Left empty', rd.left]);
+  if (missing.length) lists.push(['Required and still empty', missing.map(x => short(x, 80))]);
+  const block = !rv.button ? (rv.many ? 'This page has more than one send button, so Job Hunt leaves sending to you.' : "This step has no Submit button. If the form goes on (Next, Continue), press that on the page and fill again.") : missing.length ? `Fill in first: ${missing.slice(0, 3).map(x => short(x, 40)).join(', ')}${missing.length > 3 ? ` and ${missing.length - 3} more` : ''}, then press Check again.` : '';
+  return h('section', { class: 'card ask' }, h('div', { class: 'eb' }, 'Ready to send?'), h('h2', {}, 'Look the form over, then submit'),
+    h('p', { class: 's' }, `Filled ${plural(rd.filled, 'field', 'fields')}. Read every answer on the page first.`),
+    lists.map(([title, items]) => [h('div', { class: 's', style: 'margin-top:6px;font-weight:600' }, `${title} · ${items.length}`), h('ul', { class: 'dots s' }, items.slice(0, 12).map(x => h('li', {}, short(x, 160))), items.length > 12 ? h('li', {}, `and ${items.length - 12} more`) : null)]),
+    block ? h('p', { class: 's', style: 'color:var(--warn)' }, block) : h('p', { class: 's m' }, `Pressing it presses "${short(rv.button, 40)}" on this form, once${rd.role ? ', and marks the role applied' : ''}.`),
+    h('button', { class: 'btn p wide', disabled: !!working || !!block, onclick: () => run('submit', actions.submit) }, working === 'submit' ? [h('span', { class: 'spin' }), ' '] : null, 'Submit application'),
+    h('div', { class: 'row' }, btn('Check again', 'review', null, 'ghost'), h('span', { class: 'grow' }), btn("I'll send it myself", 'notNow', null, 'ghost')));
+}
+
+function teamCard(r) {
+  const list = teams[r.id];
+  if (!list || !list.length) return null;
+  return h('div', { style: 'border-top:1px solid var(--line2);padding-top:8px' }, h('div', { class: 'eb' }, 'Meet the hiring team'),
+    h('ul', { class: 'plain s' }, list.map(p => h('li', {}, h('b', {}, short(p.name, 60)), p.title ? h('span', { class: 'm' }, ' · ', short(p.title, 80)) : null))),
+    teamAdded[r.id] ? h('p', { class: 's m' }, 'In People, linked to this role.') : btn(list.length === 1 ? 'Add them to People' : `Add all ${list.length} to People`, 'addTeam', null, 'wide'));
 }
 
 function applyingCard() {
@@ -505,7 +665,7 @@ function offersCard() {
 }
 
 function logLink() {
-  return ['role', 'unknown'].includes(page.kind) ? h('div', { style: 'text-align:center' }, h('button', { class: 'btn ghost s', disabled: !!working, onclick: () => run('copyLog', actions.copyLog) }, "Copy the panel's log")) : null;
+  return ['role', 'unknown', 'siteprofile'].includes(page.kind) ? h('div', { style: 'text-align:center' }, h('button', { class: 'btn ghost s', disabled: !!working, onclick: () => run('copyLog', actions.copyLog) }, "Copy the panel's log")) : null;
 }
 
 function fitBox(r) {
@@ -536,6 +696,7 @@ function roleCard(r) {
       ['applied', 'reply', 'interview', 'offer'].includes(r.stage) ? h('span', { class: 's m grow' }, 'You applied.') : btn('I applied', 'applied'),
       h('span', { class: 'grow' }), btn('Not for me', 'no', null, 'ghost danger')));
   }
+  kids.push(teamCard(r));
   kids.push(h('div', { class: 'row' }, h('a', { class: 's grow', href: `${APP}#/roles/${r.id}`, target: '_blank', rel: 'noopener' }, 'Open in Job Hunt'),
     page.carried ? h('button', { class: 'btn ghost s', disabled: !!working, onclick: () => run('notThisRole', actions.notThisRole) }, 'Not this role') : null));
   if (page.carried) kids.unshift(h('div', { class: 's m' }, 'You came to this page from this role.'));
@@ -570,6 +731,9 @@ function pageCard() {
     case 'unknown': return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'This page'), h('h2', {}, 'Is this a job posting?'),
       h('p', { class: 's m' }, 'Send it to Job Hunt and it is scored against your CV, with a CV and letter written if it fits.'), btn('Send this posting to Job Hunt', 'send', null, 'p wide'),
       btn('Fill in a form on this page', 'fill', null, 'wide'));
+    case 'siteprofile': return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'Your profile on this site'), h('h2', {}, 'Fill it in from your CV'),
+      h('p', { class: 's m' }, 'Your jobs, schools, skills and contact details, from your CV. Questions are left for you, and nothing is saved until you save it on the page.'),
+      btn('Fill my profile from my CV', 'fillProfile', null, 'p wide'));
     case 'blind': return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'This page'), h('h2', {}, "Job Hunt isn't switched on for this site"),
       h('p', { class: 's m' }, "It works on LinkedIn and the main hiring systems as it is. To use it on an employer's own careers site, allow it on every site. It looks up the address of the page beside it in your own Job Hunt, and reads or fills a page only when you press a button here."),
       btn('Switch on for every site', 'everySite', null, 'wide'));
@@ -598,7 +762,7 @@ function render() {
       h('p', { class: 's' }, 'In Job Hunt open You, then Connections. Check that it shows this code and press Approve.'),
       h('a', { class: 'btn wide', href: `${APP}#/you/connections`, target: '_blank', rel: 'noopener' }, 'Open Job Hunt'))];
   } else {
-    kids = [versionCard(), applyingCard(), flashCard(), offersCard(), pageCard(), nextCard(), logLink()];
+    kids = [newCard(), versionCard(), applyingCard(), flashCard(), submitCard(), offersCard(), pageCard(), nextCard(), logLink()];
   }
   $main.replaceChildren(...kids.flat().filter(Boolean));
 }
@@ -606,7 +770,7 @@ function render() {
 // ---- start ------------------------------------------------------------------------
 chrome.tabs.onActivated.addListener(refreshSoon);
 chrome.tabs.onUpdated.addListener((id, info) => { if (info.status === 'complete' || info.url) refreshSoon(); if (info.status === 'complete') afterLoad(id); });
-chrome.tabs.onRemoved.addListener(id => { delete pressed[id]; delete filledIn[id]; });
+chrome.tabs.onRemoved.addListener(id => { delete pressed[id]; delete filledIn[id]; delete ready[id]; });
 // Word from the page (only ever from this extension's own filler) and from the shortcut.
 chrome.runtime.onMessage.addListener((m, sender) => {
   if (!m || sender.id !== chrome.runtime.id) return;
@@ -614,7 +778,7 @@ chrome.runtime.onMessage.addListener((m, sender) => {
   const id = sender.tab && sender.tab.id;
   if (!id) return;
   if (m.jobhunt === 'learn') hold(m.learn);
-  else if (m.jobhunt === 'pressed') { pressed[id] = { at: Number(m.at) || Date.now(), was: m.was || null, role: roleOfTab(id) }; hold(m.learn); showOffers(); log('the person sent the form'); render(); }
+  else if (m.jobhunt === 'pressed') { delete ready[id]; pressed[id] = { at: Number(m.at) || Date.now(), was: m.was || null, role: roleOfTab(id) }; hold(m.learn); showOffers(); log('the person sent the form'); render(); }
   else if (m.jobhunt === 'submitted') sentFrom(id);
 });
 chrome.permissions.onAdded.addListener(refreshSoon);
@@ -624,4 +788,6 @@ setInterval(() => {
 }, 3000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 chrome.storage.session.get('tabRoles').then(g => { tabRoles = { ...(g.tabRoles || {}), ...tabRoles }; }).catch(() => {});
+chrome.action.setBadgeText({ text: '' }).catch(() => {});
+chrome.storage.local.get('updatedFrom').then(g => { updatedFrom = g.updatedFrom || ''; if (updatedFrom) render(); }).catch(() => {});
 loadKey().then(() => refresh()).then(takeTodo);
