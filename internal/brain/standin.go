@@ -26,6 +26,8 @@ func StandIn() llm.Engine {
 			out = standPropose(req.Input.(string))
 		case "employers":
 			out = map[string]any{"employers": standEmployers(req.Input.(Person))}
+		case "title_look":
+			out = map[string]any{"keep": standTitleLook(req.Input.(titleLookInput))}
 		case "about_employers":
 			out = map[string]any{"employers": standAbout(req.Input.([]EmployerRef))}
 		case "read_role":
@@ -847,6 +849,17 @@ func standPrep(in prepInput) Prep {
 	p.Stories = []string{"Pick the project you are proudest of: the situation, what you did, the result."}
 	p.AskThem = []string{"What would success in the first six months look like?", "What is the hardest part of this work here that outsiders underestimate?"}
 	p.WatchOuts = []string{"Don't open with what you need; open with what you have done."}
+	company := ""
+	if in.Posting != nil {
+		company = in.Posting.Company
+	} else if _, at, ok := strings.Cut(in.With, " at "); ok {
+		company = at
+	} else {
+		company = in.With
+	}
+	if company != "" {
+		p.Company = []WebFact{{What: company + " is hiring for this team (a sample; with Claude this is read on the web).", URL: "https://example.com/news"}}
+	}
 	return p
 }
 

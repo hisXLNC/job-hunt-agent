@@ -279,6 +279,8 @@ type RunStats struct {
 	// from the run (see keepOutcomes), as it can run to thousands.
 	src, from string
 	outcomes  map[string]*SourceLog
+	// Roles set aside only for their title's wording: given a second look.
+	titleAside []int64
 }
 
 // SourceRun is what one kind of source gave in one search.
@@ -548,6 +550,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	// 4. Read what is new, freshest first: being early matters more than
 	// anything else Job Hunt does.
 	stats.New = len(fresh) + stats.Cleared
+	fresh = append(fresh, e.secondLook(ctx, p, &stats)...)
 	// In budget mode a big batch stays unread until the night.
 	if !e.budgetHolds(len(fresh)) {
 		e.readAll(ctx, fresh, &stats)
@@ -696,12 +699,31 @@ var metros = map[string]metro{
 	"toronto": {Miles: 35, Region: []string{"ontario", "on", "ont"}, Towns: []string{"toronto", "gta", "greater toronto", "greater toronto area", "north york", "etobicoke", "scarborough", "east york",
 		"mississauga", "brampton", "caledon", "vaughan", "woodbridge", "thornhill", "markham", "unionville", "richmond hill", "~aurora", "~newmarket", "king city", "stouffville",
 		"oakville", "~burlington", "~milton", "halton hills", "~georgetown", "pickering", "ajax", "whitby", "oshawa", "~concord", "york region", "peel region", "halton region", "durham region"}},
-	"vancouver": {Miles: 30, Region: []string{"british columbia", "bc"}, Towns: []string{"vancouver", "burnaby", "~richmond", "~surrey", "north vancouver", "west vancouver", "new westminster", "coquitlam", "port coquitlam", "port moody", "~delta", "~langley", "metro vancouver", "lower mainland"}},
-	"montreal":  {Miles: 30, Region: []string{"quebec", "québec", "qc"}, Towns: []string{"montreal", "montréal", "laval", "longueuil", "brossard", "dorval", "pointe claire", "saint laurent", "greater montreal"}},
-	"ottawa":    {Miles: 25, Region: []string{"ontario", "on"}, Towns: []string{"ottawa", "gatineau", "kanata", "nepean", "orleans"}},
-	"calgary":   {Miles: 25, Region: []string{"alberta", "ab"}, Towns: []string{"calgary", "airdrie", "cochrane", "okotoks"}},
-	"new york":  {Miles: 25, Region: []string{"new york", "ny"}, Towns: []string{"new york", "nyc", "manhattan", "brooklyn", "queens", "bronx", "jersey city", "hoboken"}},
-	"london":    {Miles: 25, Towns: []string{"london", "greater london"}},
+	"vancouver":     {Miles: 30, Region: []string{"british columbia", "bc"}, Towns: []string{"vancouver", "burnaby", "~richmond", "~surrey", "north vancouver", "west vancouver", "new westminster", "coquitlam", "port coquitlam", "port moody", "~delta", "~langley", "metro vancouver", "lower mainland"}},
+	"montreal":      {Miles: 30, Region: []string{"quebec", "québec", "qc"}, Towns: []string{"montreal", "montréal", "laval", "longueuil", "brossard", "dorval", "pointe claire", "saint laurent", "greater montreal"}},
+	"ottawa":        {Miles: 25, Region: []string{"ontario", "on"}, Towns: []string{"ottawa", "gatineau", "kanata", "nepean", "orleans"}},
+	"calgary":       {Miles: 25, Region: []string{"alberta", "ab"}, Towns: []string{"calgary", "airdrie", "cochrane", "okotoks"}},
+	"new york":      {Miles: 25, Region: []string{"new york", "ny"}, Towns: []string{"new york", "nyc", "manhattan", "brooklyn", "queens", "bronx", "jersey city", "hoboken"}},
+	"london":        {Miles: 25, Towns: []string{"london", "greater london", "city of london", "westminster", "canary wharf", "croydon", "stratford"}},
+	"edmonton":      {Miles: 25, Region: []string{"alberta", "ab"}, Towns: []string{"edmonton", "st albert", "sherwood park", "~leduc", "spruce grove", "nisku"}},
+	"winnipeg":      {Miles: 20, Region: []string{"manitoba", "mb"}, Towns: []string{"winnipeg", "~selkirk", "~steinbach"}},
+	"halifax":       {Miles: 20, Region: []string{"nova scotia", "ns"}, Towns: []string{"halifax", "dartmouth", "bedford", "sackville"}},
+	"hamilton":      {Miles: 20, Region: []string{"ontario", "on"}, Towns: []string{"hamilton", "~burlington", "stoney creek", "ancaster", "dundas", "grimsby"}},
+	"kitchener":     {Miles: 20, Region: []string{"ontario", "on"}, Towns: []string{"kitchener", "waterloo", "cambridge", "guelph", "region of waterloo", "waterloo region"}},
+	"waterloo":      {Miles: 20, Region: []string{"ontario", "on"}, Towns: []string{"waterloo", "kitchener", "cambridge", "guelph", "region of waterloo", "waterloo region"}},
+	"victoria":      {Miles: 20, Region: []string{"british columbia", "bc"}, Towns: []string{"victoria", "saanich", "esquimalt", "langford", "oak bay"}},
+	"quebec":        {Miles: 20, Region: []string{"quebec", "québec", "qc"}, Towns: []string{"quebec city", "québec city", "ville de québec", "lévis", "levis", "sainte foy"}},
+	"san francisco": {Miles: 35, Region: []string{"california", "ca"}, Towns: []string{"san francisco", "bay area", "sf", "oakland", "berkeley", "san mateo", "redwood city", "palo alto", "mountain view", "menlo park", "south san francisco", "emeryville"}},
+	"los angeles":   {Miles: 35, Region: []string{"california", "ca"}, Towns: []string{"los angeles", "la", "santa monica", "pasadena", "burbank", "glendale", "culver city", "long beach", "irvine", "el segundo"}},
+	"chicago":       {Miles: 30, Region: []string{"illinois", "il"}, Towns: []string{"chicago", "evanston", "oak brook", "schaumburg", "naperville", "deerfield"}},
+	"boston":        {Miles: 25, Region: []string{"massachusetts", "ma"}, Towns: []string{"boston", "cambridge", "somerville", "waltham", "quincy", "newton", "burlington"}},
+	"seattle":       {Miles: 25, Region: []string{"washington", "wa"}, Towns: []string{"seattle", "bellevue", "redmond", "kirkland", "tacoma", "everett"}},
+	"dubai":         {Miles: 30, Region: []string{"united arab emirates", "uae"}, Towns: []string{"dubai", "sharjah", "jebel ali", "difc"}},
+	"sydney":        {Miles: 30, Region: []string{"new south wales", "nsw"}, Towns: []string{"sydney", "north sydney", "parramatta", "macquarie park", "chatswood"}},
+	"melbourne":     {Miles: 30, Region: []string{"victoria", "vic"}, Towns: []string{"melbourne", "southbank", "docklands", "richmond", "st kilda"}},
+	"singapore":     {Miles: 20, Towns: []string{"singapore"}},
+	"dublin":        {Miles: 20, Region: []string{"ireland", "county dublin"}, Towns: []string{"dublin", "dún laoghaire", "dun laoghaire", "sandyford", "swords", "blanchardstown"}},
+	"manchester":    {Miles: 20, Region: []string{"greater manchester"}, Towns: []string{"manchester", "salford", "stockport", "trafford", "oldham"}},
 }
 
 var placeSplit = strings.NewReplacer(",", " ", "(", " ", ")", " ", "-", " ", "/", " ", ".", " ", ";", " ", "|", " ", "·", " ")
@@ -848,7 +870,7 @@ func screen(p store.Profile, post sources.Posting, searched bool) (reason, band 
 	}
 	ok, band := titleOK(p, title)
 	if !ok {
-		return "Title isn't in your field", ""
+		return titleAside, ""
 	}
 	if !searched && !placeOK(p, post.Location, post.Workplace) {
 		return "Based somewhere else", band
@@ -865,7 +887,7 @@ func screen(p store.Profile, post sources.Posting, searched bool) (reason, band 
 		}
 	}
 	if p.PayStrict && p.PayFloor > 0 {
-		if y := PayPerYear(post.Pay); y > 0 && y < p.PayFloor {
+		if payBelow(p, post.Pay) {
 			return "Pays under your floor", band
 		}
 	}
@@ -932,13 +954,18 @@ func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profi
 	}
 	if reason != "" {
 		r.Closed, r.ClosedWhy = "screened", reason
-		r.Description = "" // not kept for roles nobody will look at
+		if reason != titleAside {
+			r.Description = "" // not kept for roles nobody will look at
+		}
 	}
 	id, err := e.S.AddRole(r)
 	if err != nil {
 		return 0, false, false
 	}
 	seenAs.RoleID = id
+	if reason == titleAside {
+		stats.titleAside = append(stats.titleAside, id)
+	}
 	if reason != "" {
 		stats.Cleared++
 		stats.ClearedBy[reason]++

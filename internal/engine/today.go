@@ -368,7 +368,7 @@ func (e *Engine) roleCard(kind string, r store.Role, now time.Time) Card {
 			rd = &got
 		}
 	}
-	e.roleFacts(&c, r, desc, rd, e.S.Profile().PayFloor, now)
+	e.roleFacts(&c, r, desc, rd, e.S.Profile(), now)
 	return c
 }
 

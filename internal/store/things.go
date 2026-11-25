@@ -537,6 +537,12 @@ func (s *Store) Reopen(id int64) error {
 // reading, now that it clears them. Only a set-aside role comes back: one the
 // person said no to, or closed in any other way, is left as it is. It reports
 // whether the role came back.
+// DropText forgets the posting text of a role the rules set aside: it is not
+// kept for roles nobody will look at.
+func (s *Store) DropText(id int64) {
+	s.db.Exec(`UPDATE roles SET description = '' WHERE id = ? AND closed = 'screened'`, id)
+}
+
 func (s *Store) Unscreen(id int64) (bool, error) {
 	res, err := s.db.Exec(`UPDATE roles SET closed = '', closed_why = '', stage_at = ? WHERE id = ? AND closed = 'screened'`, s.now(), id)
 	if err != nil {

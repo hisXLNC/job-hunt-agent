@@ -173,3 +173,24 @@ func saying(r SourcePosting) string {
 	}
 	return "New"
 }
+
+// broughtBack marks roles the second look at titles brought back as new in
+// each source's list.
+func (st *RunStats) broughtBack(ids []int64) {
+	if len(ids) == 0 {
+		return
+	}
+	back := map[int64]bool{}
+	for _, id := range ids {
+		back[id] = true
+	}
+	for _, l := range st.outcomes {
+		for i := range l.Postings {
+			if o := &l.Postings[i]; back[o.RoleID] && o.Outcome == "skipped" {
+				l.Counts["skipped"]--
+				l.Counts["new"]++
+				o.Outcome, o.Why = "new", ""
+			}
+		}
+	}
+}

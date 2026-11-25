@@ -21,7 +21,7 @@ Limits: I did not read the old `fill.js`/`fill.rs`, `sources.rs`, `cv.rs`, `goog
 7. **Two-way Google Calendar sync — DONE 26.11.50 (Google sign-in with the person's own "Desktop app" OAuth client, loopback + PKCE, calendar.events only; `internal/engine/gcal.go`), was PARTIAL (L).** Old pushed interviews to Google, pulled moves and deletes back with a note on the application, and offered "Link to application" for look-alike events (1.29). New reads a secret iCal address and has a per-interview "Add to Google Calendar" link plus .ics files. No write-back, no move/delete detection, no linking.
 8. **Recruiters found from two years of mail — DONE 26.11.50 (a switch, off at first, again weekly; envelopes only, then the newest message of each likely recruiter, ten senders to a Claude request; phone and LinkedIn kept only when the signature has them; muted employers left alone; `internal/engine/recruiters.go`), was MISSING (M).** Old scanned Gmail, saved each recruiter's e-mail, phone and LinkedIn from the signature, linked them to applications, added their companies' boards, and filtered system senders (1.38, 1.39, 2.34.5). New `matchMail` only recognises people already in People.
 9. **Mail-check interval setting — DONE 26.11.30, was MISSING (S).** Old "Check email every (minutes)". New is fixed at 10 minutes in `chores` (`internal/engine/loop.go`).
-10. **Inbox "new" count on the nav — not determined** (see the last section).
+10. **Inbox "new" count on the nav — present** (Replies shows how much mail is waiting).
 
 ## B. Notifications and reminders — about 6 present, 8 gaps
 
@@ -153,12 +153,12 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 
 - Whether new `places` are searched or only accepted (D4). Settled in 26.11.49: they were only accepted; now they are searched.
 - Workday skills, Field of Study, month/year dates and "I currently work here" on the real site: new has its own test pages, which I did not run.
-- Whether new interview prep includes web research on the company with links (old did, 1.13).
-- Whether the new letter keeps the old layout (date, ATTN line, bold Subject with reference number, 1.3).
-- Whether new converts PDF or text CVs into an editable Word copy that keeps the look (old 1.1); new tailors from a structured model and writes its own .docx.
-- Whether titles a word match misses get a second look by Claude (old 1.6); new uses "words that mark your field".
-- Country coverage: metro areas for cities outside Canada, non-CAD and monthly pay (old 1.40).
-- Inbox unread badge and its nav count: I did not read `web/app.js` navigation.
+- Whether new interview prep includes web research on the company with links (old did, 1.13). It didn't; DONE 26.11.51.
+- Whether the new letter keeps the old layout (date, ATTN line, bold Subject with reference number, 1.3). Date and bold subject were there; ATTN and the reference number DONE 26.11.51.
+- Whether new converts PDF or text CVs into an editable Word copy that keeps the look (old 1.1). Decided: new tailors from a structured model and writes its own clean .docx and PDF, which reads better in screening systems than a copied layout.
+- Whether titles a word match misses get a second look by Claude (old 1.6). They didn't; DONE 26.11.51 (titles only, up to 120 a search).
+- Country coverage: metro areas for cities outside Canada, non-CAD and monthly pay (old 1.40). Monthly pay was read; more metro areas and currency-aware pay floor DONE 26.11.51 (and a floor per hour/day/month now works).
+- Inbox unread badge and its nav count: present (Replies shows the count of mail waiting).
 
 ## Suggested first picks
 

@@ -2,6 +2,27 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.51
+
+The last pieces from the old Job Hunt.
+
+- **Interview prep reads up on the employer.** Each prep pack now has what Claude read on the web
+  about the employer (what it does now, recent news, the team), each with a link to the page, and
+  uses it for the questions to ask them.
+- **Letters are addressed the way the posting asks.** When a posting names who to write to, the
+  letter says "ATTN: Name, Title" and "Dear Name,"; when it gives a reference or competition
+  number, the subject quotes it ("Application for Tax Manager (Ref. 12345)"). Applies to roles
+  read from now on.
+- **A second look at titles.** A posting whose title's wording doesn't match yours (another word
+  for the same job, another country's wording) gets one quick check by Claude before it is set
+  aside; the same work under another name is brought back and read. Only titles are sent.
+- **Pay floor fixed.** A floor set per hour, day or month was compared with yearly pay, so it
+  never set anything aside. Pay in another currency than where you will work is never compared
+  with your floor.
+- **More cities count their own area**, as Toronto does: Edmonton, Winnipeg, Halifax, Hamilton,
+  Kitchener-Waterloo, Victoria, Quebec City, San Francisco, Los Angeles, Chicago, Boston,
+  Seattle, Dubai, Sydney, Melbourne, Singapore, Dublin and Manchester.
+
 ## 26.11.50
 
 The rest of the old Job Hunt, rebuilt.

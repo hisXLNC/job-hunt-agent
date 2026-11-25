@@ -16,7 +16,7 @@ func TestTheSearchedPlaces(t *testing.T) {
 	got := searchedPlaces(p)
 	want := []where{
 		{"Toronto", "Toronto, Canada", "ON"},
-		{"Hamilton", "Hamilton, Canada", ""},
+		{"Hamilton", "Hamilton, Canada", "ON"},
 		{"Kitchener", "Kitchener, ON, Canada", "ON"},
 		{"Ottawa", "Ottawa, Canada", "ON"},
 	}

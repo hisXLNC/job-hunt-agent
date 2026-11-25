@@ -21,7 +21,7 @@ var limitReasons = []string{"Pays under your floor", "Posted more than ", "A kin
 // limitReason is the reason a limit rules a role out, or "".
 func limitReason(p store.Profile, r store.Role, now time.Time) string {
 	if p.PayStrict && p.PayFloor > 0 {
-		if y := PayPerYear(r.Pay); y > 0 && y < p.PayFloor {
+		if payBelow(p, r.Pay) {
 			return "Pays under your floor"
 		}
 	}

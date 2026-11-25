@@ -128,7 +128,7 @@ func Closes(desc string) (time.Time, bool) {
 }
 
 // roleFacts fills the at-a-glance columns and the "worth knowing" tags of a card.
-func (e *Engine) roleFacts(c *Card, r store.Role, desc string, rd *brain.Reading, payFloor int, now time.Time) {
+func (e *Engine) roleFacts(c *Card, r store.Role, desc string, rd *brain.Reading, p store.Profile, now time.Time) {
 	c.Company, c.CompanyID, c.Place, c.Workplace, c.Pay = r.Company, r.CompanyID, r.Location, r.Workplace, r.Pay
 	c.JobType = JobType(r.Title, desc)
 	c.PayYear = PayPerYear(r.Pay)
@@ -151,7 +151,7 @@ func (e *Engine) roleFacts(c *Card, r store.Role, desc string, rd *brain.Reading
 			add("Closes "+t.Format("2 Jan"), "")
 		}
 	}
-	if y := PayPerYear(r.Pay); payFloor > 0 && y > 0 && y < payFloor {
+	if payBelow(p, r.Pay) {
 		add("Under your pay floor", "crit")
 	}
 	switch c.JobType {
@@ -260,4 +260,73 @@ func PayFromText(desc string) string {
 		return ""
 	}
 	return strings.TrimRight(best, " .,;")
+}
+
+// payBelow reports whether a posting's pay is under the person's floor. Pay in
+// another currency than the one where the person will work is never compared:
+// a role is not set aside on a guessed exchange rate.
+func payBelow(p store.Profile, pay string) bool {
+	floor, y := floorPerYear(p), PayPerYear(pay)
+	if floor <= 0 || y <= 0 {
+		return false
+	}
+	if c, home := payCurrency(pay), homeCurrency(p.Country); c != "" && home != "" && c != home {
+		return false
+	}
+	return y < floor
+}
+
+var currencyWords = []struct{ code, re string }{
+	{"USD", `\bUSD\b|US\$|\bU\.S\. dollars?`}, {"CAD", `\bCAD\b|C\$|CA\$|\bCanadian dollars?`},
+	{"GBP", `£|\bGBP\b`}, {"EUR", `€|\bEUR\b|\beuros?\b`}, {"AUD", `\bAUD\b|A\$|AU\$`},
+	{"AED", `\bAED\b|\bdirhams?\b`}, {"INR", `₹|\bINR\b|\blakhs?\b`}, {"SGD", `\bSGD\b|S\$`}, {"NZD", `\bNZD\b|NZ\$`},
+	{"CHF", `\bCHF\b`}, {"SAR", `\bSAR\b|\briyals?\b`},
+}
+
+var currencyRes = func() []*regexp.Regexp {
+	var out []*regexp.Regexp
+	for _, c := range currencyWords {
+		out = append(out, regexp.MustCompile(`(?i)`+c.re))
+	}
+	return out
+}()
+
+// payCurrency is the currency a pay line names, or "" when it names none (a
+// bare $ is taken to be the local dollar).
+func payCurrency(pay string) string {
+	for i, re := range currencyRes {
+		if re.MatchString(pay) {
+			return currencyWords[i].code
+		}
+	}
+	return ""
+}
+
+// homeCurrency is the currency of the country the person will work in.
+func homeCurrency(country string) string {
+	switch strings.ToLower(strings.TrimSpace(country)) {
+	case "canada", "ca":
+		return "CAD"
+	case "united states", "usa", "us", "united states of america":
+		return "USD"
+	case "united kingdom", "uk", "england", "scotland", "wales", "northern ireland", "great britain":
+		return "GBP"
+	case "ireland", "germany", "france", "netherlands", "spain", "italy", "belgium", "portugal", "austria", "finland", "luxembourg", "greece":
+		return "EUR"
+	case "australia":
+		return "AUD"
+	case "united arab emirates", "uae":
+		return "AED"
+	case "india":
+		return "INR"
+	case "singapore":
+		return "SGD"
+	case "new zealand":
+		return "NZD"
+	case "switzerland":
+		return "CHF"
+	case "saudi arabia":
+		return "SAR"
+	}
+	return ""
 }

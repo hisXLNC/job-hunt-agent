@@ -209,9 +209,23 @@ func (e *Engine) roleLetter(roleID int64) (office.Letter, store.Role, error) {
 	case "warm":
 		sign = "With thanks,"
 	}
+	// Addressed the way the posting asks: to the person it names, quoting its reference.
+	to, subject := []string{"Hiring team", r.Company}, r.Title
+	var rd brain.Reading
+	if json.Unmarshal(r.Reading, &rd) == nil {
+		if c := oneLineOf(rd.Contact, 120); c != "" {
+			to = []string{"ATTN: " + c, r.Company}
+			if name, _, _ := strings.Cut(c, ","); doc.Style != "formal" && strings.TrimSpace(name) != "" {
+				greeting = "Dear " + strings.TrimSpace(name) + ","
+			}
+		}
+		if ref := oneLineOf(rd.Ref, 60); ref != "" {
+			subject += " (Ref. " + ref + ")"
+		}
+	}
 	l := office.Letter{
 		Name: p.Name, Contact: contact, Date: e.Now().Format("2 January 2006"),
-		To: []string{"Hiring team", r.Company}, Subject: r.Title, Body: greeting + "\n\n" + doc.Text, Sign: sign,
+		To: to, Subject: "Application for " + subject, Body: greeting + "\n\n" + doc.Text, Sign: sign,
 	}
 	for _, line := range strings.Split(p.Signature, "\n") {
 		if line = strings.TrimSpace(line); line != "" {
@@ -519,4 +533,13 @@ func (e *Engine) ClearTakenDown() (int, error) {
 		e.S.Log(store.Activity{Kind: "tidied", Text: fmt.Sprintf("Closed %s whose posting was taken down", countWord(n, "role"))})
 	}
 	return n, err
+}
+
+// oneLineOf keeps text read from a posting to one short line.
+func oneLineOf(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > n {
+		s = string(r[:n])
+	}
+	return s
 }
