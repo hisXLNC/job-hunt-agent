@@ -81,7 +81,7 @@ function sent(d) {
   const r = d.role;
   if (d.preparing) return html`<div class="card row"><span class="spin"></span><div><h4>Writing your CV and letter</h4><p class="s m">Both at once. This takes about a minute and the page updates by itself.</p></div></div>`;
   if (!d.cv && (d.old_cv || d.letter)) return html`<div class="card col" style="gap:12px">
-    <div class="row"><div class="grow"><div class="eb">From the old Job Hunt</div><h3 style="margin-top:4px">What you ${stageOrder(r.stage) >= 3 ? 'sent' : 'prepared'} for this role</h3></div>
+    <div class="row"><div class="grow"><div class="eb">From Job Hunt Old</div><h3 style="margin-top:4px">What you ${stageOrder(r.stage) >= 3 ? 'sent' : 'prepared'} for this role</h3></div>
       ${d.old_cv ? html`<a class="btn sm" href="/api/roles/${r.id}/old-cv">Download the CV</a>` : ''}</div>
     ${d.old_cv ? '' : html`<p class="s m">The CV file written for this role was not in what was brought over.</p>`}
     ${d.letter ? html`<div class="row wrap"><h4 class="grow">Your letter · ${words(d.letter)} words</h4><button class="btn sm" data-act="copyletter">Copy</button>${files(r, 'letter', 'The letter as it is saved here.')}</div>

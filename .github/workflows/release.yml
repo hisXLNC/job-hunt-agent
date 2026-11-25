@@ -97,14 +97,35 @@ jobs:
             throw "Job Hunt did not answer on this computer"
           }
 
+          # 0. The previous Job Hunt, as it is on the person's computer: an entry in the
+          # list of apps and shortcuts, all called "Job Hunt"; and a desktop shortcut
+          # left by this one when it was called "Job Hunt 3".
+          $start = [Environment]::GetFolderPath("Programs")
+          $desk = [Environment]::GetFolderPath("Desktop")
+          $oldKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Job Hunt"
+          New-Item $oldKey -Force | Out-Null
+          Set-ItemProperty $oldKey -Name DisplayName -Value "Job Hunt"
+          Set-Content "$start\Job Hunt.lnk" "old"
+          Set-Content "$desk\Job Hunt.lnk" "old"
+          Set-Content "$desk\Job Hunt 3.lnk" "earlier name"
+
           # 1. A silent install puts everything in place.
           Start-Process dist\JobHunt3-Setup.exe -ArgumentList "/S" -Wait
+          if ((Get-ItemProperty $oldKey).DisplayName -ne "Job Hunt Old") { throw "the old Job Hunt was not renamed in the list of apps" }
+          if (-not (Test-Path "$start\Job Hunt Old.lnk") -or -not (Test-Path "$desk\Job Hunt Old.lnk")) { throw "the old Job Hunt's shortcuts were not renamed" }
+          if ((Get-Content "$start\Job Hunt Old.lnk" -Raw).Trim() -ne "old") { throw "the old Job Hunt's shortcut was overwritten" }
+          if (Test-Path "$desk\Job Hunt 3.lnk") { throw "the shortcut under the earlier name was left" }
+          if ((Get-Item "$start\Job Hunt.lnk").Length -lt 100) { throw "the Start menu shortcut is not this Job Hunt's" }
+          $un0 = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\JobHunt3"
+          if ($un0.DisplayName -ne "Job Hunt") { throw "the list of apps calls it '$($un0.DisplayName)'" }
+          Remove-Item $oldKey -Recurse
+          Remove-Item "$start\Job Hunt Old.lnk", "$desk\Job Hunt Old.lnk"
+          Write-Host "Named Job Hunt; the old one is now Job Hunt Old"
           if (-not (Test-Path $exe)) { throw "the program was not installed" }
           if (-not (Test-Path "$dir\extension\manifest.json")) { throw "the side panel's files were not installed" }
           if (-not (Test-Path "$dir\Uninstall.exe")) { throw "there is no uninstaller" }
-          $start = [Environment]::GetFolderPath("Programs")
-          if (-not (Test-Path "$start\Job Hunt 3.lnk")) { throw "there is no Start menu shortcut" }
-          if (-not (Test-Path "$([Environment]::GetFolderPath('Desktop'))\Job Hunt 3.lnk")) { throw "there is no desktop shortcut" }
+          if (-not (Test-Path "$start\Job Hunt.lnk")) { throw "there is no Start menu shortcut" }
+          if (-not (Test-Path "$([Environment]::GetFolderPath('Desktop'))\Job Hunt.lnk")) { throw "there is no desktop shortcut" }
           $un = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\JobHunt3"
           if ($un.DisplayVersion -ne "${{ steps.v.outputs.version }}") { throw "Windows' list of apps shows version '$($un.DisplayVersion)'" }
           $run = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3
@@ -200,7 +221,7 @@ jobs:
           Write-Host "Updated over a running copy; data kept; starts again"
 
           # 4b. The way Job Hunt updates itself: quietly, keeping the person's choices, and starting again by itself.
-          Remove-Item "$([Environment]::GetFolderPath('Desktop'))\Job Hunt 3.lnk"
+          Remove-Item "$([Environment]::GetFolderPath('Desktop'))\Job Hunt.lnk"
           Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name JobHunt3
           # The window was open when the update began: it must come back afterwards.
           if ($hasWv) { Set-Content "$env:JOBHUNT_HOME\reopen-window" "1" }
@@ -209,7 +230,7 @@ jobs:
           $st = State
           if ($hasWv) { if ((Win) -eq [IntPtr]::Zero) { throw "after updating itself Job Hunt did not open its window again" }; Write-Host "Self-update: the window came back" }
           if ($st.version -ne "${{ steps.v.outputs.version }}") { throw "after updating itself the program says it is version '$($st.version)'" }
-          if (Test-Path "$([Environment]::GetFolderPath('Desktop'))\Job Hunt 3.lnk") { throw "a self-update put back the desktop shortcut the person removed" }
+          if (Test-Path "$([Environment]::GetFolderPath('Desktop'))\Job Hunt.lnk") { throw "a self-update put back the desktop shortcut the person removed" }
           if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3) { throw "a self-update turned starting with Windows back on" }
           if (-not $st.can_install) { throw "the installed copy says it cannot update itself" }
           Write-Host "Self-update: quiet, kept the person's choices, came back by itself"
@@ -218,7 +239,7 @@ jobs:
           Start-Process "$dir\Uninstall.exe" -ArgumentList "/S", "_?=$dir" -Wait
           if (Running) { throw "removing Job Hunt left it running" }
           if (Test-Path $exe) { throw "removing Job Hunt left the program behind" }
-          if (Test-Path "$start\Job Hunt 3.lnk") { throw "removing Job Hunt left its Start menu shortcut" }
+          if (Test-Path "$start\Job Hunt.lnk") { throw "removing Job Hunt left its Start menu shortcut" }
           if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\JobHunt3") { throw "removing Job Hunt left its entry in Windows' list of apps" }
           if ((Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run").JobHunt3) { throw "removing Job Hunt left it starting with Windows" }
           if (Test-Path "HKCU:\Software\Classes\jobhunt3") { throw "removing Job Hunt left its notification links registered" }

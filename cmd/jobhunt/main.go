@@ -158,6 +158,9 @@ func main() {
 		fatal(fmt.Errorf("Job Hunt couldn't open its data in %s: %w", dir, err))
 	}
 	defer s.Close()
+	if !*demo {
+		keepStartShortcut()
+	}
 	e := engine.New(s, dir)
 	e.Version = api.Version
 	e.Restored(restored)

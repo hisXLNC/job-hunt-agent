@@ -1,10 +1,16 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
+
+	"jobhunt/internal/trace"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -53,4 +59,32 @@ func setStartsWithWindows(on bool) error {
 		return errors.New("this copy of Job Hunt was not installed, so it can't start with Windows; run the installer")
 	}
 	return k.SetStringValue("JobHunt3", `"`+me+`" -no-window`)
+}
+
+// keepStartShortcut puts Job Hunt's Start menu shortcut back if it is
+// missing. The previous Job Hunt used the same name, and removing it takes
+// a shortcut called "Job Hunt" with it, which is now this one's.
+func keepStartShortcut() {
+	me := installedCopy()
+	appdata := os.Getenv("APPDATA")
+	if me == "" || appdata == "" {
+		return
+	}
+	lnk := filepath.Join(appdata, `Microsoft\Windows\Start Menu\Programs`, "Job Hunt.lnk")
+	if _, err := os.Stat(lnk); err == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+			`$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:JH_LNK);$s.TargetPath=$env:JH_EXE;$s.Save()`)
+		cmd.Env = append(os.Environ(), "JH_LNK="+lnk, "JH_EXE="+me)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000} // CREATE_NO_WINDOW
+		if out, err := cmd.CombinedOutput(); err != nil {
+			trace.Log("app", "couldn't put back the Start menu shortcut: %v %s", err, strings.TrimSpace(string(out)))
+		} else {
+			trace.Log("app", "put back the Start menu shortcut")
+		}
+	}()
 }

@@ -68,7 +68,7 @@ func (e *Engine) oldOpen(path string) (*old.Source, error) {
 		path = old.Default()
 	}
 	if path == "" {
-		return nil, errors.New("the old Job Hunt's data was not found on this computer. Choose a backup it made, or its data folder")
+		return nil, errors.New("Job Hunt Old's data was not found on this computer. Choose a backup it made, or its data folder")
 	}
 	return old.Open(path, filepath.Join(e.Dir, "tmp"))
 }
@@ -278,13 +278,13 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 	res := OldResult{At: now.Unix(), Where: firstOf(shown, src.Where)}
 	op := src.Profile()
 	// It is a job like any other: it shows at the top of every page and can be stopped.
-	ctx, j, ok := e.startJob(ctx, "old", "Bringing things over from the old Job Hunt")
+	ctx, j, ok := e.startJob(ctx, "old", "Bringing things over from Job Hunt Old")
 	if !ok {
 		return res, errors.New("already bringing things over. Give it a few minutes")
 	}
 	defer e.endJob(j)
 	stopped := errors.New("stopped. What was already brought over stays, and nothing is added twice: press the button again to carry on")
-	e.oldSay("Opening the old Job Hunt", 0, 1)
+	e.oldSay("Opening Job Hunt Old", 0, 1)
 	defer e.oldSay("", 0, 0)
 
 	// 1. Claude, the way the old one reached it, if nothing is set here yet.
@@ -851,7 +851,7 @@ type OldCleared struct {
 // of everything is made first and can be put back from Settings.
 func (e *Engine) ClearOld() (OldCleared, error) {
 	if !e.oldMu.TryLock() {
-		return OldCleared{}, errors.New("things are being brought over from the old Job Hunt right now")
+		return OldCleared{}, errors.New("things are being brought over from Job Hunt Old right now")
 	}
 	defer e.oldMu.Unlock()
 	out := OldCleared{At: e.Now().Unix()}

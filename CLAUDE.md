@@ -11,8 +11,10 @@ up by one with every release and starts at 0 in a new month. It carries on from 
 
 A release of the rewrite is made by changing `VERSION` (and the top of `CHANGELOG.md`) on this
 branch: `.github/workflows/release.yml` builds, tests on Windows and publishes `v<version>` with
-`JobHunt3-Setup.exe`. See `installer/README.md`. It installs as "Job Hunt 3", next to the old app,
-and never publishes to the old app's update feed.
+`JobHunt3-Setup.exe`. See `installer/README.md`. It installs as "Job Hunt", next to the old app
+(which the installer renames "Job Hunt Old" in shortcuts and the list of apps), and never publishes
+to the old app's update feed. Its files, registry names and data folder keep the old "3" names so
+updates and data carry on.
 
 ## Shape
 

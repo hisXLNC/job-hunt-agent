@@ -23,7 +23,10 @@ Unicode true
   !define EXT "..\extension"
 !endif
 
-!define NAME "Job Hunt 3"
+!define NAME "Job Hunt"
+; Before 26.11.52 this was "Job Hunt 3"; its install folder, program file and
+; registry names keep the 3 so that updates and the person's data carry on.
+!define OLDNAME "Job Hunt 3"
 !define PROGRAM "JobHunt3.exe"
 !define UNKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\JobHunt3"
 !define RUNKEY "Software\Microsoft\Windows\CurrentVersion\Run"
@@ -91,9 +94,41 @@ FunctionEnd
   ClearErrors
 !macroend
 
+; The previous Job Hunt (the one before the rewrite) also called itself "Job
+; Hunt". The first time this one takes the name, the old one's shortcuts and
+; its entry in Windows' list of apps become "Job Hunt Old", so the two can be
+; told apart. Nothing of it is removed or changed otherwise.
+!macro RenameTheOldOne KEY
+  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEY}" "DisplayName"
+  ${If} $0 == "Job Hunt"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEY}" "DisplayName" "Job Hunt Old"
+    ${If} ${FileExists} "$SMPROGRAMS\Job Hunt.lnk"
+      Rename "$SMPROGRAMS\Job Hunt.lnk" "$SMPROGRAMS\Job Hunt Old.lnk"
+    ${EndIf}
+    ${If} ${FileExists} "$SMPROGRAMS\Job Hunt\Job Hunt.lnk"
+      Rename "$SMPROGRAMS\Job Hunt\Job Hunt.lnk" "$SMPROGRAMS\Job Hunt\Job Hunt Old.lnk"
+    ${EndIf}
+    ${If} ${FileExists} "$DESKTOP\Job Hunt.lnk"
+      Rename "$DESKTOP\Job Hunt.lnk" "$DESKTOP\Job Hunt Old.lnk"
+    ${EndIf}
+  ${EndIf}
+  ClearErrors
+!macroend
+
+Var HadDesktop
 Section "Job Hunt" SecApp
   SectionIn RO
   !insertmacro StopRunning
+  !insertmacro RenameTheOldOne "Job Hunt"
+  !insertmacro RenameTheOldOne "net.jobhunt.desktop"
+  ; Shortcuts made under the earlier name "Job Hunt 3" give way to the new name;
+  ; a desktop shortcut the person kept is kept, under the new name.
+  StrCpy $HadDesktop 0
+  ${If} ${FileExists} "$DESKTOP\${OLDNAME}.lnk"
+    StrCpy $HadDesktop 1
+    Delete "$DESKTOP\${OLDNAME}.lnk"
+  ${EndIf}
+  Delete "$SMPROGRAMS\${OLDNAME}.lnk"
   SetOutPath "$INSTDIR"
   File "/oname=${PROGRAM}" "${EXE}"
   SetOutPath "$INSTDIR\extension"
@@ -119,6 +154,7 @@ SectionEnd
 
 Section "Shortcut on the desktop" SecDesktop
   ${If} $Updating != 1
+  ${OrIf} $HadDesktop == 1
     CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\${PROGRAM}"
   ${EndIf}
 SectionEnd
@@ -139,6 +175,8 @@ Section "Uninstall"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\${NAME}.lnk"
   Delete "$DESKTOP\${NAME}.lnk"
+  Delete "$SMPROGRAMS\${OLDNAME}.lnk"
+  Delete "$DESKTOP\${OLDNAME}.lnk"
   DeleteRegValue HKCU "${RUNKEY}" "JobHunt3"
   DeleteRegKey HKCU "${UNKEY}"
   DeleteRegKey HKCU "Software\Classes\jobhunt3"

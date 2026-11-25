@@ -50,7 +50,7 @@ const BY_ACT = {
   pause: 'Pause or resume all searching. Nothing new is found while paused.',
   toggle: 'Switch this on or off.',
   addcv: 'Add a CV file. Claude reads it once so it can tailor it later.',
-  oldhere: 'Copy your roles, CVs, people and settings from the old Job Hunt on this computer. The old app is not changed.',
+  oldhere: 'Copy your roles, CVs, people and settings from Job Hunt Old on this computer. Job Hunt Old is not changed.',
 };
 
 function tip(el) {

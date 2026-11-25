@@ -343,7 +343,7 @@ func TestBringOverFromABackupAndAnOlderDatabase(t *testing.T) {
 	// Something that is not the old Job Hunt is refused in words.
 	junk := filepath.Join(t.TempDir(), "notes.zip")
 	os.WriteFile(junk, []byte("PK\x03\x04 not really"), 0o644)
-	if _, err := e.ImportOld(context.Background(), junk, ""); err == nil || !strings.Contains(err.Error(), "not the old Job Hunt") {
+	if _, err := e.ImportOld(context.Background(), junk, ""); err == nil || !strings.Contains(err.Error(), "not Job Hunt Old") {
 		t.Fatalf("junk was accepted: %v", err)
 	}
 	if _, err := e.ImportOld(context.Background(), filepath.Join(t.TempDir(), "missing"), ""); err == nil {

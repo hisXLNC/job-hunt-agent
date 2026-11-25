@@ -26,10 +26,10 @@ export function oldCard(old, first) {
     <div class="col" style="gap:8px;margin-top:8px"><div class="row"><label class="btn sm">Choose a backup (.zip)<input type="file" accept=".zip,.db" hidden data-on="change" data-act="oldfile"></label><span class="xs m">The old app made one under You → Back up.</span></div>
     <form data-act="oldpath" data-busy="Bringing it over…" class="row"><input type="text" name="path" placeholder="Or the old data folder, like D:\Job Hunt\data" aria-label="The old data folder" class="grow"><button class="btn sm">Bring over</button></form></div></details>`;
   return html`<div class="card col" style="gap:10px" id="oldcard">
-    <div><h3>${first ? 'Used the old Job Hunt?' : 'The old Job Hunt'}</h3>
+    <div><h3>${first ? 'Used Job Hunt Old?' : 'Job Hunt Old'}</h3>
       <p class="s m" style="margin-top:3px">${o.found ? html`It is on this computer${o.name ? html`, set up for <b>${o.name}</b>` : ''}. It holds ${holds(o) || 'no jobs yet'}.`
         : 'Bring over the jobs you applied to or prepared, your CVs, the people who wrote to you and what you told it to look for.'}
-        Nothing in the old app is changed, and roles you said no to stay gone.${o.claude === 'key' ? ' Your Claude API key comes over too.' : ''}</p></div>
+        Nothing in Job Hunt Old is changed, and roles you said no to stay gone.${o.claude === 'key' ? ' Your Claude API key comes over too.' : ''}</p></div>
     ${last ? html`<div class="s"><b>Brought over:</b> ${came(last) || 'nothing new'}.${last.claude ? ` Claude is connected through ${last.claude}.` : ''}${(last.notes || []).map(x => html`<div class="xs m" style="margin-top:3px">${x}</div>`)}</div>` : ''}
     ${old?.problem ? html`<p class="s" style="color:var(--crit)">${old.problem}</p>` : ''}
     ${o.found ? html`<div class="row"><button class="btn ${last ? '' : 'p'}" data-act="oldhere" data-busy="Bringing it over…">${last ? 'Bring over again' : 'Bring it all over'}</button>${last ? html`<span class="xs m">Nothing is added twice.</span>` : ''}</div>` : ''}
@@ -42,7 +42,7 @@ function done(r) {
 // What is being done now and how far along it is, as a bar.
 function progress(p) {
   const pc = Math.max(2, Math.min(100, p?.percent || 0));
-  return html`<div class="col" style="gap:8px"><div class="row"><span class="spin"></span><h4 class="grow">Bringing things over from the old Job Hunt</h4><b class="s" id="oldpc">${pc}%</b></div>
+  return html`<div class="col" style="gap:8px"><div class="row"><span class="spin"></span><h4 class="grow">Bringing things over from Job Hunt Old</h4><b class="s" id="oldpc">${pc}%</b></div>
     <div class="bar" role="progressbar" aria-label="Bringing things over" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pc}" id="oldbar"><i style="width:${pc}%;transition:width .9s linear"></i></div>
     <p class="s m" id="oldtext">${p?.text || 'Starting'}. Reading each CV takes about a minute.</p></div>`;
 }

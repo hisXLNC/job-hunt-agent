@@ -23,7 +23,7 @@ import (
 )
 
 // ErrNotOld means the file or folder is not the old Job Hunt's data.
-var ErrNotOld = errors.New("that is not the old Job Hunt's data: it should be its data folder, its jobhunt.db file, or a backup .zip it made")
+var ErrNotOld = errors.New("that is not Job Hunt Old's data: it should be its data folder, its jobhunt.db file, or a backup .zip it made")
 
 // Default returns where the old app keeps its data on this computer, or ""
 // when it was never installed here. JOBHUNT_OLD names another place.

@@ -370,7 +370,7 @@ func TestBringOverTheOldJobHunt(t *testing.T) {
 		t.Fatalf("look: %d %s", w.Code, w.Body)
 	}
 	// Not the old app's data: said in words.
-	if w := page("POST", "/api/import/old?name=holiday.zip", "PK not a backup"); w.Code != 400 || !strings.Contains(w.Body.String(), "not the old Job Hunt") {
+	if w := page("POST", "/api/import/old?name=holiday.zip", "PK not a backup"); w.Code != 400 || !strings.Contains(w.Body.String(), "not Job Hunt Old") {
 		t.Fatalf("junk: %d %s", w.Code, w.Body)
 	}
 	// A page from somewhere else cannot start it.

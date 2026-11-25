@@ -2,6 +2,13 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.52
+
+- **Job Hunt is now just "Job Hunt"**: its shortcuts, Start menu and Windows' list of apps no
+  longer say "Job Hunt 3". The previous app's shortcuts and its entry in the list of apps become
+  **"Job Hunt Old"**, and the bring-over card calls it that too. Nothing of the old app is removed,
+  and your data stays where it is. A desktop shortcut you kept is kept under the new name.
+
 ## 26.11.51
 
 The last pieces from the old Job Hunt.
