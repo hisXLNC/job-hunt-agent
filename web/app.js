@@ -400,6 +400,70 @@ function whatsNew() {
     <div class="news">${w.changes.map(c => html`${w.changes.length > 1 ? html`<h4>${c.version}</h4>` : ''}${mark(c.text)}`)}</div></div>`.s;
   document.body.append(box);
 }
+// Another computer left a newer copy in the copies folder: offer to carry on
+// from it. Only one computer works at a time, and when both were used that
+// is said plainly. Used here and on You, The app.
+export function carryOn(o) {
+  if (!o) return '';
+  const since = o.since ? exact(o.since) : 'the last time the two were in step';
+  return html`<div class="col" style="gap:8px"><b class="s">Your work on ${o.computer} is newer: ${o.handed ? 'handed over' : 'saved'} ${ago(o.at)}.</b>
+    ${o.both ? html`<p class="s" style="background:var(--warn-soft);padding:9px 11px;border-radius:8px"><b>Job Hunt was used on this computer too</b> since ${since}. Only one computer works at a time: nothing is merged. Carrying on puts ${o.computer}'s copy in place of what is here, and what is here is saved first as a copy of its own, so you can come back to it.</p>`
+      : html`<p class="s m">Job Hunt puts that copy in place of what is here and starts again. What is here is saved first, as a copy of its own.</p>`}
+    <div class="row wrap" style="gap:8px"><button class="btn sm p" data-carry="go" data-copy="${o.copy}">Continue where you left off on ${o.computer}</button><button class="btn sm" data-carry="stay" title="Keeps working with what is on this computer. A newer copy from ${o.computer} is offered again.">Keep working here</button></div></div>`;
+}
+let carryShown = '';
+function carryBox() {
+  const o = app.state?.other_computer, key = o ? o.copy + ':' + o.at : '';
+  if (key === carryShown) return;
+  carryShown = key;
+  document.getElementById('carryon')?.remove();
+  if (!o || document.getElementById('whatsnew')) return;
+  const box = document.createElement('div');
+  box.id = 'carryon';
+  box.className = 'modal';
+  box.innerHTML = html`<div class="card" role="dialog" aria-label="Carry on from another computer"><h3>Carry on from ${o.computer}?</h3>${carryOn(o)}</div>`.s;
+  document.body.append(box);
+}
+async function carryGo(el) {
+  el.disabled = true;
+  try {
+    const b = await post('backups/continue', { copy: el.dataset.copy });
+    document.getElementById('carryon')?.remove();
+    if (!b.can_restart) { toast('Ready. Stop Job Hunt and start it again to carry on.'); return refreshState(); }
+    await post('restart');
+    document.body.innerHTML = '<div class="setup"><div class="card empty"><span class="spin" style="display:inline-block"></span><h3 style="margin-top:10px">Job Hunt is starting again with your other computer\'s work</h3><p>A few seconds. This page comes back by itself.</p></div></div>';
+    const began = Date.now();
+    let gone = false;
+    const look = async () => {
+      let up = false;
+      try { up = (await fetch('/api/state', { cache: 'no-store' })).ok; } catch { up = false; }
+      if (!up) gone = true;
+      if (up && (gone || Date.now() - began > 8000)) { location.href = '/#/today'; location.reload(); return; }
+      setTimeout(look, 700);
+    };
+    setTimeout(look, 900);
+  } catch (e) { el.disabled = false; toast(e.message, true); }
+}
+document.addEventListener('click', async ev => {
+  const el = ev.target.closest('[data-carry]');
+  if (!el) return;
+  ev.preventDefault();
+  if (el.dataset.carry === 'go') return carryGo(el);
+  el.disabled = true;
+  try { await post('backups/stay'); document.getElementById('carryon')?.remove(); toast('Working here. A newer copy from the other computer is offered again.'); } catch (e) { toast(e.message, true); }
+  await refreshState(); reload(true);
+});
+
+// Updates are looked for when the window comes back into view, at most every ten minutes.
+let lookedAt = 0;
+async function lookForUpdate() {
+  if (document.hidden || Date.now() - lookedAt < 600000 || !app.state?.setup_done) return;
+  lookedAt = Date.now();
+  try { const r = await post('update/check'); if (r.update) refreshState(); } catch { /* it tries again by itself */ }
+}
+window.addEventListener('focus', lookForUpdate);
+document.addEventListener('visibilitychange', lookForUpdate);
+
 async function refreshState() {
   try { app.state = await api('state'); } catch { return; }
   if (loadedVersion && app.state.version !== loadedVersion) { location.reload(); return; }
@@ -407,6 +471,7 @@ async function refreshState() {
   applyTheme(app.state.theme);
   bellCount();
   whatsNew();
+  carryBox();
   const pl = document.getElementById('pilot');
   if (pl) pl.innerHTML = pilot().s;
   for (const n of NAV) { const b = document.getElementById('b-' + n[0]); if (b) b.innerHTML = piece(badge(n[0])); }
@@ -501,7 +566,7 @@ function watchSize() {
 
 async function navigate() {
   const route = parseHash();
-  if (!app.state) { try { app.state = await api('state'); loadedVersion = app.state.version; applyTheme(app.state.theme); whatsNew(); } catch (e) { $app.innerHTML = html`<div class="setup"><div class="card empty"><h3>Job Hunt is not running</h3><p>${e.message}</p></div></div>`.s; return; } }
+  if (!app.state) { try { app.state = await api('state'); loadedVersion = app.state.version; applyTheme(app.state.theme); whatsNew(); carryBox(); lookedAt = Date.now(); } catch (e) { $app.innerHTML = html`<div class="setup"><div class="card empty"><h3>Job Hunt is not running</h3><p>${e.message}</p></div></div>`.s; return; } }
   let key = route.parts[0] || 'today';
   if (!app.state.setup_done && key !== 'setup') { location.hash = '#/setup'; return; }
   if (key === 'roles' && route.parts[1] && route.parts[1] !== 'board') key = 'role';

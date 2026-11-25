@@ -34,7 +34,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 5. **Weekly review on Sunday/Monday — DONE 26.11.30, was MISSING (M).** Old e-mailed it to the person and sent a phone summary (1.14, 1.30). The e-mailed part sends mail, so only the in-app/phone summary is a real gap.
 6. **Closing-date reminder two days before — DONE 26.11.30, was MISSING (S).** New shows a "Closes" tag and a calendar entry, no notice.
 7. **Phone notice coverage and privacy — DONE 26.11.30, was PARTIAL (S/M).** Old: interviews, offers, follow-ups due and applications ready, high priority for interviews/offers, an "only urgent" option, and private by default (kind of notice only, 1.42). New pushes fresh roles and replies only, always with title and employer through ntfy.
-8. **Update reminders — PARTIAL (S).** Old repeated a notice daily until installed and checked on window focus. New checks every 30 minutes and shows it in-app; tray has "Check for updates".
+8. **Update reminders — DONE 26.11.49, was PARTIAL (S).** `remindUpdate` in `internal/engine/update.go` tells once a day until installed; the pages look again when the window comes back into view. Old repeated a notice daily until installed and checked on window focus. New checks every 30 minutes and shows it in-app; tray has "Check for updates".
 
 ## C. The role page — about 14 present, 13 gaps
 
@@ -89,7 +89,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 2. **Files attached as PDF — DONE 26.11.31, was PARTIAL (S).** New side panel fetches `.docx` only (`extension/panel.js` line 253; `internal/api/ext.go` has no PDF route).
 3. **Fill a job site's profile from the CV — MISSING (M).** (2.48) New "profile" means a LinkedIn person's page.
 4. **Hiring team read from a LinkedIn posting — MISSING (S/M).** (2.46) New adds a person only from a LinkedIn profile page.
-5. **Fill forms on the phone, share a job from the phone — MISSING (M).** Bookmark filler and "Send to Job Hunt" share shortcut (2.36, 2.36.5). Phone access has no add-a-posting call.
+5. **Fill forms on the phone, share a job from the phone — DONE 26.11.49 (adding a posting from a link or the phone's Share; filling forms stays in the side panel), was MISSING (M).** `POST /api/roles/link` (`AddFromLink` in `internal/engine/link.go`) is on the phone's list; the phone page has an Add tab and is a share target. Bookmark filler and "Send to Job Hunt" share shortcut (2.36, 2.36.5). Phone access has no add-a-posting call.
 6. **Bookmark button and clipboard pick-up — MISSING (S).** For browsers without the extension (1.13; `clip_watch`).
 7. **Choose the browser links open in — MISSING (S).** (2.32)
 8. **Workday skills by real clicks — not determined.** Old used `chrome.debugger`; new has no debugger permission and handles skills in `filler.js`. I could not judge equivalence.
@@ -106,21 +106,21 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 
 ## H. Sync, backup and phone — about 7 present, 5 gaps
 
-1. **Continue on another computer — PARTIAL (L).** Old synced to Drive every few minutes, offered "continue where you left off" with sign-ins, and "take over" between two PCs (1.10, 1.12, 1.34, 2.0). New keeps copies in a cloud-drive folder with manual restore, one computer at a time.
-2. **Applications spreadsheet kept in Drive — MISSING (S).** New has the CSV download only.
-3. **Whole app from the phone — PARTIAL (by the new rule).** Old served the full app behind a password, including settings and installing updates. New `phoneCalls` (`internal/api/reach.go`) allows Today, a role, applied / no / later / prepare, PDFs, replies and interviews. Not possible from the phone: editing the letter, asking for changes, follow-ups, people and notes, adding a role, search now. CLAUDE.md forbids settings and keys; the rest is a choice.
-4. **Add to home screen — MISSING (S).** `web/phone/` has no web manifest or touch icon.
+1. **Continue on another computer — DONE 26.11.49 (one computer at a time, nothing merged), was PARTIAL (L).** `internal/engine/handover.go`: each computer keeps its latest copy in the copies folder; on start a newer one from another computer is offered as "Continue where you left off", through the safe restore. "Hand over to the other computer" is under You, The app. Using both is said plainly. Old synced to Drive every few minutes, offered "continue where you left off" with sign-ins, and "take over" between two PCs (1.10, 1.12, 1.34, 2.0). New keeps copies in a cloud-drive folder with manual restore, one computer at a time.
+2. **Applications spreadsheet kept in Drive — DONE 26.11.49, was MISSING (S).** "Job Hunt applications.csv" in the copies folder, kept up to date (`KeepApplicationsSheet`). New has the CSV download only.
+3. **Whole app from the phone — DONE 26.11.49 (never settings, keys, connections, saved copies or the assistant), was PARTIAL (by the new rule).** The phone now edits the letter, asks for changes to the letter and CV, writes follow-ups, has People and notes, adds a role from a link and searches now. Old served the full app behind a password, including settings and installing updates. New `phoneCalls` (`internal/api/reach.go`) allows Today, a role, applied / no / later / prepare, PDFs, replies and interviews. Not possible from the phone: editing the letter, asking for changes, follow-ups, people and notes, adding a role, search now. CLAUDE.md forbids settings and keys; the rest is a choice.
+4. **Add to home screen — DONE 26.11.49, was MISSING (S).** `web/phone/manifest.json` and touch icons from the app icon. `web/phone/` has no web manifest or touch icon.
 5. **Recruiters spreadsheet — MISSING (S).** (`/api/recruiters.csv`)
 
 ## I. CVs and settings — about 10 present, 7 gaps
 
-1. **Per-CV controls — PARTIAL (M).** Old: titles and keywords per CV, Find more titles, Replace file, letter style per CV, ATS check, what Claude read from it. New UI has add / download / remove; name and focus are settable only through the API.
-2. **A changed CV re-does waiting work — MISSING (M).** Old rescored and re-tailored waiting applications when a CV was replaced or removed, keeping your own edits (2.14, 2.15). New `DeleteCV` just deletes the row.
+1. **Per-CV controls — DONE 26.11.49, was PARTIAL (M).** You, About you: each CV opens to its titles, words, letter style, Find more titles, Replace file, the screening check and what Claude read (`internal/engine/cvs.go`). Old: titles and keywords per CV, Find more titles, Replace file, letter style per CV, ATS check, what Claude read from it. New UI has add / download / remove; name and focus are settable only through the API.
+2. **A changed CV re-does waiting work — DONE 26.11.49, was MISSING (M).** Replacing or removing a CV scores and tailors again the roles waiting to be sent, keeping a letter the person wrote and their own changes (`RedoForCV`). Old rescored and re-tailored waiting applications when a CV was replaced or removed, keeping your own edits (2.14, 2.15). New `DeleteCV` just deletes the row.
 3. **Time zone and interview settings — DONE 26.11.32 (interview hours, length, how many; the computer's own time zone), was MISSING (S).** See A5.
-4. **LinkedIn note length by account — PARTIAL (S).** Old 300 or 200; new fixed 300 (`web/pages/people.js`).
+4. **LinkedIn note length by account — DONE 26.11.49, was PARTIAL (S).** Old 300 or 200; new fixed 300 (`web/pages/people.js`).
 5. **Close as "No response" prompt after four quiet weeks — DONE 26.11.31, was PARTIAL (S).** (1.25)
-6. **A role beside the list — MISSING (S/M).** (2.43) Cosmetic.
-7. **"Write all" follow-ups in one go — MISSING (S).** (2.38)
+6. **A role beside the list — DONE 26.11.49 (Roles, on screens 1500 wide and up), was MISSING (S/M).** (2.43) Cosmetic.
+7. **"Write all" follow-ups in one go — DONE 26.11.49, was MISSING (S).** (2.38)
 
 ## Decisions (25 Nov 2026)
 

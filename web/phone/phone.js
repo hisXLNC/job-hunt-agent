@@ -1,4 +1,5 @@
-// Job Hunt on the phone: Today, a role, replies and interviews. A small
+// Job Hunt on the phone: Today, a role, replies, interviews, people and
+// adding a role from a link. A small
 // page of its own, because the phone can only make a few calls (see
 // internal/api/reach.go). Everything shown is put in as text, never as HTML.
 
@@ -23,7 +24,23 @@ async function call(method, path, body) {
   if (!r.ok) throw new Error(d.error || 'That didn\'t work. Try again.');
   return d;
 }
-const get = p => call('GET', p), post = (p, b) => call('POST', p, b || {});
+const get = p => call('GET', p), post = (p, b) => call('POST', p, b || {}), put = (p, b) => call('PUT', p, b || {});
+const copyText = t => navigator.clipboard?.writeText(t).then(() => toast('Copied'), () => toast('Couldn\'t copy. Select the text instead.')) ?? toast('Couldn\'t copy. Select the text instead.');
+
+// A button that does one thing, says so, and draws the page again.
+const doing = (label, fn, cls = 'btn') => el('button', { class: cls, type: 'button', on: { click: async ev => {
+  const b = ev.currentTarget, was = b.textContent; b.disabled = true;
+  try { await fn(b); } catch (e) { fail(e); } finally { if (b.isConnected) { b.disabled = false; b.textContent = was; } }
+} } }, label);
+
+// A link shared to Job Hunt from another app arrives as ?url=…&text=…; it
+// waits on the Add tab.
+let shared = '';
+{
+  const q = new URLSearchParams(location.search);
+  const found = [q.get('url'), q.get('text'), q.get('title')].filter(Boolean).join(' ');
+  if (found) { shared = found.slice(0, 2000); history.replaceState(null, '', '/#add'); }
+}
 
 let toastTimer;
 function toast(text) {
@@ -53,7 +70,7 @@ function unpaired(old) {
 
 function nav(on, counts) {
   const tab = (key, label, n) => el('a', { href: '#' + key, class: on === key ? 'on' : '' }, label, n ? el('b', {}, n) : '');
-  tabs.replaceChildren(tab('today', 'Today'), tab('replies', 'Replies', counts?.replies), tab('interviews', 'Interviews'));
+  tabs.replaceChildren(tab('today', 'Today'), tab('replies', 'Replies', counts?.replies), tab('interviews', 'Interviews'), tab('people', 'People'), tab('add', 'Add'));
 }
 
 async function today() {
@@ -70,11 +87,14 @@ async function today() {
     if (!href) body.push(el('div', { class: 'm', style: 'margin-top:6px' }, c.why || '', ' Done on your computer.'));
     return href ? el('a', { class: 'card', href }, body) : el('div', { class: 'card' }, body);
   });
+  const unwritten = d.cards.filter(c => c.kind === 'chase' && !c.body).length;
   page.replaceChildren(el('div', { class: 'm', style: 'padding:0 2px' }, d.numbers.map(n => `${n.value} ${n.label.toLowerCase()}`).join(' · ')),
+    el('div', { class: unwritten > 1 ? 'two' : '' }, doing('Search now', async b => { b.textContent = 'Starting…'; await post('search'); toast('Searching. New roles show up here in a few minutes.'); }),
+      unwritten > 1 ? doing(`Write all ${unwritten} follow-ups`, async b => { b.textContent = 'Starting…'; const r = await post('roles/chaseall'); toast(r.writing ? `Writing ${r.writing}. Press Refresh in a minute.` : 'Every follow-up is written already.'); }) : ''),
     ...(cards.length ? cards : [el('div', { class: 'empty' }, 'Your list is clear.')]));
 }
 
-async function role(id) {
+async function role(id, stay) {
   const d = await get('roles/' + id), r = d.role, now = d.now;
   title.textContent = r.company;
   nav('today');
@@ -101,11 +121,113 @@ async function role(id) {
     if (!r.applied_at) kids.push(later ? el('button', { class: 'btn', type: 'button', on: { click: act('later', { days: 0 }, 'Back on Today') } }, 'Bring back to Today')
       : el('div', {}, el('h3', {}, 'Save for later'), el('div', { class: 'three', style: 'margin-top:6px' }, [[1, 'Tomorrow'], [3, '3 days'], [7, 'Next week']].map(([n, label]) => el('button', { class: 'btn', type: 'button', on: { click: act('later', { days: n }, 'Saved for later') } }, label)))));
   }
-  if (d.letter) kids.push(el('h3', {}, 'Your letter'), el('div', { class: 'card' }, el('p', { class: 'letter' }, d.letter),
-    el('button', { class: 'btn', type: 'button', style: 'margin-top:10px', on: { click: () => navigator.clipboard?.writeText(d.letter).then(() => toast('Copied'), () => toast('Couldn\'t copy. Select the text instead.')) } }, 'Copy the letter')));
+  kids.push(...chasePart(id, d));
+  if (d.letter) {
+    const text = el('textarea', { rows: 12, 'aria-label': 'Your letter' }, d.letter);
+    kids.push(el('h3', {}, 'Your letter'), el('div', { class: 'card col' }, text,
+      el('div', { class: 'two' }, doing('Save', async () => { await post(`roles/${id}/letter`, { text: text.value }); toast('Letter saved'); }), doing('Copy', () => copyText(text.value))),
+      ask(id, 'askletter', 'undoletter', d.letter_prev, 'What to change in the letter', 'Shorter, and open with the project I led', 'Letter written again', 'The letter is as it was')));
+  }
+  if (d.cv?.doc) kids.push(el('h3', {}, 'Your CV for this role'), el('div', { class: 'card col' },
+    el('p', { class: 's' }, `${(d.cv.doc.changes || []).filter(c => !c.off).length} changes to your CV for this role. Read them on your computer, or ask for something different here.`),
+    ask(id, 'askcv', 'undocv', d.cv.doc.prev, 'What to change in the CV', 'Make more of the team I managed', 'CV tailored again', 'The CV changes are as they were')));
+  const notes = el('textarea', { rows: 3, 'aria-label': 'Your notes on this role', placeholder: 'Who referred you, what the recruiter said…' }, d.my_notes || '');
+  kids.push(el('h3', {}, 'Your notes'), el('div', { class: 'card col' }, notes, doing('Save notes', async () => { await post(`roles/${id}/notes`, { text: notes.value }); toast('Saved'); })));
   kids.push(el('p', { class: 'm', style: 'text-align:center' }, 'Filling the form for you happens in the side panel on your computer.'));
   page.replaceChildren(...kids);
+  if (!stay) scrollTo(0, 0);
+}
+
+// Asking Claude to change the letter or the CV, with a way back.
+function ask(id, what, undo, prev, label, example, done, undone) {
+  const box = el('input', { type: 'text', 'aria-label': label, placeholder: 'For example: ' + example });
+  return el('div', { class: 'col' }, el('div', { class: 's' }, label),
+    box, doing('Ask for this change', async b => {
+      if (!box.value.trim()) { toast('Say what to change.'); return; }
+      b.textContent = 'Writing…';
+      await post(`roles/${id}/${what}`, { ask: box.value.trim() }); toast(done); await role(id, true);
+    }),
+    prev ? doing('Undo the last change' + (prev.ask ? `: "${prev.ask.slice(0, 40)}"` : ''), async () => { await post(`roles/${id}/${undo}`); toast(undone); await role(id, true); }, 'btn q') : '');
+}
+
+// The follow-up on an application that has gone quiet.
+function chasePart(id, d) {
+  const r = d.role, c = d.chase;
+  if (r.closed || r.stage !== 'applied' || !r.applied_at) return [];
+  if (c?.sent_at) return [el('div', { class: 'card m' }, 'You followed up ' + ago(c.sent_at, d.now) + '. One is enough.')];
+  if (c?.body && !c.dropped_at) {
+    const subj = el('input', { type: 'text', 'aria-label': 'Subject', value: c.subject || '' }), text = el('textarea', { rows: 8, 'aria-label': 'Your follow-up' }, c.body);
+    return [el('h3', {}, 'Your follow-up'), el('div', { class: 'card col' }, c.to ? el('div', { class: 's' }, 'To ' + c.to + (c.email ? ' · ' + c.email : '')) : '', subj, text,
+      el('div', { class: 'two' }, doing('Save', async () => { await post(`roles/${id}/chasesave`, { subject: subj.value, text: text.value }); toast('Saved'); }), doing('Copy', () => copyText(text.value))),
+      el('div', { class: 'two' }, doing('I sent it', async () => { await post(`roles/${id}/chasesave`, { subject: subj.value, text: text.value }); await post(`roles/${id}/chasesent`); toast('Noted'); await role(id, true); }, 'btn p'),
+        doing('Let it go', async () => { await post(`roles/${id}/chasedrop`); toast('No follow-up for this one'); await role(id, true); }, 'btn q')),
+      el('p', { class: 'm' }, 'Job Hunt wrote it; you send it, from your own mail.'))];
+  }
+  if (!d.chase_due) return [];
+  return [el('div', { class: 'card col' }, el('div', { class: 't' }, 'No reply yet'), el('p', { class: 's' }, 'One short follow-up is normal. Job Hunt writes it; you send it.'),
+    el('div', { class: 'two' }, doing('Write follow-up', async b => { b.textContent = 'Writing…'; await post(`roles/${id}/chase`); await role(id, true); }, 'btn p'),
+      doing('Let it go', async () => { await post(`roles/${id}/chasedrop`); await role(id, true); }, 'btn q')))];
+}
+
+const KINDS = { knows_work: 'Knows your work', made_move: 'Made the same move', same_roots: 'Same roots', same_craft: 'Same craft', mentor: 'Mentor', recruiter: 'Recruiter', contact: 'You know them' };
+function noteState(n) {
+  if (!n) return ['Not written to', ''];
+  return { draft: ['Note drafted', 'warn'], sent: ['Written to', 'blue'], quiet: ['No answer', ''], replied: ['Answered', 'good'] }[n.state] || ['', ''];
+}
+
+async function people() {
+  const d = await get('people?size=60&page=1'), now = Date.now() / 1000;
+  title.textContent = 'People';
+  nav('people');
+  page.replaceChildren(el('div', { class: 'm', style: 'padding:0 2px' }, `${d.know} ${d.know === 1 ? 'person knows' : 'people know'} who you are`),
+    ...(d.people.length ? d.people.map(p => {
+      const [word, tone] = p.knows_you_at ? ['Knows you', 'good'] : noteState(p.note);
+      return el('a', { class: 'card', href: '#person/' + p.id }, el('div', { class: 'row', style: 'gap:6px;margin-bottom:4px' }, el('span', { class: 'chip ' + tone }, word), el('span', { class: 'm' }, KINDS[p.kind] || ''), p.note?.sent_at ? el('span', { class: 'm' }, ago(p.note.sent_at, now)) : ''),
+        el('div', { class: 't' }, p.name), el('div', { class: 's cut' }, [p.title, p.company].filter(Boolean).join(' · ')));
+    }) : [el('div', { class: 'empty' }, 'Nobody here yet. Job Hunt finds people to write to from your computer.')]),
+    d.total > d.people.length ? el('p', { class: 'm', style: 'text-align:center' }, `The first ${d.people.length} of ${d.total}. The rest are on your computer.`) : '');
+}
+
+async function person(id) {
+  const d = await get('people/' + id), p = d.person, n = d.notes?.[0], url = safeUrl(p.url), now = Date.now() / 1000;
+  title.textContent = p.name;
+  nav('people');
+  const again = purpose => async b => { b.textContent = 'Writing…'; await post(`people/${id}/note`, purpose ? { purpose } : {}); await person(id); };
+  const kids = [el('div', { class: 'card' }, el('h2', {}, p.name), el('div', { class: 's', style: 'margin-top:4px' }, [p.title, p.company].filter(Boolean).join(' · ')), p.why ? el('p', { class: 's', style: 'margin-top:8px' }, p.why) : '')];
+  if (url) kids.push(el('a', { class: 'btn', href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Open their profile'));
+  if (n) {
+    const subj = n.channel === 'email' ? el('input', { type: 'text', 'aria-label': 'Subject', value: n.subject || '' }) : null;
+    const body = el('textarea', { rows: n.channel === 'email' ? 9 : 6, 'aria-label': 'Your note' }, n.body);
+    const save = () => put(`notes/${n.id}`, { subject: subj?.value || '', body: body.value });
+    const mark = (what, said) => async () => { await save(); await post(`notes/${n.id}/${what}`); toast(said); await person(id); };
+    kids.push(el('h3', {}, n.state === 'draft' ? 'Your note · draft' : n.sent_at ? 'Your note · sent ' + ago(n.sent_at, now) : 'Your note'),
+      el('div', { class: 'card col' }, el('p', { class: 'm' }, (n.channel === 'linkedin' ? 'For the LinkedIn connect box. ' : 'An email. ') + 'Nothing is sent until you send it yourself.'), subj || '', body,
+        el('div', { class: 'two' }, doing('Save', async () => { await save(); toast('Saved'); }), doing('Copy', async () => { await save(); copyText(body.value); })),
+        n.state === 'draft' ? doing('I sent it', mark('sent', 'Noted. A reminder comes in a week if they are quiet.'), 'btn p') : '',
+        n.state === 'sent' ? el('div', { class: 'two' }, doing('They answered', mark('replied', 'One more person who knows you'), 'btn p'), doing('Let it go', mark('quiet', 'Let go'), 'btn q')) : '',
+        n.state === 'sent' ? doing('Write a follow-up', again('nudge')) : '', n.state === 'replied' ? doing('Write a thank-you', again('thanks')) : '',
+        doing('Write it again', again(''))));
+  } else kids.push(doing('Write a note', again(''), 'btn p'));
+  page.replaceChildren(...kids);
   scrollTo(0, 0);
+}
+
+// Adding a role from a link: pasted, or shared to Job Hunt from another app.
+function add() {
+  title.textContent = 'Add a role';
+  nav('add');
+  const box = el('textarea', { rows: 3, 'aria-label': 'The link to the posting', placeholder: 'https://…' }, shared);
+  shared = '';
+  page.replaceChildren(el('div', { class: 'card col' }, el('div', { class: 't' }, 'Add a role from a link'),
+    el('p', { class: 's' }, 'Paste the link to a job posting, or share it to Job Hunt from your browser. Job Hunt reads it and scores it against your CV.'),
+    box, doing('Add it', async b => {
+      if (!/https?:\/\//i.test(box.value)) { toast('Paste a link that starts with https://'); return; }
+      b.textContent = 'Reading…';
+      const r = await post('roles/link', { text: box.value });
+      toast('Added. Claude is reading it.');
+      location.hash = 'role/' + r.id;
+    }, 'btn p'),
+    el('p', { class: 'm' }, 'A role you said no to stays closed. Some sites can only be read on your computer, with the side panel.')));
 }
 
 async function replies() {
@@ -141,8 +263,11 @@ async function show() {
     if (!me) me = await get('phone/me').catch(e => { if (e.pair && h === 'old') return null; throw e; });
     if (!me) return unpaired(true);
     if (h === 'old') { history.replaceState(null, '', '/'); }
-    const m = /^role\/(\d+)$/.exec(h);
+    const m = /^role\/(\d+)$/.exec(h), who = /^person\/(\d+)$/.exec(h);
     if (m) await role(m[1]);
+    else if (who) await person(who[1]);
+    else if (h === 'people') await people();
+    else if (h === 'add') add();
     else if (h === 'replies') await replies();
     else if (h === 'interviews') await interviews();
     else await today();
@@ -154,5 +279,7 @@ async function show() {
 }
 addEventListener('hashchange', show);
 document.getElementById('again').addEventListener('click', show);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) show(); });
+// Coming back to the page draws it again, unless something typed isn't saved.
+const typed = () => [...document.querySelectorAll('textarea, input')].some(x => x.value !== x.defaultValue);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !typed()) show(); });
 show();

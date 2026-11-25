@@ -22,6 +22,10 @@ a.card:active{background:var(--s2)}
 .btn{display:flex;align-items:center;justify-content:center;min-height:46px;padding:0 14px;border-radius:11px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:650 15px inherit;text-decoration:none;width:100%}
 .btn.p{background:var(--btn);border-color:var(--btn);color:#fff}.btn.q{color:var(--crit)}
 .btn[disabled]{opacity:.55}
+.col{display:flex;flex-direction:column;gap:8px}
+textarea,input[type=text]{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--s2);color:var(--ink);font-family:inherit;font-size:15px;line-height:1.45;padding:10px 11px}
+textarea{resize:vertical}
+nav a{font-size:12.5px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 h2{font-size:19px;line-height:1.25}h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:6px 2px 0}
 p.letter{white-space:pre-wrap;font-size:14px;color:var(--ink2)}

@@ -1,4 +1,4 @@
-import { html, api, post, put, del, when, toast, copy, app, rel, exact, with_, applyTheme } from '../app.js';
+import { html, api, post, put, del, when, toast, copy, app, rel, exact, with_, applyTheme, carryOn } from '../app.js';
 import { oldCard, oldActions } from '../old.js';
 
 const TABS = [['', 'About you'], ['arriving', 'Arriving'], ['connections', 'Connections'], ['panel', 'Browser side panel'], ['app', 'The app and debugging']];
@@ -81,6 +81,37 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
 const longDay = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 const LETTER = { standard: 'Standard', formal: 'Formal', short: 'Short and direct', warm: 'Warm' };
 
+// One CV's own controls: what it is for, its letter style, a new file in its
+// place, whether a screening system reads it, and what Claude read from it.
+const moreTitles = new Map();
+function cvControls(k, count) {
+  const set = k.set || {}, m = k.model || {}, more = moreTitles.get(k.cv.id) || [];
+  const item = it => [it.heading, it.org, it.dates].filter(Boolean).join(' · ');
+  return html`<div class="col" style="gap:12px;border-top:1px solid var(--line2);padding-top:10px">
+    ${k.redoing ? html`<p class="s" style="background:var(--accent-soft);padding:8px 10px;border-radius:8px"><span class="spin" style="width:10px;height:10px;display:inline-block"></span> Scoring and writing again the roles that use a changed CV. Your own edits are kept.</p>`
+      : k.waiting ? html`<p class="xs m">${k.waiting} role${k.waiting === 1 ? '' : 's'} waiting to be sent use this CV. If you replace or remove it, they are scored and written again, with your own edits kept.</p>` : ''}
+    <form data-act="savecv" data-id="${k.cv.id}" class="col" style="gap:10px">
+      <label class="field">Name<input type="text" name="name" value="${k.cv.name}"></label>
+      <label class="field">Job titles it is for <span class="h">One per line. Each is added to the titles Job Hunt looks for.</span><textarea name="titles" rows="3">${(set.titles || []).join('\n')}</textarea></label>
+      ${more.length ? html`<div class="col" style="gap:6px"><span class="xs m">Titles this CV also suits. Tick the ones to add.</span><div class="row wrap" style="gap:6px">${more.map(t => html`<label class="chip" style="gap:5px;cursor:pointer"><input type="checkbox" name="more" value="${t}" style="margin:0">${t}</label>`)}</div>
+        <div class="row" style="gap:8px"><button type="button" class="btn sm" data-act="addtitles" data-id="${k.cv.id}">Add the ticked titles</button><button type="button" class="btn sm ghost" data-act="droptitles" data-id="${k.cv.id}">None of these</button></div></div>` : ''}
+      <label class="field">Words it is for <span class="h">Comma-separated. Claude picks this CV for postings that mention them.</span><input type="text" name="keywords" value="${(set.keywords || []).join(', ')}" placeholder="Vertex, SAP, e-invoicing"></label>
+      <label class="field">Letter style with this CV<select name="letter_style"><option value="">The one under About you</option>${[['standard', 'Standard'], ['formal', 'Formal: banks, government, law'], ['short', 'Short and direct'], ['warm', 'Warm and personal']].map(([v, x]) => html`<option value="${v}" ${set.letter_style === v ? 'selected' : ''}>${x}</option>`)}</select></label>
+      <div class="row wrap" style="gap:8px"><button class="btn sm p">Save</button><button type="button" class="btn sm" data-act="moretitles" data-id="${k.cv.id}" data-busy="Looking…" title="Claude reads this CV and suggests job titles it suits that you don't look for yet. Nothing is added until you tick them.">Find more titles</button>
+        <label class="btn sm" title="Reads a new file in place of this one. Its name and settings stay.">Replace file<input type="file" accept=".docx,.pdf,.txt,.md" hidden data-on="change" data-act="replacecv" data-id="${k.cv.id}"></label>
+        <span class="grow"></span>${count > 1 ? html`<button type="button" class="btn sm ghost danger" data-act="delcv" data-id="${k.cv.id}" data-confirm="Remove this CV? Roles waiting to be sent that use it are scored and written again from your other CV, with your own edits kept.">Remove</button>` : ''}</div></form>
+    ${k.readable ? html`<div><div class="row" style="gap:8px"><h4 class="grow">Will a screening system read it?</h4>${(k.ats || []).some(x => x.bad) ? html`<span class="chip warn">${k.ats.filter(x => x.bad).length} to fix</span>` : html`<span class="chip good">Reads cleanly</span>`}</div>
+      <ul class="s ink2" style="margin:6px 0 0 18px">${(k.ats || []).map(x => html`<li style="${x.bad ? 'color:var(--warn)' : ''}">${x.text}</li>`)}</ul>
+      <p class="xs m" style="margin-top:4px">About the file Job Hunt writes from this CV. A tailored CV is checked again on each role.</p></div>
+    <details><summary class="s" style="cursor:pointer"><b>What Claude read from it</b></summary><div class="col s" style="gap:8px;margin-top:8px">
+      <div><b>${m.name}</b>${m.headline ? html` · ${m.headline}` : ''}<div class="xs m">${[m.contact?.email, m.contact?.phone, m.contact?.location].filter(Boolean).join(' · ')}</div></div>
+      ${m.summary ? html`<p class="ink2">${m.summary}</p>` : ''}
+      ${(m.sections || []).map(sec => html`<div><div class="eb">${sec.title}</div>${sec.kind === 'skills' ? html`<div class="ink2">${(sec.items || []).map(it => [it.heading, it.text, ...(it.bullets || [])].filter(Boolean).join(', ')).join(' · ')}</div>`
+        : html`<ul style="margin:2px 0 0 18px">${(sec.items || []).map(it => html`<li>${item(it) || it.text}${(it.bullets || []).length ? html` <span class="m">· ${it.bullets.length} line${it.bullets.length === 1 ? '' : 's'}</span>` : ''}</li>`)}</ul>`}</div>`)}
+      <p class="xs m">If something is missing or wrong here, fix it in your file and use Replace file.</p></div></details>` : ''}
+  </div>`;
+}
+
 function about(d, route) {
   const p = d.profile;
   d.cvs ||= []; d.facts ||= []; d.answers ||= []; p.titles ||= {};
@@ -140,7 +171,11 @@ function about(d, route) {
         <a class="foldhead" href="${with_(route, { open: on ? '' : key, hl: '' })}"><b class="foldname">${name}</b><span class="chip ${tone}">${word}</span><span class="grow s m foldsum">${sum}</span><span class="btn sm">${on ? 'Close' : 'Change'}</span></a>
         ${on ? html`<div class="foldbody">${body}</div>` : ''}</div>`; })}</div>
   <div class="col" style="gap:14px">
-    <div class="card" data-set="cvs"><div class="row"><h4 class="grow">Your CVs</h4><label class="btn sm">Add another<input type="file" accept=".docx,.pdf,.txt,.md" hidden data-on="change" data-act="addcv"></label></div><div class="col" style="margin-top:10px;gap:10px">${d.cvs.map(c => html`<div class="row"><div class="grow"><b class="s">${c.name}</b><div class="xs m">${c.filename} · added ${rel(c.created_at)}</div></div><a class="btn sm" href="/api/cvs/${c.id}/file">Download</a>${d.cvs.length > 1 ? html`<button class="btn sm ghost danger" data-act="delcv" data-id="${c.id}" data-confirm="Remove this CV?">Remove</button>` : ''}</div>`)}</div>
+    <div class="card" data-set="cvs"><div class="row"><h4 class="grow">Your CVs</h4><label class="btn sm">Add another<input type="file" accept=".docx,.pdf,.txt,.md" hidden data-on="change" data-act="addcv"></label></div><div class="col" style="margin-top:10px;gap:10px">${d.cvs.map(c => {
+      const on = String(route.q.cv) === String(c.id);
+      return html`<div class="col" style="gap:8px"><div class="row"><div class="grow"><b class="s">${c.name}</b><div class="xs m">${c.filename} · added ${rel(c.created_at)}${(c.titles || []).length ? html` · for ${c.titles.slice(0, 2).join(', ')}${c.titles.length > 2 ? '…' : ''}` : ''}</div></div>
+        <a class="btn sm" href="${with_(route, { cv: on ? '' : c.id, open: '', hl: '' })}" title="Titles and words this CV is for, its letter style, a new file in its place, and what Claude read from it.">${on ? 'Close' : 'Change'}</a><a class="btn sm" href="/api/cvs/${c.id}/file">Download</a></div>
+        ${on && d.cvlook?.cv?.id === c.id ? cvControls(d.cvlook, d.cvs.length) : ''}</div>`; })}</div>
       <p class="xs m" style="margin-top:8px">Word or PDF. Reading one takes about a minute.</p></div>
     <div class="card" data-set="facts"><h4>What Job Hunt knows about you</h4><p class="xs m" style="margin-top:3px">Facts beyond your CV. Used wherever they help, never invented.</p>
       <div class="col s" style="margin-top:8px;gap:6px">${d.facts.map(f => html`<div class="row top-al"><span class="grow">${f.text}</span><button class="btn sm ghost" data-act="delfact" data-id="${f.id}" aria-label="Forget this">Forget</button></div>`)}</div>
@@ -356,6 +391,7 @@ function looks() {
     <div class="seg" role="group" aria-label="Light or dark">${THEMES.map(([k, v, tip]) => html`<button type="button" class="${cur === k ? 'on' : ''}" aria-pressed="${cur === k ? 'true' : 'false'}" data-act="theme" data-theme="${k}" title="${tip}">${v}</button>`)}</div></div>`;
 }
 
+let handed = null; // the hand-over just made, said until the page is left
 const bytes = n => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 // The saved copies of the data, and putting one back.
 function copies(b, route) {
@@ -372,7 +408,11 @@ function copies(b, route) {
       : html`<p class="s m">No copies yet. The first is saved within a day, or press Save a copy now.</p>`}
     <div class="hr"></div>
     <div class="col" style="gap:6px" data-set="cloud"><h4>On another computer, or safe if this one breaks</h4>
-      <p class="xs m">Keep the copies inside a cloud drive's folder and the drive's own program carries them off this computer. On another computer, install Job Hunt, point "Where copies are kept" at the same folder and restore the newest copy. Use Job Hunt on one computer at a time: two running at once would each overwrite the other's copy.</p>
+      <p class="xs m">Keep the copies inside a cloud drive's folder and the drive's own program carries them off this computer. On the other computer, install Job Hunt and keep its copies in the same folder: when it starts, it offers to carry on where you left off. A spreadsheet of your applications is kept there too, up to date. Use Job Hunt on one computer at a time: nothing is merged.</p>
+      ${b.other ? html`<div style="background:var(--accent-soft);padding:10px 12px;border-radius:8px">${carryOn(b.other)}</div>` : ''}
+      ${handed ? html`<div class="s" style="background:var(--good-soft, var(--accent-soft));padding:10px 12px;border-radius:8px"><b>Handed over at ${when(handed.at)}.</b> A fresh copy is in ${handed.dir}. Stop Job Hunt here, then open it on the other computer and choose Continue. Give the drive a minute to carry the copy across.
+        <div class="row" style="margin-top:8px"><button class="btn sm" data-act="quit" data-confirm="Stop Job Hunt on this computer?">Stop Job Hunt here</button></div></div>`
+        : b.custom ? html`<div class="row wrap" style="gap:8px"><button class="btn sm" data-act="handover" data-busy="Saving…" title="Saves a fresh copy in the copies folder now, for the other computer to carry on from.">Hand over to the other computer</button><span class="xs m grow">This computer is ${b.computer}.</span></div>` : ''}
       ${(b.cloud || []).length ? html`<div class="row wrap">${b.cloud.map(c => c.used ? html`<span class="chip good" title="${c.dir}">Copies are kept in ${c.name}</span>` : html`<button class="btn sm" data-act="cloudcopies" data-dir="${c.dir}" title="Makes the folder ${c.dir} and keeps the copies there, refreshed every three hours.">Keep copies in ${c.name}</button>`)}</div>`
         : html`<p class="xs m">No Google Drive, OneDrive or Dropbox folder was found on this computer. Install Google Drive for desktop (or OneDrive) and come back, or paste any folder below.</p>`}</div>
     <div class="hr"></div>
@@ -420,6 +460,7 @@ export default {
       case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null)]).then(([c, pa, oc]) => ({ ...c, phoneaccess: pa, owncal: oc }));
       case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null)]).then(([a, o, g, h, b]) => ({ ...a, old: o, debug: g, history: h, backups: b }));
     }
+    if (route.q.cv) return Promise.all([api('you'), api(`cvs/${route.q.cv}/look`).catch(() => null)]).then(([y, k]) => ({ ...y, cvlook: k }));
     return api('you');
   },
   view(d, route) {
@@ -497,7 +538,33 @@ export default {
     async addsig({ el }) { const file = el.files[0]; if (!file) return false; await api('profile/signature-picture', { method: 'POST', raw: file }); toast('Your signature goes into every letter from now on'); },
     dropsig: () => del('profile/signature-picture').then(() => toast('Letters are signed with your name only')),
     async addcv({ el }) { const file = el.files[0]; if (!file) return false; toast('Reading your CV. About a minute.'); await api('cvs?name=' + encodeURIComponent(file.name), { method: 'POST', raw: file }); toast('CV added'); },
-    delcv: ({ d }) => del(`cvs/${d.id}`),
+    async delcv({ d, route }) {
+      const r = await del(`cvs/${d.id}`);
+      toast(r.redoing ? `Removed. ${r.redoing} waiting role${r.redoing === 1 ? ' is' : 's are'} being scored and written again, with your own edits kept.` : 'Removed');
+      location.hash = with_(route, { cv: '' });
+      return false;
+    },
+    savecv: ({ d, f }) => put(`cvs/${d.id}`, { name: f.name, titles: titleLines(f.titles), keywords: lines(f.keywords), letter_style: f.letter_style }).then(() => toast('Saved. Its titles are searched from the next search.')),
+    async moretitles({ d }) {
+      const r = await post(`cvs/${d.id}/titles`);
+      moreTitles.set(+d.id, r.titles || []);
+      if (!(r.titles || []).length) toast('No more titles to suggest. You already look for the ones this CV suits.');
+    },
+    async addtitles({ el, d, data }) {
+      const ticked = [...el.form.querySelectorAll('input[name=more]:checked')].map(i => i.value);
+      if (!ticked.length) { toast('Tick the titles to add first.', true); return false; }
+      await put(`cvs/${d.id}`, { titles: [...(data.cvlook?.set?.titles || []), ...ticked] });
+      moreTitles.delete(+d.id);
+      toast(`Added ${ticked.length} title${ticked.length === 1 ? '' : 's'}. They are searched from the next search.`);
+    },
+    droptitles({ d }) { moreTitles.delete(+d.id); },
+    async replacecv({ el, d }) {
+      const file = el.files[0];
+      if (!file) return false;
+      toast('Reading the new file. About a minute.');
+      const r = await api(`cvs/${d.id}/file?name=` + encodeURIComponent(file.name), { method: 'POST', raw: file });
+      toast(r.redoing ? `New file read. ${r.redoing} waiting role${r.redoing === 1 ? ' is' : 's are'} being scored and written again, with your own edits kept.` : 'New file read.');
+    },
     addfact: ({ f, el }) => post('facts', { text: f.text }).then(() => el.reset()),
     delfact: ({ d }) => del(`facts/${d.id}`),
     delanswer: ({ d }) => del(`answers/${d.id}`),
@@ -529,6 +596,7 @@ export default {
     async savecal({ f }) { await put('owncal', { url: f.url }); toast('Connected. Your entries are on the month under Interviews.'); },
     forgetcal: () => del('owncal').then(() => toast('Disconnected')),
     copyfree: ({ d }) => copy(d.text).then(() => false),
+    async handover() { const r = await post('backups/handover'); handed = r.handed; toast('Handed over. Stop Job Hunt here, then carry on on the other computer.'); },
     cloudcopies: ({ d }) => post('backups/cloud', { dir: d.dir }).then(() => toast('Copies are kept there from now on. One was saved just now.')),
     savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0, detail: !!f.detail, only: f.only || '' }).then(() => toast('Saved')),
     newtopic({ el }) { const a = new Uint8Array(12); crypto.getRandomValues(a); el.closest('form').querySelector('[name=topic]').value = 'jobhunt-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); return false; },

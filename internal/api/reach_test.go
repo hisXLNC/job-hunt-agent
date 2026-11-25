@@ -1,11 +1,14 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"jobhunt/web"
 )
 
 func phoneDo(h http.Handler, method, path, cookie string, marker bool) *httptest.ResponseRecorder {
@@ -214,5 +217,43 @@ func TestTheAssistantCannotAddFromALinkOrHandOver(t *testing.T) {
 				t.Errorf("%s %s is on the assistant's list", c.Method, c.Pattern)
 			}
 		}
+	}
+}
+
+// The phone's page can be put on the home screen, with the app's icon, and
+// a link shared to it from another app opens the page with the link in it.
+func TestThePhonesPageCanBeInstalledAndSharedTo(t *testing.T) {
+	s, _ := newServer(t)
+	s.Web = web.FS
+	h := s.phoneHandler()
+	s.S.Set("phoneaccess", PhoneAccess{On: true})
+	w := phoneDo(h, "GET", "/manifest.json", "", false)
+	if w.Code != 200 {
+		t.Fatalf("the manifest answered %d", w.Code)
+	}
+	var m struct {
+		Icons []struct{ Src string } `json:"icons"`
+		Share struct {
+			Action, Method string
+			Params         map[string]string
+		} `json:"share_target"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.Share.Action != "/" || m.Share.Method != "GET" || m.Share.Params["url"] != "url" || m.Share.Params["text"] != "text" {
+		t.Fatalf("sharing to the page isn't set up: %+v", m.Share)
+	}
+	for _, i := range append(m.Icons, struct{ Src string }{"/touch-icon.png"}) {
+		if w := phoneDo(h, "GET", i.Src, "", false); w.Code != 200 || w.Body.Len() < 100 {
+			t.Errorf("icon %s answered %d", i.Src, w.Code)
+		}
+	}
+	page := phoneDo(h, "GET", "/?url=https%3A%2F%2Facme.example%2Fjobs%2F1&text=Look", "", false)
+	if page.Code != 200 || !strings.Contains(page.Body.String(), `rel="manifest"`) || !strings.Contains(page.Body.String(), "apple-touch-icon") {
+		t.Fatalf("a shared link didn't open the page (%d)", page.Code)
+	}
+	if csp := page.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
+		t.Fatalf("the page lost its policy: %q", csp)
 	}
 }
