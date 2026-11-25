@@ -422,7 +422,7 @@ const actions = {
     const posts = (got[0] && got[0].result) || [];
     if (!posts.length) { say('warn', 'No posts found on this page yet. Scroll a little so they load, then try again.'); return; }
     const r = await call('leads', { method: 'POST', body: { posts, chosen: ONE_POST.test(page.url) && posts.length === 1 } });
-    if (r.added) say('good', `${plural(r.added, 'new lead', 'new leads')} from ${plural(r.seen, 'post', 'posts')} read. Job Hunt sizes them up and writes a note for each.`);
+    if (r.added) say('good', `${plural(r.added, 'new lead', 'new leads')} from ${plural(r.seen, 'post', 'posts')} read. Job Hunt sizes them up; open Leads to ask for a note.`);
     else if (r.hiring) say('good', `Read ${plural(r.seen, 'post', 'posts')}. The hiring ones are already in Leads.`);
     else say('warn', `Read ${plural(r.seen, 'post', 'posts')}. None read like someone hiring.`);
   },
@@ -582,7 +582,7 @@ function pageCard() {
     case 'role': return roleCard(page.role);
     case 'profile': return personCard();
     case 'posts': return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'This page'), h('h2', {}, 'Hiring posts'),
-      h('p', { class: 's m' }, 'Job Hunt reads the posts on this page and keeps the ones where someone says they are hiring. Each one is sized up, with who to write to and a short note. You send it yourself.'),
+      h('p', { class: 's m' }, 'Job Hunt reads the posts on this page and keeps the ones where someone says they are hiring. Each one is sized up, with who to write to. Ask in Job Hunt for a note; you send it yourself.'),
       btn('Send hiring posts to Leads', 'sendPosts', null, 'p wide'),
       h('a', { class: 's', href: `${APP}#/leads`, target: '_blank', rel: 'noopener' }, 'Open Leads in Job Hunt'));
     case 'unknown': return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'This page'), h('h2', {}, 'Is this a job posting?'),

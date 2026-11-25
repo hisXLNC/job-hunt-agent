@@ -83,6 +83,8 @@ func StandIn() llm.Engine {
 			out = standCareer(req.Input.(CareerInput))
 		case "lead":
 			out = standLead(req.Input.(leadInput))
+		case "lead_note":
+			out = standLeadNote(req.Input.(leadNoteInput))
 		case "find_news":
 			out = map[string]any{"news": standNews(req.Input.(NewsInput))}
 		case "results":
@@ -1039,30 +1041,39 @@ func standLead(in leadInput) LeadReading {
 	if len(out.Help) == 0 {
 		out.Help = []string{"Your experience in " + firstNonEmpty(strings.Join(pr.Strengths[:min(1, len(pr.Strengths))], ""), "your field")}
 	}
-	co := firstNonEmpty(out.Company, "the company")
 	who := LeadWho{Name: l.Author, Title: l.AuthorTitle, Why: "They wrote the post.", Search: strings.TrimSpace(l.Author + " " + out.Company)}
 	if l.Author == "" {
 		who = LeadWho{Title: "Head of Finance", Why: "The person who would hire for this work.", Search: "Head of Finance " + out.Company}
 	}
 	out.Who = []LeadWho{who, {Title: "Talent partner", Why: "Runs the hiring and can pass your note on.", Search: "talent " + out.Company}}
+	return out
+}
+
+// standLeadNote writes the note or the follow-up the person asked for.
+func standLeadNote(in leadNoteInput) Message {
+	l, pr, rd := in.Lead, in.Person.Profile, in.Reading
+	co := firstNonEmpty(rd.Company, firstNonEmpty(l.Company, "the company"))
 	first := "there"
-	if f := strings.Fields(who.Name); len(f) > 0 {
-		first = f[0]
+	if len(rd.Who) > 0 {
+		if f := strings.Fields(rd.Who[0].Name); len(f) > 0 {
+			first = f[0]
+		}
 	}
 	me := firstNonEmpty(strings.Join(strings.Fields(pr.Name)[:min(1, len(strings.Fields(pr.Name)))], ""), "")
 	what := "your post"
 	if l.Kind != "post" {
 		what = "the news about " + co
 	}
-	mine := "My work is in " + strings.ToLower(out.Role)
+	mine := "My work is in " + strings.ToLower(rd.Role)
 	if len(pr.Strengths) > 0 {
 		mine = "My own work is in " + strings.Join(pr.Strengths[:min(2, len(pr.Strengths))], " and ")
 	}
-	out.Note = Message{Subject: out.Role + " at " + co,
+	if in.Which == "follow_up" {
+		return Message{Subject: "Re: " + firstNonEmpty(rd.Note.Subject, rd.Role+" at "+co),
+			Body: fmt.Sprintf("Hi %s,\n\nA short follow-up to my note last week. If it is easier, I am glad to send two lines on how I would approach the first three months. And if the timing is wrong, no problem at all.\n\n%s", first, me)}
+	}
+	return Message{Subject: rd.Role + " at " + co,
 		Body: fmt.Sprintf("Hi %s,\n\nI saw %s. %s, which sounds close to what you need now.\n\nWould you have 15 minutes next week? I would value hearing what you are looking for.\n\n%s", first, what, mine, me)}
-	out.FollowUp = Message{Subject: "Re: " + out.Note.Subject,
-		Body: fmt.Sprintf("Hi %s,\n\nA short follow-up to my note last week. If it is easier, I am glad to send two lines on how I would approach the first three months. And if the timing is wrong, no problem at all.\n\n%s", first, me)}
-	return out
 }
 
 // standNews gives two made-up items so the sample shows what news looks like.

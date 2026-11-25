@@ -2,8 +2,8 @@ import { html, api, post, put, toast, copy, listSize, endless, href, safeUrl, re
 
 // Leads: ways in that are not postings. Hiring posts the side panel reads on
 // LinkedIn, funding and growth news, and what the person pastes in. Claude
-// sizes each one up and writes a first note and one follow-up; the person
-// sends them. Everything a lead says came from outside: it is only shown.
+// sizes each one up; a first note and one follow-up are written only when the
+// person presses the button for each, and they send them. Everything a lead says came from outside: it is only shown.
 
 const KINDS = { post: 'Hiring post', news: 'News', yours: 'Added by you' };
 const WORTH = { yes: ['good', 'Worth writing to'], maybe: ['warn', 'Maybe'], no: ['', 'Probably not'] };
@@ -32,7 +32,7 @@ function list(d, route) {
   return html`<div class="body">
     <div class="card row wrap" style="gap:20px;padding:20px">
       <div class="grow" style="min-width:260px"><h2 style="font-size:20px">Write before the posting goes up.</h2>
-        <p class="m" style="margin-top:4px;max-width:660px">Someone saying “we're hiring”, a company that just raised money or opened an office: a short note now reaches a person before a hundred applications do. Job Hunt sizes each lead up and writes the note; you read it, change what you like, and send it yourself.</p></div>
+        <p class="m" style="margin-top:4px;max-width:660px">Someone saying “we're hiring”, a company that just raised money or opened an office: a short note now reaches a person before a hundred applications do. Job Hunt sizes each lead up and says who to write to. Ask, and it writes the note; you read it, change what you like, and send it yourself.</p></div>
       <div class="col" style="gap:8px;align-items:flex-end">${look}
         <label class="row s" style="gap:8px"><button class="switch ${d.auto ? 'on' : ''}" role="switch" aria-checked="${d.auto ? 'true' : 'false'}" aria-label="Look for news by itself" data-act="auto" data-to="${d.auto ? '' : '1'}"></button>Look by itself a few times a week</label>
         ${d.looked ? html`<span class="xs m">Last looked ${rel(d.looked)}</span>` : ''}</div></div>
@@ -44,7 +44,7 @@ function list(d, route) {
           <td class="s ink2">${l.read.who?.[0] ? html`<b>${l.read.who[0].name || l.read.who[0].title}</b>${l.read.who[0].name ? html`<span class="xs m" style="display:block">${l.read.who[0].title}</span>` : ''}` : html`<span class="m">–</span>`}</td>
           <td>${l.read_at && l.read.hiring ? html`<b style="color:${fitTone(l.fit)}">${l.fit}</b>` : html`<span class="m">–</span>`}</td>
           <td>${where(l)}</td>
-          <td style="text-align:right;white-space:nowrap">${show === 'dismissed' ? html`<button class="btn sm" data-act="restore" data-id="${l.id}">Bring back</button>` : html`<a class="btn sm ${!l.sent_at && l.read_at ? 'p' : ''}" href="#/leads/${l.id}">${l.due ? 'Follow up' : l.sent_at ? 'Open' : 'Read the note'}</a>`}</td></tr>`)}</tbody></table></div>${endless('leads', d.leads.length, d.total)}`
+          <td style="text-align:right;white-space:nowrap">${show === 'dismissed' ? html`<button class="btn sm" data-act="restore" data-id="${l.id}">Bring back</button>` : html`<a class="btn sm ${!l.sent_at && l.read_at ? 'p' : ''}" href="#/leads/${l.id}">${l.due ? 'Follow up' : 'Open'}</a>`}</td></tr>`)}</tbody></table></div>${endless('leads', d.leads.length, d.total)}`
         : html`<div class="card empty"><h3>${show === 'written' ? 'Nobody written to yet' : show === 'dismissed' ? 'Nothing set aside' : 'No leads yet'}</h3><p>${show === 'open' ? 'Look for news, paste a post you came across, or open a LinkedIn search beside the side panel.' : ''}</p></div>`}
     </div>
     <div class="col" style="gap:14px">
@@ -60,13 +60,18 @@ function list(d, route) {
 
 function note(l, which, label) {
   const m = l.read[which] || {};
+  if (!m.body) {
+    // Nothing is written until the person asks for it.
+    if (which === 'follow_up' && !l.read.note?.body) return html`<p class="s m">Write the first note before a follow-up.</p>`;
+    return html`<div><button class="btn ${which === 'note' || l.due ? 'p' : ''}" data-act="write" data-which="${which}" data-busy="Writing…" title="Claude writes it now, from your CV and this lead. Nothing is sent.">${which === 'note' ? 'Write a note' : 'Write the follow-up'}</button></div>`;
+  }
   return html`<form data-act="save" data-which="${which}" class="col" style="gap:8px">
     <label class="field">Subject <span class="h">For an e-mail; leave it out on LinkedIn</span><input type="text" name="subject" value="${m.subject || ''}"></label>
     <textarea name="body" rows="${which === 'note' ? 8 : 5}" aria-label="${label}">${m.body || ''}</textarea>
     <div class="row wrap"><button type="button" class="btn ${which === 'note' ? (l.sent_at ? '' : 'p') : (l.due ? 'p' : '')}" data-act="copy">Copy</button>
       ${which === 'note' && !l.sent_at ? html`<button type="button" class="btn" data-act="step" data-step="sent" data-to="1">I sent it</button>` : ''}
       ${which === 'follow_up' && l.sent_at && !l.followed_at && !l.replied_at ? html`<button type="button" class="btn" data-act="step" data-step="followed" data-to="1">I sent the follow-up</button>` : ''}
-      <span class="grow"></span><button class="btn sm">Save changes</button></div></form>`;
+      <span class="grow"></span><button class="btn sm">Save changes</button><button type="button" class="btn sm ghost" data-act="write" data-which="${which}" data-busy="Writing…" data-confirm="Write it again? What is in the box now is replaced.">Write it again</button></div></form>`;
 }
 
 function one(l) {
@@ -79,11 +84,11 @@ function one(l) {
       <div class="s m">${l.company_id ? employer(l.company, l.company_id) : l.company}${r.place ? ` · ${r.place}` : ''} · found ${rel(l.found_at)}${l.source === 'linkedin' ? ' on LinkedIn' : l.source === 'web' ? ' in the news' : ''}</div>
       ${r.why ? html`<p class="ink2">${r.why}</p>` : ''}
       ${r.help?.length ? html`<div><div class="eb" style="margin:4px 0">Where you would help</div><ul style="margin:0 0 0 18px" class="s">${r.help.map(h => html`<li>${h}</li>`)}</ul></div>` : ''}</div>
-    ${l.read_at ? html`<div class="card col" style="gap:10px"><div><div class="eb">${l.sent_at ? html`Your note · sent ${rel(l.sent_at)}` : 'Your note · draft'}</div>
-        <p class="xs m" style="margin-top:2px">Job Hunt wrote it${r.edited ? '; you changed it' : ''}. Nothing is sent until you send it yourself.</p></div>${note(l, 'note', 'Your note')}</div>
+    ${l.read_at ? html`<div class="card col" style="gap:10px"><div><div class="eb">${l.sent_at ? html`Your note · sent ${rel(l.sent_at)}` : r.note?.body ? 'Your note · draft' : 'Your note'}</div>
+        <p class="xs m" style="margin-top:2px">${r.note?.body ? html`Job Hunt wrote it when you asked${r.edited ? '; you changed it' : ''}.` : 'Job Hunt writes a short note to the first person under “Who to write to” when you ask.'} Nothing is sent until you send it yourself.</p></div>${note(l, 'note', 'Your note')}</div>
       <div class="card col" style="gap:10px"><div class="row"><div class="grow"><div class="eb">${l.followed_at ? html`Follow-up · sent ${rel(l.followed_at)}` : 'One follow-up'}</div>
         <p class="xs m" style="margin-top:2px">${l.sent_at ? (l.due ? 'A week has gone by with no answer. One follow-up is worth sending; after that, let it go.' : 'For a week after your note, if there is no answer.') : 'For a week after your note, if there is no answer.'}</p></div>${l.due ? html`<span class="chip warn">Due</span>` : ''}</div>${note(l, 'follow_up', 'Follow-up')}</div>`
-      : html`<div class="card"><p class="s"><span class="spin"></span> Claude is sizing this lead up and writing the note.</p></div>`}
+      : html`<div class="card"><p class="s"><span class="spin"></span> Claude is sizing this lead up.</p></div>`}
     <div class="card"><div class="row"><h4 class="grow">What it said</h4>${url ? html`<a class="s" href="${url}" target="_blank" rel="noopener noreferrer">Open the ${l.kind === 'news' ? 'article' : 'post'}</a>` : ''}</div>
       ${l.author ? html`<p class="s" style="margin-top:6px">${authorUrl ? html`<a href="${authorUrl}" target="_blank" rel="noopener noreferrer"><b>${l.author}</b></a>` : html`<b>${l.author}</b>`}${l.author_title ? html` <span class="m">· ${l.author_title}</span>` : ''}</p>` : ''}
       ${l.headline ? html`<p class="s" style="margin-top:6px"><b>${l.headline}</b></p>` : ''}
@@ -97,7 +102,7 @@ function one(l) {
       ${l.sent_at ? html`${l.replied_at ? html`<button class="btn sm" data-act="step" data-step="replied" data-to="">They didn't answer after all</button>` : html`<button class="btn sm p" data-act="step" data-step="replied" data-to="1">They answered</button>`}` : ''}
       ${l.role_id ? html`<a class="btn sm" href="#/roles/${l.role_id}">Open the role${l.role_name ? `: ${l.role_name}` : ''}</a>` : html`<button class="btn sm" data-act="role" data-busy="Adding…" title="Adds it to Roles, where it is read against your CV and a CV and letter are written if it fits.">Make it a role</button>`}
       ${l.company_id ? html`<a class="btn sm" href="#/employer/${l.company_id}">Open the employer</a>` : html`<button class="btn sm" data-act="employer" title="Watches this employer's job board for new postings.">Watch this employer</button>`}
-      <button class="btn sm ghost" data-act="again" data-busy="Reading…" data-confirm="${r.edited ? 'Read it again? Your own changes to the notes are replaced.' : ''}">Read it again</button>
+      <button class="btn sm ghost" data-act="again" data-busy="Reading…" title="Claude sizes it up again. Notes already written stay as they are.">Read it again</button>
       ${l.state === 'dismissed' ? html`<button class="btn sm ghost" data-act="restore" data-id="${l.id}">Bring it back</button>` : html`<button class="btn sm ghost" data-act="dismiss">Set aside</button>`}</div>
   </div></div>`;
 }
@@ -127,6 +132,7 @@ export default {
       if (d.to && d.step === 'sent') toast('Noted. In a week with no answer, the follow-up is ready.');
     }),
     again: ({ route }) => post(`leads/${route.parts[1]}/again`),
+    write: ({ d, route }) => post(`leads/${route.parts[1]}/write`, { which: d.which }),
     async role({ route }) { const r = await post(`leads/${route.parts[1]}/role`); location.hash = `#/roles/${r.id}`; return false; },
     employer: ({ route }) => post(`leads/${route.parts[1]}/employer`).then(() => toast('Watching this employer')),
     person: ({ d, route }) => post(`leads/${route.parts[1]}/person`, { who: +d.who }).then(() => toast('Added to People')),

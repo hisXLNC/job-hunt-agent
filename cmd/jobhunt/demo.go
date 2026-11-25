@@ -222,8 +222,12 @@ func seedDemo(e *engine.Engine) error {
 	}
 	e.ReadLeads(ctx)
 	if leads, _, _ := s.Leads(store.LeadFilter{}); len(leads) > 0 {
-		// Written to eight days ago and quiet since: the follow-up is due.
-		s.SetLeadStep(leads[0].ID, "sent", now.AddDate(0, 0, -8).Unix())
+		// The person asked for a note to the best one, sent it eight days ago
+		// and heard nothing: the follow-up is due, not yet written. The others
+		// have no note until asked.
+		if _, err := e.WriteLeadNote(ctx, leads[0].ID, "note"); err == nil {
+			s.SetLeadStep(leads[0].ID, "sent", now.AddDate(0, 0, -8).Unix())
+		}
 	}
 
 	// A conversation coming up.
