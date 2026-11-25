@@ -1,4 +1,4 @@
-import { html, api, post, put, ago, until, when, rings, tile, toast, listSize, endless, sortHead, with_, href, freshness, BAND, employer, rel, soon, dayName } from '../app.js';
+import { html, api, post, put, ago, until, when, clock, rings, tile, toast, listSize, endless, sortHead, with_, href, freshness, BAND, employer, rel, soon, dayName } from '../app.js';
 
 const BOARD = { greenhouse: 'Its own board (Greenhouse)', lever: 'Its own board (Lever)', ashby: 'Its own board (Ashby)', smartrecruiters: 'Its own board (SmartRecruiters)', workday: 'Its own board (Workday)', workable: 'Its own board (Workable)', bamboohr: 'Its own board (BambooHR)', recruitee: 'Its own board (Recruitee)', page: 'Its own careers page' };
 
@@ -66,8 +66,8 @@ export default {
   topics: ['roles', 'companies', 'runs', 'status'],
   async load(route) {
     const q = route.q, u = new URLSearchParams({ size: listSize('radar'), page: 1, sort: q.sort || '', state: q.state || 'following', q: q.q || '' });
-    const [radar, comp, places, src] = await Promise.all([api('radar'), api('companies?' + u), api('places'), api('sources').catch(() => null)]);
-    return { ...radar, comp, places, sources: src?.sources };
+    const [radar, comp, places, src, ss] = await Promise.all([api('radar'), api('companies?' + u), api('places'), api('sources').catch(() => null), api('searchset').catch(() => null)]);
+    return { ...radar, comp, places, sources: src?.sources, budget: ss?.budget };
   },
   view(d, route) {
     const st = d.status, c = d.comp, state = route.q.state || 'following', tab = TABS.some(([k]) => k === route.q.tab) ? route.q.tab : 'fresh';
@@ -81,6 +81,8 @@ export default {
           ${d.search.linkedin_note ? html`<div style="color:var(--warn);margin-top:2px">${d.search.linkedin_note}</div>` : ''}</div>
         <div class="row"><button class="btn p" data-act="search" data-kind="full">Search now</button>${st.paused ? html`<button class="btn" data-act="pause" data-paused="">Resume searching</button>` : html`<select class="mini" style="max-width:150px" aria-label="Pause searching" data-on="change" data-act="pausefor" title="Stops the searches Job Hunt runs by itself. Search now still works."><option value="">Pause…</option><option value="0">Until I turn it back on</option><option value="1">For a day</option><option value="3">For 3 days</option><option value="7">For a week</option><option value="14">For two weeks</option></select>`}</div>
       </div>
+      ${d.budget?.run_at ? html`<div class="card row wrap" style="gap:10px"><span class="grow s"><b>Budget mode: ${d.budget.waiting} new posting${d.budget.waiting === 1 ? '' : 's'} wait to be read at ${clock(d.budget.run_at)}${d.budget.run_at - Date.now() / 1000 > 86400 ? ` on ${dayName(d.budget.run_at)}` : ''}.</b> <span class="m">A big batch is read at night, when it costs least.</span></span>
+        <button class="btn sm p" data-act="budgetrun" data-busy="Starting…" title="Reads them now, against your CV.">Run now</button><button class="btn sm" data-act="budgetcancel" data-confirm="Set these ${d.budget.waiting} postings aside without reading them? Nothing is deleted: they stay under Roles, Set aside, and each can be brought back.">Cancel</button></div>` : ''}
       <div class="tabs">${TABS.map(([k, v]) => html`<a class="${k === tab ? 'on' : ''}" href="${href('radar', k === 'fresh' ? {} : { tab: k })}">${v}${k === 'fresh' && d.fresh?.length ? html` <span class="m">${d.fresh.length}</span>` : ''}${k === 'sources' && probs ? html` <span class="chip crit" style="margin-left:4px;padding:1px 7px">${probs}</span>` : ''}${k === 'employers' && c.following ? html` <span class="m">${c.following}</span>` : ''}</a>`)}</div>
       ${tab === 'sources' ? sourcesCard(d.sources, d.places, route) : tab === 'employers' ? html`<div class="cols wide"><div class="col" style="gap:14px">
           <div class="card" style="padding:0"><div class="row" style="padding:14px 16px 10px"><h3 class="grow">Employers</h3>
@@ -127,6 +129,8 @@ export default {
     placeoff: ({ d }) => post('places/remove', { id: d.id }),
     addplace: ({ f, el }) => post('places', { url: f.url }).then(r => { el.reset(); tried(r); }),
     addknown: ({ d }) => post('places', { id: d.id }).then(tried),
+    budgetrun: () => post('budget/run').then(() => toast('Reading them now. New roles appear as they are read.')),
+    budgetcancel: () => post('budget/cancel').then(r => toast(`${r.set_aside} set aside unread. They are under Roles, Set aside.`)),
     more: () => post('companies/more').then(() => toast('Looking for more employers that hire people like you')),
   },
 };

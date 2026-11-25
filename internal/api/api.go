@@ -525,11 +525,13 @@ func (s *Server) Handler() http.Handler {
 		}
 		type item struct {
 			store.Role
-			Preparing bool `json:"preparing"`
+			Preparing bool    `json:"preparing"`
+			Rating    float64 `json:"rating,omitempty"` // what employees rate the employer, out of 5
 		}
 		out := make([]item, len(roles))
+		ratings := e.Ratings()
 		for i, x := range roles {
-			out[i] = item{x, e.Preparing(x.ID)}
+			out[i] = item{x, e.Preparing(x.ID), ratings[x.CompanyID]}
 		}
 		counts, _ := st.RoleCounts()
 		// Not stages: roles put away until a day, and ones a tidy would close.
@@ -1655,6 +1657,30 @@ func (s *Server) Handler() http.Handler {
 			return nil, bad(err.Error())
 		}
 		return e.Schedule(), nil
+	})
+	// Employee ratings, old roles set aside, and budget mode.
+	h("GET /api/searchset", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		return map[string]any{"set": e.SearchSet(), "budget": e.Budget(), "rated": len(e.Ratings())}, nil
+	})
+	h("PUT /api/searchset", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		set := e.SearchSet()
+		if err := read(r, &set); err != nil {
+			return nil, err
+		}
+		if err := e.SetSearchSet(set); err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		return e.SearchSet(), nil
+	})
+	h("POST /api/budget/run", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if err := e.RunBudgetNow(); err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		return nil, nil
+	})
+	h("POST /api/budget/cancel", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		n, err := e.CancelBudget()
+		return map[string]int{"set_aside": n}, err
 	})
 	h("GET /api/changes", func(w http.ResponseWriter, r *http.Request) (any, error) { return jobhunt.History(), nil })
 	// Every role as a spreadsheet file.

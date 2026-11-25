@@ -513,7 +513,10 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	// 4. Read what is new, freshest first: being early matters more than
 	// anything else Job Hunt does.
 	stats.New = len(fresh) + stats.Cleared
-	e.readAll(ctx, fresh, &stats)
+	// In budget mode a big batch stays unread until the night.
+	if !e.budgetHolds(len(fresh)) {
+		e.readAll(ctx, fresh, &stats)
+	}
 
 	state := "done"
 	if ctx.Err() != nil {
@@ -849,6 +852,9 @@ func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profi
 		return id, false, false
 	}
 	reason, band := screen(p, post, searchedBand != "")
+	if reason == "" {
+		reason = e.ratingAside(companyID, post.Company)
+	}
 	if band == "" {
 		band = searchedBand
 	}

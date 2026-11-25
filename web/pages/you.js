@@ -43,6 +43,7 @@ const SETTINGS = [
   ['connections', 'desk', 'morning', 'Morning summary and reminders', 'morning summary reminder remind interview tomorrow closing weekly review thank you'],
   ['connections', 'desk', 'startup', 'Start with Windows', 'start startup sign in boot login autostart windows'],
   ['connections', 'phone', 'detail', 'What phone notices say', 'private privacy urgent only interviews offers names employer'],
+  ['connections', 'tidy', '', 'Employee ratings, setting aside old roles, budget mode', 'rating ratings stars glassdoor reviews employees skip below old roles clear tidy 30 60 90 days budget night cheap batch'],
   ['connections', 'schedule', '', 'When Job Hunt searches', 'schedule search times when how often quick check full search hours frequency'],
   ['panel', 'panel', '', 'Browser side panel', 'side panel extension browser chrome edge fill forms pair connect'],
   ['app', 'theme', '', 'Light or dark', 'dark light theme colour color night mode appearance look match windows'],
@@ -263,7 +264,7 @@ function connections(d, route) {
   const cal = d.owncal || {}, pa = d.phoneaccess, k = d.desk || {}, sc = d.schedule || { full: [] }, more = d.more || [];
   const keyed = more.filter(x => x.id !== 'alerts'), setUp = keyed.filter(x => x.has_key);
   const model = (d.models || []).find(x => x.ID === cl.model)?.Name || '';
-  const ts = cal.talkset || {};
+  const ts = cal.talkset || {}, ss = d.searchset?.set || {};
   const rows = [
     ['claude', 'Claude', cl.engine ? (cl.ok ? ['good', 'Connected'] : ['warn', 'Resting']) : ['warn', 'Not connected'],
       cl.engine ? `${{ 'claude-code': 'Your Claude subscription', api: 'An API key', demo: 'Sample answers (no Claude)' }[cl.engine] || cl.engine}${model ? ' · ' + model : ''} · ${cl.calls} calls today${cl.note && !cl.ok ? ' · ' + cl.note : ''}` : 'Claude does the reading and writing', claude],
@@ -278,6 +279,7 @@ function connections(d, route) {
     ['sources', 'More job sources', setUp.length ? [setUp.length === keyed.length ? 'good' : 'warn', `${setUp.length} of ${keyed.length}`] : ['', 'None'],
       keyed.length ? (setUp.length ? `${setUp.map(x => x.name).join(', ')} set up` + (keyed.length > setUp.length ? ` · ${keyed.filter(x => !setUp.includes(x)).map(x => x.name).join(', ')} need${keyed.length - setUp.length === 1 ? 's' : ''} a key` : '') : `${keyed.map(x => x.name).join(', ')}: each needs a key`) : '', moreSources(d)],
     ['schedule', 'Search times', ['good', 'On'], `Full searches at ${sc.full.length ? sc.full.map(hhmm).join(', ') : 'no set times'} · quick checks every ${sc.fast_minutes || 20} minutes`, schedule(d)],
+    ['tidy', 'Ratings, old roles and budget', ss.min_rating || ss.clear_days || ss.budget ? ['blue', 'On'] : ['', 'Off'], tidySum(d), tidyCard(d)],
     ['desk', 'On this computer', ['good', 'On'], [d.startup?.on ? 'Starts when you sign in' : 'Does not start by itself', k.notify ? 'Windows notifications on' : 'no Windows notifications', k.morning >= 0 ? `morning summary at ${k.morning}:00` : 'no morning summary'].join(' · '), thisComputer(d)],
   ];
   return html`<div class="card" style="padding:0">${rows.map(([key, name, [tone, word], sum, body], i) => {
@@ -328,6 +330,23 @@ function thisComputer(d) {
     ${d.startup?.can ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="startup" ${d.startup.on ? 'checked' : ''}> Start Job Hunt when I sign in to Windows <span class="xs m" style="font-weight:400">(in the background, by the clock)</span></label>` : ''}
     <div class="row"><button class="btn p">Save</button>${d.can_notify ? html`<button type="button" class="btn" data-act="testdesk">Show a test</button>` : ''}</div></form>`;
 }
+// Employee ratings, roles set aside when nobody acted on them, and budget mode.
+function tidySum(d) {
+  const ss = d.searchset?.set || {}, b = d.searchset?.budget || {};
+  return [ss.ratings_off ? 'ratings not looked up' : `ratings looked up by themselves${d.searchset?.rated ? ` (${d.searchset.rated} so far)` : ''}`, ss.min_rating ? `skips employers rated under ${ss.min_rating.toFixed(1)}★` : '',
+    ss.clear_days ? `sets aside roles untouched for ${ss.clear_days} days` : '', ss.budget ? (b.run_at ? `${b.waiting} wait for the night` : 'budget mode on') : ''].filter(Boolean).join(' · ');
+}
+function tidyCard(d) {
+  const ss = d.searchset?.set || {};
+  return html`<form data-act="savesearchset" class="card col" style="gap:10px" data-set="tidy"><h3>Ratings, old roles and budget</h3>
+    <label class="row s" style="font-weight:500"><input type="checkbox" name="ratings" ${ss.ratings_off ? '' : 'checked'}> Look up what employees rate each employer, by itself</label>
+    <p class="xs m">For employers of roles worth a look, a few a day, through Claude's web search. The ★ shows beside the employer in Roles. Needs your Claude subscription or an API key.</p>
+    <div class="grid3"><label class="field">Skip employers rated under <span class="h">Their roles are set aside with the reason; never ones you saved, applied to or added.</span><select name="min_rating">${[[0, 'Don\'t skip any'], [2.5, '2.5★'], [3, '3.0★'], [3.3, '3.3★'], [3.5, '3.5★'], [3.8, '3.8★'], [4, '4.0★']].map(([v, t]) => html`<option value="${v}" ${(ss.min_rating || 0) === v ? 'selected' : ''}>${t}</option>`)}</select></label>
+      <label class="field">Set aside roles nobody acted on <span class="h">Never ones you saved, prepared, applied to or added. Nothing is deleted.</span><select name="clear_days">${[[0, 'Never'], [30, 'After 30 days'], [60, 'After 60 days'], [90, 'After 90 days']].map(([v, t]) => html`<option value="${v}" ${(ss.clear_days || 0) === v ? 'selected' : ''}>${t}</option>`)}</select></label></div>
+    <label class="row top-al s" style="gap:8px"><input type="checkbox" name="budget" ${ss.budget ? 'checked' : ''}> <span><b>Budget mode</b><br><span class="m">When a search brings in more than 12 new postings, they wait to be read at night (from 01:00), with Run now and Cancel on Radar. Off reads every posting at once, so you can be among the first ten applicants.</span></span></label>
+    <div class="row"><button class="btn p">Save</button></div></form>`;
+}
+
 function schedule(d) {
   const sc = d.schedule || { full: [] };
   const hour = (name, v) => html`<select name="${name}" style="width:92px">${Array.from({ length: 24 }, (_, h) => html`<option value="${h}" ${v === h ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`)}</select>`;
@@ -422,7 +441,7 @@ export default {
     switch (route.parts[1] || '') {
       case 'arriving': return api('arriving');
       case 'panel': return api('connections');
-      case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null)]).then(([c, pa, oc]) => ({ ...c, phoneaccess: pa, owncal: oc }));
+      case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null), api('searchset').catch(() => null)]).then(([c, pa, oc, ss]) => ({ ...c, phoneaccess: pa, owncal: oc, searchset: ss }));
       case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null)]).then(([a, o, g, h, b]) => ({ ...a, old: o, debug: g, history: h, backups: b }));
     }
     return api('you');
@@ -478,6 +497,7 @@ export default {
       toast('Saved');
     },
     testdesk: () => post('desk/test').then(() => { toast('Sent. It shows by the clock.'); return false; }),
+    savesearchset: ({ f }) => put('searchset', { ratings_off: !f.ratings, min_rating: +f.min_rating || 0, clear_days: +f.clear_days || 0, budget: !!f.budget }).then(() => toast('Saved')),
     async saveschedule({ f }) {
       const full = f.full.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean).map(t => { const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(t); if (!m) throw new Error(`"${t}" isn't a time. Write times like 07:00 or 17:30.`); let h = +m[1]; if (/pm/i.test(m[3] || '') && h < 12) h += 12; if (/am/i.test(m[3] || '') && h === 12) h = 0; return h * 60 + +(m[2] || 0); });
       await put('schedule', { full, fast_minutes: +f.fast_minutes, from: +f.from, to: +f.to });
