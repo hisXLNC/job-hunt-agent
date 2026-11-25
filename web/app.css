@@ -26,6 +26,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 @keyframes pulse{50%{opacity:.35}}
 .main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .top{height:58px;flex:none;display:flex;align-items:center;gap:14px;padding:0 28px;border-bottom:1px solid var(--line);background:var(--surface)}
+.top .head{display:flex;flex-wrap:wrap;align-items:center;align-content:flex-start;column-gap:20px;row-gap:30px;height:24px;flex:1;min-width:0;overflow:hidden;white-space:nowrap;margin-left:8px}.top .head:empty{display:none}.top .head>div{flex:none;height:24px}
+.top:has(.head:not(:empty)) .sub{flex:none}
+@media(max-width:2400px){.top .head .hsub{display:none}}
+@media(max-width:1900px){.top:has(.head:not(:empty)) .sub{display:none}}
 .top h1{font-size:19px;font-weight:650;letter-spacing:-.015em;white-space:nowrap}
 .top .sub{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .find{margin-left:auto;width:clamp(170px,26vw,330px);flex:none;height:34px;border:1px solid var(--line);border-radius:9px;background:var(--s2);display:flex;align-items:center;gap:8px;padding:0 11px;color:var(--muted);font-size:13px;position:relative}

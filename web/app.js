@@ -289,7 +289,7 @@ function frame() {
     <nav class="col" style="gap:2px" aria-label="Main">${NAV.map(n => html`<a class="nav ${n[0] === active ? 'on' : ''}" href="#/${n[0]}" ${n[0] === active ? new Safe('aria-current="page"') : ''}>${new Safe(IC[n[0]])}${n[1]}<span id="b-${n[0]}" style="margin-left:auto;display:contents">${badge(n[0])}</span></a>`)}</nav>
     <div class="sp"></div>
     <div class="pilot" id="pilot">${pilot()}</div></aside>
-    <div class="main"><div class="top"><h1 id="title"></h1><span class="sub" id="sub"></span>
+    <div class="main"><div class="top"><h1 id="title"></h1><span class="sub" id="sub"></span><div class="head" id="head"></div>
       <div class="find"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></svg><input id="find" type="text" placeholder="Find a role, employer or person" aria-label="Find a role, employer or person" autocomplete="off" style="height:32px;padding:0;border:0;box-shadow:none"><kbd>Ctrl K</kbd><div class="found" id="found" hidden></div></div>
       ${bellFrame()}${assistantButton()}</div>
       <div class="page" id="page" tabindex="-1"></div></div>${assistantFrame()}</div>`;
@@ -448,6 +448,7 @@ export async function reload(quiet) {
     if (quiet) root.scrollTop = keep;
     document.getElementById('title').textContent = typeof page.title === 'function' ? page.title(data, route) : page.title;
     document.getElementById('sub').textContent = page.sub ? page.sub(data, route) : '';
+    document.getElementById('head').innerHTML = page.head ? page.head(data, route).s : '';
     page.after?.(root, data, route);
     stickHeight(root); watchEnd(root); noFill(document.getElementById('app') || document);
     if (cursor >= 0) { if (quiet) moveCursor(cursor); else cursor = -1; }
@@ -455,6 +456,7 @@ export async function reload(quiet) {
     if (seq !== loadSeq || !root.isConnected) return;
     document.getElementById('title').textContent = typeof page.title === 'string' ? page.title : 'Job Hunt';
     document.getElementById('sub').textContent = '';
+    document.getElementById('head').innerHTML = '';
     root.innerHTML = html`<div class="body"><div class="card empty"><h3>This page couldn't load</h3><p>${e.message}</p><p style="margin-top:12px"><button class="btn" data-act="_retry">Try again</button></p></div></div>`.s;
   }
 }

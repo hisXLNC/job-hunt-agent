@@ -151,9 +151,10 @@ export default {
   sub: d => d.date + (app.state.moving ? ` · you land in ${app.state.days} days` : ''),
   topics: ['today', 'roles', 'people', 'mail', 'talks', 'status'],
   load: () => api('today'),
+  // The week's numbers sit in the top bar, beside the title.
+  head: d => html`${(d.numbers || []).map(n => html`<div class="row" style="gap:6px" title="${n.sub}"><b style="font-size:16px;${n.tone === 'hot' ? 'color:var(--hot)' : n.tone === 'good' ? 'color:var(--good)' : ''}">${n.value}</b><span class="s m">${n.label.toLowerCase()}</span>${n.of ? html`<span class="bar goal ${n.done >= n.of ? 'met' : ''}" title="Your goal is ${n.of} applications a week. Change it under You."><i style="width:${Math.min(100, Math.round((n.done || 0) * 100 / n.of))}%"></i></span>` : ''}<span class="xs m hsub">· ${n.sub}</span></div>`)}`,
   view(d, route) {
     return html`<div class="body col" style="gap:10px">
-      <div class="card row wrap" style="padding:8px 14px;gap:22px">${d.numbers.map(n => html`<div class="row" style="gap:6px" title="${n.sub}"><b style="font-size:17px;${n.tone === 'hot' ? 'color:var(--hot)' : n.tone === 'good' ? 'color:var(--good)' : ''}">${n.value}</b><span class="s m">${n.label.toLowerCase()}</span>${n.of ? html`<span class="bar goal ${n.done >= n.of ? 'met' : ''}" title="Your goal is ${n.of} applications a week. Change it under You."><i style="width:${Math.min(100, Math.round((n.done || 0) * 100 / n.of))}%"></i></span>` : ''}<span class="xs m">· ${n.sub}</span></div>`)}</div>
       ${d.problems?.length ? html`<div class="card" style="border-color:var(--crit);background:var(--crit-card);padding:9px 14px">${d.problems.map(p => html`<p class="s"><b style="color:var(--crit)">Needs attention.</b> ${p.text} <span class="m">· ${rel(p.at)}</span></p>`)}</div>` : ''}
       ${d.question ? question(d.question, d.waiting) : ''}
       ${list(d, route)}

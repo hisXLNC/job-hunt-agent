@@ -2,6 +2,10 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.44
+
+- **Today's numbers sit in the top bar, beside "Today".** Ready to send, applied this week, in conversation and people who know you no longer take a row of their own, so the list starts higher. On a narrower window the ones that don't fit drop out whole; hover a number for its detail.
+
 ## 26.11.43
 
 - **"Never show" limits apply to roles already found.** Ticking contract, part-time or internships under Never show (or the pay floor, or the age of postings) only stopped new postings; the ones already in your lists stayed. Now every role you haven't saved or applied to that a limit rules out is set aside at once, with the reason, including ones Job Hunt prepared on its own (their CV and letter are kept). Untick a limit and the roles it set aside come back. Roles you said not interested to never come back. Limits you set earlier are applied the first time this version starts.
