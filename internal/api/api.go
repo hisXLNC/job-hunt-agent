@@ -1496,7 +1496,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
-			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources()}, nil
+			"desk": e.Desk(), "schedule": e.Schedule(), "suggest": e.SuggestTimes(), "can_notify": e.Notify != nil, "more": e.MoreSources()}, nil
 	})
 	// More job sources: the searches that take a key (Adzuna, Jooble, Google
 	// for Jobs) and job-alert e-mails. A key goes in and never comes out: what

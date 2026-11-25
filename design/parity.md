@@ -69,7 +69,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 10. **Employers found by themselves, dead boards removed — PARTIAL (S/M).** Old ran weekly, after profile changes and after thin searches, and removed boards after two failures (1.16). New `SeedEmployers` runs at setup and on "Suggest more"; I found no removal of dead boards.
 11. **Company ratings in lists and as a filter — PARTIAL (M).** Old looked ratings up by itself, showed ★ in lists and could skip companies rated below a number (1.45, 2.11). New: "Look it up" on the employer page only.
 12. **Old matches cleared by themselves — PARTIAL (S).** Old: unpicked after 60 days set aside; "set aside older than 3 weeks"; remove never-acted-on after 30/60/90 days. New: "Clear taken-down roles" only.
-13. **Search times suggested from your own postings' hours — MISSING (S).** (2.58)
+13. **Search times suggested from your own postings' hours — DONE 26.11.49 (You → Connections → When Job Hunt searches), was MISSING (S).** (2.58)
 14. **Models per task and grouped scoring — PARTIAL (M).** Old: separate models for scoring, tailoring and the rest, effort level, four postings per scoring request (2.17, 2.34, 2.45). New: one model for everything, one posting per read.
 15. **Budget mode — MISSING (S/M).** Old held big batches for the night with Run now / Cancel (1.30). New has a daily dollar cap (API key only) and limit detection.
 16. **Another AI — MISSING (M).** OpenAI-style services for searching or everything (2.45).

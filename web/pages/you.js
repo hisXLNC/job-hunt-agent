@@ -330,7 +330,20 @@ function schedule(d) {
     <label class="field">Full searches at <span class="h">Every source, every title. Times of day, comma-separated; up to six.</span><input type="text" name="full" value="${sc.full.map(hhmm).join(', ')}" placeholder="07:00, 12:30, 17:30"></label>
     <label class="field" style="max-width:420px">Quick check for brand-new postings <span class="h">Only postings a couple of hours old with few applicants. This is what gets you in early.</span><select name="fast_minutes">${[[10, 'Every 10 minutes'], [15, 'Every 15 minutes'], [20, 'Every 20 minutes'], [30, 'Every 30 minutes'], [60, 'Every hour'], [120, 'Every 2 hours'], [0, 'Off']].map(([v, t]) => html`<option value="${v}" ${sc.fast_minutes === v ? 'selected' : ''}>${t}</option>`)}</select></label>
     <div class="row s" style="gap:8px"><span style="font-weight:600">Quick checks between</span>${hour('from', sc.from)}<span>and</span>${hour('to', sc.to)}<span class="m">Same time twice means all day.</span></div>
-    <div class="row"><button class="btn p">Save</button></div></form>`;
+    <div class="row"><button class="btn p">Save</button></div>${suggested(d)}</form>`;
+}
+// Search times suggested from when the roles found for you were posted.
+function suggested(d) {
+  const sg = d.suggest, sc = d.schedule || {};
+  if (!sg) return '';
+  if (!sg.ready) return html`<p class="xs m" style="border-top:1px solid var(--line2);padding-top:10px">Once Job Hunt has seen ${sg.need} postings that say the time they went up (${sg.seen} so far), it suggests search times from them.</p>`;
+  const top = Math.max(...sg.hours.map(h => h.n), 1), hh = h => String(h).padStart(2, '0') + ':00';
+  const span = sg.from === sg.to ? 'all day' : `between ${hh(sg.from)} and ${hh(sg.to)}`;
+  return html`<div class="col" style="gap:8px;border-top:1px solid var(--line2);padding-top:10px"><b class="s">Suggested from your own postings</b>
+    <div class="row" style="gap:2px;align-items:end;height:44px" role="img" aria-label="How many of your postings went up in each hour of the day">${sg.hours.map(h => html`<span title="${hh(h.hour)}: ${h.n} posting${h.n === 1 ? '' : 's'}" style="flex:1;min-width:3px;height:${Math.max(2, Math.round(40 * h.n / top))}px;border-radius:2px;background:var(--${sg.peaks.includes(h.hour) ? 'accent' : 'line'})"></span>`)}</div>
+    <div class="row xs m" style="justify-content:space-between"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
+    <p class="s ink2">Of the ${sg.seen} roles found for you lately that say when they went up, most went up around ${sg.peaks.map(hh).join(', ')}. Full searches at <b>${sg.full.map(hhmm).join(', ')}</b> and quick checks <b>${span}</b> would find them while few have applied.</p>
+    <div class="row">${sg.same ? html`<span class="chip good">Your times follow this</span>` : html`<button type="button" class="btn sm" data-act="usesuggest" data-busy="Saving…">Use these times</button>`}</div></div>`;
 }
 
 function panel(d) {
@@ -473,6 +486,7 @@ export default {
       toast('Saved');
     },
     testdesk: () => post('desk/test').then(() => { toast('Sent. It shows by the clock.'); return false; }),
+    usesuggest: ({ data }) => put('schedule', { full: data.suggest.full, fast_minutes: data.schedule?.fast_minutes ?? 20, from: data.suggest.from, to: data.suggest.to }).then(() => toast('Saved. The next searches follow these times.')),
     async saveschedule({ f }) {
       const full = f.full.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean).map(t => { const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(t); if (!m) throw new Error(`"${t}" isn't a time. Write times like 07:00 or 17:30.`); let h = +m[1]; if (/pm/i.test(m[3] || '') && h < 12) h += 12; if (/am/i.test(m[3] || '') && h === 12) h = 0; return h * 60 + +(m[2] || 0); });
       await put('schedule', { full, fast_minutes: +f.fast_minutes, from: +f.from, to: +f.to });
