@@ -1594,6 +1594,7 @@ func (s *Server) Handler() http.Handler {
 			"week": st.UsageSince(e.Now().Add(-7 * 24 * time.Hour).Unix()), "today": st.UsageSince(e.Now().Add(-24 * time.Hour).Unix())}, nil
 	})
 	s.debugRoutes(mux, h)
+	s.outboxRoutes(mux, h)
 	// Letting work the person stopped start by itself again.
 	h("POST /api/jobs/resume", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		e.Resume("")
@@ -1916,8 +1917,9 @@ type State struct {
 	AutoUpdate bool               `json:"auto_update"`
 	Checked    int64              `json:"update_checked"`
 	WhatsNew   *whatsNew          `json:"whats_new,omitempty"`
-	Theme      string             `json:"theme"`   // light, dark, or system (match Windows)
-	Notices    int                `json:"notices"` // unread, for the bell
+	Theme      string             `json:"theme"`    // light, dark, or system (match Windows)
+	Notices    int                `json:"notices"`  // unread, for the bell
+	MailCan    map[string]bool    `json:"mail_can"` // which of the inbox's own switches are on
 }
 
 func (s *Server) state() State {
@@ -1932,6 +1934,7 @@ func (s *Server) state() State {
 	qs, _ := st.OpenQuestions()
 	return State{
 		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(), CanInstall: e.CanInstall(), AutoUpdate: e.AutoUpdate(), Checked: e.UpdateChecked(), WhatsNew: s.whatsNew(), Theme: e.Theme(), Notices: e.UnreadNotices(),
+		MailCan: mailCan(e.MailSet()),
 		Counts: map[string]int{
 			"ready":     counts["ready"],
 			"fresh":     st.Count(`SELECT COUNT(*) FROM roles WHERE closed = '' AND stage IN ('found','ready') AND CASE WHEN posted_at > 0 THEN posted_at ELSE first_seen_at END > ?`, now.Add(-24*time.Hour).Unix()),
@@ -1942,6 +1945,12 @@ func (s *Server) state() State {
 			"questions": len(qs),
 		},
 	}
+}
+
+// mailCan says which of the inbox's own switches are on, so a page shows
+// only the buttons that work.
+func mailCan(set engine.MailSet) map[string]bool {
+	return map[string]bool{"drafts": set.On && set.Drafts, "send": set.On && set.Send, "recruiters": set.On && set.Recruiters}
 }
 
 // events streams the names of things that changed, so open pages refresh

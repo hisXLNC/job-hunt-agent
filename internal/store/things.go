@@ -925,6 +925,7 @@ type Person struct {
 	URL        string `json:"url"`
 	Email      string `json:"email"`
 	EmailSure  string `json:"email_sure"` // "", "sure", "likely", "guess"
+	Phone      string `json:"phone"`
 	Place      string `json:"place"`
 	Source     string `json:"source"`
 	State      string `json:"state"`
@@ -934,11 +935,11 @@ type Person struct {
 	Note *Note `json:"note,omitempty"` // latest note, in listings
 }
 
-const personCols = `p.id, p.company_id, COALESCE(c.name, ''), p.name, p.title, p.kind, p.why, p.url, p.email, p.email_sure, p.place, p.source, p.state, p.knows_you_at, p.created_at`
+const personCols = `p.id, p.company_id, COALESCE(c.name, ''), p.name, p.title, p.kind, p.why, p.url, p.email, p.email_sure, p.place, p.source, p.state, p.knows_you_at, p.created_at, p.phone`
 
 func scanPerson(sc interface{ Scan(...any) error }) (Person, error) {
 	var p Person
-	err := sc.Scan(&p.ID, &p.CompanyID, &p.Company, &p.Name, &p.Title, &p.Kind, &p.Why, &p.URL, &p.Email, &p.EmailSure, &p.Place, &p.Source, &p.State, &p.KnowsYouAt, &p.CreatedAt)
+	err := sc.Scan(&p.ID, &p.CompanyID, &p.Company, &p.Name, &p.Title, &p.Kind, &p.Why, &p.URL, &p.Email, &p.EmailSure, &p.Place, &p.Source, &p.State, &p.KnowsYouAt, &p.CreatedAt, &p.Phone)
 	return p, err
 }
 
@@ -954,7 +955,7 @@ func (s *Store) AddPerson(p Person) (int64, bool, error) {
 	if err == nil {
 		s.db.Exec(`UPDATE people SET title = CASE WHEN title = '' THEN ? ELSE title END, url = CASE WHEN url = '' THEN ? ELSE url END,
 			email = CASE WHEN email = '' THEN ? ELSE email END, email_sure = CASE WHEN email_sure = '' THEN ? ELSE email_sure END,
-			why = CASE WHEN why = '' THEN ? ELSE why END WHERE id = ?`, p.Title, p.URL, p.Email, p.EmailSure, p.Why, id)
+			why = CASE WHEN why = '' THEN ? ELSE why END, phone = CASE WHEN phone = '' THEN ? ELSE phone END WHERE id = ?`, p.Title, p.URL, p.Email, p.EmailSure, p.Why, p.Phone, id)
 		return id, false, nil
 	}
 	if p.State == "" {
@@ -963,8 +964,8 @@ func (s *Store) AddPerson(p Person) (int64, bool, error) {
 	if p.Source == "" {
 		p.Source = "you"
 	}
-	res, err := s.db.Exec(`INSERT INTO people(company_id, name, title, kind, why, url, email, email_sure, place, source, state, knows_you_at, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		p.CompanyID, p.Name, p.Title, p.Kind, p.Why, p.URL, p.Email, p.EmailSure, p.Place, p.Source, p.State, p.KnowsYouAt, s.now())
+	res, err := s.db.Exec(`INSERT INTO people(company_id, name, title, kind, why, url, email, email_sure, place, source, state, knows_you_at, created_at, phone) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		p.CompanyID, p.Name, p.Title, p.Kind, p.Why, p.URL, p.Email, p.EmailSure, p.Place, p.Source, p.State, p.KnowsYouAt, s.now(), p.Phone)
 	if err != nil {
 		return 0, false, err
 	}
@@ -974,8 +975,8 @@ func (s *Store) AddPerson(p Person) (int64, bool, error) {
 }
 
 func (s *Store) SavePerson(p Person) error {
-	_, err := s.db.Exec(`UPDATE people SET company_id=?, name=?, title=?, kind=?, why=?, url=?, email=?, email_sure=?, place=?, state=?, knows_you_at=? WHERE id=?`,
-		p.CompanyID, p.Name, p.Title, p.Kind, p.Why, p.URL, p.Email, p.EmailSure, p.Place, p.State, p.KnowsYouAt, p.ID)
+	_, err := s.db.Exec(`UPDATE people SET company_id=?, name=?, title=?, kind=?, why=?, url=?, email=?, email_sure=?, place=?, state=?, knows_you_at=?, phone=? WHERE id=?`,
+		p.CompanyID, p.Name, p.Title, p.Kind, p.Why, p.URL, p.Email, p.EmailSure, p.Place, p.State, p.KnowsYouAt, p.Phone, p.ID)
 	s.Changed("people", "today")
 	return err
 }

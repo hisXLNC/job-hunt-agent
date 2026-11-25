@@ -292,6 +292,10 @@ ALTER TABLE companies ADD COLUMN about_from TEXT NOT NULL DEFAULT '';
 	`
 ALTER TABLE roles ADD COLUMN later_until INTEGER NOT NULL DEFAULT 0;
 `,
+	// 6: a person's phone number, as their e-mail signature gives it.
+	`
+ALTER TABLE people ADD COLUMN phone TEXT NOT NULL DEFAULT '';
+`,
 }
 
 // Open opens (creating and upgrading if needed) the database at path.
