@@ -331,3 +331,42 @@ func (e *Engine) UpdateWaiting() string {
 	}
 	return w.Version
 }
+
+// updateFirst is when a version was first found, so a reminder waits while
+// it may still install by itself.
+type updateFirst struct {
+	Version string `json:"version"`
+	At      int64  `json:"at"`
+}
+
+// remindUpdate tells the person once a day that a newer version is ready,
+// until it is installed. When new versions install by themselves it first
+// gives that a day.
+func (e *Engine) remindUpdate(now time.Time) {
+	u := e.NewerVersion()
+	if u == nil || e.Busy("update") {
+		return
+	}
+	var first updateFirst
+	e.S.Get("update:first", &first)
+	if first.Version != u.Version {
+		first = updateFirst{Version: u.Version, At: now.Unix()}
+		e.S.Set("update:first", first)
+	}
+	selfInstalls := e.AutoUpdate() && (e.CanInstall() || e.RunInstaller != nil)
+	if selfInstalls && now.Unix()-first.At < 24*3600 {
+		return
+	}
+	day := now.Format("2006-01-02")
+	var told string
+	e.S.Get("update:told", &told)
+	if told == day {
+		return
+	}
+	e.S.Set("update:told", day)
+	text := "Install it under You, The app. It takes about a minute and your data stays."
+	if !e.CanInstall() && e.RunInstaller == nil {
+		text = "Download the installer under You, The app, and run it. Your data stays."
+	}
+	e.Tell("Job Hunt "+u.Version+" is ready to install", text, "#/you/app")
+}

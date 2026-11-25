@@ -52,12 +52,17 @@ function list(d, route) {
         <button class="btn sm p" style="align-self:flex-start">Add</button></form></div>
       <div class="card"><h4>People you already know</h4><p class="s m" style="margin-top:3px">Upload LinkedIn's Connections.csv (Settings → Data privacy → Get a copy of your data). Job Hunt keeps only the people who work at employers on your list; the rest of the file is not stored.</p>
         <label class="btn sm" style="margin-top:8px">Choose Connections.csv<input type="file" accept=".csv" hidden data-on="change" data-act="import"></label></div>
+      <div class="card col" style="gap:8px">${noteLength(d)}</div>
     </div></div></div>`;
 }
 
+// How long a LinkedIn connect note may be: 300 characters with Premium, 200 on a free account.
+const noteLimit = d => d.note_chars === 200 ? 200 : 300;
+const noteLength = d => html`<label class="field">Your LinkedIn account <span class="h">A connect note can be 300 characters with Premium and 200 on a free account. Notes are written to fit.</span><select data-on="change" data-act="notechars"><option value="300" ${noteLimit(d) === 300 ? 'selected' : ''}>Premium: 300 characters</option><option value="200" ${noteLimit(d) === 200 ? 'selected' : ''}>Free: 200 characters</option></select></label>`;
+
 function one(d) {
   const p = d.person, n = d.notes?.[0], url = safeUrl(p.url);
-  const limit = n?.channel === 'linkedin' ? 300 : 0;
+  const limit = n?.channel === 'linkedin' ? noteLimit(d) : 0;
   return html`<div class="body cols wide"><div class="col" style="gap:14px">
     <div class="card row" style="gap:16px;padding:20px">${tile(p.name)}<div class="grow"><div class="row wrap" style="gap:8px"><span class="chip">${KIND[p.kind] || 'Contact'}</span>${status({ ...p, note: n })}</div>
       <h2 style="font-size:21px;margin-top:4px">${p.name}</h2><div class="s m">${p.title}${p.title && p.company ? ' · ' : ''}${employer(p.company, p.company_id)}</div><p class="s ink2" style="margin-top:6px">${p.why}</p></div>
@@ -84,6 +89,7 @@ function one(d) {
       <label class="field">What you share<select name="kind">${Object.entries(KIND).map(([k, v]) => html`<option value="${k}" ${p.kind === k ? 'selected' : ''}>${v}</option>`)}</select></label>
       <label class="field">Why they might answer<textarea name="why" rows="2">${p.why}</textarea></label>
       <div class="row"><button class="btn sm">Save</button><span class="grow"></span><button type="button" class="btn sm danger" data-act="remove" data-confirm="Remove ${p.name} and the notes to them?">Remove</button></div></form></div>
+    ${n?.channel === 'linkedin' ? html`<div class="card col" style="gap:8px">${noteLength(d)}</div>` : ''}
     <div class="card"><h4>What happened</h4><div class="col s" style="margin-top:10px;gap:8px">${(d.activity || []).map(a => html`<div class="row top-al" style="gap:10px"><span class="xs m" style="width:62px;flex:none">${rel(a.at)}</span><span>${a.text}</span></div>`)}${!(d.activity || []).length ? html`<span class="m">Nothing yet.</span>` : ''}</div></div>
   </div></div>`;
 }
@@ -93,9 +99,10 @@ export default {
   sub: (d, route) => route.parts[1] ? [d.person.title, d.person.company].filter(Boolean).join(' · ') : 'Who to write to, and who has answered',
   topics: ['people'],
   load(route) {
-    if (route.parts[1]) return api('people/' + route.parts[1]);
+    const chars = api('profile').then(p => p.note_chars || 300).catch(() => 300);
+    if (route.parts[1]) return Promise.all([api('people/' + route.parts[1]), chars]).then(([d, c]) => ({ ...d, note_chars: c }));
     const q = route.q, u = new URLSearchParams({ size: listSize('people'), page: 1, kind: q.kind || '', know: q.know || '' });
-    return api('people?' + u);
+    return Promise.all([api('people?' + u), chars]).then(([d, c]) => ({ ...d, note_chars: c }));
   },
   view: (d, route) => route.parts[1] ? one(d) : list(d, route),
   after(root) {
@@ -104,6 +111,7 @@ export default {
   },
   actions: {
     ...outActions,
+    notechars: ({ el }) => put('profile', { note_chars: +el.value }).then(() => toast(`Notes are written to fit ${el.value} characters from now on.`)),
     find: () => post('people/find').then(() => toast('Looking. This takes a minute or two.')),
     async draft({ d }) { await post(`people/${d.id}/note`, {}); location.hash = `#/people/${d.id}`; return false; },
     async add({ f }) { const r = await post('people', f); location.hash = `#/people/${r.id}`; return false; },

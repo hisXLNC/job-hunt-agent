@@ -615,6 +615,9 @@ type Profile struct {
 	// The most roles one search prepares by itself; 0 = no limit. The
 	// rest wait on Today with a Prepare button.
 	PrepareMax int `json:"prepare_max"`
+	// How long a LinkedIn connection note may be on the person's account:
+	// 300 characters, or 200 on a free account. Not set = 300.
+	NoteChars int `json:"note_chars,omitempty"`
 	// What matters to the person in a job, in their own words. Claude
 	// weighs it when it reads a role.
 	Matters   string `json:"matters"`
@@ -653,6 +656,14 @@ func (p Profile) PrepareAt() int {
 		at = min(max(*p.PrepareFit, 30), 100)
 	}
 	return max(at, p.Keep())
+}
+
+// NoteLimit is how many characters a LinkedIn connection note may have.
+func (p Profile) NoteLimit() int {
+	if p.NoteChars == 200 {
+		return 200
+	}
+	return 300
 }
 
 // LetterStyles are the ways a cover letter can be written; the first is the usual one.
@@ -744,6 +755,25 @@ type CV struct {
 	Model     json.RawMessage `json:"model,omitempty"`
 	Focus     string          `json:"focus"`
 	CreatedAt int64           `json:"created_at"`
+	// What the person set for this CV (kept under "cvset:<id>", filled in by
+	// the engine): the titles and words it is meant for, and its letter style.
+	Titles      []string `json:"titles,omitempty"`
+	Keywords    []string `json:"keywords,omitempty"`
+	LetterStyle string   `json:"letter_style,omitempty"`
+}
+
+// ReplaceCVFile puts a new file in place of a CV's old one, keeping its
+// name and what the person set for it.
+func (s *Store) ReplaceCVFile(id int64, filename string, original []byte, text string, model []byte) error {
+	res, err := s.db.Exec(`UPDATE cvs SET filename = ?, original = ?, text = ?, model = ? WHERE id = ?`, filename, original, text, rawStr(model, "{}"), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	s.Changed("you")
+	return nil
 }
 
 func (s *Store) AddCV(c CV, original []byte) (int64, error) {

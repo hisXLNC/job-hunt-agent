@@ -108,9 +108,11 @@ function list(d, route) {
   const ticks = shown.filter(c => c.kind === 'apply' || c.kind === 'decide');
   const types = [...new Set(all.map(c => (c.job_type || '').split(',')[0]).filter(Boolean))];
   const filtered = q.best || q.show || q.where || q.type || q.minfit || q.within || q.minpay;
+  const unwritten = all.filter(c => c.kind === 'chase' && !c.body).length;
   return html`<div class="stick col" style="gap:8px"><div class="row wrap" style="gap:6px">${GROUPS.map(([k, v]) => { const n = k ? all.filter(c => group(c) === k).length : all.length; return n || !k ? html`<a class="chip ${(q.show || '') === k ? 'on' : ''}" style="padding:4px 11px;font-size:12px" href="${with_(route, { show: k})}">${v} ${n}</a>` : ''; })}
       ${all.length > BEST || q.best ? html`<a class="chip ${q.best ? 'on' : ''}" style="padding:4px 11px;font-size:12px" href="${with_(route, { best: q.best ? '' : 1})}" aria-pressed="${q.best ? 'true' : 'false'}" title="Only the ten rows most worth doing now, in Job Hunt's own order. The rest wait. Press again to see everything.">Best ${BEST}</a>` : ''}
       <span class="grow"></span>
+      ${unwritten > 1 ? html`<button class="btn sm" data-act="chaseall" data-busy="Starting…" title="Writes a short follow-up for each application waiting for one. You read each and send it yourself.">Write all ${unwritten} follow-ups</button>` : ''}
       ${sel('where', 'Where', Object.entries(WHERE))}${types.length ? sel('type', 'Type', types.map(t => [t, t])) : ''}${sel('minpay', 'Pay', [[80000, '$80k and up'], [100000, '$100k and up'], [120000, '$120k and up'], [150000, '$150k and up']])}${sel('minfit', 'Fit', [60, 70, 80, 90].map(n => [n, `Fit ${n} and up`]))}${sel('within', 'Posted', [[1, 'In the last day'], [3, 'In 3 days'], [7, 'In a week']])}
       ${filtered || q.sort ? html`<a class="btn sm ghost" href="#/today" title="Shows everything again, in Job Hunt's own order.">Clear</a>` : ''}</div>
     ${bulkBar(all)}</div>
@@ -190,6 +192,7 @@ export default {
     applied: ({ d }) => post(`roles/${d.id}/applied`).then(() => toast('Marked as applied', false, () => post(`roles/${d.id}/unapply`))),
     no: ({ d }) => post(`roles/${d.id}/no`).then(() => toast('It won\'t be shown again', false, () => post(`roles/${d.id}/reopen`))),
     later: ({ d }) => post(`roles/${d.id}/later`, { days: +d.days }).then(() => toast({ 1: 'Saved for later. Back tomorrow.', 3: 'Saved for later. Back in 3 days.', 7: 'Saved for later. Back next week.' }[d.days], false, () => post(`roles/${d.id}/later`, { days: 0 }))),
+    chaseall: () => post('roles/chaseall').then(r => toast(r.writing ? `Writing ${r.writing} follow-up${r.writing === 1 ? '' : 's'}. Each shows up here when it is ready to read and send.` : 'Every follow-up is written already.')),
     async chase({ d }) { await post(`roles/${d.id}/chase`); location.hash = `#/roles/${d.id}`; return false; },
     chasesent: ({ d }) => post(`roles/${d.id}/chasesent`).then(() => toast('Noted in the role\'s history.')),
     chasedrop: ({ d }) => post(`roles/${d.id}/chasedrop`),

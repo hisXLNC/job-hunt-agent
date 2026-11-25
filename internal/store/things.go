@@ -319,6 +319,16 @@ func (s *Store) SeenRole(key string) (id int64, closed string, ok bool) {
 	return id, closed, err == nil
 }
 
+// RoleByURL finds a role whose posting or application page is at this
+// address. A role the person said no to is preferred, so it stays closed.
+func (s *Store) RoleByURL(link string) (id int64, closed string, ok bool) {
+	if strings.TrimSpace(link) == "" {
+		return 0, "", false
+	}
+	err := s.db.QueryRow(`SELECT id, closed FROM roles WHERE url = ? OR apply_url = ? ORDER BY (closed = 'no') DESC, id DESC LIMIT 1`, link, link).Scan(&id, &closed)
+	return id, closed, err == nil
+}
+
 // SimilarRole finds a role at the same company with the same title in the
 // same place, so the same job seen through two places is one role. A role
 // the person said no to is preferred, so a repost of it stays closed.

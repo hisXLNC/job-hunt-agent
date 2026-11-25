@@ -1,4 +1,34 @@
-import { html, api, post, rings, tile, toast, listSize, endless, sortHead, with_, href, stageChip, freshness, BAND, STAGE, CLOSED, fitColor, employer, shortPay, picked, redraw, LATER, dayName, applicantsText } from '../app.js';
+import { html, api, post, rings, tile, toast, listSize, endless, sortHead, with_, href, stageChip, freshness, BAND, STAGE, CLOSED, fitColor, employer, shortPay, picked, redraw, LATER, dayName, applicantsText, safeUrl, app } from '../app.js';
+
+// On a wide screen a role opened from the list shows beside it, and the list
+// stays where it was. Narrower, a title opens the role's own page.
+const WIDE = 1500;
+const wide = () => window.innerWidth >= WIDE;
+let seeing = null; // { id, d }: the role shown beside the list
+document.addEventListener('click', async ev => {
+  const a = ev.target.closest('a.t[data-see]');
+  if (!a || !wide() || app.route?.parts[0] !== 'roles' || app.route?.parts[1] || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button) return;
+  ev.preventDefault();
+  try { seeing = { id: a.dataset.see, d: await api('roles/' + a.dataset.see) }; } catch (e) { toast(e.message, true); return; }
+  if (app.data) app.data.seeing = seeing.d;
+  redraw();
+});
+
+function beside(d) {
+  const r = d.role, rd = d.reading || {}, url = safeUrl(r.url), ready = !!d.cv?.doc || !!d.letter;
+  return html`<div class="card col" style="gap:10px;position:sticky;top:8px">
+    <div class="row top-al" style="gap:10px">${tile(r.company, false, r.company_id)}<div class="grow"><b style="font-size:15.5px;display:block">${r.title}</b><span class="s m">${employer(r.company, r.company_id)}${r.location ? html` · ${r.location}` : ''}</span></div><button class="btn sm ghost" data-act="unsee" aria-label="Close" title="Close">✕</button></div>
+    <div class="row wrap" style="gap:8px">${rings(r.fit, r.fit_tailored, true)}<span>${stageChip(r)}${d.preparing ? html` <span class="chip blue"><span class="spin" style="width:10px;height:10px"></span>Preparing</span>` : ''}</span></div>
+    ${rd.summary ? html`<p class="s">${rd.summary}</p>` : html`<p class="s m">${d.reading_now ? 'Claude is reading it.' : 'Not read yet.'}</p>`}
+    ${(rd.concerns || []).length ? html`<ul class="s ink2" style="margin:0 0 0 18px">${rd.concerns.slice(0, 3).map(c => html`<li>${c}</li>`)}</ul>` : ''}
+    ${ready ? html`<div class="row wrap" style="gap:6px"><span class="xs m">CV</span><a class="btn sm" href="/api/roles/${r.id}/cv.docx">Word</a><a class="btn sm" href="/api/roles/${r.id}/cv.pdf">PDF</a><span class="xs m">Letter</span><a class="btn sm" href="/api/roles/${r.id}/letter.docx">Word</a><a class="btn sm" href="/api/roles/${r.id}/letter.pdf">PDF</a></div>` : ''}
+    <div class="row wrap" style="gap:6px">
+      ${!r.closed && r.stage === 'found' && !d.preparing ? html`<button class="btn sm p" data-act="seedo" data-id="${r.id}" data-do="prepare" data-busy="Starting…" title="Tailors your CV and writes the letter. About a minute.">Prepare</button>` : ''}
+      ${url ? html`<a class="btn sm ${r.stage === 'ready' ? 'p' : ''}" href="${url}" target="_blank" rel="noopener noreferrer">Open the posting</a>` : ''}
+      ${!r.closed && !r.applied_at ? html`<button class="btn sm" data-act="seedo" data-id="${r.id}" data-do="applied">I applied</button>` : ''}
+      ${!r.closed && !r.applied_at ? html`<button class="btn sm ghost danger" data-act="seedo" data-id="${r.id}" data-do="no" data-confirm="Not interested in this role? It will never be shown again.">Not for me</button>` : ''}</div>
+    <a class="s" href="#/roles/${r.id}">Open the whole page</a></div>`;
+}
 
 const STAGES = ['found', 'ready', 'applied', 'reply', 'interview', 'offer'];
 
@@ -74,8 +104,8 @@ function table(d, route) {
   const open = d.roles.filter(r => !r.closed);
   return html`    <div class="card" style="padding:0"><table class="tbl long">
     <thead><tr><th class="pick" style="width:34px"><input type="checkbox" data-on="change" data-act="pickall" ${open.length && open.every(r => picked.has(String(r.id))) ? 'checked' : ''} ${open.length ? '' : 'disabled'} aria-label="Tick every open role in this list" title="Tick every open role in this list"></th><th>${sortHead('Role', 'title', route, 'age')} · ${sortHead('Employer', 'company', route, 'age')}</th><th>${sortHead('Fit now', 'fit', route, 'age')} · Tailored</th><th>${sortHead('Posted', 'age', route, 'age')}</th><th>${sortHead('Applicants', 'applicants', route, 'age')}</th><th>${sortHead('Stage', 'stage', route, 'age')}</th><th></th></tr></thead>
-    <tbody>${d.roles.map(r => html`<tr class="${picked.has(String(r.id)) ? 'sel' : ''}"><td class="pick">${r.closed ? '' : html`<input type="checkbox" data-on="change" data-act="pick" data-id="${r.id}" ${picked.has(String(r.id)) ? 'checked' : ''} aria-label="Tick ${r.title}">`}</td>
-      <td><div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a class="t" href="#/roles/${r.id}">${r.title}</a><span class="s m">${employer(r.company, r.company_id)}${r.rating ? html` <span class="xs" title="What employees rate ${r.company}, out of 5">★ ${r.rating.toFixed(1)}</span>` : ''}${r.location ? html` · ${r.location}` : ''}${r.workplace ? html` · ${r.workplace}` : ''}${r.pay ? html` · <b style="font-weight:600;color:var(--ink2)" title="${r.pay}">${shortPay(r.pay)}</b>` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}${r.path ? html` <span class="chip ${r.path === 'on' ? 'good' : ''}" style="padding:0 7px" title="${r.path === 'on' ? 'Moves you along the career path you want' : 'Leads away from the career path you want'}">${r.path === 'on' ? 'On path' : 'Off path'}</span>` : ''}</span></div></div></td>
+    <tbody>${d.roles.map(r => html`<tr class="${picked.has(String(r.id)) || String(r.id) === String(d.seeing?.role?.id) ? 'sel' : ''}"><td class="pick">${r.closed ? '' : html`<input type="checkbox" data-on="change" data-act="pick" data-id="${r.id}" ${picked.has(String(r.id)) ? 'checked' : ''} aria-label="Tick ${r.title}">`}</td>
+      <td><div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a class="t" href="#/roles/${r.id}" data-see="${r.id}">${r.title}</a><span class="s m">${employer(r.company, r.company_id)}${r.rating ? html` <span class="xs" title="What employees rate ${r.company}, out of 5">★ ${r.rating.toFixed(1)}</span>` : ''}${r.location ? html` · ${r.location}` : ''}${r.workplace ? html` · ${r.workplace}` : ''}${r.pay ? html` · <b style="font-weight:600;color:var(--ink2)" title="${r.pay}">${shortPay(r.pay)}</b>` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}${r.path ? html` <span class="chip ${r.path === 'on' ? 'good' : ''}" style="padding:0 7px" title="${r.path === 'on' ? 'Moves you along the career path you want' : 'Leads away from the career path you want'}">${r.path === 'on' ? 'On path' : 'Off path'}</span>` : ''}</span></div></div></td>
       <td>${rings(r.fit, r.fit_tailored, true)}</td>
       <td>${freshness(r, true)}</td>
       <td class="s">${r.applicants >= 0 ? html`<b style="${r.applicants < 10 ? 'color:var(--hot)' : 'font-weight:500'}">${applicantsText(r.applicants)}</b>${r.applicants < 10 ? html` <span class="xs" style="color:var(--hot)">be early</span>` : ''}` : html`<span class="m">–</span>`}</td>
@@ -105,14 +135,16 @@ export default {
   sized: true,
   async load(route) {
     if (route.parts[1] === 'board') return api('board');
-    const [d, rescore] = await Promise.all([api('roles?' + query(route)), route.q.closed === 'screened' ? api('rescore').catch(() => null) : null]);
-    return { ...d, rescore };
+    const [d, rescore, s] = await Promise.all([api('roles?' + query(route)), route.q.closed === 'screened' ? api('rescore').catch(() => null) : null,
+      seeing && wide() ? api('roles/' + seeing.id).catch(() => null) : null]);
+    if (seeing && wide()) seeing = s ? { id: seeing.id, d: s } : null;
+    return { ...d, rescore, seeing: s };
   },
   view(d, route) {
     const isBoard = route.parts[1] === 'board';
     return html`<div class="body">
       <div class="tabs"><a class="${isBoard ? '' : 'on'}" href="#/roles">List</a><a class="${isBoard ? 'on' : ''}" href="#/roles/board">Board</a></div>
-      ${isBoard ? board(d) : html`${filters(d, route)}${table(d, route)}`}</div>`;
+      ${isBoard ? board(d) : d.seeing && wide() ? html`<div class="cols"><div style="min-width:0">${filters(d, route)}${table(d, route)}</div><div style="align-self:stretch">${beside(d.seeing)}</div></div>` : html`${filters(d, route)}${table(d, route)}`}</div>`;
   },
   // Sent here by the "Send to Job Hunt" bookmark (add=link) or by a job link the
   // person copied (add=copied): the add form opens filled in. What came from the
@@ -164,5 +196,12 @@ export default {
     reopen: ({ d }) => post(`roles/${d.id}/reopen`).then(() => toast('Brought back')),
     rescore: ({ d }) => post('rescore', { all: !!d.all }).then(() => toast('Scoring them again. Those that fit come back as they are read.')),
     force: () => post('search/force').then(() => toast('Searching every source, a week back. Then the set-aside roles are checked again.')),
+    unsee({ data }) { seeing = null; if (data) data.seeing = null; redraw(); return false; },
+    async seedo({ d }) {
+      await post(`roles/${d.id}/${d.do}`);
+      const back = { applied: 'unapply', no: 'reopen' }[d.do];
+      if (d.do === 'no') seeing = null;
+      toast({ prepare: 'Preparing. About a minute.', applied: 'Marked as applied', no: "It won't be shown again" }[d.do], false, back ? () => post(`roles/${d.id}/${back}`) : undefined);
+    },
   },
 };

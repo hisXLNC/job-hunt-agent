@@ -59,6 +59,7 @@ type Change struct {
 	After  string `json:"after"`
 	Why    string `json:"why"`
 	Off    bool   `json:"off,omitempty"`
+	Mine   bool   `json:"mine,omitempty"` // the person wrote After themselves
 }
 
 // Unit is one addressed piece of text.

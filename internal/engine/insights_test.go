@@ -180,6 +180,16 @@ func TestRejectionsGuideTailoring(t *testing.T) {
 	if err := e.Prepare(ctx, id); err != nil {
 		t.Fatal(err)
 	}
+	// Another pass may be preparing the same role at that moment; wait for it.
+	for i := 0; i < 100; i++ {
+		mu.Lock()
+		n := len(prompts)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 	mu.Lock()
 	n := len(prompts)
 	last := ""

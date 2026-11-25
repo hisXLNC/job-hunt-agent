@@ -3,11 +3,10 @@
 package api
 
 import (
-	"cmp"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -395,6 +394,9 @@ func (s *Server) Handler() http.Handler {
 		if p.PrepareMax < 0 || p.PrepareMax > 200 {
 			return nil, bad("The most to prepare in one search is 0 (no limit) to 200.")
 		}
+		if p.NoteChars != 0 && p.NoteChars != 200 && p.NoteChars != 300 {
+			return nil, bad("A LinkedIn note is 300 or 200 characters long.")
+		}
 		if len(p.Matters) > 1500 {
 			return nil, bad("Keep what matters to you under 1,500 characters.")
 		}
@@ -490,6 +492,9 @@ func (s *Server) Handler() http.Handler {
 		}
 		var in struct {
 			Name, Focus *string
+			Titles      *[]string `json:"titles"`
+			Keywords    *[]string `json:"keywords"`
+			LetterStyle *string   `json:"letter_style"`
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
@@ -500,13 +505,62 @@ func (s *Server) Handler() http.Handler {
 		if in.Focus != nil {
 			c.Focus = strings.TrimSpace(*in.Focus)
 		}
+		if in.Titles != nil || in.Keywords != nil || in.LetterStyle != nil {
+			set := e.CVSet(c.ID)
+			if in.Titles != nil {
+				set.Titles = *in.Titles
+			}
+			if in.Keywords != nil {
+				set.Keywords = *in.Keywords
+			}
+			if in.LetterStyle != nil {
+				set.LetterStyle = *in.LetterStyle
+			}
+			if err := e.SetCVSet(c.ID, set); err != nil {
+				return nil, bad(capitalise(err.Error()) + ".")
+			}
+		}
 		return nil, st.UpdateCV(c)
 	})
+	// Removing a CV scores and tailors again the roles waiting on it.
 	h("DELETE /api/cvs/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
-		if cvs, _ := st.CVs(); len(cvs) <= 1 {
-			return nil, bad("Keep at least one CV. Add the new one first, then remove this one.")
+		if _, err := st.CV(idOf(r)); err != nil {
+			return nil, err
 		}
-		return nil, st.DeleteCV(idOf(r))
+		n, err := e.RemoveCV(idOf(r))
+		if err != nil {
+			return nil, bad(err.Error())
+		}
+		return map[string]int{"redoing": n}, nil
+	})
+	// What the CV page shows: what Claude read, the screening-system check, the settings.
+	h("GET /api/cvs/{id}/look", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.LookAtCV(idOf(r)) })
+	h("POST /api/cvs/{id}/titles", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if e.LLM().Engine == "" {
+			return nil, llm.ErrNotConnected
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+		titles, err := e.MoreTitles(ctx, idOf(r))
+		return map[string]any{"titles": titles}, err
+	})
+	// A new file in place of a CV: the same CV, read again.
+	h("POST /api/cvs/{id}/file", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if e.LLM().Engine == "" {
+			return nil, llm.ErrNotConnected
+		}
+		name := path.Base(strings.ReplaceAll(r.URL.Query().Get("name"), `\`, "/"))
+		data, err := io.ReadAll(io.LimitReader(r.Body, 15<<20))
+		if err != nil || len(data) == 0 {
+			return nil, bad("That file is empty.")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+		defer cancel()
+		n, err := e.ReplaceCV(ctx, idOf(r), name, data)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]int{"redoing": n}, nil
 	})
 	h("GET /api/cvs/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		m, err := e.CVModel(idOf(r))
@@ -580,6 +634,33 @@ func (s *Server) Handler() http.Handler {
 		}
 		id, err := e.AddRole(in.Company, in.Title, in.Location, safeLink(in.URL), in.Description, "manual")
 		return map[string]int64{"id": id}, err
+	})
+	// A posting from a link the person shared (the phone's Share, or pasted).
+	h("POST /api/roles/link", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Text string `json:"text"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		id, err := e.AddFromLink(ctx, clipRunes(in.Text, 4000))
+		if err != nil {
+			return nil, bad(err.Error())
+		}
+		return map[string]int64{"id": id}, nil
+	})
+	// Writes every follow-up that is due, one after another. Nothing is sent.
+	h("POST /api/roles/chaseall", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if e.LLM().Engine == "" {
+			return nil, llm.ErrNotConnected
+		}
+		n, err := e.WriteAllChases()
+		if err != nil {
+			return nil, bad(err.Error())
+		}
+		return map[string]int{"writing": n}, nil
 	})
 	// Closes (never deletes) roles whose posting is gone and that were never
 	// prepared or applied to.
@@ -1879,39 +1960,14 @@ func (s *Server) Handler() http.Handler {
 	h("GET /api/changes", func(w http.ResponseWriter, r *http.Request) (any, error) { return jobhunt.History(), nil })
 	// Every role as a spreadsheet file.
 	mux.HandleFunc("GET /api/roles.csv", func(w http.ResponseWriter, r *http.Request) {
-		roles, _, err := st.Roles(store.RoleFilter{Closed: []string{"*"}, Unread: true, Sort: "age", Limit: 20000})
-		if err != nil {
+		var buf bytes.Buffer
+		if err := e.WriteRolesCSV(&buf); err != nil {
 			http.Error(w, "couldn't read the roles", 500)
 			return
 		}
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="JobHunt-roles.csv"`)
-		w.Write([]byte("\xEF\xBB\xBF"))
-		cw := csv.NewWriter(w)
-		day := func(t int64) string {
-			if t <= 0 {
-				return ""
-			}
-			return time.Unix(t, 0).Format("2006-01-02")
-		}
-		num := func(n int) string {
-			if n < 0 {
-				return ""
-			}
-			return strconv.Itoa(n)
-		}
-		// A cell that starts like a formula is text from a posting: it is kept from running in a spreadsheet.
-		safe := func(s string) string {
-			if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
-				return "'" + s
-			}
-			return s
-		}
-		cw.Write([]string{"Title", "Employer", "Place", "Way of working", "Pay", "Fit now", "Fit tailored", "Stage", "Closed", "Why", "Posted", "First seen", "Applied", "Applicants", "Source", "Link"})
-		for _, x := range roles {
-			cw.Write([]string{safe(x.Title), safe(x.Company), safe(x.Location), x.Workplace, safe(x.Pay), num(x.Fit), num(x.FitTailored), x.Stage, x.Closed, safe(x.ClosedWhy), day(x.PostedAt), day(x.FirstSeenAt), day(x.AppliedAt), num(x.Applicants), x.Source, safe(cmp.Or(x.ApplyURL, x.URL))})
-		}
-		cw.Flush()
+		w.Write(buf.Bytes())
 	})
 	// Updates: look now, install now, and whether they install by themselves.
 	h("POST /api/update/check", func(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -2147,6 +2203,8 @@ type State struct {
 	Theme      string             `json:"theme"`    // light, dark, or system (match Windows)
 	Notices    int                `json:"notices"`  // unread, for the bell
 	MailCan    map[string]bool    `json:"mail_can"` // which of the inbox's own switches are on
+	// A newer copy another computer left in the copies folder, to carry on from.
+	Other *engine.Handover `json:"other_computer,omitempty"`
 }
 
 func (s *Server) state() State {
@@ -2160,7 +2218,7 @@ func (s *Server) state() State {
 	s.mu.Unlock()
 	qs, _ := st.OpenQuestions()
 	return State{
-		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(), CanInstall: e.CanInstall(), AutoUpdate: e.AutoUpdate(), Checked: e.UpdateChecked(), WhatsNew: s.whatsNew(), Theme: e.Theme(), Notices: e.UnreadNotices(),
+		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(), CanInstall: e.CanInstall(), AutoUpdate: e.AutoUpdate(), Checked: e.UpdateChecked(), WhatsNew: s.whatsNew(), Theme: e.Theme(), Notices: e.UnreadNotices(), Other: e.OtherComputer(),
 		MailCan: mailCan(e.MailSet()),
 		Counts: map[string]int{
 			"ready":     counts["ready"],

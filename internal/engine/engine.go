@@ -47,6 +47,9 @@ type Engine struct {
 	FilesHome string
 	// Tests only: the cloud drives on this computer.
 	CloudRoots func() [][2]string
+	// This computer's name, as other computers see it in the copies folder;
+	// "" means the name the computer has (tests set it).
+	HostName string
 	// Tests only: stands in for fetching the person's calendar.
 	OwnCalFetch func(addr string) ([]byte, error)
 	// Google's addresses for signing in and for Calendar; tests point them
@@ -74,6 +77,7 @@ type Engine struct {
 	smtpDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
 
 	preparedNow atomic.Int32 // documents the search under way has written by itself
+	startWork   int64        // the newest activity in the data when the program started
 	srcMu       sync.Mutex   // the keys and the state of the searches that take one
 
 	oldMu     sync.Mutex // one import from the old Job Hunt at a time
@@ -128,6 +132,9 @@ func New(s *store.Store, dir string) *Engine {
 	e.meter.Shape = e.shapeRequest
 	e.brain = &brain.Brain{LLM: e.meter}
 	s.CloseStaleRuns()
+	// What was last done here before this start: whether this computer was
+	// used since it was last in step with another one (see handover.go).
+	e.startWork = int64(s.Count(`SELECT COALESCE(MAX(at), 0) FROM activity`))
 	return e
 }
 
@@ -351,6 +358,9 @@ func (e *Engine) Status() Status {
 // Person gathers what Claude is told about the person.
 func (e *Engine) Person() brain.Person {
 	cvs, _ := e.S.CVs()
+	for i := range cvs {
+		e.fillCVSet(&cvs[i])
+	}
 	facts, _ := e.S.Facts()
 	return brain.Person{Profile: e.S.Profile(), CVs: cvs, Facts: facts, Today: e.Now(), TurnedDown: e.TurnedDown(), Guidance: e.tailorGuidance()}
 }
