@@ -51,6 +51,9 @@ type Engine struct {
 	meter *llm.Metered
 	brain *brain.Brain
 
+	otherMu sync.Mutex
+	other   *llm.OpenAI // the other AI, for the saved setting (otherai.go)
+
 	mu      sync.Mutex
 	busy    map[string]bool // background jobs running now, by name
 	jobs    map[string]*task
@@ -90,7 +93,8 @@ func New(s *store.Store, dir string) *Engine {
 	e := &Engine{S: s, Dir: dir, Now: time.Now, Src: &sources.Client{}, busy: map[string]bool{}, jobs: map[string]*task{}, held: map[string]time.Time{}, preps: map[int64]bool{}}
 	e.ctx, e.stopAll = context.WithCancel(context.Background())
 	e.meter = &llm.Metered{
-		Pick: e.pickEngine,
+		Pick:  e.pickEngine,
+		Other: e.otherFor,
 		Record: func(task, engine, model string, in, out, cached int64, cost float64, ms int64, errText string) {
 			s.LogCall(store.Call{Task: task, Engine: engine, Model: model, TokensIn: in, TokensOut: out, TokensCached: cached, Cost: cost, Ms: ms, Error: errText})
 		},

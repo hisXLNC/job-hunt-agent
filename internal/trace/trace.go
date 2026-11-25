@@ -34,7 +34,7 @@ var (
 
 var (
 	mailRe = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
-	keyRe  = regexp.MustCompile(`(?i)(sk-[A-Za-z0-9_\-]{8,}|bearer\s+[A-Za-z0-9._\-]{8,}|(?:api[_-]?key|token|password|secret|authorization|key)=[^&\s"']+)`)
+	keyRe  = regexp.MustCompile(`(?i)(\b(?:sk|gsk|xai)[-_][A-Za-z0-9_\-]{8,}|\bAIza[A-Za-z0-9_\-]{20,}|bearer\s+[A-Za-z0-9._\-]{8,}|(?:api[_-]?key|token|password|secret|authorization|key)=[^&\s"']+)`)
 )
 
 // Clean takes e-mail addresses, keys and line breaks out of a line.

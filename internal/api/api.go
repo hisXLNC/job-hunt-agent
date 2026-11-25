@@ -1465,7 +1465,7 @@ func (s *Server) Handler() http.Handler {
 		if s.Startup != nil {
 			startOn, startCan = s.Startup()
 		}
-		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
+		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "other_ai": e.OtherAIState(), "other_services": llm.OtherServices, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
 			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources()}, nil
 	})
@@ -1543,6 +1543,35 @@ func (s *Server) Handler() http.Handler {
 		defer cancel()
 		msg, err := e.TestClaude(ctx)
 		return map[string]string{"message": msg}, err
+	})
+	// Another AI, in Claude's place for the searching or for everything. Its
+	// key goes in and never comes out. A new address, model or key is tried
+	// before it is kept. These calls are not on the assistant's list, nor the
+	// phone's.
+	h("PUT /api/otherai", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in engine.OtherAIInput
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		msg, err := e.SetOtherAI(ctx, in)
+		if err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		return map[string]string{"message": msg}, nil
+	})
+	h("DELETE /api/otherai", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		return nil, e.ForgetOtherAI()
+	})
+	h("POST /api/otherai/test", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		msg, err := e.TestOtherAI(ctx)
+		if err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		return map[string]string{"message": msg}, nil
 	})
 	h("PUT /api/phone", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		set := e.Phone()

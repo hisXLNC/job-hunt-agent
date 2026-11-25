@@ -14,9 +14,9 @@ func TestTheRecordKeepsNoAddressesOrKeys(t *testing.T) {
 	}
 	defer Close()
 	Log("fetch", "GET https://example.com/jobs?api_key=abcdef123456&q=tax 200")
-	Log("problem", "couldn't write to someone@example.com\nBearer abcdefghijklmnop sk-ant-abcdefgh12345678")
+	Log("problem", "couldn't write to someone@example.com\nBearer abcdefghijklmnop sk-ant-abcdefgh12345678 gsk_abcdefgh12345678 xai-abcdefgh12345678")
 	got := strings.Join(Tail(2), "\n")
-	for _, bad := range []string{"someone@example.com", "abcdef123456", "abcdefghijklmnop", "sk-ant-abcdefgh12345678"} {
+	for _, bad := range []string{"someone@example.com", "abcdef123456", "abcdefghijklmnop", "sk-ant-abcdefgh12345678", "gsk_abcdefgh12345678", "xai-abcdefgh12345678"} {
 		if strings.Contains(got, bad) {
 			t.Errorf("the record kept %q:\n%s", bad, got)
 		}

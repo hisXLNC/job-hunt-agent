@@ -31,6 +31,7 @@ const SETTINGS = [
   ['arriving', '', '', 'Arriving: your CV in local form', 'arriving arrival pack newcomer local cv terms'],
   ['connections', 'claude', '', 'Claude: subscription, API key, model', 'claude api key model subscription sign in connect anthropic ai'],
   ['connections', 'claude', 'daily_limit', 'Daily spending limit', 'limit budget spend cost dollars money cap'],
+  ['connections', 'otherai', '', 'Another AI: ChatGPT, Grok, Gemini, OpenRouter or a model on this computer', 'another other ai openai chatgpt gpt grok xai gemini groq openrouter ollama lm studio local model llm'],
   ['connections', 'phone', '', 'Phone notices', 'phone ntfy notice notification push buzz mobile topic quiet hours'],
   ['connections', 'phoneaccess', '', 'Job Hunt on your phone', 'phone mobile access remote browser wifi tailscale away qr code pair'],
   ['connections', 'owncal', 'talkset', 'When you can do interviews', 'interview hours availability times to offer length slots time zone'],
@@ -255,6 +256,7 @@ function connections(d, route) {
       <p class="xs m">A "we received your application" message marks that role as applied by itself, and adds the role if Job Hunt never found it. With Gmail, archived messages are read too.</p>
       <p class="xs m">Gmail: Google Account → Security → 2-Step Verification → App passwords. The password is kept only in Job Hunt's data file on this computer.</p>
       <div class="row"><button class="btn p">Save and check</button>${m.last_at ? html`<span class="xs m">Last read ${rel(m.last_at)}</span>` : ''}</div></form>`;
+  const oa = d.other_ai || {};
   const cal = d.owncal || {}, pa = d.phoneaccess, k = d.desk || {}, sc = d.schedule || { full: [] }, more = d.more || [];
   const keyed = more.filter(x => x.id !== 'alerts'), setUp = keyed.filter(x => x.has_key);
   const model = (d.models || []).find(x => x.ID === cl.model)?.Name || '';
@@ -262,6 +264,8 @@ function connections(d, route) {
   const rows = [
     ['claude', 'Claude', cl.engine ? (cl.ok ? ['good', 'Connected'] : ['warn', 'Resting']) : ['warn', 'Not connected'],
       cl.engine ? `${{ 'claude-code': 'Your Claude subscription', api: 'An API key', demo: 'Sample answers (no Claude)' }[cl.engine] || cl.engine}${model ? ' · ' + model : ''} · ${cl.calls} calls today${cl.note && !cl.ok ? ' · ' + cl.note : ''}` : 'Claude does the reading and writing', claude],
+    ['otherai', 'Another AI', oa.on ? (oa.ok ? ['good', 'On'] : ['warn', 'Resting']) : ['', 'Off'],
+      oa.on ? `${(d.other_services || []).find(x => x.Base === oa.base)?.Name || oa.base} · ${oa.model} · ${oa.use === 'all' ? 'everything it can do' : 'searching only'}${oa.note ? ' · ' + oa.note : ''}` : 'ChatGPT, Grok, Gemini or a model on this computer, for the searching or for more', otherAI(d)],
     ['mail', 'Your inbox', m.on ? (m.note ? ['crit', 'Not working'] : ['good', 'Connected']) : ['', 'Off'],
       m.on ? (m.note || `${m.host || 'Mail'} · ${m.last_at ? 'checked ' + rel(m.last_at) : 'not checked yet'}${m.every ? `, every ${m.every} minutes` : ''}`) : 'Notices replies the moment they arrive; reads only', mail],
     ['owncal', 'Your calendar', cal.on ? (cal.note ? ['crit', 'Not working'] : ['good', 'Connected']) : ['', 'Off'],
@@ -281,6 +285,23 @@ function connections(d, route) {
         <a class="foldhead" href="${with_(route, { open: on ? '' : key, hl: '' })}"><b class="foldname">${name}</b><span class="chip ${tone}">${word}</span><span class="grow s m foldsum">${sum}</span><span class="btn sm">${on ? 'Close' : word === 'Off' || word === 'None' || word === 'Not connected' ? 'Set up' : 'Change'}</span></a>
         ${on ? html`<div class="foldbody">${body}</div>` : ''}</div>`; })}
     <div class="fold" style="border-top:1px solid var(--line2)"><a class="foldhead" href="#/you/panel"><b class="foldname">Browser side panel</b><span class="chip ${ext?.paired_at ? 'good' : ''}">${ext?.paired_at ? 'Connected' : 'Off'}</span><span class="grow s m foldsum">Fills application forms in your browser; it has its own page</span><span class="btn sm">Open</span></a></div></div>`;
+}
+
+// Another AI in Claude's place, for the searching or for everything. The key
+// is never sent back to this page: it only knows whether one is there.
+function otherAI(d) {
+  const o = d.other_ai || {}, sv = d.other_services || [];
+  const known = sv.find(x => x.Base === o.base);
+  return html`<form data-act="saveother" data-busy="Trying it…" class="card col" style="gap:10px" data-set="otherai"><div class="row"><h3 class="grow">Another AI</h3><span class="chip ${o.on ? (o.ok ? 'good' : 'warn') : ''}">${o.on ? (o.ok ? 'On' : 'Resting') : 'Off'}</span></div>
+    <p class="s m">Another AI service can do part of Claude's work: ChatGPT, Grok, Gemini, Groq, OpenRouter, or a model on this computer through Ollama or LM Studio. Any service that works the OpenAI way will do. Claude stays connected: it looks things up on the web, runs the assistant, and takes over whenever the other AI fails.</p>
+    ${o.note ? html`<p class="s" style="color:var(--warn)">${o.note}</p>` : ''}
+    <label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${o.on ? 'checked' : ''}> Use another AI</label>
+    <label class="field" style="max-width:420px">Use it for<select name="use"><option value="search" ${o.use === 'all' ? '' : 'selected'}>Searching: reading and scoring postings</option><option value="all" ${o.use === 'all' ? 'selected' : ''}>Everything it can do: searching and writing</option></select></label>
+    <div class="grid2"><label class="field">Address <span class="h">Pick one or paste the service's own.</span><input type="url" name="base" value="${o.base || ''}" list="otherbases" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false"><datalist id="otherbases">${sv.map(x => html`<option value="${x.Base}">${x.Name}</option>`)}</datalist></label>
+      <label class="field">Model <span class="h">Its name as the service writes it.</span><input type="text" name="model" value="${o.model || ''}" placeholder="${known?.Model || 'gpt-5-mini'}" autocomplete="off" spellcheck="false"></label></div>
+    <label class="field" style="max-width:340px">Key <span class="h">Not needed for a model on this computer.</span><input type="password" name="key" placeholder="${o.has_key ? 'Saved. Paste to replace.' : ''}" autocomplete="off"></label>
+    <p class="xs m">It is sent your CV, your profile and the postings it reads (and, for everything, what it writes for you; never your mail), and only to the address above. The key is kept only in Job Hunt's data file on this computer. A new address, model or key is tried before it is saved, and kept only if the service answers.</p>
+    <div class="row wrap"><button class="btn p">Save</button>${o.base && o.model ? html`<button type="button" class="btn" data-act="testother" data-busy="Asking…" title="Asks the saved service one small question, without Claude.">Test it</button>` : ''}${o.has_key ? html`<button type="button" class="btn ghost" data-act="delother" data-confirm="Remove the key for the other AI? Claude does all the work again.">Remove the key</button>` : ''}</div></form>`;
 }
 
 // The searches that take a key, and job-alert e-mails. A saved key is never
@@ -510,6 +531,12 @@ export default {
       toast('Saved');
     },
     async testllm() { const r = await post('llm/test'); toast(r.message); return false; },
+    async saveother({ f }) {
+      const r = await put('otherai', { on: !!f.on, use: f.use, base: (f.base || '').trim(), model: (f.model || '').trim(), key: (f.key || '').trim() });
+      toast(r?.message || 'Saved');
+    },
+    async testother() { const r = await post('otherai/test'); toast(r.message); return false; },
+    delother: () => del('otherai').then(() => toast('Key removed. Claude does all the work again.')),
     async phoneon({ el }) { await put('phoneaccess', { on: el.checked }); toast(el.checked ? 'On. Now add a phone.' : 'Off. No phone can connect.'); },
     async phonecode({ d }) {
       const r = await post('phoneaccess/code', { kind: d.kind });
