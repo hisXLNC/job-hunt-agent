@@ -504,3 +504,104 @@ func TestRecruitersFoundInMail(t *testing.T) {
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// quietSources answers every board lookup from here, with nothing.
+func quietSources() *sources.Client {
+	nothing := roundTrip(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{}, Request: r}, nil
+	})
+	return &sources.Client{HTTP: &http.Client{Transport: nothing}, Base: map[string]string{"greenhouse": "http://boards.invalid", "lever": "http://boards.invalid", "ashby": "http://boards.invalid", "smartrecruiters": "http://boards.invalid", "linkedin": "http://boards.invalid", "page": "http://boards.invalid"}}
+}
+
+func TestReplyOnTheRolePageThreadsOnlyToTheirSenderAndSubject(t *testing.T) {
+	e, _, sm, roleID := mailEngine(t, map[int]string{})
+	ctx := context.Background()
+	e.S.Set("mail", MailSet{On: true, Host: "imap.gmail.com:993", User: "me@example.com", Pass: "app-pass", Send: true})
+	e.S.AddMail(store.Mail{MsgID: "no1@acme.example", FromName: "Dana", FromAddr: "dana@acme.example", Subject: "Your application to Acme Corp", RoleID: roleID, Kind: "rejection", State: "done"})
+	e.S.SaveDoc(roleID, "noreply", NoReply{Subject: "Thank you", Body: "Thank you for letting me know."})
+
+	send := func(to, subject, body string) string {
+		t.Helper()
+		n := len(sm.datas)
+		if err := e.SendMail(ctx, Outgoing{Kind: "noreply", ID: roleID, To: to, Subject: subject, Body: body}); err != nil {
+			t.Fatal(err)
+		}
+		if len(sm.datas) != n+1 {
+			t.Fatal("not sent")
+		}
+		return sm.datas[n]
+	}
+	// Their own subject, to them: a reply in their thread.
+	if m := send("dana@acme.example", "Re: Your application to Acme Corp", "Thank you, Dana."); !strings.Contains(m, "In-Reply-To: <no1@acme.example>") {
+		t.Errorf("not in their thread:\n%s", m)
+	}
+	// Another subject, or someone else: a message of its own.
+	if m := send("dana@acme.example", "Thank you", "Thank you again."); strings.Contains(m, "In-Reply-To") {
+		t.Errorf("threaded under another subject:\n%s", m)
+	}
+	if m := send("lee@acme.example", "Re: Your application to Acme Corp", "Thank you, Lee."); strings.Contains(m, "In-Reply-To") {
+		t.Errorf("threaded to someone who did not write:\n%s", m)
+	}
+	// What was sent is what the page shows afterwards.
+	var n NoReply
+	e.S.Doc(roleID, "noreply", &n)
+	if n.Body != "Thank you, Lee." || n.Subject != "Re: Your application to Acme Corp" {
+		t.Errorf("the reply as kept: %+v", n)
+	}
+}
+
+func TestRecruiterScanCarriesOnAndTrustsNoClaims(t *testing.T) {
+	msgs := map[int]string{}
+	for i := 1; i <= 45; i++ {
+		msgs[i] = mailWith(fmt.Sprintf("r%d@co%d.example", i, i), fmt.Sprintf(`"Rec Ruiter%d" <rec@co%d.example>`, i, i), fmt.Sprintf("A role at Co%d", i),
+			fmt.Sprintf("Hello, I am recruiting.\r\n\r\nRec Ruiter%d\r\nTalent Partner, Company Number %d\r\n", i, i))
+	}
+	// A message from elsewhere signing as someone at an employer already on the list.
+	msgs[50] = mailWith("x@lookalike.example", `"Lee Park" <lee@lookalike.example>`, "A role at Acme Corp", "I am recruiting.\r\n\r\nLee Park\r\nTalent Partner, Acme Corp\r\n+1 416 555 0123\r\n")
+	e, _, _, _ := mailEngine(t, msgs)
+	e.Src = quietSources()
+	acme, err := e.S.CompanyByName("Acme Corp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	leeID, _, _ := e.S.AddPerson(store.Person{CompanyID: acme.ID, Name: "Lee Park", Kind: "manager"})
+	e.S.Set("mail", MailSet{On: true, Host: "imap.gmail.com:993", User: "me@example.com", Pass: "app-pass", Recruiters: true})
+	ctx := context.Background()
+
+	if err := e.ScanRecruiters(ctx); err != nil {
+		t.Fatal(err)
+	}
+	first := e.RecruiterScan()
+	if !first.More || first.At != 0 || first.Found < scanSenders-1 || first.Found >= 45 {
+		t.Fatalf("after the first look: %+v", first)
+	}
+	// Not again within the hour, but soon after.
+	if e.recruiterScanDue() {
+		t.Error("looked again at once")
+	}
+	first.TriedAt -= 2 * 3600
+	e.S.Set(recruiterScanKey, first)
+	if !e.recruiterScanDue() {
+		t.Error("the rest is not looked at soon")
+	}
+	if err := e.ScanRecruiters(ctx); err != nil {
+		t.Fatal(err)
+	}
+	second := e.RecruiterScan()
+	if second.More || second.At == 0 || second.Found != 45 {
+		t.Errorf("after the second look: %+v", second)
+	}
+	if n := e.S.Count(`SELECT COUNT(*) FROM people WHERE source = 'mail'`); n != 45 {
+		t.Errorf("%d recruiters, want 45", n)
+	}
+	// What the look-alike claimed changed nothing already held.
+	if after, _ := e.S.Company(acme.ID); after.Site != acme.Site || after.State != acme.State || after.BoardKind != acme.BoardKind {
+		t.Errorf("Acme Corp changed: %+v", after)
+	}
+	if p, _ := e.S.Person(leeID); p.Email != "" || p.Phone != "" {
+		t.Errorf("Lee Park was changed by a stranger's mail: %+v", p)
+	}
+	if n := e.S.Count(`SELECT COUNT(*) FROM people WHERE email = 'lee@lookalike.example'`); n != 0 {
+		t.Error("the look-alike became a person")
+	}
+}

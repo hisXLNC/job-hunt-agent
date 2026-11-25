@@ -25,9 +25,24 @@ import (
 
 // RecruiterScan is how the last look through the mail went.
 type RecruiterScan struct {
-	At    int64  `json:"at"`
+	At    int64  `json:"at"` // the last look that covered everything up to then
 	Found int    `json:"found"`
 	Note  string `json:"note,omitempty"`
+	// TriedAt is the last look, finished or not; More says senders were left
+	// for the next look, which then comes soon.
+	TriedAt int64 `json:"tried_at,omitempty"`
+	More    bool  `json:"more,omitempty"`
+}
+
+// recruiterScanDue says whether it is time to look through the mail again:
+// a week after a whole look, an hour after one that left senders for later
+// or failed.
+func (e *Engine) recruiterScanDue() bool {
+	s, now := e.RecruiterScan(), e.Now()
+	if now.Sub(time.Unix(s.TriedAt, 0)) < time.Hour {
+		return false
+	}
+	return s.More || s.Note != "" || now.Sub(time.Unix(s.At, 0)) > 7*24*time.Hour
 }
 
 const (
@@ -109,8 +124,18 @@ func digitsOf(s string) string {
 	}, s)
 }
 
+// sigPart is the signature end of what signatureText made.
+func sigPart(text string) string {
+	if i := strings.LastIndex(text, "\n[…]\n"); i >= 0 {
+		return text[i:]
+	}
+	lines := strings.Split(text, "\n")
+	return strings.Join(lines[max(len(lines)-8, 0):], "\n")
+}
+
 // checkedPhone keeps a phone number only when the signature itself has it.
 func checkedPhone(claimed, text string) string {
+	text = sigPart(text)
 	for _, p := range []string{claimed, phoneRe.FindString(text)} {
 		p = oneLine(p)
 		d := digitsOf(p)
@@ -121,8 +146,9 @@ func checkedPhone(claimed, text string) string {
 	return ""
 }
 
-// checkedLinkedIn keeps a profile link only when the message has it.
+// checkedLinkedIn keeps a profile link only when the signature has it.
 func checkedLinkedIn(claimed, text string) string {
+	text = sigPart(text)
 	for _, l := range []string{claimed, linkedInRe.FindString(text)} {
 		l = strings.TrimSpace(l)
 		if l == "" || !linkedInRe.MatchString(l) || linkedInRe.FindString(l) != l || !strings.Contains(strings.ToLower(text), strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(l, "https://"), "http://"))) {
@@ -160,6 +186,7 @@ func (e *Engine) ScanRecruiters(ctx context.Context) error {
 		return nil
 	}
 	scan := e.RecruiterScan()
+	scan.TriedAt = e.Now().Unix()
 	fail := func(err error) error {
 		scan.Note = err.Error()
 		e.S.Set(recruiterScanKey, scan)
@@ -258,13 +285,13 @@ func (e *Engine) ScanRecruiters(ctx context.Context) error {
 	// Only senders whose mail looks like it is about work are opened.
 	var list []*senderSeen
 	for _, s := range senders {
-		match := e.matchMail(s.name, s.addr, s.subject)
-		if hiringRe.MatchString(s.subject) || match.companyID != 0 {
+		if hiringRe.MatchString(s.subject) || e.matchMail(s.name, s.addr, s.subject).companyID != 0 {
 			list = append(list, s)
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].at > list[j].at })
-	if len(list) > scanSenders {
+	more := len(list) > scanSenders
+	if more {
 		list = list[:scanSenders]
 	}
 	var asks []brain.Sender
@@ -341,7 +368,12 @@ func (e *Engine) ScanRecruiters(ctx context.Context) error {
 	}
 
 	e.S.Set(judgedKey, judged)
-	scan.At, scan.Found, scan.Note = now.Unix(), scan.Found+len(found), ""
+	// A look that left senders for later keeps its window, so the rest of
+	// the two years is still looked through; the senders judged are skipped.
+	scan.Found, scan.Note, scan.More = scan.Found+len(found), "", more || ctx.Err() != nil
+	if !scan.More {
+		scan.At = now.Unix()
+	}
 	e.S.Set(recruiterScanKey, scan)
 	if len(found) > 0 {
 		e.S.Log(store.Activity{Kind: "people", Text: fmt.Sprintf("Found %s in your mail", countWord(len(found), "recruiter or hiring person"))})
@@ -379,20 +411,28 @@ func (e *Engine) keepRecruiter(s *senderSeen, g brain.SenderReading, text string
 			}
 		}
 	}
+	// An employer already on the list is used as it is: what a message
+	// claims never changes it. Only one this look adds gets the sender's
+	// site and has its board looked for.
 	var co store.Company
+	created := false
 	if company != "" {
-		site := ""
-		if !domainIn(domain, freeMail) {
-			site = "https://" + domain
+		if c, err := e.S.CompanyByName(company); err == nil {
+			if c.State == "muted" {
+				return 0, false
+			}
+			co = c
+		} else {
+			site := ""
+			if !domainIn(domain, freeMail) {
+				site = "https://" + domain
+			}
+			c, fresh, err := e.S.UpsertCompany(store.Company{Name: company, Site: site, State: "suggested", Source: "mail"})
+			if err != nil || c.State == "muted" {
+				return 0, false
+			}
+			co, created = c, fresh
 		}
-		c, _, err := e.S.UpsertCompany(store.Company{Name: company, Site: site, State: "suggested", Source: "mail"})
-		if err != nil {
-			return 0, false
-		}
-		if c.State == "muted" {
-			return 0, false
-		}
-		co = c
 	}
 	kind := "recruiter"
 	if g.Kind == "manager" {
@@ -403,24 +443,14 @@ func (e *Engine) keepRecruiter(s *senderSeen, g brain.SenderReading, text string
 		Why:   clipText("Wrote to you on "+when+": “"+plainLabel(s.subject, 120)+"”", 200),
 		Email: s.addr, EmailSure: "sure", URL: checkedLinkedIn(g.LinkedIn, text), Phone: checkedPhone(g.Phone, text),
 		Source: "mail", State: "new", KnowsYouAt: s.at}
-	id, isNew, err := e.S.AddPerson(p)
-	if err != nil {
+	// Someone of that name is already there: a message signing with their
+	// name does not change them (adding would fill in their empty details).
+	if e.S.Count(`SELECT COUNT(*) FROM people WHERE (lower(name) = lower(?) AND company_id = ?) OR (? != '' AND url = ?)`, p.Name, p.CompanyID, p.URL, p.URL) > 0 {
 		return 0, false
 	}
-	if !isNew {
-		// The same person by name or profile: fill in what was missing.
-		if got, err := e.S.Person(id); err == nil {
-			if got.Email == "" {
-				got.Email, got.EmailSure = p.Email, "sure"
-			}
-			if got.Phone == "" {
-				got.Phone = p.Phone
-			}
-			if got.URL == "" {
-				got.URL = p.URL
-			}
-			e.S.SavePerson(got)
-		}
+	id, isNew, err := e.S.AddPerson(p)
+	if err != nil || !isNew {
+		return 0, false
 	}
 	e.S.Log(store.Activity{Kind: "people", PersonID: id, CompanyID: co.ID, Text: "Found in your mail: " + name + ", " + map[string]string{"recruiter": "a recruiter", "manager": "hiring"}[kind]})
 	if co.ID != 0 {
@@ -432,6 +462,9 @@ func (e *Engine) keepRecruiter(s *senderSeen, g brain.SenderReading, text string
 				n++
 			}
 		}
+	}
+	if !created {
+		return 0, true
 	}
 	return co.ID, true
 }

@@ -144,12 +144,26 @@ func realMsgID(id string) bool {
 	return !strings.HasPrefix(id, "uid:") && !strings.HasPrefix(id, "paste:") && msgIDRe.MatchString(id)
 }
 
-// latestMsg is the newest real message filed under a role or from a person.
-func (e *Engine) latestMsg(where string, id int64, prefer string) (string, int64) {
-	rows, _ := e.S.Pairs(`SELECT msg_id, id FROM mails WHERE `+where+` = ? ORDER BY (kind = ?) DESC, at DESC LIMIT 20`, id, prefer)
+var rePrefixRe = regexp.MustCompile(`(?i)^\s*((re|aw|fwd?|tr)\s*:\s*)+`)
+
+// sameSubject reports whether two subjects are one conversation's.
+func sameSubject(a, b string) bool {
+	a, b = oneLine(rePrefixRe.ReplaceAllString(a, "")), oneLine(rePrefixRe.ReplaceAllString(b, ""))
+	return a != "" && strings.EqualFold(a, b)
+}
+
+// answered finds the message, filed under a role or from a person, that an
+// outgoing one answers: only one from the person it goes to, under the same
+// subject, so what the person sees is what is sent.
+func (e *Engine) answered(where string, id int64, to, subject string) (string, int64) {
+	if to == "" {
+		return "", 0
+	}
+	rows, _ := e.S.Pairs(`SELECT msg_id || char(0) || subject, id FROM mails WHERE `+where+` = ? AND lower(from_addr) = lower(?) ORDER BY at DESC LIMIT 20`, id, to)
 	for _, r := range rows {
-		if realMsgID(r.Label) {
-			return r.Label, int64(r.N)
+		msgID, subj, _ := strings.Cut(r.Label, "\x00")
+		if realMsgID(msgID) && sameSubject(subj, subject) {
+			return msgID, int64(r.N)
 		}
 	}
 	return "", 0
@@ -157,6 +171,7 @@ func (e *Engine) latestMsg(where string, id int64, prefer string) (string, int64
 
 func (e *Engine) outFor(o Outgoing) (outFor, error) {
 	var f outFor
+	to, _ := oneAddress(o.To)
 	switch o.Kind {
 	case "mail":
 		m, err := e.S.Mail(o.ID)
@@ -174,8 +189,7 @@ func (e *Engine) outFor(o Outgoing) (outFor, error) {
 			return f, err
 		}
 		f.roleID, f.companyID = r.ID, r.CompanyID
-		prefer := map[string]string{"noreply": "rejection", "offer": "offer", "chase": "receipt"}[o.Kind]
-		f.thread, f.mailID = e.latestMsg("role_id", r.ID, prefer)
+		f.thread, f.mailID = e.answered("role_id", r.ID, to, o.Subject)
 		return f, nil
 	case "thanks":
 		t, err := e.S.Talk(o.ID)
@@ -193,10 +207,10 @@ func (e *Engine) outFor(o Outgoing) (outFor, error) {
 		return f, errors.New("unknown kind of message")
 	}
 	if f.personID != 0 {
-		f.thread, f.mailID = e.latestMsg("person_id", f.personID, "person")
+		f.thread, f.mailID = e.answered("person_id", f.personID, to, o.Subject)
 	}
 	if f.thread == "" && f.roleID != 0 {
-		f.thread, f.mailID = e.latestMsg("role_id", f.roleID, "interview")
+		f.thread, f.mailID = e.answered("role_id", f.roleID, to, o.Subject)
 	}
 	if f.roleID != 0 {
 		if r, err := e.S.Role(f.roleID); err == nil {
@@ -285,6 +299,45 @@ func draftsBox(c *imapConn, set MailSet) string {
 	return "Drafts"
 }
 
+// keepWording stores the text as the person last changed it, on the thing it
+// belongs to, so what was saved or sent is what the page shows.
+func (e *Engine) keepWording(o Outgoing) error {
+	subject, body := oneLine(o.Subject), strings.TrimSpace(o.Body)
+	if body == "" {
+		return errors.New("the message is empty")
+	}
+	switch o.Kind {
+	case "mail":
+		m, err := e.S.Mail(o.ID)
+		if err != nil {
+			return err
+		}
+		m.Draft = body
+		return e.S.SaveMail(m)
+	case "chase":
+		return e.SaveChase(o.ID, subject, body)
+	case "thanks":
+		return e.SaveThanks(o.ID, subject, body)
+	case "note":
+		return e.S.SaveNoteText(o.ID, subject, body)
+	case "noreply":
+		var n NoReply
+		if ok, err := e.S.Doc(o.ID, "noreply", &n); err != nil || !ok {
+			return store.ErrNotFound
+		}
+		n.Subject, n.Body = subject, body
+		return e.S.SaveDoc(o.ID, "noreply", n)
+	case "offer":
+		var d OfferDoc
+		if ok, err := e.S.Doc(o.ID, "offer", &d); err != nil || !ok {
+			return store.ErrNotFound
+		}
+		d.Advice.Subject, d.Advice.Reply = subject, body
+		return e.S.SaveDoc(o.ID, "offer", d)
+	}
+	return errors.New("unknown kind of message")
+}
+
 // SaveDraft puts the message in the mailbox's Drafts, in the thread of the
 // message it answers. It is not sent: it waits there for the person. A
 // draft saved again for the same thing replaces the one before.
@@ -295,6 +348,9 @@ func (e *Engine) SaveDraft(ctx context.Context, o Outgoing) error {
 	}
 	f, err := e.outFor(o)
 	if err != nil {
+		return err
+	}
+	if err := e.keepWording(o); err != nil {
 		return err
 	}
 	msg, msgID, err := e.buildMessage(set, o, f)
@@ -404,6 +460,9 @@ func (e *Engine) SendMail(ctx context.Context, o Outgoing) error {
 	if err != nil {
 		return err
 	}
+	if err := e.keepWording(o); err != nil {
+		return err
+	}
 	// The same text to the same person twice within ten minutes is a second
 	// press, not a second message.
 	sum := sha256.Sum256([]byte(to + "\x00" + oneLine(o.Subject) + "\x00" + strings.TrimSpace(o.Body)))
@@ -424,7 +483,7 @@ func (e *Engine) SendMail(ctx context.Context, o Outgoing) error {
 	switch o.Kind {
 	case "mail":
 		if m, err := e.S.Mail(o.ID); err == nil {
-			m.State, m.Draft = "done", strings.TrimSpace(o.Body)
+			m.State = "done"
 			e.S.SaveMail(m)
 		}
 	case "chase":

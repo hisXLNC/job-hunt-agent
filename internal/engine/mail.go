@@ -506,7 +506,7 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 				continue
 			}
 			if match.handled {
-				if match.personID != 0 {
+				if p, err := e.S.Person(match.personID); err == nil && (p.Kind == "recruiter" || p.Kind == "manager") {
 					labels[labelRecruiters] = append(labels[labelRecruiters], h.uid)
 				}
 				continue
@@ -556,7 +556,7 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 	if taken > 0 {
 		e.S.Log(store.Activity{Kind: "mail", Text: fmt.Sprintf("Read %d new message%s about your search", taken, plural(taken))})
 	}
-	if set.Recruiters && now.Sub(time.Unix(e.RecruiterScan().At, 0)) > 7*24*time.Hour && !e.Busy("recruiters") {
+	if set.Recruiters && e.recruiterScanDue() && !e.Busy("recruiters") {
 		e.Go("recruiters", "Looking through your mail for recruiters", func(ctx context.Context) error { return e.ScanRecruiters(ctx) })
 	}
 	return nil

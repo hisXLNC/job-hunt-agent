@@ -25,7 +25,7 @@ function chase(d) {
   if (c?.sent_at) return html`<div class="card row"><div class="grow"><h4>You followed up ${ago(c.sent_at)}</h4><p class="s m">One follow-up is enough. If they answer, it shows under Replies.</p></div></div>`;
   if (c?.body && !c.dropped_at) return html`<div class="card col" style="gap:10px;border-color:var(--warn)">
     <div class="row"><div class="grow"><div class="eb">Follow up</div><h3 style="margin-top:4px">${quiet}</h3></div>${c.to ? html`<span class="s m">To ${c.to}${c.email ? html` · ${c.email}` : ''}</span>` : ''}</div>
-    <form data-act="chasesave" class="col" style="gap:6px">${toField(c.email)}<input type="text" name="subject" value="${c.subject}" aria-label="Subject"><textarea name="text" rows="8" aria-label="Your follow-up">${c.body}</textarea>
+    <form data-act="chasesave" class="col" style="gap:6px">${toField(c.email)}<input type="text" name="subject" value="${replySubject(d.mail, c.email, c.subject)}" aria-label="Subject"><textarea name="text" rows="8" aria-label="Your follow-up">${c.body}</textarea>
       <div class="row wrap" style="gap:6px"><span class="xs m grow" style="min-width:200px">Job Hunt wrote it; you send it, from your own mail.</span>
         <button class="btn sm">Save</button><button type="button" class="btn sm" data-act="chasecopy">Copy</button>
         <button type="button" class="btn sm" data-act="chasemail" title="Opens a new message in your mail program with this text in it. You press Send.">Open in my mail</button>${outButtons('chase', r.id)}
@@ -34,6 +34,14 @@ function chase(d) {
   if (!d.chase_due) return '';
   return html`<div class="card row" style="border-color:var(--warn)"><div class="grow"><h4>${quiet}</h4><p class="s m">One short follow-up is normal; after that, let it go. Job Hunt writes it; you send it.</p></div>
     <button class="btn p sm" data-act="chase" data-busy="Writing…">Write follow-up</button><button class="btn sm ghost" data-act="chasedrop">Let it go</button></div>`;
+}
+// Sent to someone who wrote about this role, a message goes into their thread
+// under their subject, as Gmail threads it; the field shows what is sent.
+function replySubject(mails, to, own) {
+  if (!canOut() || !to) return own || '';
+  const m = (mails || []).find(x => x.from_addr && x.from_addr.toLowerCase() === to.toLowerCase() && x.subject);
+  if (!m || /^re:/i.test(own || '')) return own || '';
+  return /^re:/i.test(m.subject) ? m.subject : 'Re: ' + m.subject;
 }
 const mailAddr = s => (/^[^\s@<>"',;:?&%#]+@[^\s@<>"',;:?&%#]+\.[^\s@<>"',;:?&%#]+$/.test(s || '') ? s : '');
 
@@ -211,7 +219,7 @@ function afterNo(d) {
   if (r.closed !== 'rejected') return '';
   if (!n) return html`<div class="card row" style="gap:12px"><div class="grow"><h4>They said no</h4><p class="s m">A short, gracious reply keeps the door open for the next role there. Job Hunt writes it; you send it.</p></div><button class="btn sm" data-act="noreply" data-busy="Writing…">Write a reply</button></div>`;
   return html`<div class="card col" style="gap:8px"><div class="row"><div class="grow"><div class="eb">They said no</div><h4 style="margin-top:4px">Your reply${n.to ? html` to ${n.to}` : ''}</h4></div><button class="btn sm ghost" data-act="noreply" data-busy="Writing…">Write it again</button></div>
-    ${canOut() ? outForm('noreply', r.id, { to: mailAddr(n.email), subject: n.subject, body: n.body }, mailAddr(n.email)) : html`<div class="quote s pre">${n.subject ? html`<b>${n.subject}</b>\n\n` : ''}${n.body}</div><div class="row" style="gap:6px"><button class="btn sm" data-act="noreplycopy">Copy</button><button class="btn sm" data-act="noreplymail">Open in my mail</button></div>`}</div>`;
+    ${canOut() ? outForm('noreply', r.id, { to: mailAddr(n.email), subject: replySubject(d.mail, n.email, n.subject), body: n.body }, mailAddr(n.email)) : html`<div class="quote s pre">${n.subject ? html`<b>${n.subject}</b>\n\n` : ''}${n.body}</div><div class="row" style="gap:6px"><button class="btn sm" data-act="noreplycopy">Copy</button><button class="btn sm" data-act="noreplymail">Open in my mail</button></div>`}</div>`;
 }
 
 // Practising the interview with Claude, in the assistant.
