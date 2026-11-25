@@ -2,6 +2,11 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.38
+
+- **About you, one line per group.** You, What to look for, Hard limits, What matters to you, Letters and follow-ups, and What Job Hunt does by itself each show what is set in one line. Each opens where it sits and saves on its own, so there is no long form with one Save at the bottom. The long list of nearby places is folded away. "Find a setting" opens the right group.
+- **Titles with a comma are kept whole.** Saving About you (or the first-run setup) split a title like "Director, Tax Technology" into "Director" and "Tax Technology". Titles now split only at line breaks. If you saved your titles before, look at What to look for once and join any that were split.
+
 ## 26.11.37
 
 - **Career path is back**, as its own page under Progress. Claude reads your CV and shows three ways it can go from here: a step up, sideways, or the same level somewhere new. Each shows how well your CV fits today, what it pays now and in 3, 5 and 10 years (Claude's estimate; check it), what's missing, and **Search these titles**.

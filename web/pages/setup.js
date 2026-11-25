@@ -2,6 +2,7 @@ import { html, api, post, put, toast, app } from '../app.js';
 import { oldCard, oldActions } from '../old.js';
 
 const lines = s => (s || '').split(/\n|,/).map(x => x.trim()).filter(Boolean);
+const titleLines = s => (s || '').split('\n').map(x => x.trim()).filter(Boolean);
 const head = (n, title, done, sub) => html`<div class="row"><div class="num" style="${done ? 'background:var(--good-solid);color:#fff' : ''}">${done ? '✓' : n}</div><div class="grow"><h3>${title}</h3>${sub ? html`<p class="s m">${sub}</p>` : ''}</div></div>`;
 
 export default {
@@ -65,7 +66,7 @@ export default {
     },
     async finish({ f, data }) {
       const p = data.y.profile;
-      await put('profile', { ...p, titles: { level: lines(f.level), step_up: lines(f.step_up), sideways: lines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid) });
+      await put('profile', { ...p, titles: { level: titleLines(f.level), step_up: titleLines(f.step_up), sideways: titleLines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid) });
       await post('setup/finish');
       app.state = null;
       location.hash = '#/today';

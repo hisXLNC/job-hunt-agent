@@ -65,8 +65,8 @@ button.chip{cursor:pointer}
 .hr{height:1px;background:var(--line2)}
 .bar{height:8px;border-radius:6px;background:var(--line2);overflow:hidden}.bar i{display:block;height:100%;border-radius:6px;background:var(--accent)}
 .pilot .bar{height:5px;border-radius:5px;background:#2A3555;margin-top:9px}.pilot .bar i{background:#6C8BFF}
-.cols{display:grid;gap:18px;grid-template-columns:1fr 338px;align-items:start}
-.cols.wide{grid-template-columns:1fr 400px}
+.cols{display:grid;gap:18px;grid-template-columns:minmax(0,1fr) 338px;align-items:start}
+.cols.wide{grid-template-columns:minmax(0,1fr) 400px}
 .num{width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:grid;place-items:center;font-weight:700;flex:none;margin-top:2px}
 .big{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
 .stat{text-align:center;padding:0 16px}.stat+.stat{border-left:1px solid var(--line2)}
@@ -329,7 +329,7 @@ ol.steps{margin:0 0 0 20px;padding:0;display:flex;flex-direction:column;gap:5px;
 /* Connections: one row each, opening in place. */
 .foldhead{display:flex;align-items:center;gap:14px;padding:14px 18px;color:inherit;text-decoration:none}
 .foldhead:hover{text-decoration:none;background:var(--row-hover)}.fold:first-child .foldhead{border-radius:14px 14px 0 0}
-.foldname{width:190px;flex:none}.foldsum{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foldname{width:190px;flex:none}.foldsum{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .foldbody{padding:0 18px 18px 222px}
 .foldbody>.card,.foldbody>form.card{border:0;background:none;padding:0;box-shadow:none}
 .foldbody>.card>.row:first-child:has(h3),.foldbody>.card>h3:first-child,.foldbody>.card>div:first-child>h3:first-child{display:none}

@@ -3,6 +3,8 @@ import { oldCard, oldActions } from '../old.js';
 
 const TABS = [['', 'About you'], ['arriving', 'Arriving'], ['connections', 'Connections'], ['panel', 'Browser side panel'], ['app', 'The app and debugging']];
 const lines = s => (s || '').split(/\n|,/).map(x => x.trim()).filter(Boolean);
+// Titles are one per line and may hold a comma: "Director, Tax Technology".
+const titleLines = s => (s || '').split('\n').map(x => x.trim()).filter(Boolean);
 const WORK = { '': 'Not said yet', citizen: 'Yes, as a citizen', resident: 'Yes, as a permanent resident', permit: 'Yes, on a work permit', none: 'Not yet' };
 
 // What the "Find a setting" box knows: where each setting lives and the words
@@ -73,49 +75,75 @@ document.addEventListener('keydown', ev => {
 });
 document.addEventListener('click', ev => { if (!ev.target.closest('.setfind')) document.getElementById('setfound')?.setAttribute('hidden', ''); });
 
-function about(d) {
+// Which group of About you holds a field the settings search points at.
+const GROUP_OF = { name: 'me', rare: 'me', city: 'me', places: 'me', arrive_on: 'me', work_status: 'me', pay_floor: 'me', level: 'look', domain: 'look', avoid: 'look', wp_remote: 'look', max_age_days: 'limits', matters: 'matters', letter_style: 'letters', keep_fit: 'auto', may_prepare: 'auto' };
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
+const longDay = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const LETTER = { standard: 'Standard', formal: 'Formal', short: 'Short and direct', warm: 'Warm' };
+
+function about(d, route) {
   const p = d.profile;
   d.cvs ||= []; d.facts ||= []; d.answers ||= []; p.titles ||= {};
-  return html`<div class="cols wide"><div class="col" style="gap:14px">
-    <form data-act="saveprofile" class="card col" style="gap:12px" data-set="profile"><h3>You</h3>
-      <div class="grid2"><label class="field">Name<input type="text" name="name" value="${p.name}"></label><label class="field">How you describe yourself<input type="text" name="headline" value="${p.headline}"></label></div>
+  const hit = route.q.hl && SETTINGS.find(x => x.id === route.q.hl);
+  const open = route.q.open || (hit?.set === 'profile' ? GROUP_OF[hit.field] || '' : '');
+  const t = p.titles, nt = (t.level || []).length + (t.step_up || []).length + (t.sideways || []).length;
+  const wp = !p.workplaces?.length ? ['remote', 'hybrid', 'on site'] : p.workplaces.map(w => (w === 'onsite' ? 'on site' : w));
+  const near = (d.area?.length || 0) + (p.places || []).length;
+  const types = [['contract', 'contract'], ['part-time', 'part-time'], ['internship', 'internships']];
+  const hidden = types.filter(([k]) => (p.no_types || []).includes(k)).map(x => x[1]);
+  const limits = [p.max_age_days ? `Postings up to ${p.max_age_days === 1 ? '1 day' : p.max_age_days === 7 ? 'a week' : p.max_age_days === 14 ? '2 weeks' : p.max_age_days === 30 ? 'a month' : p.max_age_days + ' days'} old` : 'Any age of posting',
+    hidden.length ? `no ${hidden.join(', ')}` : 'contract, part-time and internships all shown', p.pay_strict && p.pay_floor ? 'nothing under your pay floor' : ''].filter(Boolean);
+  const sign = (p.signature || '').split('\n').map(x => x.trim()).filter(Boolean).join(' ');
+  const save = html`<div class="row" style="gap:8px;margin-top:4px"><button class="btn sm p">Save</button><a class="btn sm ghost" href="${with_(route, { open: '' })}">Cancel</a></div>`;
+  const form = (group, body) => html`<form data-act="saveprofile" data-group="${group}" class="col" style="gap:12px" data-set="profile">${body}${save}</form>`;
+  const rows = [
+    ['me', 'You', ['', p.name || 'No name yet'], [p.headline, p.city ? `${[p.city, p.country].filter(Boolean).join(', ')}${near ? ` (and ${plural(near, 'nearby place')})` : ''}` : 'No city yet', p.arrive_on ? `arriving ${longDay(p.arrive_on)}` : '', `right to work ${p.work_status ? WORK[p.work_status].replace(/^Yes, /, '').toLowerCase() : 'not said yet'}`, p.pay_floor ? `pay floor ${p.pay_floor.toLocaleString()}` : 'no pay floor'].filter(Boolean).join(' · '),
+      form('me', html`<div class="grid2"><label class="field">Name<input type="text" name="name" value="${p.name}"></label><label class="field">How you describe yourself<input type="text" name="headline" value="${p.headline}"></label></div>
       <label class="field">The one thing few other applicants have <span class="h">Job Hunt leads with this.</span><input type="text" name="rare" value="${p.rare}"></label>
       <div class="grid3"><label class="field">City you want to work in<input type="text" name="city" value="${p.city}"></label><label class="field">Country<input type="text" name="country" value="${p.country}"></label><label class="field">Where you live now<input type="text" name="home" value="${p.home}"></label></div>
-      <label class="field">Nearby places that also count <span class="h">${d.area?.length ? html`${p.city} already includes ${d.area.join(', ')}. Add any others here, comma-separated.` : 'Other towns you would work in. Comma-separated.'}</span><input type="text" name="places" value="${(p.places || []).join(', ')}" placeholder="${d.area?.length ? 'Hamilton, Guelph' : ''}"></label>
+      <label class="field">Nearby places that also count <span class="h">${d.area?.length ? html`<details style="display:inline"><summary style="display:inline;cursor:pointer;color:var(--accent)">${p.city} already includes ${d.area.length} places</summary> ${d.area.join(', ')}.</details> Add any others here, comma-separated.` : 'Other towns you would work in. Comma-separated.'}</span><input type="text" name="places" value="${(p.places || []).join(', ')}" placeholder="${d.area?.length ? 'Hamilton, Guelph' : ''}"></label>
       <div class="grid3"><label class="field">You arrive on <span class="h">Leave empty if you are there.</span><input type="date" name="arrive_on" value="${p.arrive_on}"></label>
         <label class="field">Allowed to work there on arrival<select name="work_status">${Object.entries(WORK).map(([k, v]) => html`<option value="${k}" ${p.work_status === k ? 'selected' : ''}>${v}</option>`)}</select></label>
         <label class="field">Lowest yearly salary<input type="number" name="pay_floor" value="${p.pay_floor || ''}" placeholder="No floor"></label></div>
-      <label class="row s" style="font-weight:500"><input type="checkbox" name="start_early" ${p.start_early ? 'checked' : ''}> Open to starting remotely before you arrive</label>
-      <div class="hr"></div><h3>What to look for</h3><p class="s m">One title per line. All three groups are searched equally often.</p>
-      <div class="grid3"><label class="field">At your level<textarea name="level" rows="4">${(p.titles.level || []).join('\n')}</textarea></label><label class="field">A step up<textarea name="step_up" rows="4">${(p.titles.step_up || []).join('\n')}</textarea></label><label class="field">Sideways<textarea name="sideways" rows="4">${(p.titles.sideways || []).join('\n')}</textarea></label></div>
+      <label class="row s" style="font-weight:500"><input type="checkbox" name="start_early" ${p.start_early ? 'checked' : ''}> Open to starting remotely before you arrive</label>`)],
+    ['look', 'What to look for', [nt ? 'good' : 'warn', nt ? plural(nt, 'title') : 'No titles'], [`${(t.level || []).length} at your level, ${(t.step_up || []).length} a step up, ${(t.sideways || []).length} sideways`, p.domain?.length ? `field words: ${p.domain.join(', ')}` : '', p.avoid?.length ? `never: ${p.avoid.join(', ')}` : '', wp.join(', ')].filter(Boolean).join(' · '),
+      form('look', html`<p class="xs m">One title per line. All three groups are searched equally often. <a href="#/career">Career path</a> can add more.</p>
+      <div class="grid3"><label class="field">At your level<textarea name="level" rows="4">${(t.level || []).join('\n')}</textarea></label><label class="field">A step up<textarea name="step_up" rows="4">${(t.step_up || []).join('\n')}</textarea></label><label class="field">Sideways<textarea name="sideways" rows="4">${(t.sideways || []).join('\n')}</textarea></label></div>
       <div class="grid2"><label class="field">Words that mark your field <span class="h">A title with one of these is always read. Comma-separated.</span><input type="text" name="domain" value="${(p.domain || []).join(', ')}"></label>
         <label class="field">Never show <span class="h">Titles or employers. Comma-separated.</span><input type="text" name="avoid" value="${(p.avoid || []).join(', ')}"></label></div>
-      <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Ways of working:</span>${['remote', 'hybrid', 'onsite'].map(w => html`<label class="row s" style="gap:5px"><input type="checkbox" name="wp_${w}" ${!p.workplaces?.length || p.workplaces.includes(w) ? 'checked' : ''}> ${w === 'onsite' ? 'On site' : w[0].toUpperCase() + w.slice(1)}</label>`)}</div>
-      <div class="hr"></div><h3>Hard limits</h3><p class="s m">A posting that breaks one of these is set aside without being read. You can still see them under Roles → Set aside.</p>
-      <div class="grid3"><label class="field">Posted no longer ago than<select name="max_age_days">${[[0, 'Any age'], [1, '1 day'], [3, '3 days'], [7, '1 week'], [14, '2 weeks'], [30, '1 month']].map(([v, t]) => html`<option value="${v}" ${(p.max_age_days || 0) === v ? 'selected' : ''}>${t}</option>`)}</select></label>
-        <label class="row s" style="gap:6px;font-weight:500;align-self:end;height:36px"><input type="checkbox" name="pay_strict" ${p.pay_strict ? 'checked' : ''}> Set aside roles that pay under your floor</label></div>
-      <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Never show:</span>${[['contract', 'Contract'], ['part-time', 'Part-time'], ['internship', 'Internships']].map(([k, t]) => html`<label class="row s" style="gap:5px"><input type="checkbox" name="no_${k}" ${(p.no_types || []).includes(k) ? 'checked' : ''}> ${t}</label>`)}</div>
-      <div class="hr"></div><h3>Letters, follow-ups and your week</h3>
-      <div class="grid3"><label class="field">Letter style <span class="h">You can change it for any one role.</span><select name="letter_style">${[['standard', 'Standard'], ['formal', 'Formal: banks, government, law'], ['short', 'Short and direct'], ['warm', 'Warm and personal']].map(([k, t]) => html`<option value="${k}" ${p.letter_style === k ? 'selected' : ''}>${t}</option>`)}</select></label>
+      <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Ways of working:</span>${['remote', 'hybrid', 'onsite'].map(w => html`<label class="row s" style="gap:5px"><input type="checkbox" name="wp_${w}" ${!p.workplaces?.length || p.workplaces.includes(w) ? 'checked' : ''}> ${w === 'onsite' ? 'On site' : w[0].toUpperCase() + w.slice(1)}</label>`)}</div>`)],
+    ['limits', 'Hard limits', p.max_age_days || hidden.length || p.pay_strict ? ['blue', 'On'] : ['', 'None'], limits.join(' · '),
+      form('limits', html`<p class="xs m">A posting that breaks one of these is set aside without being read. You can still see them under Roles → Set aside.</p>
+      <div class="grid3"><label class="field">Posted no longer ago than<select name="max_age_days">${[[0, 'Any age'], [1, '1 day'], [3, '3 days'], [7, '1 week'], [14, '2 weeks'], [30, '1 month']].map(([v, x]) => html`<option value="${v}" ${(p.max_age_days || 0) === v ? 'selected' : ''}>${x}</option>`)}</select></label>
+        <label class="row s" style="gap:6px;font-weight:500;align-self:end;height:36px"><input type="checkbox" name="pay_strict" ${p.pay_strict ? 'checked' : ''}> Set aside roles that pay under your floor${p.pay_floor ? ` (${p.pay_floor.toLocaleString()})` : ' (set it under You)'}</label></div>
+      <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Never show:</span>${[['contract', 'Contract'], ['part-time', 'Part-time'], ['internship', 'Internships']].map(([k, x]) => html`<label class="row s" style="gap:5px"><input type="checkbox" name="no_${k}" ${(p.no_types || []).includes(k) ? 'checked' : ''}> ${x}</label>`)}</div>`)],
+    ['matters', 'What matters to you', p.matters ? ['good', 'Written'] : ['warn', 'Not yet'], p.matters ? `“${p.matters.length > 150 ? p.matters.slice(0, 150) + '…' : p.matters}”` : 'In your own words; Claude weighs every role by it',
+      form('matters', html`<label class="field">What matters to you in a job <span class="h">In your own words. Claude weighs every role by it.</span><textarea name="matters" rows="3" maxlength="1500" placeholder="A team that ships; no on-call; within 40 minutes by train; a manager who was an accountant.">${p.matters || ''}</textarea></label>`)],
+    ['letters', 'Letters and follow-ups', ['', LETTER[p.letter_style] || 'Standard'], [(p.chase_days ?? 8) ? `Follow up after ${p.chase_days ?? 8} days` : 'No follow-ups', sign ? `signed “${sign}”` : 'signed “Sincerely,” and your name', (p.weekly_goal ?? 10) ? `goal ${p.weekly_goal ?? 10} applications a week` : 'no weekly goal'].join(' · '),
+      form('letters', html`<div class="grid3"><label class="field">Letter style <span class="h">You can change it for any one role.</span><select name="letter_style">${[['standard', 'Standard'], ['formal', 'Formal: banks, government, law'], ['short', 'Short and direct'], ['warm', 'Warm and personal']].map(([k, x]) => html`<option value="${k}" ${p.letter_style === k ? 'selected' : ''}>${x}</option>`)}</select></label>
         <label class="field">Follow up on an application <span class="h">When there has been no reply.</span><select name="chase_days">${[...new Set([0, 5, 8, 10, 14, 21, p.chase_days ?? 8])].sort((a, b) => a - b).map(n => html`<option value="${n}" ${(p.chase_days ?? 8) === n ? 'selected' : ''}>${n ? `After ${n} days` : 'Never'}</option>`)}</select></label>
         <label class="field">Applications a week <span class="h">Your goal. 0 for none.</span><input type="number" name="weekly_goal" min="0" max="100" value="${p.weekly_goal ?? 10}"></label></div>
-      <label class="field" style="max-width:420px">How you sign a letter <span class="h">One line each. Leave empty for "Sincerely," and your name.</span><textarea name="signature" rows="2" placeholder="Kind regards,&#10;Sam Rivera, CPA">${p.signature || ''}</textarea></label>
-      <div class="grid3" data-set="fit"><label class="field">Fit a role needs <span class="h">Under this, it is set aside. 55 unless you say.</span><input type="number" name="keep_fit" min="30" max="95" value="${p.keep_fit ?? 55}"></label>
+      <label class="field" style="max-width:420px">How you sign a letter <span class="h">One line each. Leave empty for "Sincerely," and your name.</span><textarea name="signature" rows="2" placeholder="Kind regards,&#10;Sam Rivera, CPA">${p.signature || ''}</textarea></label>`)],
+    ['auto', 'What Job Hunt does by itself', ['', `Fit ${p.keep_fit ?? 55}+`], [`Keeps roles from fit ${p.keep_fit ?? 55}`, p.may_prepare === 'ask' ? 'asks before writing anything' : `writes the CV and letter straight away from fit ${p.prepare_fit ?? 70}`, p.prepare_max ? `at most ${p.prepare_max} per search` : 'no limit per search'].join(' · '),
+      form('auto', html`<div class="grid3" data-set="fit"><label class="field">Fit a role needs <span class="h">Under this, it is set aside. 55 unless you say.</span><input type="number" name="keep_fit" min="30" max="95" value="${p.keep_fit ?? 55}"></label>
         <label class="field">Write documents from fit <span class="h">85 for strong fits only; the same as the first for all.</span><input type="number" name="prepare_fit" min="30" max="100" value="${p.prepare_fit ?? 70}"></label>
         <label class="field">Most to write in one search <span class="h">0 for no limit. The rest wait on Today.</span><input type="number" name="prepare_max" min="0" max="200" value="${p.prepare_max || 0}"></label></div>
-      <label class="field">What matters to you in a job <span class="h">In your own words. Claude weighs every role by it.</span><textarea name="matters" rows="2" maxlength="1500" placeholder="A team that ships; no on-call; within 40 minutes by train; a manager who was an accountant.">${p.matters || ''}</textarea></label>
       <label class="field" style="max-width:420px">When a strong role appears<select name="may_prepare"><option value="do" ${p.may_prepare !== 'ask' ? 'selected' : ''}>Write the CV and letter straight away</option><option value="ask" ${p.may_prepare === 'ask' ? 'selected' : ''}>Ask me before writing anything</option></select></label>
-      <p class="xs m">Job Hunt never submits an application or sends a message. That is always you.</p>
-      <div class="row"><button class="btn p">Save</button></div></form>
-  </div>
+      <p class="xs m">Job Hunt never submits an application or sends a message. That is always you.</p>`)],
+  ];
+  return html`<div class="cols wide"><div class="card" style="padding:0;align-self:start">${rows.map(([key, name, [tone, word], sum, body], i) => {
+      const on = open === key;
+      return html`<div class="fold ${on ? 'open' : ''}" style="${i ? 'border-top:1px solid var(--line2)' : ''}">
+        <a class="foldhead" href="${with_(route, { open: on ? '' : key, hl: '' })}"><b class="foldname">${name}</b><span class="chip ${tone}">${word}</span><span class="grow s m foldsum">${sum}</span><span class="btn sm">${on ? 'Close' : 'Change'}</span></a>
+        ${on ? html`<div class="foldbody">${body}</div>` : ''}</div>`; })}</div>
   <div class="col" style="gap:14px">
-    <div class="card" data-set="cvs"><h4>Your CVs</h4><div class="col" style="margin-top:10px;gap:10px">${d.cvs.map(c => html`<div class="row"><div class="grow"><b class="s">${c.name}</b><div class="xs m">${c.filename} · added ${rel(c.created_at)}</div></div><a class="btn sm" href="/api/cvs/${c.id}/file">Download</a>${d.cvs.length > 1 ? html`<button class="btn sm ghost danger" data-act="delcv" data-id="${c.id}" data-confirm="Remove this CV?">Remove</button>` : ''}</div>`)}</div>
-      <label class="btn sm" style="margin-top:10px">Add another CV<input type="file" accept=".docx,.pdf,.txt,.md" hidden data-on="change" data-act="addcv"></label><p class="xs m" style="margin-top:6px">Word or PDF. Reading it takes about a minute.</p></div>
+    <div class="card" data-set="cvs"><div class="row"><h4 class="grow">Your CVs</h4><label class="btn sm">Add another<input type="file" accept=".docx,.pdf,.txt,.md" hidden data-on="change" data-act="addcv"></label></div><div class="col" style="margin-top:10px;gap:10px">${d.cvs.map(c => html`<div class="row"><div class="grow"><b class="s">${c.name}</b><div class="xs m">${c.filename} · added ${rel(c.created_at)}</div></div><a class="btn sm" href="/api/cvs/${c.id}/file">Download</a>${d.cvs.length > 1 ? html`<button class="btn sm ghost danger" data-act="delcv" data-id="${c.id}" data-confirm="Remove this CV?">Remove</button>` : ''}</div>`)}</div>
+      <p class="xs m" style="margin-top:8px">Word or PDF. Reading one takes about a minute.</p></div>
     <div class="card" data-set="facts"><h4>What Job Hunt knows about you</h4><p class="xs m" style="margin-top:3px">Facts beyond your CV. Used wherever they help, never invented.</p>
       <div class="col s" style="margin-top:8px;gap:6px">${d.facts.map(f => html`<div class="row top-al"><span class="grow">${f.text}</span><button class="btn sm ghost" data-act="delfact" data-id="${f.id}" aria-label="Forget this">Forget</button></div>`)}</div>
       <form data-act="addfact" class="row" style="margin-top:8px;gap:6px"><input type="text" name="text" placeholder="I am a CPA in good standing" aria-label="A fact about you"><button class="btn sm">Add</button></form></div>
-    <div class="card" data-set="answers"><h4>Answers saved for forms</h4><p class="xs m" style="margin-top:3px">Asked once, reused on every application.</p>
-      <div class="col s" style="margin-top:8px;gap:8px">${d.answers.map(a => html`<div class="row top-al"><div class="grow"><b>${a.question}</b><div class="ink2">${a.answer}</div></div><button class="btn sm ghost" data-act="delanswer" data-id="${a.id}">Remove</button></div>`)}${!d.answers.length ? html`<span class="m">None yet.</span>` : ''}</div></div>
+    <div class="card" data-set="answers"><h4>Answers saved for forms</h4><p class="xs m" style="margin-top:3px">Asked once, reused on every application.${d.answers.length ? '' : ' None yet.'}</p>
+      ${d.answers.length ? html`<div class="col s" style="margin-top:8px;gap:8px">${d.answers.map(a => html`<div class="row top-al"><div class="grow"><b>${a.question}</b><div class="ink2">${a.answer}</div></div><button class="btn sm ghost" data-act="delanswer" data-id="${a.id}">Remove</button></div>`)}</div>` : ''}</div>
   </div></div>`;
 }
 
@@ -394,7 +422,7 @@ export default {
     const tab = route.parts[1] || '';
     return html`<div class="body"><div class="tabs">${TABS.map(([k, v]) => html`<a class="${k === tab ? 'on' : ''}" href="#/you${k ? '/' + k : ''}">${v}</a>`)}
         <div class="setfind"><input type="text" id="setfind" placeholder="Find a setting" aria-label="Find a setting" autocomplete="off" title="Type what you are looking for, such as dark, salary, backup or phone. Enter opens the first match."><div class="found" id="setfound" hidden></div></div></div>
-      ${tab === 'arriving' ? arriving(d) : tab === 'connections' ? connections(d, route) : tab === 'panel' ? panel(d) : tab === 'app' ? theApp(d, route) : about(d)}</div>`;
+      ${tab === 'arriving' ? arriving(d) : tab === 'connections' ? connections(d, route) : tab === 'panel' ? panel(d) : tab === 'app' ? theApp(d, route) : about(d, route)}</div>`;
   },
   // A setting found through the search box is brought into view and marked, once.
   after(root, d, route) {
@@ -446,14 +474,21 @@ export default {
       await put('schedule', { full, fast_minutes: +f.fast_minutes, from: +f.from, to: +f.to });
       toast('Saved. The next searches follow this.');
     },
-    async saveprofile({ f }) {
+    async saveprofile({ f, d, route }) {
+      // Each group sends only its own fields; the rest of the profile stays as it is.
       const wp = ['remote', 'hybrid', 'onsite'].filter(w => f['wp_' + w]);
-      await put('profile', { name: f.name, headline: f.headline, rare: f.rare, city: f.city, places: lines(f.places), country: f.country, home: f.home, arrive_on: f.arrive_on, work_status: f.work_status, pay_floor: +f.pay_floor || 0,
-        start_early: !!f.start_early, titles: { level: lines(f.level), step_up: lines(f.step_up), sideways: lines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid), workplaces: wp.length === 3 ? [] : wp, may_prepare: f.may_prepare,
-        letter_style: f.letter_style, signature: f.signature, chase_days: Math.max(0, +f.chase_days || 0), weekly_goal: Math.max(0, Math.round(+f.weekly_goal) || 0),
-        keep_fit: Math.min(95, Math.max(30, Math.round(+f.keep_fit) || 55)), prepare_fit: Math.min(100, Math.max(30, Math.round(+f.prepare_fit) || 70)), prepare_max: Math.max(0, Math.round(+f.prepare_max) || 0), matters: f.matters,
-        pay_strict: !!f.pay_strict, max_age_days: +f.max_age_days || 0, no_types: ['contract', 'part-time', 'internship'].filter(k => f['no_' + k]) });
+      const body = {
+        me: () => ({ name: f.name, headline: f.headline, rare: f.rare, city: f.city, places: lines(f.places), country: f.country, home: f.home, arrive_on: f.arrive_on, work_status: f.work_status, pay_floor: +f.pay_floor || 0, start_early: !!f.start_early }),
+        look: () => ({ titles: { level: titleLines(f.level), step_up: titleLines(f.step_up), sideways: titleLines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid), workplaces: wp.length === 3 ? [] : wp }),
+        limits: () => ({ pay_strict: !!f.pay_strict, max_age_days: +f.max_age_days || 0, no_types: ['contract', 'part-time', 'internship'].filter(k => f['no_' + k]) }),
+        matters: () => ({ matters: f.matters }),
+        letters: () => ({ letter_style: f.letter_style, signature: f.signature, chase_days: Math.max(0, +f.chase_days || 0), weekly_goal: Math.max(0, Math.round(+f.weekly_goal) || 0) }),
+        auto: () => ({ keep_fit: Math.min(95, Math.max(30, Math.round(+f.keep_fit) || 55)), prepare_fit: Math.min(100, Math.max(30, Math.round(+f.prepare_fit) || 70)), prepare_max: Math.max(0, Math.round(+f.prepare_max) || 0), may_prepare: f.may_prepare }),
+      }[d.group];
+      if (!body) return false;
+      await put('profile', body());
       toast('Saved. The next search uses this.');
+      location.hash = with_(route, { open: '' });
     },
     async addcv({ el }) { const file = el.files[0]; if (!file) return false; toast('Reading your CV. About a minute.'); await api('cvs?name=' + encodeURIComponent(file.name), { method: 'POST', raw: file }); toast('CV added'); },
     delcv: ({ d }) => del(`cvs/${d.id}`),
