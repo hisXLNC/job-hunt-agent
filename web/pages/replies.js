@@ -1,4 +1,5 @@
 import { html, api, post, put, del, ago, when, tile, toast, copy, listSize, endless, with_, employer, rel } from '../app.js';
+import { toField, outButtons, outActions } from '../outbox.js';
 
 const KINDS = { interview: ['Wants to talk', 'good'], assessment: ['Assessment', 'warn'], question: ['Asks you something', 'blue'], offer: ['Offer', 'good'], rejection: ['Said no', 'crit'], receipt: ['Received', ''], person: ['From a person', 'blue'], other: ['Other', ''] };
 const chip = k => { const [l, c] = KINDS[k] || [k, '']; return html`<span class="chip ${c}">${l}</span>`; };
@@ -18,7 +19,7 @@ function list(d, route) {
         <td class="s">${chip(m.kind)} <span class="ink2">${m.summary || m.subject}</span>${m.state === 'new' && m.next ? html`<div class="xs" style="margin-top:2px"><b>Next:</b> ${m.next}</div>` : ''}</td>
         <td class="s">${m.role_id ? html`<a href="#/roles/${m.role_id}">${m.role}</a>` : html`<span class="m">–</span>`}</td><td class="s m" style="white-space:nowrap">${rel(m.at)}</td>
         <td style="text-align:right"><a class="btn sm ${m.state === 'new' ? 'p' : ''}" href="#/replies/${m.id}">${m.state === 'new' ? 'Read and reply' : 'Open'}</a></td></tr>`)}</tbody></table></div>${endless('replies', (d.mail || []).length, d.total)}`
-      : html`<div class="card empty"><h3>${q.state || q.kind ? 'Nothing here' : 'Nothing is waiting for you'}</h3><p>When an employer or someone you wrote to answers, it shows up here with a drafted reply.</p></div>`}
+      : html`<div class="card empty"><h3>${q.state || q.kind ? 'Nothing here' : 'Nothing is waiting for you'}</h3><p>When an employer or someone you wrote to answers, it shows up here. Job Hunt writes a reply when you ask for one.</p></div>`}
   </div>
   <div class="col" style="gap:14px"><div class="card"><h4>Paste a message</h4><p class="xs m" style="margin-top:3px">Got a reply somewhere Job Hunt can't see? Paste it and it is read, filed and answered like the rest.</p>
     <form data-act="paste" data-busy="Reading…" class="col" style="margin-top:8px;gap:8px"><label class="field">From<input type="text" name="from" placeholder="Dana Lee &lt;dana@company.com&gt;"></label><label class="field">Subject<input type="text" name="subject"></label>
@@ -35,9 +36,12 @@ function one(m) {
       <div class="s pre" style="margin-top:12px;border-top:1px solid var(--line2);padding-top:12px">${m.body || 'The text of this message was not kept.'}</div></div>
   </div>
   <div class="col" style="gap:14px">
-    <div class="card col" style="gap:8px"><div class="eb">Your reply · draft</div><p class="xs m">Job Hunt wrote it; fill the gaps in [brackets]. It opens in your own mail program and you press send.</p>
-      <form data-act="savedraft" class="col" style="gap:8px"><textarea name="draft" rows="11" aria-label="Your reply">${m.draft}</textarea>
-        <div class="row wrap"><button type="button" class="btn p" data-act="copydraft">Copy</button>${mailto ? html`<a class="btn" href="${mailto}" data-act="openmail">Open in my mail</a>` : ''}<span class="grow"></span><button class="btn sm">Save</button></div></form></div>
+    ${m.draft ? html`<div class="card col" style="gap:8px"><div class="eb">Your reply · draft</div><p class="xs m">Job Hunt wrote it; fill the gaps in [brackets]. Nothing goes until you send it.</p>
+      <form data-act="savedraft" class="col" style="gap:8px">${toField(to)}${toField(to) ? html`<label class="field">Subject<input type="text" name="subject" value="${subj}"></label>` : ''}<textarea name="draft" rows="11" aria-label="Your reply">${m.draft}</textarea>
+        <div class="row wrap" style="gap:6px"><button type="button" class="btn ${outButtons('mail', m.id).s ? '' : 'p'}" data-act="copydraft">Copy</button>${mailto ? html`<a class="btn" href="${mailto}" data-act="openmail">Open in my mail</a>` : ''}${outButtons('mail', m.id)}<span class="grow"></span><button class="btn sm">Save</button></div></form>
+        <button type="button" class="link xs" style="align-self:flex-start" data-act="writereply" data-busy="Writing…" data-confirm="Write the reply again? What is in the box now is replaced.">Write it again</button></div>`
+      : html`<div class="card col" style="gap:8px"><div class="eb">Your reply</div><p class="s">Write a reply to ${m.from_name || m.from_addr || 'them'}?</p><p class="xs m">Job Hunt writes it only when you ask, and you send it.</p>
+        <div class="row"><button class="btn p" data-act="writereply" data-busy="Writing…">Write it</button></div></div>`}
     <div class="card col" style="gap:8px"><h4>After that</h4>
       ${m.kind === 'interview' || m.kind === 'person' || m.kind === 'offer' ? html`<a class="btn" href="#/interviews?role=${m.role_id || ''}&person=${m.person_id || ''}&mail=${m.id}">Add the conversation to Interviews</a>` : ''}
       ${m.state === 'new' ? html`<button class="btn" data-act="done">Done with this one</button>` : html`<button class="btn" data-act="undone">Needs me again</button>`}
@@ -59,10 +63,13 @@ export default {
     check: () => post('mail/check').then(() => toast('Checking your inbox')),
     async paste({ f }) { const r = await post('mail', f); toast('Read and filed'); if (r.id) { location.hash = `#/replies/${r.id}`; return false; } },
     savedraft: ({ route, f }) => put(`mail/${route.parts[1]}`, { draft: f.draft }).then(() => toast('Saved')),
+    writereply: ({ route }) => post(`mail/${route.parts[1]}/reply`),
+    ...outActions,
     copydraft: ({ el }) => { copy(el.closest('form').querySelector('textarea').value); return false; },
     openmail({ el, data }) {
-      const body = el.closest('form').querySelector('textarea').value, subj = /^re:/i.test(data.subject) ? data.subject : 'Re: ' + (data.subject || '');
-      location.href = `mailto:${encodeURIComponent(data.from_addr)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
+      const form = el.closest('form'), body = form.querySelector('textarea').value, to = form.querySelector('[name=to]')?.value || data.from_addr;
+      const subj = form.querySelector('[name=subject]')?.value || (/^re:/i.test(data.subject) ? data.subject : 'Re: ' + (data.subject || ''));
+      location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
       return false;
     },
     done: ({ route }) => put(`mail/${route.parts[1]}`, { state: 'done' }),

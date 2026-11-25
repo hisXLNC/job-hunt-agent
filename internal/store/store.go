@@ -328,6 +328,10 @@ CREATE TABLE role_seen (
   PRIMARY KEY (role_id, source)
 );
 `,
+	// 7: a person's phone number, as their e-mail signature gives it.
+	`
+ALTER TABLE people ADD COLUMN phone TEXT NOT NULL DEFAULT '';
+`,
 }
 
 // Open opens (creating and upgrading if needed) the database at path.

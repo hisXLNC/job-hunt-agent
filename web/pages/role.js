@@ -1,4 +1,5 @@
 import { html, api, post, del, ago, when, rings, ring, tile, toast, copy, safeUrl, stageChip, freshness, openAssistant, BAND, STAGE, KIND, employer, rel, LATER, dayName } from '../app.js';
+import { toField, outButtons, outForm, canOut, outActions } from '../outbox.js';
 
 const NO = ['No reason', 'Pay too low', 'Too junior', 'Too senior', 'Not my field', 'Wrong place or too far', 'Not this kind of contract', 'Not this employer'];
 const STYLE = { standard: 'Standard', formal: 'Formal', short: 'Short', warm: 'Warm' };
@@ -24,15 +25,23 @@ function chase(d) {
   if (c?.sent_at) return html`<div class="card row"><div class="grow"><h4>You followed up ${ago(c.sent_at)}</h4><p class="s m">One follow-up is enough. If they answer, it shows under Replies.</p></div></div>`;
   if (c?.body && !c.dropped_at) return html`<div class="card col" style="gap:10px;border-color:var(--warn)">
     <div class="row"><div class="grow"><div class="eb">Follow up</div><h3 style="margin-top:4px">${quiet}</h3></div>${c.to ? html`<span class="s m">To ${c.to}${c.email ? html` · ${c.email}` : ''}</span>` : ''}</div>
-    <form data-act="chasesave" class="col" style="gap:6px"><input type="text" name="subject" value="${c.subject}" aria-label="Subject"><textarea name="text" rows="8" aria-label="Your follow-up">${c.body}</textarea>
+    <form data-act="chasesave" class="col" style="gap:6px">${toField(c.email)}<input type="text" name="subject" value="${replySubject(d.mail, c.email, c.subject)}" aria-label="Subject"><textarea name="text" rows="8" aria-label="Your follow-up">${c.body}</textarea>
       <div class="row wrap" style="gap:6px"><span class="xs m grow" style="min-width:200px">Job Hunt wrote it; you send it, from your own mail.</span>
         <button class="btn sm">Save</button><button type="button" class="btn sm" data-act="chasecopy">Copy</button>
-        <button type="button" class="btn sm" data-act="chasemail" title="Opens a new message in your mail program with this text in it. You press Send.">Open in my mail</button>
+        <button type="button" class="btn sm" data-act="chasemail" title="Opens a new message in your mail program with this text in it. You press Send.">Open in my mail</button>${outButtons('chase', r.id)}
         <button type="button" class="btn sm p" data-act="chasesent" title="Records it in this role's history. Job Hunt won't suggest another.">I sent it</button>
         <button type="button" class="btn sm ghost" data-act="chasedrop" title="Stops suggesting a follow-up for this application.">Let it go</button></div></form></div>`;
   if (!d.chase_due) return '';
   return html`<div class="card row" style="border-color:var(--warn)"><div class="grow"><h4>${quiet}</h4><p class="s m">One short follow-up is normal; after that, let it go. Job Hunt writes it; you send it.</p></div>
     <button class="btn p sm" data-act="chase" data-busy="Writing…">Write follow-up</button><button class="btn sm ghost" data-act="chasedrop">Let it go</button></div>`;
+}
+// Sent to someone who wrote about this role, a message goes into their thread
+// under their subject, as Gmail threads it; the field shows what is sent.
+function replySubject(mails, to, own) {
+  if (!canOut() || !to) return own || '';
+  const m = (mails || []).find(x => x.from_addr && x.from_addr.toLowerCase() === to.toLowerCase() && x.subject);
+  if (!m || /^re:/i.test(own || '')) return own || '';
+  return /^re:/i.test(m.subject) ? m.subject : 'Re: ' + m.subject;
 }
 const mailAddr = s => (/^[^\s@<>"',;:?&%#]+@[^\s@<>"',;:?&%#]+\.[^\s@<>"',;:?&%#]+$/.test(s || '') ? s : '');
 
@@ -200,7 +209,7 @@ function offer(d) {
       <div class="s ink2">${a.market}${floor !== null ? html` Against your pay floor: <b>${floor >= 0 ? `${floor.toLocaleString()} above` : `${(-floor).toLocaleString()} below`}</b>.` : ''}</div>
       ${(a.asks || []).length ? html`<div class="eb" style="margin-top:4px">Worth asking for</div><ul class="s" style="margin:0 0 0 18px">${a.asks.map(x => html`<li>${x}</li>`)}</ul>` : ''}
       ${(a.watch || []).length ? html`<div class="eb" style="margin-top:4px">Careful with</div><ul class="s ink2" style="margin:0 0 0 18px">${a.watch.map(x => html`<li>${x}</li>`)}</ul>` : ''}</div>
-      <div class="col" style="gap:6px"><div class="eb">Your reply, asking for more</div><div class="quote s pre">${a.subject ? html`<b>${a.subject}</b>\n\n` : ''}${a.reply}</div><div class="row" style="gap:6px"><button class="btn sm" data-act="offercopy">Copy</button><button class="btn sm" data-act="offermail" title="Opens a new message in your mail program. You press Send.">Open in my mail</button></div></div></div>
+      <div class="col" style="gap:6px"><div class="eb">Your reply, asking for more</div>${canOut() ? outForm('offer', d.role.id, { subject: a.subject, body: a.reply, to: '' }) : html`<div class="quote s pre">${a.subject ? html`<b>${a.subject}</b>\n\n` : ''}${a.reply}</div><div class="row" style="gap:6px"><button class="btn sm" data-act="offercopy">Copy</button><button class="btn sm" data-act="offermail" title="Opens a new message in your mail program. You press Send.">Open in my mail</button></div>`}</div></div>
     <details class="s"><summary>Paste another offer</summary><div style="margin-top:8px">${form}</div></details></div>`;
 }
 
@@ -210,7 +219,7 @@ function afterNo(d) {
   if (r.closed !== 'rejected') return '';
   if (!n) return html`<div class="card row" style="gap:12px"><div class="grow"><h4>They said no</h4><p class="s m">A short, gracious reply keeps the door open for the next role there. Job Hunt writes it; you send it.</p></div><button class="btn sm" data-act="noreply" data-busy="Writing…">Write a reply</button></div>`;
   return html`<div class="card col" style="gap:8px"><div class="row"><div class="grow"><div class="eb">They said no</div><h4 style="margin-top:4px">Your reply${n.to ? html` to ${n.to}` : ''}</h4></div><button class="btn sm ghost" data-act="noreply" data-busy="Writing…">Write it again</button></div>
-    <div class="quote s pre">${n.subject ? html`<b>${n.subject}</b>\n\n` : ''}${n.body}</div><div class="row" style="gap:6px"><button class="btn sm" data-act="noreplycopy">Copy</button><button class="btn sm" data-act="noreplymail">Open in my mail</button></div></div>`;
+    ${canOut() ? outForm('noreply', r.id, { to: mailAddr(n.email), subject: replySubject(d.mail, n.email, n.subject), body: n.body }, mailAddr(n.email)) : html`<div class="quote s pre">${n.subject ? html`<b>${n.subject}</b>\n\n` : ''}${n.body}</div><div class="row" style="gap:6px"><button class="btn sm" data-act="noreplycopy">Copy</button><button class="btn sm" data-act="noreplymail">Open in my mail</button></div>`}</div>`;
 }
 
 // Practising the interview with Claude, in the assistant.
@@ -300,10 +309,11 @@ export default {
     chase: ({ route }) => post(`roles/${route.parts[1]}/chase`),
     chasesave: ({ route, f }) => post(`roles/${route.parts[1]}/chasesave`, { subject: f.subject, text: f.text }).then(() => toast('Saved')),
     chasecopy: ({ el }) => { copy(el.form.text.value); return false; },
+    ...outActions,
     async chasemail({ route, el, data }) {
       const subject = el.form.subject.value, text = el.form.text.value;
       await post(`roles/${route.parts[1]}/chasesave`, { subject, text });
-      location.href = `mailto:${mailAddr(data.chase?.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+      location.href = `mailto:${mailAddr(el.form.to?.value.trim() || data.chase?.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
       toast('Opened in your mail. Press "I sent it" once it has gone.');
     },
     chasesent: ({ route }) => post(`roles/${route.parts[1]}/chasesent`).then(() => toast('Noted in this role\'s history')),

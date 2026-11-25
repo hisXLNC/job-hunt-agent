@@ -28,8 +28,11 @@ import (
 	"jobhunt/internal/store"
 )
 
-// MailSet is how Job Hunt reads the person's inbox. It only ever reads: the
-// mailbox is opened read-only and nothing is sent, moved or marked.
+// MailSet is how Job Hunt reads the person's inbox. Reading opens the mailbox
+// read-only. Anything more is a switch of its own that starts off: saving
+// drafts in the mailbox's Drafts folder, labelling mail it matched, looking
+// through two years of mail for recruiters, and sending one message when the
+// person presses Send on it.
 type MailSet struct {
 	On       bool   `json:"on"`
 	Host     string `json:"host"`
@@ -44,6 +47,17 @@ type MailSet struct {
 	Box string `json:"box,omitempty"`
 	// Every is how often the inbox is read, in minutes (10 when 0).
 	Every int `json:"every,omitempty"`
+
+	Drafts     bool `json:"drafts"`     // save written replies as drafts in the mailbox
+	Labels     bool `json:"labels"`     // label matched mail JobHunt/Applied and JobHunt/Recruiters (Gmail)
+	Recruiters bool `json:"recruiters"` // look through two years of mail for recruiters
+	Send       bool `json:"send"`       // let the person send a message from Job Hunt, one press each
+}
+
+// Gmail reports whether the mailbox is Gmail's, where a copy is a label.
+func (set MailSet) Gmail() bool {
+	h := strings.ToLower(set.Host)
+	return strings.Contains(h, "gmail.com") || strings.Contains(h, "googlemail.com")
 }
 
 // Often is how often the inbox is read.
@@ -58,14 +72,18 @@ var allMailRe = regexp.MustCompile(`(?i)^\* LIST \(([^)]*)\) (?:"[^"]*"|NIL) (.+
 
 // wholeBox finds the folder that holds every message, archived or not
 // (Gmail's "All Mail"). "" when the service has none.
-func wholeBox(c *imapConn) string {
+func wholeBox(c *imapConn) string { return specialBox(c, `\all`) }
+
+// specialBox finds the folder the service marks with a special use, such as
+// \all or \drafts. "" when there is none.
+func specialBox(c *imapConn, use string) string {
 	lines, err := c.cmd(`LIST "" "*"`)
 	if err != nil {
 		return ""
 	}
 	for _, l := range lines {
 		m := allMailRe.FindStringSubmatch(l.text)
-		if m == nil || !strings.Contains(strings.ToLower(m[1]), `\all`) {
+		if m == nil || !hasFlag(m[1], use) {
 			continue
 		}
 		name := strings.TrimSpace(m[2])
@@ -127,6 +145,9 @@ func (e *Engine) SetMail(ctx context.Context, set MailSet) error {
 	e.S.Changed("connections")
 	if set.On {
 		e.Go("mail", "", func(ctx context.Context) error { return e.CheckMail(ctx) })
+	}
+	if set.On && set.Recruiters && !old.Recruiters {
+		e.Go("recruiters", "Looking through your mail for recruiters", func(ctx context.Context) error { return e.ScanRecruiters(ctx) })
 	}
 	return nil
 }
@@ -436,6 +457,7 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 		uids = uids[len(uids)-400:]
 	}
 	taken := 0
+	labels := map[string][]uint32{}
 	alerts, alertSeen, alertNew := e.alertsOn(), 0, 0
 	alertMails := 0
 	for start := 0; start < len(uids) && ctx.Err() == nil; start += 50 {
@@ -484,6 +506,9 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 				continue
 			}
 			if match.handled {
+				if p, err := e.S.Person(match.personID); err == nil && (p.Kind == "recruiter" || p.Kind == "manager") {
+					labels[labelRecruiters] = append(labels[labelRecruiters], h.uid)
+				}
 				continue
 			}
 			body, err := c.cmd("UID FETCH %d (UID BODY.PEEK[]<0.60000>)", h.uid)
@@ -508,6 +533,14 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 				continue
 			}
 			taken++
+			if l := e.labelFor(h.msgID); l != "" {
+				labels[l] = append(labels[l], h.uid)
+			}
+		}
+	}
+	if set.Labels && set.Gmail() {
+		for _, name := range []string{labelApplied, labelRecruiters} {
+			copyTo(c, name, labels[name])
 		}
 	}
 	set.LastAt, set.Note = now.Unix(), ""
@@ -522,6 +555,9 @@ func (e *Engine) CheckMail(ctx context.Context) error {
 	e.S.Changed("connections")
 	if taken > 0 {
 		e.S.Log(store.Activity{Kind: "mail", Text: fmt.Sprintf("Read %d new message%s about your search", taken, plural(taken))})
+	}
+	if set.Recruiters && e.recruiterScanDue() && !e.Busy("recruiters") {
+		e.Go("recruiters", "Looking through your mail for recruiters", func(ctx context.Context) error { return e.ScanRecruiters(ctx) })
 	}
 	return nil
 }
@@ -667,11 +703,8 @@ func (e *Engine) takeMail(ctx context.Context, m store.Mail) error {
 	if err != nil {
 		return err
 	}
-	m.Kind, m.Summary, m.Next, m.Draft, m.RoleID = reading.Kind, reading.Summary, reading.Next, reading.Reply, reading.RoleID
-	if m.Kind == "interview" {
-		// They ask when the person is free: the draft offers real free times.
-		m.Draft = e.fillTimes(m.Draft)
-	}
+	// No reply is written here: the person asks for one when they want it.
+	m.Kind, m.Summary, m.Next, m.RoleID = reading.Kind, reading.Summary, reading.Next, reading.RoleID
 	if m.PersonID != 0 && (m.Kind == "other" || m.Kind == "question") {
 		m.Kind = "person"
 	}

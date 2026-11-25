@@ -1091,8 +1091,8 @@ func (s *Server) Handler() http.Handler {
 			return nil, err
 		}
 		var in struct {
-			Name, Title, Kind, Why, URL, Email, State *string
-			KnowsYou                                  *bool `json:"knows_you"`
+			Name, Title, Kind, Why, URL, Email, State, Phone *string
+			KnowsYou                                         *bool `json:"knows_you"`
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
@@ -1108,6 +1108,7 @@ func (s *Server) Handler() http.Handler {
 		set(&p.Why, in.Why)
 		set(&p.Email, in.Email)
 		set(&p.State, in.State)
+		set(&p.Phone, in.Phone)
 		if in.URL != nil {
 			p.URL = safeLink(*in.URL)
 		}
@@ -1562,7 +1563,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "other_ai": e.OtherAIState(), "other_services": llm.OtherServices, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
-			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources()}, nil
+			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources(), "recruiter_scan": e.RecruiterScan()}, nil
 	})
 	// More job sources: the searches that take a key (Adzuna, Jooble, Google
 	// for Jobs) and job-alert e-mails. A key goes in and never comes out: what
@@ -1724,6 +1725,7 @@ func (s *Server) Handler() http.Handler {
 			"week": st.UsageSince(e.Now().Add(-7 * 24 * time.Hour).Unix()), "today": st.UsageSince(e.Now().Add(-24 * time.Hour).Unix())}, nil
 	})
 	s.debugRoutes(mux, h)
+	s.outboxRoutes(mux, h)
 	// Letting work the person stopped start by itself again.
 	h("POST /api/jobs/resume", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		e.Resume("")
@@ -2071,8 +2073,9 @@ type State struct {
 	AutoUpdate bool               `json:"auto_update"`
 	Checked    int64              `json:"update_checked"`
 	WhatsNew   *whatsNew          `json:"whats_new,omitempty"`
-	Theme      string             `json:"theme"`   // light, dark, or system (match Windows)
-	Notices    int                `json:"notices"` // unread, for the bell
+	Theme      string             `json:"theme"`    // light, dark, or system (match Windows)
+	Notices    int                `json:"notices"`  // unread, for the bell
+	MailCan    map[string]bool    `json:"mail_can"` // which of the inbox's own switches are on
 }
 
 func (s *Server) state() State {
@@ -2087,6 +2090,7 @@ func (s *Server) state() State {
 	qs, _ := st.OpenQuestions()
 	return State{
 		SetupDone: p.SetupDone, Name: p.Name, City: p.City, Moving: moving, Days: days, Claude: e.Claude(), Status: e.Status(), ExtPending: pending, Version: Version, Update: e.NewerVersion(), CanInstall: e.CanInstall(), AutoUpdate: e.AutoUpdate(), Checked: e.UpdateChecked(), WhatsNew: s.whatsNew(), Theme: e.Theme(), Notices: e.UnreadNotices(),
+		MailCan: mailCan(e.MailSet()),
 		Counts: map[string]int{
 			"ready":     counts["ready"],
 			"fresh":     st.Count(`SELECT COUNT(*) FROM roles WHERE closed = '' AND stage IN ('found','ready') AND CASE WHEN posted_at > 0 THEN posted_at ELSE first_seen_at END > ?`, now.Add(-24*time.Hour).Unix()),
@@ -2097,6 +2101,12 @@ func (s *Server) state() State {
 			"questions": len(qs),
 		},
 	}
+}
+
+// mailCan says which of the inbox's own switches are on, so a page shows
+// only the buttons that work.
+func mailCan(set engine.MailSet) map[string]bool {
+	return map[string]bool{"drafts": set.On && set.Drafts, "send": set.On && set.Send, "recruiters": set.On && set.Recruiters}
 }
 
 // events streams the names of things that changed, so open pages refresh

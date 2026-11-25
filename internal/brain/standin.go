@@ -64,6 +64,10 @@ func StandIn() llm.Engine {
 			out = standAssist(req.Input.(AssistInput))
 		case "mail":
 			out = standMail(req.Input.(mailInput))
+		case "mail_reply":
+			out = standMailReply(req.Input.(mailInput))
+		case "senders":
+			out = standSenders(req.Input.([]Sender))
 		case "check_cv":
 			out = standCheck(req.Input.(checkInput))
 		case "offer":
@@ -892,7 +896,6 @@ func standMail(in mailInput) MailReading {
 			break
 		}
 	}
-	first := strings.Fields(in.Mail.From + " there")[0]
 	switch {
 	case has("offer of employment", "pleased to offer", "offer letter"):
 		out.Kind, out.Summary, out.Next = "offer", "They are making you an offer.", "Read the terms before answering; ask for them in writing if they are not attached."
@@ -900,7 +903,6 @@ func standMail(in mailInput) MailReading {
 		out.Kind, out.Summary, out.Next = "rejection", "They are not taking this application further.", "Nothing to do. If you spoke to someone there, a short thank-you keeps the door open."
 	case has("interview", "schedule a call", "availability", "speak with you", "meet with", "phone screen", "a quick chat"):
 		out.Kind, out.Summary, out.Next = "interview", "They want to talk to you and are asking when you are free.", "Reply with two or three times, then add it to Interviews."
-		out.Reply = "Hi " + first + ",\n\nThank you for getting back to me. I would be glad to talk. I am free at the following times (Eastern):\n\n- [time 1]\n- [time 2]\n- [time 3]\n\nIf none of these work, I am happy to fit around your calendar.\n\nBest regards,\n" + in.Person.Profile.Name
 	case has("assessment", "take-home", "case study", "complete the test", "online test"):
 		out.Kind, out.Summary, out.Next = "assessment", "They are asking you to complete an assessment.", "Check the deadline and do it; these are usually timed from when you open the link."
 	case has("received your application", "thank you for applying", "thanks for applying", "application has been received"):
@@ -909,8 +911,7 @@ func standMail(in mailInput) MailReading {
 			out.Title, out.Company = strings.TrimSpace(x[1]), strings.TrimSpace(x[2])
 		}
 	case strings.Contains(text, "?"):
-		out.Kind, out.Summary, out.Next = "question", "They are asking you something.", "Answer it; a draft is below."
-		out.Reply = "Hi " + first + ",\n\nThank you for your note. [your answer]\n\nBest regards,\n" + in.Person.Profile.Name
+		out.Kind, out.Summary, out.Next = "question", "They are asking you something.", "Answer it."
 	}
 	return out
 }

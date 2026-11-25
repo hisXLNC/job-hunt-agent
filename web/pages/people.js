@@ -1,4 +1,5 @@
 import { html, api, post, put, del, ago, tile, toast, copy, listSize, endless, with_, safeUrl, app, KIND, employer, rel } from '../app.js';
+import { toField, outButtons, outActions } from '../outbox.js';
 
 const FIVE = ['knows_work', 'made_move', 'same_roots', 'same_craft', 'mentor'];
 const HINT = {
@@ -31,7 +32,7 @@ function list(d, route) {
         <a class="chip ${q.kind === 'recruiter' ? 'on' : ''}" href="${with_(route, { kind: 'recruiter', know: ''})}">Recruiters ${count('recruiter')}</a>
         <a class="chip ${q.kind === 'contact' ? 'on' : ''}" href="${with_(route, { kind: 'contact', know: ''})}">You know them ${count('contact')}</a>
         <a class="chip ${q.know ? 'on' : ''}" href="${with_(route, { know: 1, kind: ''})}">Know you ${d.know}</a></div>
-        ${q.kind && HINT[q.kind] ? html`<p class="s m">${HINT[q.kind]}</p>` : ''}</div></div>
+        ${q.kind && HINT[q.kind] ? html`<p class="s m">${HINT[q.kind]}</p>` : ''}${q.kind === 'recruiter' ? html`<div class="row"><a class="btn sm" href="/api/recruiters.csv" download title="Recruiters and hiring managers with their e-mail, phone and LinkedIn, as a file a spreadsheet opens.">Save recruiters as a spreadsheet</a></div>` : ''}</div></div>
       ${d.people.length ? html`<div class="card" style="padding:0"><table class="tbl long"><thead><tr><th>Person</th><th>Why they would answer</th><th>Where it stands</th><th></th></tr></thead><tbody>
         ${d.people.map(p => html`<tr><td style="width:30%"><div class="row">${tile(p.name, true)}<div><a class="t" href="#/people/${p.id}">${p.name}</a><span class="xs m">${p.title}${p.title && p.company ? ' · ' : ''}${employer(p.company, p.company_id)}</span></div></div></td>
           <td class="s ink2"><span class="chip" style="margin-bottom:3px">${KIND[p.kind] || 'Contact'}</span><div>${p.why}</div></td><td>${status(p)}</td>
@@ -66,10 +67,10 @@ function one(d) {
         <p class="xs m" style="margin-top:2px">${n.channel === 'linkedin' ? 'For the LinkedIn connect box.' : 'An email.'} Job Hunt wrote it. Nothing is sent until you send it yourself.</p></div>
         ${limit ? html`<span class="chip ${n.body.length > limit ? 'crit' : ''}" id="count">${n.body.length} of ${limit}</span>` : ''}</div>
       <form data-act="save" data-id="${n.id}" class="col" style="gap:8px">
-        ${n.channel === 'email' ? html`<label class="field">Subject<input type="text" name="subject" value="${n.subject}"></label>` : ''}
+        ${n.channel === 'email' && n.state === 'draft' ? toField(p.email) : ''}${n.channel === 'email' ? html`<label class="field">Subject<input type="text" name="subject" value="${n.subject}"></label>` : ''}
         <textarea name="body" rows="${n.channel === 'email' ? 9 : 5}" aria-label="Your note" data-limit="${limit}">${n.body}</textarea>
         <div class="row wrap">
-          ${n.state === 'draft' ? html`<button type="button" class="btn p" data-act="copyopen" data-url="${url}">Copy${url ? ' and open their profile' : ''}</button><button type="button" class="btn" data-act="sent" data-id="${n.id}">I sent it</button>` : ''}
+          ${n.state === 'draft' ? html`<button type="button" class="btn p" data-act="copyopen" data-url="${url}">Copy${url ? ' and open their profile' : ''}</button><button type="button" class="btn" data-act="sent" data-id="${n.id}">I sent it</button>${n.channel === 'email' ? outButtons('note', n.id) : ''}` : ''}
           ${n.state === 'sent' ? html`<button type="button" class="btn p" data-act="replied" data-id="${n.id}">They answered</button><button type="button" class="btn" data-act="nudge" data-busy="Writing…">Write a follow-up</button><button type="button" class="btn" data-act="quiet" data-id="${n.id}">Let it go</button>` : ''}
           ${n.state === 'replied' ? html`<button type="button" class="btn" data-act="thanks" data-busy="Writing…">Write a thank-you</button><a class="btn" href="#/interviews?person=${p.id}">Book a conversation</a>` : ''}
           <span class="grow"></span><button class="btn sm">Save changes</button><button type="button" class="btn sm" data-act="again" data-busy="Writing…">Write it again</button></div></form></div>`
@@ -79,7 +80,7 @@ function one(d) {
   <div class="col" style="gap:14px">
     <div class="card"><h4>About them</h4><form data-act="edit" class="col" style="margin-top:8px;gap:8px">
       <label class="field">Name<input type="text" name="name" value="${p.name}" required></label><label class="field">Their role<input type="text" name="title" value="${p.title}"></label>
-      <label class="field">Profile link<input type="url" name="url" value="${p.url}"></label><label class="field">Email<input type="email" name="email" value="${p.email}"></label>
+      <label class="field">Profile link<input type="url" name="url" value="${p.url}"></label><label class="field">Email<input type="email" name="email" value="${p.email}"></label><label class="field">Phone<input type="tel" name="phone" value="${p.phone || ''}"></label>
       <label class="field">What you share<select name="kind">${Object.entries(KIND).map(([k, v]) => html`<option value="${k}" ${p.kind === k ? 'selected' : ''}>${v}</option>`)}</select></label>
       <label class="field">Why they might answer<textarea name="why" rows="2">${p.why}</textarea></label>
       <div class="row"><button class="btn sm">Save</button><span class="grow"></span><button type="button" class="btn sm danger" data-act="remove" data-confirm="Remove ${p.name} and the notes to them?">Remove</button></div></form></div>
@@ -102,6 +103,7 @@ export default {
     if (ta && c && +ta.dataset.limit) ta.addEventListener('input', () => { c.textContent = `${ta.value.length} of ${ta.dataset.limit}`; c.classList.toggle('crit', ta.value.length > +ta.dataset.limit); });
   },
   actions: {
+    ...outActions,
     find: () => post('people/find').then(() => toast('Looking. This takes a minute or two.')),
     async draft({ d }) { await post(`people/${d.id}/note`, {}); location.hash = `#/people/${d.id}`; return false; },
     async add({ f }) { const r = await post('people', f); location.hash = `#/people/${r.id}`; return false; },

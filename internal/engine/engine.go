@@ -68,6 +68,7 @@ type Engine struct {
 	gcal    *googleState // Google Calendar: the access token and a sign-in under way
 
 	mailDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
+	smtpDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
 
 	preparedNow atomic.Int32 // documents the search under way has written by itself
 	srcMu       sync.Mutex   // the keys and the state of the searches that take one
