@@ -416,8 +416,13 @@ func (s *Server) Handler() http.Handler {
 		for i := range p.Domain {
 			p.Domain[i] = strings.ToLower(strings.TrimSpace(p.Domain[i]))
 		}
+		was := st.Profile()
 		if err := st.SaveProfile(p); err != nil {
 			return nil, err
+		}
+		// The limits apply to the roles already found, not only to the next search.
+		if was.PayStrict != p.PayStrict || was.PayFloor != p.PayFloor || was.MaxAgeDays != p.MaxAgeDays || strings.Join(was.NoTypes, ",") != strings.Join(p.NoTypes, ",") {
+			e.ApplyLimits()
 		}
 		return st.Profile(), nil
 	})

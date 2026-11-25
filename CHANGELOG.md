@@ -2,6 +2,10 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.43
+
+- **"Never show" limits apply to roles already found.** Ticking contract, part-time or internships under Never show (or the pay floor, or the age of postings) only stopped new postings; the ones already in your lists stayed. Now every role you haven't saved or applied to that a limit rules out is set aside at once, with the reason, including ones Job Hunt prepared on its own (their CV and letter are kept). Untick a limit and the roles it set aside come back. Roles you said not interested to never come back. Limits you set earlier are applied the first time this version starts.
+
 ## 26.11.42
 
 - **The old Job Hunt's jobs are cleared out, except the ones you applied to.** Once, on the first start of this version: every job brought over from the old app that you never applied to goes, with its letter and history. Kept: everything you applied to (with interviews, offers and noes, the CV and letter sent), and every job you said not interested to, still closed, so it never comes back. A copy of everything is saved first, under Settings, Saved copies ("Before clearing the old Job Hunt's jobs"), and can be put back. Bringing things over from the old app again now brings only what you applied to.

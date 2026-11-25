@@ -127,6 +127,10 @@ func (e *Engine) Run() {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
 	e.resumeSearch()
+	if e.S.Profile().SetupDone {
+		// Limits changed before this version only applied to new postings.
+		e.ApplyLimits()
+	}
 	e.tick()
 	for {
 		select {

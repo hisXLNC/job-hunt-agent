@@ -1429,3 +1429,25 @@ func (s *Store) DropRoles(ids []int64) (companies int, err error) {
 	s.Changed("roles", "today", "progress", "companies", "people")
 	return int(n), nil
 }
+
+// UntouchedOrLimited lists the open roles the person has not acted on (not
+// saved, not applied to; written documents, which Job Hunt may have made on its
+// own, are kept either way), and those set aside by the quick rules, so the
+// limits can be applied again to both. A role said no to is not listed.
+func (s *Store) UntouchedOrLimited() ([]int64, error) {
+	rows, err := s.db.Query(`SELECT id FROM roles WHERE saved = 0 AND applied_at = 0
+		AND ((closed = '' AND stage IN ('new','found','ready')) OR closed = 'screened')`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
