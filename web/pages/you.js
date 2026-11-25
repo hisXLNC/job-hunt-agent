@@ -303,12 +303,12 @@ function moreSources(d) {
         <div class="row wrap" style="gap:14px"><label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''}> Search ${s.name}</label>
           <label class="row s" style="gap:6px">At most <input type="number" name="limit" value="${s.limit}" min="1" max="5000" style="width:84px;height:30px" aria-label="Most requests a day to ${s.name}"> requests a day</label></div>
         <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>`}
-      <div class="row"><button class="btn sm p">Save</button>
+      <div class="row"><button class="btn sm p" data-busy="${alerts ? 'Saving…' : 'Trying the key…'}">Save</button>
         ${!alerts && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="Asking…" title="Runs one small search now and says what came back.">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
         <span class="grow"></span>${s.at ? html`<span class="xs m">Last answered ${ago(s.at)}: ${s.seen} posting${s.seen === 1 ? '' : 's'}${alerts || s.new ? `, ${s.new} new` : ''}</span>` : ''}</div></form>`;
   };
   return html`<div class="card col" style="gap:12px"><div><h3>More job sources</h3>
-    <p class="s m" style="margin-top:4px">Other places Job Hunt can search with your titles and city. Each needs a key that you get yourself, free. A key is kept only in Job Hunt's data file on this computer and is sent only to the service it is for.</p></div>
+    <p class="s m" style="margin-top:4px">Other places Job Hunt can search with your titles and city. Each needs a key that you get yourself, free. A new key is tried with one small search before it is saved. A key is kept only in Job Hunt's data file on this computer and is sent only to the service it is for.</p></div>
     ${(d.more || []).map(row)}</div>`;
 }
 
@@ -533,7 +533,8 @@ export default {
     savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0, detail: !!f.detail, only: f.only || '' }).then(() => toast('Saved')),
     newtopic({ el }) { const a = new Uint8Array(12); crypto.getRandomValues(a); el.closest('form').querySelector('[name=topic]').value = 'jobhunt-' + [...a].map(b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join(''); return false; },
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
-    savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(() => toast('Saved')),
+    // A new key is tried with one small search first; one the service refuses is not saved.
+    savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(r => toast(r?.warning || ((f.key || '').trim() ? 'Tried and saved. The key works.' : 'Saved'))),
     async testsource({ d }) { const r = await post(`sources/${d.id}/test`); toast(r.message); },
     delsource: ({ d }) => del(`sources/${d.id}`).then(() => toast('Key removed')),
     savemail: ({ f }) => put('mailset', { on: !!f.on, user: f.user, pass: f.pass || '', host: f.host, every: Math.min(240, Math.max(5, +f.every || 10)) }).then(() => toast(f.on ? 'Connected. Job Hunt is reading recent replies.' : 'Saved')),

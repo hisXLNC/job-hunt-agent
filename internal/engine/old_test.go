@@ -468,7 +468,10 @@ func TestClearingOutTheOldJobsKeepsWhatWasAppliedTo(t *testing.T) {
 
 func TestTheSearchKeysComeOver(t *testing.T) {
 	e, _ := newEngine(t)
-	e.SetSource("jooble", SourceKeyInput{Key: "jooble-mine"})
+	e.Src.Base["jooble"] = "http://127.0.0.1:1" // unreachable: the key is saved with a warning
+	if w, err := e.SetSource(context.Background(), "jooble", SourceKeyInput{Key: "jooble-mine"}); err != nil || w == "" {
+		t.Fatalf("an untried key: %q, %v", w, err)
+	}
 	dir := oldData(t, true, false, map[string]string{
 		"adzuna.id": "adz-id", "adzuna.key": "adz-key", "jooble.key": "jooble-old",
 		"jsearch.key": "js-key", "jsearch.provider": "rapidapi", "apify.key": "apify-token", "apify.actor": "someone/other-scraper",

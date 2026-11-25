@@ -107,22 +107,50 @@ func TestKeyedSourcesAreSearched(t *testing.T) {
 	}
 
 	// Saving: a half-given Adzuna pair and something that is no key are refused.
-	if err := e.SetSource("adzuna", SourceKeyInput{Key: "adzuna-secret-1"}); err == nil {
+	if _, err := e.SetSource(ctx, "adzuna", SourceKeyInput{Key: "adzuna-secret-1"}); err == nil {
 		t.Error("Adzuna's key was accepted without its app ID")
 	}
-	if err := e.SetSource("jooble", SourceKeyInput{Key: "two words"}); err == nil {
+	if _, err := e.SetSource(ctx, "jooble", SourceKeyInput{Key: "two words"}); err == nil {
 		t.Error("a key with a space in it was accepted")
 	}
-	if err := e.SetSource("nowhere", SourceKeyInput{Key: "x"}); err == nil {
+	if _, err := e.SetSource(ctx, "nowhere", SourceKeyInput{Key: "x"}); err == nil {
 		t.Error("an unknown source was accepted")
 	}
 	for id, in := range map[string]SourceKeyInput{"adzuna": {AppID: "app-1", Key: "adzuna-secret-1"}, "jooble": {Key: "jooble-secret-1"}, "jsearch": {Key: "rapid-secret-1", Limit: num(2)}} {
-		if err := e.SetSource(id, in); err != nil {
+		if _, err := e.SetSource(ctx, id, in); err != nil {
 			t.Fatalf("%s: %v", id, err)
 		}
 	}
+	// Each key was tried as it was saved: one request each.
+	if w.count("adzuna") != 1 || w.count("jooble") != 1 || w.count("jsearch") != 1 {
+		t.Fatalf("saving tried the keys %d, %d, %d times", w.count("adzuna"), w.count("jooble"), w.count("jsearch"))
+	}
+	// A key the service refuses is not saved, and the one saved before stays.
+	w.status["jooble"] = 403
+	if _, err := e.SetSource(ctx, "jooble", SourceKeyInput{Key: "jooble-wrong-2"}); err == nil || !strings.Contains(err.Error(), "not saved") || strings.Contains(err.Error(), "jooble-wrong-2") {
+		t.Fatalf("a refused key: %v", err)
+	}
+	if k := e.sourceKeys().Jooble; k != "jooble-secret-1" {
+		t.Fatalf("the refused key replaced the saved one: %q", k)
+	}
+	for _, m := range e.MoreSources() {
+		if m.ID == "jooble" && m.State != "working" {
+			t.Fatalf("a refused new key marked the saved one as %q (%s)", m.State, m.Note)
+		}
+	}
+	// One the service cannot be reached for is saved, with a warning.
+	w.status["jooble"] = 502
+	if warn, err := e.SetSource(ctx, "jooble", SourceKeyInput{Key: "jooble-secret-1"}); err != nil || !strings.Contains(warn, "could not try it") {
+		t.Fatalf("an untried key: %q, %v", warn, err)
+	}
+	w.status["jooble"] = 0
+	// Switching it on, or changing its allowance, asks nothing.
+	before := w.count("jooble")
+	if _, err := e.SetSource(ctx, "jooble", SourceKeyInput{On: on(true), Limit: num(60)}); err != nil || w.count("jooble") != before {
+		t.Fatalf("a switch asked Jooble: %v", err)
+	}
 	// An empty key keeps the saved one.
-	if err := e.SetSource("jooble", SourceKeyInput{On: on(true)}); err != nil || e.sourceKeys().Jooble != "jooble-secret-1" {
+	if _, err := e.SetSource(ctx, "jooble", SourceKeyInput{On: on(true)}); err != nil || e.sourceKeys().Jooble != "jooble-secret-1" {
 		t.Fatalf("saving again without the key: %v", err)
 	}
 
@@ -135,19 +163,19 @@ func TestKeyedSourcesAreSearched(t *testing.T) {
 		t.Fatalf("test of a refused key: %v", err)
 	}
 	for _, m := range e.MoreSources() {
-		want := map[string]string{"adzuna": "working", "jooble": "problem", "jsearch": "waiting", "apify": "none", "alerts": "none"}[m.ID]
+		want := map[string]string{"adzuna": "working", "jooble": "problem", "jsearch": "working", "apify": "none", "alerts": "none"}[m.ID]
 		if m.State != want {
 			t.Errorf("%s: state %q, want %q (%s)", m.ID, m.State, want, m.Note)
 		}
 	}
 	w.status["jooble"] = 0
 	// Saving the key again is asking to try again.
-	if err := e.SetSource("jooble", SourceKeyInput{Key: "jooble-secret-1"}); err != nil {
+	if _, err := e.SetSource(ctx, "jooble", SourceKeyInput{Key: "jooble-secret-1"}); err != nil {
 		t.Fatal(err)
 	}
 
 	// A full search asks each for the titles, inside its daily allowance.
-	before := w.count("adzuna")
+	before = w.count("adzuna")
 	if err := e.Search(ctx, "full"); err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +289,7 @@ func TestKeyedSourcesAreSearched(t *testing.T) {
 	}
 
 	// Switched off, it is not asked; the key removed, it is gone.
-	if err := e.SetSource("jooble", SourceKeyInput{On: on(false)}); err != nil {
+	if _, err := e.SetSource(ctx, "jooble", SourceKeyInput{On: on(false)}); err != nil {
 		t.Fatal(err)
 	}
 	jooble = w.count("jooble")
@@ -401,7 +429,7 @@ func TestJobAlertMailBecomesPostings(t *testing.T) {
 		return a, nil
 	}
 	e2.S.Set("mail", MailSet{On: true, User: "me@example.com", Pass: "app-pass"})
-	if err := e2.SetSource(srcAlerts, SourceKeyInput{On: on(false)}); err != nil {
+	if _, err := e2.SetSource(ctx, srcAlerts, SourceKeyInput{On: on(false)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := e2.CheckMail(ctx); err != nil {

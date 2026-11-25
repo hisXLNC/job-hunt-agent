@@ -155,85 +155,123 @@ func tidyKey(s string) (string, error) {
 }
 
 // SetSource saves what the person entered for one of the keyed searches, or
-// switches job-alert e-mails on or off.
-func (e *Engine) SetSource(id string, in SourceKeyInput) error {
+// switches job-alert e-mails on or off. A new key is tried first, with one
+// small search: a key the service refuses is not saved (the one saved before
+// stays). When the service cannot be reached the key is saved all the same,
+// and warning says so.
+func (e *Engine) SetSource(ctx context.Context, id string, in SourceKeyInput) (warning string, err error) {
 	_, keyed := keyedSources[id]
 	if !keyed && id != srcAlerts {
-		return store.ErrNotFound
+		return "", store.ErrNotFound
 	}
 	key, err := tidyKey(in.Key)
 	if err != nil {
-		return err
+		return "", err
 	}
 	appID, err := tidyKey(in.AppID)
 	if err != nil {
-		return err
+		return "", err
+	}
+	// apply puts what was entered into k; it reports whether the key changed.
+	apply := func(k *SourceKeys) (bool, error) {
+		changed := key != "" || appID != ""
+		switch id {
+		case "adzuna":
+			k.AdzunaID, k.AdzunaKey = firstOf(appID, k.AdzunaID), firstOf(key, k.AdzunaKey)
+			if k.AdzunaID == "" || k.AdzunaKey == "" {
+				return false, errors.New("Adzuna needs both its Application ID and its Application Key")
+			}
+		case "jooble":
+			k.Jooble = firstOf(key, k.Jooble)
+		case "apify":
+			k.Apify = firstOf(key, k.Apify)
+			if appID != "" {
+				k.ApifyActor = appID
+			}
+		case "jsearch":
+			k.JSearch = firstOf(key, k.JSearch)
+			from := sources.FromRapidAPI
+			if in.From == sources.FromOpenWebNinja {
+				from = sources.FromOpenWebNinja
+			}
+			changed = changed || (k.JSearch != "" && from != firstOf(k.JSearchFrom, sources.FromRapidAPI))
+			k.JSearchFrom = from
+		}
+		if keyed && !k.forSources().Has(id) {
+			return false, errors.New("paste the key first")
+		}
+		if in.On != nil {
+			var off []string
+			for _, x := range k.Off {
+				if x != id {
+					off = append(off, x)
+				}
+			}
+			if !*in.On {
+				off = append(off, id)
+			}
+			k.Off = off
+		}
+		if in.Limit != nil && keyed {
+			if k.Limit == nil {
+				k.Limit = map[string]int{}
+			}
+			delete(k.Limit, id)
+			if n := *in.Limit; n > 0 && n != keyedSources[id].perDay {
+				k.Limit[id] = min(n, 5000)
+			}
+		}
+		return changed, nil
+	}
+	e.srcMu.Lock()
+	try := e.sourceKeys()
+	changed, err := apply(&try)
+	e.srcMu.Unlock()
+	if err != nil {
+		return "", err
+	}
+	tried := false
+	if keyed && changed && !(id == "apify" && key == "") {
+		// Tried before it is kept. This happens outside the lock: trying
+		// writes the source's state, which takes it too.
+		before := e.sourceStates()[id]
+		_, terr := e.tryKey(ctx, id, try.forSources())
+		switch {
+		case terr == nil:
+			tried = true
+		case errors.Is(terr, sources.ErrKeyRefused):
+			// The key saved before, if any, is untouched, and so is what is
+			// known about it.
+			e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt = before.Error, before.ErrorAt })
+			why, _ := keyedPlain(id, terr)
+			return "", errors.New(strings.Replace(why, "refused the key", "refused this key, so it was not saved", 1))
+		case errors.Is(terr, sources.ErrOutOfRequests), errors.Is(terr, sources.ErrNoCountry):
+			// The service accepted the key itself.
+		default:
+			why, _ := keyedPlain(id, terr)
+			warning = "Saved, but Job Hunt could not try it just now (" + why + "). It is tried again on the next search"
+		}
 	}
 	e.srcMu.Lock()
 	k := e.sourceKeys()
-	changed := key != "" || appID != ""
-	switch id {
-	case "adzuna":
-		k.AdzunaID, k.AdzunaKey = firstOf(appID, k.AdzunaID), firstOf(key, k.AdzunaKey)
-		if k.AdzunaID == "" || k.AdzunaKey == "" {
-			e.srcMu.Unlock()
-			return errors.New("Adzuna needs both its Application ID and its Application Key")
-		}
-	case "jooble":
-		k.Jooble = firstOf(key, k.Jooble)
-	case "apify":
-		k.Apify = firstOf(key, k.Apify)
-		if appID != "" {
-			k.ApifyActor = appID
-		}
-	case "jsearch":
-		k.JSearch = firstOf(key, k.JSearch)
-		from := sources.FromRapidAPI
-		if in.From == sources.FromOpenWebNinja {
-			from = sources.FromOpenWebNinja
-		}
-		changed = changed || (k.JSearch != "" && from != firstOf(k.JSearchFrom, sources.FromRapidAPI))
-		k.JSearchFrom = from
-	}
-	if keyed && !k.forSources().Has(id) {
+	if _, err := apply(&k); err != nil {
 		e.srcMu.Unlock()
-		return errors.New("paste the key first")
-	}
-	if in.On != nil {
-		var off []string
-		for _, x := range k.Off {
-			if x != id {
-				off = append(off, x)
-			}
-		}
-		if !*in.On {
-			off = append(off, id)
-		}
-		k.Off = off
-	}
-	if in.Limit != nil && keyed {
-		if k.Limit == nil {
-			k.Limit = map[string]int{}
-		}
-		delete(k.Limit, id)
-		if n := *in.Limit; n > 0 && n != keyedSources[id].perDay {
-			k.Limit[id] = min(n, 5000)
-		}
+		return "", err
 	}
 	err = e.S.Set(sourceKeysKey, k)
 	e.srcMu.Unlock()
 	if err != nil {
-		return err
+		return "", err
 	}
-	if changed || (in.On != nil && *in.On) {
-		// A new key, or being switched on again, is asking to try again.
+	if tried || (!keyed && changed) || (in.On != nil && *in.On && !changed) {
+		// A key that works, or being switched on again, is asking to try again.
 		e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt, s.RestUntil = "", 0, 0 })
 	}
-	if changed {
+	if keyed && changed {
 		e.S.Log(store.Activity{Kind: "source", Text: "Saved a key for " + keyedSources[id].name})
 	}
 	e.S.Changed("connections", "runs", "status")
-	return nil
+	return warning, nil
 }
 
 // ForgetSource removes the key saved for one search. Roles found there stay.
@@ -297,8 +335,8 @@ func keyedQuery(p store.Profile, title string, within time.Duration) sources.Que
 	return sources.Query{Keywords: title, Location: strings.TrimSpace(strings.Split(p.City, ",")[0]), Country: countryCode(p.Country), Within: within}
 }
 
-// TestSource runs one tiny search, so the person knows now whether the key
-// works. It reports how many postings came back.
+// TestSource runs one tiny search with the saved key, so the person knows
+// now whether it works. It reports how many postings came back.
 func (e *Engine) TestSource(ctx context.Context, id string) (int, error) {
 	if _, ok := keyedSources[id]; !ok {
 		return 0, store.ErrNotFound
@@ -307,6 +345,18 @@ func (e *Engine) TestSource(ctx context.Context, id string) (int, error) {
 	if !keys.Has(id) {
 		return 0, errors.New("save the key first")
 	}
+	n, err := e.tryKey(ctx, id, keys)
+	if err != nil {
+		why, _ := keyedPlain(id, err)
+		return 0, errors.New(why)
+	}
+	return n, nil
+}
+
+// tryKey runs one tiny search with these keys and notes what happened in the
+// source's state. It reports how many postings came back; the error is the
+// service's own (sources.ErrKeyRefused and the like).
+func (e *Engine) tryKey(ctx context.Context, id string, keys sources.Keys) (int, error) {
 	p := e.S.Profile()
 	title := "manager"
 	if all := p.Titles.All(); len(all) > 0 {
@@ -320,7 +370,7 @@ func (e *Engine) TestSource(ctx context.Context, id string) (int, error) {
 			why, _ := keyedPlain(id, err)
 			e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt = why, e.Now().Unix() })
 			e.S.Changed("connections", "runs")
-			return 0, errors.New(why)
+			return 0, err
 		}
 		e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt, s.RestUntil = "", 0, 0 })
 		e.S.Changed("connections", "runs")
@@ -345,12 +395,12 @@ func (e *Engine) TestSource(ctx context.Context, id string) (int, error) {
 				s.Error, s.ErrorAt, s.RestUntil = why, now, now+int64(rest/time.Second)
 			})
 			e.S.Changed("connections", "runs")
-			return 0, errors.New(why)
+			return 0, err
 		}
 		e.setSourceState(id, func(s *SourceState) { s.Used++; s.Error, s.ErrorAt = why, now })
 		e.S.Changed("connections", "runs")
 		trace.Log("search", "test of %s failed: %v", id, err)
-		return 0, errors.New(why)
+		return 0, err
 	}
 	e.setSourceState(id, func(s *SourceState) {
 		s.Used++

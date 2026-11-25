@@ -1481,11 +1481,18 @@ func (s *Server) Handler() http.Handler {
 		if err := read(r, &in); err != nil {
 			return nil, err
 		}
-		if err := e.SetSource(r.PathValue("id"), in); err != nil {
+		// A new key is tried before it is kept.
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		warning, err := e.SetSource(ctx, r.PathValue("id"), in)
+		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return nil, err
 			}
 			return nil, bad(sentence(err.Error()))
+		}
+		if warning != "" {
+			return map[string]any{"warning": sentence(warning)}, nil
 		}
 		return nil, nil
 	})

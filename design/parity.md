@@ -73,7 +73,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 14. **Models per task and grouped scoring — PARTIAL (M).** Old: separate models for scoring, tailoring and the rest, effort level, four postings per scoring request (2.17, 2.34, 2.45). New: one model for everything, one posting per read.
 15. **Budget mode — MISSING (S/M).** Old held big batches for the night with Run now / Cancel (1.30). New has a daily dollar cap (API key only) and limit detection.
 16. **Another AI — MISSING (M).** OpenAI-style services for searching or everything (2.45).
-17. **Pasted key tested before saving — PARTIAL (S).** New saves, then offers Test.
+17. **Pasted key tested before saving — DONE 26.11.49, was PARTIAL (S).** New saves, then offers Test.
 
 ## E. Whole features with no counterpart — 0 present, 5 gaps
 
