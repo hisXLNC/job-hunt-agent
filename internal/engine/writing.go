@@ -279,11 +279,10 @@ func (e *Engine) LetterPDF(roleID int64) (File, error) {
 // PackPDF is the letter and the CV in one PDF, the letter first, for forms
 // that take a single file.
 func (e *Engine) PackPDF(roleID int64) (File, error) {
-	if _, ok := e.Own(roleID, "cv"); ok {
-		return File{}, errors.New("you chose your own CV file for this role; download it and the letter on their own")
-	}
-	if _, ok := e.Own(roleID, "letter"); ok {
-		return File{}, errors.New("you chose your own letter file for this role; download it and the CV on their own")
+	for _, kind := range []string{"cv", "letter"} {
+		if _, ok := e.Own(roleID, kind); ok {
+			return File{}, ErrOwnFile
+		}
 	}
 	l, r, err := e.roleLetter(roleID)
 	if err != nil {

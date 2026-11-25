@@ -135,8 +135,19 @@ func (e *Engine) Today() Brief {
 		cards = append(cards, e.roleCard("apply", r, now))
 	}
 	// 4. Strong roles nothing was prepared for.
-	found, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"found"}, MinFit: p.Keep() - 12, // near misses kept as "worth a look tailored" sit a little under the bar
-		Sort: "fit", Limit: 12, NotLater: now.Unix()})
+	// A near miss that tailoring would carry over the bar is worth a look too.
+	all, _, _ := e.S.Roles(store.RoleFilter{Stages: []string{"found"}, Sort: "fit", Limit: 80, NotLater: now.Unix()})
+	var found []store.Role
+	for _, r := range all {
+		if len(found) == 12 {
+			break
+		}
+		if r.Fit >= p.Keep() {
+			found = append(found, r)
+		} else if full, err := e.S.Role(r.ID); err == nil && readingOf(full).IfTailored >= p.Keep() {
+			found = append(found, r)
+		}
+	}
 	sort.SliceStable(found, func(i, j int) bool { return urgency(found[i], now) > urgency(found[j], now) })
 	for _, r := range found {
 		c := e.roleCard("decide", r, now)

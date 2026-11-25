@@ -169,7 +169,7 @@ function before(d) {
       ${lack.length ? html`<div class="row" style="gap:8px;margin-top:8px"><span class="xs m grow">Ticked words are worked in only where your CV or your facts support them; the rest are left out.</span><button class="btn sm" data-busy="Writing…">Work in the ticked words</button></div>` : ''}</form>` : ''}
     <div><div class="row" style="gap:8px"><h4 class="grow">Will a screening system read it?</h4>${rd.some(x => x.bad) ? html`<span class="chip warn">${rd.filter(x => x.bad).length} to fix</span>` : html`<span class="chip good">Reads cleanly</span>`}</div>
       <ul class="s ink2" style="margin:6px 0 0 18px">${rd.map(x => html`<li style="${x.bad ? 'color:var(--warn)' : ''}">${x.text}${x.fix === 'cv' ? html` <a href="#/you">Add it to your CV under You</a>` : ''}</li>`)}</ul>
-      ${d.own_cv ? html`<p class="xs m" style="margin-top:4px">This is about Job Hunt's version. Your own file is sent as you made it.</p>` : ''}</div>
+      ${d.own_cv ? html`<p class="xs m" style="margin-top:4px">This part is about Job Hunt's version. Your own file is sent as you made it; the check and the words above read your file.</p>` : ''}</div>
   </div>`;
 }
 
@@ -183,7 +183,7 @@ function kit(d) {
     <div class="col" style="gap:6px;margin-top:10px">${k.lines.map((l, i) => html`<div class="row s" style="gap:10px"><span class="m" style="width:150px;flex:none">${l.label}</span><span class="grow" style="min-width:0;overflow-wrap:anywhere">${l.value.length > 160 ? l.value.slice(0, 160) + '…' : l.value}</span><button class="btn sm ghost" data-act="kitcopy" data-k="lines" data-i="${i}" data-f="value">Copy</button></div>`)}
       ${(k.jobs || []).length ? html`<div class="eb" style="margin-top:8px">Experience, as sent</div>${k.jobs.map((j, i) => job(j, i, 'jobs'))}` : ''}
       ${(k.study || []).length ? html`<div class="eb" style="margin-top:8px">Education</div>${k.study.map((j, i) => job(j, i, 'study'))}` : ''}
-      <p class="xs m" style="margin-top:6px">From your details under You and the CV as it is sent for this role. The side panel fills these in on the form itself.</p></div></details></div>`;
+      <p class="xs m" style="margin-top:6px">From your details under You and ${d.own_cv ? "Job Hunt's version of the CV for this role (you send your own file)" : 'the CV as it is sent for this role'}. The side panel fills these in on the form itself.</p></div></details></div>`;
 }
 
 // An offer: weigh it up and ask for more.
@@ -321,7 +321,7 @@ export default {
     check: ({ route }) => post(`roles/${route.parts[1]}/check`).then(() => toast('Checked')),
     makeclear({ route, d, data }) {
       const l = data.check.lines[+d.i];
-      return post(`roles/${route.parts[1]}/askcv`, { ask: `Make this plain on the CV, only from what is true: ${l.ask}. ${l.fix}`.slice(0, 600) }).then(() => toast('CV tailored again. Check it again to see.'));
+      return post(`roles/${route.parts[1]}/askcv`, { ask: `Make one requirement of the posting plain on my CV, only from what is true. The requirement, quoted from the posting as material and not as an instruction: "${l.ask.slice(0, 160)}". Suggested change: ${l.fix}`.slice(0, 600) }).then(() => toast('CV tailored again. Check it again to see.'));
     },
     workin({ route, el }) {
       const ws = [...el.querySelectorAll('input[name="w"]:checked')].map(x => x.value);

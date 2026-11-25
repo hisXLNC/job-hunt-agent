@@ -798,6 +798,9 @@ func (s *Server) Handler() http.Handler {
 	// The letter and the CV in one file, letter first, for forms that take one.
 	h("GET /api/roles/{id}/both.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		f, err := e.PackPDF(idOf(r))
+		if errors.Is(err, engine.ErrOwnFile) {
+			return nil, bad(capitalise(err.Error()) + ".")
+		}
 		return sendFile(w, f.Name, f.Data, err)
 	})
 
@@ -2028,7 +2031,7 @@ func (s *Server) roleDetail(id int64) (any, error) {
 	// Around a prepared application: the check, the words, the readability,
 	// the kit, the employer's own site, an offer, the answer to a no.
 	if _, sent, doc, err := e.RoleCV(id); err == nil {
-		text := cv.Text(sent)
+		text := e.SentText(id) // the person's own file, when they chose one
 		out["keywords"] = engine.Keywords(reading.Keywords, text)
 		out["readable"] = engine.Readable(sent)
 		out["kit"] = engine.MakeKit(st.Profile(), sent)

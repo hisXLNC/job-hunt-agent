@@ -212,3 +212,88 @@ func TestOwnSite(t *testing.T) {
 		t.Fatal("a role from the employer's own board needs nothing more")
 	}
 }
+
+func TestWholeWordsOnly(t *testing.T) {
+	for _, k := range Keywords([]string{"AI", "ERP", "RPA"}, "Trained enterprise teams with our partners") {
+		if k.In {
+			t.Errorf("%q found inside another word", k.Word)
+		}
+	}
+	for _, k := range Keywords([]string{"Vertex", "einvoicing", "e-invoicing", "SAP S/4HANA"}, "Led the rollout of Vertex. Built e-invoicing on SAP S/4HANA, and einvoicing too.") {
+		if !k.In {
+			t.Errorf("%q not found", k.Word)
+		}
+	}
+}
+
+// A near miss that tailoring would carry over the bar is kept and shown on
+// Today; one that it would not is set aside.
+func TestNearMissIsKept(t *testing.T) {
+	e, _ := newEngine(t)
+	co := setUp(t, e)
+	ctx := context.Background()
+	add := func(key string) int64 {
+		id, err := e.S.AddRole(store.Role{CompanyID: co.ID, Key: key, Source: "greenhouse", Title: "Tax Technology Manager", Location: "Toronto, ON", Description: goodAd})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	first := add("gh-a")
+	if _, _, err := e.ReadRole(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := e.S.Role(first)
+	fit, after := r.Fit, readingOf(r).IfTailored
+	if after <= fit || fit < 30 {
+		t.Fatalf("the stand-in forecasts %d → %d", fit, after)
+	}
+	p := e.S.Profile()
+	p.MayPrepare = "ask"
+	bar := fit + 1
+	p.KeepFit = &bar
+	e.S.SaveProfile(p)
+
+	near := add("gh-b")
+	if kept, _, err := e.ReadRole(ctx, near); err != nil || !kept {
+		t.Fatalf("a near miss tailoring lifts over the bar must be kept: %v", err)
+	}
+	onToday := false
+	for _, c := range e.Today().Cards {
+		if c.RoleID == near {
+			onToday = true
+		}
+	}
+	if !onToday {
+		t.Fatal("the near miss is not on Today")
+	}
+
+	high := after + 1
+	p.KeepFit = &high
+	e.S.SaveProfile(p)
+	far := add("gh-c")
+	if kept, _, _ := e.ReadRole(ctx, far); kept {
+		t.Fatal("a role tailoring cannot lift over the bar is set aside")
+	}
+	for _, c := range e.Today().Cards {
+		if c.RoleID == near {
+			t.Fatal("once the bar is raised past its forecast, the near miss leaves Today")
+		}
+	}
+}
+
+// A role brought over from the old app, with only the old app's CV file, still
+// counts as "applied here before".
+func TestAppliedBeforeWithTheOldAppsFile(t *testing.T) {
+	e, _ := newEngine(t)
+	setUp(t, e)
+	old, _ := e.AddRole("Acme Corp", "Tax Analyst", "Toronto, ON", "", plainAd, "manual")
+	e.S.SaveDoc(old, "old_cv", OldCV{Name: "Old CV.txt", Data: []byte("Sam Rivera\nTax Analyst at Northwind, 2019 - Present\n- Led Vertex")})
+	e.MarkApplied(old, "")
+	now, _ := e.AddRole("Acme Corp", "Tax Technology Manager", "Toronto, ON", "", plainAd, "manual")
+	r, _ := e.S.Role(now)
+	before := e.EarlierHere(r)
+	if before == nil || before.RoleID != old || !strings.Contains(before.text, "Led Vertex") {
+		t.Fatalf("earlier = %+v", before)
+	}
+}

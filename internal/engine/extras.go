@@ -18,6 +18,7 @@ import (
 
 	"jobhunt/internal/brain"
 	"jobhunt/internal/cv"
+	"jobhunt/internal/office"
 	"jobhunt/internal/store"
 )
 
@@ -43,11 +44,10 @@ func (e *Engine) CheckCV(ctx context.Context, roleID int64) error {
 	if err != nil {
 		return err
 	}
-	_, sent, _, err := e.RoleCV(roleID)
-	if err != nil {
-		return err
+	text := e.SentText(roleID)
+	if strings.TrimSpace(text) == "" {
+		return store.ErrNotFound
 	}
-	text := cv.Text(sent)
 	out, err := e.brain.CheckCV(ctx, e.Person(), postingOf(r), text)
 	if err != nil {
 		return err
@@ -66,10 +66,22 @@ func (e *Engine) CheckCV(ctx context.Context, roleID int64) error {
 	return e.S.SaveDoc(roleID, "check", CheckDoc{Lines: lines, Of: TextHash(text), At: e.Now().Unix()})
 }
 
-// SentHash is the hash of the CV text as it is sent now; "" if none.
-func (e *Engine) SentHash(roleID int64) string {
+// SentText is the text of the CV that goes, or went, out for a role: the
+// person's own file if they chose one, else Job Hunt's tailored CV, else the
+// file the old app wrote for it. "" when there is none.
+func (e *Engine) SentText(roleID int64) string {
+	if f, ok := e.Own(roleID, "cv"); ok {
+		if t, err := office.ExtractText(f.Name, f.Data); err == nil && strings.TrimSpace(t) != "" {
+			return t
+		}
+	}
 	if _, sent, _, err := e.RoleCV(roleID); err == nil {
-		return TextHash(cv.Text(sent))
+		return cv.Text(sent)
+	}
+	if f, err := e.OldCVFile(roleID); err == nil {
+		if t, err := office.ExtractText(f.Name, f.Data); err == nil {
+			return t
+		}
 	}
 	return ""
 }
@@ -84,28 +96,44 @@ type Keyword struct {
 
 var notWordish = regexp.MustCompile(`[^\p{L}\p{N}+#/.&]+`)
 
-func squashWords(s string) string {
-	return " " + strings.Join(strings.Fields(notWordish.ReplaceAllString(strings.ToLower(s), " ")), " ") + " "
+// wordsOf splits text into lower-case words; dots, slashes and the like at
+// either end of a word are not part of it ("Vertex." is "vertex").
+func wordsOf(s string) []string {
+	var out []string
+	for _, w := range strings.Fields(notWordish.ReplaceAllString(strings.ToLower(s), " ")) {
+		if w = strings.Trim(w, "./&"); w != "" {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // Keywords counts, here and without Claude, which of the posting's words the
-// CV as sent contains.
+// CV as sent contains. Words are matched whole: "AI" is not found in
+// "trained", nor "ERP" in "enterprise".
 func Keywords(words []string, sent string) []Keyword {
-	have := squashWords(sent)
+	cvWords := wordsOf(sent)
+	seq := " " + strings.Join(cvWords, " ") + " "
+	// "e-invoicing", "e invoicing" and "einvoicing" are the same word: a
+	// word, or two in a row, written together.
+	joined := map[string]bool{}
+	for i, w := range cvWords {
+		joined[w] = true
+		if i > 0 {
+			joined[cvWords[i-1]+w] = true
+		}
+	}
 	seen := map[string]bool{}
 	var out []Keyword
 	for _, w := range words {
 		w = strings.TrimSpace(w)
-		k := squashWords(w)
-		if strings.TrimSpace(k) == "" || seen[k] || len(out) >= 20 {
+		ws := wordsOf(w)
+		k := strings.Join(ws, " ")
+		if k == "" || seen[k] || len(out) >= 20 {
 			continue
 		}
 		seen[k] = true
-		in := strings.Contains(have, k)
-		// "e-invoicing" and "e invoicing" and "einvoicing" are the same word.
-		if !in {
-			in = strings.Contains(strings.ReplaceAll(have, " ", ""), strings.ReplaceAll(k, " ", ""))
-		}
+		in := strings.Contains(seq, " "+k+" ") || joined[strings.Join(ws, "")]
 		out = append(out, Keyword{Word: w, In: in})
 	}
 	return out
@@ -310,6 +338,10 @@ func firstNonEmpty(s ...string) string {
 
 // ---- the person's own files -----------------------------------------------------------------
 
+// ErrOwnFile: the person chose their own file for a role, so Job Hunt's
+// documents are not put together into one PDF.
+var ErrOwnFile = errors.New("you chose your own file for this role; download the CV and the letter on their own")
+
 // OwnFile is a CV or letter file the person would rather send than Job Hunt's.
 type OwnFile struct {
 	Name string `json:"name"`
@@ -453,7 +485,8 @@ func NeedsOwnSite(r store.Role, site string) bool {
 func (e *Engine) OwnSiteFromSearches(r store.Role) string {
 	others, _, _ := e.S.Roles(store.RoleFilter{CompanyID: r.CompanyID, Closed: []string{"*"}, Unread: true, Limit: 200})
 	for _, o := range others {
-		if o.ID == r.ID || !ownSystems[o.Source] || !sameTitle(o.Title, titleWords(r.Title)) {
+		if o.ID == r.ID || !ownSystems[o.Source] || o.GoneAt > 0 || o.Closed == "expired" ||
+			!sameTitle(o.Title, titleWords(r.Title)) || !sameTitle(r.Title, titleWords(o.Title)) || !samePlace(o.Location, r.Location) {
 			continue
 		}
 		if u := firstNonEmpty(o.ApplyURL, o.URL); hostOf(u) != "" {
@@ -461,6 +494,13 @@ func (e *Engine) OwnSiteFromSearches(r store.Role) string {
 		}
 	}
 	return ""
+}
+
+// samePlace: two postings' places name the same town, when both say one.
+func samePlace(a, b string) bool {
+	town := func(s string) string { t, _, _ := strings.Cut(strings.ToLower(s), ","); return strings.TrimSpace(t) }
+	ta, tb := town(a), town(b)
+	return ta == "" || tb == "" || ta == tb || strings.Contains(ta, tb) || strings.Contains(tb, ta)
 }
 
 // FindOwnSite looks for the posting on the employer's own site: first among
@@ -571,8 +611,8 @@ func (e *Engine) EarlierDiff(roleID int64, doc TailoredCV, sent cv.CV) *Differs 
 	if doc.Earlier == nil {
 		return nil
 	}
-	_, then, _, err := e.RoleCV(doc.Earlier.RoleID)
-	if err != nil {
+	thenText := e.SentText(doc.Earlier.RoleID)
+	if thenText == "" {
 		return nil
 	}
 	split := func(s string) []string {
@@ -591,7 +631,7 @@ func (e *Engine) EarlierDiff(roleID int64, doc TailoredCV, sent cv.CV) *Differs 
 		}
 		return m
 	}
-	was, now := split(cv.Text(then)), split(cv.Text(sent))
+	was, now := split(thenText), split(cv.Text(sent))
 	a, b := set(was), set(now)
 	d := &Differs{EarlierRef: *doc.Earlier}
 	for _, l := range now {

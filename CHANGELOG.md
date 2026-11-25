@@ -2,6 +2,14 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.40
+
+- **Words a screening system looks for** now matches whole words only. Short ones like "AI" or "ERP" were being ticked when they only appeared inside other words ("trained", "enterprise").
+- **Applied there before?** now also counts applications brought over from the old Job Hunt, and ones where you sent your own CV file.
+- With your own CV file chosen, **Check my CV** and the word check read your file, not Job Hunt's version.
+- **On their own site** only links an open posting with the same title in the same town.
+- **Near misses on Today** are the ones tailoring would carry over your bar, not every role a little under it.
+
 ## 26.11.39
 
 - **Before you send**, on every role with a CV ready. **Check my CV** reads the CV exactly as it will be sent and says, for each thing the posting asks for, whether it is shown, unclear or missing, with **Make it clear** for the unclear ones. **Words a screening system looks for** shows which of the posting's words are in your CV; tick the missing ones and **Work in the ticked words** (only where your CV or facts support them). **Will a screening system read it?** checks for a missing phone or e-mail, undated roles, length and odd symbols.

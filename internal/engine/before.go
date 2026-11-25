@@ -1,7 +1,8 @@
 package engine
 
 import (
-	"jobhunt/internal/cv"
+	"strings"
+
 	"jobhunt/internal/store"
 )
 
@@ -28,12 +29,8 @@ func (e *Engine) EarlierHere(r store.Role) *earlier {
 	if id == 0 {
 		return nil
 	}
-	_, sent, _, err := e.RoleCV(id)
-	if err != nil {
-		return nil
-	}
-	text := cv.Text(sent)
-	if text == "" {
+	text := e.SentText(id)
+	if strings.TrimSpace(text) == "" {
 		return nil
 	}
 	return &earlier{EarlierRef{RoleID: id, Title: title, At: at}, text}
