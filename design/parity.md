@@ -38,21 +38,21 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 
 ## C. The role page — about 14 present, 13 gaps
 
-1. **Attach your own CV or letter for a role — MISSING (M).** (1.26, 2.10)
+1. **Attach your own CV or letter for a role — DONE 26.11.39, was MISSING (M).** (1.26, 2.10) `SetOwnFile` in `internal/engine/extras.go`; the downloads and the side panel hand over the own file.
 2. **Edit one tailored paragraph yourself — DONE 26.11.31, was PARTIAL (S).** The API takes `after` on `POST /api/roles/{id}/change`; `web/pages/role.js` only has the on/off switch.
-3. **Check my CV, ATS check, Ashby notes — MISSING (M).** Old read the tailored CV requirement by requirement (Meets / Undecided / Not shown), reworded undecided ones, and checked base and tailored CVs for ATS problems (1.14, 2.53–2.55; `core/src/ats.rs`, `pipeline/checks.rs`). New has the asks-versus-evidence table from the first read only.
-4. **Keyword coverage with missing keywords to tick — MISSING (S/M).** (2.45) `Reading.Keywords` exists but is not shown or used.
-5. **Fit forecast before tailoring — MISSING (M).** Old showed "95 → ~97" and "Worth a look tailored" on near misses (1.44). New has the tailored score only after preparing.
-6. **Applied here before: stay close to the CV they have — MISSING (M).** Old kept tailoring close to the CV already sent, or reused it, with a word-by-word comparison (2.29; `/api/settings/repeat`). New has the "Applied here once" tag and employer history.
+3. **Check my CV, ATS check, Ashby notes — DONE 26.11.39 (no Ashby notes), was MISSING (M).** Old read the tailored CV requirement by requirement (Meets / Undecided / Not shown), reworded undecided ones, and checked base and tailored CVs for ATS problems (1.14, 2.53–2.55; `core/src/ats.rs`, `pipeline/checks.rs`). New has the asks-versus-evidence table from the first read only.
+4. **Keyword coverage with missing keywords to tick — DONE 26.11.39, was MISSING (S/M).** (2.45) `Reading.Keywords` exists but is not shown or used.
+5. **Fit forecast before tailoring — DONE 26.11.39, was MISSING (M).** Old showed "95 → ~97" and "Worth a look tailored" on near misses (1.44). New has the tailored score only after preparing.
+6. **Applied here before: stay close to the CV they have — DONE 26.11.39, was MISSING (M).** Old kept tailoring close to the CV already sent, or reused it, with a word-by-word comparison (2.29; `/api/settings/repeat`). New has the "Applied here once" tag and employer history.
 7. **Application questions in the app — DONE 26.11.31, was PARTIAL (S).** Old: paste a form's questions, get answers to copy (1.14). New `FormAnswers` is reachable only from the side panel.
-8. **Copy-and-paste kit — MISSING (M).** (2.36; `/api/jobs/<id>/kit`)
-9. **Offer advice — MISSING (M).** Paste an offer, get comparison, asks and a counter-offer e-mail (1.14). New has only prep for an "offer call".
-10. **Reply to a rejection — MISSING (S).** (2.52)
-11. **Practise this interview — MISSING (S).** (2.51) No button or prompt in new; the assistant could be asked by hand.
+8. **Copy-and-paste kit — DONE 26.11.39, was MISSING (M).** (2.36; `/api/jobs/<id>/kit`)
+9. **Offer advice — DONE 26.11.39, was MISSING (M).** Paste an offer, get comparison, asks and a counter-offer e-mail (1.14). New has only prep for an "offer call".
+10. **Reply to a rejection — DONE 26.11.39, was MISSING (S).** (2.52)
+11. **Practise this interview — DONE 26.11.39, was MISSING (S).** (2.51) No button or prompt in new; the assistant could be asked by hand.
 12. **Your own notes on a role — DONE 26.11.31, was MISSING (S).** New has notes on employers and on conversations, not on roles.
 13. **Not interested: reason, "learn from it", "Never show this company" — DONE 26.11.31, was PARTIAL (S).** New page sends no reason and nothing learns from it; muting an employer is on Radar only.
-14. **Find the posting on the company's own site — MISSING (M).** (1.43, 2.6, 2.23) New uses `apply_url` only when a source supplies it.
-15. **Signature picture — PARTIAL (S).** Old placed an image in the letter; new has a text closing.
+14. **Find the posting on the company's own site — DONE 26.11.39, was MISSING (M).** (1.43, 2.6, 2.23) New uses `apply_url` only when a source supplies it.
+15. **Signature picture — DONE 26.11.39, was PARTIAL (S).** Old placed an image in the letter; new has a text closing.
 16. **Cleaning what Job Hunt writes — DONE 26.11.31, was PARTIAL (S).** Old removed em dashes, AI stock words and hidden characters from output (1.20). New only instructs "no buzzwords" in the prompt (`internal/brain/brain.go`); invisible characters are stripped from postings read in, not from writing going out.
 
 ## D. Search, sources and scoring — about 25 present, 16 gaps
@@ -121,6 +121,16 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 5. **Close as "No response" prompt after four quiet weeks — DONE 26.11.31, was PARTIAL (S).** (1.25)
 6. **A role beside the list — MISSING (S/M).** (2.43) Cosmetic.
 7. **"Write all" follow-ups in one go — MISSING (S).** (2.38)
+
+## Decisions (25 Nov 2026)
+
+- The person asked for everything here except E4 (Claude Desktop) and E5 (CV links opened).
+- Batch 1 (role page) approved as drawn: fit forecast, applied here before, own files, Check my CV, keywords, ATS, kit, offer, rejection reply, practise, own site.
+- A7: build two-way Google Calendar with a Google sign-in key the person creates once (they chose it). Last, after the rest.
+- H3: the phone gets more of the app, but never settings, keys, connections, saved copies or the assistant (CLAUDE.md).
+- A3, A4, A8 write to or read more of the inbox: each is a switch that starts off.
+- Nothing new may reopen a "not interested" role or bring back a muted employer; clearing old matches closes, never deletes.
+- Budget mode and grouped scoring start off: the person wants to be among the first ten applicants.
 
 ## Deliberately excluded (not gaps)
 

@@ -348,22 +348,25 @@ type Ask struct {
 
 // Reading is Job Hunt's reading of one role against the person.
 type Reading struct {
-	Fit      int      `json:"fit"`
-	Verdict  string   `json:"verdict"` // apply, maybe, skip
-	Band     string   `json:"band"`    // level, step_up, sideways, other
-	Summary  string   `json:"summary"`
-	Employer string   `json:"employer"` // what the employer does, in general
-	Division string   `json:"division"` // the part of it this posting is for
-	Agency   bool     `json:"agency"`   // posted by a recruiter for somebody else
-	Asks     []Ask    `json:"asks"`
-	Concerns []string `json:"concerns"`
-	Keywords []string `json:"keywords"`
-	CVID     int64    `json:"cv_id"`
-	SkipWhy  string   `json:"skip_why"`
+	Fit int `json:"fit"`
+	// IfTailored: the fit an honest tailoring of the CV would likely reach.
+	IfTailored int      `json:"if_tailored"`
+	Verdict    string   `json:"verdict"` // apply, maybe, skip
+	Band       string   `json:"band"`    // level, step_up, sideways, other
+	Summary    string   `json:"summary"`
+	Employer   string   `json:"employer"` // what the employer does, in general
+	Division   string   `json:"division"` // the part of it this posting is for
+	Agency     bool     `json:"agency"`   // posted by a recruiter for somebody else
+	Asks       []Ask    `json:"asks"`
+	Concerns   []string `json:"concerns"`
+	Keywords   []string `json:"keywords"`
+	CVID       int64    `json:"cv_id"`
+	SkipWhy    string   `json:"skip_why"`
 }
 
 var readingShape = llm.Obj(
 	"fit", llm.Int("0 to 100, how well the person fits this role as their CV stands today"),
+	"if_tailored", llm.Int("0 to 100, the fit the CV would likely reach once honestly tailored to this posting: reworded and reordered from what is already true, nothing added that is not. Never below fit"),
 	"verdict", llm.Enum("apply: worth applying. maybe: only if little else is around. skip: not for this person", "apply", "maybe", "skip"),
 	"band", llm.Enum("how the role sits against the person's level", "level", "step_up", "sideways", "other"),
 	"summary", llm.Str("Job Hunt's read in two sentences: why this is or isn't a match, and the one thing that will decide it"),
@@ -505,6 +508,8 @@ type Again struct {
 	Ask     string
 	Changes []cv.Change // for a CV: the edits as they stand
 	Text    string      // for a letter: the letter as it stands
+	// Earlier: the CV this employer already has from an earlier application.
+	Earlier string
 }
 
 // Tailor proposes edits to a CV for one role. Every edit is reversible and
@@ -543,6 +548,10 @@ func (b *Brain) Tailor(ctx context.Context, p Person, base cv.CV, post Posting, 
 		prompt += "\n# The edits you proposed before, which the person has read\n" + cur.String() +
 			"\n# What the person now asks for\n" + clip(in.Ask, 600) +
 			"\n\nGive the whole set of edits again with that done. Keep the earlier edits that still serve; leave out the ones the person switched off unless they ask for them. Their request changes emphasis, length and wording. It never makes something true: if it asks for a claim nothing supports, do not write it, and say so under left_out."
+	}
+	if again != nil && strings.TrimSpace(again.Earlier) != "" {
+		prompt += "\n\n# The CV this employer already has, from the person's earlier application there\n<cv>\n" + clip(again.Earlier, 16000) + "\n</cv>\n" +
+			"The same people may compare the two. Stay close to that CV: change only what this posting clearly needs, and never let the two disagree on a fact, a date or a title."
 	}
 	out, _, err := llm.JSON[Tailoring](ctx, b.LLM, llm.Request{
 		Task: "tailor",

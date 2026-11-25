@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"jobhunt/internal/brain"
 	"jobhunt/internal/store"
@@ -37,10 +38,18 @@ func TestCareerPathCountsItselfAndKeepsMarks(t *testing.T) {
 		}
 	}
 	e.AddRole("Other", "Payroll Clerk", "Toronto, ON", "", "team of 3", "manual")
+	// A role applied to half a year ago counts as an application, not as a recent posting.
+	now := e.S.Now
+	e.S.Now = func() time.Time { return time.Now().AddDate(0, -6, 0) }
+	old, _ := e.AddRole("Long Ago Ltd", up, "Toronto, ON", "", "Lead a team of 4.", "manual")
+	e.S.Now = now
+	if err := e.S.SetStage(old, "applied"); err != nil {
+		t.Fatal(err)
+	}
 	pg = e.Career()
 	r := pg.Routes[0]
-	if r.Seen != 6 || !r.Enough {
-		t.Fatalf("seen = %d", r.Seen)
+	if r.Seen != 6 || !r.Enough || r.Applied != 1 {
+		t.Fatalf("seen = %d, applied = %d", r.Seen, r.Applied)
 	}
 	var lead CareerGapView
 	for _, g := range r.Gaps {

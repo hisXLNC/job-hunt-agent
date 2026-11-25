@@ -55,6 +55,17 @@ func StandIn() llm.Engine {
 			out = standAssist(req.Input.(AssistInput))
 		case "mail":
 			out = standMail(req.Input.(mailInput))
+		case "check_cv":
+			out = standCheck(req.Input.(checkInput))
+		case "offer":
+			out = OfferAdvice{Terms: "Base $126,000 · bonus 10% · 3 weeks' holiday · hybrid, 3 days in", Base: 126000, Market: "About the middle of what this kind of role pays there (an estimate).",
+				Asks: []string{"A base of $135,000: your experience is rare here", "A fourth week of holiday", "A start date that suits your move"}, Watch: []string{"The bonus is at the company's discretion"},
+				Subject: "Thank you for the offer", Reply: "Dear Priya,\n\nThank you for the offer; I am very glad to have it and keen to join the team.\n\nBefore I sign, could we look at the base? Given the scope of the role, a base of $135,000 would let me accept straight away.\n\nKind regards"}
+		case "rejection_reply":
+			in := req.Input.(letterInput)
+			out = Message{Subject: "Re: " + in.Posting.Title, Body: "Thank you for letting me know, and for the time you and the team gave my application.\n\nI enjoyed learning about " + in.Posting.Company + " and would welcome hearing about future roles that fit. If you have a moment, one line on what would have made the difference would help me.\n\nKind regards"}
+		case "find_posting":
+			out = Found{Note: "Sample answers cannot search the web."}
 		case "career":
 			out = standCareer(req.Input.(CareerInput))
 		case "reviews":
@@ -419,6 +430,7 @@ func standRead(p Person, post Posting) Reading {
 		score = 25 + 55*(hits/total) + 20*titleHit
 	}
 	r.Fit = int(min(score, 97))
+	r.IfTailored = min(r.Fit+6, 98)
 	r.Band = bandOf(p, post.Title)
 	low := strings.ToLower(post.Title)
 	switch {
@@ -919,4 +931,41 @@ func standCareer(in CareerInput) Career {
 		},
 		Try: []CareerTitle{{Title: now + " Lead", Band: "step_up"}, {Title: "Senior " + now, Band: "level"}, {Title: now + " Specialist", Band: "sideways"}},
 	}
+}
+
+func standCheck(in checkInput) Check {
+	low := strings.ToLower(in.Sent)
+	var out Check
+	// The posting's bulleted lines are its requirements; headings and the
+	// opening paragraph are not.
+	var asks []string
+	for _, line := range strings.Split(in.Post.Description, "\n") {
+		t := strings.TrimSpace(line)
+		if l := strings.TrimSpace(strings.TrimLeft(t, "-•*")); l != t && len(l) >= 12 {
+			asks = append(asks, l)
+		}
+	}
+	for _, l := range asks {
+		if len(out.Lines) == 6 {
+			break
+		}
+		ws := topWords(l, 3)
+		hit := 0
+		for _, w := range ws {
+			if strings.Contains(low, strings.ToLower(w)) {
+				hit++
+			}
+		}
+		cl := CheckLine{Ask: clipWords(l, 12)}
+		switch {
+		case len(ws) > 0 && hit == len(ws):
+			cl.Status, cl.Evidence = "shown", sentenceWith(in.Sent, ws...)
+		case hit > 0:
+			cl.Status, cl.Evidence, cl.Fix = "unclear", "Hinted at, but not said plainly", "Name it in the most recent role's first bullet"
+		default:
+			cl.Status, cl.Evidence, cl.Fix = "missing", "Not on the CV", "Leave it out"
+		}
+		out.Lines = append(out.Lines, cl)
+	}
+	return out
 }

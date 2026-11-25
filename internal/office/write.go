@@ -37,6 +37,7 @@ type para struct {
 
 type doc struct {
 	paras  []para
+	pic    *Picture // a signature picture, at the paragraph styled "SignPicture"
 	title  string
 	who    string
 	margin int // page margin, in twentieths of a point
@@ -65,6 +66,12 @@ func (d *doc) para(style string, runs ...run) {
 func (d *doc) xml() string {
 	var body strings.Builder
 	for _, p := range d.paras {
+		if p.style == "SignPicture" {
+			if d.pic != nil {
+				body.WriteString(d.pic.drawingXML())
+			}
+			continue
+		}
 		body.WriteString(`<w:p><w:pPr><w:pStyle w:val="` + p.style + `"/>`)
 		if p.style == "ListParagraph" {
 			// Said on the paragraph as well as in the style: some readers only look here.
@@ -202,6 +209,8 @@ type Letter struct {
 	// Signature, when set, is the person's own closing, one line each
 	// ("Kind regards," / "Sam Rivera, CPA"); it takes the place of Sign and the name.
 	Signature []string
+	// Picture, when set, is the handwritten signature placed under the closing.
+	Picture *Picture
 }
 
 // RenderLetter writes a letter as a .docx.
@@ -269,6 +278,9 @@ func letterDoc(l Letter) *doc {
 			sig = append(sig, s, clean(l.Name))
 		}
 	}
+	if l.Picture != nil {
+		d.pic = l.Picture
+	}
 	for i, line := range sig {
 		if line == "" {
 			continue
@@ -278,6 +290,9 @@ func letterDoc(l Letter) *doc {
 			style = "LetterGap"
 		}
 		d.para(style, run{text: line})
+		if i == 0 && d.pic != nil {
+			d.para("SignPicture")
+		}
 	}
 	return d
 }
@@ -308,6 +323,8 @@ const docRels = xmlHead + `<Relationships xmlns="http://schemas.openxmlformats.o
 	`<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>` +
 	`<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>` +
 	`</Relationships>`
+
+const drawNS = `xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`
 
 const wNS = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"`
 
@@ -364,18 +381,23 @@ var epoch = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func (d *doc) docx() ([]byte, error) {
 	margin := d.margin
-	document := xmlHead + `<w:document ` + wNS + `><w:body>` + d.xml() +
+	document := xmlHead + `<w:document ` + wNS + ` ` + drawNS + `><w:body>` + d.xml() +
 		fmt.Sprintf(`<w:sectPr><w:pgSz w:w="%d" w:h="%d"/><w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`, pageW, pageH, margin, margin, margin, margin) +
 		`</w:body></w:document>`
 	core := xmlHead + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
 		`<dc:title>` + esc(d.title) + `</dc:title><dc:creator>` + esc(d.who) + `</dc:creator><cp:lastModifiedBy>` + esc(d.who) + `</cp:lastModifiedBy></cp:coreProperties>`
 	app := xmlHead + `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Microsoft Office Word</Application></Properties>`
 
+	types, rels := contentTypes, docRels
+	if d.pic != nil {
+		types = strings.Replace(types, `<Default Extension="xml"`, `<Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="xml"`, 1)
+		rels = strings.Replace(rels, `</Relationships>`, `<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/signature.`+d.pic.mediaExt()+`"/></Relationships>`, 1)
+	}
 	parts := []struct{ name, data string }{
-		{"[Content_Types].xml", contentTypes},
+		{"[Content_Types].xml", types},
 		{"_rels/.rels", rootRels},
 		{"word/document.xml", document},
-		{"word/_rels/document.xml.rels", docRels},
+		{"word/_rels/document.xml.rels", rels},
 		{"word/styles.xml", styles(pageW - 2*margin)},
 		{"word/numbering.xml", numbering},
 		{"word/settings.xml", settings},
@@ -390,6 +412,15 @@ func (d *doc) docx() ([]byte, error) {
 			return nil, err
 		}
 		if _, err := w.Write([]byte(p.data)); err != nil {
+			return nil, err
+		}
+	}
+	if d.pic != nil {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: "word/media/signature." + d.pic.mediaExt(), Method: zip.Store, Modified: epoch})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := w.Write(d.pic.Data); err != nil {
 			return nil, err
 		}
 	}

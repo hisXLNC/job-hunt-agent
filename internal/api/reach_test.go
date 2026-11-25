@@ -103,6 +103,11 @@ func TestAPhoneCanOnlyMakeItsOwnFewCalls(t *testing.T) {
 	if w := phoneDo(h, "POST", "/api/roles/1/later", key, false); w.Code != 403 {
 		t.Errorf("a change without the marker got %d", w.Code)
 	}
+	for _, c := range [][2]string{{"POST", "/api/roles/1/own/cv"}, {"DELETE", "/api/roles/1/own/cv"}, {"POST", "/api/profile/signature-picture"}, {"POST", "/api/roles/1/check"}, {"POST", "/api/roles/1/offer"}, {"POST", "/api/roles/1/findsite"}} {
+		if phoneMay(c[0], c[1]) {
+			t.Errorf("a phone may make %s %s", c[0], c[1])
+		}
+	}
 	if phoneMay("POST", "/api/roles/1/applied/../../quit") || phoneMay("GET", "/api/roles/1/cv.docx") || !phoneMay("GET", "/api/roles/12/both.pdf") {
 		t.Error("the phone's list matches the wrong things")
 	}

@@ -257,7 +257,9 @@ async function fetchFile(id, which, word) {
   const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(r.headers.get('Content-Disposition') || '');
   let name = (which === 'cv' ? 'CV.' : 'Cover letter.') + ext;
   if (m) { try { name = decodeURIComponent(m[1]); } catch (e) { name = m[1]; } }
-  return { name, blob: await r.blob(), type: ext === 'pdf' ? 'application/pdf' : WORD };
+  // The person's own file for a role comes as it is, Word or PDF, whichever was asked for.
+  const type = /\.docx$/i.test(name) ? WORD : /\.pdf$/i.test(name) ? 'application/pdf' : ext === 'pdf' ? 'application/pdf' : WORD;
+  return { name, blob: await r.blob(), type };
 }
 function toB64(blob) {
   return new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = () => no(new Error('The file could not be read.')); fr.readAsDataURL(blob); });

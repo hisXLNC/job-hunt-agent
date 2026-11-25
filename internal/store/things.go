@@ -1334,9 +1334,9 @@ type RoleText struct {
 	Applied                  bool
 }
 
-// RoleTexts lists roles first seen since a moment, with their text.
+// RoleTexts lists roles first seen since a moment (0 for all), with their text.
 func (s *Store) RoleTexts(since int64) ([]RoleText, error) {
-	rows, err := s.db.Query(`SELECT title, description, band, stage, applied_at > 0 FROM roles WHERE first_seen_at >= ? OR applied_at > 0`, since)
+	rows, err := s.db.Query(`SELECT title, description, band, stage, applied_at > 0 FROM roles WHERE first_seen_at >= ?`, since)
 	if err != nil {
 		return nil, err
 	}
@@ -1350,4 +1350,14 @@ func (s *Store) RoleTexts(since int64) ([]RoleText, error) {
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// AppliedBefore is the most recent other role at the same employer that the
+// person applied to and that has a CV of Job Hunt's. Zero when there is none.
+func (s *Store) AppliedBefore(companyID, except int64) (id int64, title string, at int64) {
+	s.db.QueryRow(`SELECT r.id, r.title, r.applied_at FROM roles r
+		WHERE r.company_id = ? AND r.id <> ? AND r.applied_at > 0
+		AND EXISTS (SELECT 1 FROM docs d WHERE d.role_id = r.id AND d.kind = 'cv')
+		ORDER BY r.applied_at DESC LIMIT 1`, companyID, except).Scan(&id, &title, &at)
+	return
 }

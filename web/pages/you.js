@@ -123,7 +123,10 @@ function about(d, route) {
       form('letters', html`<div class="grid3"><label class="field">Letter style <span class="h">You can change it for any one role.</span><select name="letter_style">${[['standard', 'Standard'], ['formal', 'Formal: banks, government, law'], ['short', 'Short and direct'], ['warm', 'Warm and personal']].map(([k, x]) => html`<option value="${k}" ${p.letter_style === k ? 'selected' : ''}>${x}</option>`)}</select></label>
         <label class="field">Follow up on an application <span class="h">When there has been no reply.</span><select name="chase_days">${[...new Set([0, 5, 8, 10, 14, 21, p.chase_days ?? 8])].sort((a, b) => a - b).map(n => html`<option value="${n}" ${(p.chase_days ?? 8) === n ? 'selected' : ''}>${n ? `After ${n} days` : 'Never'}</option>`)}</select></label>
         <label class="field">Applications a week <span class="h">Your goal. 0 for none.</span><input type="number" name="weekly_goal" min="0" max="100" value="${p.weekly_goal ?? 10}"></label></div>
-      <label class="field" style="max-width:420px">How you sign a letter <span class="h">One line each. Leave empty for "Sincerely," and your name.</span><textarea name="signature" rows="2" placeholder="Kind regards,&#10;Sam Rivera, CPA">${p.signature || ''}</textarea></label>`)],
+      <label class="field" style="max-width:420px">How you sign a letter <span class="h">One line each. Leave empty for "Sincerely," and your name.</span><textarea name="signature" rows="2" placeholder="Kind regards,&#10;Sam Rivera, CPA">${p.signature || ''}</textarea></label>
+      <div class="row wrap" style="gap:10px"><span class="s grow" style="min-width:220px"><b>Your handwritten signature</b> <span class="m">· a picture of it, placed under the closing in every letter (Word and PDF). PNG or JPEG.</span></span>
+        ${d.signature_picture ? html`<img src="/api/profile/signature-picture?t=${Date.now()}" alt="Your signature" style="height:36px;max-width:180px;object-fit:contain;background:#fff;border-radius:6px;border:1px solid var(--line);padding:2px 6px"><button type="button" class="btn sm ghost" data-act="dropsig">Remove</button>` : ''}
+        <label class="btn sm">${d.signature_picture ? 'Use another' : 'Add a picture'}<input type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden data-on="change" data-act="addsig"></label></div>`)],
     ['auto', 'What Job Hunt does by itself', ['', `Fit ${p.keep_fit ?? 55}+`], [`Keeps roles from fit ${p.keep_fit ?? 55}`, p.may_prepare === 'ask' ? 'asks before writing anything' : `writes the CV and letter straight away from fit ${p.prepare_fit ?? 70}`, p.prepare_max ? `at most ${p.prepare_max} per search` : 'no limit per search'].join(' · '),
       form('auto', html`<div class="grid3" data-set="fit"><label class="field">Fit a role needs <span class="h">Under this, it is set aside. 55 unless you say.</span><input type="number" name="keep_fit" min="30" max="95" value="${p.keep_fit ?? 55}"></label>
         <label class="field">Write documents from fit <span class="h">85 for strong fits only; the same as the first for all.</span><input type="number" name="prepare_fit" min="30" max="100" value="${p.prepare_fit ?? 70}"></label>
@@ -490,6 +493,8 @@ export default {
       toast('Saved. The next search uses this.');
       location.hash = with_(route, { open: '' });
     },
+    async addsig({ el }) { const file = el.files[0]; if (!file) return false; await api('profile/signature-picture', { method: 'POST', raw: file }); toast('Your signature goes into every letter from now on'); },
+    dropsig: () => del('profile/signature-picture').then(() => toast('Letters are signed with your name only')),
     async addcv({ el }) { const file = el.files[0]; if (!file) return false; toast('Reading your CV. About a minute.'); await api('cvs?name=' + encodeURIComponent(file.name), { method: 'POST', raw: file }); toast('CV added'); },
     delcv: ({ d }) => del(`cvs/${d.id}`),
     addfact: ({ f, el }) => post('facts', { text: f.text }).then(() => el.reset()),

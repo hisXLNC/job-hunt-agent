@@ -2,6 +2,17 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.39
+
+- **Before you send**, on every role with a CV ready. **Check my CV** reads the CV exactly as it will be sent and says, for each thing the posting asks for, whether it is shown, unclear or missing, with **Make it clear** for the unclear ones. **Words a screening system looks for** shows which of the posting's words are in your CV; tick the missing ones and **Work in the ticked words** (only where your CV or facts support them). **Will a screening system read it?** checks for a missing phone or e-mail, undated roles, length and odd symbols.
+- **Copy-and-paste kit**: name, e-mail, phone, LinkedIn, city, current title, right to work and each role's title, dates and text, one Copy each, for forms that make you type it all.
+- **Use your own CV or letter file** for a role. The downloads and the side panel then hand over your file instead of Job Hunt's, until you press **Use Job Hunt's again**.
+- **Applied there before?** A new CV for an employer you already applied to stays close to the one they have, and the role page says so, with **See what differs**.
+- **Fit once tailored**: before anything is written, a role shows what its fit would likely reach once tailored. Near misses that tailoring would lift over your bar now stay on Today instead of being set aside.
+- **An offer**: paste it on the role and Job Hunt weighs it up (against the market and your pay floor), lists what's worth asking for and drafts the reply. **They said no**: a short, gracious reply to send. **Practise this interview** opens Claude to ask you one question at a time.
+- **On their own site**: for a role found on LinkedIn or another board, Job Hunt looks for the same posting on the employer's own careers site, so you can apply there.
+- **Your handwritten signature** in letters: add a picture of it under You → Letters and follow-ups and it goes under the closing in every letter, Word and PDF.
+
 ## 26.11.38
 
 - **About you, one line per group.** You, What to look for, Hard limits, What matters to you, Letters and follow-ups, and What Job Hunt does by itself each show what is set in one line. Each opens where it sits and saves on its own, so there is no long form with one Save at the bottom. The long list of nearby places is folded away. "Find a setting" opens the right group.

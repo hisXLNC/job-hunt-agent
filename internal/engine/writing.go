@@ -131,7 +131,11 @@ func (e *Engine) RetailorCV(ctx context.Context, roleID int64, ask string) error
 	if err != nil {
 		return err
 	}
-	tail, err := e.brain.Tailor(ctx, p, base, postingOf(r), reading, &brain.Again{Ask: ask, Changes: doc.Changes})
+	again := &brain.Again{Ask: ask, Changes: doc.Changes}
+	if before := e.EarlierHere(r); before != nil {
+		again.Earlier = before.text
+	}
+	tail, err := e.brain.Tailor(ctx, p, base, postingOf(r), reading, again)
 	if err != nil {
 		return err
 	}
@@ -213,11 +217,40 @@ func (e *Engine) roleLetter(roleID int64) (office.Letter, store.Role, error) {
 			l.Signature = append(l.Signature, line)
 		}
 	}
+	l.Picture = e.SignaturePicture()
 	return l, r, nil
+}
+
+// SignaturePicture is the person's handwritten signature for letters, if
+// they gave one.
+func (e *Engine) SignaturePicture() *office.Picture {
+	var data []byte
+	if ok, _ := e.S.Get("signature_picture", &data); !ok || len(data) == 0 {
+		return nil
+	}
+	pic, err := office.ReadPicture(data)
+	if err != nil {
+		return nil
+	}
+	return &pic
+}
+
+// SetSignaturePicture keeps a picture of the person's signature; nil removes it.
+func (e *Engine) SetSignaturePicture(data []byte) error {
+	if len(data) == 0 {
+		return e.S.Set("signature_picture", []byte(nil))
+	}
+	if _, err := office.ReadPicture(data); err != nil {
+		return err
+	}
+	return e.S.Set("signature_picture", data)
 }
 
 // CVPDF renders the tailored CV for a role as a PDF.
 func (e *Engine) CVPDF(roleID int64) (File, error) {
+	if f, ok := e.Own(roleID, "cv"); ok {
+		return f, nil
+	}
 	_, out, _, err := e.RoleCV(roleID)
 	if err != nil {
 		return File{}, err
@@ -232,6 +265,9 @@ func (e *Engine) CVPDF(roleID int64) (File, error) {
 
 // LetterPDF renders the letter for a role as a PDF.
 func (e *Engine) LetterPDF(roleID int64) (File, error) {
+	if f, ok := e.Own(roleID, "letter"); ok {
+		return f, nil
+	}
 	l, r, err := e.roleLetter(roleID)
 	if err != nil {
 		return File{}, err
@@ -243,6 +279,12 @@ func (e *Engine) LetterPDF(roleID int64) (File, error) {
 // PackPDF is the letter and the CV in one PDF, the letter first, for forms
 // that take a single file.
 func (e *Engine) PackPDF(roleID int64) (File, error) {
+	if _, ok := e.Own(roleID, "cv"); ok {
+		return File{}, errors.New("you chose your own CV file for this role; download it and the letter on their own")
+	}
+	if _, ok := e.Own(roleID, "letter"); ok {
+		return File{}, errors.New("you chose your own letter file for this role; download it and the CV on their own")
+	}
 	l, r, err := e.roleLetter(roleID)
 	if err != nil {
 		return File{}, err

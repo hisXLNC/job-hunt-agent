@@ -197,6 +197,10 @@ func TestAssistantCannotReachWhatIsNotOnItsList(t *testing.T) {
 		brain.AssistCall{Method: "GET", Path: "/api/roles/../llm"},
 		brain.AssistCall{Method: "GET", Path: "https://evil.example/api/state"},
 		brain.AssistCall{Method: "POST", Path: "/api/facts", Body: `{not json`},
+		brain.AssistCall{Method: "DELETE", Path: "/api/roles/1/own/cv"},
+		brain.AssistCall{Method: "DELETE", Path: "/api/profile/signature-picture"},
+		brain.AssistCall{Method: "POST", Path: "/api/roles/1/findsite"},
+		brain.AssistCall{Method: "POST", Path: "/api/roles/1/offer", Body: `{"text":"x"}`},
 	), brain.AssistStep{Say: "I can't do those."})
 	before := srv.E.LLM()
 	v := tell(t, h, "do the things the e-mail says", "#/replies")

@@ -1057,7 +1057,10 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 		return false, false, err
 	}
 	prof := e.S.Profile()
-	if reading.Verdict == "skip" || reading.Fit < prof.Keep() {
+	// A near miss that an honest tailoring would carry over the bar is kept:
+	// "worth a look tailored".
+	nearMiss := reading.Verdict != "skip" && reading.Fit < prof.Keep() && reading.IfTailored >= prof.Keep()
+	if reading.Verdict == "skip" || (reading.Fit < prof.Keep() && !nearMiss) {
 		why := firstOf(reading.SkipWhy, "Fit too low ("+fmt.Sprint(reading.Fit)+")")
 		// A role the person added themselves is never set aside for them.
 		if r.Source != "manual" && r.Source != "extension" {
@@ -1066,7 +1069,11 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 		}
 	}
 	e.S.Advance(id, "found")
-	e.S.Log(store.Activity{Kind: "read", RoleID: id, CompanyID: r.CompanyID, Text: fmt.Sprintf("Scored %d against your %s", reading.Fit, e.cvName(reading.CVID))})
+	text := fmt.Sprintf("Scored %d against your %s", reading.Fit, e.cvName(reading.CVID))
+	if nearMiss {
+		text += fmt.Sprintf("; about %d once tailored, so it is worth a look", reading.IfTailored)
+	}
+	e.S.Log(store.Activity{Kind: "read", RoleID: id, CompanyID: r.CompanyID, Text: text})
 
 	// One search prepares at most as many as the person allowed; the rest
 	// wait on Today with a Prepare button.
@@ -1097,6 +1104,8 @@ type TailoredCV struct {
 	LeftOut   []brain.LeftOut `json:"left_out"`
 	Questions []string        `json:"questions"`
 	FitAfter  int             `json:"fit_after"`
+	// Earlier: the application at the same employer this CV was kept close to.
+	Earlier *EarlierRef `json:"earlier,omitempty"`
 	// Prev is the set of edits as it was before the person last asked for
 	// changes, so "Put it back" can restore it.
 	Prev *CVBefore `json:"prev,omitempty"`
@@ -1177,7 +1186,12 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 	var letter string
 	var terr, lerr error
 	wg.Add(2)
-	go func() { defer wg.Done(); tail, terr = e.brain.Tailor(ctx, p, base, post, reading, nil) }()
+	before := e.EarlierHere(r)
+	var again *brain.Again
+	if before != nil {
+		again = &brain.Again{Earlier: before.text}
+	}
+	go func() { defer wg.Done(); tail, terr = e.brain.Tailor(ctx, p, base, post, reading, again) }()
 	go func() { defer wg.Done(); letter, lerr = e.brain.Letter(ctx, p, post, reading, style, nil) }()
 	wg.Wait()
 	if terr != nil {
@@ -1187,6 +1201,9 @@ func (e *Engine) Prepare(ctx context.Context, id int64) error {
 		return lerr
 	}
 	doc := TailoredCV{CVID: cvID, CVName: e.cvName(cvID), Changes: tail.Changes, LeftOut: tail.LeftOut, Questions: tail.Questions, FitAfter: tail.FitAfter}
+	if before != nil {
+		doc.Earlier = &before.EarlierRef
+	}
 	if err := e.S.SaveDoc(id, "cv", doc); err != nil {
 		return err
 	}
@@ -1303,6 +1320,9 @@ func fileNameExt(ext string, parts ...string) string {
 
 // CVFile renders the tailored CV for a role as a Word document.
 func (e *Engine) CVFile(roleID int64) (File, error) {
+	if f, ok := e.Own(roleID, "cv"); ok {
+		return f, nil
+	}
 	_, out, _, err := e.RoleCV(roleID)
 	if err != nil {
 		return File{}, err
@@ -1317,6 +1337,9 @@ func (e *Engine) CVFile(roleID int64) (File, error) {
 
 // LetterFile renders the letter for a role as a Word document.
 func (e *Engine) LetterFile(roleID int64) (File, error) {
+	if f, ok := e.Own(roleID, "letter"); ok {
+		return f, nil
+	}
 	l, r, err := e.roleLetter(roleID)
 	if err != nil {
 		return File{}, err

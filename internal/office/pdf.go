@@ -393,6 +393,7 @@ type pdfBuilder struct {
 	y      float64 // top of the next line
 	margin float64
 	fresh  bool // nothing on this page yet
+	pic    *Picture
 }
 
 func (p *pdfBuilder) newPage() {
@@ -549,6 +550,18 @@ func (p *pdfBuilder) add(d *doc) {
 		all[i] = p.lay(pa, width)
 	}
 	for i, l := range all {
+		if d.paras[i].style == "SignPicture" && d.pic != nil {
+			w, h := d.pic.size()
+			if p.y-h-6 < bottom && !p.fresh {
+				p.newPage()
+			}
+			p.y -= 4
+			fmt.Fprintf(p.page, "q %s 0 0 %s %s %s cm /Im1 Do Q\n", num(w), num(h), num(left), num(p.y-h))
+			p.y -= h + 2
+			p.pic = d.pic
+			p.fresh = false
+			continue
+		}
 		if len(l.lines) == 0 {
 			continue
 		}
@@ -693,6 +706,12 @@ func renderPDF(docs ...*doc) ([]byte, error) {
 	for i, o := range objs {
 		write(i+1, []byte(o))
 	}
+	// The signature picture, if a letter has one, follows the pages.
+	picObj, xobj := 0, ""
+	if p.pic != nil {
+		picObj = first + 2*len(p.pages)
+		xobj = fmt.Sprintf(" /XObject << /Im1 %d 0 R >>", picObj)
+	}
 	for i, pg := range p.pages {
 		var z bytes.Buffer
 		zw, err := zlib.NewWriterLevel(&z, zlib.BestCompression)
@@ -710,8 +729,15 @@ func renderPDF(docs ...*doc) ([]byte, error) {
 		stream.Write(z.Bytes())
 		stream.WriteString("\nendstream")
 		write(first+2*i, stream.Bytes())
-		write(first+2*i+1, []byte(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %s %s] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents %d 0 R >>",
-			num(pdfPageW), num(pdfPageH), first+2*i)))
+		write(first+2*i+1, []byte(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %s %s] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >>%s >> /Contents %d 0 R >>",
+			num(pdfPageW), num(pdfPageH), xobj, first+2*i)))
+	}
+	if p.pic != nil {
+		img, err := p.pic.pdfImage()
+		if err != nil {
+			return nil, err
+		}
+		write(picObj, img)
 	}
 	xref := out.Len()
 	fmt.Fprintf(&out, "xref\n0 %d\n0000000000 65535 f \n", len(offsets)+1)

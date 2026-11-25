@@ -708,8 +708,72 @@ func (s *Server) Handler() http.Handler {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 			return nil, e.WriteCase(ctx, id)
+		case "check":
+			return rewrite(func(ctx context.Context) error { return e.CheckCV(ctx, id) })
+		case "offer":
+			if strings.TrimSpace(in.Text) == "" {
+				return nil, bad("Paste the offer first.")
+			}
+			return rewrite(func(ctx context.Context) error { return e.WeighOffer(ctx, id, clipRunes(in.Text, 12000)) })
+		case "noreply":
+			return rewrite(func(ctx context.Context) error { return e.WriteNoReply(ctx, id) })
+		case "findsite":
+			if e.OwnSiteFromSearches(role) == "" && e.LLM().Engine == "" {
+				return nil, llm.ErrNotConnected
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			defer cancel()
+			if err := e.FindOwnSite(ctx, id); err != nil {
+				return nil, bad(capitalise(err.Error()) + ".")
+			}
+			return nil, nil
 		}
 		return nil, bad("unknown action")
+	})
+	// A picture of the person's handwritten signature, put in their letters.
+	h("POST /api/profile/signature-picture", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		data, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+		if err != nil || len(data) == 0 {
+			return nil, bad("That file is empty.")
+		}
+		if err := e.SetSignaturePicture(data); err != nil {
+			return nil, bad(capitalise(err.Error()) + ".")
+		}
+		return nil, nil
+	})
+	h("DELETE /api/profile/signature-picture", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		return nil, e.SetSignaturePicture(nil)
+	})
+	h("GET /api/profile/signature-picture", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		pic := e.SignaturePicture()
+		if pic == nil {
+			return nil, store.ErrNotFound
+		}
+		w.Header().Set("Content-Type", "image/"+pic.Ext)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Write(pic.Data)
+		return noBody{}, nil
+	})
+	// The person's own CV or letter file for a role, sent instead of Job Hunt's.
+	h("POST /api/roles/{id}/own/{kind}", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		name := path.Base(strings.ReplaceAll(r.URL.Query().Get("name"), `\`, "/"))
+		data, err := io.ReadAll(io.LimitReader(r.Body, 11<<20))
+		if err != nil || len(data) == 0 {
+			return nil, bad("That file is empty.")
+		}
+		if err := e.SetOwnFile(idOf(r), r.PathValue("kind"), name, data); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+			return nil, bad(capitalise(err.Error()) + ".")
+		}
+		return nil, nil
+	})
+	h("DELETE /api/roles/{id}/own/{kind}", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if err := e.DropOwnFile(idOf(r), r.PathValue("kind")); err != nil {
+			return nil, bad(capitalise(err.Error()) + ".")
+		}
+		return nil, nil
 	})
 	h("GET /api/roles/{id}/cv.docx", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		f, err := e.CVFile(idOf(r))
@@ -1311,7 +1375,7 @@ func (s *Server) Handler() http.Handler {
 		facts, _ := st.Facts()
 		answers, _ := st.Answers()
 		qs, _ := st.OpenQuestions()
-		return map[string]any{"profile": st.Profile(), "cvs": cvs, "facts": facts, "answers": answers, "questions": qs, "area": engine.Area(st.Profile())}, nil
+		return map[string]any{"profile": st.Profile(), "cvs": cvs, "facts": facts, "answers": answers, "questions": qs, "area": engine.Area(st.Profile()), "signature_picture": e.SignaturePicture() != nil}, nil
 	})
 	h("POST /api/facts", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
@@ -1792,6 +1856,11 @@ func clipAsk(s string) string {
 	return string(r[:min(len(r), 600)])
 }
 
+func clipRunes(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	return string(r[:min(len(r), n)])
+}
+
 func capitalise(s string) string {
 	if s == "" {
 		return s
@@ -1956,6 +2025,42 @@ func (s *Server) roleDetail(id int64) (any, error) {
 	if f, err := e.OldCVFile(id); err == nil {
 		out["old_cv"] = f.Name
 	}
+	// Around a prepared application: the check, the words, the readability,
+	// the kit, the employer's own site, an offer, the answer to a no.
+	if _, sent, doc, err := e.RoleCV(id); err == nil {
+		text := cv.Text(sent)
+		out["keywords"] = engine.Keywords(reading.Keywords, text)
+		out["readable"] = engine.Readable(sent)
+		out["kit"] = engine.MakeKit(st.Profile(), sent)
+		out["earlier"] = e.EarlierDiff(id, doc, sent)
+		var check engine.CheckDoc
+		if ok, _ := st.Doc(id, "check", &check); ok {
+			out["check"] = check
+			out["check_stale"] = check.Of != engine.TextHash(text)
+		}
+	}
+	out["own_cv"] = e.OwnInfo(id, "cv")
+	out["own_letter"] = e.OwnInfo(id, "letter")
+	if c, err := st.Company(r.CompanyID); err == nil && engine.NeedsOwnSite(r, c.Site) {
+		var site engine.OwnSite
+		if ok, _ := st.Doc(id, "ownsite", &site); ok {
+			out["own_site"] = site
+		} else if u := e.OwnSiteFromSearches(r); u != "" {
+			out["own_site"] = engine.OwnSite{URL: u, From: "search"}
+		} else {
+			out["own_site"] = engine.OwnSite{}
+		}
+	}
+	var offer engine.OfferDoc
+	if ok, _ := st.Doc(id, "offer", &offer); ok {
+		out["offer"] = offer
+	}
+	var noreply engine.NoReply
+	if ok, _ := st.Doc(id, "noreply", &noreply); ok {
+		out["noreply"] = noreply
+	}
+	out["pay_floor"] = st.Profile().PayFloor
+	out["can_web"] = e.LLM().Engine == "api" || e.LLM().Engine == "claude-code"
 	var cs engine.CaseDoc
 	if ok, _ := st.Doc(id, "case", &cs); ok {
 		out["case"] = cs
