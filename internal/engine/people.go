@@ -134,7 +134,7 @@ func (e *Engine) AddPerson(p store.Person, company string) (int64, error) {
 // ---- notes ------------------------------------------------------------------------
 
 // DraftNote writes a note to a person. It is a draft until the person says
-// they sent it; Job Hunt never sends anything.
+// they sent it; Job Hunt sends nothing unless the person presses Send on it.
 func (e *Engine) DraftNote(ctx context.Context, personID int64, purpose, channel string, roleID int64) (store.Note, error) {
 	p, err := e.S.Person(personID)
 	if err != nil {

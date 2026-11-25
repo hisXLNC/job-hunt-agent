@@ -110,7 +110,7 @@ func (e *Engine) remind(now time.Time) {
 			continue
 		}
 		if e.saidOnce(fmt.Sprintf("after:%d:%d", t.ID, t.At)) {
-			e.Say(false, "How did it go?", "How did it go with "+talkWith(t)+"?", "Say how it went, and send a short thank-you while it is fresh. One is drafted for you.", fmt.Sprintf("#/interviews/%d", t.ID))
+			e.Say(false, "How did it go?", "How did it go with "+talkWith(t)+"?", "Say how it went. Write a thank-you to "+talkWith(t)+" while it is fresh? Press Write a thank-you and Job Hunt writes it.", fmt.Sprintf("#/interviews/%d", t.ID))
 		}
 	}
 

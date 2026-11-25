@@ -6,7 +6,7 @@ import (
 )
 
 // Mail is a message that arrived for the person and has to do with the
-// search. Job Hunt reads mail; it never sends any.
+// search. Job Hunt reads mail; it sends one only when the person presses Send on it.
 //
 // Kinds: interview, assessment, question, offer, rejection, receipt, person,
 // other. States: "new" (needs the person), "done".

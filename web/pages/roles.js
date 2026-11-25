@@ -32,7 +32,7 @@ function filters(d, route) {
       <button class="btn sm">Filter</button>
       ${q.q || q.band || q.minfit || q.company || closedOn || q.stage || q.later ? html`<a class="btn sm ghost" href="#/roles">Clear</a>` : ''}
       <span class="grow"></span>
-      <a class="btn sm" href="/api/roles.csv" download title="Every role Job Hunt knows, as a file a spreadsheet opens.">Save as a spreadsheet</a><button type="button" class="btn sm" data-act="showadd">Add a role yourself</button>
+      <a class="btn sm" href="/api/roles.csv" download title="Every role Job Hunt knows, as a file a spreadsheet opens.">Save as a spreadsheet</a><a class="btn sm" href="/api/recruiters.csv" download title="Recruiters and hiring managers with their e-mail, phone and LinkedIn, as a file a spreadsheet opens.">Recruiters as a spreadsheet</a><button type="button" class="btn sm" data-act="showadd">Add a role yourself</button>
     </form></div>${bulk(d)}</div>
     <form data-act="add" id="addrole" hidden class="card col" style="gap:8px;padding:12px 14px">
       <div class="grid3"><label class="field">Employer<input type="text" name="company" required></label><label class="field">Job title<input type="text" name="title" required></label><label class="field">Place<input type="text" name="location"></label></div>

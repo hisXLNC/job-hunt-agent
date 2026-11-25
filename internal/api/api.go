@@ -1089,8 +1089,8 @@ func (s *Server) Handler() http.Handler {
 			return nil, err
 		}
 		var in struct {
-			Name, Title, Kind, Why, URL, Email, State *string
-			KnowsYou                                  *bool `json:"knows_you"`
+			Name, Title, Kind, Why, URL, Email, State, Phone *string
+			KnowsYou                                         *bool `json:"knows_you"`
 		}
 		if err := read(r, &in); err != nil {
 			return nil, err
@@ -1106,6 +1106,7 @@ func (s *Server) Handler() http.Handler {
 		set(&p.Why, in.Why)
 		set(&p.Email, in.Email)
 		set(&p.State, in.State)
+		set(&p.Phone, in.Phone)
 		if in.URL != nil {
 			p.URL = safeLink(*in.URL)
 		}
@@ -1467,7 +1468,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
-			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources()}, nil
+			"desk": e.Desk(), "schedule": e.Schedule(), "can_notify": e.Notify != nil, "more": e.MoreSources(), "recruiter_scan": e.RecruiterScan()}, nil
 	})
 	// More job sources: the searches that take a key (Adzuna, Jooble, Google
 	// for Jobs) and job-alert e-mails. A key goes in and never comes out: what

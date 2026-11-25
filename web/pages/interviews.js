@@ -1,4 +1,5 @@
 import { html, api, post, put, del, when, clock, toast, copy, safeUrl, employer, rel, soon, with_ } from '../app.js';
+import { toField, outButtons, outActions } from '../outbox.js';
 
 const KINDS = { chat: 'Informal conversation', screen: 'Recruiter call', interview: 'Interview', offer: 'Offer call' };
 const pad = n => String(n).padStart(2, '0');
@@ -108,8 +109,8 @@ function after(d) {
     <div class="row wrap"><button class="btn sm ${d.went === 'next' ? 'p' : ''}" data-act="went" data-how="next">Another round</button><button class="btn sm ${d.went === 'offer' ? 'p' : ''}" data-act="went" data-how="offer">They made an offer</button><button class="btn sm ${d.went === 'fine' ? 'p' : ''}" data-act="went" data-how="fine">Waiting to hear</button><button class="btn sm" data-act="went" data-how="no" ${t.role_id ? html`data-confirm="Mark this as a no? The role is closed as rejected; its documents and history stay."` : ''}>They said no</button>
       ${d.went === 'next' ? html`<a class="btn sm" href="#/interviews?${t.role_id ? 'role=' + t.role_id : t.person_id ? 'person=' + t.person_id : ''}">Add the next conversation</a>` : ''}</div>
     <div class="eb" style="margin-top:6px">A thank-you</div>
-    ${d.thanking ? html`<div class="row"><span class="spin"></span><span class="s m">Writing it. About half a minute.</span></div>` : th.body ? html`<form data-act="savethanks" class="col" style="gap:8px"><label class="field">Subject<input type="text" name="subject" value="${th.subject}"></label><textarea name="body" rows="7" aria-label="The thank-you">${th.body}</textarea>
-      <div class="row wrap"><button type="button" class="btn sm p" data-act="copythanks">Copy</button><a class="btn sm" href="${mail}" title="Opens a new message in your mail program with this in it. You add who it goes to and send it.">Open in my mail</a><button class="btn sm">Save my wording</button><button type="button" class="btn sm" data-act="thanks">Write it again</button></div><p class="xs m">Job Hunt writes; you send. Best within a day.</p></form>` : html`<div class="row wrap"><p class="s m grow" style="min-width:220px">Three or four sentences, specific to what was said. Your notes on the right are used if you wrote any.</p><button class="btn sm p" data-act="thanks">Write a thank-you</button></div>`}
+    ${d.thanking ? html`<div class="row"><span class="spin"></span><span class="s m">Writing it. About half a minute.</span></div>` : th.body ? html`<form data-act="savethanks" class="col" style="gap:8px">${toField(d.person?.email)}<label class="field">Subject<input type="text" name="subject" value="${th.subject}"></label><textarea name="body" rows="7" aria-label="The thank-you">${th.body}</textarea>
+      <div class="row wrap"><button type="button" class="btn sm p" data-act="copythanks">Copy</button><a class="btn sm" href="${mail}" title="Opens a new message in your mail program with this in it. You add who it goes to and send it.">Open in my mail</a>${outButtons('thanks', t.id)}<button class="btn sm">Save my wording</button><button type="button" class="btn sm" data-act="thanks">Write it again</button></div><p class="xs m">Job Hunt writes; you send. Best within a day.</p></form>` : html`<div class="row wrap"><p class="s m grow" style="min-width:220px">Three or four sentences, specific to what was said. Your notes on the right are used if you wrote any.</p><button class="btn sm p" data-act="thanks">Write a thank-you</button></div>`}
   </div>`;
 }
 
@@ -133,6 +134,7 @@ export default {
   },
   view: (d, route) => route.parts[1] ? one(d) : route.q.view === 'month' ? month(d, route) : list(d, route),
   actions: {
+    ...outActions,
     copyfeed: ({ d }) => copy(d.text).then(() => false),
     async add({ f }) {
       const at = ts(f.at);

@@ -14,12 +14,12 @@ Limits: I did not read the old `fill.js`/`fill.rs`, `sources.rs`, `cv.rs`, `goog
 
 1. **Confirmation e-mail marks a role applied — DONE 26.11.30, was MISSING (M).** Old: a "we received your application" mail marked the job applied, even if not approved, and created a job for applications Job Hunt never found (1.25, 2.10; `core/src/pipeline/mail.rs`). New: `takeMail` in `internal/engine/mail.go` files a `receipt` as done and changes no stage. It also only offers roles already at ready or later as candidates.
 2. **Archived mail is not seen — DONE 26.11.30, was PARTIAL (S).** Old read confirmations "archived or not". New `CheckMail` does `EXAMINE INBOX` only.
-3. **Reply drafts saved in Gmail, in the thread — MISSING (M).** Old saved replies, follow-ups, thank-yous, rejection replies and recruiter notes as Gmail drafts (`core/src/google.rs`). New is IMAP read-only; drafts leave via Copy or `mailto:` (`web/pages/replies.js`, `role.js`). A draft is not a send, so this is not excluded by the rule.
-4. **Gmail labels — MISSING (S).** Old labelled JobHunt/Applied and JobHunt/Recruiters.
+3. **Reply drafts saved in Gmail, in the thread — DONE 26.11.49 (a switch, off at first; "Save as a Gmail draft" next to Copy on replies, follow-ups, thank-yous, rejection and offer replies and e-mail notes; IMAP APPEND to Drafts with In-Reply-To/References; `internal/engine/outbox.go`), was MISSING (M).** Old saved replies, follow-ups, thank-yous, rejection replies and recruiter notes as Gmail drafts (`core/src/google.rs`). New is IMAP read-only; drafts leave via Copy or `mailto:` (`web/pages/replies.js`, `role.js`). A draft is not a send, so this is not excluded by the rule.
+4. **Gmail labels — DONE 26.11.49 (a switch, off at first, Gmail only; CREATE then UID COPY while the mailbox is open read-only), was MISSING (S).** Old labelled JobHunt/Applied and JobHunt/Recruiters.
 5. **Interview request answered with times that suit you — DONE 26.11.32, was PARTIAL (M).** Old drafted the reply with offered slots, driven by settings (interview hours, length, how many times to offer, time zone). New lists free times on the calendar settings card to copy by hand (`FreeTimes` in `internal/engine/owncal.go`); the drafted reply has [brackets] and no slots, and none of those settings exist.
 6. **Confirmed interview goes into the calendar by itself — DONE 26.11.32 (onto Interviews; Google Calendar stays one-way), was PARTIAL (M).** Old `book_interview` created the interview, prep block and reminders from the mail. New advances the stage to interview; the person presses "Add the conversation to Interviews" and fills in the time.
 7. **Two-way Google Calendar sync — PARTIAL (L).** Old pushed interviews to Google, pulled moves and deletes back with a note on the application, and offered "Link to application" for look-alike events (1.29). New reads a secret iCal address and has a per-interview "Add to Google Calendar" link plus .ics files. No write-back, no move/delete detection, no linking.
-8. **Recruiters found from two years of mail — MISSING (M).** Old scanned Gmail, saved each recruiter's e-mail, phone and LinkedIn from the signature, linked them to applications, added their companies' boards, and filtered system senders (1.38, 1.39, 2.34.5). New `matchMail` only recognises people already in People.
+8. **Recruiters found from two years of mail — DONE 26.11.49 (a switch, off at first, again weekly; envelopes only, then the newest message of each likely recruiter, ten senders to a Claude request; phone and LinkedIn kept only when the signature has them; muted employers left alone; `internal/engine/recruiters.go`), was MISSING (M).** Old scanned Gmail, saved each recruiter's e-mail, phone and LinkedIn from the signature, linked them to applications, added their companies' boards, and filtered system senders (1.38, 1.39, 2.34.5). New `matchMail` only recognises people already in People.
 9. **Mail-check interval setting — DONE 26.11.30, was MISSING (S).** Old "Check email every (minutes)". New is fixed at 10 minutes in `chores` (`internal/engine/loop.go`).
 10. **Inbox "new" count on the nav — not determined** (see the last section).
 
@@ -110,7 +110,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 2. **Applications spreadsheet kept in Drive — MISSING (S).** New has the CSV download only.
 3. **Whole app from the phone — PARTIAL (by the new rule).** Old served the full app behind a password, including settings and installing updates. New `phoneCalls` (`internal/api/reach.go`) allows Today, a role, applied / no / later / prepare, PDFs, replies and interviews. Not possible from the phone: editing the letter, asking for changes, follow-ups, people and notes, adding a role, search now. CLAUDE.md forbids settings and keys; the rest is a choice.
 4. **Add to home screen — MISSING (S).** `web/phone/` has no web manifest or touch icon.
-5. **Recruiters spreadsheet — MISSING (S).** (`/api/recruiters.csv`)
+5. **Recruiters spreadsheet — DONE 26.11.49 (next to "Save as a spreadsheet" on Roles, and on People → Recruiters), was MISSING (S).** (`/api/recruiters.csv`)
 
 ## I. CVs and settings — about 10 present, 7 gaps
 
@@ -129,13 +129,15 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 - A7: build two-way Google Calendar with a Google sign-in key the person creates once (they chose it). Last, after the rest.
 - H3: the phone gets more of the app, but never settings, keys, connections, saved copies or the assistant (CLAUDE.md).
 - A3, A4, A8 write to or read more of the inbox: each is a switch that starts off.
+- Ask before drafting: Job Hunt writes no message unasked. A reply to mail, a follow-up, a thank-you, a rejection reply and a note are offered ("Write it") and Claude is asked only on that press.
+- Approved sending (mail only): with the "Let me send mail from Job Hunt" switch on (off at first), a written message can be edited and sent through Gmail's SMTP with one press for that one message, after showing who it goes to and the subject. Never by itself, never in bulk, never from the assistant or the phone. A Gmail draft saved for it is removed once sent.
 - Nothing new may reopen a "not interested" role or bring back a muted employer; clearing old matches closes, never deletes.
 - Budget mode and grouped scoring start off: the person wants to be among the first ten applicants.
 
 ## Deliberately excluded (not gaps)
 
 - Submitting simple Greenhouse/Lever/Ashby forms after a countdown (2.23).
-- Recruiter e-mail "sent for you" and e-mailed applications sent from Gmail (1.39, 2.29).
+- Recruiter e-mail "sent for you" and e-mailed applications sent from Gmail (1.39, 2.29). Sending one message on the person's own press is allowed since 26.11.49; nothing is sent for them.
 - The e-mailed weekly review (it sends mail).
 - Publishing to the old update feed.
 - The NAS/Oracle server builds were already archived in the old app.
