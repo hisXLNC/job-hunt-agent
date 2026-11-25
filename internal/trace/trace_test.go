@@ -39,4 +39,7 @@ func TestGoogleSignInLeavesNoTokens(t *testing.T) {
 	if got := Clean("GET /?state=x&code=4/0AFakeCode&scope=y"); strings.Contains(got, "4/0AFakeCode") {
 		t.Errorf("kept the sign-in code: %s", got)
 	}
+	if got := Clean("GET /search?postcode=M5V&countryCode=CA"); !strings.Contains(got, "postcode=M5V") || !strings.Contains(got, "countryCode=CA") {
+		t.Errorf("took out more than the sign-in code: %s", got)
+	}
 }

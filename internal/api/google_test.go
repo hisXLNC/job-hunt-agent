@@ -19,6 +19,13 @@ func TestGoogleCalendarCallsStayWithThePerson(t *testing.T) {
 		}
 	}
 
+	// The entry an interview lands on is the person's own calendar: never shown to Claude.
+	var seen strings.Builder
+	got := prune(map[string]any{"talk": map[string]any{"title": "Interview"}, "clash": map[string]any{"title": "Private entry"}}, 500, 50, &seen)
+	if _, ok := got.(map[string]any)["clash"]; ok || strings.Contains(seen.String(), "Private entry") {
+		t.Error("the assistant would see a calendar entry")
+	}
+
 	_, h := newServer(t)
 	const id, secret = "1234567890-fakeclient.apps.googleusercontent.com", "GOCSPX-fake-secret-value"
 	if w := do(h, call{method: "PUT", path: "/api/google", marker: true, body: `{"client_id":"nope","client_secret":"x"}`}); w.Code != 400 {

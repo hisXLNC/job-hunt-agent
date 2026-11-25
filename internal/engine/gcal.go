@@ -601,6 +601,10 @@ func rfc(ts int64, loc *time.Location) *gTime {
 
 const gPrepMinutes = 60
 
+// gMinutes is how long a conversation is in Google Calendar; links keep
+// this, so a short one doesn't look changed there on every sync.
+func gMinutes(m int) int { return max(m, 5) }
+
 func prepMinutes(t store.Talk) int {
 	if t.Kind == "chat" {
 		return 30
@@ -646,7 +650,7 @@ func (e *Engine) talkEvent(t store.Talk) gEvent {
 	desc = append(desc, "Your prep pack: "+e.BaseURL+fmt.Sprintf("#/interviews/%d", t.ID), "Kept up to date by Job Hunt.")
 	return gEvent{
 		Summary: talkSummary(t), Description: strings.Join(desc, "\n"), Location: safeURL(t.Link),
-		Start: rfc(t.At, loc), End: rfc(t.At+int64(max(t.Minutes, 15))*60, loc),
+		Start: rfc(t.At, loc), End: rfc(t.At+int64(gMinutes(t.Minutes))*60, loc),
 		Reminders:          &gReminders{Overrides: gReminderPlan(t.At, loc)},
 		ExtendedProperties: &gExt{Private: map[string]string{"jobhunt": "talk", "jobhuntTalk": strconv.FormatInt(t.ID, 10)}},
 	}
@@ -718,7 +722,7 @@ func (e *Engine) googleDirty() bool {
 	for _, t := range talks {
 		seen[t.ID] = true
 		l, ok := links[t.ID]
-		if !ok || l.At != t.At || l.Minutes != t.Minutes || (!l.Adopted && l.Sum != talkSum(t)) {
+		if !ok || l.At != t.At || l.Minutes != gMinutes(t.Minutes) || (!l.Adopted && l.Sum != talkSum(t)) {
 			return true
 		}
 	}
@@ -787,10 +791,27 @@ func (e *Engine) syncGoogle(ctx context.Context) error {
 			// Moved out of the window, or gone.
 			var one gEvent
 			if err := e.gcall(ctx, "GET", evPath(l.Event), nil, &one); err != nil {
+				var st gStatus
 				if !gGone(err) {
 					return err
 				}
-				one = gEvent{ID: l.Event, Status: "cancelled"}
+				if errors.As(err, &st) && st.code == 410 {
+					one = gEvent{ID: l.Event, Status: "cancelled"} // Google says it was deleted
+				}
+			}
+			if one.ID == "" {
+				// Not there at all, which is not the same as deleted (a
+				// different account, a calendar emptied): the conversation
+				// stays here and is put into Google Calendar again.
+				if l.Prep != "" {
+					if err := e.gcall(ctx, "DELETE", evPath(l.Prep), nil, nil); err != nil && !gGone(err) {
+						return err
+					}
+				}
+				trace.Log("google", "a conversation's entry is not in Google Calendar any more; putting it back")
+				delete(links, id)
+				save()
+				continue
 			}
 			ev = one
 		}
@@ -818,11 +839,14 @@ func (e *Engine) syncGoogle(ctx context.Context) error {
 			continue
 		}
 		before := t.At
-		t.At, t.Minutes = start, max(minutes, 5)
+		t.At, t.Minutes = start, gMinutes(minutes)
 		if err := e.S.SaveTalk(t); err != nil {
 			return err
 		}
-		l.At, l.Minutes = t.At, t.Minutes
+		l.At, l.Minutes = t.At, minutes
+		if !l.Adopted {
+			l.Sum = "" // sent again, so its reminders fit the new time
+		}
 		links[id] = l
 		save()
 		text := fmt.Sprintf("Moved in Google Calendar: %s, from %s to %s", strings.ToLower(firstOf(t.Title, "conversation")),
@@ -902,13 +926,13 @@ func (e *Engine) pushGoogle(ctx context.Context, links map[int64]gLink, save fun
 				return err
 			}
 			l = gLink{Event: made.ID}
-		case l.Adopted && (l.At != t.At || l.Minutes != t.Minutes):
+		case l.Adopted && (l.At != t.At || l.Minutes != gMinutes(t.Minutes)):
 			if err := e.gcall(ctx, "PATCH", evPath(l.Event), gEvent{Start: want.Start, End: want.End}, nil); err != nil {
 				if !gGone(err) {
 					return err
 				}
 			}
-		case !l.Adopted && (l.At != t.At || l.Minutes != t.Minutes || l.Sum != talkSum(t)):
+		case !l.Adopted && (l.At != t.At || l.Minutes != gMinutes(t.Minutes) || l.Sum != talkSum(t)):
 			if err := e.gcall(ctx, "PATCH", evPath(l.Event), want, nil); err != nil {
 				if !gGone(err) {
 					return err
@@ -921,7 +945,7 @@ func (e *Engine) pushGoogle(ctx context.Context, links map[int64]gLink, save fun
 				l.Event = made.ID
 			}
 		}
-		l.At, l.Minutes, l.Sum = t.At, t.Minutes, talkSum(t)
+		l.At, l.Minutes, l.Sum = t.At, gMinutes(t.Minutes), talkSum(t)
 		links[t.ID] = l
 		save()
 		// The prep block ends where the conversation starts.
@@ -1092,7 +1116,7 @@ func (e *Engine) LinkGoogleEvent(eventID string, roleID int64) (int64, error) {
 	}
 	t, _ := e.S.Talk(id)
 	links := e.gLinks()
-	links[id] = gLink{Event: eventID, At: t.At, Minutes: t.Minutes, Sum: talkSum(t), Adopted: true}
+	links[id] = gLink{Event: eventID, At: t.At, Minutes: gMinutes(t.Minutes), Sum: talkSum(t), Adopted: true}
 	e.S.Set(gcalLinks, links)
 	kept := []GoogleLookalike{}
 	for _, l := range looks {

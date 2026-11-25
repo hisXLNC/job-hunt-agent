@@ -36,7 +36,7 @@ var (
 	mailRe = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 	// Google's sign-in leaves tokens shaped ya29.…, 1//… and GOCSPX-…, and
 	// a sign-in code in code=.
-	keyRe = regexp.MustCompile(`(?i)(sk-[A-Za-z0-9_\-]{8,}|bearer\s+[A-Za-z0-9._\-]{8,}|ya29\.[A-Za-z0-9._\-]+|1//[A-Za-z0-9._\-]{8,}|GOCSPX-[A-Za-z0-9_\-]+|(?:api[_-]?key|token|password|secret|authorization|key|code|verifier)=[^&\s"']+)`)
+	keyRe = regexp.MustCompile(`(?i)(sk-[A-Za-z0-9_\-]{8,}|bearer\s+[A-Za-z0-9._\-]{8,}|ya29\.[A-Za-z0-9._\-]+|1//[A-Za-z0-9._\-]{8,}|GOCSPX-[A-Za-z0-9_\-]+|(?:api[_-]?key|token|password|secret|authorization|key|verifier)=[^&\s"']+|\bcode=[^&\s"']+)`)
 )
 
 // Clean takes e-mail addresses, keys and line breaks out of a line.

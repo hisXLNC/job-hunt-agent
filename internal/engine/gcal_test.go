@@ -265,7 +265,7 @@ func TestGoogleCalendarBothWays(t *testing.T) {
 	}
 
 	// Moved in Google Calendar: moved here, with a note on the role.
-	moved := at.AddDate(0, 0, 1)
+	moved := at.AddDate(0, 0, 1).Add(2 * time.Hour)
 	ev := g.event(l.Event)
 	g.mu.Lock()
 	ev["start"], ev["end"] = when(moved), when(moved.Add(time.Hour))
@@ -280,6 +280,13 @@ func TestGoogleCalendarBothWays(t *testing.T) {
 	if !evStart(g.event(l.Prep)).Equal(moved.Add(-gPrepMinutes * time.Minute)) {
 		t.Error("the prep block didn't follow the move")
 	}
+	rem, _ = json.Marshal(g.event(l.Event)["reminders"])
+	if eve := int(moved.Sub(dayStart(moved).AddDate(0, 0, -1).Add(18 * time.Hour)).Minutes()); !strings.Contains(string(rem), fmt.Sprintf(`"minutes":%d`, eve)) {
+		t.Errorf("the evening-before reminder didn't follow the move: %s", rem)
+	}
+	if e.googleDirty() {
+		t.Error("after a move in Google, the next sync would send it again")
+	}
 	acts, _ := e.S.ActivityList(store.ActivityFilter{RoleID: rid, Limit: 20})
 	if !hasActivity(acts, "Moved in Google Calendar") {
 		t.Errorf("no note on the role about the move: %+v", acts)
@@ -289,7 +296,7 @@ func TestGoogleCalendarBothWays(t *testing.T) {
 	// one that doesn't, isn't. Both count as busy time.
 	g.put("theirs", map[string]any{"summary": "Chat <b>with</b> the Northwind team", "start": when(at.Add(48 * time.Hour)), "end": when(at.Add(49 * time.Hour))})
 	g.put("byinvite", map[string]any{"summary": "Call", "attendees": []any{map[string]any{"email": "recruiter@northwind.example"}}, "start": when(at.Add(72 * time.Hour)), "end": when(at.Add(73 * time.Hour))})
-	g.put("dentist", map[string]any{"summary": "Dentist", "start": when(at.Add(26 * time.Hour)), "end": when(at.Add(27 * time.Hour))})
+	g.put("dentist", map[string]any{"summary": "Dentist", "start": when(at.Add(30 * time.Hour)), "end": when(at.Add(31 * time.Hour))})
 	if err := e.SyncGoogle(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -386,6 +393,40 @@ func TestGoogleCalendarBothWays(t *testing.T) {
 	}
 	if e.GoogleOn() || len(g.revoked) != 1 || g.revoked[0] != fakeRefresh || !e.Google().HasClient || len(e.gLinks()) != 0 || e.CalendarKnown() {
 		t.Errorf("sign out: on=%v revoked=%v view=%+v", e.GoogleOn(), g.revoked, e.Google())
+	}
+}
+
+// An entry Google no longer knows at all (another account, say) is not a
+// deletion: the interview stays here and goes back into Google Calendar.
+func TestGoogleEntryNotFoundIsNotADeletion(t *testing.T) {
+	e, g := signedInToFakeGoogle(t)
+	far := dayStart(e.Now()).AddDate(0, 0, 5).Add(10 * time.Hour)
+	keep, _ := e.AddTalk(store.Talk{Kind: "chat", Title: "Coffee", At: far.Unix(), Minutes: 10})
+	if err := e.SyncGoogle(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if e.googleDirty() {
+		t.Error("a ten-minute conversation looks changed right after being sent")
+	}
+	before := e.gLinks()[keep]
+	g.mu.Lock()
+	delete(g.events, before.Event) // Google answers 404
+	g.mu.Unlock()
+	if err := e.SyncGoogle(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.S.Talk(keep); err != nil {
+		t.Fatal("an interview was deleted because Google didn't know its entry")
+	}
+	if l := e.gLinks()[keep]; l.Event == "" || l.Event == before.Event || g.event(l.Event) == nil {
+		t.Errorf("it wasn't put back into Google Calendar: %+v", l)
+	}
+	if g.event(before.Prep)["status"] != "cancelled" {
+		t.Error("the old prep block was left behind")
+	}
+	acts, _ := e.S.ActivityList(store.ActivityFilter{Limit: 50})
+	if hasActivity(acts, "Removed in Google Calendar") || hasActivity(acts, "Changed in Google Calendar") {
+		t.Errorf("a wrong note: %+v", acts)
 	}
 }
 

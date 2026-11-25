@@ -298,7 +298,10 @@ func (s *Server) inside(ctx context.Context, method, target string, body []byte,
 	return rec.code, rec.buf.Bytes()
 }
 
-var secretKey = regexp.MustCompile(`(?i)^(pass|password|key|key_hash|token|secret|topic|data|cli)$`)
+// The person's own calendar entries are not Claude's to read either: "clash"
+// on an interview is the entry it lands on, from the private address or the
+// Google sign-in.
+var secretKey = regexp.MustCompile(`(?i)^(pass|password|key|key_hash|token|secret|topic|data|cli|clash)$`)
 
 // prune makes a result small enough to show Claude and takes out anything
 // secret. Every string it passes is also written to seen, so the program
