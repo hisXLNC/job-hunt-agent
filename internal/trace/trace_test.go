@@ -29,3 +29,14 @@ func TestTheRecordKeepsNoAddressesOrKeys(t *testing.T) {
 		t.Errorf("the file: %v\n%s", err, b)
 	}
 }
+
+func TestGoogleSignInLeavesNoTokens(t *testing.T) {
+	for _, bad := range []string{"ya29.a0Abc-def_123", "1//0gFakeRefresh-Token_9", "GOCSPX-FakeSecret_123"} {
+		if got := Clean("google said something about " + bad); strings.Contains(got, bad) {
+			t.Errorf("kept %q: %s", bad, got)
+		}
+	}
+	if got := Clean("GET /?state=x&code=4/0AFakeCode&scope=y"); strings.Contains(got, "4/0AFakeCode") {
+		t.Errorf("kept the sign-in code: %s", got)
+	}
+}

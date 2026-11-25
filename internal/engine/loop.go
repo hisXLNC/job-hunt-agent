@@ -210,6 +210,11 @@ func (e *Engine) chores(now time.Time) {
 	if e.OwnCal().On && every("owncal", 30*time.Minute) {
 		go e.ReadOwnCal(e.ctx)
 	}
+	// Google Calendar: everything every half hour, and a conversation
+	// changed here goes there within a couple of minutes.
+	if e.GoogleOn() && (every("google", 30*time.Minute) || e.googleDirty() && every("google-push", 2*time.Minute)) {
+		e.GoogleSoon()
+	}
 	if every("update", 30*time.Minute) {
 		go e.CheckUpdate(e.ctx)
 	} else if u := e.NewerVersion(); u != nil && e.AutoUpdate() && e.CanInstall() && !e.anyJobBut("") && every("update-try:"+u.Version, 6*time.Hour) {

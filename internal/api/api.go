@@ -1247,6 +1247,9 @@ func (s *Server) Handler() http.Handler {
 		}
 		t.ID, t.Link = 0, safeLink(t.Link)
 		id, err := e.AddTalk(t)
+		if err == nil {
+			e.GoogleSoon()
+		}
 		return map[string]int64{"id": id}, err
 	})
 	h("GET /api/talks/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -1255,6 +1258,7 @@ func (s *Server) Handler() http.Handler {
 		if err == nil {
 			out["clash"] = e.Clash(t.At, t.Minutes)
 			out["google"] = engine.GoogleCalendarLink(t.Title, t.At, t.Minutes, t.Link, "")
+			out["in_google"] = e.TalkInGoogle(t.ID)
 			out["went"] = e.TalkWent(t.ID)
 			out["thanks"] = e.TalkThanks(t.ID)
 			out["thanking"] = e.Busy(fmt.Sprintf("thanks:%d", t.ID))
@@ -1322,9 +1326,19 @@ func (s *Server) Handler() http.Handler {
 		if in.Minutes != nil && *in.Minutes > 0 {
 			t.Minutes = *in.Minutes
 		}
-		return nil, st.SaveTalk(t)
+		if err := st.SaveTalk(t); err != nil {
+			return nil, err
+		}
+		e.GoogleSoon()
+		return nil, nil
 	})
-	h("DELETE /api/talks/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) { return nil, st.DeleteTalk(idOf(r)) })
+	h("DELETE /api/talks/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if err := st.DeleteTalk(idOf(r)); err != nil {
+			return nil, err
+		}
+		e.GoogleSoon()
+		return nil, nil
+	})
 	h("POST /api/talks/{id}/prep", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		id := idOf(r)
 		if e.LLM().Engine == "" {
@@ -1806,6 +1820,7 @@ func (s *Server) Handler() http.Handler {
 		return nil, nil
 	})
 	s.reachRoutes(h)
+	s.googleRoutes(h)
 	s.mux = mux
 	s.inner = s.guard(mux)
 	return s.inner

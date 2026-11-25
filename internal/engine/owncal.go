@@ -164,11 +164,16 @@ func (e *Engine) fetchOwnCal(ctx context.Context, addr string) ([]OwnEvent, erro
 // OwnEvents are the person's own entries between two moments.
 func (e *Engine) OwnEvents(from, to int64) []OwnEvent {
 	out := []OwnEvent{}
-	if !e.OwnCal().On {
+	var all []OwnEvent
+	switch {
+	case e.googleRead():
+		// Signed in to Google: its own reading, without the entries Job Hunt put there.
+		e.S.Get(gcalEvents, &all)
+	case e.OwnCal().On:
+		e.S.Get("owncal:events", &all)
+	default:
 		return out
 	}
-	var all []OwnEvent
-	e.S.Get("owncal:events", &all)
 	for _, ev := range all {
 		if ev.End > from && ev.Start < to {
 			out = append(out, ev)
@@ -176,6 +181,17 @@ func (e *Engine) OwnEvents(from, to int64) []OwnEvent {
 	}
 	return out
 }
+
+// googleRead says whether the person's busy times come from the Google
+// sign-in: signed in and read at least once.
+func (e *Engine) googleRead() bool {
+	g := e.GoogleSet()
+	return g.Refresh != "" && g.At != 0
+}
+
+// CalendarKnown says whether Job Hunt knows when the person is busy, from
+// the private address or from the Google sign-in.
+func (e *Engine) CalendarKnown() bool { return e.OwnCal().On || e.googleRead() }
 
 // Clash is the entry in the person's calendar that a conversation at this
 // time would land on, if there is one.
@@ -283,7 +299,7 @@ func (e *Engine) fillTimes(reply string) string {
 // Job Hunt's own list of conversations, at most two a day.
 func (e *Engine) FreeTimes(n int) []Slot {
 	out := []Slot{}
-	if !e.OwnCal().On {
+	if !e.CalendarKnown() {
 		return out
 	}
 	now := e.Now()

@@ -35,6 +35,7 @@ const SETTINGS = [
   ['connections', 'phoneaccess', '', 'Job Hunt on your phone', 'phone mobile access remote browser wifi tailscale away qr code pair'],
   ['connections', 'owncal', 'talkset', 'When you can do interviews', 'interview hours availability times to offer length slots time zone'],
   ['connections', 'owncal', '', 'Your Google Calendar', 'google calendar sync busy free times outlook icloud ical ics availability'],
+  ['connections', 'google', '', 'Google Calendar, both ways: sign in', 'google calendar sign in signin oauth client id secret cloud console two-way both ways sync push interviews prep block link to application'],
   ['app', 'cloud', '', 'Copies in Google Drive or OneDrive', 'sync google drive onedrive dropbox cloud another computer second pc laptop move'],
   ['connections', 'mail', '', 'Your inbox', 'inbox mail email e-mail gmail imap app password replies'],
   ['connections', 'desk', 'notify', 'Windows notifications', 'notification windows toast alert desktop popup'],
@@ -210,7 +211,34 @@ function ownCalendar(c) {
     <div data-set="talkset"><div class="eb">When you can do interviews</div><p class="xs m" style="margin-top:3px">When an employer asks for your availability, the drafted reply offers free times inside these hours${c.on ? '' : ' (once your calendar is connected; until then the draft leaves gaps for you to fill)'}. A message that fixes one time puts the interview into Interviews by itself.</p>
       <div class="grid4" style="margin-top:8px"><label class="field">From <span class="h">Hour, 0 to 22.</span><input type="number" name="t_from" min="0" max="22" value="${c.talkset?.from ?? 9}"></label><label class="field">Until <span class="h">Hour, up to 24.</span><input type="number" name="t_to" min="1" max="24" value="${c.talkset?.to ?? 17}"></label><label class="field">Minutes each<input type="number" name="t_minutes" min="15" max="240" step="15" value="${c.talkset?.minutes ?? 60}"></label><label class="field">Times to offer<input type="number" name="t_offer" min="1" max="6" value="${c.talkset?.offer ?? 3}"></label></div>
       <button type="button" class="btn sm" style="margin-top:8px" data-act="savetalkset">Save these hours</button></div>
-    <p class="xs m">Outlook and iCloud calendars have such an address too (Outlook: Settings → Calendar → Shared calendars → Publish a calendar → ICS). To put an interview <b>into</b> Google Calendar, open it under Interviews and press <b>Add to Google Calendar</b>.</p></form>`;
+    <p class="xs m">Outlook and iCloud calendars have such an address too (Outlook: Settings → Calendar → Shared calendars → Publish a calendar → ICS). To have Job Hunt put interviews <b>into</b> Google Calendar and follow moves made there, sign in under <b>Google Calendar, both ways</b>.</p></form>`;
+}
+
+// Google Calendar both ways, through a sign-in key the person makes once in
+// Google Cloud Console. The secret and the sign-in are never sent back here.
+const GCC = 'https://console.cloud.google.com';
+const googleState = g => !g ? ['', 'Off'] : g.signed_in ? (g.note ? ['crit', 'Problem'] : ['good', 'Signed in']) : g.has_client ? ['warn', 'Not signed in'] : ['', 'Off'];
+function googleCard(g) {
+  if (!g) return '';
+  const a = (href, text) => html`<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  const [tone, word] = googleState(g);
+  return html`<form data-act="savegoogle" class="card col" style="gap:10px" data-set="google"><div class="row"><h3 class="grow">Google Calendar, both ways</h3><span class="chip ${tone}">${word}</span></div>
+    <p class="s m">Signed in, Job Hunt puts each interview into your Google Calendar with a prep block before it and reminders the evening before and half an hour before, and changes it there when it changes here. Move or delete one in Google Calendar and Job Hunt follows, with a note on the role. Entries you made yourself that name an employer you applied to are offered under Interviews with <b>Link to application</b>. What it reads stays on this computer and is never given to Claude.</p>
+    ${g.note ? html`<p class="s" style="color:var(--crit)">${g.note}</p>` : ''}
+    ${g.signed_in ? html`<p class="s">${g.syncing ? 'Syncing now' : g.at ? 'Synced ' + rel(g.at) : 'Not synced yet'} · ${g.pushed} ${g.pushed === 1 ? 'conversation' : 'conversations'} kept in Google Calendar${g.lookalikes ? html` · <a href="#/interviews">${g.lookalikes} to link under Interviews</a>` : ''}. Synced every half hour, and within two minutes of a change here.</p>` : html`
+    <details ${g.has_client ? '' : 'open'}><summary class="s"><b>Once: make your own sign-in key in Google Cloud Console</b> (about ten minutes, free)</summary><ol class="steps s" style="margin-top:6px">
+      <li>Open ${a(GCC + '/projectcreate', 'Google Cloud Console')} and sign in with the Google account whose calendar you use. Make a new project named <b>Job Hunt</b> and press <b>Create</b>.</li>
+      <li>Open the ${a(GCC + '/apis/library/calendar-json.googleapis.com', 'Google Calendar API')} page for that project and press <b>Enable</b>.</li>
+      <li>Open ${a(GCC + '/auth/overview', 'Google Auth Platform')} and press <b>Get started</b>. App name <b>Job Hunt</b>, your own address for support and contact, audience <b>External</b>. Agree and press <b>Create</b>.</li>
+      <li>On the left, press <b>Audience</b>, then <b>Publish app</b>. Without this, Google ends the sign-in every seven days.</li>
+      <li>On the left, press <b>Clients</b>, then <b>Create client</b>. Application type <b>Desktop app</b>, name <b>Job Hunt</b>, then <b>Create</b>.</li>
+      <li>Copy the <b>Client ID</b> and the <b>Client secret</b> it shows into the boxes below and press <b>Save</b>.</li>
+      <li>Press <b>Sign in with Google</b>. Google warns that it hasn't verified the app: it is your own, so press <b>Advanced</b>, then <b>Go to Job Hunt</b>, and allow it to see and edit events in your calendars.</li></ol></details>
+    <div class="grid2"><label class="field">Client ID<input type="text" name="client_id" placeholder="${g.has_client ? 'Saved. Paste to replace.' : '…apps.googleusercontent.com'}" autocomplete="off" spellcheck="false"></label><label class="field">Client secret <span class="h">Kept only in Job Hunt's data file on this computer.</span><input type="password" name="client_secret" placeholder="${g.has_client ? 'Saved. Paste to replace.' : 'GOCSPX-…'}" autocomplete="off"></label></div>`}
+    ${g.waiting && !g.signed_in ? html`<p class="s"><span class="spin"></span> Waiting for Google. Finish signing in in your browser; this page updates by itself.</p>` : ''}
+    <div class="row wrap">${g.signed_in ? html`<button type="button" class="btn p" data-act="syncgoogle" data-busy="Syncing…">Sync now</button><button type="button" class="btn" data-act="testgoogle" data-busy="Asking Google…">Test</button><button type="button" class="btn danger" data-act="signoutgoogle" data-confirm="Sign out of Google? Job Hunt stops changing your Google Calendar. Entries already there stay; the client ID and secret are kept so you can sign in again.">Sign out</button>`
+      : html`<button class="btn ${g.has_client ? '' : 'p'}">Save</button>${g.has_client ? html`<button type="button" class="btn p" data-act="signingoogle">Sign in with Google</button><button type="button" class="btn danger" data-act="forgetgoogle" data-confirm="Remove the client ID and secret from Job Hunt?">Remove the key</button>` : ''}`}</div>
+    <p class="xs m">Job Hunt asks Google only to see and edit calendar events, and keeps no password. Without signing in, the read-only address under Your calendar keeps working.</p></form>`;
 }
 const clockOf = ts => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -219,6 +247,7 @@ function connections(d, route) {
   const usage = Object.entries(d.usage || {}).sort((a, b) => b[1].calls - a[1].calls);
   const hit = route.q.hl && SETTINGS.find(x => x.id === route.q.hl);
   const open = route.q.open || (hit ? { talkset: 'owncal' }[hit.set] || hit.set : '');
+  const gg = d.google;
   const claude = html`<form data-act="savellm" class="card col" style="gap:10px" data-set="claude"><div class="row"><h3 class="grow">Claude</h3><span class="chip ${cl.engine && cl.ok ? 'good' : 'warn'}">${cl.engine ? (cl.ok ? 'Connected' : 'Resting') : 'Not connected'}</span></div>
       <p class="s m">Claude does the reading and writing. ${cl.note && !cl.ok ? html`<b style="color:var(--warn)">${cl.note}</b>` : ''}</p>
       <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="claude-code" ${cl.engine === 'claude-code' ? 'checked' : ''} ${d.cli_found ? '' : 'disabled'}> <span><b>Your Claude subscription</b> through Claude Code<br><span class="m">${d.cli_found ? 'Found on this computer. Uses the plan you already pay for.' : 'Claude Code isn\'t installed on this computer. Install it from claude.com/claude-code and sign in.'}</span></span></label>
@@ -266,6 +295,8 @@ function connections(d, route) {
       m.on ? (m.note || `${m.host || 'Mail'} · ${m.last_at ? 'checked ' + rel(m.last_at) : 'not checked yet'}${m.every ? `, every ${m.every} minutes` : ''}`) : 'Notices replies the moment they arrive; reads only', mail],
     ['owncal', 'Your calendar', cal.on ? (cal.note ? ['crit', 'Not working'] : ['good', 'Connected']) : ['', 'Off'],
       `${cal.on ? (cal.note || 'Read only') : 'Not connected'} · interviews ${ts.from ?? 9} to ${ts.to ?? 17}, ${ts.minutes ?? 60} minutes each, ${ts.offer ?? 3} times offered`, ownCalendar(d.owncal)],
+    ['google', 'Google Calendar, both ways', googleState(gg),
+      gg?.signed_in ? (gg.note || `${gg.pushed} kept in Google Calendar${gg.at ? ' · synced ' + rel(gg.at) : ''}`) : gg?.has_client ? 'Key saved; press Sign in with Google' : 'Interviews into Google Calendar, and moves made there back here', googleCard(gg)],
     ['phone', 'Phone notices', ph.on ? ['good', 'On'] : ['', 'Off'],
       ph.on ? `For fit ${ph.min_fit} and up${ph.quiet_from !== ph.quiet_to ? ` · quiet ${ph.quiet_from}:00 to ${ph.quiet_to}:00` : ''}${ph.only === 'urgent' ? ' · interviews and offers only' : ''}` : 'A buzz on your phone when a strong role is posted, through the free ntfy app', phone],
     ['phoneaccess', 'Job Hunt on your phone', pa?.on ? (pa.problem ? ['crit', 'Not working'] : ['good', 'On']) : ['', 'Off'],
@@ -417,7 +448,7 @@ export default {
     switch (route.parts[1] || '') {
       case 'arriving': return api('arriving');
       case 'panel': return api('connections');
-      case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null)]).then(([c, pa, oc]) => ({ ...c, phoneaccess: pa, owncal: oc }));
+      case 'connections': return Promise.all([api('connections'), api('phoneaccess').catch(() => null), api('owncal').catch(() => null), api('google').catch(() => null)]).then(([c, pa, oc, g]) => ({ ...c, phoneaccess: pa, owncal: oc, google: g }));
       case 'app': return Promise.all([api('app'), api('import/old').catch(() => null), api('debug').catch(() => null), api('changes').catch(() => []), api('backups').catch(() => null)]).then(([a, o, g, h, b]) => ({ ...a, old: o, debug: g, history: h, backups: b }));
     }
     return api('you');
@@ -528,6 +559,20 @@ export default {
     savetalkset({ el }) { const f = el.closest('form'); return put('talkset', { from: +f.t_from.value, to: +f.t_to.value, minutes: +f.t_minutes.value, offer: +f.t_offer.value }).then(() => toast('Saved')); },
     async savecal({ f }) { await put('owncal', { url: f.url }); toast('Connected. Your entries are on the month under Interviews.'); },
     forgetcal: () => del('owncal').then(() => toast('Disconnected')),
+    savegoogle: ({ f }) => put('google', { client_id: (f.client_id || '').trim(), client_secret: (f.client_secret || '').trim() }).then(() => toast('Saved. Now press Sign in with Google.')),
+    async signingoogle() {
+      const r = await post('google/signin');
+      // Google's page opens in the browser; it sends the browser back to Job Hunt by itself.
+      const w = window.open(r.url, '_blank');
+      if (w) w.opener = null;
+      else if (!window.jhNative) location.href = r.url;
+      toast('Google\'s sign-in page is open in your browser.');
+      return false;
+    },
+    async syncgoogle() { await post('google/sync'); toast('Synced with Google Calendar'); },
+    async testgoogle() { const r = await post('google/test'); toast(r.message); return false; },
+    signoutgoogle: () => post('google/signout').then(() => toast('Signed out of Google')),
+    forgetgoogle: () => del('google').then(() => toast('Removed')),
     copyfree: ({ d }) => copy(d.text).then(() => false),
     cloudcopies: ({ d }) => post('backups/cloud', { dir: d.dir }).then(() => toast('Copies are kept there from now on. One was saved just now.')),
     savephone: ({ f }) => put('phone', { on: !!f.on, topic: f.topic, server: f.server, min_fit: +f.min_fit || 75, quiet_from: +f.quiet_from || 0, quiet_to: +f.quiet_to || 0, detail: !!f.detail, only: f.only || '' }).then(() => toast('Saved')),

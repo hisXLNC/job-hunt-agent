@@ -393,7 +393,7 @@ func (s *Server) reachRoutes(h func(string, handler)) {
 	// ---- the person's own calendar ---------------------------------------------------
 	own := func() map[string]any {
 		c := e.OwnCal()
-		return map[string]any{"on": c.On, "has_url": c.URL != "", "at": c.At, "note": c.Note, "count": c.Count, "free": e.FreeTimes(max(5, e.TalkSet().Offer)), "talkset": e.TalkSet()}
+		return map[string]any{"on": c.On, "known": e.CalendarKnown(), "has_url": c.URL != "", "at": c.At, "note": c.Note, "count": c.Count, "free": e.FreeTimes(max(5, e.TalkSet().Offer)), "talkset": e.TalkSet()}
 	}
 	h("GET /api/owncal", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		out := own()

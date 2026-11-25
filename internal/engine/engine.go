@@ -46,6 +46,9 @@ type Engine struct {
 	CloudRoots func() [][2]string
 	// Tests only: stands in for fetching the person's calendar.
 	OwnCalFetch func(addr string) ([]byte, error)
+	// Google's addresses for signing in and for Calendar; tests point them
+	// at a fake Google. Empty means Google's own.
+	GoogleHosts GoogleHosts
 	Now         func() time.Time
 
 	meter *llm.Metered
@@ -59,6 +62,7 @@ type Engine struct {
 	preps   map[int64]bool       // roles being prepared
 	stopAll context.CancelFunc
 	ctx     context.Context
+	gcal    *googleState // Google Calendar: the access token and a sign-in under way
 
 	mailDial func(ctx context.Context, host string) (net.Conn, error) // tests replace it
 
