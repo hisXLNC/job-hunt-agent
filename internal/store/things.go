@@ -1362,3 +1362,70 @@ func (s *Store) AppliedBefore(companyID, except int64) (id int64, title string, 
 		ORDER BY r.applied_at DESC LIMIT 1`, companyID, except).Scan(&id, &title, &at)
 	return
 }
+
+// OldLeftovers lists the roles brought over from the old Job Hunt that the
+// person never applied to. A role they said no to is not on it: it stays, closed,
+// so the same posting is never shown again.
+func (s *Store) OldLeftovers() ([]int64, error) {
+	rows, err := s.db.Query(`SELECT id FROM roles
+		WHERE (key LIKE 'old:%' OR id IN (SELECT role_id FROM activity WHERE kind = 'added' AND text = 'Found by the old Job Hunt'))
+		AND applied_at = 0 AND stage NOT IN ('applied', 'interview', 'offer') AND closed NOT IN ('no', 'rejected', 'withdrawn')
+		ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// DropRoles removes roles with their documents and history. Mail, notes and
+// talks that named them stay, no longer tied to a role. Employers brought over
+// from the old Job Hunt only as suggestions, and now left with nothing, go too.
+func (s *Store) DropRoles(ids []int64) (companies int, err error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	for _, id := range ids {
+		for _, q := range []string{
+			`DELETE FROM docs WHERE role_id = ?`,
+			`DELETE FROM activity WHERE role_id = ?`,
+			`UPDATE notes SET role_id = 0 WHERE role_id = ?`,
+			`UPDATE talks SET role_id = 0 WHERE role_id = ?`,
+			`UPDATE mails SET role_id = 0 WHERE role_id = ?`,
+			`DELETE FROM roles WHERE id = ?`,
+		} {
+			if _, err := tx.Exec(q, id); err != nil {
+				return 0, err
+			}
+		}
+	}
+	res, err := tx.Exec(`DELETE FROM companies WHERE source = 'old' AND state = 'suggested'
+		AND id NOT IN (SELECT company_id FROM roles)
+		AND id NOT IN (SELECT company_id FROM people)
+		AND id NOT IN (SELECT company_id FROM mails)`)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	if _, err := tx.Exec(`DELETE FROM activity WHERE company_id <> 0 AND role_id = 0 AND company_id NOT IN (SELECT id FROM companies)`); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	s.Changed("roles", "today", "progress", "companies", "people")
+	return int(n), nil
+}

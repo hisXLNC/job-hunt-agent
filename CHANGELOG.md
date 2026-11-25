@@ -2,6 +2,10 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.42
+
+- **The old Job Hunt's jobs are cleared out, except the ones you applied to.** Once, on the first start of this version: every job brought over from the old app that you never applied to goes, with its letter and history. Kept: everything you applied to (with interviews, offers and noes, the CV and letter sent), and every job you said not interested to, still closed, so it never comes back. A copy of everything is saved first, under Settings, Saved copies ("Before clearing the old Job Hunt's jobs"), and can be put back. Bringing things over from the old app again now brings only what you applied to.
+
 ## 26.11.41
 
 - **A sharp icon on the taskbar.** Job Hunt's window took its icon at the smallest size and Windows stretched it on a scaled screen, so it looked blurred next to other apps. It now takes the size your screen draws.

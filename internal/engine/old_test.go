@@ -390,3 +390,78 @@ func TestBringingOverSaysHowFarItIs(t *testing.T) {
 		t.Fatalf("still says it is busy: %+v", l)
 	}
 }
+
+func TestClearingOutTheOldJobsKeepsWhatWasAppliedTo(t *testing.T) {
+	e, _ := newEngine(t)
+	ctx := context.Background()
+	dir := oldData(t, true, false, nil)
+	if _, err := e.ImportOld(ctx, dir, ""); err != nil {
+		t.Fatal(err)
+	}
+	// A role found here, not by the old app, is never touched.
+	c, _, _ := e.S.UpsertCompany(store.Company{Name: "New Find Inc", State: "following"})
+	mine, _ := e.S.AddRole(store.Role{CompanyID: c.ID, Key: "greenhouse:new:1", Title: "Tax Manager", Applicants: -1})
+	rail, _, _ := e.S.SeenRole("old:lever:x1")
+
+	e.clearOldOnce()
+	var done OldCleared
+	if ok, _ := e.S.Get(oldClearedKey, &done); !ok || done.Roles != 3 || done.Copy == "" {
+		t.Fatalf("cleared = %+v", done)
+	}
+	for _, key := range []string{"linkedin:4012345678", "old:lever:x1", "old:jobbank:5", "old:workday:9", "old:indeed:abc", "greenhouse:new:1"} {
+		if _, _, ok := e.S.SeenRole(key); !ok {
+			t.Errorf("%s was removed", key)
+		}
+	}
+	for _, key := range []string{"old:greenhouse:acme:77", "old:adzuna:2", "old:manual:11"} {
+		if _, _, ok := e.S.SeenRole(key); ok {
+			t.Errorf("%s is still there", key)
+		}
+	}
+	if _, err := e.S.Role(mine); err != nil {
+		t.Fatal(err)
+	}
+	// What was applied to keeps its letter, CV and interview.
+	maple, _, _ := e.S.SeenRole("linkedin:4012345678")
+	if _, err := e.OldCVFile(maple); err != nil {
+		t.Fatal("the CV sent to Maple Bank is gone")
+	}
+	if talks, _ := e.S.TalksForRole(rail); len(talks) != 1 {
+		t.Fatalf("talks = %+v", talks)
+	}
+	if n := e.S.Count(`SELECT COUNT(*) FROM docs WHERE role_id NOT IN (SELECT id FROM roles) AND role_id <> 0`); n != 0 {
+		t.Fatalf("%d documents left without a role", n)
+	}
+	// Employers that only came with the cleared jobs go; watched boards stay.
+	if _, err := e.S.CompanyByName("Fresh Co"); err == nil {
+		t.Error("Fresh Co is still suggested")
+	}
+	if co, err := e.S.CompanyByName("Acme Corp"); err != nil || co.BoardToken != "acme" {
+		t.Errorf("the watched board went: %+v %v", co, err)
+	}
+	// A copy of everything was saved first, and is offered back.
+	if _, err := os.Stat(done.Copy); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, cp := range e.Copies() {
+		found = found || (cp.Before && strings.Contains(cp.What, "clearing"))
+	}
+	if !found {
+		t.Fatalf("the copy is not listed: %+v", e.Copies())
+	}
+	// Bringing things over again brings back only what was applied to.
+	roles := e.S.Count(`SELECT COUNT(*) FROM roles`)
+	if _, err := e.ImportOld(ctx, dir, ""); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.S.Count(`SELECT COUNT(*) FROM roles`); n != roles {
+		t.Fatalf("bringing over again added %d roles", n-roles)
+	}
+	// It happens once.
+	e.S.AddRole(store.Role{CompanyID: c.ID, Key: "old:later", Title: "Tax Lead", Applicants: -1})
+	e.clearOldOnce()
+	if _, _, ok := e.S.SeenRole("old:later"); !ok {
+		t.Fatal("the clear-out ran twice")
+	}
+}

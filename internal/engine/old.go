@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -441,6 +442,7 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 	// 6. Jobs.
 	ids := map[string]int64{} // old job id → role here
 	jobsSeen := 0
+	cleared := e.oldWasCleared()
 	e.oldSay(fmt.Sprintf("Bringing over %s", countWord(jobsTotal, "job")), 2+cvCost, whole)
 	err = src.Jobs(nil, func(j old.Job) error {
 		if ctx.Err() != nil {
@@ -450,6 +452,10 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 			e.oldSay(fmt.Sprintf("Bringing over jobs: %d of %d", jobsSeen, jobsTotal), 2+cvCost+oldJobsCost*float64(jobsSeen)/float64(jobsTotal), whole)
 		}
 		m := mapOld(j, now)
+		if cleared && !m.applied && m.closed != "no" {
+			// Cleared out once already: only what was applied to comes over.
+			m.keep = false
+		}
 		if !m.keep || strings.TrimSpace(j.Company) == "" || strings.TrimSpace(j.Title) == "" {
 			if j.Status == "queued" || j.Status == "skipped" {
 				res.LeftBehind++
@@ -817,4 +823,67 @@ func clip(s string, n int) string {
 		cut = cut[:len(cut)-1]
 	}
 	return strings.TrimSpace(cut) + "…"
+}
+
+// oldClearedKey records that the jobs brought over from the old Job Hunt were
+// cleared out, keeping only those the person applied to. After that, bringing
+// things over again adds only those too.
+const oldClearedKey = "old.cleared"
+
+// OldCleared is what the clear-out removed.
+type OldCleared struct {
+	At        int64  `json:"at"`
+	Roles     int    `json:"roles"`
+	Employers int    `json:"employers"`
+	Copy      string `json:"copy"` // the saved copy made first
+}
+
+// ClearOld removes the jobs the old Job Hunt brought over that the person never
+// applied to, with their letters, CVs and history. Kept: every role applied to
+// (with interviews, offers and noes), and every role the person said not
+// interested to, closed as before, so it is never shown again. A saved copy
+// of everything is made first and can be put back from Settings.
+func (e *Engine) ClearOld() (OldCleared, error) {
+	if !e.oldMu.TryLock() {
+		return OldCleared{}, errors.New("things are being brought over from the old Job Hunt right now")
+	}
+	defer e.oldMu.Unlock()
+	out := OldCleared{At: e.Now().Unix()}
+	ids, err := e.S.OldLeftovers()
+	if err != nil {
+		return out, err
+	}
+	if len(ids) > 0 && e.Dir != "" {
+		dir := e.BackupDir()
+		if os.MkdirAll(dir, 0o700) != nil {
+			dir = e.DefaultBackupDir()
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				return out, fmt.Errorf("no copy could be saved first: %w", err)
+			}
+		}
+		dst := filepath.Join(dir, "jobhunt-before-clearing-"+e.Now().Format("20060102-150405")+".db")
+		if err := e.S.Backup(dst); err != nil {
+			return out, fmt.Errorf("no copy could be saved first: %w", err)
+		}
+		out.Copy = dst
+		prune(dir, beforeCopy, beforeKept)
+	}
+	n, err := e.S.DropRoles(ids)
+	if err != nil {
+		return out, err
+	}
+	out.Roles, out.Employers = len(ids), n
+	e.S.Set(oldClearedKey, out)
+	if out.Roles > 0 {
+		e.S.Log(store.Activity{Kind: "import", Text: fmt.Sprintf("Cleared out %s brought over from the old Job Hunt that you never applied to. The ones you applied to stay.", countWord(out.Roles, "job"))})
+	}
+	e.S.Changed("app")
+	return out, nil
+}
+
+// oldWasCleared reports whether the clear-out has run.
+func (e *Engine) oldWasCleared() bool {
+	var c OldCleared
+	ok, _ := e.S.Get(oldClearedKey, &c)
+	return ok
 }

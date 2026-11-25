@@ -157,6 +157,7 @@ func (e *Engine) tick() {
 		return
 	}
 	e.chores(now)
+	e.clearOldOnce()
 	if e.Paused() || e.Busy("search") || e.heldBack("search") {
 		return
 	}
@@ -447,4 +448,19 @@ func (e *Engine) resumeSearch() {
 	}
 	trace.Log("search", "picking up the %s search that was cut short when Job Hunt last stopped", kind)
 	e.StartSearch(kind)
+}
+
+// clearOldOnce clears out, once, the jobs brought over from the old Job Hunt
+// that were never applied to.
+func (e *Engine) clearOldOnce() {
+	var last OldResult
+	if e.oldWasCleared() || e.Busy("old") {
+		return
+	}
+	if ok, _ := e.S.Get(oldDoneKey, &last); !ok {
+		return
+	}
+	if _, err := e.ClearOld(); err != nil {
+		trace.Log("problem", "clearing the old Job Hunt's jobs: %v", err)
+	}
 }

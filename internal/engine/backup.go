@@ -28,7 +28,8 @@ type Copy struct {
 	Name   string `json:"name"`
 	At     int64  `json:"at"`
 	Size   int64  `json:"size"`
-	Before bool   `json:"before"` // saved by Job Hunt just before a copy was put back
+	Before bool   `json:"before"` // saved by Job Hunt just before a copy was put back, or before a clear-out
+	What   string `json:"what"`   // what it was saved before, in words
 }
 
 // StagedRestore is a saved copy waiting to be put back at the next start.
@@ -41,7 +42,7 @@ type StagedRestore struct {
 
 var (
 	dailyCopy  = regexp.MustCompile(`^jobhunt-\d{4}-\d{2}-\d{2}\.db$`)
-	beforeCopy = regexp.MustCompile(`^jobhunt-before-restore-\d{8}-\d{6}\.db$`)
+	beforeCopy = regexp.MustCompile(`^jobhunt-before-(restore|clearing)-\d{8}-\d{6}\.db$`)
 )
 
 const beforeKept = 3
@@ -170,7 +171,14 @@ func (e *Engine) Copies() []Copy {
 		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
-		out = append(out, Copy{Name: name, At: info.ModTime().Unix(), Size: info.Size(), Before: before})
+		c := Copy{Name: name, At: info.ModTime().Unix(), Size: info.Size(), Before: before}
+		switch {
+		case strings.HasPrefix(name, "jobhunt-before-clearing-"):
+			c.What = "Before clearing the old Job Hunt's jobs"
+		case before:
+			c.What = "Before a restore"
+		}
+		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].At != out[j].At {
