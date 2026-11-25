@@ -1510,9 +1510,15 @@ func (s *Server) Handler() http.Handler {
 	})
 	h("PUT /api/llm", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		cur := e.LLM()
-		var in engine.LLMSettings
+		// Read onto what is saved, so a page that sends only some fields
+		// (setup sends the engine and key) leaves the rest as it was.
+		in := cur
+		in.Key, in.Model = "", ""
 		if err := read(r, &in); err != nil {
 			return nil, err
+		}
+		if err := engine.CheckModels(in); err != nil {
+			return nil, bad(sentence(err.Error()))
 		}
 		switch in.Engine {
 		case "", "claude-code", "api", "demo":

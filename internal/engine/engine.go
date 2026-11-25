@@ -73,6 +73,8 @@ type Engine struct {
 	// Sample answers in place of Claude when the engine is "demo". Tests set
 	// it to script what Claude says; nil means the built-in stand-in.
 	Sample llm.Engine
+	// Tests only: answers in place of Claude Code, so nothing real is run.
+	CLIStandIn llm.Engine
 }
 
 // LLMSettings is how Claude is reached.
@@ -83,6 +85,14 @@ type LLMSettings struct {
 	CLI    string `json:"cli"`
 	// DailyLimit caps spending per day in dollars when using an API key. 0 = none.
 	DailyLimit float64 `json:"daily_limit"`
+	// Models per kind of task; "" means Model. See models.go.
+	ScoreModel string `json:"score_model,omitempty"` // reading roles against the CV
+	WriteModel string `json:"write_model,omitempty"` // tailoring, letters, notes
+	// Effort for every task: "" lets each task ask for what it needs.
+	Effort string `json:"effort,omitempty"`
+	// Grouped: several postings are read in one request. Cheaper, but the
+	// first of them waits for the others, so it starts off.
+	Grouped bool `json:"grouped,omitempty"`
 }
 
 // New builds an engine over an open store.
@@ -103,6 +113,7 @@ func New(s *store.Store, dir string) *Engine {
 			return max(set.DailyLimit-spent, 0)
 		},
 	}
+	e.meter.Shape = e.shapeRequest
 	e.brain = &brain.Brain{LLM: e.meter}
 	s.CloseStaleRuns()
 	return e
@@ -141,6 +152,9 @@ func (e *Engine) pickEngine() (llm.Engine, error) {
 	case "api":
 		return &llm.API{Key: set.Key, Model: set.Model}, nil
 	case "claude-code":
+		if e.CLIStandIn != nil {
+			return e.CLIStandIn, nil
+		}
 		return &llm.CLI{Path: set.CLI, Model: set.Model, Dir: filepath.Join(e.Dir, "claude")}, nil
 	case "demo":
 		if e.Sample != nil {
@@ -164,11 +178,17 @@ type ClaudeState struct {
 	HasKey  bool    `json:"has_key"`
 	Limit   float64 `json:"limit"`
 	CLIPath string  `json:"cli_path"`
+	// The person's choices of model per kind of task, and effort.
+	ScoreModel string `json:"score_model"`
+	WriteModel string `json:"write_model"`
+	Effort     string `json:"effort"`
+	Grouped    bool   `json:"grouped"`
 }
 
 func (e *Engine) Claude() ClaudeState {
 	set := e.LLM()
-	st := ClaudeState{Engine: set.Engine, Model: set.Model, HasKey: set.Key != "", Limit: set.DailyLimit, CLIPath: set.CLI}
+	st := ClaudeState{Engine: set.Engine, Model: set.Model, HasKey: set.Key != "", Limit: set.DailyLimit, CLIPath: set.CLI,
+		ScoreModel: set.ScoreModel, WriteModel: set.WriteModel, Effort: set.Effort, Grouped: set.Grouped}
 	now := e.Now()
 	u := e.S.UsageSince(dayStart(now).Unix())
 	st.Today, st.Calls = u.Cost, u.Calls

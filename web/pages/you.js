@@ -31,6 +31,7 @@ const SETTINGS = [
   ['arriving', '', '', 'Arriving: your CV in local form', 'arriving arrival pack newcomer local cv terms'],
   ['connections', 'claude', '', 'Claude: subscription, API key, model', 'claude api key model subscription sign in connect anthropic ai'],
   ['connections', 'claude', 'daily_limit', 'Daily spending limit', 'limit budget spend cost dollars money cap'],
+  ['connections', 'claude', 'score_model', 'A model for each kind of work, effort, four postings per request', 'model scoring reading tailoring writing effort grouped batch cheaper haiku sonnet opus'],
   ['connections', 'phone', '', 'Phone notices', 'phone ntfy notice notification push buzz mobile topic quiet hours'],
   ['connections', 'phoneaccess', '', 'Job Hunt on your phone', 'phone mobile access remote browser wifi tailscale away qr code pair'],
   ['connections', 'owncal', 'talkset', 'When you can do interviews', 'interview hours availability times to offer length slots time zone'],
@@ -226,6 +227,10 @@ function connections(d, route) {
       <div class="grid2" style="padding-left:24px"><label class="field">API key<input type="password" name="key" placeholder="${cl.has_key ? 'Saved. Paste to replace.' : 'sk-ant-…'}" autocomplete="off"></label><label class="field">Stop at this much a day (USD)<input type="number" name="daily_limit" value="${cl.limit || ''}" placeholder="No limit" step="0.5" min="0"></label></div>
       <label class="row top-al s" style="gap:8px"><input type="radio" name="engine" value="demo" ${cl.engine === 'demo' ? 'checked' : ''}> <span><b>Sample answers</b><br><span class="m">No Claude. For looking around; the writing is crude.</span></span></label>
       <label class="field" style="max-width:340px">Model<select name="model">${d.models.map(x => html`<option value="${x.ID}" ${cl.model === x.ID ? 'selected' : ''}>${x.Name}: ${x.Note}</option>`)}</select></label>
+      <details ${cl.score_model || cl.write_model || cl.effort || cl.grouped ? 'open' : ''}><summary class="s">A model for each kind of work</summary>
+        <div class="grid3" style="margin-top:8px">${[['score_model', 'Reading roles', 'Most of the calls. A cheaper model saves the most here.'], ['write_model', 'Tailoring and writing', 'What employers read.']].map(([k, label, h]) => html`<label class="field">${label} <span class="h">${h}</span><select name="${k}"><option value="">The model above</option>${d.models.map(x => html`<option value="${x.ID}" ${cl[k] === x.ID ? 'selected' : ''}>${x.Name}</option>`)}</select></label>`)}
+          <label class="field">Effort <span class="h">How hard Claude thinks. Lower is faster and cheaper.</span><select name="effort">${[['', 'As each task needs'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']].map(([v, t]) => html`<option value="${v}" ${(cl.effort || '') === v ? 'selected' : ''}>${t}</option>`)}</select></label></div>
+        <label class="row top-al s" style="gap:8px;margin-top:8px"><input type="checkbox" name="grouped" ${cl.grouped ? 'checked' : ''}> <span><b>Read four postings in one request</b><br><span class="m">Cheaper, but a new role waits for three others before it is scored, so you hear about it later. Off keeps you among the first applicants.</span></span></label></details>
       <div class="row"><button class="btn p">Save</button><button type="button" class="btn" data-act="testllm" data-busy="Asking Claude…">Test it</button><span class="grow"></span><span class="xs m">${cl.calls} calls today${cl.engine === 'api' ? html` · $${cl.today.toFixed(2)} today · $${cl.week.toFixed(2)} this week` : ''}</span></div>
       ${usage.length ? html`<details><summary class="s">What Claude was used for this week</summary><table class="tbl" style="margin-top:6px"><tbody>${usage.map(([k, u]) => html`<tr><td class="s">${k.replace(/_/g, ' ')}</td><td class="s">${u.calls} calls</td><td class="s">${u.cost ? '$' + u.cost.toFixed(2) : ''}</td><td class="s m">${u.errors ? u.errors + ' failed' : ''}</td></tr>`)}</tbody></table></details>` : ''}</form>`;
   const phone = html`<form data-act="savephone" class="card col" style="gap:10px" data-set="phone"><div class="row"><h3 class="grow">Phone notices</h3><span class="chip ${ph.on ? 'good' : ''}">${ph.on ? 'On' : 'Off'}</span></div>
@@ -506,7 +511,7 @@ export default {
     apply: () => post('arriving/apply').then(() => toast('A copy of your CV in local form was added under You')),
     async savellm({ f }) {
       if (!f.engine) throw new Error('Choose how to reach Claude.');
-      await put('llm', { engine: f.engine, key: f.key || '', model: f.model, daily_limit: +f.daily_limit || 0 });
+      await put('llm', { engine: f.engine, key: f.key || '', model: f.model, daily_limit: +f.daily_limit || 0, score_model: f.score_model || '', write_model: f.write_model || '', effort: f.effort || '', grouped: !!f.grouped });
       toast('Saved');
     },
     async testllm() { const r = await post('llm/test'); toast(r.message); return false; },

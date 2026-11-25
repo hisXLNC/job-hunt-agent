@@ -39,6 +39,9 @@ func (a *API) Do(ctx context.Context, req Request) (Response, error) {
 		a.client = &c
 	}
 	model := a.model()
+	if req.Model != "" {
+		model = req.Model
+	}
 	maxTokens := int64(req.MaxTokens)
 	if maxTokens <= 0 {
 		maxTokens = 16000

@@ -883,9 +883,14 @@ func (e *Engine) readAll(ctx context.Context, ids []int64, stats *RunStats) {
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].age > list[j].age })
 
+	// With grouped scoring on, a few postings go to Claude in one request.
+	size := 1
+	if e.LLM().Grouped {
+		size = brain.GroupSize
+	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	work := make(chan int64)
+	work := make(chan []int64)
 	readDone := 0
 	e.StepTakes(ctx, 8*time.Second)
 	e.Report(ctx, 0, len(list), fmt.Sprintf("Reading %s against your CV", countWord(len(list), "new role")))
@@ -893,38 +898,45 @@ func (e *Engine) readAll(ctx context.Context, ids []int64, stats *RunStats) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for id := range work {
-				kept, prepared, err := e.ReadRole(ctx, id)
-				mu.Lock()
-				readDone++
-				e.Report(ctx, readDone, len(list), fmt.Sprintf("Read %d of %d new roles", readDone, len(list)))
-				if err == nil {
-					stats.Read++
-					if kept {
-						stats.Kept++
+			for chunk := range work {
+				stop := false
+				for _, res := range e.readGroup(ctx, chunk) {
+					mu.Lock()
+					readDone++
+					e.Report(ctx, readDone, len(list), fmt.Sprintf("Read %d of %d new roles", readDone, len(list)))
+					if res.err == nil {
+						stats.Read++
+						if res.kept {
+							stats.Kept++
+						}
+						if res.prepared {
+							stats.Prepared++
+						}
 					}
-					if prepared {
-						stats.Prepared++
+					mu.Unlock()
+					if res.err != nil && !errors.Is(res.err, context.Canceled) {
+						e.problem("Reading new roles", res.err)
+						stop = stop || stopsWork(res.err)
 					}
 				}
-				mu.Unlock()
-				if err != nil && !errors.Is(err, context.Canceled) {
-					e.problem("Reading new roles", err)
-					if stopsWork(err) {
-						return
-					}
+				if stop {
+					return
 				}
 			}
 		}()
 	}
-	for _, a := range list {
+	for i := 0; i < len(list); i += size {
 		if ctx.Err() != nil {
 			break
 		}
 		if rest, _, _ := e.meter.Resting(); rest {
 			break
 		}
-		work <- a.id
+		var chunk []int64
+		for _, a := range list[i:min(i+size, len(list))] {
+			chunk = append(chunk, a.id)
+		}
+		work <- chunk
 	}
 	close(work)
 	// Workers that returned early leave ids unread; they stay at stage "new"
@@ -934,6 +946,81 @@ func (e *Engine) readAll(ctx context.Context, ids []int64, stats *RunStats) {
 		}
 	}()
 	wg.Wait()
+}
+
+type readResult struct {
+	kept, prepared bool
+	err            error
+}
+
+// readGroup reads a few roles. One role is read on its own; several are read
+// in one request, and one by one if that request's answer doesn't fit them.
+func (e *Engine) readGroup(ctx context.Context, ids []int64) []readResult {
+	out := make([]readResult, len(ids))
+	if len(ids) == 1 {
+		k, p, err := e.ReadRole(ctx, ids[0])
+		out[0] = readResult{k, p, err}
+		return out
+	}
+	var ready []store.Role
+	var at []int
+	for i, id := range ids {
+		r, ok, kept, err := e.textToRead(ctx, id)
+		if !ok {
+			out[i] = readResult{kept: kept, err: err}
+			continue
+		}
+		ready, at = append(ready, r), append(at, i)
+	}
+	if len(ready) == 0 {
+		return out
+	}
+	p := e.Person()
+	if len(p.CVs) == 0 {
+		for _, i := range at {
+			out[i].err = errors.New("add a CV first")
+		}
+		return out
+	}
+	posts := make([]brain.Posting, len(ready))
+	for i, r := range ready {
+		posts[i] = e.postingToRead(r)
+	}
+	var readings []brain.Reading
+	var err error
+	if len(ready) > 1 {
+		readings, err = e.brain.ReadRoles(ctx, p, posts)
+	}
+	if len(ready) == 1 || (err != nil && !stopsWork(err) && ctx.Err() == nil) {
+		if err != nil {
+			trace.Log("search", "grouped reading of %d roles failed, reading them one by one: %v", len(ready), err)
+		}
+		readings, err = make([]brain.Reading, len(ready)), nil
+		for j, r := range ready {
+			rd, rerr := e.brain.ReadRole(ctx, p, posts[j])
+			if rerr != nil {
+				out[at[j]].err = rerr
+				if stopsWork(rerr) || ctx.Err() != nil {
+					return out
+				}
+				continue
+			}
+			k, pr, terr := e.takeReading(ctx, r, rd)
+			out[at[j]] = readResult{k, pr, terr}
+		}
+		return out
+	}
+	if err != nil {
+		for _, i := range at {
+			out[i].err = err
+		}
+		return out
+	}
+	for j, r := range ready {
+		k, pr, terr := e.takeReading(ctx, r, readings[j])
+		out[at[j]] = readResult{k, pr, terr}
+	}
+	return out
 }
 
 // stopsWork reports errors that will repeat for every role.
@@ -970,12 +1057,41 @@ const (
 // ReadRole reads one role against the person: fetches the full posting if
 // needed, scores it, and either sets it aside or moves it to "found".
 func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, err error) {
-	r, err := e.S.Role(id)
+	r, ready, kept, err := e.textToRead(ctx, id)
+	if !ready {
+		return kept, false, err
+	}
+	p := e.Person()
+	if len(p.CVs) == 0 {
+		return false, false, errors.New("add a CV first")
+	}
+	reading, err := e.brain.ReadRole(ctx, p, e.postingToRead(r))
 	if err != nil {
 		return false, false, err
 	}
+	return e.takeReading(ctx, r, reading)
+}
+
+// postingToRead is a role as Claude is shown it, with what is on record
+// about its employer.
+func (e *Engine) postingToRead(r store.Role) brain.Posting {
+	post := postingOf(r)
+	if co, err := e.S.Company(r.CompanyID); err == nil {
+		post.About = co.About
+	}
+	return post
+}
+
+// textToRead makes sure a role has its posting's text. ready is false when
+// there is nothing to read (yet); kept then says whether the role was kept
+// for the person to open anyway.
+func (e *Engine) textToRead(ctx context.Context, id int64) (r store.Role, ready, kept bool, err error) {
+	r, err = e.S.Role(id)
+	if err != nil {
+		return r, false, false, err
+	}
 	if r.Closed == "no" {
-		return false, false, nil
+		return r, false, false, nil
 	}
 	if len(strings.Fields(r.Description)) < 40 {
 		post := sources.Posting{Source: r.Source, Key: r.Key, URL: r.URL, NeedsDetail: true}
@@ -1021,29 +1137,23 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 		e.S.Set(tries, n)
 		if n < 3 && ctx.Err() == nil {
 			trace.Log("search", "role %d has no text yet, try %d of 3", id, n)
-			return false, false, nil
+			return r, false, false, nil
 		}
 		e.S.Advance(id, "found")
 		e.S.SetReading(id, -1, r.Band, brain.Reading{Summary: "Job Hunt couldn't get this posting's text. Open the posting to read it; the extension can send it back."})
-		return true, false, nil
+		return r, false, true, nil
 	}
-	p := e.Person()
-	if len(p.CVs) == 0 {
-		return false, false, errors.New("add a CV first")
-	}
-	post := postingOf(r)
-	co, coErr := e.S.Company(r.CompanyID)
-	if coErr == nil {
-		post.About = co.About
-	}
-	reading, err := e.brain.ReadRole(ctx, p, post)
-	if err != nil {
-		return false, false, err
-	}
+	return r, true, false, nil
+}
+
+// takeReading keeps Claude's reading of a role, sets the role aside or moves
+// it to "found", and prepares it when it is strong enough.
+func (e *Engine) takeReading(ctx context.Context, r store.Role, reading brain.Reading) (kept, prepared bool, err error) {
+	id := r.ID
 	// The first posting that says what an employer does describes it from then
 	// on; what the person wrote themselves is never replaced. A recruiter's
 	// posting describes its client, which says nothing about its next one.
-	if coErr == nil && reading.Employer != "" && co.About == "" && !reading.Agency {
+	if co, coErr := e.S.Company(r.CompanyID); coErr == nil && reading.Employer != "" && co.About == "" && !reading.Agency {
 		if now, err := e.S.Company(r.CompanyID); err == nil && now.About == "" {
 			now.About, now.AboutFrom = reading.Employer, "posting"
 			e.S.SaveCompany(now)
