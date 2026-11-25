@@ -19,7 +19,9 @@ import (
 // OpenAI reaches another AI service through the OpenAI-style Chat
 // Completions API: OpenAI itself, OpenRouter, Groq, xAI, Gemini's
 // OpenAI-style address, or a model on this computer (Ollama, LM Studio).
-// It cannot look things up on the web.
+// It cannot look things up on the web. Its cost is not counted: what the
+// person spends there is between them and the service, and it never eats
+// into Claude's daily limit.
 //
 // A structured answer is asked for with the service's JSON schema format;
 // a service that refuses that format is asked in words instead, and an
@@ -81,9 +83,8 @@ type chatResp struct {
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
-		PromptTokens     int64   `json:"prompt_tokens"`
-		CompletionTokens int64   `json:"completion_tokens"`
-		Cost             float64 `json:"cost"` // OpenRouter says what a call cost
+		PromptTokens     int64 `json:"prompt_tokens"`
+		CompletionTokens int64 `json:"completion_tokens"`
 		Details          struct {
 			Cached int64 `json:"cached_tokens"`
 		} `json:"prompt_tokens_details"`
@@ -135,7 +136,6 @@ func (o *OpenAI) Do(ctx context.Context, req Request) (Response, error) {
 		out.TokensIn += r.Usage.PromptTokens - r.Usage.Details.Cached
 		out.TokensOut += r.Usage.CompletionTokens
 		out.TokensCached += r.Usage.Details.Cached
-		out.Cost += r.Usage.Cost
 		if r.Model != "" {
 			out.Model = r.Model
 		}

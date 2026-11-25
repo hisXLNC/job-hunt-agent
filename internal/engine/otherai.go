@@ -55,8 +55,9 @@ const otherKey = "otherai"
 var searchTasks = map[string]bool{"read_role": true}
 
 // keepWithClaude are requests the other AI never takes: the assistant acts
-// on the person's data with buttons, and the test is Claude's own.
-var keepWithClaude = map[string]bool{"assist": true, "test": true}
+// on the person's data with buttons, mail from the inbox is promised to
+// Claude alone (see the inbox card), and the test is Claude's own.
+var keepWithClaude = map[string]bool{"assist": true, "mail": true, "rejection_reply": true, "test": true}
 
 // OtherAI returns the stored setting.
 func (e *Engine) OtherAI() OtherAI {

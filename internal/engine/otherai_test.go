@@ -45,7 +45,7 @@ func (o *otherServer) start(t *testing.T, key string) *httptest.Server {
 			w.WriteHeader(503)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{"model": "other-model", "choices": []any{map[string]any{"message": map[string]any{"content": `{"word":"ready"}`}, "finish_reason": "stop"}}})
+		json.NewEncoder(w).Encode(map[string]any{"model": "other-model", "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 2, "cost": 5.0}, "choices": []any{map[string]any{"message": map[string]any{"content": `{"word":"ready"}`}, "finish_reason": "stop"}}})
 	}))
 	t.Cleanup(srv.Close)
 	return srv
@@ -124,7 +124,7 @@ func TestAnotherAIDoesOnlyItsShareAndClaudeTakesOver(t *testing.T) {
 	}
 	// Everything: still never a web lookup or the assistant.
 	e.SetOtherAI(ctx, OtherAIInput{On: true, Base: srv.URL + "/v1", Model: "m", Use: "all"})
-	if ask("tailor", false) != "other-model" || ask("reviews", true) != "claude" || ask("assist", false) != "claude" {
+	if ask("tailor", false) != "other-model" || ask("reviews", true) != "claude" || ask("assist", false) != "claude" || ask("mail", false) != "claude" {
 		t.Fatal("everything went the wrong way")
 	}
 	// When it fails, Claude answers and the call is kept as failed.
@@ -146,5 +146,9 @@ func TestAnotherAIDoesOnlyItsShareAndClaudeTakesOver(t *testing.T) {
 	}
 	if rest, _, _ := e.meter.Resting(); rest {
 		t.Fatal("Claude was paused")
+	}
+	// What the service says it charged never counts against Claude's limit.
+	if u := e.S.UsageSince(0); u.Cost != 0 {
+		t.Fatalf("the other AI's cost was counted: %v", u.Cost)
 	}
 }
