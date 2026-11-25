@@ -438,6 +438,8 @@ func standRead(p Person, post Posting) Reading {
 		r.Verdict, r.SkipWhy = "skip", "Entry-level role"
 	case avoided(p, post.Title):
 		r.Verdict, r.SkipWhy = "skip", "On your never-show list"
+	case unwanted(p, post) != "":
+		r.Verdict, r.SkipWhy = "skip", unwanted(p, post)
 	case r.Fit >= 70:
 		r.Verdict = "apply"
 	case r.Fit >= 50:
@@ -451,6 +453,7 @@ func standRead(p Person, post Posting) Reading {
 			gaps++
 		}
 	}
+	r.Path = standPath(p, post.Title)
 	r.Employer = firstNonEmpty(post.About, sentenceWith(post.Description, "we are a ", "we are the ", "we're a ", "our company", "our mission", "founded in", "headquartered"))
 	r.Division = sentenceWith(post.Description, " team", "division", "department", "business unit", "report to", "reports to", "reporting to", " group")
 	r.Summary = fmt.Sprintf("Your CV shows %d of the %d things this posting asks for most.", len(r.Asks)-gaps, len(r.Asks))
@@ -554,6 +557,40 @@ func bandOf(p Person, title string) string {
 		return "sideways"
 	}
 	return "other"
+}
+
+// unwanted names a deal-breaker or an unwanted industry the posting has, in
+// so many words.
+func unwanted(p Person, post Posting) string {
+	text := strings.ToLower(post.Title + "\n" + post.Description)
+	for _, d := range p.Profile.DealBreakers {
+		if d = strings.TrimSpace(d); d != "" && strings.Contains(text, strings.ToLower(d)) {
+			return "Deal-breaker: " + d
+		}
+	}
+	for _, d := range p.Profile.NoIndustries {
+		if d = strings.TrimSpace(d); d != "" && strings.Contains(text, strings.ToLower(d)) {
+			return "An industry you don't want: " + d
+		}
+	}
+	return ""
+}
+
+// standPath: a title sharing a word with the path the person wants is on it.
+func standPath(p Person, title string) string {
+	if strings.TrimSpace(p.Profile.CareerPath) == "" {
+		return "unknown"
+	}
+	have := map[string]bool{}
+	for _, w := range words(title) {
+		have[w] = true
+	}
+	for _, w := range words(p.Profile.CareerPath) {
+		if have[w] {
+			return "on"
+		}
+	}
+	return "off"
 }
 
 func avoided(p Person, title string) bool {

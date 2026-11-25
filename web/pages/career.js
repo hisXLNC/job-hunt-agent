@@ -1,4 +1,4 @@
-import { html, api, post, toast, day, rel, with_, BAND } from '../app.js';
+import { html, api, post, put, toast, day, rel, with_, BAND } from '../app.js';
 
 // Career path: where the CV can go from here, and the smallest steps that get there.
 // Claude reads the routes and the gaps; every count of postings is Job Hunt's own.
@@ -26,7 +26,8 @@ function routeCard(r, i, d, chosen, at) {
     ${r.gaps.length ? html`<div><div class="eb" style="margin-bottom:4px">What's missing</div>${r.gaps.map(g => html`<div class="s row" style="gap:6px"><span style="color:var(--${g.done ? 'good' : 'warn'})">${g.done ? '✓' : '●'}</span><span style="${g.done ? 'text-decoration:line-through;color:var(--muted)' : ''}">${g.gap}</span></div>`)}</div>` : ''}
     <div class="row wrap" style="gap:6px;margin-top:auto">
       ${r.searching ? html`<span class="btn sm p" title="${r.titles.join(', ')}" aria-disabled="true">Searching these titles</span>` : html`<button class="btn sm" data-act="search" data-route="${i}" data-busy title="Adds ${r.titles.join(', ')} to what Job Hunt searches for. Change them under Radar → Titles.">Search these titles</button>`}
-      ${i === chosen ? '' : html`<a class="btn sm ghost" href="${with_(at, { plan: i })}">The plan</a>`}</div></div>`;
+      ${i === chosen ? '' : html`<a class="btn sm ghost" href="${with_(at, { plan: i })}">The plan</a>`}
+      ${d.path === r.title ? html`<span class="chip good" title="Roles are tagged On path or Off path for this. Change it under You → What you want.">Your path</span>` : html`<button class="btn sm ghost" data-act="mypath" data-title="${r.title}" title="Tags every role Job Hunt reads On path or Off path for ${r.title}, and Claude weighs roles by it.">Make this my path</button>`}</div></div>`;
 }
 
 function plan(r, d) {
@@ -51,7 +52,7 @@ export default {
   title: 'Career path',
   sub: () => 'Where your CV can take you, and what gets you there',
   topics: ['career', 'status', 'you'],
-  load: () => api('career'),
+  load: () => Promise.all([api('career'), api('profile').catch(() => ({}))]).then(([c, p]) => ({ ...c, path: p.career_path || '' })),
   view(d, route) {
     const lookBtn = d.looking ? html`<span class="btn" disabled><span class="spin"></span>Reading</span>`
       : d.can_look ? html`<button class="btn" data-act="look" data-busy title="Claude reads your CV against what employers post. About two minutes.">${d.has ? 'Look again now' : 'Look now'}</button>`
@@ -81,6 +82,7 @@ export default {
   actions: {
     look: () => post('career/look').then(() => toast('Reading where your CV can go. About two minutes.')),
     done: ({ d }) => post('career/done', { id: d.id, done: !!d.done }),
+    mypath: ({ d }) => put('profile', { career_path: d.title }).then(() => toast(`Your path is ${d.title}. Roles read from now on are tagged On path or Off path.`)),
     async search({ d }) {
       const body = d.route !== undefined ? { route: Number(d.route) } : { title: d.title };
       const out = await post('career/search', body);

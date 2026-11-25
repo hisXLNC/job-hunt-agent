@@ -24,6 +24,7 @@ const SETTINGS = [
   ['', 'profile', 'max_age_days', 'Hard limits: age of posting, pay, contract, part-time', 'hard limits old postings age contract part-time internship strict'],
   ['', 'profile', 'keep_fit', 'Fit score a role needs, and when documents are written', 'fit score needed threshold tailor automatically strong fits all limit per search most tailored scored'],
   ['', 'profile', 'matters', 'What matters to you in a job', 'matters priorities preferences values what i want'],
+  ['', 'profile', 'seniority', 'What you want: level, permanent or contract, industries, deal-breakers, career path', 'level seniority permanent contract industry industries sector deal-breakers dealbreakers career path on path off path want'],
   ['', 'profile', 'may_prepare', 'When a strong role appears: write straight away or ask', 'prepare automatically ask before writing tailor auto'],
   ['', 'cvs', '', 'Your CVs', 'cv resume résumé upload add file word pdf'],
   ['', 'facts', '', 'What Job Hunt knows about you', 'facts know about me remember forget'],
@@ -76,9 +77,10 @@ document.addEventListener('keydown', ev => {
 document.addEventListener('click', ev => { if (!ev.target.closest('.setfind')) document.getElementById('setfound')?.setAttribute('hidden', ''); });
 
 // Which group of About you holds a field the settings search points at.
-const GROUP_OF = { name: 'me', rare: 'me', city: 'me', places: 'me', arrive_on: 'me', work_status: 'me', pay_floor: 'me', level: 'look', domain: 'look', avoid: 'look', wp_remote: 'look', max_age_days: 'limits', matters: 'matters', letter_style: 'letters', keep_fit: 'auto', may_prepare: 'auto' };
+const GROUP_OF = { name: 'me', rare: 'me', city: 'me', places: 'me', arrive_on: 'me', work_status: 'me', pay_floor: 'me', level: 'look', domain: 'look', avoid: 'look', wp_remote: 'look', max_age_days: 'limits', matters: 'matters', seniority: 'wants', letter_style: 'letters', keep_fit: 'auto', may_prepare: 'auto' };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
 const longDay = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const SEN = { mid: 'Mid-level', senior: 'Senior', lead: 'Team lead', manager: 'Manager', director: 'Director', executive: 'Executive' };
 const LETTER = { standard: 'Standard', formal: 'Formal', short: 'Short and direct', warm: 'Warm' };
 
 function about(d, route) {
@@ -93,6 +95,8 @@ function about(d, route) {
   const hidden = types.filter(([k]) => (p.no_types || []).includes(k)).map(x => x[1]);
   const limits = [p.max_age_days ? `Postings up to ${p.max_age_days === 1 ? '1 day' : p.max_age_days === 7 ? 'a week' : p.max_age_days === 14 ? '2 weeks' : p.max_age_days === 30 ? 'a month' : p.max_age_days + ' days'} old` : 'Any age of posting',
     hidden.length ? `no ${hidden.join(', ')}` : 'contract, part-time and internships all shown', p.pay_strict && p.pay_floor ? 'nothing under your pay floor' : ''].filter(Boolean);
+  const wants = [p.seniority ? SEN[p.seniority] : '', p.terms === 'permanent' ? 'permanent only' : p.terms === 'contract' ? 'contract' : '', p.industries?.length ? `in ${p.industries.join(', ')}` : '',
+    p.no_industries?.length ? `not in ${p.no_industries.join(', ')}` : '', p.deal_breakers?.length ? plural(p.deal_breakers.length, 'deal-breaker') : '', p.career_path ? `path: ${p.career_path}` : ''].filter(Boolean);
   const sign = (p.signature || '').split('\n').map(x => x.trim()).filter(Boolean).join(' ');
   const save = html`<div class="row" style="gap:8px;margin-top:4px"><button class="btn sm p">Save</button><a class="btn sm ghost" href="${with_(route, { open: '' })}">Cancel</a></div>`;
   const form = (group, body) => html`<form data-act="saveprofile" data-group="${group}" class="col" style="gap:12px" data-set="profile">${body}${save}</form>`;
@@ -119,6 +123,14 @@ function about(d, route) {
       <div class="row wrap" style="gap:16px"><span class="s" style="font-weight:600">Never show:</span>${[['contract', 'Contract'], ['part-time', 'Part-time'], ['internship', 'Internships']].map(([k, x]) => html`<label class="row s" style="gap:5px"><input type="checkbox" name="no_${k}" ${(p.no_types || []).includes(k) ? 'checked' : ''}> ${x}</label>`)}</div>`)],
     ['matters', 'What matters to you', p.matters ? ['good', 'Written'] : ['warn', 'Not yet'], p.matters ? `“${p.matters.length > 150 ? p.matters.slice(0, 150) + '…' : p.matters}”` : 'In your own words; Claude weighs every role by it',
       form('matters', html`<label class="field">What matters to you in a job <span class="h">In your own words. Claude weighs every role by it.</span><textarea name="matters" rows="3" maxlength="1500" placeholder="A team that ships; no on-call; within 40 minutes by train; a manager who was an accountant.">${p.matters || ''}</textarea></label>`)],
+    ['wants', 'What you want', wants.length ? ['good', 'Said'] : ['warn', 'Not yet'], wants.length ? wants.join(' · ') : 'Level, permanent or contract, industries, deal-breakers and your career path; Claude weighs every role by them',
+      form('wants', html`<p class="xs m">Claude weighs every role by these when it reads it. A role that clearly has a deal-breaker, or is in an industry you don't want, is set aside with the reason; you can still see it under Roles → Set aside.</p>
+      <div class="grid2"><label class="field">Level you want<select name="seniority"><option value="">Not said</option>${Object.entries(SEN).map(([k, v]) => html`<option value="${k}" ${p.seniority === k ? 'selected' : ''}>${v}</option>`)}</select></label>
+        <label class="field">Permanent or contract <span class="h">To never see contracts, use Hard limits.</span><select name="terms">${[['', 'Either'], ['permanent', 'Permanent'], ['contract', 'Contract']].map(([k, v]) => html`<option value="${k}" ${(p.terms || '') === k ? 'selected' : ''}>${v}</option>`)}</select></label></div>
+      <div class="grid2"><label class="field">Industries you want <span class="h">Comma-separated.</span><input type="text" name="industries" value="${(p.industries || []).join(', ')}" placeholder="Banking, insurance"></label>
+        <label class="field">Industries you don't want <span class="h">Comma-separated.</span><input type="text" name="no_industries" value="${(p.no_industries || []).join(', ')}" placeholder="Gambling, tobacco"></label></div>
+      <label class="field">Deal-breakers <span class="h">One per line.</span><textarea name="deal_breakers" rows="3" placeholder="On-call rota&#10;More than two days a week away from home">${(p.deal_breakers || []).join('\n')}</textarea></label>
+      <label class="field">The career path you want <span class="h">Roles are tagged On path or Off path. <a href="#/career">Career path</a> can set it from one of its routes.</span><input type="text" name="career_path" maxlength="300" value="${p.career_path || ''}" placeholder="Head of Tax Technology"></label>`)],
     ['letters', 'Letters and follow-ups', ['', LETTER[p.letter_style] || 'Standard'], [(p.chase_days ?? 8) ? `Follow up after ${p.chase_days ?? 8} days` : 'No follow-ups', sign ? `signed “${sign}”` : 'signed “Sincerely,” and your name', (p.weekly_goal ?? 10) ? `goal ${p.weekly_goal ?? 10} applications a week` : 'no weekly goal'].join(' · '),
       form('letters', html`<div class="grid3"><label class="field">Letter style <span class="h">You can change it for any one role.</span><select name="letter_style">${[['standard', 'Standard'], ['formal', 'Formal: banks, government, law'], ['short', 'Short and direct'], ['warm', 'Warm and personal']].map(([k, x]) => html`<option value="${k}" ${p.letter_style === k ? 'selected' : ''}>${x}</option>`)}</select></label>
         <label class="field">Follow up on an application <span class="h">When there has been no reply.</span><select name="chase_days">${[...new Set([0, 5, 8, 10, 14, 21, p.chase_days ?? 8])].sort((a, b) => a - b).map(n => html`<option value="${n}" ${(p.chase_days ?? 8) === n ? 'selected' : ''}>${n ? `After ${n} days` : 'Never'}</option>`)}</select></label>
@@ -500,6 +512,7 @@ export default {
         look: () => ({ titles: { level: titleLines(f.level), step_up: titleLines(f.step_up), sideways: titleLines(f.sideways) }, domain: lines(f.domain), avoid: lines(f.avoid), workplaces: wp.length === 3 ? [] : wp }),
         limits: () => ({ pay_strict: !!f.pay_strict, max_age_days: +f.max_age_days || 0, no_types: ['contract', 'part-time', 'internship'].filter(k => f['no_' + k]) }),
         matters: () => ({ matters: f.matters }),
+        wants: () => ({ seniority: f.seniority, terms: f.terms, industries: lines(f.industries), no_industries: lines(f.no_industries), deal_breakers: titleLines(f.deal_breakers), career_path: f.career_path.trim() }),
         letters: () => ({ letter_style: f.letter_style, signature: f.signature, chase_days: Math.max(0, +f.chase_days || 0), weekly_goal: Math.max(0, Math.round(+f.weekly_goal) || 0) }),
         auto: () => ({ keep_fit: Math.min(95, Math.max(30, Math.round(+f.keep_fit) || 55)), prepare_fit: Math.min(100, Math.max(30, Math.round(+f.prepare_fit) || 70)), prepare_max: Math.max(0, Math.round(+f.prepare_max) || 0), may_prepare: f.may_prepare }),
       }[d.group];

@@ -258,7 +258,7 @@ export default {
     const r = d.role, url = safeUrl(r.apply_url || r.url), later = !r.closed && r.later_until > d.now;
     return html`<div class="body">
       <div class="card row" style="gap:16px;padding:20px">${tile(r.company, false, r.company_id)}
-        <div class="grow col" style="gap:6px"><div class="row wrap" style="gap:8px">${stageChip(r)}${BAND[r.band] ? html`<span class="chip">${BAND[r.band]}</span>` : ''}${freshness(r)}${r.pay ? html`<span class="s m">· ${r.pay}</span>` : ''}${r.gone_at ? html`<span class="chip warn">Posting taken down ${rel(r.gone_at)}</span>` : ''}</div>
+        <div class="grow col" style="gap:6px"><div class="row wrap" style="gap:8px">${stageChip(r)}${BAND[r.band] ? html`<span class="chip">${BAND[r.band]}</span>` : ''}${r.path ? html`<a class="chip ${r.path === 'on' ? 'good' : ''}" href="#/you?open=wants" title="${r.path === 'on' ? 'Moves you along the career path you want' : 'Leads away from the career path you want'}">${r.path === 'on' ? 'On path' : 'Off path'}</a>` : ''}${freshness(r)}${r.pay ? html`<span class="s m">· ${r.pay}</span>` : ''}${r.gone_at ? html`<span class="chip warn">Posting taken down ${rel(r.gone_at)}</span>` : ''}</div>
           <h2 style="font-size:21px">${r.title}</h2><div class="s m">${employer(r.company, r.company_id)}${r.location ? html` · ${r.location}` : ''}${r.closed && r.closed_why ? html` · <b>${r.closed_why}</b>` : ''}</div></div>
         ${forecast(d)}
         <div class="col" style="gap:6px">

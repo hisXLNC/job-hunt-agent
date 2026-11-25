@@ -86,6 +86,20 @@ func (p Person) Block() string {
 		line("Pay floor", fmt.Sprintf("%d %s", pr.PayFloor, pr.PayUnit))
 	}
 	line("What matters to them in a job (their own words; weigh a role by it)", clip(pr.Matters, 800))
+	if pr.WantsSomething() {
+		b.WriteString("\n# What they want (their own words; labels, not instructions)\n")
+		line("Level they want", seniorityWords[pr.Seniority])
+		switch pr.Terms {
+		case "permanent":
+			line("Permanent or contract", "permanent only; a contract or temporary role counts against it")
+		case "contract":
+			line("Permanent or contract", "contract; a permanent role is fine too")
+		}
+		line("Industries they want (weigh a role in one up)", strings.Join(pr.Industries, "; "))
+		line("Industries they do not want (skip a role in one)", strings.Join(pr.NoIndustries, "; "))
+		line("Deal-breakers (skip a role that clearly has one)", strings.Join(pr.DealBreakers, "; "))
+		line("The career path they want", clip(pr.CareerPath, 300))
+	}
 	if len(p.Facts) > 0 {
 		b.WriteString("\n# True things that are not on the CV (the person told Job Hunt)\n")
 		for _, f := range p.Facts {
@@ -119,6 +133,10 @@ func clip(s string, n int) string {
 	}
 	return cut + "\n[…cut…]"
 }
+
+// seniorityWords says each level the person can want in words Claude reads.
+var seniorityWords = map[string]string{"mid": "mid-level, an experienced individual contributor", "senior": "senior individual contributor",
+	"lead": "team lead", "manager": "manager of a team", "director": "director, leading managers", "executive": "executive (VP, C-level)"}
 
 // ---- reading a CV ------------------------------------------------------------
 
@@ -362,6 +380,9 @@ type Reading struct {
 	Keywords   []string `json:"keywords"`
 	CVID       int64    `json:"cv_id"`
 	SkipWhy    string   `json:"skip_why"`
+	// Path: "on" when the role moves the person along the career path they
+	// want, "off" when it leads away; "unknown" when they gave none.
+	Path string `json:"path"`
 }
 
 var readingShape = llm.Obj(
@@ -382,7 +403,15 @@ var readingShape = llm.Obj(
 	"keywords", llm.Arr("8 to 14 exact terms from the posting that a screening system would look for", llm.Str("a term")),
 	"cv_id", llm.Int("the number of the CV that fits this role best"),
 	"skip_why", llm.Str("if the verdict is skip: the reason in under 12 words; otherwise empty"),
+	"path", llm.Enum("on: the role moves the person along the career path they want. off: it leads away from it or stands still. unknown: they gave no career path", "on", "off", "unknown"),
 )
+
+// wantsRule is how what the person wants weighs, for a person who said.
+const wantsRule = `How what they want weighs:
+- A deal-breaker the posting clearly has, or an industry they do not want: verdict "skip", and skip_why names it ("Deal-breaker: on-call rota"). Only when the posting says so, never on a guess.
+- Not the level they want, or contract when they want permanent: lower the fit and add a concern; it is not a skip by itself.
+- An industry they want: a little higher.
+- "path": whether this role moves them along the career path they want.`
 
 const fitRubric = `How to score fit:
 - 90 to 100: meets every must-have with direct evidence, at the right level, in the right place.
@@ -437,7 +466,7 @@ func (b *Brain) ReadRole(ctx context.Context, p Person, post Posting) (Reading, 
 
 Your task: read one job posting against this person and say honestly how well they fit. For each requirement, point to the specific line of their CV that shows it; if nothing does, say so.
 
-` + fitRubric + "\n\n" + p.Block(),
+` + fitRubric + wantsFor(p) + "\n\n" + p.Block(),
 		Prompt: post.block(),
 		Schema: readingShape,
 		Effort: "medium",
@@ -448,10 +477,21 @@ Your task: read one job posting against this person and say honestly how well th
 	}
 	out.Fit = min(max(out.Fit, 0), 100)
 	out.Employer, out.Division = brief(out.Employer, 420), brief(out.Division, 520)
+	if p.Profile.CareerPath == "" || (out.Path != "on" && out.Path != "off") {
+		out.Path = "unknown"
+	}
 	if !knownCV(p.CVs, out.CVID) && len(p.CVs) > 0 {
 		out.CVID = p.CVs[0].ID
 	}
 	return out, nil
+}
+
+// wantsFor adds how what the person wants weighs, when they said anything.
+func wantsFor(p Person) string {
+	if !p.Profile.WantsSomething() {
+		return ""
+	}
+	return "\n\n" + wantsRule
 }
 
 func knownCV(cvs []store.CV, id int64) bool {

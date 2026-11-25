@@ -579,6 +579,23 @@ type Profile struct {
 	// weighs it when it reads a role.
 	Matters   string `json:"matters"`
 	SetupDone bool   `json:"setup_done"`
+
+	// What the person wants, which Claude weighs when it reads a role (none
+	// of it sets a posting aside before it is read; the hard limits do that).
+	Seniority    string   `json:"seniority,omitempty"`     // one of Seniorities; "" = not said
+	Terms        string   `json:"terms,omitempty"`         // "permanent", "contract"; "" = either
+	Industries   []string `json:"industries,omitempty"`    // industries they want
+	NoIndustries []string `json:"no_industries,omitempty"` // industries they do not want
+	DealBreakers []string `json:"deal_breakers,omitempty"` // things that rule a role out, in their words
+	CareerPath   string   `json:"career_path,omitempty"`   // where they want their career to go; roles are tagged on or off it
+}
+
+// Seniorities are the levels a person can say they want, lowest first.
+var Seniorities = []string{"mid", "senior", "lead", "manager", "director", "executive"}
+
+// WantsSomething reports whether the person said anything under what they want.
+func (p Profile) WantsSomething() bool {
+	return p.Seniority != "" || p.Terms != "" || len(p.Industries) > 0 || len(p.NoIndustries) > 0 || len(p.DealBreakers) > 0 || p.CareerPath != ""
 }
 
 // Keep is the fit a role needs to be kept.

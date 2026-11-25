@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -396,6 +397,25 @@ func (s *Server) Handler() http.Handler {
 			return nil, bad("Keep what matters to you under 1,500 characters.")
 		}
 		p.Matters = strings.TrimSpace(p.Matters)
+		// What the person wants: a few short lines each.
+		if p.Seniority != "" && !slices.Contains(store.Seniorities, p.Seniority) {
+			return nil, bad("The level is one of: " + strings.Join(store.Seniorities, ", ") + ".")
+		}
+		if p.Terms != "" && p.Terms != "permanent" && p.Terms != "contract" {
+			return nil, bad("Permanent or contract: permanent, contract, or empty for either.")
+		}
+		for _, list := range []*[]string{&p.Industries, &p.NoIndustries, &p.DealBreakers} {
+			var keep []string
+			for _, x := range *list {
+				if x = strings.Join(strings.Fields(x), " "); x != "" && len(keep) < 20 {
+					keep = append(keep, string([]rune(x)[:min(len([]rune(x)), 100)]))
+				}
+			}
+			*list = keep
+		}
+		if p.CareerPath = strings.TrimSpace(p.CareerPath); len(p.CareerPath) > 300 {
+			return nil, bad("Keep the career path under 300 characters.")
+		}
 		if p.Goal() > 100 || (p.WeeklyGoal != nil && *p.WeeklyGoal < 0) {
 			return nil, bad("Applications a week is 0 to 100 (0 means no goal).")
 		}

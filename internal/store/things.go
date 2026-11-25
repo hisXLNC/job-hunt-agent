@@ -279,6 +279,9 @@ type Role struct {
 	// LaterUntil: the person saved the role for later; it stays off Today
 	// until this moment. 0 when not saved for later.
 	LaterUntil int64 `json:"later_until"`
+	// Path: "on" or "off" the career path the person wants, from the
+	// role's reading; "" when there is no path or it could not tell.
+	Path string `json:"path,omitempty"`
 }
 
 // Age is when the posting went up, or when Job Hunt first saw it.
@@ -289,18 +292,21 @@ func (r Role) Age() int64 {
 	return r.FirstSeenAt
 }
 
-const roleCols = `r.id, r.company_id, c.name, r.key, r.source, r.title, r.location, r.workplace, r.pay, r.url, r.apply_url, r.posted_at, r.first_seen_at, r.last_seen_at, r.gone_at, r.applicants, r.band, r.stage, r.stage_at, r.closed, r.closed_why, r.fit, r.fit_tailored, r.saved, r.auto, r.applied_at, r.later_until`
+const roleCols = `r.id, r.company_id, c.name, r.key, r.source, r.title, r.location, r.workplace, r.pay, r.url, r.apply_url, r.posted_at, r.first_seen_at, r.last_seen_at, r.gone_at, r.applicants, r.band, r.stage, r.stage_at, r.closed, r.closed_why, r.fit, r.fit_tailored, r.saved, r.auto, r.applied_at, r.later_until, CASE WHEN json_valid(r.reading) THEN COALESCE(json_extract(r.reading, '$.path'), '') ELSE '' END`
 
 func scanRole(sc interface{ Scan(...any) error }, full bool) (Role, error) {
 	var r Role
 	var saved, auto int
-	dst := []any{&r.ID, &r.CompanyID, &r.Company, &r.Key, &r.Source, &r.Title, &r.Location, &r.Workplace, &r.Pay, &r.URL, &r.ApplyURL, &r.PostedAt, &r.FirstSeenAt, &r.LastSeenAt, &r.GoneAt, &r.Applicants, &r.Band, &r.Stage, &r.StageAt, &r.Closed, &r.ClosedWhy, &r.Fit, &r.FitTailored, &saved, &auto, &r.AppliedAt, &r.LaterUntil}
+	dst := []any{&r.ID, &r.CompanyID, &r.Company, &r.Key, &r.Source, &r.Title, &r.Location, &r.Workplace, &r.Pay, &r.URL, &r.ApplyURL, &r.PostedAt, &r.FirstSeenAt, &r.LastSeenAt, &r.GoneAt, &r.Applicants, &r.Band, &r.Stage, &r.StageAt, &r.Closed, &r.ClosedWhy, &r.Fit, &r.FitTailored, &saved, &auto, &r.AppliedAt, &r.LaterUntil, &r.Path}
 	var reading string
 	if full {
 		dst = append(dst, &r.Description, &reading)
 	}
 	err := sc.Scan(dst...)
 	r.Saved, r.Auto = saved != 0, auto != 0
+	if r.Path != "on" && r.Path != "off" {
+		r.Path = ""
+	}
 	if full {
 		r.Reading = raw(reading)
 	}
