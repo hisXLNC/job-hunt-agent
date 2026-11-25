@@ -1,0 +1,21 @@
+name: Try a failed release once more
+
+# A release can fail for reasons outside the code (a Windows machine that is slow to start,
+# GitHub having a bad minute). When the first attempt fails, its failed part is run again once.
+# A second failure stays failed, so a real problem is never hidden.
+on:
+  workflow_run:
+    workflows: ["Release Job Hunt for Windows"]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  again:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: gh api -X POST "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/rerun-failed-jobs"

@@ -67,21 +67,13 @@ jobs:
         if: steps.v.outputs.publish == 'true'
         shell: pwsh
         run: |
-          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
-          # The package site is sometimes away (503, 504): try twice, then
-          # NSIS's own download.
-          for ($i = 1; $i -le 2 -and -not (Test-Path $nsis); $i++) {
-            choco install nsis -y --no-progress | Out-Host
-            if (-not (Test-Path $nsis)) { Start-Sleep -Seconds 20 }
-          }
-          if (-not (Test-Path $nsis)) {
-            $zip = "$env:RUNNER_TEMP\nsis.zip"
-            for ($i = 1; $i -le 3; $i++) {
-              try { Invoke-WebRequest -Uri "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip" -OutFile $zip -UserAgent "curl/8" -MaximumRedirection 10; break } catch { Start-Sleep -Seconds 20 }
-            }
-            Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\nsis" -Force
-            $nsis = "$env:RUNNER_TEMP\nsis\nsis-3.10\makensis.exe"
-          }
+          # NSIS comes with the code (installer/tools), checked against its known fingerprint, so
+          # building the installer never depends on a download site being up.
+          $zip = "installer\tools\nsis-3.10.zip"
+          $want = "fcdce3229717a2a148e7cda0ab5bdb667f39d8fb33ede1da8dabc336bd5ad110"
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $want) { throw "installer\tools\nsis-3.10.zip is not the NSIS it should be" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\nsis" -Force
+          $nsis = "$env:RUNNER_TEMP\nsis\nsis-3.10\makensis.exe"
           if (-not (Test-Path $nsis)) { throw "the installer builder (NSIS) is not on this machine" }
           & $nsis /V2 "/DVERSION=${{ steps.v.outputs.version }}" "/DEXE=..\dist\JobHunt3.exe" "/DOUT=..\dist\JobHunt3-Setup.exe" "/DEXT=..\extension" installer\jobhunt.nsi
           if ($LASTEXITCODE -ne 0) { throw "the installer did not build" }
