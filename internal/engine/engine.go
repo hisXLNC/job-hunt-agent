@@ -348,7 +348,7 @@ func (e *Engine) Status() Status {
 func (e *Engine) Person() brain.Person {
 	cvs, _ := e.S.CVs()
 	facts, _ := e.S.Facts()
-	return brain.Person{Profile: e.S.Profile(), CVs: cvs, Facts: facts, Today: e.Now(), TurnedDown: e.TurnedDown()}
+	return brain.Person{Profile: e.S.Profile(), CVs: cvs, Facts: facts, Today: e.Now(), TurnedDown: e.TurnedDown(), Guidance: e.tailorGuidance()}
 }
 
 // AddCV takes in a CV file: reads it, structures it, and, for the first one,

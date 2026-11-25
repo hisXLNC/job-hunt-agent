@@ -257,6 +257,7 @@ const IC = {
   today: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>',
   radar: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6-6"/></svg>',
   roles: '<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/></svg>',
+  leads: '<svg viewBox="0 0 24 24"><path d="M3 11l15-6v14L3 13z"/><path d="M7 13v5a2 2 0 004 0v-4"/></svg>',
   people: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.600 3.200-5.500 6.500-5.500s5.900 1.900 6.500 5.500M16 4.800a3.500 3.500 0 010 6.400M18.500 14.800c1.700.8 2.700 2.500 3 5.200"/></svg>',
   replies: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
   interviews: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
@@ -264,10 +265,10 @@ const IC = {
   career: '<svg viewBox="0 0 24 24"><path d="M4 20c2-6 6-9 12-10M13 6l4 4-4 4"/><circle cx="4" cy="20" r="1.2"/></svg>',
   you: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.200 4-6 8-6s7 1.800 8 6"/></svg>',
 };
-const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['career', 'Career path'], ['you', 'You']];
+const NAV = [['today', 'Today'], ['radar', 'Radar'], ['roles', 'Roles'], ['people', 'People'], ['leads', 'Leads'], ['replies', 'Replies'], ['interviews', 'Interviews'], ['progress', 'Progress'], ['career', 'Career path'], ['you', 'You']];
 const PAGES = {
   today: () => import('./pages/today.js'), radar: () => import('./pages/radar.js'), roles: () => import('./pages/roles.js'),
-  role: () => import('./pages/role.js'), people: () => import('./pages/people.js'), replies: () => import('./pages/replies.js'),
+  role: () => import('./pages/role.js'), people: () => import('./pages/people.js'), leads: () => import('./pages/leads.js'), replies: () => import('./pages/replies.js'),
   employer: () => import('./pages/employer.js'),
   interviews: () => import('./pages/interviews.js'), progress: () => import('./pages/progress.js'), career: () => import('./pages/career.js'), you: () => import('./pages/you.js'),
   setup: () => import('./pages/setup.js'),

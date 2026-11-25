@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -205,6 +206,25 @@ func seedDemo(e *engine.Engine) error {
 		{Title: "Indirect tax technology manager", Company: "Any Big Four firm in Toronto", Kind: "knows_work", Why: "Advisers who worked alongside your past employers know the quality of that work.", Search: "indirect tax technology manager Toronto Vertex"},
 		{Title: "Finance professional who moved from the Gulf", Company: "Toronto", Kind: "made_move", Why: "They remember what the first three months were like.", Search: "tax manager Toronto previously Dubai"},
 	}})
+
+	// Leads: a hiring post from the side panel, news from the web, one pasted in.
+	for i, l := range []store.Lead{
+		{Kind: "post", Source: "linkedin", Author: "Hannah Morales", AuthorTitle: "VP Finance at Brightwater Analytics", URL: "https://example.com/posts/brightwater-hiring",
+			Text: "We're hiring! My team at Brightwater Analytics is looking for a Tax Technology Lead in Toronto to own our sales tax engine and the e-invoicing rollout next year. Experience with Vertex and SAP S/4HANA is a big plus. Send me a message if this sounds like you."},
+		{Kind: "news", Source: "web", Company: "Granite Freight", Headline: "Opens a new head office in Toronto and plans to hire 200 people", URL: "https://example.com/news/granite-office",
+			Text: "Granite Freight is moving its head office to Toronto and says it will hire 200 people there over the next year, many in finance and systems, as it replaces its tax and invoicing software.\n\nAnnounced: two weeks ago"},
+		{Kind: "yours", Source: "you", Company: "Quill Payments", URL: "https://example.com/news/quill-einvoicing",
+			Text: "Quill Payments launches e-invoicing for Canadian businesses and says it is growing its tax team in Toronto ahead of new e-invoicing rules."},
+	} {
+		l.Key = fmt.Sprintf("demo:lead:%d", i)
+		l.FoundAt = now.Add(-time.Duration(3+i*20) * time.Hour).Unix()
+		s.AddLead(l)
+	}
+	e.ReadLeads(ctx)
+	if leads, _, _ := s.Leads(store.LeadFilter{}); len(leads) > 0 {
+		// Written to eight days ago and quiet since: the follow-up is due.
+		s.SetLeadStep(leads[0].ID, "sent", now.AddDate(0, 0, -8).Unix())
+	}
 
 	// A conversation coming up.
 	if tid, err := s.AddTalk(store.Talk{PersonID: pids[1], Kind: "chat", Title: "Video call with Leila", At: now.Add(26 * time.Hour).Truncate(30 * time.Minute).Unix(), Minutes: 30, Link: "https://meet.example.com/abc"}); err == nil {

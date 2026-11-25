@@ -77,6 +77,12 @@ func StandIn() llm.Engine {
 			out = Found{Note: "Sample answers cannot search the web."}
 		case "career":
 			out = standCareer(req.Input.(CareerInput))
+		case "lead":
+			out = standLead(req.Input.(leadInput))
+		case "find_news":
+			out = map[string]any{"news": standNews(req.Input.(NewsInput))}
+		case "results":
+			out = standResults(req.Input.(ResultsInput))
 		case "reviews":
 			out = Reviews{Rating: 3.9, Count: 412, Sources: []ReviewSource{{Name: "Glassdoor", Rating: 3.9, URL: "https://www.glassdoor.com/"}, {Name: "Indeed", Rating: 3.8, URL: "https://www.indeed.com/"}},
 				Likes: []string{"Hybrid, two days in the office", "Steady work, good benefits"}, Warns: []string{"Slow decisions, many layers", "Pay rises below market"}}
@@ -975,6 +981,116 @@ func standCheck(in checkInput) Check {
 			cl.Status, cl.Evidence, cl.Fix = "missing", "Not on the CV", "Leave it out"
 		}
 		out.Lines = append(out.Lines, cl)
+	}
+	return out
+}
+
+// ---- leads and results --------------------------------------------------------------
+
+var standNotHiring = regexp.MustCompile(`(?i)open ?to ?work|looking for my next|i was laid off|hire me`)
+var standHiring = regexp.MustCompile(`(?i)hiring|\bhire\b|join (my|our) team|raised|series [a-e]|funding|expan|office|growing`)
+
+// standLead sizes up a lead by plain rules: hiring words, the person's own
+// titles and strengths in its text.
+func standLead(in leadInput) LeadReading {
+	l, pr := in.Lead, in.Person.Profile
+	text := strings.ToLower(l.Headline + " " + l.AuthorTitle + " " + l.Text)
+	out := LeadReading{Company: l.Company, Place: pr.City}
+	out.Hiring = l.Kind == "yours" || (standHiring.MatchString(text) && !standNotHiring.MatchString(text))
+	if out.Company == "" {
+		at := regexp.MustCompile(`\b(?:at|@)\s+([A-Z][A-Za-z0-9&.\-]*(?: [A-Z][A-Za-z0-9&.\-]*){0,3})`)
+		for _, t := range []string{l.AuthorTitle, l.Text} {
+			if m := at.FindStringSubmatch(t); m != nil && out.Company == "" {
+				out.Company = strings.TrimSpace(m[1])
+			}
+		}
+	}
+	fit := 45
+	for _, t := range pr.Titles.All() {
+		for _, w := range strings.Fields(strings.ToLower(t.Title)) {
+			if len(w) > 3 && strings.Contains(text, w) {
+				fit += 6
+				out.Role = firstNonEmpty(out.Role, t.Title)
+			}
+		}
+	}
+	for _, s := range pr.Strengths {
+		if strings.Contains(text, strings.ToLower(s)) {
+			fit += 8
+			out.Help = append(out.Help, "Your work on "+s+" is what they will need")
+		}
+	}
+	out.Fit = max(0, min(95, fit))
+	if !out.Hiring {
+		out.Fit = 0
+	}
+	out.Role = firstNonEmpty(out.Role, firstNonEmpty(strings.Join(pr.Titles.Level[:min(1, len(pr.Titles.Level))], ""), "A role in your field"))
+	switch {
+	case !out.Hiring:
+		out.Worth, out.Why = "no", "This does not read like an employer hiring."
+	case out.Fit >= 70:
+		out.Worth, out.Why = "yes", "They need what you have done, and nobody else has written to them yet. Write while it is fresh."
+	case out.Fit >= 55:
+		out.Worth, out.Why = "maybe", "Close to your field, but the work may sit beside yours rather than on it."
+	default:
+		out.Worth, out.Why = "no", "Little of what they need is on your CV."
+	}
+	if len(out.Help) == 0 {
+		out.Help = []string{"Your experience in " + firstNonEmpty(strings.Join(pr.Strengths[:min(1, len(pr.Strengths))], ""), "your field")}
+	}
+	co := firstNonEmpty(out.Company, "the company")
+	who := LeadWho{Name: l.Author, Title: l.AuthorTitle, Why: "They wrote the post.", Search: strings.TrimSpace(l.Author + " " + out.Company)}
+	if l.Author == "" {
+		who = LeadWho{Title: "Head of Finance", Why: "The person who would hire for this work.", Search: "Head of Finance " + out.Company}
+	}
+	out.Who = []LeadWho{who, {Title: "Talent partner", Why: "Runs the hiring and can pass your note on.", Search: "talent " + out.Company}}
+	first := "there"
+	if f := strings.Fields(who.Name); len(f) > 0 {
+		first = f[0]
+	}
+	me := firstNonEmpty(strings.Join(strings.Fields(pr.Name)[:min(1, len(strings.Fields(pr.Name)))], ""), "")
+	what := "your post"
+	if l.Kind != "post" {
+		what = "the news about " + co
+	}
+	mine := "My work is in " + strings.ToLower(out.Role)
+	if len(pr.Strengths) > 0 {
+		mine = "My own work is in " + strings.Join(pr.Strengths[:min(2, len(pr.Strengths))], " and ")
+	}
+	out.Note = Message{Subject: out.Role + " at " + co,
+		Body: fmt.Sprintf("Hi %s,\n\nI saw %s. %s, which sounds close to what you need now.\n\nWould you have 15 minutes next week? I would value hearing what you are looking for.\n\n%s", first, what, mine, me)}
+	out.FollowUp = Message{Subject: "Re: " + out.Note.Subject,
+		Body: fmt.Sprintf("Hi %s,\n\nA short follow-up to my note last week. If it is easier, I am glad to send two lines on how I would approach the first three months. And if the timing is wrong, no problem at all.\n\n%s", first, me)}
+	return out
+}
+
+// standNews gives two made-up items so the sample shows what news looks like.
+func standNews(in NewsInput) []LeadNews {
+	place := firstNonEmpty(in.Place, "your city")
+	all := []LeadNews{
+		{Company: "Brightwater Analytics", Headline: "Raised a $30M Series B to grow its finance and operations teams", Text: "Brightwater Analytics, a " + place + " software company, announced a Series B round led by a growth fund. It plans to double its finance team over the next year.", URL: "https://example.com/news/brightwater-series-b", When: "This month"},
+		{Company: "Granite Freight", Headline: "Opens a new head office in " + place, Text: "Granite Freight is moving its head office to " + place + " and says it will hire 200 people there, many in finance and systems.", URL: "https://example.com/news/granite-office", When: "Two weeks ago"},
+	}
+	var out []LeadNews
+	for _, n := range all {
+		known := false
+		for _, k := range in.Known {
+			known = known || strings.EqualFold(k, n.Company)
+		}
+		if !known {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// standResults reads the numbers back in plain words.
+func standResults(in ResultsInput) ResultsReading {
+	out := ResultsReading{Summary: "You are applying steadily, and the roles at your own level answer more often than the step-ups. The numbers are still small, so treat this as a first look."}
+	out.Points = []string{"Apply on the first day: most of your replies came from roles sent within a day of the posting.", "Write to one person at each employer you apply to; notes bring answers that applications alone do not."}
+	if len(in.Rejections) >= 2 {
+		out.Rejections = []string{"Most of the no's came before anyone spoke to you, on roles a step above your level.", "They were roles where your CV led with strategy rather than the systems you built."}
+		out.Guidance = "For step-up roles, lead with the systems you put live and the team you ran, with numbers, before any strategy; keep the first three bullets on hands-on delivery."
 	}
 	return out
 }

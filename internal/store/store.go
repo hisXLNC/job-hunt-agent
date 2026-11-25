@@ -292,6 +292,42 @@ ALTER TABLE companies ADD COLUMN about_from TEXT NOT NULL DEFAULT '';
 	`
 ALTER TABLE roles ADD COLUMN later_until INTEGER NOT NULL DEFAULT 0;
 `,
+	// 6: leads (hiring posts, funding and growth news, ones the person pasted
+	// in), and every place a role was seen through, for the overlap between sources.
+	`
+CREATE TABLE leads (
+  id INTEGER PRIMARY KEY,
+  key TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL DEFAULT 'post',
+  source TEXT NOT NULL DEFAULT 'you',
+  company TEXT NOT NULL DEFAULT '',
+  author TEXT NOT NULL DEFAULT '',
+  author_title TEXT NOT NULL DEFAULT '',
+  author_url TEXT NOT NULL DEFAULT '',
+  headline TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '',
+  fit INTEGER NOT NULL DEFAULT -1,
+  reading TEXT NOT NULL DEFAULT '{}',
+  read_at INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL DEFAULT 'open',
+  sent_at INTEGER NOT NULL DEFAULT 0,
+  followed_at INTEGER NOT NULL DEFAULT 0,
+  replied_at INTEGER NOT NULL DEFAULT 0,
+  role_id INTEGER NOT NULL DEFAULT 0,
+  company_id INTEGER NOT NULL DEFAULT 0,
+  person_id INTEGER NOT NULL DEFAULT 0,
+  found_at INTEGER NOT NULL
+);
+CREATE INDEX leads_state ON leads(state, fit DESC);
+
+CREATE TABLE role_seen (
+  role_id INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (role_id, source)
+);
+`,
 }
 
 // Open opens (creating and upgrading if needed) the database at path.

@@ -12,6 +12,7 @@ import (
 
 	"jobhunt/internal/brain"
 	"jobhunt/internal/cv"
+	"jobhunt/internal/engine"
 	"jobhunt/internal/store"
 )
 
@@ -313,4 +314,19 @@ func (s *Server) extRoutes(h func(string, handler)) {
 		return out, nil
 	})
 	h("POST /api/ext/note/{id}/sent", func(w http.ResponseWriter, r *http.Request) (any, error) { return nil, e.NoteSent(idOf(r)) })
+	// Posts the side panel read on LinkedIn: those that read like hiring
+	// become leads. "chosen": the person picked this one post themselves.
+	h("POST /api/ext/leads", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Posts  []engine.LeadPost `json:"posts"`
+			Chosen bool              `json:"chosen"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if len(in.Posts) > 50 {
+			in.Posts = in.Posts[:50]
+		}
+		return e.AddLeadPosts(in.Posts, in.Chosen && len(in.Posts) == 1)
+	})
 }
