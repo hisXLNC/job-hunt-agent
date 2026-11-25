@@ -64,7 +64,7 @@ New notifies for: a fresh fitting role, "X wrote to you", updated, and problems 
 5. **Indeed through the Claude connector — MISSING (M).** (1.4) Indeed appears in new only as job-alert mail.
 6. **LinkedIn through Apify — MISSING (S).** (1.31)
 7. **Search one source and see each posting's outcome — DONE 26.11.49 (the list per source, from what each search decided; no extra search of one source, which would add requests), was PARTIAL (M).** Old gave each source a tab: every posting, its fit, new / already here / skipped and why (2.18, 2.19). New Radar shows counts per source and Test for keyed sources.
-8. **Score again / Force search — PARTIAL (S).** Old re-checked skipped postings in bulk with a request estimate (1.5, 1.22). New: per-role Bring back and Read it now.
+8. **Score again / Force search — DONE 26.11.49 (Roles → Set aside; force is on Radar too), was PARTIAL (S).** Old re-checked skipped postings in bulk with a request estimate (1.5, 1.22). New: per-role Bring back and Read it now.
 9. **Pause searching for a set time — DONE 26.11.31, was PARTIAL (S).** Old: a day, a few days, two weeks, or off. New: one indefinite toggle.
 10. **Employers found by themselves, dead boards removed — PARTIAL (S/M).** Old ran weekly, after profile changes and after thin searches, and removed boards after two failures (1.16). New `SeedEmployers` runs at setup and on "Suggest more"; I found no removal of dead boards.
 11. **Company ratings in lists and as a filter — PARTIAL (M).** Old looked ratings up by itself, showed ★ in lists and could skip companies rated below a number (1.45, 2.11). New: "Look it up" on the employer page only.

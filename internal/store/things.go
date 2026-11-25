@@ -517,6 +517,43 @@ func (s *Store) Reopen(id int64) error {
 	return err
 }
 
+// Unscreen brings back a role that was set aside by the rules or by its
+// reading, now that it clears them. Only a set-aside role comes back: one the
+// person said no to, or closed in any other way, is left as it is. It reports
+// whether the role came back.
+func (s *Store) Unscreen(id int64) (bool, error) {
+	res, err := s.db.Exec(`UPDATE roles SET closed = '', closed_why = '', stage_at = ? WHERE id = ? AND closed = 'screened'`, s.now(), id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	s.Changed("roles", "today")
+	return n > 0, nil
+}
+
+// SetAside lists the roles set aside (by the rules or by their reading) that
+// were first seen since a moment, newest first: the person never saved or
+// applied to them, their posting is still up, and their employer is not
+// muted.
+func (s *Store) SetAside(since int64, limit int) ([]Role, error) {
+	rows, err := s.db.Query(`SELECT `+roleCols+`, r.description, r.reading FROM roles r JOIN companies c ON c.id = r.company_id
+		WHERE r.closed = 'screened' AND r.saved = 0 AND r.applied_at = 0 AND r.gone_at = 0 AND c.state != 'muted' AND r.first_seen_at >= ?
+		ORDER BY r.first_seen_at DESC LIMIT ?`, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Role
+	for rows.Next() {
+		r, err := scanRole(rows, true)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // SetLater keeps an open role off Today until a moment (0 brings it back
 // now). It never touches a closed role: a role the person said no to cannot
 // come back this way, and it reports whether anything changed.

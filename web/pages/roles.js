@@ -22,6 +22,7 @@ function filters(d, route) {
       ${chip('Set aside', c['closed:screened'] || 0, { closed: 'screened' }, q.closed === 'screened')}
       ${chip('Not interested', c['closed:no'] || 0, { closed: 'no' }, q.closed === 'no')}
       ${chip('Ended', (c['closed:rejected'] || 0) + (c['closed:expired'] || 0) + (c['closed:withdrawn'] || 0), { closed: 'rejected,expired,withdrawn' }, ended)}
+      ${q.closed === 'screened' && d.rescore ? again(d.rescore) : ''}
       ${ended ? html`<span class="grow"></span><button class="btn sm" data-act="tidy" ${down ? '' : 'disabled'} data-confirm="Close ${down} role${down === 1 ? '' : 's'} whose posting is gone? Only roles you never prepared or applied to. Nothing is deleted: they are kept here, under Ended."
         title="Closes open roles whose posting was taken down, or that no search has seen for a month, and that you never prepared or applied to. Roles you applied to or prepared keep everything. ${down ? '' : 'There is nothing to clear right now.'}">Clear taken-down roles${down ? html` <span style="opacity:.7">${down}</span>` : ''}</button>` : ''}
     </div>
@@ -40,6 +41,20 @@ function filters(d, route) {
       <label class="field">The posting's text <span class="h">Paste it so Job Hunt can read it against your CV.</span><textarea name="description" rows="4"></textarea></label>
       <div class="row"><button class="btn p sm">Add and read it</button></div>
     </form>`;
+}
+
+// Score again: the roles set aside lately, against the rules, CVs and settings
+// as they are now, with what it costs said first. Roles said no to are never among them.
+function again(rs) {
+  const fetch = rs.fetch ? `, and ${rs.fetch} posting${rs.fetch === 1 ? '' : 's'} fetched again from ${rs.fetch === 1 ? 'its site' : 'their sites'}` : '';
+  const reqs = n => `about ${n} request${n === 1 ? '' : 's'} to Claude`;
+  return html`<span class="grow"></span>
+    <button class="btn sm" data-act="rescore" ${rs.pass ? '' : 'disabled'} data-busy="Starting…" data-confirm="${rs.pass} of the ${rs.by_rules} roles the rules set aside in the last ${rs.days} days pass the rules as they are now. Reading them takes ${reqs(rs.requests)}${fetch}. Roles that fit come back; the rest stay set aside."
+      title="Checks the roles the rules set aside in the last ${rs.days} days against your rules as they are now, which costs nothing, and reads the ones that now pass: ${reqs(rs.requests)}.">Score again${rs.pass ? html` <span style="opacity:.7">${rs.pass}</span>` : ''}</button>
+    <button class="btn sm" data-act="rescore" data-all="1" ${rs.pass + rs.by_claude ? '' : 'disabled'} data-busy="Starting…" data-confirm="Read again the ${rs.pass + rs.by_claude} roles set aside in the last ${rs.days} days that pass the rules, including the ${rs.by_claude} Claude set aside? It takes ${reqs(rs.requests_all)}${fetch}."
+      title="Also reads again the roles Claude set aside after reading them: ${reqs(rs.requests_all)}.">Score all again</button>
+    <button class="btn sm ghost" data-act="force" data-busy="Starting…" data-confirm="Search every source now, whatever the schedule says, looking back a week instead of to the last search? Then the roles the rules set aside are checked again (${reqs(rs.requests)}, as well as reading what the search finds)."
+      title="Searches now, looking back a week, then scores the set-aside roles again with today's rules.">Search now, ignore the schedule</button>`;
 }
 
 // What can be done to every ticked role in one go; it stays in view with the filters.
@@ -88,7 +103,11 @@ export default {
   sub: (d, route) => route.parts[1] === 'board' ? 'Where every role stands' : 'Everything Job Hunt found, freshest first',
   topics: ['roles'],
   sized: true,
-  load: route => route.parts[1] === 'board' ? api('board') : api('roles?' + query(route)),
+  async load(route) {
+    if (route.parts[1] === 'board') return api('board');
+    const [d, rescore] = await Promise.all([api('roles?' + query(route)), route.q.closed === 'screened' ? api('rescore').catch(() => null) : null]);
+    return { ...d, rescore };
+  },
   view(d, route) {
     const isBoard = route.parts[1] === 'board';
     return html`<div class="body">
@@ -114,5 +133,7 @@ export default {
     showadd() { const f = document.getElementById('addrole'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); return false; },
     async add({ f }) { const r = await post('roles', f); toast('Added. Job Hunt is reading it.'); location.hash = `#/roles/${r.id}`; return false; },
     reopen: ({ d }) => post(`roles/${d.id}/reopen`).then(() => toast('Brought back')),
+    rescore: ({ d }) => post('rescore', { all: !!d.all }).then(() => toast('Scoring them again. Those that fit come back as they are read.')),
+    force: () => post('search/force').then(() => toast('Searching every source, a week back. Then the set-aside roles are checked again.')),
   },
 };

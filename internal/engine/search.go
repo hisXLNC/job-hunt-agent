@@ -309,11 +309,16 @@ func (st *RunStats) missed(kind, why string) {
 	st.BySource[kind] = r
 }
 
-// StartSearch starts a search in the background. Kind is "full" or "fast".
+// StartSearch starts a search in the background. Kind is "full" or "fast",
+// or "force": a full search the person asked for that ignores the schedule,
+// looks back a week rather than to the last search, and then checks the
+// roles set aside lately against the rules as they are now.
 func (e *Engine) StartSearch(kind string) bool {
 	doing := "Searching every source"
 	if kind == "fast" {
 		doing = "Checking for postings under an hour old"
+	} else if kind == "force" {
+		doing = "Searching every source, a week back"
 	}
 	return e.Go("search", doing, func(ctx context.Context) error {
 		// Kept until the search ends by itself or the person stops it. If
@@ -333,6 +338,10 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	p := e.S.Profile()
 	if !p.SetupDone {
 		return nil
+	}
+	force := kind == "force"
+	if force {
+		kind = "full"
 	}
 	e.preparedNow.Store(0)
 	runID := e.S.StartRun("search:" + kind)
@@ -416,7 +425,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	// 2. LinkedIn's public search: every title, step-up and sideways included,
 	// each searched as often as the others.
 	sinceLast := 26 * time.Hour
-	if st.LastFull == 0 {
+	if st.LastFull == 0 || force {
 		sinceLast = 7 * 24 * time.Hour
 	} else if d := now.Sub(time.Unix(st.LastFull, 0)) + 2*time.Hour; d > sinceLast {
 		sinceLast = min(d, 14*24*time.Hour)
@@ -536,6 +545,12 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	e.S.EndRun(runID, state, stats, strings.Join(stats.Problems, "\n"))
 	if stats.Kept > 0 || kind == "full" {
 		e.S.Log(store.Activity{Kind: "search", Text: fmt.Sprintf("Searched %d places: %d postings, %d new, %d worth a look", stats.Looked, stats.Seen, stats.New, stats.Kept)})
+	}
+	if force && ctx.Err() == nil {
+		// Then what the rules set aside lately, against the rules as they are now.
+		if _, err := e.ScoreAgain(ctx, false); err != nil && !errors.Is(err, context.Canceled) {
+			e.problem("Scoring again", err)
+		}
 	}
 	return nil
 }
@@ -1019,11 +1034,18 @@ const (
 // ReadRole reads one role against the person: fetches the full posting if
 // needed, scores it, and either sets it aside or moves it to "found".
 func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, err error) {
+	return e.readRole(ctx, id, false)
+}
+
+// readRole reads one role. Again, the role is one set aside earlier, read
+// once more because the person asked: it stays set aside unless the reading
+// now clears the bar, and nothing is written for it by itself.
+func (e *Engine) readRole(ctx context.Context, id int64, again bool) (kept, prepared bool, err error) {
 	r, err := e.S.Role(id)
 	if err != nil {
 		return false, false, err
 	}
-	if r.Closed == "no" {
+	if r.Closed == "no" || (again && r.Closed != "screened") {
 		return false, false, nil
 	}
 	if len(strings.Fields(r.Description)) < 40 {
@@ -1059,6 +1081,10 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 				trace.Log("search", "posting page for role %d not read: %v", id, perr)
 			}
 		}
+	}
+	if len(strings.Fields(r.Description)) < 40 && again {
+		// Still nothing to read: it stays where it was.
+		return false, false, nil
 	}
 	if len(strings.Fields(r.Description)) < 40 {
 		// Without the posting's text there is nothing to read, and Claude is
@@ -1117,6 +1143,12 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 			return false, false, nil
 		}
 	}
+	if again {
+		// Back among the roles worth a look; a "no" is never undone here.
+		if ok, err := e.S.Unscreen(id); err != nil || !ok {
+			return false, false, err
+		}
+	}
 	e.S.Advance(id, "found")
 	text := fmt.Sprintf("Scored %d against your %s", reading.Fit, e.cvName(reading.CVID))
 	if nearMiss {
@@ -1127,7 +1159,7 @@ func (e *Engine) ReadRole(ctx context.Context, id int64) (kept, prepared bool, e
 	// One search prepares at most as many as the person allowed; the rest
 	// wait on Today with a Prepare button.
 	full := prof.PrepareMax > 0 && e.Busy("search") && int(e.preparedNow.Load()) >= prof.PrepareMax
-	if reading.Fit >= prof.PrepareAt() && prof.MayPrepare != "ask" && !full {
+	if reading.Fit >= prof.PrepareAt() && prof.MayPrepare != "ask" && !full && !again {
 		if perr := e.Prepare(ctx, id); perr == nil {
 			prepared = true
 			e.preparedNow.Add(1)

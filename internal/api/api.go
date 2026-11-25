@@ -1006,6 +1006,35 @@ func (s *Server) Handler() http.Handler {
 		}
 		return nil, nil
 	})
+	// Search now, ignoring the schedule: a week back, then the roles the rules
+	// set aside lately are checked again. For the person's own button only: it
+	// can bring set-aside roles back, so it is not on the assistant's list.
+	h("POST /api/search/force", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		e.Resume("search")
+		if e.LLM().Engine == "" {
+			return nil, llm.ErrNotConnected
+		}
+		if !e.StartSearch("force") {
+			return nil, bad("A search is already running.")
+		}
+		return nil, nil
+	})
+	// Score again: first what it would do, then doing it. Like the search
+	// above, for the person's own button only.
+	h("GET /api/rescore", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.RescoreEstimate() })
+	h("POST /api/rescore", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			All bool `json:"all"`
+		}
+		read(r, &in)
+		if e.LLM().Engine == "" {
+			return nil, llm.ErrNotConnected
+		}
+		if !e.StartRescore(in.All) {
+			return nil, bad("Job Hunt is already scoring them again.")
+		}
+		return nil, nil
+	})
 	h("POST /api/pause", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
 			Paused bool `json:"paused"`
