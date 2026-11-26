@@ -5,12 +5,16 @@ import (
 	"testing"
 )
 
-// The Google Calendar calls are the person's own: not on the assistant's
-// list, not on the phone's, and nothing that works as a key comes back.
+// The assistant may look at, test and sync Google Calendar; the client
+// secret is never its to set and leaving Google waits for the button. A
+// phone has none of it, and nothing that works as a key comes back.
 func TestGoogleCalendarCallsStayWithThePerson(t *testing.T) {
 	for _, c := range tools {
-		if strings.Contains(c.Pattern, "/api/google") {
+		if c.Pattern == "/api/google" && c.Method == "PUT" {
 			t.Errorf("%s %s is on the assistant's list", c.Method, c.Pattern)
+		}
+		if (c.Pattern == "/api/google" && c.Method == "DELETE" || c.Pattern == "/api/google/signout") && c.Class != mustAsk {
+			t.Errorf("%s %s is made without the person's button", c.Method, c.Pattern)
 		}
 	}
 	for _, c := range [][2]string{{"GET", "/api/google"}, {"PUT", "/api/google"}, {"POST", "/api/google/signin"}, {"POST", "/api/google/sync"}, {"GET", "/api/google/lookalikes"}, {"POST", "/api/google/lookalikes/abc/link"}} {

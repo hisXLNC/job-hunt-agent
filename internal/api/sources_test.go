@@ -123,10 +123,18 @@ func TestSourceKeysGoInAndNeverComeOut(t *testing.T) {
 		t.Errorf("after removing Jooble's key: %v", m)
 	}
 
-	// None of this is on the assistant's list.
-	for _, tl := range tools {
-		if strings.HasPrefix(tl.Pattern, "/api/sources") {
-			t.Errorf("%s %s is on the assistant's list; keys are the person's to enter", tl.Method, tl.Pattern)
+	// The assistant can switch a source and try it, but a key never rides
+	// along: keys are the person's to enter.
+	tl, _ := findTool("PUT", "/api/sources/adzuna")
+	if tl == nil || !tl.Only {
+		t.Fatalf("switching a source: %+v", tl)
+	}
+	for _, f := range tl.Show {
+		if f == "key" || f == "app_id" || f == "from" {
+			t.Errorf("the assistant can set a source's %s", f)
 		}
+	}
+	if tl, _ := findTool("DELETE", "/api/sources/adzuna"); tl == nil || tl.Class != mustAsk {
+		t.Errorf("forgetting a key is not held for the person's button: %+v", tl)
 	}
 }

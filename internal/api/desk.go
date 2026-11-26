@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 	"jobhunt/extension"
 	"jobhunt/internal/engine"
 	"jobhunt/internal/llm"
+	"jobhunt/internal/store"
 )
 
 // Machine is what only the computer itself can do. Each part is nil where
@@ -66,8 +68,9 @@ func (s *Server) pc() map[string]any {
 	return out
 }
 
-// openDir shows a folder in the computer's file manager.
-func openDir(dir string) error {
+// openDir shows a folder in the computer's file manager. A variable so a
+// test can stand in for the file manager.
+var openDir = func(dir string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
@@ -145,6 +148,74 @@ func (s *Server) deskRoutes(h func(string, handler)) {
 			return nil, bad("Keeping files in a folder is off. Switch it on under Settings, The app.")
 		}
 		return map[string]string{"dir": folder}, openDir(folder)
+	})
+	// A file of the person's own, handed to them: a copy in the files folder,
+	// which is then shown, or by e-mail to their own address and no other.
+	h("POST /api/handout/save", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in engine.Handout
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		dir, paths, err := e.SaveHandout(in)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+			return nil, bad(sentence(err.Error()))
+		}
+		out := map[string]any{"dir": dir, "files": paths, "shown": true}
+		if err := openDir(dir); err != nil {
+			out["shown"] = false
+		}
+		return out, nil
+	})
+	h("POST /api/handout/mail", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in engine.Handout
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		_, what, err := e.MailHandout(ctx, in)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+			return nil, bad(sentence(err.Error()))
+		}
+		// The address itself stays out of what Claude is shown.
+		return map[string]string{"sent": what, "to": "your own address, the one your inbox is connected with"}, nil
+	})
+	// The inbox's switches, without its address or password.
+	h("PUT /api/mailset/switches", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			On, Drafts, Labels, Recruiters, Send *bool
+			Every                                *int
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		set := e.MailSet()
+		if set.User == "" {
+			return nil, bad("The inbox isn't connected yet. Enter its address and app password under Settings, Connections.")
+		}
+		for _, sw := range []struct {
+			to   *bool
+			from *bool
+		}{{&set.On, in.On}, {&set.Drafts, in.Drafts}, {&set.Labels, in.Labels}, {&set.Recruiters, in.Recruiters}, {&set.Send, in.Send}} {
+			if sw.from != nil {
+				*sw.to = *sw.from
+			}
+		}
+		if in.Every != nil {
+			set.Every = min(max(*in.Every, 5), 240)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if err := e.SetMail(ctx, set); err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		return nil, nil
 	})
 	h("POST /api/pick-folder", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {

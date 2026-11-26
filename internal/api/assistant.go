@@ -33,8 +33,12 @@ import (
 //	ask    remove something, close or reopen a role, change what is searched
 //	       for. Held until the person presses the button.
 //
-// Keys, passwords, the inbox and Claude connections, the side panel's
-// approval and stopping the program are not in the table at all.
+// The table covers every screen. What is left out on purpose is named in
+// notForAssistant (assistant_list_test.go checks that every call the app
+// answers is in one or the other): typing in a key, a password, the VPN
+// file or the calendar's private address, pairing a phone or the side
+// panel, pressing its own buttons, and stopping the program. For those it
+// opens the screen where the person does that one step.
 
 type toolClass int
 
@@ -85,6 +89,21 @@ var tools = []tool{
 	{Method: "GET", Pattern: "/api/notices", Help: "What is under the bell: the last fifty things Job Hunt told the person (a fresh strong role, someone wrote, a new version, a problem), newest first, each with the page it opens and whether it was read."},
 	{Method: "GET", Pattern: "/api/calendar", Help: "Everything with a date around a month: interviews, booked conversations, the days follow-ups are due and the days postings close. Query: from, to (unix seconds, at most 100 days apart); left out means this month."},
 	{Method: "GET", Pattern: "/api/find", Help: "Quick search across roles, people and employers. Query: q."},
+	{Method: "GET", Pattern: "/api/leads", Help: "The Leads screen: news of employers that are hiring or growing, each with what Job Hunt made of it and where it stands. Query: show (open, dismissed, all), size."},
+	{Method: "GET", Pattern: "/api/leads/{id}", Kind: "lead", Help: "One lead in full: the news, the people to write to, the notes written for it."},
+	{Method: "GET", Pattern: "/api/insights", Help: "What is working: answers by CV, title, source, level and how early the person applied, and what Job Hunt advises from it. Query: days (30)."},
+	{Method: "GET", Pattern: "/api/sources", Help: "Every job source on one list (employers' boards, LinkedIn, Job Bank, Indeed through Claude, the keyed ones): whether each is working, the last error in plain words, when it was last asked and what it found. Keys are left out."},
+	{Method: "GET", Pattern: "/api/sources/{key}/postings", Help: "The postings one source showed lately. {key} is the source's id from /api/sources. Query: show, size."},
+	{Method: "GET", Pattern: "/api/searchset", Help: "The searching choices: employee ratings, the lowest rating kept, clearing old roles, reading big batches at night; and tonight's batch."},
+	{Method: "GET", Pattern: "/api/desk", Help: "This computer: Windows notifications, the morning summary's hour, staying awake, waking for a search, noticing copied job links, the browser links open in; and the search times."},
+	{Method: "GET", Pattern: "/api/files", Help: "The folder on this computer where each role's CV and letter are kept as files (\"dir\"), whether that is on, and the folders in it."},
+	{Method: "GET", Pattern: "/api/backups", Help: "The saved copies of all the data: where they are kept, how many, each with its date."},
+	{Method: "GET", Pattern: "/api/changes", Help: "What changed in each version of Job Hunt, newest first."},
+	{Method: "GET", Pattern: "/api/google", Help: "Whether Google Calendar is signed in and in step. Nothing that works as a key."},
+	{Method: "GET", Pattern: "/api/google/lookalikes", Help: "Entries in the person's Google Calendar that look like interviews and are not tied to a role yet."},
+	{Method: "GET", Pattern: "/api/cvs/{id}/look", Kind: "cv", Help: "How one CV reads to a hiring manager: strengths, what is weak, what to fix."},
+	{Method: "GET", Pattern: "/api/rescore", Help: "Whether roles are being scored again, and how far along."},
+	{Method: "GET", Pattern: "/api/debug", Help: "The technical log: what Job Hunt did and what failed, newest last, and the log file's path. For working out why something went wrong."},
 
 	// ---- doing ----------------------------------------------------------------
 	{Method: "POST", Pattern: "/api/questions/{id}/answer", Class: canDo, Kind: "question", Label: "Answer a question Job Hunt asked", Help: `Body: {"answer": "..."}. Only with what the person said.`, Show: []string{"answer"}},
@@ -144,6 +163,75 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/backup", Class: canDo, Label: "Back up now", Help: "Copies everything to a file on this computer and says where."},
 	{Method: "POST", Pattern: "/api/llm/test", Class: canDo, Label: "Test the Claude connection"},
 	{Method: "POST", Pattern: "/api/phone/test", Class: canDo, Label: "Send a test notification to the phone"},
+	{Method: "POST", Pattern: "/api/handout/save", Class: canDo, Label: "Put a copy of a file in your folder", Help: `Body: {"what": "cv" (one of the person's CVs, "id" its number) | "role_cv" | "role_letter" | "role_both" ("id" the role's number), "format": "docx" | "pdf" (roles only)}. Writes the file into the files folder on this computer, opens that folder for the person, and returns the whole path of each file. Use it whenever they ask where a CV or letter is, or for a copy.`, Show: []string{"what", "format"}},
+	{Method: "POST", Pattern: "/api/handout/mail", Class: canDo, Label: "E-mail a file to yourself", Help: `Body as for /api/handout/save. Sends the file as an attachment to the person's own address (the one the inbox is connected with) and to nobody else. Use it when they ask to be e-mailed a CV or letter. If it fails because the inbox isn't connected, put a copy in their folder instead and say so.`, Show: []string{"what", "format"}},
+	{Method: "POST", Pattern: "/api/window", Class: canDo, Label: "Open a screen", Help: `Body: {"page": "#/..."}. Brings Job Hunt's window forward on that screen. Use it to take the person to the place where one step is theirs (pasting a key, signing in).`, Show: []string{"page"}, Only: true},
+	{Method: "POST", Pattern: "/api/open-folder", Class: canDo, Label: "Open a folder on this computer", Help: `Body: {"what": "data" | "backups" | "extension"}. Opens it and returns its path.`, Show: []string{"what"}, Only: true},
+	{Method: "POST", Pattern: "/api/files/show", Class: canDo, Label: "Open the files folder", Help: `Body: {"folder": "a folder's name from /api/files, or empty for the whole files folder"}. Returns its path.`},
+	{Method: "POST", Pattern: "/api/files/role/{id}", Class: canDo, Kind: "role", Label: "Write a role's CV and letter into its folder", Help: "As Word files and PDFs; the folder is opened and its path returned."},
+	{Method: "POST", Pattern: "/api/roles/link", Class: canDo, Label: "Add a role from its link", Help: `Body: {"text": "the posting's address, or text with it in"}. Opens the page, reads the posting and adds the role. Returns its number.`, Show: []string{"text"}},
+	{Method: "POST", Pattern: "/api/roles/chaseall", Class: canDo, Label: "Write every follow-up that is due", Help: "Only when the person asks for all of them. Drafts; the person sends."},
+	{Method: "POST", Pattern: "/api/roles/{id}/notes", Class: canDo, Kind: "role", Label: "Keep the person's notes on a role", Help: `Body: {"text": "the whole of their notes"}. Replaces what was there: read the role first and keep what they had.`},
+	{Method: "POST", Pattern: "/api/roles/{id}/answers", Class: canDo, Kind: "role", Label: "Answer an application form's questions", Help: `Body: {"text": "the form's questions, one on each line"}. Writes answers from the CV and the saved answers. About a minute.`},
+	{Method: "POST", Pattern: "/api/roles/{id}/check", Class: canDo, Kind: "role", Label: "Check the tailored CV", Help: "Reads the tailored CV as the employer's screening would and says what to fix. About a minute."},
+	{Method: "POST", Pattern: "/api/roles/{id}/offer", Class: canDo, Kind: "role", Label: "Weigh an offer", Help: `Body: {"text": "the offer, as the person pasted it"}. About a minute.`},
+	{Method: "POST", Pattern: "/api/roles/{id}/noreply", Class: canDo, Kind: "role", Label: "Write what to do about no reply", Help: "For an application that went unanswered. About half a minute."},
+	{Method: "POST", Pattern: "/api/roles/{id}/findsite", Class: canDo, Kind: "role", Label: "Find the employer's own posting", Help: "Looks for this role on the employer's own website, to apply there directly."},
+	{Method: "POST", Pattern: "/api/cvs/{id}/titles", Class: canDo, Kind: "cv", Label: "Suggest more titles from a CV", Help: "Returns titles this CV could also be searched under. About a minute."},
+	{Method: "PUT", Pattern: "/api/companies/{id}/note", Class: canDo, Kind: "company", Label: "Keep a note on an employer", Help: `Body: {"text": "the whole note"}.`},
+	{Method: "POST", Pattern: "/api/leads", Class: canDo, Label: "Add a lead", Help: `Body: {"text": "the news, as the person gave it", "url": "its address, if they gave one", "company": "the employer"}.`, Show: []string{"company"}},
+	{Method: "POST", Pattern: "/api/leads/find", Class: canDo, Label: "Look for news of employers hiring", Help: "Background."},
+	{Method: "PUT", Pattern: "/api/leads/auto", Class: canDo, Label: "Look for leads by itself, or stop", Help: `Body: {"on": true|false}.`, Show: []string{"on"}},
+	{Method: "PUT", Pattern: "/api/leads/{id}", Class: canDo, Kind: "lead", Label: "Reword a lead's note", Help: `Body: {"which": "the note's name from the lead", "subject": "...", "body": "..."}.`},
+	{Method: "POST", Pattern: "/api/leads/{id}/write", Class: canDo, Kind: "lead", Label: "Write a note for a lead", Help: `Body: {"which": "the note's name from the lead"}. A draft; the person sends it. Only when they ask.`},
+	{Method: "POST", Pattern: "/api/leads/{id}/again", Class: canDo, Kind: "lead", Label: "Read a lead again"},
+	{Method: "POST", Pattern: "/api/leads/{id}/dismiss", Class: canDo, Kind: "lead", Label: "Dismiss a lead", Help: `"restore" brings it back.`},
+	{Method: "POST", Pattern: "/api/leads/{id}/restore", Class: canDo, Kind: "lead", Label: "Bring a lead back"},
+	{Method: "POST", Pattern: "/api/leads/{id}/sent", Class: canDo, Kind: "lead", Label: "Mark a lead's note as sent", Help: `Body: {"on": true|false}. Only when the person says they sent it.`},
+	{Method: "POST", Pattern: "/api/leads/{id}/followed", Class: canDo, Kind: "lead", Label: "Mark a lead as followed up", Help: `Body: {"on": true|false}.`},
+	{Method: "POST", Pattern: "/api/leads/{id}/replied", Class: canDo, Kind: "lead", Label: "Mark a lead as answered", Help: `Body: {"on": true|false}.`},
+	{Method: "POST", Pattern: "/api/leads/{id}/role", Class: canDo, Kind: "lead", Label: "Make a role from a lead", Help: "Returns the role's number."},
+	{Method: "POST", Pattern: "/api/leads/{id}/employer", Class: canDo, Kind: "lead", Label: "Watch a lead's employer"},
+	{Method: "POST", Pattern: "/api/leads/{id}/person", Class: canDo, Kind: "lead", Label: "Add a person from a lead", Help: `Body: {"who": the person's place in the lead's list, from 0}.`},
+	{Method: "POST", Pattern: "/api/insights/read", Class: canDo, Label: "Look at what is working", Help: "Reads the results so far and writes the advice. Background."},
+	{Method: "PUT", Pattern: "/api/insights/guidance", Class: canDo, Label: "Use what is working when scoring, or stop", Help: `Body: {"on": true|false}.`, Show: []string{"on"}},
+	{Method: "POST", Pattern: "/api/career/look", Class: canDo, Label: "Read the career path again", Help: "From all the person's CVs together. Background, about a minute."},
+	{Method: "POST", Pattern: "/api/career/search", Class: canDo, Label: "Search for a career path's titles", Help: `Body: {"route": the route's place from 0, to add all its titles} or {"title": "one title"}. Adds them to the titles searched for.`, Show: []string{"title"}},
+	{Method: "POST", Pattern: "/api/career/done", Class: canDo, Label: "Tick off a step on the career path", Help: `Body: {"id": "the step's id", "done": true|false}.`},
+	{Method: "POST", Pattern: "/api/talks/{id}/went", Class: canDo, Kind: "talk", Label: "Say how an interview went", Help: `Body: {"how": "the person's own words"}.`},
+	{Method: "POST", Pattern: "/api/talks/{id}/thanks", Class: canDo, Kind: "talk", Label: "Write a thank-you", Help: "A draft for after an interview; the person sends it. Only when they ask. Background."},
+	{Method: "PUT", Pattern: "/api/talks/{id}/thanks", Class: canDo, Kind: "talk", Label: "Reword a thank-you", Help: `Body: {"subject": "...", "body": "..."}.`},
+	{Method: "PUT", Pattern: "/api/talkset", Class: canDo, Label: "Change the hours offered for interviews", Help: `Body: any of {"from", "to"} (hours 0-23), {"minutes"} (how long one is), {"offer"} (how many times to offer).`, Show: []string{"from", "to", "minutes", "offer"}},
+	{Method: "POST", Pattern: "/api/mail/{id}/reply", Class: canDo, Kind: "mail", Label: "Write an answer to a message", Help: "A draft; the person sends it. Only when they ask. About half a minute."},
+	{Method: "POST", Pattern: "/api/mail/draft", Class: canDo, Label: "Save a draft in the mailbox", Help: `Body: {"kind": "mail" | "chase" | "note", "id": the message's, role's or note's number, "to": "...", "subject": "...", "body": "..."}. Puts the written message in the mailbox's Drafts. Nothing is sent.`, Show: []string{"subject"}},
+	{Method: "POST", Pattern: "/api/mail/recruiters", Class: canDo, Label: "Look through the mail for recruiters", Help: "Background."},
+	{Method: "PUT", Pattern: "/api/mailset/switches", Class: canDo, Label: "Change the inbox's switches", Help: `Body: any of {"on", "drafts" (save written replies as drafts in the mailbox), "labels", "recruiters", "send" (let the person send from Job Hunt)} as true|false, {"every": minutes between checks}. The address and password are the person's to enter under Settings, Connections.`, Show: []string{"on", "drafts", "labels", "recruiters", "send", "every"}, Only: true},
+	{Method: "POST", Pattern: "/api/jobs/resume", Class: canDo, Label: "Let Job Hunt carry on by itself", Help: "Ends the half hour it leaves its own work alone after being stopped."},
+	{Method: "POST", Pattern: "/api/notices/read", Class: canDo, Label: "Mark what is under the bell as read", Help: `Body: {} for all, or {"id": one notice's number}.`},
+	{Method: "POST", Pattern: "/api/budget/run", Class: canDo, Label: "Read tonight's batch now"},
+	{Method: "POST", Pattern: "/api/sources/{key}/test", Class: canDo, Label: "Try a job source now", Help: "{key} is the source's id from /api/sources. Asks it once and returns how many postings it showed, or why it failed."},
+	{Method: "PUT", Pattern: "/api/sources/{key}", Class: canDo, Label: "Switch a keyed job source on or off", Help: `Body: {"on": true|false} and/or {"limit": requests a day}. Its key is the person's to paste under Settings, Connections.`, Show: []string{"on", "limit"}, Only: true},
+	{Method: "PUT", Pattern: "/api/vpn/{key}", Class: canDo, Label: "Send a source through the VPN, or not", Help: `{key} is a source's id from "vpn" in /api/connections. Body: {"on": true|false}.`, Show: []string{"on"}, Only: true},
+	{Method: "POST", Pattern: "/api/vpn/check", Class: canDo, Label: "Check the VPN server answers"},
+	{Method: "POST", Pattern: "/api/vpn/test", Class: canDo, Label: "Try each source through the VPN", Help: "Returns what each did. Up to a minute and a half."},
+	{Method: "POST", Pattern: "/api/google/sync", Class: canDo, Label: "Bring Google Calendar in step now"},
+	{Method: "POST", Pattern: "/api/google/test", Class: canDo, Label: "Test Google Calendar"},
+	{Method: "POST", Pattern: "/api/google/signin", Class: canDo, Label: "Open Google's sign-in page", Help: "Opens it in the person's browser; they sign in there themselves."},
+	{Method: "POST", Pattern: "/api/google/lookalikes/{key}/link", Class: canDo, Label: "Tie a calendar entry to a role", Help: `{key} is the entry's id from /api/google/lookalikes. Body: {"role_id": the role's number}.`},
+	{Method: "POST", Pattern: "/api/google/lookalikes/{key}/dismiss", Class: canDo, Label: "Leave a calendar entry alone"},
+	{Method: "POST", Pattern: "/api/otherai/test", Class: canDo, Label: "Test the other AI"},
+	{Method: "POST", Pattern: "/api/claude-code/status", Class: canDo, Label: "Check the Claude Code sign-in"},
+	{Method: "POST", Pattern: "/api/claude-code/signin", Class: canDo, Label: "Open the Claude sign-in window", Help: "Opens a window on this computer; the person signs in there themselves."},
+	{Method: "POST", Pattern: "/api/update/check", Class: canDo, Label: "Look for a newer version"},
+	{Method: "PUT", Pattern: "/api/update", Class: canDo, Label: "Update by itself, or not", Help: `Body: {"auto": true|false}.`, Show: []string{"auto"}},
+	{Method: "PUT", Pattern: "/api/schedule", Class: canDo, Label: "Change when Job Hunt searches", Help: `Body: any of {"full": [minutes after midnight of each full search], "fast_minutes": minutes between quick checks (0 = off), "from", "to": the hours quick checks run between}. Returns the schedule.`, Show: []string{"fast_minutes", "from", "to"}},
+	{Method: "PUT", Pattern: "/api/searchset", Class: canDo, Label: "Change the searching choices", Help: `Body: any of {"ratings_off": bool, "min_rating": 0-5, "clear_days": 0|30|60|90, "budget": bool}; see GET /api/searchset.`, Show: []string{"ratings_off", "min_rating", "clear_days", "budget"}},
+	{Method: "PUT", Pattern: "/api/desk", Class: canDo, Label: "Change how Job Hunt behaves on this computer", Help: `Body: any of {"notify": bool, "morning": hour or -1, "awake": "off|working|always", "wake": bool, "clip": bool, "browser": "..."}; see GET /api/desk.`, Show: []string{"notify", "morning", "awake", "wake", "clip"}},
+	{Method: "PUT", Pattern: "/api/startup", Class: canDo, Label: "Start with the computer, or not", Help: `Body: {"on": true|false}.`, Show: []string{"on"}},
+	{Method: "PUT", Pattern: "/api/theme", Class: canDo, Label: "Change light or dark", Help: `Body: {"theme": "light|dark|system"}.`, Show: []string{"theme"}},
+	{Method: "POST", Pattern: "/api/desk/test", Class: canDo, Label: "Show a test notification on this computer"},
+	{Method: "POST", Pattern: "/api/desk/allow-wake", Class: canDo, Label: "Let Windows wake the computer for a search"},
+	{Method: "POST", Pattern: "/api/debug/note", Class: canDo, Label: "Write a note into the technical log", Help: `Body: {"text": "what the person saw go wrong", "page": "the screen"}.`},
 
 	// ---- only with the person's OK --------------------------------------------
 	{Method: "POST", Pattern: "/api/roles/{id}/no", Class: mustAsk, Kind: "role", Label: "Mark not interested", Help: `Body: {"why": "their reason, short"}. The role never comes back.`, Show: []string{"why"}},
@@ -153,6 +241,26 @@ var tools = []tool{
 	{Method: "PUT", Pattern: "/api/profile", Class: mustAsk, Label: "Change your profile", Help: `Body: only the fields to change, from GET /api/you: name, headline, summary, years, strengths, rare, home, city, places (other towns that count as the city, besides its own surrounding area listed under "area"), country, arrive_on (YYYY-MM-DD), work_status (citizen|resident|permit|none), start_early, titles {"level": [], "step_up": [], "sideways": []}, domain, avoid, workplaces (remote,hybrid,onsite), pay_floor, pay_unit, letter_style (standard|formal|short|warm: how new letters are written), signature (their own closing under a letter, one line each, "" for the usual), chase_days (days of silence after applying before a follow-up is suggested; 0 = never), weekly_goal (applications a week they aim for; 0 = no goal). A list is replaced whole: send the full new list.`},
 	{Method: "PUT", Pattern: "/api/phone", Class: mustAsk, Label: "Change phone notifications", Help: `Body: any of {"on", "min_fit", "quiet_from", "quiet_to"} (hours 0-23). Where notifications are sent is changed by the person under Settings, Connections.`, Show: []string{"on", "min_fit", "quiet_from", "quiet_to"}, Only: true},
 	{Method: "POST", Pattern: "/api/places/remove", Class: mustAsk, Label: "Stop watching a job site", Help: `Body: {"id": "..."}. Roles already found there stay.`, Show: []string{"id"}, Only: true},
+	{Method: "POST", Pattern: "/api/mail/send", Class: mustAsk, Label: "Send an e-mail", Help: `Body: {"kind": "mail" (an answer to a message) | "chase" (a role's follow-up) | "note" (a note to a person), "id": its number, "to": "the address", "subject": "...", "body": "the whole message"}. Use the written draft's own words and the address the app holds. The person's button is the Send; say it is waiting under your reply.`, Show: []string{"to", "subject"}},
+	{Method: "POST", Pattern: "/api/cvs/{id}/file", Class: mustAsk, Kind: "cv", Label: "Put a new file in place of a CV", Help: `Query: name (the file name). Set "file" to the attachment; no body. The CV is read again from it.`, File: true},
+	{Method: "PUT", Pattern: "/api/llm", Class: mustAsk, Label: "Change how Claude is used", Help: `Body: any of {"model", "score_model" (reading roles), "write_model" (tailoring and letters), "effort": ""|"low"|"medium"|"high", "grouped": bool, "daily_limit": dollars a day}. The key and the way of signing in are the person's, under Settings, Connections.`, Show: []string{"model", "score_model", "write_model", "effort", "grouped", "daily_limit"}, Only: true},
+	{Method: "POST", Pattern: "/api/budget/cancel", Class: mustAsk, Label: "Set tonight's batch aside unread"},
+	{Method: "POST", Pattern: "/api/update/install", Class: mustAsk, Label: "Install the newer version", Help: "Job Hunt closes and comes back by itself."},
+	{Method: "POST", Pattern: "/api/restart", Class: mustAsk, Label: "Start Job Hunt again"},
+	{Method: "POST", Pattern: "/api/backups/restore", Class: mustAsk, Label: "Go back to a saved copy", Help: `Body: {"name": "the copy's name from /api/backups"}. Everything since that copy is replaced by it; Job Hunt starts again.`, Show: []string{"name"}, Only: true},
+	{Method: "POST", Pattern: "/api/import/old", Class: mustAsk, Label: "Bring over the old Job Hunt's data", Help: `Body: {} for the old app's own folder, or {"path": "a backup file or folder the person named"}.`, Show: []string{"path"}, Only: true},
+	{Method: "POST", Pattern: "/api/claude-code/install", Class: mustAsk, Label: "Install Claude Code on this computer"},
+	{Method: "DELETE", Pattern: "/api/sources/{key}", Class: mustAsk, Label: "Forget a job source's key", Help: "{key} is the source's id."},
+	{Method: "DELETE", Pattern: "/api/vpn", Class: mustAsk, Label: "Remove the VPN file"},
+	{Method: "POST", Pattern: "/api/google/signout", Class: mustAsk, Label: "Sign out of Google Calendar"},
+	{Method: "DELETE", Pattern: "/api/google", Class: mustAsk, Label: "Disconnect Google Calendar altogether"},
+	{Method: "DELETE", Pattern: "/api/otherai", Class: mustAsk, Label: "Stop using the other AI"},
+	{Method: "DELETE", Pattern: "/api/roles/{id}/own/cv", Class: mustAsk, Kind: "role", Label: "Drop your own CV file for a role", Help: "The tailored one is used again."},
+	{Method: "DELETE", Pattern: "/api/roles/{id}/own/letter", Class: mustAsk, Kind: "role", Label: "Drop your own letter file for a role"},
+	{Method: "PUT", Pattern: "/api/files", Class: mustAsk, Label: "Change where files are kept", Help: `Body: {"off": true|false, "dir": "a whole folder path the person gave; empty for the usual place"}.`, Show: []string{"off", "dir"}, Only: true},
+	{Method: "PUT", Pattern: "/api/backups", Class: mustAsk, Label: "Change how saved copies are kept", Help: `Body: any of {"dir": "a whole folder path the person gave", "keep": how many to keep}.`, Show: []string{"dir", "keep"}, Only: true},
+	{Method: "POST", Pattern: "/api/rescore", Class: mustAsk, Label: "Score the roles again", Help: `Body: {"all": true} for every open role, {} for those scored before the last profile change. Background.`},
+	{Method: "POST", Pattern: "/api/search/force", Class: mustAsk, Label: "Search everything now, rests ignored", Help: "A full search that also asks the sources that are resting. Background."},
 	{Method: "DELETE", Pattern: "/api/cvs/{id}", Class: mustAsk, Kind: "cv", Label: "Remove a CV"},
 	{Method: "DELETE", Pattern: "/api/people/{id}", Class: mustAsk, Kind: "person", Label: "Remove a person"},
 	{Method: "DELETE", Pattern: "/api/notes/{id}", Class: mustAsk, Kind: "note", Label: "Remove a note"},
@@ -160,6 +268,46 @@ var tools = []tool{
 	{Method: "DELETE", Pattern: "/api/talks/{id}", Class: mustAsk, Kind: "talk", Label: "Remove an interview"},
 	{Method: "DELETE", Pattern: "/api/facts/{id}", Class: mustAsk, Kind: "fact", Label: "Forget a fact"},
 	{Method: "DELETE", Pattern: "/api/answers/{id}", Class: mustAsk, Kind: "answer", Label: "Forget a saved answer"},
+}
+
+// notForAssistant names every call the app answers that the assistant is
+// deliberately not given, and why. A new route must go in the table above
+// or here; assistant_list_test.go fails until it does.
+var notForAssistant = map[string]string{
+	// Its own conversation and buttons: it would be pressing its own OK.
+	"GET /api/assistant": "its own conversation", "POST /api/assistant": "its own conversation", "DELETE /api/assistant": "its own conversation",
+	"POST /api/assistant/confirm": "the person's button", "POST /api/assistant/stop": "the person's button",
+	"POST /api/assistant/files": "the person's attachments", "GET /api/assistant/files/{id}": "the person's attachments", "DELETE /api/assistant/files/{id}": "the person's attachments",
+	// Secrets are typed by the person on the settings screen, never in a
+	// conversation, which is stored and sent to Claude with every message.
+	"PUT /api/vpn": "the VPN file holds a private key", "PUT /api/google": "a client secret", "PUT /api/otherai": "a key",
+	"PUT /api/mailset": "the inbox password; its switches are PUT /api/mailset/switches",
+	"GET /api/owncal":  "the calendar's private address", "PUT /api/owncal": "the calendar's private address", "DELETE /api/owncal": "the calendar's private address",
+	"GET /api/calendar.ics": "the calendar as a file",
+	// The phone's door and the side panel's are opened by the person.
+	"GET /api/phoneaccess": "phone access", "PUT /api/phoneaccess": "phone access", "POST /api/phoneaccess/code": "phone access", "DELETE /api/phoneaccess/devices/{id}": "phone access",
+	"GET /api/ext/me": "the side panel's", "GET /api/ext/next": "the side panel's", "GET /api/ext/role": "the side panel's", "GET /api/ext/role/{id}": "the side panel's",
+	"GET /api/ext/role/{id}/cv.docx": "the side panel's", "GET /api/ext/role/{id}/cv.pdf": "the side panel's", "GET /api/ext/role/{id}/letter.docx": "the side panel's", "GET /api/ext/role/{id}/letter.pdf": "the side panel's",
+	"POST /api/ext/answer": "the side panel's", "POST /api/ext/answers": "the side panel's", "POST /api/ext/hello": "the side panel's", "POST /api/ext/leads": "the side panel's",
+	"POST /api/ext/note/{id}/sent": "the side panel's", "POST /api/ext/pair": "the side panel's", "POST /api/ext/person": "the side panel's", "POST /api/ext/posting": "the side panel's",
+	"POST /api/ext/role/{id}/applicants": "the side panel's", "POST /api/ext/role/{id}/applied": "the side panel's", "POST /api/ext/role/{id}/no": "the side panel's",
+	"POST /api/ext/role/{id}/prepare": "the side panel's", "POST /api/ext/role/{id}/team": "the side panel's", "POST /api/ext/unpair": "the side panel's",
+	// The program itself.
+	"POST /api/quit": "stopping the program", "POST /api/setup/finish": "first-run setup", "POST /api/pick-folder": "a dialog only the person can answer",
+	"POST /api/backups/cloud": "moving the data to another folder", "POST /api/backups/handover": "handing the data to another computer",
+	"POST /api/backups/continue": "handing the data to another computer", "POST /api/backups/stay": "handing the data to another computer",
+	"DELETE /api/backups/restore": "undoing a restore, offered on its own screen",
+	// Files and streams: linked for the person instead of read by Claude.
+	"GET /api/events": "the pages' live stream", "GET /api/roles.csv": "a file", "GET /api/recruiters.csv": "a file", "GET /api/debug/report": "a file",
+	"GET /api/cvs/{id}/file": "a file; linked in replies", "GET /api/roles/{id}/cv.docx": "a file; linked in replies", "GET /api/roles/{id}/cv.pdf": "a file; linked in replies",
+	"GET /api/roles/{id}/letter.docx": "a file; linked in replies", "GET /api/roles/{id}/letter.pdf": "a file; linked in replies", "GET /api/roles/{id}/both.pdf": "a file; linked in replies",
+	"GET /api/roles/{id}/old-cv": "a file", "GET /api/talks/{id}/invite.ics": "a file", "GET /api/companies/{id}/logo": "a picture",
+	"GET /api/profile/signature-picture": "a picture", "POST /api/profile/signature-picture": "a picture the person chooses", "DELETE /api/profile/signature-picture": "a picture the person chooses",
+	"POST /api/roles/{id}/own/{kind}": "a file the person chooses on the role's page",
+	// The same thing under another name, or of no use in a conversation.
+	"GET /api/profile": "in GET /api/you", "GET /api/cvs": "in GET /api/you", "GET /api/copied": "the clipboard", "POST /api/peek": "the clipboard's link",
+	"POST /api/update/seen": "the pages' own bookkeeping", "POST /api/leads/1/sent": "a test's spelling",
+	"PUT /api/phone/push": "where notifications are sent",
 }
 
 // assistGuide is the table in words, for Claude.
@@ -185,9 +333,13 @@ var assistGuide = func() string {
 		}
 		b.WriteByte('\n')
 	}
-	b.WriteString("\nNothing else can be called. Times are unix seconds.\n")
+	b.WriteString("\n{id} is a number; {key} is a name the app gave you. Times are unix seconds.\n")
 	return b.String()
 }()
+
+// toolKey is the shape of a name in a path ({key}): a source's id, a
+// calendar entry's id.
+var toolKey = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,120}$`)
 
 // findTool matches a call against the table.
 func findTool(method, p string) (*tool, int64) {
@@ -211,6 +363,11 @@ func findTool(method, p string) (*tool, int64) {
 					break
 				}
 				id = n
+			} else if want[j] == "{key}" {
+				if !toolKey.MatchString(segs[j]) {
+					ok = false
+					break
+				}
 			} else if want[j] != segs[j] {
 				ok = false
 				break
@@ -427,6 +584,10 @@ func (s *Server) nameOf(kind string, id int64) string {
 		if c, err := st.CV(id); err == nil {
 			return c.Name
 		}
+	case "lead":
+		if l, err := st.Lead(id); err == nil {
+			return clipTo(l.Company, 70)
+		}
 	case "company":
 		if c, err := st.Company(id); err == nil {
 			return c.Name
@@ -492,6 +653,30 @@ func (s *Server) describe(t *tool, id int64, body []byte) string {
 		}
 	case "/api/roles/tidy":
 		out = fmt.Sprintf("%s (%d)", t.Label, s.E.TakenDown())
+	case "/api/handout/save", "/api/handout/mail":
+		// Which file, by its name rather than its number.
+		n, _ := fields["id"].(float64)
+		kind, what := "role", "its CV and letter"
+		switch fields["what"] {
+		case "cv":
+			kind, what = "cv", "your CV"
+		case "role_cv":
+			what = "the CV"
+		case "role_letter":
+			what = "the letter"
+		}
+		name := s.nameOf(kind, int64(n))
+		if name == "" {
+			name = "(not found)"
+		}
+		verb := "Put a copy in your folder: "
+		if t.Pattern == "/api/handout/mail" {
+			verb = "E-mail to yourself: "
+		}
+		if kind == "cv" {
+			return verb + what + " “" + name + "”"
+		}
+		return verb + what + " for " + name
 	}
 	if t.Kind != "" {
 		name := s.nameOf(t.Kind, id)
@@ -628,7 +813,7 @@ func screenCall(page string) string {
 		return "/api/talks"
 	case "progress":
 		return "/api/progress"
-	case "you":
+	case "you", "settings":
 		if len(parts) > 1 {
 			switch parts[1] {
 			case "arriving":
@@ -637,9 +822,25 @@ func screenCall(page string) string {
 				return "/api/connections"
 			case "app":
 				return "/api/app"
+			case "debug":
+				return "/api/debug"
 			}
 		}
 		return "/api/you"
+	case "leads":
+		if id := num(1); id != "" {
+			return "/api/leads/" + id
+		}
+		return "/api/leads" + q
+	case "career":
+		return "/api/career"
+	case "employer", "employers", "companies":
+		if id := num(1); id != "" {
+			return "/api/companies/" + id
+		}
+		return "/api/companies" + q
+	case "insights":
+		return "/api/insights"
 	}
 	return ""
 }
@@ -663,7 +864,7 @@ func (s *Server) assistCall(ctx context.Context, c brain.AssistCall, run *assist
 	}
 	t, id := findTool(method, u.Path)
 	if t == nil {
-		note.Result = "Not made: that is not available to you. If it is about a password, a key or a connection, the person does it themselves under Settings, Connections."
+		note.Result = "Not made: there is no such call. Look at the list again for the one that does this. If it is typing in a key, a password or a file that works as one, open the screen for the person (POST /api/window) and tell them the one thing to do there."
 		return note
 	}
 	body := []byte(strings.TrimSpace(c.Body))
@@ -680,6 +881,10 @@ func (s *Server) assistCall(ctx context.Context, c brain.AssistCall, run *assist
 			if v, ok := all[k]; ok {
 				keep[k] = v
 			}
+		}
+		if len(all) > 0 && len(keep) == 0 {
+			note.Result = "Not made: this call takes only " + strings.Join(t.Show, ", ") + ". A key, a password or a way of signing in is the person's to enter: open that screen for them (POST /api/window) and say the one thing to do there."
+			return note
 		}
 		body, _ = json.Marshal(keep)
 	}

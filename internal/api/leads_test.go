@@ -46,10 +46,15 @@ func TestLeadsDoors(t *testing.T) {
 	if got := do(h, call{method: "POST", path: "/api/leads", marker: true, body: `{"text":"Initech is opening a Toronto office and hiring its finance team."}`}).Code; got != 200 {
 		t.Errorf("adding a lead: %d", got)
 	}
+	// The assistant reaches Leads by named actions only, never the open
+	// "{action}" door, and never the side panel's way in.
 	for _, tl := range tools {
-		if strings.Contains(tl.Pattern, "/leads") || strings.Contains(tl.Pattern, "/insights") {
+		if strings.Contains(tl.Pattern, "{action}") || strings.HasPrefix(tl.Pattern, "/api/ext/") {
 			t.Errorf("the assistant can reach %s %s", tl.Method, tl.Pattern)
 		}
+	}
+	if tl, _ := findTool("GET", "/api/leads"); tl == nil {
+		t.Error("the assistant cannot read Leads")
 	}
 	for _, p := range []string{"GET /api/leads", "POST /api/leads/1/sent", "GET /api/insights", "POST /api/ext/leads"} {
 		m, path, _ := strings.Cut(p, " ")

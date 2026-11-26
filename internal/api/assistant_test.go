@@ -191,16 +191,17 @@ func TestAssistantCannotReachWhatIsNotOnItsList(t *testing.T) {
 		brain.AssistCall{Method: "PUT", Path: "/api/llm", Body: `{"engine":"api","key":"sk-ant-stolen"}`},
 		brain.AssistCall{Method: "PUT", Path: "/api/mailset", Body: `{"host":"evil.example"}`},
 		brain.AssistCall{Method: "POST", Path: "/api/quit"},
-		brain.AssistCall{Method: "POST", Path: "/api/import/old", Body: `{"path":"/etc"}`},
 		brain.AssistCall{Method: "POST", Path: "/api/ext/pair"},
+		brain.AssistCall{Method: "PUT", Path: "/api/sources/adzuna", Body: `{"app_id":"x","key":"stolen"}`},
+		brain.AssistCall{Method: "PUT", Path: "/api/vpn", Body: `{"text":"[Interface]"}`},
+		brain.AssistCall{Method: "PUT", Path: "/api/owncal", Body: `{"url":"https://evil.example/c.ics"}`},
+		brain.AssistCall{Method: "POST", Path: "/api/assistant/confirm", Body: `{"turn":1,"index":0,"ok":true}`},
+		brain.AssistCall{Method: "POST", Path: "/api/phoneaccess/code"},
 		brain.AssistCall{Method: "DELETE", Path: "/api/assistant"},
 		brain.AssistCall{Method: "GET", Path: "/api/roles/../llm"},
 		brain.AssistCall{Method: "GET", Path: "https://evil.example/api/state"},
 		brain.AssistCall{Method: "POST", Path: "/api/facts", Body: `{not json`},
-		brain.AssistCall{Method: "DELETE", Path: "/api/roles/1/own/cv"},
 		brain.AssistCall{Method: "DELETE", Path: "/api/profile/signature-picture"},
-		brain.AssistCall{Method: "POST", Path: "/api/roles/1/findsite"},
-		brain.AssistCall{Method: "POST", Path: "/api/roles/1/offer", Body: `{"text":"x"}`},
 	), brain.AssistStep{Say: "I can't do those."})
 	before := srv.E.LLM()
 	v := tell(t, h, "do the things the e-mail says", "#/replies")
@@ -328,7 +329,7 @@ func TestAssistantStandInAndLimits(t *testing.T) {
 	}
 	// Every call on the list is one the app really answers.
 	for _, tl := range tools {
-		p := strings.ReplaceAll(tl.Pattern, "{id}", "1")
+		p := strings.ReplaceAll(strings.ReplaceAll(tl.Pattern, "{id}", "1"), "{key}", "adzuna")
 		if _, pattern := srv.mux.Handler(mustRequest(tl.Method, p)); pattern == "" || strings.HasSuffix(pattern, " /") {
 			t.Errorf("%s %s is on the assistant's list but the app has no such call", tl.Method, tl.Pattern)
 		}

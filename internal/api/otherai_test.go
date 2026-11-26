@@ -58,8 +58,13 @@ func TestAnotherAIsKeyGoesInAndNeverComesOut(t *testing.T) {
 
 func TestNeitherTheAssistantNorAPhoneReachTheOtherAI(t *testing.T) {
 	for _, c := range tools {
-		if strings.Contains(c.Pattern, "otherai") {
+		// Its key is never the assistant's to set; testing it is fine and
+		// dropping it waits for the button.
+		if c.Pattern == "/api/otherai" && c.Method == "PUT" {
 			t.Errorf("%s %s is on the assistant's list", c.Method, c.Pattern)
+		}
+		if c.Pattern == "/api/otherai" && c.Method == "DELETE" && c.Class != mustAsk {
+			t.Errorf("%s %s is made without the person's button", c.Method, c.Pattern)
 		}
 	}
 	for _, m := range [][2]string{{"PUT", "/api/otherai"}, {"DELETE", "/api/otherai"}, {"POST", "/api/otherai/test"}} {
@@ -72,10 +77,12 @@ func TestNeitherTheAssistantNorAPhoneReachTheOtherAI(t *testing.T) {
 		brain.AssistCall{Method: "DELETE", Path: "/api/otherai"},
 	), brain.AssistStep{Say: "I can't."})
 	tell(t, h, "send my CV to another AI", "#/settings/connections")
-	for _, n := range sc.seen[1].Notes[1:] {
-		if !strings.HasPrefix(n.Result, "Not made") {
-			t.Errorf("%s went through: %s", n.Call, n.Result)
-		}
+	notes := sc.seen[1].Notes[1:]
+	if !strings.HasPrefix(notes[0].Result, "Not made") {
+		t.Errorf("%s went through: %s", notes[0].Call, notes[0].Result)
+	}
+	if !strings.Contains(notes[1].Result, "waiting for the person's OK") {
+		t.Errorf("%s was not held for the button: %s", notes[1].Call, notes[1].Result)
 	}
 	if srv.E.OtherAI().Base != "" {
 		t.Fatal("the assistant changed the other AI")

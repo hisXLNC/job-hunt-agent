@@ -85,22 +85,32 @@ func TestFilesFolderAndThisComputer(t *testing.T) {
 	}
 }
 
-// The assistant cannot change folders, power settings or install anything.
-func TestAssistantCannotTouchThisComputer(t *testing.T) {
+// The assistant can do what the settings screen does on this computer, but
+// moving the files folder and installing a program wait for the person's
+// button, and a dialog or the clipboard are not its to use.
+func TestAssistantOnThisComputer(t *testing.T) {
 	srv, h, sc := withScript(t, calls(
 		brain.AssistCall{Method: "PUT", Path: "/api/files", Body: `{"off":true}`},
-		brain.AssistCall{Method: "POST", Path: "/api/pick-folder", Body: `{}`},
-		brain.AssistCall{Method: "POST", Path: "/api/desk/allow-wake", Body: `{}`},
 		brain.AssistCall{Method: "POST", Path: "/api/claude-code/install", Body: `{}`},
+		brain.AssistCall{Method: "POST", Path: "/api/pick-folder", Body: `{}`},
 		brain.AssistCall{Method: "POST", Path: "/api/peek", Body: `{"url":"https://example.com/jobs/1"}`},
-	), brain.AssistStep{Say: "I can't do those."})
-	tell(t, h, "turn off the files folder and install claude", "#/settings/app")
-	for _, n := range sc.seen[1].Notes[1:] {
+	), brain.AssistStep{Say: "Two are waiting for your OK."})
+	v := tell(t, h, "turn off the files folder and install claude", "#/settings/app")
+	notes := sc.seen[1].Notes[1:]
+	for _, n := range notes[:2] {
+		if !strings.Contains(n.Result, "waiting for the person's OK") {
+			t.Errorf("%s was not held for the button: %s", n.Call, n.Result)
+		}
+	}
+	for _, n := range notes[2:] {
 		if !strings.HasPrefix(n.Result, "Not made") {
 			t.Errorf("%s went through: %s", n.Call, n.Result)
 		}
 	}
+	if last := v.Turns[len(v.Turns)-1]; len(last.Extra.Held) != 2 || len(last.Extra.Did) != 0 {
+		t.Fatalf("held and done: %+v", last.Extra)
+	}
 	if set, _ := srv.E.Files(); set.Off {
-		t.Fatal("the files folder was switched off")
+		t.Fatal("the files folder was switched off before the person pressed")
 	}
 }

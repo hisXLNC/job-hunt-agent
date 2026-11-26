@@ -9,16 +9,17 @@ import (
 	"jobhunt/internal/store"
 )
 
-// Sending, writing into the mailbox and the recruiter scan are only for the
-// person's own press on this computer: not the assistant's, not a phone's.
+// A phone can do none of the mail writing. The assistant can write a draft
+// and save it when asked, but a message to someone goes only when the
+// person presses the button under its reply.
 func TestMailWritingIsOnlyForThePersonsOwnPress(t *testing.T) {
 	routes := [][2]string{{"POST", "/api/mail/send"}, {"POST", "/api/mail/draft"}, {"POST", "/api/mail/recruiters"}, {"POST", "/api/mail/1/reply"}, {"GET", "/api/recruiters.csv"}}
-	for _, c := range tools {
-		for _, r := range routes {
-			if c.Method == r[0] && (c.Pattern == r[1] || strings.HasPrefix(c.Pattern, "/api/mail/send") || strings.HasPrefix(c.Pattern, "/api/mail/draft") || strings.HasPrefix(c.Pattern, "/api/mail/recruiters") || strings.HasSuffix(c.Pattern, "/reply")) {
-				t.Errorf("%s %s is on the assistant's list", c.Method, c.Pattern)
-			}
-		}
+	if tl, _ := findTool("POST", "/api/mail/send"); tl == nil || tl.Class != mustAsk {
+		t.Errorf("sending an e-mail is not held for the person's button: %+v", tl)
+	}
+	// E-mailing a file goes to the person's own address: the call takes no address.
+	if tl, _ := findTool("POST", "/api/handout/mail"); tl == nil || strings.Contains(tl.Help, `"to"`) {
+		t.Errorf("e-mailing a file to yourself: %+v", tl)
 	}
 	for _, r := range routes {
 		if phoneMay(r[0], r[1]) {

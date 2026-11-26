@@ -122,32 +122,44 @@ func TestSavedCopiesOverTheInterface(t *testing.T) {
 	_ = srv
 }
 
-// Putting a copy back, moving the copies, the look of the pages and starting
-// again are the person's own buttons.
-func TestAssistantCannotRestoreOrRestart(t *testing.T) {
+// The assistant looks at the saved copies and changes the look of the pages
+// at once; putting a copy back, moving the copies and starting again wait
+// for the person's button; undoing a restore and the calendar file are not
+// its to call.
+func TestAssistantRestoreAndRestartWaitForTheButton(t *testing.T) {
 	srv, h, sc := withScript(t, calls(
 		brain.AssistCall{Method: "POST", Path: "/api/backups/restore", Body: `{"name":"jobhunt-2026-01-01.db"}`},
-		brain.AssistCall{Method: "DELETE", Path: "/api/backups/restore"},
 		brain.AssistCall{Method: "PUT", Path: "/api/backups", Body: `{"dir":"/tmp","keep":7}`},
-		brain.AssistCall{Method: "GET", Path: "/api/backups"},
 		brain.AssistCall{Method: "POST", Path: "/api/restart"},
+		brain.AssistCall{Method: "DELETE", Path: "/api/backups/restore"},
+		brain.AssistCall{Method: "GET", Path: "/api/calendar.ics"},
+		brain.AssistCall{Method: "GET", Path: "/api/backups"},
 		brain.AssistCall{Method: "PUT", Path: "/api/theme", Body: `{"theme":"dark"}`},
 		brain.AssistCall{Method: "POST", Path: "/api/notices/read", Body: `{}`},
-		brain.AssistCall{Method: "GET", Path: "/api/calendar.ics"},
-	), brain.AssistStep{Say: "I can't do those."})
+	), brain.AssistStep{Say: "Three are waiting for your OK."})
 	srv.E.Tell("Something", "happened", "#/today")
-	v := tell(t, h, "put back yesterday's copy and restart", "#/settings/app")
-	for _, n := range sc.seen[1].Notes[1:] {
+	v := tell(t, h, "put back yesterday's copy and restart, and go dark", "#/settings/app")
+	notes := sc.seen[1].Notes[1:]
+	for _, n := range notes[:3] {
+		if !strings.Contains(n.Result, "waiting for the person's OK") {
+			t.Errorf("%s was not held for the button: %s", n.Call, n.Result)
+		}
+	}
+	for _, n := range notes[3:5] {
 		if !strings.HasPrefix(n.Result, "Not made") {
 			t.Errorf("%s went through: %s", n.Call, n.Result)
 		}
 	}
-	if last := v.Turns[len(v.Turns)-1]; len(last.Extra.Did)+len(last.Extra.Held) != 0 {
-		t.Fatalf("something was done or offered: %+v", last.Extra)
+	if last := v.Turns[len(v.Turns)-1]; len(last.Extra.Held) != 3 || len(last.Extra.Did) != 2 {
+		t.Fatalf("held and done: %+v", last.Extra)
 	}
-	if srv.E.Theme() != "light" || srv.E.BackupSet().Dir != "" || srv.E.StagedRestore() != nil || srv.E.UnreadNotices() != 1 {
-		t.Fatal("something changed")
+	if srv.E.BackupSet().Dir != "" || srv.E.StagedRestore() != nil {
+		t.Fatal("a copy was put back or moved before the person pressed")
 	}
+	if srv.E.Theme() != "dark" || srv.E.UnreadNotices() != 0 {
+		t.Fatal("the look and the bell were not changed")
+	}
+
 }
 
 // Reading the bell and the calendar is looking.

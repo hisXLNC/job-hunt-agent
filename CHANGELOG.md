@@ -2,6 +2,21 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.62
+
+- **The assistant says yes.** It was told it couldn't send mail, see files or change settings, so
+  it refused. It now reaches every screen: Leads, Career path, What is working, sources and the VPN,
+  the inbox's switches, Google Calendar, search times, notifications, theme, updates, backups and
+  the files folder. When it can't do the very thing, it does the nearest and says what it did.
+- **"Where is my CV?"** It puts a copy in your files folder, opens the folder and gives you the
+  whole path. CVs are otherwise kept inside Job Hunt's data, not as files of their own.
+- **"E-mail me my CV."** It sends it, as an attachment, to your own address (the one your inbox is
+  connected with) at once. A role's tailored CV, letter, or both, as Word or PDF, the same.
+- **E-mail to anyone else**, removing things, installing an update, putting back a saved copy and
+  changing your profile still wait for one press of the button under its reply.
+- **Keys and passwords** are never typed into the conversation, which is kept and sent to Claude
+  with every message. It opens the screen and tells you the one thing to paste there.
+
 ## 26.11.61
 
 - **Adzuna: "no listings for your country".** Job Hunt took the country only from the Country box

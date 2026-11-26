@@ -14,7 +14,7 @@ function remembered() { try { return localStorage.getItem('jh.chat') === '1'; } 
 
 // Claude's words become HTML here and nowhere else. Everything is escaped
 // first; then only bold, lists, and links into the app itself are let back in.
-const LINK = /\[([^\]\n]{1,120})\]\((#\/[\w\/?=&;%.,-]*|\/api\/roles\/\d+\/(?:cv|letter)\.docx)\)/g;
+const LINK = /\[([^\]\n]{1,120})\]\((#\/[\w\/?=&;%.,-]*|\/api\/roles\/\d+\/(?:(?:cv|letter)\.(?:docx|pdf)|both\.pdf)|\/api\/cvs\/\d+\/file)\)/g;
 function inline(s) {
   return esc(s).replace(LINK, (m, text, to) => `<a href="${to}"${to[0] === '/' ? ' download' : ''}>${text}</a>`).replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
 }

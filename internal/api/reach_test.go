@@ -210,12 +210,16 @@ func TestAPhoneCanDoMoreOfTheAppButNeverTheForbiddenParts(t *testing.T) {
 	}
 }
 
-func TestTheAssistantCannotAddFromALinkOrHandOver(t *testing.T) {
+func TestTheAssistantCannotHandTheDataOver(t *testing.T) {
 	for _, c := range tools {
-		for _, p := range []string{"/api/roles/link", "/api/roles/chaseall", "/api/backups/handover", "/api/backups/continue", "/api/backups/stay", "/api/cvs/{id}/file", "/api/cvs/{id}/titles"} {
+		for _, p := range []string{"/api/backups/handover", "/api/backups/continue", "/api/backups/stay", "/api/backups/cloud"} {
 			if c.Pattern == p {
 				t.Errorf("%s %s is on the assistant's list", c.Method, c.Pattern)
 			}
+		}
+		// A new file in place of a CV waits for the person's button.
+		if c.Pattern == "/api/cvs/{id}/file" && c.Class != mustAsk {
+			t.Errorf("%s %s is made without the person's button", c.Method, c.Pattern)
 		}
 	}
 }
