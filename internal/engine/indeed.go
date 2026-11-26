@@ -167,7 +167,7 @@ func (e *Engine) searchIndeed(ctx context.Context, p store.Profile, stats *RunSt
 		e.Report(ctx, i, n, "Indeed: "+title)
 		stats.Looked++
 		used++
-		found, err := e.brain.Indeed(ctx, brain.IndeedQuery{Title: title, Location: place, Country: countryCode(p.Country), Max: 10})
+		found, err := e.brain.Indeed(ctx, brain.IndeedQuery{Title: title, Location: place, Country: searchCountry(p), Max: 10})
 		if err != nil {
 			if ctx.Err() != nil {
 				break
@@ -255,7 +255,7 @@ func (e *Engine) testIndeed(ctx context.Context) (int, error) {
 		title = all[0].Title
 	}
 	now := e.Now()
-	found, err := e.brain.Indeed(ctx, brain.IndeedQuery{Title: title, Location: strings.TrimSpace(strings.Split(p.City, ",")[0]), Country: countryCode(p.Country), Max: 10})
+	found, err := e.brain.Indeed(ctx, brain.IndeedQuery{Title: title, Location: strings.TrimSpace(strings.Split(p.City, ",")[0]), Country: searchCountry(p), Max: 10})
 	why := ""
 	switch {
 	case err != nil:

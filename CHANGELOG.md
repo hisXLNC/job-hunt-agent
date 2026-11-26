@@ -2,6 +2,19 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.61
+
+- **Adzuna: "no listings for your country".** Job Hunt took the country only from the Country box
+  in your profile, and gave up when that was empty or written in a way it didn't know. It now
+  reads more spellings, and otherwise works the country out from the city you want to work in
+  (Toronto, ON is Canada). The message, when it does appear, says what to check, and nothing
+  rests for a day because of it.
+- **LinkedIn: "asked Job Hunt to slow down" through the VPN.** A VPN server's address is shared by
+  many people, and LinkedIn throttles those first. When LinkedIn says slow down while it goes
+  through the VPN, Job Hunt now takes it off the VPN by itself and asks again over your own
+  connection at once. A rest it was given while on the VPN is ended by this update.
+- **Indeed and Adzuna are tried afresh** after this update, so the old messages go.
+
 ## 26.11.60
 
 - **Logos no longer queue behind Claude.** An employer the company lookup doesn't know is asked of

@@ -122,6 +122,62 @@ func countryCode(country string) string {
 	return ""
 }
 
+var (
+	caProvinces = map[string]bool{"on": true, "bc": true, "qc": true, "ab": true, "mb": true, "sk": true, "ns": true, "nb": true, "nl": true, "pe": true, "nt": true, "yt": true, "nu": true,
+		"ontario": true, "british columbia": true, "quebec": true, "québec": true, "alberta": true, "manitoba": true, "saskatchewan": true, "nova scotia": true, "new brunswick": true, "newfoundland": true, "newfoundland and labrador": true, "prince edward island": true}
+	usStates = map[string]bool{"ny": true, "new york": true, "ca": true, "california": true, "tx": true, "texas": true, "wa": true, "washington": true, "ma": true, "massachusetts": true, "il": true, "illinois": true, "fl": true, "florida": true, "nj": true, "new jersey": true, "ga": true, "georgia": true, "co": true, "colorado": true, "pa": true, "pennsylvania": true, "dc": true, "va": true, "virginia": true, "nc": true, "north carolina": true}
+)
+
+// searchCountry is the two-letter country the person's roles are searched
+// in: the profile's country, however it is written, and where that is empty
+// or not understood, the country of the city they want to work in.
+func searchCountry(p store.Profile) string {
+	clean := func(s string) string {
+		return strings.ToLower(strings.Trim(strings.TrimSpace(strings.ReplaceAll(s, ".", "")), "()"))
+	}
+	if c := countryCode(clean(p.Country)); c != "" {
+		return c
+	}
+	switch c := clean(p.Country); {
+	case c == "can" || strings.Contains(c, "canada"):
+		return "CA"
+	case c == "u s" || c == "u s a" || strings.Contains(c, "united states") || strings.Contains(c, "america"):
+		return "US"
+	case strings.Contains(c, "united kingdom") || strings.Contains(c, "britain"):
+		return "GB"
+	}
+	parts := strings.Split(p.City, ",")
+	for i := len(parts) - 1; i >= 1; i-- {
+		part := clean(parts[i])
+		if c := countryCode(part); c != "" && len(part) > 2 {
+			return c
+		}
+		if caProvinces[part] {
+			return "CA"
+		}
+	}
+	city := cityOf(p)
+	for _, r := range metros[city].Region {
+		if caProvinces[r] {
+			return "CA"
+		}
+	}
+	for _, r := range metros[city].Region {
+		if usStates[r] {
+			return "US"
+		}
+	}
+	if city == "london" {
+		return "GB"
+	}
+	for i := len(parts) - 1; i >= 1; i-- {
+		if usStates[clean(parts[i])] {
+			return "US"
+		}
+	}
+	return ""
+}
+
 // provinceOf gives the two-letter province of the person's city, if known.
 func provinceOf(p store.Profile) string {
 	for _, r := range metros[cityOf(p)].Region {
@@ -547,7 +603,7 @@ func (e *Engine) searchPlaces(ctx context.Context, p store.Profile, within time.
 			if a.at.Province != places[0].Province {
 				stats.from += " in " + a.at.Town
 			}
-			q := sources.Query{Keywords: a.title, Location: a.at.Loc, Province: a.at.Province, Country: countryCode(p.Country), Within: w}
+			q := sources.Query{Keywords: a.title, Location: a.at.Loc, Province: a.at.Province, Country: searchCountry(p), Within: w}
 			posts, err := e.Src.Find(ctx, id, q)
 			if err != nil {
 				if failed(id, id, name, err) {

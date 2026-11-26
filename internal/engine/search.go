@@ -217,6 +217,30 @@ type SearchState struct {
 	LinkedInTurn int `json:"linkedin_turn,omitempty"`
 }
 
+// slowDown reports whether a source answered that it is asked too often.
+func slowDown(err error) bool {
+	var he *sources.HTTPError
+	return errors.As(err, &he) && (he.Status == 429 || he.Status == 999)
+}
+
+// AfterUpdate puts right, once, what earlier versions left behind: a rest
+// LinkedIn asked for while it went through the VPN (it goes directly again),
+// and the rests of Adzuna and Indeed, whose reasons were misjudged.
+func (e *Engine) AfterUpdate() {
+	var done bool
+	if e.S.Get("fixed_61", &done); done {
+		return
+	}
+	if st := e.searchState(); st.LinkedInUntil > e.Now().Unix() && e.offVPNByItself("linkedin") {
+		st.LinkedInUntil, st.LinkedInNote, st.LinkedInStrikes = 0, "", 0
+		e.S.Set("search", st)
+	}
+	for _, id := range []string{"adzuna", "indeed"} {
+		e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt, s.RestUntil = "", 0, 0 })
+	}
+	e.S.Set("fixed_61", true)
+}
+
 func (e *Engine) searchState() SearchState {
 	var st SearchState
 	e.S.Get("search", &st)
@@ -463,7 +487,12 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			stats.Looked++
 			asked++
 			stats.reading("linkedin", bt.label(places[0]))
-			posts, err := e.Src.Search(ctx, sources.Query{Keywords: bt.Title, Location: bt.At.Loc, Miles: metros[strings.ToLower(bt.At.Town)].Miles, Within: within, FewApplicants: few})
+			liq := sources.Query{Keywords: bt.Title, Location: bt.At.Loc, Miles: metros[strings.ToLower(bt.At.Town)].Miles, Within: within, FewApplicants: few}
+			posts, err := e.Src.Search(ctx, liq)
+			if slowDown(err) && e.offVPNByItself("linkedin") {
+				// It was the VPN server LinkedIn throttled: asked again directly.
+				posts, err = e.Src.Search(ctx, liq)
+			}
 			if err != nil {
 				var he *sources.HTTPError
 				if errors.As(err, &he) && (he.Status == 429 || he.Status == 999 || he.Status == 403) {

@@ -351,7 +351,8 @@ func keyedPlain(id string, err error) (string, time.Duration) {
 	case errors.Is(err, sources.ErrBlockedHere):
 		return name + " turns away requests from the country you are in now, whatever the key. Job Hunt tries again every three days. The other sources find the same postings meanwhile", 72 * time.Hour
 	case errors.Is(err, sources.ErrNoCountry):
-		return name + " has no listings for your country", 24 * time.Hour
+		// Nothing was asked of the service, so there is nothing to rest from.
+		return name + " has no listings for the country in your profile. Check Country under You: it should be the country of the city you want to work in", 0
 	case errors.Is(err, sources.ErrNoKey):
 		return name + " has no key saved", 0
 	}
@@ -368,7 +369,7 @@ func keyedPlain(id string, err error) (string, time.Duration) {
 
 // keyedQuery is the search asked of a keyed source for one title in one town.
 func keyedQuery(p store.Profile, title, town string, within time.Duration) sources.Query {
-	return sources.Query{Keywords: title, Location: town, Country: countryCode(p.Country), Within: within}
+	return sources.Query{Keywords: title, Location: town, Country: searchCountry(p), Within: within}
 }
 
 // TestSource runs one tiny search with the saved key, so the person knows

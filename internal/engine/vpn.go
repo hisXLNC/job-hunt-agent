@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"jobhunt/internal/sources"
+	"jobhunt/internal/store"
 	"jobhunt/internal/vpn"
 )
 
@@ -187,6 +188,25 @@ func (e *Engine) throughByItself(id string, err error) bool {
 	return e.SetThrough(id, true) == nil
 }
 
+// offVPNByItself takes a source that was told to slow down off the VPN,
+// when it goes through it: a VPN server's address is shared with many
+// people, and a site that counts requests by address throttles it first.
+// It says whether it did, so the caller can ask again over the person's own
+// connection at once.
+func (e *Engine) offVPNByItself(id string) bool {
+	k := e.sourceKeys()
+	if k.VPN == "" || !slices.Contains(k.Through, id) {
+		return false
+	}
+	if e.SetThrough(id, false) != nil {
+		return false
+	}
+	name, _ := vpnChoice(id)
+	e.S.Log(store.Activity{Kind: "search", Text: name + " asked the VPN server to slow down, so it goes over your own connection again"})
+	e.S.Changed("connections")
+	return true
+}
+
 // blockedPlain adds to a country refusal what can be done about it.
 func (e *Engine) blockedPlain(id string, err error, why string) string {
 	if !errors.Is(err, sources.ErrBlockedHere) {
@@ -276,7 +296,7 @@ func (e *Engine) TestThrough(ctx context.Context) []VPNTest {
 			defer cancel()
 			var n int
 			var err error
-			q := sources.Query{Keywords: title, Location: at.Loc, Province: at.Province, Country: countryCode(p.Country), Within: 7 * 24 * time.Hour, Max: 10}
+			q := sources.Query{Keywords: title, Location: at.Loc, Province: at.Province, Country: searchCountry(p), Within: 7 * 24 * time.Hour, Max: 10}
 			switch id {
 			case "apify":
 				r.Note = "Not tried here: each run of the scraper costs. Use Test under More job sources"

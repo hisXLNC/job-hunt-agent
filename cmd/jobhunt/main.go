@@ -166,6 +166,7 @@ func main() {
 	if !*demo {
 		// Employers' logos are fetched as roles are found, and now for the ones already here.
 		e.FetchLogos = true
+		e.AfterUpdate()
 		go e.WarmLogos()
 	}
 	e.Restored(restored)
