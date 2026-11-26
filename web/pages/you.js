@@ -38,6 +38,7 @@ const SETTINGS = [
   ['connections', 'claude', 'daily_limit', 'Daily spending limit', 'limit budget spend cost dollars money cap'],
   ['connections', 'claude', 'score_model', 'A model for each kind of work, effort, four postings per request', 'model scoring reading tailoring writing effort grouped batch cheaper haiku sonnet opus'],
   ['connections', 'otherai', '', 'Another AI: ChatGPT, Grok, Gemini, OpenRouter or a model on this computer', 'another other ai openai chatgpt gpt grok xai gemini groq openrouter ollama lm studio local model llm'],
+  ['connections', 'vpn', '', 'VPN for blocked sources', 'vpn proton wireguard blocked country geoblock geoblocked adzuna region'],
   ['connections', 'phone', '', 'Phone notices', 'phone ntfy notice notification push buzz mobile topic quiet hours'],
   ['connections', 'phoneaccess', '', 'Job Hunt on your phone', 'phone mobile access remote browser wifi tailscale away qr code pair'],
   ['connections', 'owncal', 'talkset', 'When you can do interviews', 'interview hours availability times to offer length slots time zone'],
@@ -377,6 +378,8 @@ function connections(d, route) {
       pa?.on ? `${pa.devices?.length || 0} phone${pa.devices?.length === 1 ? '' : 's'} paired` : 'See Today and act on roles from your phone\'s browser', phoneAccess(d.phoneaccess)],
     ['sources', 'More job sources', setUp.length ? [setUp.length === keyed.length ? 'good' : 'warn', `${setUp.length} of ${keyed.length}`] : ['', 'None'],
       keyed.length ? (setUp.length ? `${setUp.map(x => x.name).join(', ')} set up` + (keyed.length > setUp.length ? ` · ${keyed.filter(x => !setUp.includes(x)).map(x => x.name).join(', ')} need${keyed.length - setUp.length === 1 ? 's' : ''} a key` : '') : `${keyed.map(x => x.name).join(', ')}: each needs a key`) : '', moreSources(d)],
+    ['vpn', 'VPN for blocked sources', d.vpn?.server ? ['good', 'On'] : ['', 'Off'],
+      d.vpn?.server ? `${d.vpn.server} · ${d.vpn.through.length ? d.vpn.through.map(id => d.vpn.choices.find(c => c.id === id)?.name || id).join(', ') : 'no source goes through it yet'}` : 'For job sources that turn away the country you are in, such as Adzuna', vpnCard(d)],
     ['schedule', 'Search times', ['good', 'On'], `Full searches at ${sc.full.length ? sc.full.map(hhmm).join(', ') : 'no set times'} · quick checks every ${sc.fast_minutes || 20} minutes`, schedule(d)],
     ['tidy', 'Ratings, old roles and budget', ss.min_rating || ss.clear_days || ss.budget ? ['blue', 'On'] : ['', 'Off'], tidySum(d), tidyCard(d)],
     ['desk', 'On this computer', ['good', 'On'], [d.startup?.on ? 'Starts when you sign in' : 'Does not start by itself', k.notify ? 'Windows notifications on' : 'no Windows notifications', k.morning >= 0 ? `morning summary at ${k.morning}:00` : 'no morning summary'].join(' · '), thisComputer(d)],
@@ -408,16 +411,19 @@ function otherAI(d) {
 // The searches that take a key, and job-alert e-mails. A saved key is never
 // sent back to this page: it only knows whether one is there.
 const SRC_STATE = { working: ['good', 'Working'], problem: ['crit', 'Problem'], off: ['', 'Off'], none: ['', 'Not set up'], waiting: ['blue', 'Not tried yet'] };
-// Adzuna through a VPN: a WireGuard file from the person's VPN account.
-// Only Adzuna's requests go through it. The file's key never comes back here.
-function adzunaVPN(s) {
-  return html`<div class="col" style="gap:6px;background:var(--bg2);border-radius:8px;padding:10px 12px">
-    <div class="row wrap" style="gap:10px"><b class="s grow">Through a VPN</b>
-      ${s.vpn ? html`<span class="chip good">Through ${s.vpn}</span>` : html`<span class="chip">Not used</span>`}
-      <label class="btn sm" title="A WireGuard configuration file from your VPN account">${s.vpn ? 'Choose another file' : 'Choose a WireGuard file'}<input type="file" accept=".conf,text/plain" hidden data-on="change" data-act="adzunavpn"></label>
-      ${s.vpn ? html`<button type="button" class="btn sm ghost" data-act="adzunanovpn" data-confirm="Stop sending Adzuna's requests through ${s.vpn}?">Stop using it</button>` : ''}</div>
-    <p class="xs m">If Adzuna turns away the country you are in, its requests can go through a VPN server in a country it serves, inside Job Hunt only: the rest of Job Hunt and your computer stay on your own connection, and the VPN app doesn't need to be open.
-      For Proton VPN: sign in at <a href="https://account.protonvpn.com/downloads" target="_blank" rel="noopener noreferrer">account.protonvpn.com, Downloads</a>, under WireGuard configuration give it a name, choose Windows, pick a server in the country you search in, Create, then Download, and choose that file here. The free plan gives these files too, but may not let you choose the country; the test that runs when you choose the file tells you whether Adzuna answers.</p></div>`;
+// A VPN for the sources that turn away the person's country: one WireGuard
+// file, and a switch for each source. The file's key never comes back here.
+function vpnCard(d) {
+  const v = d.vpn || { through: [], choices: [] };
+  return html`<div class="card col" style="gap:12px">
+    <p class="s m">Some job sources turn away the country you are in. Job Hunt can send just those through a VPN server in a country they serve. Only the sources switched on below go through it: Claude, your inbox, everything else in Job Hunt and the rest of your computer stay on your own connection, and the VPN app doesn't need to be open. Once a file is here, a source that turns your country away is switched on by itself.</p>
+    <div class="row wrap" style="gap:10px"><b class="s grow">${v.server ? html`Server: ${v.server}` : 'No VPN file yet'}</b>
+      <label class="btn sm ${v.server ? '' : 'p'}" title="A WireGuard configuration file from your VPN account">${v.server ? 'Choose another file' : 'Choose a WireGuard file'}<input type="file" accept=".conf,text/plain" hidden data-on="change" data-act="vpnfile"></label>
+      ${v.server ? html`<button type="button" class="btn sm" data-act="vpncheck" data-busy="Connecting…">Check</button><button type="button" class="btn sm ghost" data-act="vpnoff" data-confirm="Remove the VPN file? Every source goes over your own connection again.">Remove</button>` : ''}</div>
+    <p class="xs m">For Proton VPN: sign in at <a href="https://account.protonvpn.com/downloads" target="_blank" rel="noopener noreferrer">account.protonvpn.com, Downloads</a>. Under WireGuard configuration give it a name, choose Windows, pick a server in the country you search in, press Create, then Download, and choose that file here. The free plan gives these files too, but may not let you choose the country. Any other VPN's WireGuard file works the same way. The file's private key stays in Job Hunt's data file on this computer.</p>
+    <div class="col" style="gap:6px"><b class="s">Through the VPN</b>
+      ${v.choices.map(c => html`<label class="row s"><input type="checkbox" data-on="change" data-act="vpnthrough" data-id="${c.id}" ${v.through.includes(c.id) ? 'checked' : ''}> ${c.name}</label>`)}</div>
+    <p class="xs m">LinkedIn answers some VPN servers more slowly or asks them to slow down sooner; switch it on only if LinkedIn doesn't work from where you are.</p></div>`;
 }
 
 function moreSources(d) {
@@ -425,7 +431,7 @@ function moreSources(d) {
   const row = s => {
     const alerts = s.id === 'alerts', indeed = s.id === 'indeed', [tone, word] = alerts && s.state === 'waiting' ? ['blue', 'Watching'] : SRC_STATE[s.state] || SRC_STATE.none;
     return html`<form data-act="savesource" data-id="${s.id}" class="col" style="gap:8px;border-top:1px solid var(--line2);padding-top:12px">
-      <div class="row"><b class="grow">${s.name}</b><span class="chip ${tone}">${word}</span></div>
+      <div class="row"><b class="grow">${s.name}</b>${s.vpn ? html`<span class="chip blue" title="Its requests go through your VPN">Through ${s.vpn}</span>` : ''}<span class="chip ${tone}">${word}</span></div>
       <p class="s m">${s.about}</p>
       ${s.note ? html`<p class="s" style="color:var(--${s.state === 'problem' ? 'crit' : 'muted'})">${s.note}</p>` : ''}
       ${indeed ? html`<label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''} ${s.state === 'none' && !s.on ? 'disabled' : ''}> Search Indeed through my Claude account</label>
@@ -438,8 +444,7 @@ function moreSources(d) {
           : html`<label class="field" style="max-width:340px">Key<input type="password" name="key" placeholder="${saved(s)}" autocomplete="off"></label>`}
         <div class="row wrap" style="gap:14px"><label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''}> Search ${s.name}</label>
           <label class="row s" style="gap:6px">At most <input type="number" name="limit" value="${s.limit}" min="1" max="5000" style="width:84px;height:30px" aria-label="Most requests a day to ${s.name}"> requests a day</label></div>
-        <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>
-        ${s.id === 'adzuna' ? adzunaVPN(s) : ''}`}
+        <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>`}
       <div class="row"><button class="btn sm p" data-busy="${alerts || indeed ? 'Saving…' : 'Trying the key…'}">Save</button>
         ${indeed && s.state !== 'none' ? html`<button type="button" class="btn sm" data-act="testsource" data-id="indeed" data-busy="Asking Indeed through Claude, about a minute…" title="Runs one Indeed search now for your first title, through your Claude account, and says what came back. It counts as one of today's 8.">Test</button>` : ''}
         ${!alerts && !indeed && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="${s.id === 'apify' ? 'Searching LinkedIn, about a minute…' : 'Asking…'}" title="${s.id === 'apify' ? 'Runs one real LinkedIn search for 10 postings through your scraper (about a cent) and says what came back.' : 'Runs one small search now and says what came back.'}">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
@@ -818,14 +823,16 @@ export default {
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
     // A new key is tried with one small search first; one the service refuses is not saved.
     savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' || d.id === 'indeed' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(r => toast(r?.warning || ((f.key || '').trim() ? 'Tried and saved. The key works.' : 'Saved'))),
-    async adzunavpn({ el }) {
+    async vpnfile({ el }) {
       const file = el.files[0]; if (!file) return false;
       if (file.size > 16384) { toast('That file is too large to be a WireGuard configuration'); return false; }
-      toast('Connecting Adzuna through the VPN…');
-      const r = await put('sources/adzuna/vpn', { file: await file.text() });
+      toast('Connecting to the VPN server…');
+      const r = await put('vpn', { file: await file.text() });
       toast(r.message);
     },
-    adzunanovpn: () => del('sources/adzuna/vpn').then(() => toast('Adzuna goes over your own connection again')),
+    async vpncheck() { const r = await post('vpn/check'); toast(r.message); return false; },
+    vpnoff: () => del('vpn').then(() => toast('Every source goes over your own connection again')),
+    vpnthrough: ({ d, value }) => put(`vpn/${d.id}`, { on: value }),
     async testsource({ d }) { const r = await post(`sources/${d.id}/test`); toast(r.message); },
     delsource: ({ d }) => del(`sources/${d.id}`).then(() => toast('Key removed')),
     scanrecruiters: () => post('mail/recruiters').then(() => toast('Looking through your mail for recruiters. This takes a few minutes.')),

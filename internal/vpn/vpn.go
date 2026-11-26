@@ -215,6 +215,26 @@ func (t *Tunnel) DialContext(ctx context.Context, network, address string) (net.
 	return c, nil
 }
 
+// LookupContextHost finds a name's addresses through the tunnel, with the
+// DNS server the file gives.
+func (t *Tunnel) LookupContextHost(ctx context.Context, host string) ([]string, error) {
+	tn, err := t.up(ctx)
+	if err != nil {
+		return nil, &Error{Server: t.cfg.Name(), Why: err.Error()}
+	}
+	dctx, cancel := context.WithTimeout(ctx, dialWait)
+	defer cancel()
+	ips, err := tn.LookupContextHost(dctx, host)
+	if err != nil {
+		why := "no answer"
+		if ctx.Err() == nil && dctx.Err() == nil {
+			why = "the name " + host + " wasn't found through it"
+		}
+		return nil, &Error{Server: t.cfg.Name(), Why: why}
+	}
+	return ips, nil
+}
+
 func (t *Tunnel) up(ctx context.Context) (*netstack.Net, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

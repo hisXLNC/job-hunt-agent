@@ -2,6 +2,17 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.56
+
+- **A VPN for any source that turns away your country**, not just Adzuna: Settings, Connections,
+  **VPN for blocked sources**. Choose one WireGuard file from your VPN account (Proton VPN:
+  account.protonvpn.com, Downloads, WireGuard configuration), then tick the sources that should go
+  through it: LinkedIn public search, Job Bank, FreeHire, Adzuna, Jooble, Google for Jobs, LinkedIn
+  through Apify. Once a file is there, a source that refuses your country is ticked by itself and
+  asked again straight away. Everything else in Job Hunt and on your computer stays on your own
+  connection. **Check** connects to the server and says whether it answered. A file chosen for
+  Adzuna in 26.11.55 carries on.
+
 ## 26.11.55
 
 - **Adzuna through a VPN.** If Adzuna turns away the country you are in, give Job Hunt a WireGuard

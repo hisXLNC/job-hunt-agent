@@ -38,7 +38,9 @@ type SourceKeys struct {
 	AdzunaID    string         `json:"adzuna_id,omitempty"`
 	AdzunaKey   string         `json:"adzuna_key,omitempty"`
 	Jooble      string         `json:"jooble,omitempty"`
-	AdzunaVPN   string         `json:"adzuna_vpn,omitempty"` // a WireGuard file Adzuna's requests go through (vpn.go)
+	VPN         string         `json:"vpn,omitempty"`        // a WireGuard file (vpn.go)
+	Through     []string       `json:"through,omitempty"`    // the sources whose requests go through it
+	OldVPN      string         `json:"adzuna_vpn,omitempty"` // 26.11.55 kept the file for Adzuna alone
 	JSearch     string         `json:"jsearch,omitempty"`
 	JSearchFrom string         `json:"jsearch_from,omitempty"` // "rapidapi" or "openwebninja"
 	Apify       string         `json:"apify,omitempty"`        // an Apify API token
@@ -73,6 +75,9 @@ func (k SourceKeys) limit(id string) int {
 func (e *Engine) sourceKeys() SourceKeys {
 	var k SourceKeys
 	e.S.Get(sourceKeysKey, &k)
+	if k.OldVPN != "" && k.VPN == "" {
+		k.VPN, k.Through, k.OldVPN = k.OldVPN, append(k.Through, "adzuna"), ""
+	}
 	return k
 }
 
@@ -344,7 +349,7 @@ func keyedPlain(id string, err error) (string, time.Duration) {
 	case errors.Is(err, sources.ErrOutOfRequests):
 		return name + " has no requests left for now on this key's plan. Job Hunt will try again later", 6 * time.Hour
 	case errors.Is(err, sources.ErrBlockedHere):
-		return name + " turns away requests from the country you are in now, whatever the key. Give it a VPN server in a country it serves (Through a VPN, below its key), or Job Hunt tries again every three days. The other sources find the same postings meanwhile", 72 * time.Hour
+		return name + " turns away requests from the country you are in now, whatever the key. Job Hunt tries again every three days. The other sources find the same postings meanwhile", 72 * time.Hour
 	case errors.Is(err, sources.ErrNoCountry):
 		return name + " has no listings for your country", 24 * time.Hour
 	case errors.Is(err, sources.ErrNoKey):
@@ -352,7 +357,7 @@ func keyedPlain(id string, err error) (string, time.Duration) {
 	}
 	var ve *vpn.Error
 	if errors.As(err, &ve) {
-		return name + "'s VPN server " + ve.Server + " didn't connect (" + ve.Why + "). Check that the WireGuard file is still listed in your VPN account, or download a new one and choose it again", time.Hour
+		return vpnDown(name, ve), time.Hour
 	}
 	var he *sources.HTTPError
 	if errors.As(err, &he) || errors.Is(err, context.DeadlineExceeded) {
@@ -428,9 +433,13 @@ func (e *Engine) tryKey(ctx context.Context, id string, keys sources.Keys, real 
 	cctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	posts, err := e.Src.FindKeyed(cctx, id, keys, q)
+	if err != nil && e.throughByItself(id, err) {
+		posts, err = e.Src.FindKeyed(cctx, id, keys, q) // once more, through the VPN
+	}
 	now := e.Now().Unix()
 	if err != nil {
 		why, rest := keyedPlain(id, err)
+		why = e.blockedPlain(id, err, why)
 		// Out of requests means the key itself was accepted.
 		if errors.Is(err, sources.ErrOutOfRequests) {
 			e.setSourceState(id, func(s *SourceState) {
@@ -525,6 +534,13 @@ func (e *Engine) searchKeyed(ctx context.Context, kind string, p store.Profile, 
 					break
 				}
 				why, rest = keyedPlain(id, err)
+				if e.throughByItself(id, err) {
+					// Refused by country, and there is a VPN: the next titles go through it.
+					why, rest = "", 0
+					trace.Log("search", "%s turned away this country; it goes through the VPN from now on", id)
+					continue
+				}
+				why = e.blockedPlain(id, err, why)
 				stats.missed(id, why)
 				trace.Log("search", "%s, %q: %v", id, title, err)
 				if misses++; rest > 0 || misses >= 2 {
@@ -584,7 +600,7 @@ type MoreSource struct {
 	Limit  int    `json:"limit,omitempty"` // requests a day
 	Used   int    `json:"used"`            // made today
 	Fast   bool   `json:"fast,omitempty"`  // also asked on quick checks
-	VPN    string `json:"vpn,omitempty"`   // adzuna: the VPN server its requests go through
+	VPN    string `json:"vpn,omitempty"`   // the VPN server its requests go through
 }
 
 // MoreSources lists the keyed searches and job-alert e-mails for the
@@ -604,9 +620,7 @@ func (e *Engine) MoreSources() []MoreSource {
 		if id == "apify" {
 			m.Actor = k.ApifyActor
 		}
-		if id == "adzuna" {
-			m.VPN = adzunaVPNName(k)
-		}
+		m.VPN = vpnName(k, id)
 		if id == "jsearch" {
 			m.From = firstOf(k.JSearchFrom, sources.FromRapidAPI)
 		}

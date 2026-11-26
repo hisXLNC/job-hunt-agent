@@ -24,6 +24,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -123,7 +124,7 @@ type Client struct {
 	// Via, when set, gives a way to connect that one kind of source's
 	// requests go through instead of the computer's own network (a VPN
 	// tunnel for Adzuna), or nil for the usual way.
-	Via func(kind string) func(ctx context.Context, network, addr string) (net.Conn, error)
+	Via func(kind string) Tunnel
 
 	httpOnce sync.Once
 	http     *http.Client
@@ -349,9 +350,13 @@ func (c *Client) do(ctx context.Context, method, rawURL, accept string, body []b
 		}
 	}
 	hc := c.httpClient()
-	if kind, _ := ctx.Value(viaKey{}).(string); kind != "" && c.Via != nil {
-		if dial := c.Via(kind); dial != nil {
-			hc = c.through(dial)
+	if c.Via != nil {
+		kind, _ := ctx.Value(viaKey{}).(string)
+		if kind == "" {
+			kind = SourceOf(req.URL.Hostname())
+		}
+		if t := c.Via(kind); kind != "" && t != nil {
+			hc = c.through(t)
 		}
 	}
 	resp, err := hc.Do(req)
@@ -390,10 +395,62 @@ func withVia(ctx context.Context, kind string) context.Context {
 	return context.WithValue(ctx, viaKey{}, kind)
 }
 
-// through is a client whose connections are made by dial. Its connections
-// are not kept between requests: the tunnel closes when it is quiet.
-func (c *Client) through(dial func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
+// Tunnel is another way out to the internet, such as a VPN, that some
+// sources' requests take.
+type Tunnel interface {
+	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+	LookupContextHost(ctx context.Context, host string) ([]string, error)
+}
+
+// SourceOf names the source a host belongs to, for the ones a VPN can be
+// chosen for: "linkedin", "jobbank", "freehire", "adzuna", "jooble",
+// "jsearch", "apify". Anything else is "".
+func SourceOf(host string) string {
+	h := strings.ToLower(strings.TrimSuffix(host, "."))
+	in := func(d string) bool { return h == d || strings.HasSuffix(h, "."+d) }
+	switch {
+	case in("linkedin.com"):
+		return kindLinkedIn
+	case in("jobbank.gc.ca"), in("guichetemplois.gc.ca"):
+		return kindJobBank
+	case in("freehire.me"):
+		return kindFreeHire
+	case in("adzuna.com"):
+		return kindAdzuna
+	case in("jooble.org"):
+		return kindJooble
+	case h == "jsearch.p.rapidapi.com", in("openwebninja.com"):
+		return kindJSearch
+	case in("apify.com"):
+		return kindApify
+	}
+	return ""
+}
+
+// through is a client whose connections go through a tunnel. Names are
+// looked up through it too, and, as on the computer's own network, only
+// public addresses are connected to. Connections are not kept between
+// requests: the tunnel closes when it is quiet.
+func (c *Client) through(t Tunnel) *http.Client {
 	base := c.httpClient()
+	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		ips := []string{host}
+		if _, perr := netip.ParseAddr(host); perr != nil {
+			if ips, err = t.LookupContextHost(ctx, host); err != nil {
+				return nil, err
+			}
+		}
+		for _, ip := range ips {
+			if a, perr := netip.ParseAddr(ip); perr == nil && publicAddr(a) {
+				return t.DialContext(ctx, network, net.JoinHostPort(ip, port))
+			}
+		}
+		return nil, ErrPrivateAddress
+	}
 	tr := &http.Transport{DialContext: dial, ForceAttemptHTTP2: true, DisableKeepAlives: true,
 		TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 30 * time.Second}
 	return &http.Client{Timeout: base.Timeout + 20*time.Second, Transport: traced{tr}, CheckRedirect: base.CheckRedirect}

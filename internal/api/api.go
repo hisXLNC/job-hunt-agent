@@ -1701,7 +1701,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		return map[string]any{"startup": map[string]bool{"on": startOn, "can": startCan}, "claude": e.Claude(), "cli_found": cliPath, "models": llm.Models, "other_ai": e.OtherAIState(), "other_services": llm.OtherServices, "phone": e.Phone(), "mail": mail, "mail_has_pass": hasPass,
 			"ext": map[string]any{"id": s.ext().ID, "paired_at": s.ext().PairedAt, "code": s.ext().Code()}, "ext_pending": pending, "ext_dir": extDir(), "usage": byTask,
-			"desk": e.Desk(), "schedule": e.Schedule(), "suggest": e.SuggestTimes(), "can_notify": e.Notify != nil, "more": e.MoreSources(), "recruiter_scan": e.RecruiterScan(), "pc": s.pc()}, nil
+			"desk": e.Desk(), "schedule": e.Schedule(), "suggest": e.SuggestTimes(), "can_notify": e.Notify != nil, "more": e.MoreSources(), "vpn": e.VPN(), "recruiter_scan": e.RecruiterScan(), "pc": s.pc()}, nil
 	})
 	// More job sources: the searches that take a key (Adzuna, Jooble, Google
 	// for Jobs) and job-alert e-mails. A key goes in and never comes out: what
@@ -1730,10 +1730,11 @@ func (s *Server) Handler() http.Handler {
 		}
 		return nil, nil
 	})
-	// A WireGuard file (from Proton VPN or another) that Adzuna's requests,
-	// and only those, go through. The file holds a private key: it goes in
-	// and never comes out; the pages are told the server's name.
-	h("PUT /api/sources/adzuna/vpn", func(w http.ResponseWriter, r *http.Request) (any, error) {
+	// A VPN for the sources that turn away the person's country: one
+	// WireGuard file (from Proton VPN or another), and the sources that go
+	// through it. The file holds a private key: it goes in and never comes
+	// out; the pages are told the server's name. Not on the assistant's list.
+	h("PUT /api/vpn", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
 			File string `json:"file"`
 		}
@@ -1743,29 +1744,40 @@ func (s *Server) Handler() http.Handler {
 		if strings.TrimSpace(in.File) == "" {
 			return nil, bad("Choose the WireGuard file you downloaded from your VPN account.")
 		}
-		name, err := e.SetAdzunaVPN(in.File)
+		name, err := e.SetVPN(in.File)
 		if err != nil {
 			return nil, bad(sentence(err.Error()))
 		}
-		out := map[string]any{"server": name, "message": "Adzuna now goes through " + name + ". Save Adzuna's key, then press Test."}
-		for _, m := range e.MoreSources() {
-			if m.ID == "adzuna" && m.HasKey {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-				defer cancel()
-				n, terr := e.TestSource(ctx, "adzuna")
-				switch {
-				case terr != nil:
-					out["message"] = "Saved, but the test didn't work: " + sentence(terr.Error())
-				default:
-					out["message"] = fmt.Sprintf("Adzuna answered through %s: %d postings for your first title.", name, n)
-				}
-			}
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+		defer cancel()
+		if err := e.CheckVPN(ctx); err != nil {
+			return map[string]any{"server": name, "message": "Saved, but " + sentence(err.Error())}, nil
 		}
-		return out, nil
+		return map[string]any{"server": name, "message": "Connected to " + name + ". The sources ticked below go through it."}, nil
 	})
-	h("DELETE /api/sources/adzuna/vpn", func(w http.ResponseWriter, r *http.Request) (any, error) {
-		_, err := e.SetAdzunaVPN("")
+	h("POST /api/vpn/check", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+		defer cancel()
+		if err := e.CheckVPN(ctx); err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		return map[string]any{"message": "The VPN server answered."}, nil
+	})
+	h("DELETE /api/vpn", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		_, err := e.SetVPN("")
 		return nil, err
+	})
+	h("PUT /api/vpn/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			On bool `json:"on"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if err := e.SetThrough(r.PathValue("id"), in.On); err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		return nil, nil
 	})
 	// Every posting one kind of source gave in the last search that asked it,
 	// with what was decided about each.
