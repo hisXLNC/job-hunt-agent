@@ -163,6 +163,11 @@ func main() {
 	}
 	e := engine.New(s, dir)
 	e.Version = api.Version
+	if !*demo {
+		// Employers' logos are fetched as roles are found, and now for the ones already here.
+		e.FetchLogos = true
+		go e.WarmLogos()
+	}
 	e.Restored(restored)
 	// Pages that turn a plain request away are opened in the browser already
 	// on this computer, out of sight, when there is one.

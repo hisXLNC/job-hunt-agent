@@ -229,7 +229,9 @@ func (e *Engine) lookUpReviews(ctx context.Context, id int64) error {
 
 var logoMu sync.Mutex
 var logoBusy = map[int64]bool{}
-var logoSlots = make(chan struct{}, 3)
+var logoLater = map[string]time.Time{} // by file: looks that got no answer, and when
+var logoTries = map[string]int{}
+var logoSlots = make(chan struct{}, 6)
 
 // Logo returns an employer's picture from its own site, kept on disk after
 // the first time. ok is false when it has none (the letter tile is shown).
@@ -250,7 +252,7 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	if logoBusy[id] {
 		// Another page asked a moment ago: wait for that look rather than answer "none".
 		logoMu.Unlock()
-		for range 60 {
+		for range 180 {
 			select {
 			case <-ctx.Done():
 				return nil, "", false
@@ -264,6 +266,10 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 			}
 		}
 		return nil, "", false
+	}
+	if at, ok := logoLater[file]; ok && time.Since(at) < 3*time.Minute {
+		logoMu.Unlock()
+		return nil, "", false // a look just failed for want of an answer; soon again
 	}
 	logoBusy[id] = true
 	logoMu.Unlock()
@@ -292,7 +298,7 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	var b []byte
 	var err error
 	try := func(site, mustName string) bool {
-		cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		cctx, cancel := context.WithTimeout(ctx, 7*time.Second)
 		defer cancel()
 		b, kind, err = e.Src.Logo(cctx, site, mustName)
 		if err != nil {
@@ -305,7 +311,7 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	// First the logo a job source showed beside its posting (LinkedIn, Google for
 	// Jobs): the employer's real logo, where a site's icon can be a tiny mark.
 	if !found && shown != "" && ctx.Err() == nil {
-		cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		cctx, cancel := context.WithTimeout(ctx, 7*time.Second)
 		b, kind, err = e.Src.LogoFrom(cctx, shown)
 		cancel()
 		if found = err == nil; found {
@@ -327,7 +333,7 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	// whose icon comes from the site or from Google's copy of it.
 	if !found && ctx.Err() == nil {
 		if d := e.foundDomain(ctx, id, name); d != "" {
-			cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			b, kind, err = e.Src.IconOf(cctx, d)
 			cancel()
 			if found = err == nil; found {
@@ -349,11 +355,28 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 		trace.Log("fetch", "picture for employer %d (%s) taken from %s", id, name, from)
 	}
 	if !found {
-		if ctx.Err() == nil {
+		// "None" is kept for a week only when the lookups answered and knew no
+		// website. Anything else (no answer, a website whose icon didn't come)
+		// is tried again in a few minutes, a handful of times.
+		var kept struct {
+			Domain string `json:"domain"`
+		}
+		e.S.Get(fmt.Sprintf("logo_domain:%d", id), &kept)
+		logoMu.Lock()
+		logoTries[file]++
+		sure := kept.Domain == "-" || logoTries[file] >= 6
+		if !sure {
+			logoLater[file] = time.Now()
+		}
+		logoMu.Unlock()
+		if sure && ctx.Err() == nil {
 			os.WriteFile(file, nil, 0o600)
 		}
 		return nil, "", false
 	}
+	logoMu.Lock()
+	delete(logoLater, file)
+	logoMu.Unlock()
 	os.WriteFile(file, b, 0o600)
 	return b, kind, true
 }
@@ -412,6 +435,9 @@ func (e *Engine) noteEmployerLooks(id int64, post sources.Posting) {
 		e.S.Set(logoKey(id), post.Logo)
 		// "None found" was decided without this address: look again.
 		file := filepath.Join(e.Dir, "logos3", fmt.Sprint(id))
+		logoMu.Lock()
+		delete(logoLater, file)
+		logoMu.Unlock()
 		if st, err := os.Stat(file); err == nil && st.Size() == 0 {
 			os.Remove(file)
 		}
@@ -420,6 +446,32 @@ func (e *Engine) noteEmployerLooks(id int64, post sources.Posting) {
 		if c, err := e.S.Company(id); err == nil && c.Site == "" && sources.Belongs(post.Site, c.Name) {
 			c.Site = post.Site
 			e.S.SaveCompany(c)
+		}
+	}
+	e.warmLogo(id)
+}
+
+// warmLogo fetches an employer's logo ahead of the pages, when FetchLogos
+// is on and there is none yet, so a page that shows the employer has it at once.
+func (e *Engine) warmLogo(id int64) {
+	if !e.FetchLogos || id == 0 {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(e.Dir, "logos3", fmt.Sprint(id))); err == nil {
+		return
+	}
+	go e.Logo(e.ctx, id)
+}
+
+// WarmLogos fetches, ahead of the pages, the logos of the employers of the
+// roles the person is most likely to look at: the newest ones still open.
+func (e *Engine) WarmLogos() {
+	roles, _, _ := e.S.Roles(store.RoleFilter{Unread: true, Limit: 300})
+	seen := map[int64]bool{}
+	for _, r := range roles {
+		if r.CompanyID != 0 && !seen[r.CompanyID] {
+			seen[r.CompanyID] = true
+			e.warmLogo(r.CompanyID)
 		}
 	}
 }
@@ -452,7 +504,7 @@ func (e *Engine) foundDomain(ctx context.Context, id int64, name string) string 
 	if strings.TrimSpace(name) == "" {
 		return ""
 	}
-	cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	cctx, cancel := context.WithTimeout(ctx, 7*time.Second)
 	d, err := e.Src.FindDomain(cctx, name)
 	cancel()
 	sure := err == nil || strings.Contains(err.Error(), "no website found")
@@ -556,7 +608,7 @@ var noLogosOnce sync.Once
 func (e *Engine) forgetNoLogos(dir string) {
 	noLogosOnce.Do(func() {
 		var done bool
-		if e.S.Get("logo_none_cleared_58", &done); done {
+		if e.S.Get("logo_none_cleared_59", &done); done {
 			return
 		}
 		ents, _ := os.ReadDir(dir)
@@ -565,6 +617,14 @@ func (e *Engine) forgetNoLogos(dir string) {
 				os.Remove(filepath.Join(dir, en.Name()))
 			}
 		}
-		e.S.Set("logo_none_cleared_58", true)
+		e.S.Set("logo_none_cleared_59", true)
 	})
+}
+
+// LogoSettled says whether "no logo" for an employer is a settled answer
+// (looked, none to be found) rather than a look still running or one that
+// got no answer yet.
+func (e *Engine) LogoSettled(id int64) bool {
+	st, err := os.Stat(filepath.Join(e.Dir, "logos3", fmt.Sprint(id)))
+	return err == nil && st.Size() == 0
 }

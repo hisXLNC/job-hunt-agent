@@ -2,6 +2,23 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.59
+
+- **Logos that were found but never shown.** When a logo took a while to find, or the page redrew
+  while it was being looked for, the page was told "no logo", remembered that for up to an hour
+  and never asked again. Now only a settled "none" is remembered; otherwise the page asks again by
+  itself after a few seconds. A lookup that got no answer is tried again in a few minutes instead
+  of being marked "none" for a week.
+- **Logos are faster.** They are fetched as soon as a role is found, and for the roles already on
+  your list when Job Hunt starts, instead of when a page first shows them. Twice as many are
+  fetched at once, and a website that hangs no longer holds up the others.
+- **Indeed through Claude says what is actually wrong.** Job Hunt used to take Claude's guess that
+  Indeed "isn't connected". It now reads the connector's state from Claude Code itself: connected
+  but needs signing in again, connected but not answering, or not on the Claude account Claude
+  Code is signed in to (and which connectors it does have). It also waits an hour, not twelve.
+- **The assistant can read Career path**, and the page says which CVs it was made from: all of
+  your CVs are read together.
+
 ## 26.11.58
 
 - **Sign in to Claude works and says what happened.** The button used to open Claude Code itself,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -111,14 +112,25 @@ func (c *Client) FindDomain(ctx context.Context, name string) (string, error) {
 // site itself, else Google's icon service, which keeps a copy of most
 // sites' icons and answers when the site turns plain requests away.
 func (c *Client) IconOf(ctx context.Context, domain string) ([]byte, string, error) {
-	b, kind, err := c.Logo(ctx, domain, "")
+	// Each place gets a few seconds of its own, so a site that hangs doesn't
+	// use up the time of the ones after it.
+	step := func(f func(ctx context.Context) ([]byte, string, error)) ([]byte, string, error) {
+		sctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+		defer cancel()
+		return f(sctx)
+	}
+	b, kind, err := step(func(ctx context.Context) ([]byte, string, error) { return c.Logo(ctx, domain, "") })
 	if err == nil {
 		return b, kind, nil
 	}
-	if b, kind, err = c.LogoFrom(ctx, "https://www.google.com/s2/favicons?sz=128&domain="+url.QueryEscape(domain)); err == nil {
+	if b, kind, err = step(func(ctx context.Context) ([]byte, string, error) {
+		return c.LogoFrom(ctx, "https://www.google.com/s2/favicons?sz=128&domain="+url.QueryEscape(domain))
+	}); err == nil {
 		return b, kind, nil
 	}
-	return c.LogoFrom(ctx, "https://icons.duckduckgo.com/ip3/"+url.PathEscape(domain)+".ico")
+	return step(func(ctx context.Context) ([]byte, string, error) {
+		return c.LogoFrom(ctx, "https://icons.duckduckgo.com/ip3/"+url.PathEscape(domain)+".ico")
+	})
 }
 
 // KindLogos marks the requests made for employers' logos (their websites,

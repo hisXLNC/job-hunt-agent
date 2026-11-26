@@ -30,8 +30,10 @@ type Engine struct {
 	Src *sources.Client
 	Dir string // the data folder
 
-	Version   string // this program's version; empty or a word for a build without one
-	UpdateURL string // where newer versions are listed (tests point it elsewhere)
+	Version string // this program's version; empty or a word for a build without one
+	// FetchLogos makes the engine fetch employers' logos ahead of the pages.
+	FetchLogos bool
+	UpdateURL  string // where newer versions are listed (tests point it elsewhere)
 	// Tests only: where installers may come from, and what stands in for running one.
 	UpdateDownload string
 	RunInstaller   func(file string) error

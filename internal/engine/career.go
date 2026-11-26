@@ -24,6 +24,8 @@ type careerDoc struct {
 	brain.Career
 	At  int64 `json:"at"`
 	Web bool  `json:"web"`
+	// CVs names the CVs the reading was made from: all the person had then.
+	CVs []string `json:"cvs,omitempty"`
 }
 
 // enoughSeen is how many postings a route needs before its counts are shown.
@@ -65,6 +67,9 @@ type CareerPage struct {
 	Routes  []CareerRouteView `json:"routes"`
 	Try     []CareerTryView   `json:"try"`
 	Note    string            `json:"note"`
+	// CVs names the CVs the reading was made from. Every CV the person has
+	// is read together; none is picked over the others.
+	CVs []string `json:"cvs"`
 	// How applications at the person's own level go, to compare with.
 	Level struct {
 		Applied int `json:"applied"`
@@ -134,6 +139,9 @@ func (e *Engine) Career() CareerPage {
 		return pg
 	}
 	pg.Has, pg.At, pg.Web, pg.Now, pg.Note = true, d.At, d.Web, d.Now, d.Note
+	if pg.CVs = d.CVs; len(pg.CVs) == 0 {
+		pg.CVs = e.cvNames() // read before the names were kept: it read them all
+	}
 	since := e.Now().AddDate(0, 0, -90).Unix()
 	roles, _ := e.S.RoleTexts(0)
 	recent, _ := e.S.RoleTexts(since)
@@ -274,7 +282,7 @@ func (e *Engine) readCareer(ctx context.Context) error {
 	if len(out.Routes) == 0 {
 		return errors.New("Claude's answer held no routes")
 	}
-	e.S.Set("career", careerDoc{Career: out, At: e.Now().Unix(), Web: web})
+	e.S.Set("career", careerDoc{Career: out, At: e.Now().Unix(), Web: web, CVs: e.cvNames()})
 	e.S.Set("career:ladder", e.Now().Unix())
 	// Marks stay on the gaps that are still there.
 	keep := map[string]int64{}
@@ -505,4 +513,14 @@ func (e *Engine) careerDue(now time.Time) bool {
 	// A reading from before each route named its titles and ceiling is read
 	// again once, so the pay shows where the route leads.
 	return len(d.Routes) > 0 && d.Routes[0].CeilingTitle == "" && e.S.GetInt("career:ladder") == 0
+}
+
+// cvNames are the names of the person's CVs.
+func (e *Engine) cvNames() []string {
+	cvs, _ := e.S.CVs()
+	names := []string{}
+	for _, c := range cvs {
+		names = append(names, firstOf(c.Name, c.Filename))
+	}
+	return names
 }

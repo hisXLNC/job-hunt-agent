@@ -96,10 +96,24 @@ export const rings = (fit, tailored, small) => html`<div class="rings ${small ? 
 const TILE = ['#2F4FC4', '#0B7A3B', '#C2410C', '#7A3FB8', '#0E7490', '#8F5B00', '#B42D2D', '#374151'];
 // An employer's picture comes from its own site, through the program; where
 // there is none, the letters stay. Pictures that failed are not asked for again.
-const noLogo = new Set();
+// A picture that didn't come may still be on its way (the program is looking
+// the employer up), so it is asked for again a few times before giving up.
+const noLogo = new Set(), logoTries = new Map();
 document.addEventListener('error', ev => {
   const t = ev.target;
-  if (t?.tagName === 'IMG' && t.classList.contains('lgi')) { noLogo.add(t.dataset.co); t.remove(); }
+  if (t?.tagName !== 'IMG' || !t.classList.contains('lgi')) return;
+  const id = t.dataset.co, box = t.parentElement, n = (logoTries.get(id) || 0) + 1;
+  logoTries.set(id, n);
+  noLogo.add(id);
+  t.remove();
+  if (n > 5) return;
+  setTimeout(() => {
+    noLogo.delete(id);
+    if (!box?.isConnected || box.querySelector('.lgi')) return;
+    const img = document.createElement('img');
+    img.className = 'lgi'; img.dataset.co = id; img.alt = ''; img.src = `/api/companies/${id}/logo?v=6&try=${n}`;
+    box.append(img);
+  }, [5, 12, 25, 60, 120][n - 1] * 1000);
 }, true);
 // A row's "⋯" menu opens upward when the window has no room below it.
 document.addEventListener('toggle', ev => {
@@ -123,7 +137,7 @@ export function tile(name, small, id) {
   let h = 0;
   for (const ch of n) h = (h * 31 + ch.codePointAt(0)) >>> 0;
   const init = n.split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w)).slice(0, 2).map(w => [...w][0].toUpperCase()).join('') || '?';
-  const pic = id && !noLogo.has(String(id)) ? html`<img class="lgi" data-co="${id}" src="/api/companies/${id}/logo?v=5" alt="" loading="lazy">` : '';
+  const pic = id && !noLogo.has(String(id)) ? html`<img class="lgi" data-co="${id}" src="/api/companies/${id}/logo?v=6" alt="" loading="lazy">` : '';
   return html`<div class="lg ${small === 'big' ? 'big' : small ? 'sm' : ''}" style="background:${TILE[h % TILE.length]}">${init}${pic}</div>`;
 }
 // An employer's name, always a way to its page.

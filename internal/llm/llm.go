@@ -32,6 +32,10 @@ type Request struct {
 	// Claude may use for this one request (Claude Code only), such as
 	// Indeed's job search. Nothing else is allowed alongside them.
 	Tools []string
+	// UserSettings lets Claude Code read the person's own settings for this
+	// request, where connectors can be switched on or off. Built-in tools
+	// stay off and only the tools named above are allowed.
+	UserSettings bool
 
 	// Input is the same material as Prompt in typed form. Real engines ignore
 	// it; the stand-in used by tests and the demo works from it.
@@ -53,6 +57,17 @@ type Response struct {
 	TokensOut    int64
 	TokensCached int64
 	Cost         float64 // US dollars; an estimate when the engine doesn't report one
+	// Connectors are the connectors Claude Code said it had for this request,
+	// with the state of each, when the request named connector tools. Nil
+	// when the engine didn't say.
+	Connectors []Connector
+}
+
+// Connector is one connector (MCP server) as Claude Code reported it.
+type Connector struct {
+	Name   string   // "claude.ai Indeed"
+	Status string   // "connected", "needs-auth", "failed", "pending", ...
+	Tools  []string // its tools' full names, when connected
 }
 
 // Engine is one way of reaching Claude.

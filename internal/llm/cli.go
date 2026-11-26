@@ -137,6 +137,9 @@ func (c *CLI) Do(ctx context.Context, req Request) (Response, error) {
 	runErr := cmd.Run()
 
 	out := Response{Model: model}
+	if len(req.Tools) > 0 {
+		out.Connectors = connectorsIn(stdout.Bytes())
+	}
 	var res cliResult
 	if jerr := json.Unmarshal(lastJSONLine(stdout.Bytes()), &res); jerr != nil {
 		if ctx.Err() != nil {
@@ -184,9 +187,16 @@ func cliArgs(model, sysFile string, req Request) []string {
 	}
 	args := []string{"-p", "--output-format", "json", "--model", model, "--effort", effort,
 		"--setting-sources", "", "--system-prompt-file", sysFile}
+	if req.UserSettings {
+		args[8] = "user"
+	}
 	if len(req.Images) > 0 {
 		args[2] = "stream-json"
 		args = append(args, "--input-format", "stream-json", "--verbose")
+	} else if len(req.Tools) > 0 {
+		// The stream's first line lists the connectors and their state.
+		args[2] = "stream-json"
+		args = append(args, "--verbose")
 	}
 	var allow []string
 	if req.Web {
@@ -208,6 +218,49 @@ func cliArgs(model, sysFile string, req Request) []string {
 		args = append(args, "--json-schema", string(shape))
 	}
 	return args
+}
+
+// connectorsIn reads the connectors and their state from the first line of
+// a stream ("system", "init").
+func connectorsIn(stream []byte) []Connector {
+	for _, line := range bytes.Split(stream, []byte("\n")) {
+		var ev struct {
+			Type    string   `json:"type"`
+			Subtype string   `json:"subtype"`
+			Tools   []string `json:"tools"`
+			Servers []struct {
+				Name   string `json:"name"`
+				Status string `json:"status"`
+			} `json:"mcp_servers"`
+		}
+		if json.Unmarshal(bytes.TrimSpace(line), &ev) != nil || ev.Type != "system" || ev.Subtype != "init" {
+			continue
+		}
+		out := []Connector{}
+		for _, s := range ev.Servers {
+			c := Connector{Name: s.Name, Status: s.Status}
+			prefix := "mcp__" + mcpName(s.Name) + "__"
+			for _, t := range ev.Tools {
+				if strings.HasPrefix(t, prefix) {
+					c.Tools = append(c.Tools, t)
+				}
+			}
+			out = append(out, c)
+		}
+		return out
+	}
+	return nil
+}
+
+// mcpName is a connector's name as it appears in its tools' names: every
+// character that isn't a letter, digit, "_" or "-" becomes "_".
+func mcpName(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			return r
+		}
+		return '_'
+	}, name)
 }
 
 // connectorTool is the shape of a connector's tool name, mcp__server__tool,

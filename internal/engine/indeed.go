@@ -37,7 +37,27 @@ const (
 const indeedAbout = "Indeed's own job search, run by Claude through the Indeed connector of your Claude account. Only when Job Hunt reaches Claude through your Claude subscription (Claude Code). Each title is one search, on full searches, at most 8 a day; it uses your plan."
 
 // indeedMissing is what to do when the connector isn't there.
-const indeedMissing = "Indeed isn't connected to your Claude account. In claude.ai, open Settings, Connectors, and connect Indeed. Job Hunt tries again on the next full search after that"
+const indeedMissing = "Indeed isn't connected to your Claude account. In claude.ai, open Settings, Connectors, and connect Indeed, then press Test here"
+
+// indeedWhy says, from what Claude Code itself reported about the Indeed
+// connector, what is wrong and how long to leave it.
+func indeedWhy(f brain.IndeedFound) (string, time.Duration) {
+	switch f.State {
+	case "needs-auth":
+		return "Indeed is on your Claude account but needs signing in again. In claude.ai, open Settings, Connectors, Indeed, and press Connect; then press Test here", time.Hour
+	case "failed", "pending":
+		return "The Indeed connector is on your Claude account but didn't answer just now (Indeed's side, or too many requests). Job Hunt tries again in an hour; Test tries now", time.Hour
+	case "connected":
+		return "The Indeed connector is there, but Claude couldn't use its search" + firstOf(map[bool]string{true: " (" + f.Note + ")"}[f.Note != ""], "") + ". Job Hunt tries again in an hour; Test tries now", time.Hour
+	case "none":
+		others := "no connectors at all"
+		if len(f.Seen) > 0 {
+			others = "only " + strings.Join(f.Seen, ", ")
+		}
+		return "Claude Code on this computer doesn't have the Indeed connector: it listed " + others + ". Connect Indeed in claude.ai (Settings, Connectors) on the same Claude account Claude Code is signed in to (Check sign-in, under Claude above), then press Test", time.Hour
+	}
+	return indeedMissing, time.Hour
+}
 
 // indeedReady says why the Indeed source can't run now, or "".
 func (e *Engine) indeedReady() string {
@@ -164,7 +184,8 @@ func (e *Engine) searchIndeed(ctx context.Context, p store.Profile, stats *RunSt
 			continue
 		}
 		if !found.Connected {
-			why, rest = indeedMissing, 12*time.Hour
+			why, rest = indeedWhy(found)
+			trace.Log("search", "indeed: connector %q; Claude Code listed %v; note %q", found.State, found.Seen, found.Note)
 			stats.missed(srcIndeed, why)
 			break
 		}
@@ -241,7 +262,8 @@ func (e *Engine) testIndeed(ctx context.Context) (int, error) {
 		trace.Log("search", "indeed test: %v", err)
 		why = "Indeed through Claude didn't answer: " + plainErr(err)
 	case !found.Connected:
-		why = indeedMissing
+		why, _ = indeedWhy(found)
+		trace.Log("search", "indeed test: connector %q; Claude Code listed %v; note %q", found.State, found.Seen, found.Note)
 	}
 	n := 0
 	if why == "" {

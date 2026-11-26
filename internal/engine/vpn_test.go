@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"jobhunt/internal/brain"
 	"jobhunt/internal/sources"
 )
 
@@ -120,6 +121,16 @@ func TestEachSourceThroughTheVPN(t *testing.T) {
 	for _, r := range got[:2] {
 		if !r.OK && r.Note == "" {
 			t.Errorf("%s failed with nothing said", r.ID)
+		}
+	}
+}
+
+// What is wrong with Indeed is said from Claude Code's own report.
+func TestIndeedSaysWhatIsActuallyWrong(t *testing.T) {
+	for state, want := range map[string]string{"needs-auth": "signing in again", "failed": "didn't answer just now", "none": "doesn't have the Indeed connector", "": "isn't connected"} {
+		why, _ := indeedWhy(brain.IndeedFound{State: state, Seen: []string{"claude.ai Gmail (connected)"}})
+		if !strings.Contains(why, want) {
+			t.Errorf("%q: %s", state, why)
 		}
 	}
 }

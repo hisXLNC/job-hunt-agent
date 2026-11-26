@@ -1003,7 +1003,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/companies/{id}/logo", func(w http.ResponseWriter, r *http.Request) {
 		b, kind, ok := e.Logo(r.Context(), idOf(r))
 		if !ok {
-			w.Header().Set("Cache-Control", "private, max-age=300")
+			// Only a settled "none" may be remembered by the browser; a look
+			// still running or unanswered must be asked about again.
+			if e.LogoSettled(idOf(r)) {
+				w.Header().Set("Cache-Control", "private, max-age=600")
+			} else {
+				w.Header().Set("Cache-Control", "no-store")
+			}
 			http.Error(w, "no picture", http.StatusNotFound)
 			return
 		}
