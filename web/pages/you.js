@@ -408,6 +408,18 @@ function otherAI(d) {
 // The searches that take a key, and job-alert e-mails. A saved key is never
 // sent back to this page: it only knows whether one is there.
 const SRC_STATE = { working: ['good', 'Working'], problem: ['crit', 'Problem'], off: ['', 'Off'], none: ['', 'Not set up'], waiting: ['blue', 'Not tried yet'] };
+// Adzuna through a VPN: a WireGuard file from the person's VPN account.
+// Only Adzuna's requests go through it. The file's key never comes back here.
+function adzunaVPN(s) {
+  return html`<div class="col" style="gap:6px;background:var(--bg2);border-radius:8px;padding:10px 12px">
+    <div class="row wrap" style="gap:10px"><b class="s grow">Through a VPN</b>
+      ${s.vpn ? html`<span class="chip good">Through ${s.vpn}</span>` : html`<span class="chip">Not used</span>`}
+      <label class="btn sm" title="A WireGuard configuration file from your VPN account">${s.vpn ? 'Choose another file' : 'Choose a WireGuard file'}<input type="file" accept=".conf,text/plain" hidden data-on="change" data-act="adzunavpn"></label>
+      ${s.vpn ? html`<button type="button" class="btn sm ghost" data-act="adzunanovpn" data-confirm="Stop sending Adzuna's requests through ${s.vpn}?">Stop using it</button>` : ''}</div>
+    <p class="xs m">If Adzuna turns away the country you are in, its requests can go through a VPN server in a country it serves, inside Job Hunt only: the rest of Job Hunt and your computer stay on your own connection, and the VPN app doesn't need to be open.
+      For Proton VPN: sign in at <a href="https://account.protonvpn.com/downloads" target="_blank" rel="noopener noreferrer">account.protonvpn.com, Downloads</a>, under WireGuard configuration give it a name, choose Windows, pick a server in the country you search in, Create, then Download, and choose that file here. The free plan gives these files too, but may not let you choose the country; the test that runs when you choose the file tells you whether Adzuna answers.</p></div>`;
+}
+
 function moreSources(d) {
   const saved = s => s.has_key ? 'Saved. Paste to replace.' : '';
   const row = s => {
@@ -426,7 +438,8 @@ function moreSources(d) {
           : html`<label class="field" style="max-width:340px">Key<input type="password" name="key" placeholder="${saved(s)}" autocomplete="off"></label>`}
         <div class="row wrap" style="gap:14px"><label class="row s" style="font-weight:500"><input type="checkbox" name="on" ${s.on ? 'checked' : ''}> Search ${s.name}</label>
           <label class="row s" style="gap:6px">At most <input type="number" name="limit" value="${s.limit}" min="1" max="5000" style="width:84px;height:30px" aria-label="Most requests a day to ${s.name}"> requests a day</label></div>
-        <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>`}
+        <p class="xs m">${s.used} used today. Asked on full searches${s.fast ? ', and now and then on quick checks' : ''}. Keep the number inside what your plan allows.</p>
+        ${s.id === 'adzuna' ? adzunaVPN(s) : ''}`}
       <div class="row"><button class="btn sm p" data-busy="${alerts || indeed ? 'Saving…' : 'Trying the key…'}">Save</button>
         ${indeed && s.state !== 'none' ? html`<button type="button" class="btn sm" data-act="testsource" data-id="indeed" data-busy="Asking Indeed through Claude, about a minute…" title="Runs one Indeed search now for your first title, through your Claude account, and says what came back. It counts as one of today's 8.">Test</button>` : ''}
         ${!alerts && !indeed && s.has_key ? html`<button type="button" class="btn sm" data-act="testsource" data-id="${s.id}" data-busy="${s.id === 'apify' ? 'Searching LinkedIn, about a minute…' : 'Asking…'}" title="${s.id === 'apify' ? 'Runs one real LinkedIn search for 10 postings through your scraper (about a cent) and says what came back.' : 'Runs one small search now and says what came back.'}">Test</button><button type="button" class="btn sm ghost" data-act="delsource" data-id="${s.id}" data-confirm="Remove the key for ${s.name}? Roles already found there stay.">Remove the key</button>` : ''}
@@ -805,6 +818,14 @@ export default {
     async testphone() { await post('phone/test'); toast('Sent. It should arrive on your phone in a few seconds.'); return false; },
     // A new key is tried with one small search first; one the service refuses is not saved.
     savesource: ({ f, d }) => put(`sources/${d.id}`, d.id === 'alerts' || d.id === 'indeed' ? { on: !!f.on } : { app_id: (f.app_id || '').trim(), key: (f.key || '').trim(), from: f.from || '', on: !!f.on, limit: +f.limit || 0 }).then(r => toast(r?.warning || ((f.key || '').trim() ? 'Tried and saved. The key works.' : 'Saved'))),
+    async adzunavpn({ el }) {
+      const file = el.files[0]; if (!file) return false;
+      if (file.size > 16384) { toast('That file is too large to be a WireGuard configuration'); return false; }
+      toast('Connecting Adzuna through the VPN…');
+      const r = await put('sources/adzuna/vpn', { file: await file.text() });
+      toast(r.message);
+    },
+    adzunanovpn: () => del('sources/adzuna/vpn').then(() => toast('Adzuna goes over your own connection again')),
     async testsource({ d }) { const r = await post(`sources/${d.id}/test`); toast(r.message); },
     delsource: ({ d }) => del(`sources/${d.id}`).then(() => toast('Key removed')),
     scanrecruiters: () => post('mail/recruiters').then(() => toast('Looking through your mail for recruiters. This takes a few minutes.')),

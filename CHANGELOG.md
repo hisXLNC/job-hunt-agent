@@ -2,6 +2,16 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.55
+
+- **Adzuna through a VPN.** If Adzuna turns away the country you are in, give Job Hunt a WireGuard
+  file from your VPN account (Proton VPN: account.protonvpn.com, Downloads, WireGuard
+  configuration) under Settings, Connections, More job sources, Adzuna, "Through a VPN". Only
+  Adzuna's requests go through that server, from inside Job Hunt: the rest of Job Hunt and your
+  computer stay on your own connection, and the VPN app doesn't need to be open. Choosing the file
+  runs one Adzuna search straight away to show whether it answers. The file's private key stays
+  in Job Hunt's data file and is sent to no one.
+
 ## 26.11.54
 
 - **LinkedIn asks to slow down far less.** Every LinkedIn request in Job Hunt now waits 3 to 5

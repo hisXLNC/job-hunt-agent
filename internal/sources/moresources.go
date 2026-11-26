@@ -200,7 +200,7 @@ func (c *Client) findAdzuna(ctx context.Context, k Keys, q Query) ([]Posting, er
 	v.Set("app_id", strings.TrimSpace(k.AdzunaID))
 	v.Set("app_key", strings.TrimSpace(k.AdzunaKey))
 	var res adzunaAnswer
-	if err := c.keyedJSON(ctx, http.MethodGet, c.base(kindAdzuna, adzunaHost)+"/v1/api/jobs/"+cc+"/search/1?"+v.Encode(), shown, nil, nil, &res); err != nil {
+	if err := c.keyedJSON(withVia(ctx, kindAdzuna), http.MethodGet, c.base(kindAdzuna, adzunaHost)+"/v1/api/jobs/"+cc+"/search/1?"+v.Encode(), shown, nil, nil, &res); err != nil {
 		return nil, err
 	}
 	var out []Posting

@@ -1730,6 +1730,43 @@ func (s *Server) Handler() http.Handler {
 		}
 		return nil, nil
 	})
+	// A WireGuard file (from Proton VPN or another) that Adzuna's requests,
+	// and only those, go through. The file holds a private key: it goes in
+	// and never comes out; the pages are told the server's name.
+	h("PUT /api/sources/adzuna/vpn", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			File string `json:"file"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(in.File) == "" {
+			return nil, bad("Choose the WireGuard file you downloaded from your VPN account.")
+		}
+		name, err := e.SetAdzunaVPN(in.File)
+		if err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		out := map[string]any{"server": name, "message": "Adzuna now goes through " + name + ". Save Adzuna's key, then press Test."}
+		for _, m := range e.MoreSources() {
+			if m.ID == "adzuna" && m.HasKey {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				n, terr := e.TestSource(ctx, "adzuna")
+				switch {
+				case terr != nil:
+					out["message"] = "Saved, but the test didn't work: " + sentence(terr.Error())
+				default:
+					out["message"] = fmt.Sprintf("Adzuna answered through %s: %d postings for your first title.", name, n)
+				}
+			}
+		}
+		return out, nil
+	})
+	h("DELETE /api/sources/adzuna/vpn", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		_, err := e.SetAdzunaVPN("")
+		return nil, err
+	})
 	// Every posting one kind of source gave in the last search that asked it,
 	// with what was decided about each.
 	h("GET /api/sources/{id}/postings", func(w http.ResponseWriter, r *http.Request) (any, error) {

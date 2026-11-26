@@ -64,6 +64,7 @@ type Engine struct {
 	other   *llm.OpenAI // the other AI, for the saved setting (otherai.go)
 
 	mu      sync.Mutex
+	vpn     vpnState
 	busy    map[string]bool // background jobs running now, by name
 	jobs    map[string]*task
 	held    map[string]time.Time // kinds of work the person stopped, and until when
@@ -114,6 +115,7 @@ type LLMSettings struct {
 func New(s *store.Store, dir string) *Engine {
 	e := &Engine{S: s, Dir: dir, Now: time.Now, Src: &sources.Client{}, busy: map[string]bool{}, jobs: map[string]*task{}, held: map[string]time.Time{}, preps: map[int64]bool{}}
 	e.ctx, e.stopAll = context.WithCancel(context.Background())
+	e.Src.Via = e.via
 	e.meter = &llm.Metered{
 		Pick:  e.pickEngine,
 		Other: e.otherFor,

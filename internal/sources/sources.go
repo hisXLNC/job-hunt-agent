@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -118,6 +119,11 @@ type Client struct {
 	// shows. It is used for pages that turn a plain request away or build
 	// their list with scripts.
 	Render func(ctx context.Context, url string) (string, error)
+
+	// Via, when set, gives a way to connect that one kind of source's
+	// requests go through instead of the computer's own network (a VPN
+	// tunnel for Adzuna), or nil for the usual way.
+	Via func(kind string) func(ctx context.Context, network, addr string) (net.Conn, error)
 
 	httpOnce sync.Once
 	http     *http.Client
@@ -342,7 +348,13 @@ func (c *Client) do(ctx context.Context, method, rawURL, accept string, body []b
 			return nil, nil, err
 		}
 	}
-	resp, err := c.httpClient().Do(req)
+	hc := c.httpClient()
+	if kind, _ := ctx.Value(viaKey{}).(string); kind != "" && c.Via != nil {
+		if dial := c.Via(kind); dial != nil {
+			hc = c.through(dial)
+		}
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		// The error names the address asked; one that holds a key is left out.
 		var ue *url.Error
@@ -368,6 +380,23 @@ func (c *Client) do(ctx context.Context, method, rawURL, accept string, body []b
 		return nil, nil, fmt.Errorf("sources: answer from %s is larger than %d MB", rawURL, maxBody>>20)
 	}
 	return data, resp.Request.URL, nil
+}
+
+// viaKey marks a request with the kind of source it is for, so that a
+// tunnel set for that kind carries it.
+type viaKey struct{}
+
+func withVia(ctx context.Context, kind string) context.Context {
+	return context.WithValue(ctx, viaKey{}, kind)
+}
+
+// through is a client whose connections are made by dial. Its connections
+// are not kept between requests: the tunnel closes when it is quiet.
+func (c *Client) through(dial func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
+	base := c.httpClient()
+	tr := &http.Transport{DialContext: dial, ForceAttemptHTTP2: true, DisableKeepAlives: true,
+		TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 30 * time.Second}
+	return &http.Client{Timeout: base.Timeout + 20*time.Second, Transport: traced{tr}, CheckRedirect: base.CheckRedirect}
 }
 
 func (c *Client) getJSON(ctx context.Context, rawURL string, v any) error {

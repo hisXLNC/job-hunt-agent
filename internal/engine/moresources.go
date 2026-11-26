@@ -12,6 +12,7 @@ import (
 	"jobhunt/internal/sources"
 	"jobhunt/internal/store"
 	"jobhunt/internal/trace"
+	"jobhunt/internal/vpn"
 )
 
 // More places to find jobs: the three job searches that take a key the
@@ -37,6 +38,7 @@ type SourceKeys struct {
 	AdzunaID    string         `json:"adzuna_id,omitempty"`
 	AdzunaKey   string         `json:"adzuna_key,omitempty"`
 	Jooble      string         `json:"jooble,omitempty"`
+	AdzunaVPN   string         `json:"adzuna_vpn,omitempty"` // a WireGuard file Adzuna's requests go through (vpn.go)
 	JSearch     string         `json:"jsearch,omitempty"`
 	JSearchFrom string         `json:"jsearch_from,omitempty"` // "rapidapi" or "openwebninja"
 	Apify       string         `json:"apify,omitempty"`        // an Apify API token
@@ -342,11 +344,15 @@ func keyedPlain(id string, err error) (string, time.Duration) {
 	case errors.Is(err, sources.ErrOutOfRequests):
 		return name + " has no requests left for now on this key's plan. Job Hunt will try again later", 6 * time.Hour
 	case errors.Is(err, sources.ErrBlockedHere):
-		return name + " turns away requests from the country you are in now, whatever the key. Job Hunt tries again every three days; once you are in a country it serves, it works by itself. The other sources find the same postings meanwhile", 72 * time.Hour
+		return name + " turns away requests from the country you are in now, whatever the key. Give it a VPN server in a country it serves (Through a VPN, below its key), or Job Hunt tries again every three days. The other sources find the same postings meanwhile", 72 * time.Hour
 	case errors.Is(err, sources.ErrNoCountry):
 		return name + " has no listings for your country", 24 * time.Hour
 	case errors.Is(err, sources.ErrNoKey):
 		return name + " has no key saved", 0
+	}
+	var ve *vpn.Error
+	if errors.As(err, &ve) {
+		return name + "'s VPN server " + ve.Server + " didn't connect (" + ve.Why + "). Check that the WireGuard file is still listed in your VPN account, or download a new one and choose it again", time.Hour
 	}
 	var he *sources.HTTPError
 	if errors.As(err, &he) || errors.Is(err, context.DeadlineExceeded) {
@@ -578,6 +584,7 @@ type MoreSource struct {
 	Limit  int    `json:"limit,omitempty"` // requests a day
 	Used   int    `json:"used"`            // made today
 	Fast   bool   `json:"fast,omitempty"`  // also asked on quick checks
+	VPN    string `json:"vpn,omitempty"`   // adzuna: the VPN server its requests go through
 }
 
 // MoreSources lists the keyed searches and job-alert e-mails for the
@@ -596,6 +603,9 @@ func (e *Engine) MoreSources() []MoreSource {
 		}
 		if id == "apify" {
 			m.Actor = k.ApifyActor
+		}
+		if id == "adzuna" {
+			m.VPN = adzunaVPNName(k)
 		}
 		if id == "jsearch" {
 			m.From = firstOf(k.JSearchFrom, sources.FromRapidAPI)
