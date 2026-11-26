@@ -17,7 +17,7 @@ import (
 const suggestHost = "https://autocomplete.clearbit.com"
 
 var (
-	suffixWords   = map[string]bool{"inc": true, "incorporated": true, "ltd": true, "limited": true, "llc": true, "llp": true, "lp": true, "corp": true, "corporation": true, "co": true, "company": true, "plc": true, "ulc": true, "gmbh": true, "sa": true, "ag": true, "the": true, "international": true, "group": true}
+	suffixWords  = map[string]bool{"inc": true, "incorporated": true, "ltd": true, "limited": true, "llc": true, "llp": true, "lp": true, "corp": true, "corporation": true, "co": true, "company": true, "plc": true, "ulc": true, "gmbh": true, "sa": true, "ag": true, "the": true, "international": true, "group": true}
 	countryWords = map[string]bool{"canada": true, "usa": true, "us": true, "uk": true, "america": true, "north": true, "ca": true}
 	// Domains that name a company's own site; a foreign country's domain or a
 	// jobs-only one is more often someone else's.
