@@ -3,6 +3,9 @@ package engine
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"image"
 	"image/color"
 	"image/png"
@@ -64,5 +67,42 @@ func TestEmployerLogoFromTheJobSource(t *testing.T) {
 		if sources.LogoURL(bad) != "" {
 			t.Errorf("kept %q", bad)
 		}
+	}
+}
+
+// An employer with no website on record, whose own site turns plain
+// requests away: its website is found from its name and the icon comes
+// from Google's copy.
+func TestEmployerLogoFromItsNameWhenTheSiteRefuses(t *testing.T) {
+	e, _ := newEngine(t)
+	var pic bytes.Buffer
+	png.Encode(&pic, image.NewRGBA(image.Rect(0, 0, 40, 40)))
+	asked := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked[r.URL.Path]++
+		switch r.URL.Path {
+		case "/v1/companies/suggest":
+			if r.URL.Query().Get("query") != "td" {
+				w.Write([]byte(`[]`))
+				return
+			}
+			w.Write([]byte(`[{"name":"TD Ameritrade","domain":"tdameritrade.com"},{"name":"TD","domain":"td.com"}]`))
+		case "/s2/favicons":
+			w.Write(pic.Bytes())
+		default:
+			http.Error(w, "Access denied", http.StatusForbidden) // the site itself
+		}
+	}))
+	defer srv.Close()
+	e.Src.Base["logo"], e.Src.Base["suggest"] = srv.URL, srv.URL
+	c, _, _ := e.S.UpsertCompany(store.Company{Name: "TD"})
+	if _, kind, ok := e.Logo(context.Background(), c.ID); !ok || kind != "image/png" {
+		t.Fatalf("no logo: %v %q (asked %v)", ok, kind, asked)
+	}
+	// The website found is kept: the name isn't asked about again.
+	os.Remove(filepath.Join(e.Dir, "logos3", fmt.Sprint(c.ID)))
+	e.Logo(context.Background(), c.ID)
+	if asked["/v1/companies/suggest"] != 1 {
+		t.Fatalf("asked about the name %d times", asked["/v1/companies/suggest"])
 	}
 }

@@ -379,7 +379,7 @@ function connections(d, route) {
     ['sources', 'More job sources', setUp.length ? [setUp.length === keyed.length ? 'good' : 'warn', `${setUp.length} of ${keyed.length}`] : ['', 'None'],
       keyed.length ? (setUp.length ? `${setUp.map(x => x.name).join(', ')} set up` + (keyed.length > setUp.length ? ` · ${keyed.filter(x => !setUp.includes(x)).map(x => x.name).join(', ')} need${keyed.length - setUp.length === 1 ? 's' : ''} a key` : '') : `${keyed.map(x => x.name).join(', ')}: each needs a key`) : '', moreSources(d)],
     ['vpn', 'VPN for blocked sources', d.vpn?.server ? ['good', 'On'] : ['', 'Off'],
-      d.vpn?.server ? `${d.vpn.server} · ${d.vpn.through.length ? d.vpn.through.map(id => d.vpn.choices.find(c => c.id === id)?.name || id).join(', ') : 'no source goes through it yet'}` : 'For job sources that turn away the country you are in, such as Adzuna', vpnCard(d)],
+      d.vpn?.server ? `${d.vpn.server} · ${d.vpn.through.length ? vpnSum(d.vpn) : 'no source goes through it yet'}` : 'For job sources that turn away the country you are in, such as Adzuna', vpnCard(d)],
     ['schedule', 'Search times', ['good', 'On'], `Full searches at ${sc.full.length ? sc.full.map(hhmm).join(', ') : 'no set times'} · quick checks every ${sc.fast_minutes || 20} minutes`, schedule(d)],
     ['tidy', 'Ratings, old roles and budget', ss.min_rating || ss.clear_days || ss.budget ? ['blue', 'On'] : ['', 'Off'], tidySum(d), tidyCard(d)],
     ['desk', 'On this computer', ['good', 'On'], [d.startup?.on ? 'Starts when you sign in' : 'Does not start by itself', k.notify ? 'Windows notifications on' : 'no Windows notifications', k.morning >= 0 ? `morning summary at ${k.morning}:00` : 'no morning summary'].join(' · '), thisComputer(d)],
@@ -411,6 +411,15 @@ function otherAI(d) {
 // The searches that take a key, and job-alert e-mails. A saved key is never
 // sent back to this page: it only knows whether one is there.
 const SRC_STATE = { working: ['good', 'Working'], problem: ['crit', 'Problem'], off: ['', 'Off'], none: ['', 'Not set up'], waiting: ['blue', 'Not tried yet'] };
+let vpnTests = {};
+// "7 sources: 4 working, 2 with a problem, 1 not run yet"
+function vpnSum(v) {
+  const n = { working: 0, problem: 0, other: 0 };
+  for (const id of v.through) { const st = (v.states || {})[id]?.state; n[st === 'working' ? 'working' : st === 'problem' ? 'problem' : 'other']++; }
+  return `${v.through.length} source${v.through.length === 1 ? '' : 's'}: ` + [n.working && `${n.working} working`, n.problem && `${n.problem} with a problem`, n.other && `${n.other} not run yet or off`].filter(Boolean).join(', ');
+}
+const VPN_STATE = { working: ['good', 'Working'], problem: ['warn', 'Problem'], off: ['', 'Off'], none: ['', 'Not set up'], waiting: ['blue', 'Not run yet'] };
+
 // A VPN for the sources that turn away the person's country: one WireGuard
 // file, and a switch for each source. The file's key never comes back here.
 function vpnCard(d) {
@@ -421,8 +430,18 @@ function vpnCard(d) {
       <label class="btn sm ${v.server ? '' : 'p'}" title="A WireGuard configuration file from your VPN account">${v.server ? 'Choose another file' : 'Choose a WireGuard file'}<input type="file" accept=".conf,text/plain" hidden data-on="change" data-act="vpnfile"></label>
       ${v.server ? html`<button type="button" class="btn sm" data-act="vpncheck" data-busy="Connecting…">Check</button><button type="button" class="btn sm ghost" data-act="vpnoff" data-confirm="Remove the VPN file? Every source goes over your own connection again.">Remove</button>` : ''}</div>
     <p class="xs m">For Proton VPN: sign in at <a href="https://account.protonvpn.com/downloads" target="_blank" rel="noopener noreferrer">account.protonvpn.com, Downloads</a>. Under WireGuard configuration give it a name, choose Windows, pick a server in the country you search in, press Create, then Download, and choose that file here. The free plan gives these files too, but may not let you choose the country. Any other VPN's WireGuard file works the same way. The file's private key stays in Job Hunt's data file on this computer.</p>
-    <div class="col" style="gap:6px"><b class="s">Through the VPN</b>
-      ${v.choices.map(c => html`<label class="row s"><input type="checkbox" data-on="change" data-act="vpnthrough" data-id="${c.id}" ${v.through.includes(c.id) ? 'checked' : ''}> ${c.name}</label>`)}</div>
+    <div class="row" style="gap:10px"><b class="s grow">Through the VPN</b>${v.server && v.through.length ? html`<button type="button" class="btn sm" data-act="vpntest" data-busy="Trying each source, up to a minute…" title="One small search for your first title on each ticked source, through the VPN, all at once">Test each</button>` : ''}</div>
+    <table class="tbl"><thead><tr><th style="width:36px"></th><th>Source</th><th style="width:120px">In the searches</th><th style="width:170px">Last looked</th></tr></thead><tbody>
+      ${v.choices.map(c => {
+        const st = (v.states || {})[c.id] || {}, [tone, word] = VPN_STATE[st.state] || ['', 'Not run yet'], t = vpnTests[c.id];
+        const skipped = t && !t.ok && /^(Not tried|No key)/.test(t.note);
+        return html`<tr><td><input type="checkbox" aria-label="Send ${c.name} through the VPN" data-on="change" data-act="vpnthrough" data-id="${c.id}" ${v.through.includes(c.id) ? 'checked' : ''}></td>
+          <td><b class="s">${c.name}</b>
+            ${st.state === 'problem' && st.note ? html`<div class="xs" style="color:var(--crit)">${st.note}</div>` : ''}
+            ${t ? html`<div class="xs" style="margin-top:3px">Test just now: ${t.ok ? html`<b style="color:var(--good)">working</b>, ${t.note || `${t.found} found`}` : skipped ? html`<span class="m">skipped. ${t.note}</span>` : html`<b style="color:var(--crit)">not working</b>. ${t.note}`}</div>` : ''}</td>
+          <td><span class="chip ${tone}">${word}</span></td>
+          <td class="s m">${st.at ? html`${ago(st.at)} · <b style="color:var(--ink)">${st.seen}</b> found, ${st.new} new` : '–'}</td></tr>`;
+      })}</tbody></table>
     <p class="xs m">LinkedIn answers some VPN servers more slowly or asks them to slow down sooner; switch it on only if LinkedIn doesn't work from where you are.</p></div>`;
 }
 
@@ -833,6 +852,12 @@ export default {
     async vpncheck() { const r = await post('vpn/check'); toast(r.message); return false; },
     vpnoff: () => del('vpn').then(() => toast('Every source goes over your own connection again')),
     vpnthrough: ({ d, value }) => put(`vpn/${d.id}`, { on: value }),
+    async vpntest() {
+      const r = await post('vpn/test');
+      vpnTests = Object.fromEntries((r.results || []).map(x => [x.id, x]));
+      const ok = r.results.filter(x => x.ok).length, bad = r.results.filter(x => !x.ok && !/^(Not tried|No key)/.test(x.note)).length;
+      toast(`${ok} working${bad ? `, ${bad} not working` : ''}`);
+    },
     async testsource({ d }) { const r = await post(`sources/${d.id}/test`); toast(r.message); },
     delsource: ({ d }) => del(`sources/${d.id}`).then(() => toast('Key removed')),
     scanrecruiters: () => post('mail/recruiters').then(() => toast('Looking through your mail for recruiters. This takes a few minutes.')),

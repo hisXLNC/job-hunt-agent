@@ -3,9 +3,11 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"jobhunt/internal/sources"
 	"jobhunt/internal/vpn"
@@ -75,6 +77,8 @@ type VPNView struct {
 	Server  string              `json:"server,omitempty"` // "" = no file
 	Through []string            `json:"through"`
 	Choices []map[string]string `json:"choices"`
+	// States is how each source fared in the searches, as Radar shows it.
+	States map[string]SourceRow `json:"states"`
 }
 
 // VPN says which server, if any, and which sources go through it.
@@ -89,6 +93,12 @@ func (e *Engine) VPN() VPNView {
 			v.Server = c.Name()
 		} else {
 			v.Server = "a VPN file that can't be read"
+		}
+	}
+	v.States = map[string]SourceRow{}
+	for _, r := range e.Sources() {
+		if _, ok := vpnChoice(r.ID); ok {
+			v.States[r.ID] = r
 		}
 	}
 	for _, c := range vpnChoices {
@@ -228,4 +238,103 @@ func (e *Engine) CheckVPN(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+// VPNTest is what one source did when tried through the VPN.
+type VPNTest struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	OK    bool   `json:"ok"`
+	Found int    `json:"found"`
+	Note  string `json:"note,omitempty"`
+}
+
+// TestThrough runs one small search for the person's first title on each
+// source that goes through the VPN, all at once, and says what each did.
+// LinkedIn through Apify is left out: each run of the scraper costs.
+func (e *Engine) TestThrough(ctx context.Context) []VPNTest {
+	k := e.sourceKeys()
+	p := e.S.Profile()
+	title := "manager"
+	if all := p.Titles.All(); len(all) > 0 {
+		title = all[0].Title
+	}
+	at := searchedPlaces(p)[0]
+	out := make([]VPNTest, 0, len(k.Through))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, c := range vpnChoices {
+		if !slices.Contains(k.Through, c.ID) {
+			continue
+		}
+		wg.Add(1)
+		go func(id, name string) {
+			defer wg.Done()
+			r := VPNTest{ID: id, Name: name}
+			cctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+			defer cancel()
+			var n int
+			var err error
+			q := sources.Query{Keywords: title, Location: at.Loc, Province: at.Province, Country: countryCode(p.Country), Within: 7 * 24 * time.Hour, Max: 10}
+			switch id {
+			case "apify":
+				r.Note = "Not tried here: each run of the scraper costs. Use Test under More job sources"
+			case "linkedin":
+				var posts []sources.Posting
+				posts, err = e.Src.Search(cctx, q)
+				n = len(posts)
+			case "jobbank", "freehire":
+				var posts []sources.Posting
+				posts, err = e.Src.Find(cctx, id, q)
+				n = len(posts)
+			default:
+				if !k.forSources().Has(id) {
+					r.Note = "No key saved: add one under More job sources"
+					break
+				}
+				n, err = e.TestSource(cctx, id)
+			}
+			switch {
+			case r.Note != "":
+			case err != nil:
+				r.Note = testPlain(name, err)
+			default:
+				r.OK, r.Found = true, n
+				if n == 0 {
+					r.Note = "Answered, with nothing for your first title this past week"
+				}
+			}
+			mu.Lock()
+			out = append(out, r)
+			mu.Unlock()
+		}(c.ID, c.Name)
+	}
+	wg.Wait()
+	slices.SortFunc(out, func(a, b VPNTest) int { return choiceIndex(a.ID) - choiceIndex(b.ID) })
+	return out
+}
+
+func choiceIndex(id string) int {
+	return slices.IndexFunc(vpnChoices, func(c struct{ ID, Name string }) bool { return c.ID == id })
+}
+
+// testPlain says in plain words why a source didn't answer.
+func testPlain(name string, err error) string {
+	var ve *vpn.Error
+	var he *sources.HTTPError
+	switch {
+	case errors.As(err, &ve):
+		return "The VPN server didn't connect (" + ve.Why + ")"
+	case errors.Is(err, sources.ErrBlockedHere):
+		return name + " turns away the VPN server's country"
+	case errors.As(err, &he) && (he.Status == 429 || he.Status == 999):
+		return name + " asked to slow down. Job Hunt waits before asking it again"
+	case errors.As(err, &he) && he.Status == 403:
+		return name + " turned the request away (403). It may not accept VPN servers: untick it"
+	case errors.As(err, &he):
+		return fmt.Sprintf("%s answered with an error (%d)", name, he.Status)
+	case errors.Is(err, context.DeadlineExceeded):
+		return name + " didn't answer in time"
+	}
+	return strings.TrimPrefix(err.Error(), "sources: ")
 }

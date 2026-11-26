@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -95,5 +96,30 @@ func TestOldAdzunaVPNCarriesOn(t *testing.T) {
 	e.S.Set(sourceKeysKey, map[string]any{"adzuna_vpn": file})
 	if e.via("adzuna") == nil || e.VPN().Server != "CA#99" {
 		t.Fatal("the earlier Adzuna VPN was lost")
+	}
+}
+
+// Test each: one result per ticked source, in the shown order; the costly
+// scraper and a source with no key are skipped, not tried.
+func TestEachSourceThroughTheVPN(t *testing.T) {
+	e, _ := newEngine(t)
+	for _, id := range []string{"apify", "adzuna", "linkedin", "jobbank"} {
+		e.SetThrough(id, true)
+	}
+	got := e.TestThrough(context.Background())
+	var ids []string
+	for _, r := range got {
+		ids = append(ids, r.ID)
+	}
+	if strings.Join(ids, ",") != "linkedin,jobbank,adzuna,apify" {
+		t.Fatalf("order %v", ids)
+	}
+	if got[2].OK || !strings.HasPrefix(got[2].Note, "No key") || got[3].OK || !strings.HasPrefix(got[3].Note, "Not tried") {
+		t.Fatalf("skips: %+v", got[2:])
+	}
+	for _, r := range got[:2] {
+		if !r.OK && r.Note == "" {
+			t.Errorf("%s failed with nothing said", r.ID)
+		}
 	}
 }

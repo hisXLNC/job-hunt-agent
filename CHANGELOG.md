@@ -2,6 +2,19 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.57
+
+- **Logos for far more employers.** Job Hunt now finds an employer's website from its name (TD is
+  td.com, PwC Canada is pwc.com, Affirm is affirm.com), and when the site turns Job Hunt away it
+  takes the icon from Google's copy instead. A name is matched exactly, so an employer is never
+  given someone else's logo; one with no website to be found keeps its letters. Employers marked
+  "no logo" before are looked at again.
+- **Which sources work, at a glance.** VPN for blocked sources now lists every source with how it
+  did in the searches (Working, Problem and why, Not run yet, Not set up), when it was last asked
+  and how many postings it gave. **Test each** runs one small search on every ticked source
+  through the VPN, all at once, and says under each whether it worked. The summary line counts
+  them: "7 sources: 4 working, 2 with a problem, 1 not run yet".
+
 ## 26.11.56
 
 - **A VPN for any source that turns away your country**, not just Adzuna: Settings, Connections,

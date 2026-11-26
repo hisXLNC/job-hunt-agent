@@ -236,6 +236,7 @@ var logoSlots = make(chan struct{}, 3)
 func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, ok bool) {
 	dir := filepath.Join(e.Dir, "logos3") // "logos" and "logos2" held some pictures of other sites taken for employers
 	file := filepath.Join(dir, fmt.Sprint(id))
+	e.forgetNoLogos(dir)
 	if b, err := os.ReadFile(file); err == nil {
 		if len(b) == 0 {
 			if st, err := os.Stat(file); err == nil && time.Since(st.ModTime()) < 7*24*time.Hour {
@@ -274,7 +275,7 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	sites, guesses := e.employerSites(id)
 	shown := e.shownLogo(id)
 	os.MkdirAll(dir, 0o700)
-	if len(sites)+len(guesses) == 0 && shown == "" {
+	if strings.TrimSpace(e.companyName(id)) == "" && len(sites)+len(guesses) == 0 && shown == "" {
 		os.WriteFile(file, nil, 0o600)
 		return nil, "", false
 	}
@@ -320,6 +321,20 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 		if found = try(s, ""); found {
 			from = s
 			break
+		}
+	}
+	// Then the website found from the name (Clearbit's company suggestions),
+	// whose icon comes from the site or from Google's copy of it.
+	if !found && ctx.Err() == nil {
+		if d := e.foundDomain(ctx, id, name); d != "" {
+			cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			b, kind, err = e.Src.IconOf(cctx, d)
+			cancel()
+			if found = err == nil; found {
+				from = d + " (found from the name)"
+			} else {
+				trace.Log("fetch", "no picture for employer %d from %s: %v", id, d, err)
+			}
 		}
 	}
 	for _, s := range guesses {
@@ -407,4 +422,60 @@ func (e *Engine) noteEmployerLooks(id int64, post sources.Posting) {
 			e.S.SaveCompany(c)
 		}
 	}
+}
+
+func (e *Engine) companyName(id int64) string {
+	if c, err := e.S.Company(id); err == nil {
+		return c.Name
+	}
+	return ""
+}
+
+// foundDomain is the employer's website as found from its name, looked up
+// once and kept ("-" kept when none was found, asked again after a month).
+func (e *Engine) foundDomain(ctx context.Context, id int64, name string) string {
+	key := fmt.Sprintf("logo_domain:%d", id)
+	var kept struct {
+		Domain string `json:"domain"`
+		At     int64  `json:"at"`
+	}
+	if ok, _ := e.S.Get(key, &kept); ok && kept.At > 0 && (kept.Domain != "-" || time.Since(time.Unix(kept.At, 0)) < 30*24*time.Hour) {
+		if kept.Domain == "-" {
+			return ""
+		}
+		return kept.Domain
+	}
+	if strings.TrimSpace(name) == "" {
+		return ""
+	}
+	cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	d, err := e.Src.FindDomain(cctx, name)
+	cancel()
+	if err != nil && !strings.Contains(err.Error(), "no website found") {
+		trace.Log("fetch", "no website found for employer %d: %v", id, err)
+		return "" // asked again next time
+	}
+	kept.Domain, kept.At = firstOf(d, "-"), time.Now().Unix()
+	e.S.Set(key, kept)
+	return d
+}
+
+// forgetNoLogos clears, once, the "none found" marks made before employers'
+// websites were found from their names, so each is looked for again.
+var noLogosOnce sync.Once
+
+func (e *Engine) forgetNoLogos(dir string) {
+	noLogosOnce.Do(func() {
+		var done bool
+		if e.S.Get("logo_none_cleared_56", &done); done {
+			return
+		}
+		ents, _ := os.ReadDir(dir)
+		for _, en := range ents {
+			if fi, err := en.Info(); err == nil && fi.Size() == 0 {
+				os.Remove(filepath.Join(dir, en.Name()))
+			}
+		}
+		e.S.Set("logo_none_cleared_56", true)
+	})
 }

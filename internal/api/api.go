@@ -1763,6 +1763,15 @@ func (s *Server) Handler() http.Handler {
 		}
 		return map[string]any{"message": "The VPN server answered."}, nil
 	})
+	// One small search on each source that goes through the VPN, at once.
+	h("POST /api/vpn/test", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if err := e.CheckVPN(ctx); err != nil {
+			return nil, bad(sentence(err.Error()))
+		}
+		return map[string]any{"results": e.TestThrough(ctx)}, nil
+	})
 	h("DELETE /api/vpn", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		_, err := e.SetVPN("")
 		return nil, err
