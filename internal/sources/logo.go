@@ -60,6 +60,7 @@ var (
 // When mustName is given the site is only a guess: its home page has to load
 // and name the employer in its title before its icon is taken.
 func (c *Client) Logo(ctx context.Context, host, mustName string) ([]byte, string, error) {
+	ctx = withVia(ctx, KindLogos)
 	base, err := url.Parse("https://" + host + "/")
 	if err != nil || OwnSite(host) == "" {
 		return nil, "", errors.New("sources: not an employer's own site")
@@ -301,6 +302,7 @@ func LogoURL(raw string) string {
 // LogoFrom fetches an employer's logo from the address a job source gave
 // for it (LinkedIn and Google for Jobs show one beside each posting).
 func (c *Client) LogoFrom(ctx context.Context, link string) ([]byte, string, error) {
+	ctx = withVia(ctx, KindLogos)
 	link = LogoURL(link)
 	if link == "" {
 		return nil, "", errors.New("sources: not a picture address")

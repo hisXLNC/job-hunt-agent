@@ -26,6 +26,8 @@ func StandIn() llm.Engine {
 			out = standPropose(req.Input.(string))
 		case "employers":
 			out = map[string]any{"employers": standEmployers(req.Input.(Person))}
+		case "employer_sites":
+			out = map[string]any{"sites": standSites(req.Input.([]SiteAsk))}
 		case "title_look":
 			out = map[string]any{"keep": standTitleLook(req.Input.(titleLookInput))}
 		case "about_employers":

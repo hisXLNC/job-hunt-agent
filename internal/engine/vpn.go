@@ -31,6 +31,7 @@ var vpnChoices = []struct{ ID, Name string }{
 	{"jooble", "Jooble"},
 	{"jsearch", "Google for Jobs"},
 	{"apify", "LinkedIn through Apify"},
+	{"logos", "Employers' logos (their websites, icons and the company lookup)"},
 }
 
 func vpnChoice(id string) (string, bool) {
@@ -279,6 +280,12 @@ func (e *Engine) TestThrough(ctx context.Context) []VPNTest {
 			switch id {
 			case "apify":
 				r.Note = "Not tried here: each run of the scraper costs. Use Test under More job sources"
+			case "logos":
+				var d string
+				if d, err = e.Src.FindDomain(cctx, "Air Canada"); err == nil {
+					_, _, err = e.Src.IconOf(cctx, d)
+					n = 1
+				}
 			case "linkedin":
 				var posts []sources.Posting
 				posts, err = e.Src.Search(cctx, q)

@@ -230,7 +230,7 @@ func classifyCLI(msg string) error {
 	case strings.Contains(low, "limit") && (strings.Contains(low, "reset") || strings.Contains(low, "usage") || strings.Contains(low, "hit your")):
 		return &LimitError{Msg: "Your Claude plan is out of usage for now: " + short(msg), Until: resetTime(msg, time.Now())}
 	case strings.Contains(low, "/login") || strings.Contains(low, "not logged in") || strings.Contains(low, "invalid api key") || strings.Contains(low, "authentication"):
-		return &AuthError{"Claude Code isn't signed in. Open a terminal, run \"claude\", and sign in."}
+		return &AuthError{"Claude Code isn't signed in, or its sign-in ran out (it said: " + short(msg) + "). Press Sign in to Claude under Settings, Connections, Claude"}
 	case strings.Contains(low, "overloaded") || strings.Contains(low, "529") || strings.Contains(low, "timeout") || strings.Contains(low, "econnreset"):
 		return &TransientError{fmt.Errorf("Claude is busy: %s", short(msg))}
 	}
@@ -297,6 +297,33 @@ func CheckCLI(ctx context.Context, path string) (string, error) {
 		return "", fmt.Errorf("Claude Code is installed but didn't start: %w", err)
 	}
 	return strings.TrimSpace(string(b)), nil
+}
+
+// SignedIn asks Claude Code whether it is signed in ("claude auth status").
+// known is false when it couldn't say (an older Claude Code, or it didn't
+// start); how names the kind of sign-in ("claude.ai", "oauth_token", ...).
+func SignedIn(ctx context.Context, path string) (in, known bool, how string) {
+	if path == "" {
+		p, err := FindCLI()
+		if err != nil {
+			return false, false, ""
+		}
+		path = p
+	}
+	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, path, "auth", "status")
+	hideWindow(cmd)
+	cmd.Env = cleanEnv(os.Environ())
+	b, _ := cmd.Output() // it exits 1 when signed out, with the same JSON
+	var st struct {
+		LoggedIn   *bool  `json:"loggedIn"`
+		AuthMethod string `json:"authMethod"`
+	}
+	if i := bytes.IndexByte(b, '{'); i < 0 || json.Unmarshal(b[i:], &st) != nil || st.LoggedIn == nil {
+		return false, false, ""
+	}
+	return *st.LoggedIn, true, st.AuthMethod
 }
 
 // writeSystem puts a system prompt in a file only this user can read.

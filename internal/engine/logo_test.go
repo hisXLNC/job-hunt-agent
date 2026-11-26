@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"jobhunt/internal/brain"
+	"jobhunt/internal/llm"
 	"jobhunt/internal/sources"
 	"jobhunt/internal/store"
 )
@@ -104,5 +107,59 @@ func TestEmployerLogoFromItsNameWhenTheSiteRefuses(t *testing.T) {
 	e.Logo(context.Background(), c.ID)
 	if asked["/v1/companies/suggest"] != 1 {
 		t.Fatalf("asked about the name %d times", asked["/v1/companies/suggest"])
+	}
+}
+
+// The company lookup can't be reached from here: Claude names the
+// websites, several employers in one request, and a website that doesn't
+// fit the name is not used.
+func TestEmployerWebsitesFromClaude(t *testing.T) {
+	e, _ := newEngine(t)
+	setUp(t, e)
+	stand := brain.StandIn()
+	asked := 0
+	e.Sample = llm.Func(func(ctx context.Context, req llm.Request) (llm.Response, error) {
+		if req.Task != "employer_sites" {
+			return stand.Do(ctx, req)
+		}
+		asked++
+		var sites []map[string]any
+		for i, a := range req.Input.([]brain.SiteAsk) {
+			d := map[string]string{"Pwc Canada": "pwc.com", "Quietly Wrong Ltd": "someoneelse.com"}[a.Name]
+			if d != "" {
+				sites = append(sites, map[string]any{"n": i + 1, "domain": d})
+			}
+		}
+		b, _ := json.Marshal(map[string]any{"sites": sites})
+		return llm.Response{Text: string(b)}, nil
+	})
+	var pic bytes.Buffer
+	png.Encode(&pic, image.NewRGBA(image.Rect(0, 0, 40, 40)))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/companies/suggest":
+			http.Error(w, "<html>Access denied in your region</html>", http.StatusForbidden)
+		case "/s2/favicons":
+			w.Write(pic.Bytes())
+		default:
+			http.Error(w, "Access denied", http.StatusForbidden)
+		}
+	}))
+	defer srv.Close()
+	e.Src.Base["logo"], e.Src.Base["suggest"] = srv.URL, srv.URL
+	pwc, _, _ := e.S.UpsertCompany(store.Company{Name: "Pwc Canada"})
+	wrong, _, _ := e.S.UpsertCompany(store.Company{Name: "Quietly Wrong Ltd"})
+	out := make(chan [2]bool, 2)
+	for _, id := range []int64{pwc.ID, wrong.ID} {
+		go func(id int64) { _, _, ok := e.Logo(context.Background(), id); out <- [2]bool{id == pwc.ID, ok} }(id)
+	}
+	for range 2 {
+		r := <-out
+		if r[0] != r[1] {
+			t.Errorf("pwc=%v got a logo=%v", r[0], r[1])
+		}
+	}
+	if asked != 1 {
+		t.Errorf("Claude was asked %d times for two employers", asked)
 	}
 }

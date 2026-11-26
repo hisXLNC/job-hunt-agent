@@ -52,7 +52,7 @@ type OtherAIState struct {
 const otherKey = "otherai"
 
 // searchTasks are the requests "searching only" hands to the other AI.
-var searchTasks = map[string]bool{"read_role": true, "read_roles": true, "title_look": true}
+var searchTasks = map[string]bool{"read_role": true, "read_roles": true, "title_look": true, "employer_sites": true}
 
 // keepWithClaude are requests the other AI never takes: the assistant acts
 // on the person's data with buttons, mail from the inbox is promised to

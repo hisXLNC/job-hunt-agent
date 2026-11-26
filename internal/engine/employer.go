@@ -433,13 +433,17 @@ func (e *Engine) companyName(id int64) string {
 
 // foundDomain is the employer's website as found from its name, looked up
 // once and kept ("-" kept when none was found, asked again after a month).
+// Clearbit's company lookup is asked first; where it doesn't know the name
+// or can't be reached from here, Claude is asked, a batch at a time.
 func (e *Engine) foundDomain(ctx context.Context, id int64, name string) string {
 	key := fmt.Sprintf("logo_domain:%d", id)
 	var kept struct {
 		Domain string `json:"domain"`
 		At     int64  `json:"at"`
+		Asked  bool   `json:"asked,omitempty"` // Claude was asked too
 	}
-	if ok, _ := e.S.Get(key, &kept); ok && kept.At > 0 && (kept.Domain != "-" || time.Since(time.Unix(kept.At, 0)) < 30*24*time.Hour) {
+	// "None found" stands for a month, but only once Claude has been asked as well.
+	if ok, _ := e.S.Get(key, &kept); ok && kept.At > 0 && (kept.Domain != "-" || (kept.Asked || e.LLM().Engine == "") && time.Since(time.Unix(kept.At, 0)) < 30*24*time.Hour) {
 		if kept.Domain == "-" {
 			return ""
 		}
@@ -451,13 +455,98 @@ func (e *Engine) foundDomain(ctx context.Context, id int64, name string) string 
 	cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	d, err := e.Src.FindDomain(cctx, name)
 	cancel()
-	if err != nil && !strings.Contains(err.Error(), "no website found") {
-		trace.Log("fetch", "no website found for employer %d: %v", id, err)
+	sure := err == nil || strings.Contains(err.Error(), "no website found")
+	if err != nil && !sure {
+		trace.Log("fetch", "the company lookup didn't answer for employer %d: %v", id, err)
+		var he *sources.HTTPError
+		if errors.As(err, &he) && (he.Status == 403 || he.Status == 451) {
+			e.throughByItself(sources.KindLogos, fmt.Errorf("%w", sources.ErrBlockedHere))
+		}
+	}
+	if d == "" {
+		d, kept.Asked = e.askSite(ctx, name)
+		sure = sure && (kept.Asked || e.LLM().Engine == "")
+	}
+	if d == "" && !sure {
 		return "" // asked again next time
 	}
 	kept.Domain, kept.At = firstOf(d, "-"), time.Now().Unix()
 	e.S.Set(key, kept)
 	return d
+}
+
+// Employers' websites asked of Claude are gathered for a moment and asked
+// together: one small request for a page full of employers.
+type siteWait struct {
+	name string
+	got  chan siteGot
+}
+type siteGot struct {
+	domain string
+	asked  bool
+}
+
+var (
+	siteMu      sync.Mutex
+	siteWaiting []siteWait
+)
+
+const siteGather = 1500 * time.Millisecond
+
+// askSite asks Claude for an employer's website. asked is false when Claude
+// couldn't be asked (not connected, or no answer), so nothing is kept.
+func (e *Engine) askSite(ctx context.Context, name string) (string, bool) {
+	if e.LLM().Engine == "" {
+		return "", false
+	}
+	w := siteWait{name: name, got: make(chan siteGot, 1)}
+	siteMu.Lock()
+	siteWaiting = append(siteWaiting, w)
+	first := len(siteWaiting) == 1
+	siteMu.Unlock()
+	if first {
+		time.AfterFunc(siteGather, func() { e.askSites() })
+	}
+	select {
+	case g := <-w.got:
+		return g.domain, g.asked
+	case <-ctx.Done():
+		return "", false
+	case <-time.After(3 * time.Minute):
+		return "", false
+	}
+}
+
+func (e *Engine) askSites() {
+	siteMu.Lock()
+	all := siteWaiting
+	siteWaiting = nil
+	siteMu.Unlock()
+	for len(all) > 0 {
+		part := all[:min(len(all), 40)]
+		all = all[len(part):]
+		asks := make([]brain.SiteAsk, len(part))
+		for i, w := range part {
+			asks[i] = brain.SiteAsk{Name: w.name}
+		}
+		ctx, cancel := context.WithTimeout(e.ctx, 2*time.Minute)
+		got, err := e.brain.EmployerSites(ctx, asks)
+		cancel()
+		if err != nil {
+			trace.Log("fetch", "Claude wasn't asked for employers' websites: %v", err)
+		}
+		for i, w := range part {
+			d := got[i]
+			if d != "" && !sources.Plausible(w.name, d) {
+				trace.Log("fetch", "Claude's website for %q, %s, doesn't look like it; not used", w.name, d)
+				d = ""
+			}
+			if d != "" {
+				d = sources.OwnSite(d)
+			}
+			w.got <- siteGot{domain: d, asked: err == nil}
+		}
+	}
 }
 
 // forgetNoLogos clears, once, the "none found" marks made before employers'
@@ -467,7 +556,7 @@ var noLogosOnce sync.Once
 func (e *Engine) forgetNoLogos(dir string) {
 	noLogosOnce.Do(func() {
 		var done bool
-		if e.S.Get("logo_none_cleared_56", &done); done {
+		if e.S.Get("logo_none_cleared_58", &done); done {
 			return
 		}
 		ents, _ := os.ReadDir(dir)
@@ -476,6 +565,6 @@ func (e *Engine) forgetNoLogos(dir string) {
 				os.Remove(filepath.Join(dir, en.Name()))
 			}
 		}
-		e.S.Set("logo_none_cleared_56", true)
+		e.S.Set("logo_none_cleared_58", true)
 	})
 }

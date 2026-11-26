@@ -91,14 +91,27 @@ func firstLine(s, or string) string {
 	return or
 }
 
-// signInClaude opens Claude Code in a window of its own. It asks the person
-// to sign in with their Claude account in the browser the first time.
+// signInClaude opens a window that runs Claude Code's own sign-in
+// ("claude auth login"), which opens the browser on the person's Claude
+// account. The window stays open afterwards, so whatever Claude Code said,
+// good or bad, can be read: a window that closes at once tells nothing.
 func signInClaude(cli string) error {
-	cmd := exec.Command(cli)
+	if strings.ContainsAny(cli, "\"%\r\n") {
+		return errors.New("Claude Code is in a folder whose name Windows can't pass on. Open a terminal and type: claude auth login")
+	}
+	shell := os.Getenv("ComSpec")
+	if shell == "" {
+		shell = "cmd.exe"
+	}
+	cmd := exec.Command(shell)
 	cmd.Dir, _ = os.UserHomeDir()
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000010} // CREATE_NEW_CONSOLE
+	cmd.Env = signInEnv(os.Environ())
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CmdLine:       signInLine(cli),
+		CreationFlags: 0x00000010, // CREATE_NEW_CONSOLE
+	}
 	if err := cmd.Start(); err != nil {
-		return errors.New("Windows wouldn't start Claude Code: " + err.Error())
+		return errors.New("Windows wouldn't open the sign-in window: " + err.Error())
 	}
 	go cmd.Wait()
 	return nil

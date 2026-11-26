@@ -68,6 +68,7 @@ func ownEnding(domain string) bool {
 // without its country is only taken in the first two ways, so "Deloitte
 // Canada" is deloitte.com, not a training site called Deloitte Canada.
 func (c *Client) FindDomain(ctx context.Context, name string) (string, error) {
+	ctx = withVia(ctx, KindLogos)
 	var lastErr error
 	weak, starts := "", ""
 	for i, form := range nameForms(name) {
@@ -114,5 +115,36 @@ func (c *Client) IconOf(ctx context.Context, domain string) ([]byte, string, err
 	if err == nil {
 		return b, kind, nil
 	}
-	return c.LogoFrom(ctx, "https://www.google.com/s2/favicons?sz=128&domain="+url.QueryEscape(domain))
+	if b, kind, err = c.LogoFrom(ctx, "https://www.google.com/s2/favicons?sz=128&domain="+url.QueryEscape(domain)); err == nil {
+		return b, kind, nil
+	}
+	return c.LogoFrom(ctx, "https://icons.duckduckgo.com/ip3/"+url.PathEscape(domain)+".ico")
+}
+
+// KindLogos marks the requests made for employers' logos (their websites,
+// icons, the company lookup), which a VPN can carry like a job source's.
+const KindLogos = "logos"
+
+// Plausible says whether a domain could be the named employer's: its name
+// spelled out, its initials, or one of its longer words is in it. It guards
+// a website named by Claude, which can be wrong.
+func Plausible(name, domain string) bool {
+	d := OwnSite(strings.ToLower(strings.TrimSpace(domain)))
+	if d == "" || !ownEnding(d) {
+		return false
+	}
+	label, _, _ := strings.Cut(d, ".")
+	words := nameKey(name)
+	if len(words) == 0 {
+		return false
+	}
+	initials := ""
+	for _, w := range words {
+		initials += w[:1]
+		if len(w) >= 3 && strings.Contains(label, w) {
+			return true
+		}
+	}
+	spelled := strings.Join(words, "")
+	return label == initials || strings.HasPrefix(spelled, label) && len(label) >= 2 || strings.HasPrefix(label, spelled)
 }

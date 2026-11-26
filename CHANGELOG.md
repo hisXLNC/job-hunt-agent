@@ -2,6 +2,20 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.58
+
+- **Sign in to Claude works and says what happened.** The button used to open Claude Code itself,
+  which shows no sign-in when it thinks it is signed in already and closes at once when something
+  is wrong. It now runs Claude Code's own sign-in: your browser opens on your Claude account, and
+  the window stays open to say "Signed in" or show the reason it didn't finish. A new **Check
+  sign-in** button asks Claude Code whether it is signed in, and when Claude refuses a request
+  Job Hunt now shows Claude Code's own words instead of only "isn't signed in".
+- **Logos where the lookup can't be reached.** If the company lookup doesn't know an employer or
+  can't be reached from where you are, Job Hunt asks Claude for the employers' websites, a page
+  of them in one small request, and uses an answer only when it fits the name. "Employers' logos"
+  can also be ticked under VPN for blocked sources, and is ticked by itself when the lookup turns
+  your country away.
+
 ## 26.11.57
 
 - **Logos for far more employers.** Job Hunt now finds an employer's website from its name (TD is

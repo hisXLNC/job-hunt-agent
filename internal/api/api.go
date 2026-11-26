@@ -1003,7 +1003,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/companies/{id}/logo", func(w http.ResponseWriter, r *http.Request) {
 		b, kind, ok := e.Logo(r.Context(), idOf(r))
 		if !ok {
-			w.Header().Set("Cache-Control", "private, max-age=3600")
+			w.Header().Set("Cache-Control", "private, max-age=300")
 			http.Error(w, "no picture", http.StatusNotFound)
 			return
 		}

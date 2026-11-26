@@ -123,7 +123,7 @@ export function tile(name, small, id) {
   let h = 0;
   for (const ch of n) h = (h * 31 + ch.codePointAt(0)) >>> 0;
   const init = n.split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w)).slice(0, 2).map(w => [...w][0].toUpperCase()).join('') || '?';
-  const pic = id && !noLogo.has(String(id)) ? html`<img class="lgi" data-co="${id}" src="/api/companies/${id}/logo?v=4" alt="" loading="lazy">` : '';
+  const pic = id && !noLogo.has(String(id)) ? html`<img class="lgi" data-co="${id}" src="/api/companies/${id}/logo?v=5" alt="" loading="lazy">` : '';
   return html`<div class="lg ${small === 'big' ? 'big' : small ? 'sm' : ''}" style="background:${TILE[h % TILE.length]}">${init}${pic}</div>`;
 }
 // An employer's name, always a way to its page.

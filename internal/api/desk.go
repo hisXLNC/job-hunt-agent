@@ -205,6 +205,24 @@ func (s *Server) deskRoutes(h func(string, handler)) {
 		return nil, nil
 	})
 
+	// Whether Claude Code is signed in on this computer, by its own word.
+	h("POST /api/claude-code/status", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		cli, err := llm.FindCLI()
+		if err != nil {
+			return nil, bad("Claude Code isn't installed yet. Press Install Claude Code first.")
+		}
+		in, known, how := llm.SignedIn(r.Context(), cli)
+		switch {
+		case !known:
+			return map[string]any{"signed_in": false, "message": "Claude Code didn't say whether it is signed in (it may be an old version). Press Test it to find out."}, nil
+		case !in:
+			return map[string]any{"signed_in": false, "message": "Not signed in yet. Press Sign in to Claude and finish in the window and the browser that open."}, nil
+		case how == "api_key" || how == "apiKey":
+			return map[string]any{"signed_in": true, "message": "Claude Code is using an API key, not your Claude subscription. To use the subscription, press Sign in to Claude."}, nil
+		}
+		return map[string]any{"signed_in": true, "message": "Signed in. Choose Your Claude subscription above, Save, then Test it."}, nil
+	})
+
 	// ---- a posting from its link (the bookmark button, a copied link) ----
 	h("GET /api/copied", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return map[string]string{"url": e.CopiedLink()}, nil
