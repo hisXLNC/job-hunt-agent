@@ -221,3 +221,48 @@ func (e *Engine) indeedRow(k SourceKeys, st SourceState) MoreSource {
 	}
 	return m
 }
+
+// testIndeed runs one Indeed search now, for the first title, and notes what
+// happened: the person's Test button. It counts towards the day's searches.
+func (e *Engine) testIndeed(ctx context.Context) (int, error) {
+	if why := e.indeedReady(); why != "" {
+		return 0, errors.New(why)
+	}
+	p := e.S.Profile()
+	title := "manager"
+	if all := p.Titles.All(); len(all) > 0 {
+		title = all[0].Title
+	}
+	now := e.Now()
+	found, err := e.brain.Indeed(ctx, brain.IndeedQuery{Title: title, Location: strings.TrimSpace(strings.Split(p.City, ",")[0]), Country: countryCode(p.Country), Max: 10})
+	why := ""
+	switch {
+	case err != nil:
+		trace.Log("search", "indeed test: %v", err)
+		why = "Indeed through Claude didn't answer: " + plainErr(err)
+	case !found.Connected:
+		why = indeedMissing
+	}
+	n := 0
+	if why == "" {
+		for _, j := range found.Jobs {
+			if _, ok := indeedPosting(j, now); ok {
+				n++
+			}
+		}
+	}
+	e.setSourceState(srcIndeed, func(s *SourceState) {
+		s.Used++
+		if why != "" {
+			s.Error, s.ErrorAt = why, now.Unix()
+			return
+		}
+		s.At, s.Seen, s.New = now.Unix(), n, 0
+		s.Error, s.ErrorAt, s.RestUntil = "", 0, 0
+	})
+	e.S.Changed("connections", "runs")
+	if why != "" {
+		return 0, errors.New(why)
+	}
+	return n, nil
+}

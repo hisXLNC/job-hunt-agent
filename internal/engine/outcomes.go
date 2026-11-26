@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"strings"
+
 	"jobhunt/internal/store"
 )
 
@@ -122,12 +124,36 @@ func (e *Engine) sourceName(kind string) string {
 // was asked, with what was decided about each and where its role stands now.
 // show narrows it to "new", "here" or "skipped"; limit counts from the top.
 func (e *Engine) PostingsFrom(kind, show string, limit int) (SourcePostings, error) {
+	return e.PostingsFromPlace(kind, "", show, limit)
+}
+
+// fromPlace tells whether a posting came through one place of a kind of
+// source: a job site's name, alone or followed by the title or town asked.
+func fromPlace(from, place string) bool {
+	return from == place || strings.HasPrefix(from, place+": ") || strings.HasPrefix(from, place+" in ")
+}
+
+// PostingsFromPlace is PostingsFrom for one place of a kind of source (one
+// job site or recruiter among "sites"); "" is all of them.
+func (e *Engine) PostingsFromPlace(kind, place, show string, limit int) (SourcePostings, error) {
 	name := e.sourceName(kind)
 	if name == "" {
 		return SourcePostings{}, store.ErrNotFound
 	}
 	var l SourceLog
 	e.S.Get(outcomeKey(kind), &l)
+	if place != "" {
+		name = place
+		kept := l.Postings[:0:0]
+		counts := map[string]int{}
+		for _, o := range l.Postings {
+			if fromPlace(o.From, place) {
+				kept = append(kept, o)
+				counts[o.Outcome]++
+			}
+		}
+		l.Postings, l.Counts, l.Total = kept, counts, len(kept)
+	}
 	out := SourcePostings{ID: kind, Name: name, At: l.At, Run: l.Run, Total: l.Total, Counts: l.Counts, Kept: len(l.Postings), Postings: []SourcePosting{}}
 	if out.Counts == nil {
 		out.Counts = map[string]int{}

@@ -38,11 +38,22 @@ function sourcesCard(list, pv, route) {
           <div class="xs m pre" id="failed-${s.id}" hidden style="margin-top:4px">${s.failed.join('\n')}
 Each employer's page has its careers page address, which you can correct.</div>`
           : s.note ? html`<div class="xs" style="margin-top:2px;color:var(--${s.state === 'problem' ? 'crit' : 'muted'})">${s.note}</div>` : ''}
-        ${s.id === 'sites' && sites.length ? html`<div class="col" style="margin-top:6px;gap:5px">${sites.map(x => html`<div class="row xs" style="gap:8px">${sw(x)}<span class="grow"><b>${x.name}</b> <span class="m">· ${x.kind}${x.note ? html` · <span style="color:var(--warn)">${x.note}</span>` : x.seen ? ` · ${x.seen} postings last time` : ''}</span></span>${x.mine ? html`<button class="btn sm ghost" data-act="placeoff" data-id="${x.id}" data-confirm="Stop watching ${x.name}? Roles already found there stay.">Remove</button>` : ''}</div>`)}</div>` : ''}</td>
+        ${s.id === 'sites' && sites.length ? html`<div class="xs m" style="margin-top:2px">${sites.length} ${sites.length === 1 ? 'site' : 'sites'}, each below</div>` : ''}</td>
       <td><span class="chip ${tone}">${word}</span></td><td class="s" style="white-space:nowrap">${s.at ? ago(s.at) : none}</td>
       <td class="s" style="white-space:nowrap">${s.at ? html`<b>${s.seen}</b> <span class="m">· ${s.new} new</span>` : none}</td>
-      <td style="text-align:right;white-space:nowrap">${act(s)}</td></tr>`; })}</tbody></table>
+      <td style="text-align:right;white-space:nowrap">${act(s)}</td></tr>
+      ${s.id === 'sites' ? sites.map(x => siteRow(x, sw, route, none)) : ''}`; })}</tbody></table>
     ${pv && !pv.browser ? html`<p class="xs m" style="padding:10px 16px">Some sites only open in a real browser. Job Hunt found neither Edge nor Chrome on this computer, so those will not answer.</p>` : ''}</div>`;
+}
+// One recruiter or job site, under "Recruiters and job sites", with its own numbers
+// from the last full search.
+function siteRow(x, sw, route, none) {
+  const [tone, word] = !x.on ? SRC_STATE.off : x.note ? ['warn', 'Problem'] : x.at ? (x.seen ? SRC_STATE.working : ['', 'Nothing new']) : SRC_STATE.waiting;
+  return html`<tr class="sub"><td>${sw(x)}</td>
+    <td class="s" style="padding-left:22px"><b>${x.name}</b> <span class="m">· ${x.kind}</span>${x.note ? html`<div class="xs" style="margin-top:2px;color:var(--warn)">${x.note}</div>` : ''}</td>
+    <td><span class="chip ${tone}">${word}</span></td><td class="s" style="white-space:nowrap">${x.at ? ago(x.at) : none}</td>
+    <td class="s" style="white-space:nowrap">${x.at ? html`<b>${x.seen}</b> <span class="m">· ${x.new} new</span>` : none}</td>
+    <td style="text-align:right;white-space:nowrap">${x.at ? html`<a class="btn sm ghost" href="${with_(route, { src: 'sites', place: x.name, show: '' })}" title="Every posting ${x.name} gave last time: new, already here, or skipped and why.">Postings</a> ` : ''}${x.mine ? html`<button class="btn sm ghost" data-act="placeoff" data-id="${x.id}" data-confirm="Stop watching ${x.name}? Roles already found there stay.">Remove</button>` : ''}</td></tr>`;
 }
 // Every posting one source gave the last time it was asked, and what became of each.
 const SHOW = [['', 'All'], ['new', 'New'], ['here', 'Already here'], ['skipped', 'Skipped']];
@@ -50,7 +61,7 @@ const SAY_TONE = { new: 'good', here: '', skipped: 'warn' };
 function sourcePostings(sp, route) {
   const show = route.q.show || '', c = sp.counts || {};
   const all = (c.new || 0) + (c.here || 0) + (c.skipped || 0);
-  return html`<div class="col" style="gap:14px" id="srcposts"><div class="stick"><div class="card row wrap" style="gap:6px;padding:12px 14px"><a class="btn sm ghost" href="${with_(route, { src: '', show: '' })}">← All sources</a><b class="grow" style="margin-left:6px">${sp.name}</b>
+  return html`<div class="col" style="gap:14px" id="srcposts"><div class="stick"><div class="card row wrap" style="gap:6px;padding:12px 14px"><a class="btn sm ghost" href="${with_(route, { src: '', place: '', show: '' })}">← All sources</a><b class="grow" style="margin-left:6px">${sp.name}</b>
       ${SHOW.map(([k, v]) => html`<a class="chip ${show === k ? 'on' : ''}" href="${with_(route, { show: k })}">${v} ${k ? c[k] || 0 : all}</a>`)}</div></div>
     <div class="card" style="padding:0"><p class="s m" style="padding:12px 16px">${sp.at ? html`Every posting it gave in the ${sp.run === 'fast' ? 'quick check' : 'full search'} ${rel(sp.at)}, and what Job Hunt did with each. The fit is from reading it against your CV.${sp.kept < sp.total ? ` The first ${sp.kept.toLocaleString()} of ${sp.total.toLocaleString()} are kept.` : ''}` : 'No search has asked it since Job Hunt began keeping this list. It fills in after the next search.'}</p>
     ${sp.postings.length ? html`<table class="tbl long"><thead><tr><th>Posting</th><th>Seen through</th><th>Fit</th><th>What happened</th></tr></thead>
@@ -81,7 +92,7 @@ export default {
   topics: ['roles', 'companies', 'runs', 'status'],
   async load(route) {
     const q = route.q, u = new URLSearchParams({ size: listSize('radar'), page: 1, sort: q.sort || '', state: q.state || 'following', q: q.q || '' });
-    const one = q.tab === 'sources' && q.src ? api(`sources/${encodeURIComponent(q.src)}/postings?` + new URLSearchParams({ size: listSize('srcposts'), show: q.show || '' })).catch(() => null) : null;
+    const one = q.tab === 'sources' && q.src ? api(`sources/${encodeURIComponent(q.src)}/postings?` + new URLSearchParams({ size: listSize('srcposts'), show: q.show || '', place: q.place || '' })).catch(() => null) : null;
     const [radar, comp, places, src, ss, srcposts] = await Promise.all([api('radar'), api('companies?' + u), api('places'), api('sources').catch(() => null), api('searchset').catch(() => null), one]);
     return { ...radar, comp, places, sources: src?.sources, budget: ss?.budget, srcposts };
   },

@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strings"
@@ -122,6 +123,7 @@ type Client struct {
 	http     *http.Client
 	paceMu   sync.Mutex
 	paced    map[string]time.Time
+	liRest   time.Time // no LinkedIn requests before this
 
 	// pageDelay is the pause between the pages of one listing. Zero means
 	// defaultPageDelay against a real host and no pause against a Base
@@ -139,6 +141,7 @@ type Client struct {
 type HTTPError struct {
 	Status int
 	URL    string
+	Body   string // the start of what came back, to tell a refusal's kind; never shown
 }
 
 func (e *HTTPError) Error() string {
@@ -328,6 +331,17 @@ func (c *Client) do(ctx context.Context, method, rawURL, accept string, body []b
 		req.Header.Set("Content-Type", "application/json")
 	}
 
+	// LinkedIn: one request at a time from the whole program, a few seconds
+	// apart, and none at all for a while after it asks to slow down.
+	linkedIn := c.Base[kindLinkedIn] == "" && isLinkedIn(req.URL.Hostname())
+	if linkedIn {
+		if c.linkedInResting() {
+			return nil, nil, &HTTPError{Status: http.StatusTooManyRequests, URL: rawURL}
+		}
+		if err := c.wait(ctx, "linkedin-any", linkedInGap+time.Duration(rand.Int64N(int64(linkedInJitter)))); err != nil {
+			return nil, nil, err
+		}
+	}
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
 		// The error names the address asked; one that holds a key is left out.
@@ -339,8 +353,12 @@ func (c *Client) do(ctx context.Context, method, rawURL, accept string, body []b
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		head, _ := io.ReadAll(io.LimitReader(resp.Body, 400))
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10)) // lets the connection be reused
-		return nil, nil, &HTTPError{Status: resp.StatusCode, URL: rawURL}
+		if linkedIn && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == 999) {
+			c.restLinkedIn(linkedInRest)
+		}
+		return nil, nil, &HTTPError{Status: resp.StatusCode, URL: rawURL, Body: string(head)}
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
@@ -513,4 +531,31 @@ func joinSections(blocks ...string) string {
 		}
 	}
 	return strings.Join(out, "\n\n")
+}
+
+// How LinkedIn is asked: at most one request every few seconds (searches and
+// posting pages together), and a quiet spell after it says "too many".
+const (
+	linkedInGap    = 3 * time.Second
+	linkedInJitter = 2 * time.Second
+	linkedInRest   = 20 * time.Minute
+)
+
+func isLinkedIn(host string) bool {
+	h := strings.ToLower(host)
+	return h == "linkedin.com" || strings.HasSuffix(h, ".linkedin.com")
+}
+
+func (c *Client) restLinkedIn(d time.Duration) {
+	c.paceMu.Lock()
+	defer c.paceMu.Unlock()
+	if until := time.Now().Add(d); until.After(c.liRest) {
+		c.liRest = until
+	}
+}
+
+func (c *Client) linkedInResting() bool {
+	c.paceMu.Lock()
+	defer c.paceMu.Unlock()
+	return time.Now().Before(c.liRest)
 }

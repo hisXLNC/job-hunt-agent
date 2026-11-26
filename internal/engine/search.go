@@ -206,7 +206,10 @@ type SearchState struct {
 	LastFast      int64  `json:"last_fast"`
 	LinkedInUntil int64  `json:"linkedin_until"` // LinkedIn asked us to slow down until then
 	LinkedInNote  string `json:"linkedin_note"`
-	Paused        bool   `json:"paused"`
+	// LinkedInStrikes: how many times in a row LinkedIn asked to slow down.
+	// Each one makes the next rest longer and the searches fewer.
+	LinkedInStrikes int  `json:"linkedin_strikes,omitempty"`
+	Paused          bool `json:"paused"`
 	// PausedUntil: the pause ends by itself then; 0 for until the person says.
 	PausedUntil int64 `json:"paused_until"`
 	// LinkedInTurn: which title in which place LinkedIn is asked about next,
@@ -362,7 +365,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	// up to its share of one search.
 	places := searchedPlaces(p)
 	liAll := titlesAt(p.Titles.All(), places)
-	liAsk := turnOf(liAll, st.LinkedInTurn, linkedInMost(kind, len(p.Titles.All()), len(places)))
+	liAsk := turnOf(liAll, st.LinkedInTurn, linkedInShare(linkedInMost(kind, len(p.Titles.All()), len(places)), st.LinkedInStrikes))
 
 	// 1. Employers' own boards: the earliest place a posting appears.
 	companies, _ := e.S.Companies("following")
@@ -464,8 +467,10 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			if err != nil {
 				var he *sources.HTTPError
 				if errors.As(err, &he) && (he.Status == 429 || he.Status == 999 || he.Status == 403) {
-					st.LinkedInUntil = now.Add(2 * time.Hour).Unix()
-					st.LinkedInNote = "LinkedIn asked Job Hunt to slow down; trying again later"
+					st.LinkedInStrikes = min(st.LinkedInStrikes+1, 5)
+					rest := linkedInRestFor(st.LinkedInStrikes)
+					st.LinkedInUntil = now.Add(rest).Unix()
+					st.LinkedInNote = fmt.Sprintf("LinkedIn asked Job Hunt to slow down. It is left alone until %s, then asked about fewer titles at a time", now.Add(rest).Format("15:04"))
 					stats.Problems = append(stats.Problems, st.LinkedInNote)
 					stats.missed("linkedin", st.LinkedInNote)
 					blocked = true
@@ -509,6 +514,10 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 		}
 		if len(liAll) > 0 {
 			st.LinkedInTurn = (st.LinkedInTurn + asked) % len(liAll)
+		}
+		// A round with no complaint earns back one step.
+		if !blocked && asked > 0 && st.LinkedInStrikes > 0 {
+			st.LinkedInStrikes--
 		}
 	} else {
 		stats.Problems = append(stats.Problems, firstOf(st.LinkedInNote, "LinkedIn is resting"))
@@ -582,14 +591,30 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 // every place up to a share LinkedIn puts up with. A quick check, which runs
 // many times a day, takes half that share.
 func linkedInMost(kind string, titles, places int) int {
-	most := 30
+	most := 24
 	if kind == "fast" {
-		most = 15
+		most = 10
 	}
 	if places <= 1 {
 		return titles
 	}
 	return max(titles, min(titles*places, most))
+}
+
+// linkedInShare cuts LinkedIn's share of a search after it has asked to slow
+// down: half for each recent strike, never fewer than three.
+func linkedInShare(n, strikes int) int {
+	cut := n
+	for range strikes {
+		cut /= 2
+	}
+	return max(cut, min(3, n))
+}
+
+// linkedInRestFor is how long LinkedIn is left alone after the strikes so
+// far: 2 hours, then 4, 8, 16, at most a day.
+func linkedInRestFor(strikes int) time.Duration {
+	return min(2*time.Hour<<max(strikes-1, 0), 24*time.Hour)
 }
 
 func (e *Engine) linkedInPause() time.Duration {

@@ -45,6 +45,9 @@ var (
 	ErrKeyRefused = errors.New("sources: the service refused the key")
 	// ErrOutOfRequests means the key's plan has no requests left for now.
 	ErrOutOfRequests = errors.New("sources: the key has no requests left for now")
+	// ErrBlockedHere means the service turns away requests from the country
+	// this computer is in; the key may be fine.
+	ErrBlockedHere = errors.New("sources: the service turns away requests from where this computer is")
 	// ErrNoCountry means the service has no listings for the person's country.
 	ErrNoCountry = errors.New("sources: this search has no listings for that country")
 )
@@ -119,6 +122,8 @@ func keyedErr(source string, err error) error {
 		return err
 	}
 	switch {
+	case he.Status == 451, he.Status == 403 && blockedPage(he.Body):
+		return fmt.Errorf("%w (%d)", ErrBlockedHere, he.Status)
 	case he.Status == 401 || he.Status == 403, source == kindJooble && he.Status == 404:
 		return fmt.Errorf("%w (%d)", ErrKeyRefused, he.Status)
 	case source == kindApify && he.Status == 402:
@@ -454,4 +459,20 @@ func (c *Client) keyedJSON(ctx context.Context, method, addr, shown string, head
 		return err
 	}
 	return decodeJSON(shown, data, v)
+}
+
+// blockedPage tells a refusal by country (a web page saying so, from the
+// service or the network in front of it) from a refused key (the service's
+// own answer, which is JSON).
+func blockedPage(body string) bool {
+	b := strings.ToLower(strings.TrimSpace(body))
+	if b == "" || strings.HasPrefix(b, "{") || strings.HasPrefix(b, "[") {
+		return false
+	}
+	for _, w := range []string{"country", "region", "location", "geo", "not available", "unavailable", "access denied", "forbidden", "cloudflare", "blocked"} {
+		if strings.Contains(b, w) {
+			return true
+		}
+	}
+	return strings.HasPrefix(b, "<")
 }

@@ -1734,7 +1734,7 @@ func (s *Server) Handler() http.Handler {
 	// with what was decided about each.
 	h("GET /api/sources/{id}/postings", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		size, _ := strconv.Atoi(r.URL.Query().Get("size"))
-		return e.PostingsFrom(r.PathValue("id"), r.URL.Query().Get("show"), min(max(size, 60), 1000))
+		return e.PostingsFromPlace(r.PathValue("id"), r.URL.Query().Get("place"), r.URL.Query().Get("show"), min(max(size, 60), 1000))
 	})
 	h("DELETE /api/sources/{id}", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, e.ForgetSource(r.PathValue("id"))

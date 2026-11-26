@@ -154,6 +154,7 @@ type Place struct {
 	RestUntil int64  `json:"rest_until,omitempty"`
 	Seen      int    `json:"seen"` // postings in the last full search
 	New       int    `json:"new"`
+	At        int64  `json:"at,omitempty"` // when that search asked it; 0 if it wasn't asked
 }
 
 // PlacesView is what Radar shows.
@@ -167,13 +168,17 @@ type PlacesView struct {
 func (e *Engine) Places() PlacesView {
 	ps, p, now := e.placeSet(), e.S.Profile(), e.Now().Unix()
 	last := map[string][2]int{}
+	asked := map[string]bool{}
+	lastAt := int64(0)
 	if runs, _ := e.S.Runs("search:full", 1); len(runs) > 0 {
+		lastAt = runs[0].StartedAt
 		var st RunStats
 		json.Unmarshal(runs[0].Stats, &st)
 		for place, n := range st.ByPlace {
 			name, _, _ := strings.Cut(place, ": ")
 			v := last[name]
 			last[name] = [2]int{v[0] + n[0], v[1] + n[1]}
+			asked[name] = true
 		}
 	}
 	rest := func(pl *Place) {
@@ -197,6 +202,9 @@ func (e *Engine) Places() PlacesView {
 		have[s.ID] = true
 		// Every watched site can be taken off the list again.
 		pl := Place{ID: s.ID, Name: s.Name, Kind: s.Kind, About: s.About, URL: s.URL, On: !s.Off, Mine: true, Seen: last[s.Name][0], New: last[s.Name][1]}
+		if asked[s.Name] {
+			pl.At = lastAt
+		}
 		rest(&pl)
 		view.Places = append(view.Places, pl)
 	}

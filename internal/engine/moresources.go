@@ -341,6 +341,8 @@ func keyedPlain(id string, err error) (string, time.Duration) {
 		return name + " refused the key. " + hint, 24 * time.Hour
 	case errors.Is(err, sources.ErrOutOfRequests):
 		return name + " has no requests left for now on this key's plan. Job Hunt will try again later", 6 * time.Hour
+	case errors.Is(err, sources.ErrBlockedHere):
+		return name + " turns away requests from the country you are in now, whatever the key. Job Hunt tries again every three days; once you are in a country it serves, it works by itself. The other sources find the same postings meanwhile", 72 * time.Hour
 	case errors.Is(err, sources.ErrNoCountry):
 		return name + " has no listings for your country", 24 * time.Hour
 	case errors.Is(err, sources.ErrNoKey):
@@ -361,6 +363,9 @@ func keyedQuery(p store.Profile, title, town string, within time.Duration) sourc
 // TestSource runs one tiny search with the saved key, so the person knows
 // now whether it works. It reports how many postings came back.
 func (e *Engine) TestSource(ctx context.Context, id string) (int, error) {
+	if id == srcIndeed {
+		return e.testIndeed(ctx)
+	}
 	if _, ok := keyedSources[id]; !ok {
 		return 0, store.ErrNotFound
 	}

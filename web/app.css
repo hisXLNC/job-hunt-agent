@@ -351,3 +351,4 @@ ol.steps{margin:0 0 0 20px;padding:0;display:flex;flex-direction:column;gap:5px;
 .setmenu>a.on{background:var(--surface);color:var(--ink);border-left-color:var(--accent);box-shadow:0 1px 2px var(--shadow)}
 .setbody{min-width:0}
 @media(max-width:900px){.setwrap{grid-template-columns:1fr}.setmenu{position:static;flex-direction:row;flex-wrap:wrap}.setmenu .setfind{width:100%}.setmenu>a span{display:none}}
+.tbl tr.sub td{background:var(--bg2,transparent);padding-top:8px;padding-bottom:8px}

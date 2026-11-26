@@ -2,6 +2,22 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.54
+
+- **LinkedIn asks to slow down far less.** Every LinkedIn request in Job Hunt now waits 3 to 5
+  seconds after the last one, and after any "too many" answer LinkedIn is left alone for 20
+  minutes at once. If a search is turned away again, the rest grows (2, 4, 8, 16, up to 24 hours)
+  and the next checks ask about fewer titles; each clean check earns that back. Quick checks ask
+  about 10 titles instead of 15.
+- **Adzuna turned away by country.** When Adzuna refuses the country you are in, Sources says
+  so plainly instead of blaming the key, and Job Hunt asks again every three days. Jooble, Google
+  for Jobs and LinkedIn carry most of the same postings.
+- **Every recruiter and job site has its own row** in Radar, Sources: its state, when it was last
+  looked at, how many postings it gave and how many were new, and a Postings link for just that
+  site.
+- **Indeed through Claude has a Test button** in Settings, Connections, which runs one real search
+  and says what came back or what is missing.
+
 ## 26.11.53
 
 - **Employer logos almost everywhere.** Job Hunt used to take a logo only from the employer's own
