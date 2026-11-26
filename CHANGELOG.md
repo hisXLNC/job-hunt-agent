@@ -2,6 +2,21 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.60
+
+- **Logos no longer queue behind Claude.** An employer the company lookup doesn't know is asked of
+  Claude, which takes a while, and each one held a place in the queue while it waited, so six such
+  employers stopped every other logo. The place is now given up meanwhile, and Claude is asked
+  for them together, one request at a time.
+- **A logo asked for again reaches every tile.** The page's second try was lost when the page
+  was redrawn in between, and only one of an employer's tiles got it.
+- **No more wrong logo from a look-alike name.** The company lookup lists someone else's website
+  under "TD Bank"; a website that doesn't carry the employer's name is no longer taken, and one
+  taken earlier is dropped with its picture.
+- **Indeed's second try is kept to Indeed.** When Job Hunt reads your own Claude Code settings to
+  find the Indeed connector, every other connector there is refused by name and your settings
+  can't loosen the permission check, so text in a posting can't reach anything else.
+
 ## 26.11.59
 
 - **Logos that were found but never shown.** When a logo took a while to find, or the page redrew

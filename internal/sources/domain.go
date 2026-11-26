@@ -94,7 +94,7 @@ func (c *Client) FindDomain(ctx context.Context, name string) (string, error) {
 				return d, nil
 			case strings.HasPrefix(label, spelled) && starts == "":
 				starts = d
-			case i == 0 && weak == "":
+			case i == 0 && weak == "" && Plausible(name, d):
 				weak = d
 			}
 		}

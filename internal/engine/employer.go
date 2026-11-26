@@ -457,7 +457,21 @@ func (e *Engine) warmLogo(id int64) {
 	if !e.FetchLogos || id == 0 {
 		return
 	}
-	if _, err := os.Stat(filepath.Join(e.Dir, "logos3", fmt.Sprint(id))); err == nil {
+	file := filepath.Join(e.Dir, "logos3", fmt.Sprint(id))
+	// A website once taken for the employer's that doesn't carry its name
+	// (the company lookup's "TD Bank" was someone else's site) is dropped,
+	// with the picture that came from it.
+	key := fmt.Sprintf("logo_domain:%d", id)
+	var kept struct {
+		Domain string `json:"domain"`
+		At     int64  `json:"at"`
+	}
+	if ok, _ := e.S.Get(key, &kept); ok && kept.Domain != "" && kept.Domain != "-" && !sources.Plausible(e.companyName(id), kept.Domain) {
+		kept.Domain, kept.At = "", 0
+		e.S.Set(key, kept)
+		os.Remove(file)
+	}
+	if _, err := os.Stat(file); err == nil {
 		return
 	}
 	go e.Logo(e.ctx, id)
@@ -516,7 +530,11 @@ func (e *Engine) foundDomain(ctx context.Context, id int64, name string) string 
 		}
 	}
 	if d == "" {
+		// Claude takes a while: the place in the queue goes to another
+		// employer's logo meanwhile.
+		<-logoSlots
 		d, kept.Asked = e.askSite(ctx, name)
+		logoSlots <- struct{}{}
 		sure = sure && (kept.Asked || e.LLM().Engine == "")
 	}
 	if d == "" && !sure {
@@ -569,7 +587,13 @@ func (e *Engine) askSite(ctx context.Context, name string) (string, bool) {
 	}
 }
 
+// siteAsking lets one request to Claude run at a time; the employers that
+// come up meanwhile go together in the next.
+var siteAsking sync.Mutex
+
 func (e *Engine) askSites() {
+	siteAsking.Lock()
+	defer siteAsking.Unlock()
 	siteMu.Lock()
 	all := siteWaiting
 	siteWaiting = nil

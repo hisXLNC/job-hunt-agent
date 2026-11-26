@@ -85,7 +85,7 @@ func (b *Brain) Indeed(ctx context.Context, q IndeedQuery) (IndeedFound, error) 
 	if q.Max <= 0 {
 		q.Max = 10
 	}
-	ask := func(userSettings bool) (IndeedFound, error) {
+	ask := func(userSettings bool, deny []string) (IndeedFound, error) {
 		out, resp, err := llm.JSON[IndeedFound](ctx, b.LLM, llm.Request{
 			Task: "indeed_search",
 			System: `You fetch job postings from Indeed with the Indeed tools, for a program that reads your answer as data. You only copy what the tools return; you never add, judge or invent anything.
@@ -100,6 +100,7 @@ If no Indeed tool is available to you, answer with connected false, no jobs, and
 			MaxTokens:    32000,
 			Tools:        IndeedTools,
 			UserSettings: userSettings,
+			Deny:         deny,
 			Input:        q,
 		})
 		if state, seen, known := indeedState(resp.Connectors); known {
@@ -111,12 +112,17 @@ If no Indeed tool is available to you, answer with connected false, no jobs, and
 		}
 		return out, err
 	}
-	out, err := ask(false)
+	out, err := ask(false, nil)
 	// Claude Code, kept away from every settings file, listed no Indeed
-	// connector: the person's own settings may be what switches it on.
+	// connector: the person's own settings may be what switches it on. Those
+	// settings can also allow other connectors, and postings are strangers'
+	// text, so first ask which connectors there are, with nothing to read,
+	// and then search with every other one refused by name.
 	if err == nil && !out.Connected && out.State == "none" {
-		if again, aerr := ask(true); aerr == nil && (again.Connected || again.State != "none") {
-			out = again
+		if others, ok := b.otherConnectors(ctx); ok {
+			if again, aerr := ask(true, others); aerr == nil && (again.Connected || again.State != "none") {
+				out = again
+			}
 		}
 	}
 	if err != nil {
@@ -133,6 +139,33 @@ If no Indeed tool is available to you, answer with connected false, no jobs, and
 	}
 	out.Note = brief(out.Note, 300)
 	return out, nil
+}
+
+// otherConnectors lists, under the person's own settings, every connector
+// that isn't Indeed, as rules to refuse. ok is false when there is no Indeed
+// connector there either, or Claude Code didn't say.
+func (b *Brain) otherConnectors(ctx context.Context) (deny []string, ok bool) {
+	resp, err := b.LLM.Do(ctx, llm.Request{
+		Task:           "indeed_connectors",
+		System:         "You answer with one word and use no tools.",
+		Prompt:         "Answer with the word: ready",
+		Effort:         "low",
+		MaxTokens:      50,
+		UserSettings:   true,
+		ListConnectors: true,
+	})
+	if err != nil || resp.Connectors == nil {
+		return nil, false
+	}
+	for _, c := range resp.Connectors {
+		if strings.Contains(strings.ToLower(c.Name), "indeed") {
+			ok = true
+			continue
+		}
+		deny = append(deny, c.Rule())
+		deny = append(deny, c.Tools...)
+	}
+	return deny, ok
 }
 
 func standIndeed(q IndeedQuery) IndeedFound {

@@ -36,6 +36,13 @@ type Request struct {
 	// request, where connectors can be switched on or off. Built-in tools
 	// stay off and only the tools named above are allowed.
 	UserSettings bool
+	// Deny names connectors (as "mcp__server") and tools that are refused
+	// whatever the person's settings allow. With UserSettings, it is how
+	// every connector but the one asked for is kept out of reach.
+	Deny []string
+	// ListConnectors asks for Response.Connectors on a request that names
+	// no tools.
+	ListConnectors bool
 
 	// Input is the same material as Prompt in typed form. Real engines ignore
 	// it; the stand-in used by tests and the demo works from it.

@@ -102,17 +102,22 @@ const noLogo = new Set(), logoTries = new Map();
 document.addEventListener('error', ev => {
   const t = ev.target;
   if (t?.tagName !== 'IMG' || !t.classList.contains('lgi')) return;
-  const id = t.dataset.co, box = t.parentElement, n = (logoTries.get(id) || 0) + 1;
+  const id = t.dataset.co, n = (logoTries.get(id) || 0) + 1;
+  t.remove();
+  if (noLogo.has(id)) return;   // another tile of the same employer already asked
   logoTries.set(id, n);
   noLogo.add(id);
-  t.remove();
   if (n > 5) return;
+  // Ask again later, for every tile of this employer on the page by then
+  // (the page may have been redrawn meanwhile).
   setTimeout(() => {
     noLogo.delete(id);
-    if (!box?.isConnected || box.querySelector('.lgi')) return;
-    const img = document.createElement('img');
-    img.className = 'lgi'; img.dataset.co = id; img.alt = ''; img.src = `/api/companies/${id}/logo?v=6&try=${n}`;
-    box.append(img);
+    for (const box of document.querySelectorAll(`.lg[data-lco="${CSS.escape(id)}"]`)) {
+      if (box.querySelector('.lgi')) continue;
+      const img = document.createElement('img');
+      img.className = 'lgi'; img.dataset.co = id; img.alt = ''; img.src = `/api/companies/${id}/logo?v=6&try=${n}`;
+      box.append(img);
+    }
   }, [5, 12, 25, 60, 120][n - 1] * 1000);
 }, true);
 // A row's "⋯" menu opens upward when the window has no room below it.
@@ -138,7 +143,7 @@ export function tile(name, small, id) {
   for (const ch of n) h = (h * 31 + ch.codePointAt(0)) >>> 0;
   const init = n.split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w)).slice(0, 2).map(w => [...w][0].toUpperCase()).join('') || '?';
   const pic = id && !noLogo.has(String(id)) ? html`<img class="lgi" data-co="${id}" src="/api/companies/${id}/logo?v=6" alt="" loading="lazy">` : '';
-  return html`<div class="lg ${small === 'big' ? 'big' : small ? 'sm' : ''}" style="background:${TILE[h % TILE.length]}">${init}${pic}</div>`;
+  return html`<div class="lg ${small === 'big' ? 'big' : small ? 'sm' : ''}" data-lco="${id || ''}" style="background:${TILE[h % TILE.length]}">${init}${pic}</div>`;
 }
 // An employer's name, always a way to its page.
 export const employer = (name, id, cls) => (id && name ? html`<a class="emp ${cls || ''}" href="#/employer/${id}" title="Opens ${name}: its postings, your history there, people, and what working there is like.">${name}</a>` : name || '');

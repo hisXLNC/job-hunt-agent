@@ -193,7 +193,7 @@ func cliArgs(model, sysFile string, req Request) []string {
 	if len(req.Images) > 0 {
 		args[2] = "stream-json"
 		args = append(args, "--input-format", "stream-json", "--verbose")
-	} else if len(req.Tools) > 0 {
+	} else if len(req.Tools) > 0 || req.ListConnectors {
 		// The stream's first line lists the connectors and their state.
 		args[2] = "stream-json"
 		args = append(args, "--verbose")
@@ -212,6 +212,19 @@ func cliArgs(model, sysFile string, req Request) []string {
 	}
 	if len(allow) > 0 {
 		args = append(args, "--allowedTools", strings.Join(allow, ","))
+	}
+	var deny []string
+	for _, t := range req.Deny {
+		if connectorRule.MatchString(t) {
+			deny = append(deny, t)
+		}
+	}
+	if len(deny) > 0 {
+		args = append(args, "--disallowedTools", strings.Join(deny, ","))
+	}
+	if req.UserSettings {
+		// The person's settings may not loosen the permission check.
+		args = append(args, "--permission-mode", "dontAsk")
 	}
 	if req.Schema != nil {
 		shape, _ := json.Marshal(req.Schema)
@@ -266,6 +279,12 @@ func mcpName(name string) string {
 // connectorTool is the shape of a connector's tool name, mcp__server__tool,
 // with nothing in it that could widen a permission rule.
 var connectorTool = regexp.MustCompile(`^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$`)
+
+// connectorRule is a whole connector ("mcp__server") or one of its tools.
+var connectorRule = regexp.MustCompile(`^mcp__[A-Za-z0-9_-]+(__[A-Za-z0-9_-]+)?$`)
+
+// Rule is the permission rule that names every tool of the connector.
+func (c Connector) Rule() string { return "mcp__" + mcpName(c.Name) }
 
 func lastJSONLine(b []byte) []byte {
 	b = bytes.TrimSpace(b)

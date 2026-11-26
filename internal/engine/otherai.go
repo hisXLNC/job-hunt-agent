@@ -58,7 +58,7 @@ var searchTasks = map[string]bool{"read_role": true, "read_roles": true, "title_
 // on the person's data with buttons, mail from the inbox is promised to
 // Claude alone (see the inbox card), Indeed and the news need Claude's
 // connector and web search, and the test is Claude's own.
-var keepWithClaude = map[string]bool{"assist": true, "mail": true, "mail_reply": true, "senders": true, "rejection_reply": true, "indeed_search": true, "find_news": true, "test": true}
+var keepWithClaude = map[string]bool{"assist": true, "mail": true, "mail_reply": true, "senders": true, "rejection_reply": true, "indeed_search": true, "indeed_connectors": true, "find_news": true, "test": true}
 
 // OtherAI returns the stored setting.
 func (e *Engine) OtherAI() OtherAI {
