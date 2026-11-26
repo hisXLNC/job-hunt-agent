@@ -76,6 +76,7 @@ func TestLinkedInSearch(t *testing.T) {
 			PostedAt:    testNow.Add(-18 * time.Minute),
 			Applicants:  -1,
 			NeedsDetail: true,
+			Logo:        "https://media.licdn.com/dms/image/v2/abc/company-logo_100_100/0/1?e=1&v=beta&t=xyz", // the employer's logo; a card without one has none
 		},
 		{
 			Source:      "linkedin",

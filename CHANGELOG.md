@@ -2,6 +2,14 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.53
+
+- **Employer logos almost everywhere.** Job Hunt used to take a logo only from the employer's own
+  website, which it rarely knows for roles found on LinkedIn, so most showed a letter. It now
+  uses the logo LinkedIn and Google for Jobs show beside each posting, and keeps the employer's
+  website when Google for Jobs names it. Roles already on your list get their logo the next
+  time a search sees them again.
+
 ## 26.11.52
 
 - **Job Hunt is now just "Job Hunt"**: its shortcuts, Start menu and Windows' list of apps no

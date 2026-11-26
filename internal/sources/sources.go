@@ -78,6 +78,8 @@ type Posting struct {
 	PostedAt    time.Time // zero if unknown
 	Applicants  int       // -1 if unknown
 	NeedsDetail bool      // true when Description must be fetched with Detail
+	Logo        string    // the employer's logo picture as the source shows it, "" if none
+	Site        string    // the employer's own website if the source names it, else ""
 }
 
 // Board identifies one employer's job board on one system.

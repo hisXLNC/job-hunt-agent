@@ -171,6 +171,8 @@ func parseApify(items []map[string]any) []Posting {
 		} else if x := pick(j, "applicantsCount"); isDigits(x) {
 			p.Applicants, _ = strconv.Atoi(x)
 		}
+		p.Logo = LogoURL(pick(j, "companyLogo", "company_logo", "companyLogoUrl", "logo"))
+		p.Site = OwnSite(pick(j, "companyWebsite", "company_website", "companyUrl"))
 		p.ApplyURL = webURL(pick(j, "applyUrl", "applyLink", "companyApplyUrl"))
 		if strings.Contains(p.ApplyURL, "linkedin.com") {
 			p.ApplyURL = ""

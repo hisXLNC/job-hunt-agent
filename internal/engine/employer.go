@@ -272,8 +272,9 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	ctx = context.WithoutCancel(ctx)
 
 	sites, guesses := e.employerSites(id)
+	shown := e.shownLogo(id)
 	os.MkdirAll(dir, 0o700)
-	if len(sites)+len(guesses) == 0 {
+	if len(sites)+len(guesses) == 0 && shown == "" {
 		os.WriteFile(file, nil, 0o600)
 		return nil, "", false
 	}
@@ -300,7 +301,22 @@ func (e *Engine) Logo(ctx context.Context, id int64) (data []byte, kind string, 
 	}
 	found := false
 	from := ""
+	// First the logo a job source showed beside its posting (LinkedIn, Google for
+	// Jobs): the employer's real logo, where a site's icon can be a tiny mark.
+	if !found && shown != "" && ctx.Err() == nil {
+		cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		b, kind, err = e.Src.LogoFrom(cctx, shown)
+		cancel()
+		if found = err == nil; found {
+			from = "the job source's logo"
+		} else {
+			trace.Log("fetch", "no picture for employer %d from the job source's logo: %v", id, err)
+		}
+	}
 	for _, s := range sites {
+		if found {
+			break
+		}
 		if found = try(s, ""); found {
 			from = s
 			break
@@ -359,4 +375,36 @@ func (e *Engine) employerSites(id int64) (sites, guesses []string) {
 		}
 	}
 	return sites, guesses
+}
+
+func logoKey(id int64) string { return fmt.Sprintf("logo_url:%d", id) }
+
+// shownLogo is the logo address a job source last showed for the employer.
+func (e *Engine) shownLogo(id int64) string {
+	var u string
+	e.S.Get(logoKey(id), &u)
+	return u
+}
+
+// noteEmployerLooks keeps what a posting says about how its employer looks:
+// the logo its source shows (its address changes, so the latest is kept) and
+// the employer's own website, when the employer has none yet.
+func (e *Engine) noteEmployerLooks(id int64, post sources.Posting) {
+	if id == 0 {
+		return
+	}
+	if post.Logo != "" && post.Logo != e.shownLogo(id) {
+		e.S.Set(logoKey(id), post.Logo)
+		// "None found" was decided without this address: look again.
+		file := filepath.Join(e.Dir, "logos3", fmt.Sprint(id))
+		if st, err := os.Stat(file); err == nil && st.Size() == 0 {
+			os.Remove(file)
+		}
+	}
+	if post.Site != "" {
+		if c, err := e.S.Company(id); err == nil && c.Site == "" && sources.Belongs(post.Site, c.Name) {
+			c.Site = post.Site
+			e.S.SaveCompany(c)
+		}
+	}
 }

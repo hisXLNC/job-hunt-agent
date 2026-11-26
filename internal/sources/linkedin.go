@@ -121,6 +121,12 @@ func linkedInCard(d htmlDoc, lo, hi int, now time.Time) (Posting, bool) {
 		NeedsDetail: true,
 	}
 	p.Workplace = workplaceOf(p.Location)
+	// The employer's logo as LinkedIn shows it; a card without one shows a grey placeholder.
+	if i := d.find(lo, hi, func(t token) bool {
+		return t.name == "img" && strings.Contains(firstNonEmpty(t.attr("data-delayed-url"), t.attr("src")), "company-logo")
+	}); i >= 0 {
+		p.Logo = LogoURL(firstNonEmpty(d.toks[i].attr("data-delayed-url"), d.toks[i].attr("src")))
+	}
 	if i := d.find(lo, hi, func(t token) bool { return t.name == "time" }); i >= 0 {
 		p.PostedAt = linkedInPostedAt(d.text(i), d.toks[i].attr("datetime"), now)
 	}

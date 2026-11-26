@@ -151,7 +151,7 @@ func TestJSearch(t *testing.T) {
 	}
 	checkPostings(t, posts, []Posting{
 		{Source: "jsearch", Key: "jsearch:aBcD123_xyz==", Company: "Maple Bank", Title: "Tax Technology Manager", Location: "Toronto, Ontario, CA",
-			URL: "https://www.linkedin.com/jobs/view/tax-technology-manager-at-maple-bank-4012345678", ApplyURL: "https://careers.maplebank.example/jobs/881",
+			URL: "https://www.linkedin.com/jobs/view/tax-technology-manager-at-maple-bank-4012345678", ApplyURL: "https://careers.maplebank.example/jobs/881", Site: "maplebank.example",
 			Description: "We are hiring.\n\nShort.\n\nQualifications\n- Ten years in indirect tax\n- SAP S/4HANA\n\nResponsibilities\n- Own the tax engine",
 			Pay:         "CAD 48 to 55 an hour", PostedAt: time.Date(2026, 11, 23, 10, 0, 0, 0, time.UTC), Applicants: -1, NeedsDetail: true},
 		{Source: "jsearch", Key: "jsearch:https://www.google.com/search?q=jobs&htidocid=zz9", Company: "Polar Freight", Title: "Remote Tax Lead", Location: "Anywhere", Workplace: "remote",

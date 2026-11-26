@@ -916,6 +916,7 @@ func (e *Engine) ingestBand(companyID int64, post sources.Posting, p store.Profi
 		// Most sources give no pay of their own; many postings name it in their text.
 		post.Pay = PayFromText(post.Description)
 	}
+	e.noteEmployerLooks(companyID, post)
 	seenAs := PostingOutcome{Title: post.Title, Company: post.Company, Location: post.Location}
 	if id, _, seen := e.S.SeenRole(post.Key); seen {
 		e.S.TouchRole(id, post.Applicants, post.Description)

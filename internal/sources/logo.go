@@ -3,6 +3,7 @@ package sources
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -10,7 +11,8 @@ import (
 )
 
 // An employer's picture is its own icon, taken from its own website the way
-// a browser takes the icon for a tab. No outside service is asked.
+// a browser takes the icon for a tab, or the logo a job source showed beside
+// the employer's posting. No other service is asked.
 
 // Sites that host many employers' postings: their icon is theirs, not the employer's.
 var hostsOfMany = []string{"myworkdayjobs.com", "myworkdaysite.com", "icims.com", "taleo.net", "greenhouse.io", "lever.co", "ashbyhq.com",
@@ -280,4 +282,45 @@ func parked(page []byte, host string) bool {
 		}
 	}
 	return false
+}
+
+// LogoURL keeps a logo address a job source gave if it is an ordinary https
+// address on a public host; "" otherwise.
+func LogoURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme != "https" || u.User != nil {
+		return ""
+	}
+	h := strings.ToLower(u.Hostname())
+	if !strings.Contains(h, ".") || net.ParseIP(h) != nil || h == "localhost" || strings.HasSuffix(h, ".local") || strings.HasSuffix(h, ".internal") || u.Port() != "" {
+		return ""
+	}
+	return u.String()
+}
+
+// LogoFrom fetches an employer's logo from the address a job source gave
+// for it (LinkedIn and Google for Jobs show one beside each posting).
+func (c *Client) LogoFrom(ctx context.Context, link string) ([]byte, string, error) {
+	link = LogoURL(link)
+	if link == "" {
+		return nil, "", errors.New("sources: not a picture address")
+	}
+	if b := c.Base["logo"]; b != "" { // tests point this at their own server
+		if u, err := url.Parse(link); err == nil {
+			link = b + u.Path
+		}
+	}
+	b, _, err := c.fetch(ctx, "GET", link, "image/*", nil)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(b) < 70 || len(b) > 400<<10 {
+		return nil, "", errors.New("sources: not a usable picture")
+	}
+	kind := http.DetectContentType(b)
+	switch kind {
+	case "image/png", "image/jpeg", "image/gif", "image/webp", "image/x-icon", "image/vnd.microsoft.icon", "image/bmp":
+		return b, kind, nil
+	}
+	return nil, "", errors.New("sources: not a usable picture")
 }

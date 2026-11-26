@@ -299,6 +299,8 @@ type jsearchAnswer struct {
 	Data []struct {
 		ID          string   `json:"job_id"`
 		Employer    string   `json:"employer_name"`
+		EmpLogo     string   `json:"employer_logo"`
+		EmpSite     string   `json:"employer_website"`
 		Title       string   `json:"job_title"`
 		ApplyLink   string   `json:"job_apply_link"`
 		ApplyDirect bool     `json:"job_apply_is_direct"`
@@ -383,6 +385,8 @@ func (c *Client) findJSearch(ctx context.Context, k Keys, q Query) ([]Posting, e
 			Description: jsearchText(j.Description, j.Highlights),
 			PostedAt:    parseTime(j.PostedAt),
 			Applicants:  -1,
+			Logo:        LogoURL(j.EmpLogo),
+			Site:        OwnSite(j.EmpSite),
 		}
 		if p.PostedAt.IsZero() && j.PostedUnix != nil && *j.PostedUnix > 0 {
 			p.PostedAt = time.Unix(int64(*j.PostedUnix), 0)
