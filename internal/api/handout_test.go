@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -29,7 +30,8 @@ func TestAssistantHandsOverACV(t *testing.T) {
 
 	v := tell(t, h, "where is my cv? email me a copy", "#/you")
 	notes := sc.seen[1].Notes[1:]
-	if !strings.Contains(notes[0].Result, srv.E.FilesHome) || shown == "" {
+	home, _ := json.Marshal(srv.E.FilesHome) // as it reads inside the JSON Claude is shown
+	if !strings.Contains(notes[0].Result, strings.Trim(string(home), `"`)) || shown == "" {
 		t.Fatalf("the copy: %s (folder shown: %q)", notes[0].Result, shown)
 	}
 	ents, _ := os.ReadDir(shown)
