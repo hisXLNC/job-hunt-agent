@@ -180,6 +180,12 @@ func (e *Engine) tick() {
 		if rest, _, _ := e.meter.Resting(); rest {
 			return
 		}
+		// Between searches, the boards of followed employers are looked at
+		// every few minutes: the earliest a posting can be seen.
+		if !e.heldBack("watch") && !e.Busy("read") && e.watchDue(now) {
+			e.Go("watch", "Checking the employers you follow for new postings", e.watchBoards)
+			return
+		}
 		if n := e.S.Count(`SELECT COUNT(*) FROM roles WHERE stage = 'new' AND closed = ''`); !e.heldBack("read") && n > 0 && !e.budgetHolds(n) {
 			e.Go("read", "Reading new roles", func(ctx context.Context) error {
 				e.ReadUnread(ctx)

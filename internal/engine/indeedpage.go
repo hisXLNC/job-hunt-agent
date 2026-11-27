@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"jobhunt/internal/brain"
 	"jobhunt/internal/sources"
+	"jobhunt/internal/store"
 	"jobhunt/internal/trace"
 )
 
@@ -123,5 +125,69 @@ func (e *Engine) payWithClaude(ctx context.Context) error {
 		}
 	}
 	trace.Log("did", "asked Claude for the pay of %d open roles; %d named one", asked, filled)
+	return nil
+}
+
+// ---- watching the boards of employers the person follows --------------------------
+
+const (
+	// watchEvery is how often, between searches, the boards of followed
+	// employers are looked at again: a posting there is the earliest there is.
+	watchEvery = 5 * time.Minute
+	// watchMost is how many boards one look reads; the rest are next in turn.
+	watchMost = 15
+)
+
+// watchDue reports whether a look at the boards is due, and marks it begun.
+func (e *Engine) watchDue(now time.Time) bool {
+	if now.Unix()-int64(e.S.GetInt("watch_at")) < int64(watchEvery/time.Second) {
+		return false
+	}
+	e.S.Set("watch_at", now.Unix())
+	return true
+}
+
+// watchBoards reads, in turn, the boards of followed employers that are cheap
+// to read whole (not Workday, not a careers page), and reads and prepares
+// what is new straight away, so a strong role reaches the person minutes after
+// it is posted.
+func (e *Engine) watchBoards(ctx context.Context) error {
+	p := e.S.Profile()
+	companies, _ := e.S.Companies("following")
+	var cheap []store.Company
+	for _, c := range companies {
+		if c.BoardKind != "" && c.BoardKind != "workday" && c.BoardKind != "page" {
+			cheap = append(cheap, c)
+		}
+	}
+	if len(cheap) == 0 {
+		return nil
+	}
+	turn := int(e.S.GetInt("watch_turn"))
+	pick := turnOf(cheap, turn, watchMost)
+	e.S.Set("watch_turn", (turn+len(pick))%len(cheap))
+	stats := RunStats{Kind: "watch", ByPlace: map[string][2]int{}, ClearedBy: map[string]int{}}
+	var fresh []int64
+	for _, c := range pick {
+		if ctx.Err() != nil {
+			break
+		}
+		posts, err := e.listBoard(ctx, c, p)
+		if err != nil {
+			continue
+		}
+		for _, post := range posts {
+			post.Company = c.Name
+			if id, isNew, cleared := e.ingest(c.ID, post, p, &stats); isNew && !cleared {
+				fresh = append(fresh, id)
+			}
+		}
+	}
+	if len(fresh) > 0 {
+		trace.Log("search", "watching followed employers' boards: %d new worth reading", len(fresh))
+		if !e.budgetHolds(len(fresh)) {
+			e.readAll(ctx, fresh, &stats)
+		}
+	}
 	return nil
 }

@@ -2,6 +2,20 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.67
+
+- **What holds your fit back.** On Career path, "Find what holds my fit back" groups what the
+  readings of the last 60 days' roles found missing or only partly shown, with how many roles ask
+  for each. Where your CV already shows it under other words, it says where, and offers one true
+  sentence you can keep as a fact with one press; every later reading and tailoring then uses it.
+  Where it is a real gap, it names the smallest honest step that closes it. One request to Claude,
+  only when you press. It needs at least 8 read roles.
+- **New postings at the employers you follow, sooner.** Between searches, Job Hunt looks at the job
+  boards of the employers you follow every five minutes (up to 15 at a time, in turn; Workday and
+  plain careers pages wait for the regular search). A new role that fits is read and prepared at
+  once, and a strong one reaches your phone if phone notices are on (Settings). Pausing searches
+  pauses this too.
+
 ## 26.11.66
 
 - **Indeed through the side panel.** Indeed turns programs away, so Job Hunt can't search it itself.

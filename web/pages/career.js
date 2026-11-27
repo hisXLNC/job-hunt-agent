@@ -41,6 +41,29 @@ function plan(r, d) {
     <p class="xs m" style="padding:10px 16px 14px">${r.enough ? 'Counted from the postings for this route that Job Hunt saw in the last 90 days.' : 'The counts appear once Job Hunt has seen a few postings for this route.'} A step marked done stays done when the plan is read again on Monday.</p></div>`;
 }
 
+// What holds the fit back on the roles Job Hunt has read: themes, how many
+// roles ask for each, and what to do: keep a true sentence as a fact, or close
+// a real gap.
+function heldBack(g) {
+  if (!g) return '';
+  const btn = g.busy ? html`<span class="btn sm" disabled><span class="spin"></span>Looking</span>`
+    : g.can_look && g.enough ? html`<button class="btn sm" data-act="gaps" data-busy title="Claude groups what the readings of the last 60 days' roles found missing. One request, about a minute.">${g.has ? 'Look again' : 'Find what holds my fit back'}</button>` : '';
+  const head = html`<div class="row wrap" style="gap:8px;padding:14px 16px 6px"><div class="grow"><h3>What holds your fit back</h3><p class="s m" style="margin-top:3px">${g.has
+    ? `From ${g.roles} roles Job Hunt read in the last 60 days, ${rel(g.at)}. The count is how many of them ask for it.`
+    : g.enough ? 'What the roles Job Hunt read for you keep asking for that your CV doesn\'t show, and whether it is a matter of words or a real gap.' : 'Once Job Hunt has read a few more roles for you, this shows what they keep asking for that your CV doesn\'t show.'}</p></div>${btn}</div>`;
+  if (!g.has) return html`<div class="card" style="padding:0">${head}<div style="height:8px"></div></div>`;
+  return html`<div class="card" style="padding:0">${head}
+    <table class="tbl"><thead><tr><th>Asked for</th><th>Roles</th><th>What it is</th><th></th></tr></thead><tbody>
+    ${g.gaps.map((x, i) => html`<tr><td class="s" style="min-width:170px;vertical-align:top"><b>${x.theme}</b>${x.examples.length ? html`<div class="xs m" style="margin-top:3px" title="In the postings' own words">${x.examples.join(' · ')}</div>` : ''}</td>
+      <td class="s" style="vertical-align:top;white-space:nowrap"><b>${x.roles}</b> <span class="m">of ${g.roles}</span></td>
+      <td class="s" style="vertical-align:top">${x.kind === 'shown'
+        ? html`<span class="chip good" style="padding:0 7px">On your CV, in other words</span> ${x.why}${x.fact ? html`<div style="margin-top:6px;padding:6px 8px;background:var(--s2);border-radius:6px">“${x.fact}”</div>` : ''}`
+        : html`<span class="chip warn" style="padding:0 7px">A real gap</span> ${x.why}${x.close ? html`<div style="margin-top:6px"><b>What closes it:</b> ${x.close}</div>` : ''}`}</td>
+      <td style="vertical-align:top;text-align:right;white-space:nowrap">${x.kind === 'shown' && x.fact ? (x.kept ? html`<span class="chip good">Kept as a fact</span>` : html`<button class="btn sm" data-act="keepfact" data-i="${i}" title="Keeps this sentence with your facts. Check it is true first; edit it under You if it needs it. Every role read and every CV and letter written from now on uses it.">Keep as a fact</button>`) : ''}</td></tr>`)}
+    </tbody></table>
+    <p class="xs m" style="padding:10px 16px 14px">A fact you keep is used in every reading, CV and letter from now on. Roles already set aside for a low fit can be scored again under Roles, Set aside.</p></div>`;
+}
+
 function onTheWay(r, d) {
   const lv = d.level;
   const mine = r.applied ? `Of ${r.applied} application${r.applied === 1 ? '' : 's'} to ${r.title}-type roles, ${r.heard} heard back and ${r.talks} led to a conversation.` : `No applications to ${r.title}-type roles yet.`;
@@ -52,14 +75,14 @@ export default {
   title: 'Career path',
   sub: () => 'Where your CV can take you, and what gets you there',
   topics: ['career', 'status', 'you'],
-  load: () => Promise.all([api('career'), api('profile').catch(() => ({}))]).then(([c, p]) => ({ ...c, path: p.career_path || '' })),
+  load: () => Promise.all([api('career'), api('profile').catch(() => ({})), api('fitgaps').catch(() => null)]).then(([c, p, g]) => ({ ...c, path: p.career_path || '', gaps: g })),
   view(d, route) {
     const lookBtn = d.looking ? html`<span class="btn" disabled><span class="spin"></span>Reading</span>`
       : d.can_look ? html`<button class="btn" data-act="look" data-busy title="Claude reads your CV against what employers post. About two minutes.">${d.has ? 'Look again now' : 'Look now'}</button>`
       : html`<a class="btn" href="#/settings/connections?open=claude">Connect Claude</a>`;
     if (!d.has) {
       return html`<div class="body col" style="gap:14px"><div class="card row wrap" style="gap:20px;align-items:center">
-        <div class="grow" style="min-width:280px"><h3>Where can your CV take you?</h3><p class="s ink2" style="margin-top:6px">${d.looking ? 'Claude is reading your CV against the postings Job Hunt has seen. This page fills in when it is done.' : 'Claude reads your CV and what employers post, and shows three ways your career can go from here: what each pays, what is missing, and the smallest steps that close the gap. It is read again every Monday.'}</p></div>${lookBtn}</div></div>`;
+        <div class="grow" style="min-width:280px"><h3>Where can your CV take you?</h3><p class="s ink2" style="margin-top:6px">${d.looking ? 'Claude is reading your CV against the postings Job Hunt has seen. This page fills in when it is done.' : 'Claude reads your CV and what employers post, and shows three ways your career can go from here: what each pays, what is missing, and the smallest steps that close the gap. It is read again every Monday.'}</p></div>${lookBtn}</div>${heldBack(d.gaps)}</div>`;
     }
     const pick = Number.parseInt(route.q.plan ?? '', 10);
     const chosen = d.routes[pick] ? pick : Math.max(0, d.routes.findIndex(r => r.recommended));
@@ -71,6 +94,7 @@ export default {
           <div class="s m">${[n.pay ? `About ${money(n.pay, n.currency)} a year` : '', n.years ? `${n.years} year${n.years === 1 ? '' : 's'}${n.summary ? ' in ' + lower(n.summary) : ''}` : n.summary].filter(Boolean).join(' · ')}</div></div>
         <div class="grow s ink2" style="min-width:300px">Three ways your CV can go from here. Pay is yearly base pay in ${{ CAD: 'Canadian dollars', USD: 'US dollars', GBP: 'pounds', EUR: 'euros', AUD: 'Australian dollars' }[d.now?.currency] || d.now?.currency || 'local currency'}, Claude's estimate${d.web ? ' from public pay data' : ''}; check it before you rely on it. Read ${day(d.at)} (${rel(d.at)}), and again every Monday.${d.cvs?.length ? html` Made from ${d.cvs.length === 1 ? 'your CV' : `all ${d.cvs.length} of your CVs, read together`}: ${d.cvs.join(', ')}.` : ''}${d.note ? html`<div class="m" style="margin-top:4px">${d.note}</div>` : ''}</div>
         ${lookBtn}</div>
+      ${heldBack(d.gaps)}
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px;align-items:stretch">${d.routes.map((x, i) => routeCard(x, i, d, chosen, route))}</div>
       <div class="cols wide"><div class="col" style="gap:14px">${r ? plan(r, d) : ''}</div>
         <div class="col" style="gap:14px">
@@ -81,6 +105,8 @@ export default {
   },
   actions: {
     look: () => post('career/look').then(() => toast('Reading where your CV can go. About two minutes.')),
+    gaps: () => post('fitgaps/look').then(() => toast('Looking at what holds your fit back. About a minute.')),
+    keepfact: ({ d, data }) => post('facts', { text: data.gaps.gaps[Number(d.i)].fact }).then(() => toast('Kept as a fact. Every role read and every CV and letter written from now on uses it.')),
     done: ({ d }) => post('career/done', { id: d.id, done: !!d.done }),
     mypath: ({ d }) => put('profile', { career_path: d.title }).then(() => toast(`Your path is ${d.title}. Roles read from now on are tagged On path or Off path.`)),
     async search({ d }) {

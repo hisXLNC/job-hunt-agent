@@ -1625,6 +1625,17 @@ func (s *Server) Handler() http.Handler {
 		qs, _ := st.OpenQuestions()
 		return map[string]any{"profile": st.Profile(), "cvs": cvs, "facts": facts, "answers": answers, "questions": qs, "area": engine.Area(st.Profile()), "signature_picture": e.SignaturePicture() != nil}, nil
 	})
+	// What holds the person's fit back, and Claude's look at it.
+	h("GET /api/fitgaps", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.FitGaps(), nil })
+	h("POST /api/fitgaps/look", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if e.Busy("fitgaps") {
+			return nil, bad("Claude is already looking.")
+		}
+		if err := e.LookFitGaps(); err != nil {
+			return nil, bad(err.Error() + ".")
+		}
+		return map[string]bool{"started": true}, nil
+	})
 	h("POST /api/facts", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var in struct {
 			Text string `json:"text"`

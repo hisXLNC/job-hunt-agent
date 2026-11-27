@@ -155,6 +155,8 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/talks", Class: canDo, Label: "Add an interview or conversation", Help: `Body: {"kind": "interview|chat|screen", "title", "at": unix seconds, "minutes", "link", "role_id", "person_id"}. Work the time out from "Now" above; ask if the day or hour is unclear.`, Show: []string{"title"}},
 	{Method: "PUT", Pattern: "/api/talks/{id}", Class: canDo, Kind: "talk", Label: "Update an interview", Help: `Body: any of {"title", "kind", "link", "notes", "at", "minutes"}.`},
 	{Method: "POST", Pattern: "/api/talks/{id}/prep", Class: canDo, Kind: "talk", Label: "Prepare for an interview", Help: "Writes the preparation: likely questions, answers from the CV, what to ask them. Background."},
+	{Method: "GET", Pattern: "/api/fitgaps", Help: "What holds the person's fit back across the roles read in the last 60 days: themes, how many roles ask for each, whether the CV shows it under other words (with a true sentence to keep as a fact) or it is a real gap (with what closes it)."},
+	{Method: "POST", Pattern: "/api/fitgaps/look", Class: canDo, Label: "Find what holds your fit back", Help: "Claude groups what the readings found missing. One request, about a minute."},
 	{Method: "POST", Pattern: "/api/facts", Class: canDo, Label: "Keep a fact", Help: `Body: {"text": "one full sentence about the person"}. Used in every later application.`, Show: []string{"text"}},
 	{Method: "POST", Pattern: "/api/answers", Class: canDo, Label: "Save an answer to a form question", Help: `Body: {"question", "answer"}. Reused when a form asks the same thing.`, Show: []string{"question"}},
 	{Method: "POST", Pattern: "/api/arriving", Class: canDo, Label: "Build the arrival pack", Help: "Background."},

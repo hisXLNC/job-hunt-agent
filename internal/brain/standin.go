@@ -96,6 +96,16 @@ func StandIn() llm.Engine {
 		case "reviews":
 			out = Reviews{Rating: 3.9, Count: 412, Sources: []ReviewSource{{Name: "Glassdoor", Rating: 3.9, URL: "https://www.glassdoor.com/"}, {Name: "Indeed", Rating: 3.8, URL: "https://www.indeed.com/"}},
 				Likes: []string{"Hybrid, two days in the office", "Steady work, good benefits"}, Warns: []string{"Slow decisions, many layers", "Pay rises below market"}}
+		case "fit_gaps":
+			in := req.Input.(FitGapsInput)
+			g := fitGapsOut{Gaps: []FitGap{}}
+			if len(in.Items) > 0 {
+				g.Gaps = append(g.Gaps, FitGap{Theme: in.Items[0].Ask, Items: []int{1}, Kind: "shown", Why: "The CV shows it at the current employer.", Fact: "I led this work at my current employer."})
+			}
+			if len(in.Items) > 1 {
+				g.Gaps = append(g.Gaps, FitGap{Theme: in.Items[1].Ask, Items: []int{2}, Kind: "real", Why: "Nothing on the CV covers it.", Close: "A short course, about six weeks."})
+			}
+			out = g
 		case "pay_read":
 			out = payAnswer{}
 			if m := regexp.MustCompile(`\$[\d,]+(?:\s*[-–]\s*\$[\d,]+)?(?:\s*(?:a|per)\s*(?:year|hour))?`).FindString(fmt.Sprint(req.Input)); m != "" {

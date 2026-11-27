@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Hunt side panel",
-  "version": "26.11.66",
+  "version": "26.11.67",
   "description": "Sits beside a job posting or an application form: shows your fit, attaches your CV and fills in answers. You read the form and press Submit.",
   "minimum_chrome_version": "116",
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },

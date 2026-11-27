@@ -62,3 +62,27 @@ func TestPayWithClaude(t *testing.T) {
 		t.Errorf("none: %q", r.Pay)
 	}
 }
+
+// Between searches, a new posting on a followed employer's board is found,
+// read and prepared in one look.
+func TestWatchBoards(t *testing.T) {
+	e, w := newEngine(t)
+	setUp(t, e)
+	w.mu.Lock()
+	w.jobs = []map[string]any{job(41, "Tax Technology Manager", "Toronto, ON", goodAd)}
+	w.mu.Unlock()
+	if !e.watchDue(e.Now()) || e.watchDue(e.Now()) {
+		t.Fatal("a look should be due once, then not again for a while")
+	}
+	if err := e.watchBoards(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	id, _, ok := e.S.SeenRole("greenhouse:acme:41")
+	if !ok {
+		keys, _ := e.S.Pairs(`SELECT key, id FROM roles`)
+		t.Fatalf("not found; roles: %v", keys)
+	}
+	if r, _ := e.S.Role(id); r.Fit < 0 {
+		t.Errorf("not read: %+v", r)
+	}
+}
