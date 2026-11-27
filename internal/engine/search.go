@@ -1296,7 +1296,7 @@ func (e *Engine) textToRead(ctx context.Context, id int64, again bool) (r store.
 			perr := e.Src.DetailFromPage(pctx, &page)
 			cancel()
 			if perr == nil && len(strings.Fields(page.Description)) >= 40 {
-				e.S.SetRoleDetail(id, page.Description, firstOf(page.ApplyURL, r.ApplyURL), firstOf(page.Pay, r.Pay), firstOf(page.Workplace, r.Workplace), r.Applicants, r.PostedAt)
+				e.S.SetRoleDetail(id, page.Description, firstOf(page.ApplyURL, r.ApplyURL), firstOf(page.Pay, r.Pay, PayFromText(page.Description)), firstOf(page.Workplace, r.Workplace), r.Applicants, r.PostedAt)
 				r, _ = e.S.Role(id)
 			} else if perr != nil {
 				trace.Log("search", "posting page for role %d not read: %v", id, perr)
@@ -1346,6 +1346,7 @@ func (e *Engine) takeReading(ctx context.Context, r store.Role, reading brain.Re
 	if err := e.S.SetReading(id, reading.Fit, band, reading); err != nil {
 		return false, false, err
 	}
+	e.payFromReading(r, reading)
 	prof := e.S.Profile()
 	// A near miss that an honest tailoring would carry over the bar is kept:
 	// "worth a look tailored".
@@ -1822,17 +1823,32 @@ func (e *Engine) AnswerQuestions(ctx context.Context, id int64, text string) err
 	return e.S.SaveDoc(id, "answers", AnswersDoc{Answers: out, At: e.Now().Unix()})
 }
 
-// fillPay reads pay from the text of roles that have none. It only ever
-// fills an empty pay; nothing a role already says is changed.
+// payFromReading keeps the pay Claude found in a posting when the text's own
+// reading found none. A figure that doesn't read as pay is left out.
+func (e *Engine) payFromReading(r store.Role, rd brain.Reading) {
+	pay := strings.Join(strings.Fields(rd.Pay), " ")
+	if r.Pay != "" || pay == "" || len(pay) > 120 {
+		return
+	}
+	if y := PayPerYear(pay); y < 20000 || y > 1500000 {
+		return
+	}
+	e.S.SetRoleDetail(r.ID, "", "", pay, "", -1, 0)
+}
+
+// fillPay reads pay from the text of roles that have none. It fills an empty
+// pay, and completes one that was read as only the bottom of its range
+// ("$90,000.00/yr" of "$90,000.00/yr - $110,000.00/yr"); nothing else a role
+// already says is changed.
 func (e *Engine) fillPay() {
-	ids, _ := e.S.Pairs(`SELECT '', id FROM roles WHERE pay = '' AND description != '' ORDER BY id DESC LIMIT 6000`)
+	ids, _ := e.S.Pairs(`SELECT '', id FROM roles WHERE description != '' AND (pay = '' OR (pay NOT LIKE '%-%' AND pay NOT LIKE '%–%' AND pay NOT LIKE '%—%' AND pay NOT LIKE '% to %')) ORDER BY id DESC LIMIT 6000`)
 	n := 0
 	for _, row := range ids {
 		r, err := e.S.Role(int64(row.N))
 		if err != nil {
 			continue
 		}
-		if pay := PayFromText(r.Description); pay != "" {
+		if pay := PayFromText(r.Description); pay != "" && pay != r.Pay && (r.Pay == "" || strings.HasPrefix(pay, r.Pay)) {
 			e.S.SetRoleDetail(r.ID, "", "", pay, "", -1, 0)
 			n++
 		}

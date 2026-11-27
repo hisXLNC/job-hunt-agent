@@ -201,12 +201,19 @@ const payPer = `(?:\s?(?:per|a|an|each|/)\s?(?:hour|hr|h|year|yr|annum|month|wee
 
 var (
 	// "$85,000 - $105,000 a year", "CAD 40.50/hour", "£45k–£55k"
-	payMarkedRe = regexp.MustCompile(`(?i)` + payCur + `\s?(?:` + payNum + `)(?:\s?(?:-|–|—|to|and)\s?` + payCur + `?\s?(?:` + payNum + `))?(?:\s?(?:CAD|USD|AUD|GBP|EUR))?` + payPer + `?`)
+	payMarkedRe = regexp.MustCompile(`(?i)` + payCur + `\s?(?:` + payNum + `)` + payPer + `?(?:\s?(?:-|–|—|to|and)\s?` + payCur + `?\s?(?:` + payNum + `))?(?:\s?(?:CAD|USD|AUD|GBP|EUR))?` + payPer + `?`)
+	// "110 000 $ – 130 000 $", the sign after the number as in French
+	payTrailRe = regexp.MustCompile(`(?i)(?:` + payNum + `)\s?\$(?:\s?(?:-|–|—|to|à)\s?(?:` + payNum + `)\s?\$)?` + payPer + `?`)
 	// "90,000 to 110,000 CAD per year", where no sign comes first
 	payBareRe   = regexp.MustCompile(`(?i)(?:` + payNum + `)\s?(?:-|–|—|to)\s?(?:` + payNum + `)(?:\s?(?:CAD|USD|AUD|GBP|EUR|dollars))?` + payPer + `?`)
 	payPerEndRe = regexp.MustCompile(`(?i)` + payPer + `$`)
-	payWordRe   = regexp.MustCompile(`(?i)\b(salary|salaries|compensation|pay range|base pay|pay rate|pay:|wage|hourly rate|remuneration|pay band|pay scale|rate of pay|earn|OTE|on-target earnings|per hour|per year|annually|/hr|/hour|/yr|/year)\b`)
-	payNotRe    = regexp.MustCompile(`(?i)\b(revenue|funding|raised|valuation|billion|million|customers|assets|portfolio|budget|turnover|sales of|ARR|bonus of|sign-?on|signing bonus|referral|allowance|stipend|reimburse|tuition|rrsp|401\(?k|coverage|benefit of|up to \$?\d+ (?:for|toward))`)
+	payWordRe   = regexp.MustCompile(`(?i)\b(salary|salaries|salaire|compensation|pay range|base pay|pay rate|pay:|wage|hourly rate|remuneration|pay band|pay scale|rate of pay|earn|OTE|on-target earnings|per hour|per year|annually|/hr|/hour|/yr|/year)\b`)
+	// payLooseRe counts only next to a currency sign: "a range of 25,000 to
+	// 50,000 users" is not pay, "the range for this role is $95,000" is.
+	payLooseRe = regexp.MustCompile(`(?i)\b(range|pays|paying)\b`)
+	// payThingRe: what a bare "$50,000 - $500,000" is about when it isn't pay.
+	payThingRe = regexp.MustCompile(`(?i)\b(transactions?|deals?|loans?|accounts?|contracts?|projects?|clients?|claims?|invoices?|purchases?|spend|limits?|grants?|awards?|prizes?|donations?)\b`)
+	payNotRe   = regexp.MustCompile(`(?i)\b(revenue|funding|raised|valuation|billion|million|customers|assets|portfolio|budget|turnover|sales of|ARR|bonus of|sign-?on|signing bonus|referral|allowance|stipend|reimburse|tuition|rrsp|401\(?k|coverage|benefit of|up to \$?\d+ (?:for|toward))`)
 )
 
 // PayFromText finds the pay a posting names in its own text, for the many
@@ -222,8 +229,10 @@ func PayFromText(desc string) string {
 		from, to := max(0, loc[0]-90), min(len(desc), loc[1]+40)
 		around := desc[from:to]
 		hasPer := payPerEndRe.MatchString(got)
-		worded := payWordRe.MatchString(around)
-		if !hasPer && !worded {
+		worded := payWordRe.MatchString(around) || (marked && payLooseRe.MatchString(around))
+		ranged := strings.ContainsAny(got, "-–—") || strings.Contains(strings.ToLower(got), " to ") || strings.Contains(got, " à ")
+		// "$90K - $110K" on a line of its own is a pay line too.
+		if !hasPer && !worded && !(marked && ranged && !payThingRe.MatchString(desc[max(0, loc[0]-45):min(len(desc), loc[1]+25)])) {
 			return
 		}
 		if payNotRe.MatchString(desc[max(0, loc[0]-45):min(len(desc), loc[1]+25)]) {
@@ -243,7 +252,7 @@ func PayFromText(desc string) string {
 		if worded {
 			score++
 		}
-		if strings.ContainsAny(got, "-–—") || strings.Contains(strings.ToLower(got), " to ") {
+		if ranged {
 			score++ // a range is what a posting's pay line looks like
 		}
 		if score > bestScore {
@@ -251,6 +260,9 @@ func PayFromText(desc string) string {
 		}
 	}
 	for _, loc := range payMarkedRe.FindAllStringIndex(desc, 40) {
+		try(loc, true)
+	}
+	for _, loc := range payTrailRe.FindAllStringIndex(desc, 40) {
 		try(loc, true)
 	}
 	for _, loc := range payBareRe.FindAllStringIndex(desc, 40) {

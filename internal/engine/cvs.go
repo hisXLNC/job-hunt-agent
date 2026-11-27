@@ -326,6 +326,7 @@ func (e *Engine) redoRole(ctx context.Context, id int64) error {
 	if err := e.S.SetReading(id, reading.Fit, band, reading); err != nil {
 		return err
 	}
+	e.payFromReading(r, reading)
 	text := fmt.Sprintf("Scored again against your %s: %d", e.cvName(reading.CVID), reading.Fit)
 	if hadCV {
 		if err := e.Prepare(ctx, id); err != nil {

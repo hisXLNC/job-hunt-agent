@@ -398,6 +398,9 @@ type Reading struct {
 	// empty when the posting gives none. The letter uses them.
 	Ref     string `json:"ref,omitempty"`
 	Contact string `json:"contact,omitempty"`
+	// Pay is the pay the posting names, as written; "" when it names none.
+	// Job Hunt keeps it on the role when its own reading of the text found none.
+	Pay string `json:"pay,omitempty"`
 }
 
 var readingShape = llm.Obj(
@@ -420,6 +423,7 @@ var readingShape = llm.Obj(
 	"skip_why", llm.Str("if the verdict is skip: the reason in under 12 words; otherwise empty"),
 	"ref", llm.Str("the posting's own reference, requisition or competition number exactly as written; empty if it shows none"),
 	"contact", llm.Str("the person the posting says to apply or write to, as 'Name, Title'; empty if it names nobody"),
+	"pay", llm.Str("the pay or pay range the posting itself names, as written with its period (for example '$85,000 - $105,000 a year' or '$32/hour'); empty if it names none. Never a guess, a bonus, a benefit or a figure about the business"),
 	"path", llm.Enum("on: the role moves the person along the career path they want. off: it leads away from it or stands still. unknown: they gave no career path", "on", "off", "unknown"),
 )
 

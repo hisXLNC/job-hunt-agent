@@ -2,6 +2,17 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.64
+
+- **Pay "Not named" when the posting names it.** Job Hunt reads the pay out of a posting's text when
+  the job site gives none of its own, and it missed several common ways of writing it: "$90K -
+  $110K" on a line of its own, "Hiring range: …", "the range for this role is …", "This role pays
+  …" and "110 000 $ – 130 000 $". It also kept only the bottom of a range written
+  "$90,000.00/yr - $110,000.00/yr", and didn't look for pay at all in a posting whose text came from
+  its own page rather than the job site. All fixed. Claude now also notes the pay when it reads a
+  role, so one the text reading still misses is filled in. The roles you already have are read again
+  for pay once, on this computer, without asking Claude.
+
 ## 26.11.63
 
 - **Why fit looked lower than in the old Job Hunt.** Read the same way, a role gets about the same
