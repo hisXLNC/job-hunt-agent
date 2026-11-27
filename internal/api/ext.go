@@ -70,7 +70,7 @@ func (s *Server) extRole(r store.Role) extRole {
 				Text string `json:"text"`
 			}
 			json.Unmarshal(d.Body, &l)
-			out.Letter = l.Text
+			out.Letter = strings.ReplaceAll(l.Text, "**", "") // bold marks are for the file, not a form box
 		}
 	}
 	if out.HasCV {

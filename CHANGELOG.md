@@ -2,6 +2,20 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.69
+
+- **Your letter layout is back.** New letters follow the template the old Job Hunt used: the date,
+  "ATTN: <employer> Hiring Team", a bold subject, "Dear Hiring Team," (or the person the posting
+  names), an opening that quotes one thing the posting asks for and how you meet it, 3 or 4
+  bullets each starting with a bold theme and a real result from your CV, an honest line if it
+  asks for something you don't have, a closing paragraph, and "All the best,". Formal letters keep
+  "Sincerely,". Letters already written stay as they are; choosing a letter style for one
+  writes it again in the new layout. Copy and the side panel leave the bold marks out.
+- **See the letter as it will be sent.** On a role, under your letter, the page itself: your
+  letterhead, the closing and your signature. For the CV, "Open the PDF" shows its pages.
+- **Your signature from the old Job Hunt.** The picture of your signature the old app put on your
+  letters is brought over by itself, unless you've added one here (You, Letters and follow-ups).
+
 ## 26.11.68
 
 - **Pay no longer cut off.** Pay written without commas ("CAD 85500–185000") was shown in full

@@ -687,22 +687,24 @@ func standLetter(in letterInput) string {
 		}
 	}
 	p1 := fmt.Sprintf("Your posting for %s asks for someone who has done this work before. I have.", in.Posting.Title)
-	p2 := "Two examples from my CV:"
+	p2 := "Where my CV meets what you ask for:"
 	switch in.Style {
 	case "formal":
 		p1 = fmt.Sprintf("I am writing to apply for the position of %s. The posting asks for someone who has done this work before, and I have.", in.Posting.Title)
-		p2 = "Two examples from my curriculum vitae:"
+		p2 = "Where my curriculum vitae meets what you ask for:"
 	case "warm":
 		p1 = fmt.Sprintf("I was glad to see %s is hiring a %s. It is the work I have been doing, and the work I want to keep doing.", firstNonEmpty(in.Posting.Company, "your team"), in.Posting.Title)
 	}
 	if in.Ask != "" {
-		p2 = "The two things on my CV closest to what you ask for:"
+		p2 = "The things on my CV closest to what you ask for:"
 	}
-	for i, s := range strong {
-		if i >= 2 {
-			break
+	n := 0
+	for _, a := range in.Reading.Asks {
+		if a.Strength == "gap" || a.Evidence == "" || n >= 3 {
+			continue
 		}
-		p2 += " " + strings.TrimSuffix(s, ".") + "."
+		n++
+		p2 += "\n- **" + strings.TrimSuffix(a.Ask, ".") + ":** " + strings.TrimSuffix(a.Evidence, ".") + "."
 	}
 	p3 := "I would welcome a short conversation about what you need from this role in its first six months."
 	if moving, _ := in.Person.Profile.Relocating(in.Person.Today); moving {

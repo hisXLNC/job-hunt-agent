@@ -200,17 +200,15 @@ func (e *Engine) roleLetter(roleID int64) (office.Letter, store.Role, error) {
 			contact = append([]string{m.Contact.Location, m.Contact.Email, m.Contact.Phone}, m.Contact.Links...)
 		}
 	}
-	greeting, sign := "Dear hiring team,", "Sincerely,"
+	greeting, sign := "Dear Hiring Team,", "All the best,"
 	switch doc.Style {
 	case "formal":
-		greeting = "Dear Hiring Committee,"
+		greeting, sign = "Dear Hiring Committee,", "Sincerely,"
 	case "short":
 		sign = "Best,"
-	case "warm":
-		sign = "With thanks,"
 	}
 	// Addressed the way the posting asks: to the person it names, quoting its reference.
-	to, subject := []string{"Hiring team", r.Company}, r.Title
+	to, subject := []string{"ATTN: " + r.Company + " Hiring Team", r.Company}, r.Title
 	var rd brain.Reading
 	if json.Unmarshal(r.Reading, &rd) == nil {
 		if c := oneLineOf(rd.Contact, 120); c != "" {

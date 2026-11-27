@@ -899,11 +899,11 @@ func (s *Server) Handler() http.Handler {
 	})
 	h("GET /api/roles/{id}/cv.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		f, err := e.CVPDF(idOf(r))
-		return sendFile(w, f.Name, f.Data, err)
+		return viewPDF(w, r, f.Name, f.Data, err)
 	})
 	h("GET /api/roles/{id}/letter.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		f, err := e.LetterPDF(idOf(r))
-		return sendFile(w, f.Name, f.Data, err)
+		return viewPDF(w, r, f.Name, f.Data, err)
 	})
 	// The letter and the CV in one file, letter first, for forms that take one.
 	h("GET /api/roles/{id}/both.pdf", func(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -2239,6 +2239,19 @@ func capitalise(s string) string {
 }
 
 func sendFile(w http.ResponseWriter, name string, data []byte, err error) (any, error) {
+	return sendFileAs(w, "attachment", name, data, err)
+}
+
+// viewPDF sends a PDF to be shown in the page (?view=1, the preview on the
+// role page) or downloaded.
+func viewPDF(w http.ResponseWriter, r *http.Request, name string, data []byte, err error) (any, error) {
+	if r.URL.Query().Get("view") == "1" {
+		return sendFileAs(w, "inline", name, data, err)
+	}
+	return sendFile(w, name, data, err)
+}
+
+func sendFileAs(w http.ResponseWriter, disp, name string, data []byte, err error) (any, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -2255,7 +2268,7 @@ func sendFile(w http.ResponseWriter, name string, data []byte, err error) (any, 
 		ctype = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", ctype)
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disp, map[string]string{"filename": name}))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Write(data)
 	return noBody{}, nil
@@ -2421,6 +2434,7 @@ func (s *Server) roleDetail(id int64) (any, error) {
 	}
 	out["own_cv"] = e.OwnInfo(id, "cv")
 	out["own_letter"] = e.OwnInfo(id, "letter")
+	out["signature_picture"] = e.SignaturePicture() != nil
 	if c, err := st.Company(r.CompanyID); err == nil && engine.NeedsOwnSite(r, c.Site) {
 		var site engine.OwnSite
 		if ok, _ := st.Doc(id, "ownsite", &site); ok {

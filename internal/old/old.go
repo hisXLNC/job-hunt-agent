@@ -488,3 +488,27 @@ func when(s string) time.Time {
 	}
 	return time.Time{}
 }
+
+// Signature is the picture of the person's handwritten signature the old app
+// put on every cover letter (signature.png or signature.jpeg in its data
+// folder, and in its backups), if there was one.
+func (s *Source) Signature() []byte {
+	for _, name := range []string{"signature.png", "signature.jpeg", "signature.jpg"} {
+		if s.zip != nil {
+			if f, err := s.zip.Open(name); err == nil {
+				b, err := io.ReadAll(io.LimitReader(f, 5<<20))
+				f.Close()
+				if err == nil && len(b) > 0 {
+					return b
+				}
+			}
+			continue
+		}
+		for _, d := range s.dirs {
+			if b, err := os.ReadFile(filepath.Join(d, name)); err == nil && len(b) > 0 && len(b) <= 5<<20 {
+				return b
+			}
+		}
+	}
+	return nil
+}

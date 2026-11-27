@@ -680,9 +680,9 @@ type letterInput struct {
 
 // How each letter style reads. "standard" is the task as written.
 var letterStyles = map[string]string{
-	"formal": "Formal and reserved, as for a bank, a government body, an insurer or a law firm: 230 to 300 words, measured claims, no contractions, full sentences.",
-	"short":  "Short and direct, as for a startup: 110 to 150 words, two short paragraphs and at most three lines starting with \"- \", plain conversational sentences; contractions are fine.",
-	"warm":   "Warm and personal: 200 to 260 words, one sentence on why this employer in particular, taken from the posting and never invented; confident and friendly, not gushing.",
+	"formal": "Formal and reserved, as for a bank, a government body, an insurer or a law firm: 260 to 360 words, measured claims, no contractions, full sentences.",
+	"short":  "Short and direct, as for a startup: 120 to 180 words, two short paragraphs and at most three bullets, plain conversational sentences; contractions are fine.",
+	"warm":   "Warm and personal: 220 to 310 words, one sentence on why this employer in particular, taken from the posting and never invented; confident and friendly, not gushing.",
 }
 
 func evidence(r Reading) string {
@@ -715,9 +715,13 @@ func (b *Brain) Letter(ctx context.Context, p Person, post Posting, r Reading, s
 		Task: "letter",
 		System: house + `
 
-Your task: write the body of a cover letter. 170 to 230 words, three or four short paragraphs separated by blank lines. No greeting line, no sign-off, no address block: those are added later.
+Your task: write the body of a cover letter, in the layout the person chose for their letters. 260 to 400 words. Blocks are separated by a blank line. No greeting line, no sign-off, no date, address or subject: those are added around it.
 
-Open with the thing in this posting that the person has actually done, stated as a fact, not with "I am writing to apply". The middle gives two pieces of evidence with a number or a named result each. If there is a real gap in a must-have, name it in one plain sentence and say what they bring instead: recruiters trust candidates who do that. If the person is relocating, say when they arrive and that they are available by video until then, in one sentence near the end. If their right to work is stated, say it in a few words; if it is not stated, do not mention it.
+1. Opening paragraph: the role and the employer by name, the person's strongest credential for it from the CV (title, licence or years of experience), and one core requirement quoted from the posting in quotation marks, with how they meet it. Never open with "I am writing to".
+2. One lead-in sentence ending with a colon, then 3 or 4 bullets, each on its own line starting "- **<a theme taken from a requirement of the posting>:** ", followed by one or two sentences on a concrete achievement from the CV: name the employer and keep its real figures.
+3. Only if the posting asks for something the CV doesn't show (a degree, certification or licence): one honest sentence on how their experience covers it and that they are open to earning it. Never claim it.
+4. Closing paragraph: why they would do well in this role at this employer, an invitation to talk, and thanks. If the person is relocating, say in one sentence when they arrive and that they are available by video until then. If their right to work is stated, say it in a few words; if it is not stated, do not mention it.
+No clichés: never "passionate", "team player", "ideal candidate" or "perfect fit".
 Sound like a capable person writing to a peer.
 
 ` + p.Block(),

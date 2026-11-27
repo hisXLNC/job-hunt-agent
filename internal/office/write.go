@@ -252,7 +252,7 @@ func letterDoc(l Letter) *doc {
 					style = "LetterFirst"
 					gap = false
 				}
-				d.para(style, run{text: t})
+				d.para(style, marked(t)...)
 			}
 			plain = nil
 		}
@@ -260,7 +260,7 @@ func letterDoc(l Letter) *doc {
 			if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "- "); ok {
 				flush()
 				gap = false
-				d.para("ListParagraph", run{text: clean(rest)})
+				d.para("ListParagraph", marked(clean(rest))...)
 			} else {
 				plain = append(plain, line)
 			}
@@ -295,6 +295,25 @@ func letterDoc(l Letter) *doc {
 		}
 	}
 	return d
+}
+
+// marked splits text at **…** into plain and bold runs: a letter's bullets
+// start with a bold theme ("**Tax technology:** …"). A lone ** is dropped.
+func marked(t string) []run {
+	parts := strings.Split(t, "**")
+	if len(parts)%2 == 0 {
+		return []run{{text: strings.ReplaceAll(t, "**", "")}}
+	}
+	var out []run
+	for i, p := range parts {
+		if p != "" {
+			out = append(out, run{text: p, bold: i%2 == 1})
+		}
+	}
+	if len(out) == 0 {
+		out = []run{{text: ""}}
+	}
+	return out
 }
 
 // ---- the package ----------------------------------------------------------------

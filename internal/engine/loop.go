@@ -164,6 +164,7 @@ func (e *Engine) tick() {
 	e.chores(now)
 	e.clearOldOnce()
 	e.oldKeysOnce()
+	e.oldSignatureOnce()
 	if e.Paused() || e.Busy("search") || e.heldBack("search") {
 		return
 	}

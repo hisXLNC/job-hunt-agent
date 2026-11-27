@@ -307,6 +307,7 @@ func (e *Engine) ImportOld(ctx context.Context, path, shown string) (OldResult, 
 	// The keys for the other job searches (Adzuna, Jooble, Google for Jobs,
 	// LinkedIn through Apify), where none is saved here yet.
 	res.Searches = e.oldKeys(src)
+	e.oldSignature(src)
 
 	// 2. Who the person is and where they look. Only blanks are filled:
 	// anything already said here stands.
@@ -957,4 +958,41 @@ func (e *Engine) oldKeysOnce() {
 	}
 	defer src.Close()
 	e.oldKeys(src)
+}
+
+// oldSignature brings over the picture of the person's signature the old app
+// put on their letters, unless one is already set here.
+func (e *Engine) oldSignature(src *old.Source) bool {
+	if e.SignaturePicture() != nil {
+		return false
+	}
+	b := src.Signature()
+	if b == nil || e.SetSignaturePicture(b) != nil {
+		return false
+	}
+	e.S.Log(store.Activity{Kind: "profile", Text: "Brought over from the old Job Hunt the picture of your signature, for your letters"})
+	e.S.Changed("profile")
+	return true
+}
+
+// oldSignatureOnce brings over, once, the signature a bring-over from before
+// 26.11.69 left behind. Only the old app's own data folder is read.
+func (e *Engine) oldSignatureOnce() {
+	if e.S.GetInt("old.sig") != 0 || e.Busy("old") {
+		return
+	}
+	var last OldResult
+	if ok, _ := e.S.Get(oldDoneKey, &last); !ok {
+		return
+	}
+	e.S.Set("old.sig", e.Now().Unix())
+	if old.Default() == "" {
+		return
+	}
+	src, err := e.oldOpen("")
+	if err != nil {
+		return
+	}
+	defer src.Close()
+	e.oldSignature(src)
 }

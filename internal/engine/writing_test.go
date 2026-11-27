@@ -70,7 +70,7 @@ func TestRoleFilesAsPDF(t *testing.T) {
 		t.Fatal(err)
 	}
 	ltext, _ := pdfText(t, lf.Data)
-	if lf.Name != "Sam Rivera - Acme Corp - Letter.pdf" || !strings.Contains(ltext, "Dear hiring team,") || !strings.Contains(ltext, "Sam Rivera, CPA") || strings.Contains(ltext, "Sincerely") {
+	if lf.Name != "Sam Rivera - Acme Corp - Letter.pdf" || !strings.Contains(ltext, "Dear Hiring Team,") || !strings.Contains(ltext, "Sam Rivera, CPA") || strings.Contains(ltext, "Sincerely") {
 		t.Errorf("letter %q: %.300s", lf.Name, ltext)
 	}
 	both, err := e.PackPDF(id)
@@ -81,7 +81,7 @@ func TestRoleFilesAsPDF(t *testing.T) {
 	if both.Name != "Sam Rivera - Acme Corp - Letter and CV.pdf" || pages < 2 {
 		t.Errorf("pack %q has %d pages", both.Name, pages)
 	}
-	if l, c := strings.Index(btext, "Dear hiring team,"), strings.Index(btext, "Northwind Group"); l < 0 || c < 0 || l > c {
+	if l, c := strings.Index(btext, "Dear Hiring Team,"), strings.Index(btext, "Northwind Group"); l < 0 || c < 0 || l > c {
 		t.Errorf("the letter should come first, then the CV (letter at %d, CV at %d)", l, c)
 	}
 	// The Word files carry the same kind of name.

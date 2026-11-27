@@ -104,13 +104,14 @@ function sent(d) {
         ${c.after ? html`<details class="xs"><summary class="link">Edit the wording</summary><form data-act="editchange" data-i="${i}" class="col" style="gap:6px;margin-top:6px"><textarea name="after" rows="3" aria-label="Your wording for this change">${c.after}</textarea><div class="row"><span class="m grow">Your words go into the CV as they are; they are not checked against your facts.</span><button class="btn sm">Use my wording</button></div></form></details>` : ''}</div></div>`)}
       ${!doc.changes.length ? html`<p class="s m">No changes were needed: your CV already speaks to this role.</p>` : ''}</div>
     ${doc.left_out?.length ? html`<details><summary class="s">${doc.left_out.length} thing${doc.left_out.length === 1 ? '' : 's'} left out on purpose</summary><ul class="s ink2" style="margin:6px 0 0 18px">${doc.left_out.map(x => html`<li><b>${x.what}</b>: ${x.why}</li>`)}</ul></details>` : ''}
-    <details><summary class="s">See the whole CV as it will be sent</summary><div style="margin-top:10px">${cvSheet(d.cv.sent)}</div></details>
+    <details><summary class="s">See the whole CV as it will be sent</summary><div style="margin-top:10px">${d.own_cv || d.pdf_gap ? '' : html`<div class="row" style="margin-bottom:8px"><span class="xs m grow">The words, as they read. The page itself, as it will look:</span><a class="btn sm" href="/api/roles/${r.id}/cv.pdf?view=1&v=${stamp(d)}" target="_blank" rel="noopener">Open the PDF</a></div>`}${cvSheet(d.cv.sent)}</div></details>
     ${ask('askcv', 'undocv', doc.prev, 'For example: make more of the team I managed', 'What to change in the CV')}
     <div class="hr"></div>
     <div class="row wrap"><h3 class="grow">Your letter · ${words(d.letter)} words</h3>
       <select class="mini" aria-label="Letter style" data-on="change" data-act="letterstyle" title="Writes the letter again in this style. The one you have is kept, so you can put it back.">${(d.letter_styles || []).map(s => html`<option value="${s}" ${s === d.letter_style ? 'selected' : ''}>${STYLE[s] || s}</option>`)}</select>
       <button class="btn sm" data-act="copyletter">Copy</button>${d.own_letter ? '' : files(r, 'letter', 'The letter as it is saved here.')}</div>
     <form data-act="saveletter" class="col" style="gap:6px"><textarea name="text" rows="9" aria-label="Your letter">${d.letter || ''}</textarea><div class="row"><span class="xs m grow">Edit freely; what you save here is what the download contains.</span><button class="btn sm">Save letter</button></div></form>
+    ${d.own_letter || d.pdf_gap ? '' : html`<details><summary class="s">See the letter as it will be sent</summary><p class="xs m" style="margin:8px 0 6px">On your letterhead, with your closing${d.signature_picture ? ' and signature' : html` (no signature picture yet: <a href="#/you?open=letters">add one under You</a>)`}. Save the letter first to see your changes.</p><iframe src="/api/roles/${r.id}/letter.pdf?view=1&v=${stamp(d)}" loading="lazy" title="The letter as it will be sent" style="width:100%;height:1060px;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe></details>`}
     ${ask('askletter', 'undoletter', d.letter_prev, 'For example: shorter, and open with the Vertex project', 'What to change in the letter')}
     ${d.own_cv || d.own_letter ? '' : html`<div class="row wrap"><span class="s m grow">${d.pdf_gap ? html`<b style="color:var(--warn)">A PDF from Job Hunt shows Western European letters only, and these have others.</b> Use Word for this one.` : 'For a form that takes one file: the letter first, then your CV.'}</span><a class="btn sm" href="/api/roles/${r.id}/both.pdf">Letter and CV in one PDF</a></div>`}
     <div class="row wrap"><span class="xs m grow">Every CV and letter is also kept as files in a folder of its own for this role (Settings, The app).</span><button class="btn sm ghost" data-act="showfiles" title="Writes this role's CV and letter, as they are now, into its folder and opens it.">Show files</button></div>
@@ -121,6 +122,9 @@ function sent(d) {
     ${questions(d)}
   </div>`;
 }
+
+// Changes with what the files would hold, so a preview is never an old copy.
+const stamp = d => { let h = 0; for (const ch of JSON.stringify([d.letter, d.letter_style, d.cv?.doc?.changes?.map(c => c.off ? 0 : c.after)])) h = (h * 31 + ch.charCodeAt(0)) | 0; return (h >>> 0).toString(36); };
 
 // The questions an application form asks, answered from the person's own facts, to copy across.
 function questions(d) {
@@ -326,7 +330,7 @@ export default {
     toggle: ({ route, d }) => post(`roles/${route.parts[1]}/change`, { index: +d.i, off: !!d.off }),
     switchcv: ({ route, value }) => { toast('Tailoring from the other CV…'); return post(`roles/${route.parts[1]}/cv`, { cv: +value }); },
     saveletter: ({ route, f }) => post(`roles/${route.parts[1]}/letter`, { text: f.text }).then(() => toast('Letter saved')),
-    copyletter: ({ data }) => { copy(data.letter || ''); return false; },
+    copyletter: ({ data }) => { copy((data.letter || '').replaceAll('**', '')); return false; },
     fixabout: ({ data }) => { openAssistant(`About ${data.role.company}: `, false); return false; },
     case: ({ route }) => post(`roles/${route.parts[1]}/case`),
     copycase: ({ data }) => { copy((data.case.subject ? data.case.subject + '\n\n' : '') + data.case.body); return false; },
