@@ -430,13 +430,12 @@ const wantsRule = `How what they want weighs:
 - An industry they want: a little higher.
 - "path": whether this role moves them along the career path they want.`
 
-const fitRubric = `How to score fit:
-- 90 to 100: meets every must-have with direct evidence, at the right level, in the right place.
-- 75 to 89: meets most must-haves; what is missing is minor or quickly learned.
-- 60 to 74: plausible, but one real must-have is missing or the level is off by one.
-- 40 to 59: a stretch.
-- under 40: wrong field, level or place.
-Be calibrated, not generous: most postings a search turns up score under 60.
+const fitRubric = `How to score fit: how well the person fits and how likely they are to get an interview, judged against the CV that suits this role best.
+- 90 to 100: a strong fit on level, field and the core requirements.
+- 70 to 89: a good fit with minor gaps.
+- 50 to 69: a plausible stretch.
+- under 50: a poor fit: the wrong level or field, or a hard requirement they lack (a licence, clearance, degree or designation they don't hold, or years in a tool they never used).
+Judge only against what the CVs and facts actually show. Credit transferable experience where the work is genuinely the same under another name (delivering payments products is delivering product; a program in a bank is a program), and treat hard technical requirements strictly. A requirement listed as preferred, an asset or nice to have is not a must-have, and a certification they hold, or one of several the posting accepts, meets it.
 
 Step-up roles (one level above the person) are wanted as much as roles at their level: never mark a role down for being a step up if the scope is within reach.
 

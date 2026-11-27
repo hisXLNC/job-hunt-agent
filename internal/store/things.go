@@ -248,34 +248,37 @@ func stageRank(st string) int {
 }
 
 type Role struct {
-	ID          int64           `json:"id"`
-	CompanyID   int64           `json:"company_id"`
-	Company     string          `json:"company"`
-	Key         string          `json:"key"`
-	Source      string          `json:"source"`
-	Title       string          `json:"title"`
-	Location    string          `json:"location"`
-	Workplace   string          `json:"workplace"`
-	Pay         string          `json:"pay"`
-	URL         string          `json:"url"`
-	ApplyURL    string          `json:"apply_url"`
-	Description string          `json:"description,omitempty"`
-	PostedAt    int64           `json:"posted_at"`
-	FirstSeenAt int64           `json:"first_seen_at"`
-	LastSeenAt  int64           `json:"last_seen_at"`
-	GoneAt      int64           `json:"gone_at"`
-	Applicants  int             `json:"applicants"`
-	Band        string          `json:"band"`
-	Stage       string          `json:"stage"`
-	StageAt     int64           `json:"stage_at"`
-	Closed      string          `json:"closed"`
-	ClosedWhy   string          `json:"closed_why"`
-	Fit         int             `json:"fit"`
-	FitTailored int             `json:"fit_tailored"`
-	Reading     json.RawMessage `json:"reading,omitempty"`
-	Saved       bool            `json:"saved"`
-	Auto        bool            `json:"auto"`
-	AppliedAt   int64           `json:"applied_at"`
+	ID          int64  `json:"id"`
+	CompanyID   int64  `json:"company_id"`
+	Company     string `json:"company"`
+	Key         string `json:"key"`
+	Source      string `json:"source"`
+	Title       string `json:"title"`
+	Location    string `json:"location"`
+	Workplace   string `json:"workplace"`
+	Pay         string `json:"pay"`
+	URL         string `json:"url"`
+	ApplyURL    string `json:"apply_url"`
+	Description string `json:"description,omitempty"`
+	PostedAt    int64  `json:"posted_at"`
+	FirstSeenAt int64  `json:"first_seen_at"`
+	LastSeenAt  int64  `json:"last_seen_at"`
+	GoneAt      int64  `json:"gone_at"`
+	Applicants  int    `json:"applicants"`
+	Band        string `json:"band"`
+	Stage       string `json:"stage"`
+	StageAt     int64  `json:"stage_at"`
+	Closed      string `json:"closed"`
+	ClosedWhy   string `json:"closed_why"`
+	Fit         int    `json:"fit"`
+	FitTailored int    `json:"fit_tailored"`
+	// FitReach is the fit the reading expects once the CV is tailored, until
+	// it is (-1 when the reading gave none). Shown as a forecast.
+	FitReach  int             `json:"fit_reach"`
+	Reading   json.RawMessage `json:"reading,omitempty"`
+	Saved     bool            `json:"saved"`
+	Auto      bool            `json:"auto"`
+	AppliedAt int64           `json:"applied_at"`
 	// LaterUntil: the person saved the role for later; it stays off Today
 	// until this moment. 0 when not saved for later.
 	LaterUntil int64 `json:"later_until"`
@@ -292,12 +295,12 @@ func (r Role) Age() int64 {
 	return r.FirstSeenAt
 }
 
-const roleCols = `r.id, r.company_id, c.name, r.key, r.source, r.title, r.location, r.workplace, r.pay, r.url, r.apply_url, r.posted_at, r.first_seen_at, r.last_seen_at, r.gone_at, r.applicants, r.band, r.stage, r.stage_at, r.closed, r.closed_why, r.fit, r.fit_tailored, r.saved, r.auto, r.applied_at, r.later_until, CASE WHEN json_valid(r.reading) THEN COALESCE(json_extract(r.reading, '$.path'), '') ELSE '' END`
+const roleCols = `r.id, r.company_id, c.name, r.key, r.source, r.title, r.location, r.workplace, r.pay, r.url, r.apply_url, r.posted_at, r.first_seen_at, r.last_seen_at, r.gone_at, r.applicants, r.band, r.stage, r.stage_at, r.closed, r.closed_why, r.fit, r.fit_tailored, r.saved, r.auto, r.applied_at, r.later_until, CASE WHEN json_valid(r.reading) THEN COALESCE(json_extract(r.reading, '$.path'), '') ELSE '' END, CASE WHEN json_valid(r.reading) THEN COALESCE(CAST(json_extract(r.reading, '$.if_tailored') AS INTEGER), -1) ELSE -1 END`
 
 func scanRole(sc interface{ Scan(...any) error }, full bool) (Role, error) {
 	var r Role
 	var saved, auto int
-	dst := []any{&r.ID, &r.CompanyID, &r.Company, &r.Key, &r.Source, &r.Title, &r.Location, &r.Workplace, &r.Pay, &r.URL, &r.ApplyURL, &r.PostedAt, &r.FirstSeenAt, &r.LastSeenAt, &r.GoneAt, &r.Applicants, &r.Band, &r.Stage, &r.StageAt, &r.Closed, &r.ClosedWhy, &r.Fit, &r.FitTailored, &saved, &auto, &r.AppliedAt, &r.LaterUntil, &r.Path}
+	dst := []any{&r.ID, &r.CompanyID, &r.Company, &r.Key, &r.Source, &r.Title, &r.Location, &r.Workplace, &r.Pay, &r.URL, &r.ApplyURL, &r.PostedAt, &r.FirstSeenAt, &r.LastSeenAt, &r.GoneAt, &r.Applicants, &r.Band, &r.Stage, &r.StageAt, &r.Closed, &r.ClosedWhy, &r.Fit, &r.FitTailored, &saved, &auto, &r.AppliedAt, &r.LaterUntil, &r.Path, &r.FitReach}
 	var reading string
 	if full {
 		dst = append(dst, &r.Description, &reading)

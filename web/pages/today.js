@@ -1,4 +1,4 @@
-import { html, api, post, ago, when, tile, toast, copy, safeUrl, app, openAssistant, with_, fitColor, employer, shortPay, listSize, endless, picked, redraw, rel, exact, LATER, applicantsText } from '../app.js';
+import { html, api, post, ago, when, tile, toast, copy, safeUrl, app, openAssistant, with_, fitColor, fitPair, employer, shortPay, listSize, endless, picked, redraw, rel, exact, LATER, applicantsText } from '../app.js';
 
 // What each row asks of the person: the word in the first column and the one main button.
 const TODO = {
@@ -75,7 +75,7 @@ function row(c, f) {
   if (!isRole) return html`<tr>${tick}${first}<td class="rc" colspan="${2 + f.where + f.type + f.pay}">${who}</td><td title="${c.kind === 'mail' ? exact(c.at) : ''}">${c.kind === 'mail' ? short(c.at) : ''}</td>${tail ? html`<td colspan="${tail}" class="xs m" title="${c.why || ''}">${c.why || ''}</td>` : ''}${last}</tr>`;
   return html`<tr class="${picked.has(String(c.role_id)) ? 'sel' : ''}">${tick}${first}<td class="rc">${who}</td>
     ${f.where ? html`<td>${WHERE[c.workplace] || ''}</td>` : ''}${f.type ? html`<td>${c.job_type || ''}</td>` : ''}${f.pay ? html`<td title="${c.pay || ''}">${shortPay(c.pay) || html`<span class="m">Not named</span>`}</td>` : ''}
-    <td>${c.fit >= 0 ? html`<span class="fitpair" title="Fit now, then with your tailored CV"><b style="color:${fitColor(c.fit)}">${c.fit}</b><span class="m">→</span>${c.tailored >= 0 && c.kind === 'apply' ? html`<b style="color:${fitColor(c.tailored)}">${c.tailored}</b>` : html`<span class="m">–</span>`}</span>` : ''}</td>
+    <td>${c.fit >= 0 ? fitPair(c.fit, c.kind === 'apply' ? c.tailored : -1, c.reach) : ''}</td>
     <td title="${exact(c.at)}"><span style="${age < 86400 ? 'color:var(--hot);font-weight:600' : ''}">${short(c.at)}</span></td>
     ${f.seen ? html`<td>${c.seen >= 0 ? html`<span style="${c.seen < 10 ? 'color:var(--hot);font-weight:600' : ''}">${applicantsText(c.seen)}</span>` : html`<span class="m" title="The posting doesn't say how many have applied.">—</span>`}</td>` : ''}
     ${f.tags ? html`<td class="tags">${(c.tags || []).map(x => html`<span class="chip ${x.tone || ''}">${x.text}</span>`)}</td>` : ''}${last}</tr>`;

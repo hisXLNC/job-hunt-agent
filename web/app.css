@@ -213,7 +213,7 @@ button.link:hover{text-decoration:underline}
 .tbl.today .two{min-width:0;line-height:1.3}.tbl.today .two>.t,.tbl.today .two>span{display:block;overflow:hidden;text-overflow:ellipsis}.tbl.today td.rc .row>.two{flex:1}
 .tbl.today .two a:not(.t){color:inherit}.tbl.today .two a:not(.t):hover{color:var(--accent)}
 .tbl.today .tags .chip{margin-right:4px}.tbl.today td.do{overflow:visible}
-.fitpair{display:inline-flex;gap:5px;align-items:baseline;font-variant-numeric:tabular-nums}
+.fitpair{display:inline-flex;gap:5px;align-items:baseline;font-variant-numeric:tabular-nums}.fitpair .guess{font-weight:600;opacity:.75}.rings .guess{opacity:.6}.rings .guess .ring circle:not(.track){stroke-dasharray:3 3}
 .row select.mini{flex:none;width:auto;height:28px;padding:0 24px 0 9px;font-size:12px;border-radius:7px}
 .row select.mini.f{max-width:124px}
 .menu{position:relative}.menu summary{list-style:none;cursor:pointer;width:26px;height:28px;display:grid;place-items:center;border-radius:7px;color:var(--muted);font-weight:700}

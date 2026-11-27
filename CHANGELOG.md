@@ -2,6 +2,19 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.63
+
+- **Why fit looked lower than in the old Job Hunt.** Read the same way, a role gets about the same
+  score in both: the same few roles read with each prompt came out within a few points. What
+  differed is the number shown. The old app showed the fit of the tailored CV, and before
+  tailoring its forecast of that ("~78"). Job Hunt 3 showed your CV as it stands, with "–" until a
+  role was prepared. The second number now shows the forecast, faint and as "≈78", until the CV is
+  tailored, on Today, Roles and each employer's page.
+- **How fit is scored** now spells out what it means (how well you fit and how likely an
+  interview is, against the CV that suits the role best), credits experience that is the same work
+  under another name, and doesn't count a preferred or "nice to have" item, or a certification you
+  hold, as a missing must-have.
+
 ## 26.11.62
 
 - **The assistant says yes.** It was told it couldn't send mail, see files or change settings, so

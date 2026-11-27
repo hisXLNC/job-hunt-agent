@@ -1,9 +1,9 @@
-import { html, api, post, put, tile, toast, day, ago, safeUrl, href, with_, fitColor, stageChip, shortPay, listSize, endless, KIND, exact, applicantsText } from '../app.js';
+import { html, api, post, put, tile, toast, day, ago, safeUrl, href, with_, fitColor, fitPair, stageChip, shortPay, listSize, endless, KIND, exact, applicantsText } from '../app.js';
 
 // One employer: its postings, what you sent there, who you know, what working there is like.
 const WHERE = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On site' };
 const short = t => ago(t).replace(/ ago$/, '');
-const pair = r => (r.fit >= 0 ? html`<span class="fitpair" title="Fit now, then with your tailored CV"><b style="color:${fitColor(r.fit)}">${r.fit}</b><span class="m">→</span>${r.fit_tailored >= 0 ? html`<b style="color:${fitColor(r.fit_tailored)}">${r.fit_tailored}</b>` : html`<span class="m">–</span>`}</span>` : html`<span class="m" title="Not read against your CV yet">–</span>`);
+const pair = r => fitPair(r.fit, r.fit_tailored, r.fit_reach);
 const k = n => '$' + Math.round(n / 1000) + 'k';
 const stars = r => html`<span class="stars" title="${r.rating.toFixed(1)} of 5 from public employee reviews">★ ${r.rating.toFixed(1)}</span>`;
 

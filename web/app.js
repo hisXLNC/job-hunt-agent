@@ -90,8 +90,21 @@ export function ring(v, label) {
   const col = fitColor(v);
   return html`<div class="ring" title="${label}"><svg viewBox="0 0 54 54"><circle class="track" cx="27" cy="27" r="22" fill="none" stroke-width="5"/>${has ? html`<circle cx="27" cy="27" r="22" fill="none" style="stroke:${ringColor(v)}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 27 27)"/>` : ''}</svg><b style="${has ? `color:${col}` : ''}">${has ? v : '–'}</b><span>${label}</span></div>`;
 }
-// Two rings, always: how the CV fits as it is, and after tailoring.
-export const rings = (fit, tailored, small) => html`<div class="rings ${small ? 'small' : ''}">${ring(fit, 'Fit now')}${ring(tailored, 'Tailored')}</div>`;
+// Two rings, always: how the CV fits as it is, and after tailoring. Until it
+// is tailored, the second is the fit it is expected to reach, drawn faint.
+export const rings = (fit, tailored, small, reach) => {
+  const guess = !(tailored >= 0) && reach > fit;
+  return html`<div class="rings ${small ? 'small' : ''}">${ring(fit, 'Fit now')}${guess ? html`<div class="guess" title="About ${reach} once your CV is tailored to this posting from what is already true">${ring(reach, '≈ tailored')}</div>` : ring(tailored, 'Tailored')}</div>`;
+};
+// The same as two numbers: "64 → 78", the second "≈78" while it is expected
+// rather than written.
+export const fitPair = (fit, tailored, reach) => {
+  if (!(fit >= 0)) return html`<span class="m" title="Not read against your CV yet">–</span>`;
+  const second = tailored >= 0 ? html`<b style="color:${fitColor(tailored)}" title="With your tailored CV">${tailored}</b>`
+    : reach > fit ? html`<b class="guess" style="color:${fitColor(reach)}" title="About ${reach} once your CV is tailored to this posting from what is already true">≈${reach}</b>`
+    : html`<span class="m" title="${reach >= 0 ? 'Tailoring is unlikely to raise this: the gap is experience, not wording' : 'Not tailored yet'}">–</span>`;
+  return html`<span class="fitpair"><b style="color:${fitColor(fit)}" title="Your CV as it is">${fit}</b><span class="m">→</span>${second}</span>`;
+};
 
 const TILE = ['#2F4FC4', '#0B7A3B', '#C2410C', '#7A3FB8', '#0E7490', '#8F5B00', '#B42D2D', '#374151'];
 // An employer's picture comes from its own site, through the program; where

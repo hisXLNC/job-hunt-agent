@@ -28,6 +28,7 @@ type Card struct {
 	MailID   int64  `json:"mail_id,omitempty"`
 	Fit      int    `json:"fit"`
 	Tailored int    `json:"tailored"`
+	Reach    int    `json:"reach"`        // the fit expected once tailored, before it is
 	At       int64  `json:"at,omitempty"` // when the posting went up, or the talk happens
 	Seen     int    `json:"seen"`         // applicants so far, -1 unknown
 	Fresh    bool   `json:"fresh"`        // still early enough to be among the first
@@ -171,7 +172,7 @@ func (e *Engine) Today() Brief {
 	// 6. Applications that have gone quiet: one short follow-up, once.
 	for _, r := range e.quietApplications(p, now) {
 		days := int(now.Sub(time.Unix(r.AppliedAt, 0)).Hours() / 24)
-		c := Card{Kind: "chase", Title: r.Title, Sub: fmt.Sprintf("Applied %d days ago, no reply", days), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, Seen: -1,
+		c := Card{Kind: "chase", Title: r.Title, Sub: fmt.Sprintf("Applied %d days ago, no reply", days), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, Reach: r.FitReach, Seen: -1,
 			Why: "One short follow-up is normal; after that, let it go.", Company: r.Company, CompanyID: r.CompanyID}
 		var ch ChaseDoc
 		if ok, _ := e.S.Doc(r.ID, "chase", &ch); ok && ch.Body != "" {
@@ -192,7 +193,7 @@ func (e *Engine) Today() Brief {
 			continue
 		}
 		days := int(now.Sub(time.Unix(r.AppliedAt, 0)).Hours() / 24)
-		cards = append(cards, Card{Kind: "silent", Title: r.Title, Sub: fmt.Sprintf("Applied %d days ago, no reply", days), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, Seen: -1,
+		cards = append(cards, Card{Kind: "silent", Title: r.Title, Sub: fmt.Sprintf("Applied %d days ago, no reply", days), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, Reach: r.FitReach, Seen: -1,
 			Why: "Four weeks of silence is nearly always a no. Close it, or keep it open another week. If they write after all, it opens again by itself.", Company: r.Company, CompanyID: r.CompanyID})
 	}
 	// 7. People worth a first note, when few people know the person yet.
@@ -356,7 +357,7 @@ func urgency(r store.Role, now time.Time) float64 {
 }
 
 func (e *Engine) roleCard(kind string, r store.Role, now time.Time) Card {
-	c := Card{Kind: kind, Title: r.Title, Sub: joinNonEmpty(" · ", r.Company, r.Location), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, At: r.Age(), Seen: r.Applicants, Band: r.Band, URL: firstOf(r.ApplyURL, r.URL)}
+	c := Card{Kind: kind, Title: r.Title, Sub: joinNonEmpty(" · ", r.Company, r.Location), RoleID: r.ID, Fit: r.Fit, Tailored: r.FitTailored, Reach: r.FitReach, At: r.Age(), Seen: r.Applicants, Band: r.Band, URL: firstOf(r.ApplyURL, r.URL)}
 	c.Fresh = now.Sub(time.Unix(r.Age(), 0)) < freshFor || (r.Applicants >= 0 && r.Applicants < 10)
 	var rd *brain.Reading
 	desc := ""
