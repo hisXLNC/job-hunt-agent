@@ -2,6 +2,12 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.68
+
+- **Pay no longer cut off.** Pay written without commas ("CAD 85500–185000") was shown in full
+  and cut off in the Pay column. It now reads "C$85.5k–185k", like the others; "110 000 $" reads
+  "$110k". Point at a pay to see it as the posting wrote it.
+
 ## 26.11.67
 
 - **What holds your fit back.** On Career path, "Find what holds my fit back" groups what the

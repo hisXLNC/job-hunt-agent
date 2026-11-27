@@ -164,7 +164,8 @@ export const employer = (name, id, cls) => (id && name ? html`<a class="emp ${cl
 export function shortPay(p) {
   if (!p) return '';
   // Whole-dollar cents say nothing: "$85,500.00" is "$85.5k", "$85.00/hr" is "$85/h".
-  return String(p).replace(/(\d)\.00(?!\d)/g, '$1').replace(/(\d{2,3}),000(\.00)?/g, '$1k').replace(/(\d),(\d)00(?!\d)/g, '$1.$2k').replace(/\.0k/g, 'k').replace(/\s*(a|per|\/)\s*(year|yr|annum)\b\.?/gi, '').replace(/\s*(a|per|\/)\s*(hour|hr)\b\.?/gi, '/h').replace(/\s+(to|-|–|—)\s+/g, '–').trim();
+  // "CAD 85500–185000" is "C$85.5k–185k": plain figures of five digits and up are yearly.
+  return String(p).replace(/\bCAD\s*\$?\s*/g, 'C$').replace(/(?<![\d.,])(\d{5,7})(?:\.00)?(?![\d,])/g, (_, n) => (+n / 1000).toFixed(1).replace(/\.0$/, '') + 'k').replace(/(\d)\.00(?!\d)/g, '$1').replace(/\b(\d{2,3})[\s\u00a0\u202f]000\s*\$/g, '$$$1k').replace(/(\d{2,3}),000(\.00)?/g, '$1k').replace(/(\d),(\d)00(?!\d)/g, '$1.$2k').replace(/\.0k/g, 'k').replace(/\s*(a|per|\/)\s*(year|yr|annum)\b\.?/gi, '').replace(/\s*(a|per|\/)\s*(hour|hr)\b\.?/gi, '/h').replace(/\s+(to|-|–|—)\s+/g, '–').trim();
 }
 // Rows ticked in a list, kept while the page redraws.
 export const picked = new Set();
