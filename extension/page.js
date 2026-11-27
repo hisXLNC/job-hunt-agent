@@ -126,3 +126,85 @@ function pageGrabHiringTeam() {
   }
   return out;
 }
+
+// Reads the jobs on an Indeed search page: each card's job key, title,
+// employer, place, pay and age. Indeed's own data for the cards is read too,
+// when the page carries it, for what a card leaves out. Only reads.
+function pageGrabIndeed() {
+  const flat = el => (el ? (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : '');
+  const out = new Map();
+  const JK = /^[0-9a-f]{12,20}$/i;
+  const view = jk => location.origin + '/viewjob?jk=' + jk;
+  for (const a of document.querySelectorAll('[data-jk]')) {
+    const jk = (a.getAttribute('data-jk') || '').toLowerCase();
+    if (!JK.test(jk) || out.has(jk)) continue;
+    const card = a.closest('.job_seen_beacon, .cardOutline, li, td.resultContent, [class*="jobCard"]') || a.parentElement;
+    if (!card) continue;
+    const title = flat(card.querySelector('h2 a span[title], .jobTitle span[title], h2 span[id^="jobTitle"], h2')) || a.getAttribute('aria-label') || '';
+    const company = flat(card.querySelector('[data-testid="company-name"], .companyName'));
+    const place = flat(card.querySelector('[data-testid="text-location"], .companyLocation'));
+    let pay = '';
+    for (const el of card.querySelectorAll('[data-testid="attribute_snippet_testid"], .salary-snippet-container, .salaryOnly, .estimated-salary, [class*="salary"]')) {
+      const t = flat(el);
+      if (/\d/.test(t) && /[$£€]|hour|year|month|week/i.test(t)) { pay = t; break; }
+    }
+    const posted = flat(card.querySelector('[data-testid="myJobsStateDate"], .date')).replace(/^(posted|employer active|active)\s*/i, '');
+    const snippet = flat(card.querySelector('[data-testid="jobsnippet_footer"], .job-snippet'));
+    out.set(jk, { job_id: jk, title, company, location: place, pay, posted, description: snippet, url: view(jk) });
+  }
+  // Indeed's own data behind the cards, in a script on the page.
+  for (const s of document.querySelectorAll('script')) {
+    const src = s.textContent || '';
+    const at = src.indexOf('"mosaic-provider-jobcards"]=');
+    if (at < 0) continue;
+    try {
+      const start = src.indexOf('{', at), end = src.indexOf('};', start);
+      const data = JSON.parse(src.slice(start, end + 1));
+      const results = (((data.metaData || {}).mosaicProviderJobCardsModel || {}).results) || [];
+      for (const r of results) {
+        const jk = String(r.jobkey || '').toLowerCase();
+        if (!JK.test(jk)) continue;
+        const had = out.get(jk) || { job_id: jk, url: view(jk), description: '', title: '', company: '', location: '', pay: '', posted: '' };
+        out.set(jk, {
+          ...had,
+          title: had.title || String(r.displayTitle || r.title || ''),
+          company: had.company || String(r.company || ''),
+          location: had.location || String(r.formattedLocation || ''),
+          pay: had.pay || String((r.salarySnippet && r.salarySnippet.text) || ''),
+          posted: had.posted || String(r.formattedRelativeTime || ''),
+        });
+      }
+      break;
+    } catch (e) { /* not the cards' data; the cards on the page are enough */ }
+  }
+  return [...out.values()].filter(j => j.title && j.company).slice(0, 30).map(j => ({
+    ...j, title: j.title.slice(0, 200), company: j.company.slice(0, 120), location: j.location.slice(0, 120),
+    pay: j.pay.slice(0, 120), posted: j.posted.slice(0, 60), description: (j.description || '').slice(0, 2000),
+  }));
+}
+
+// Reads the text of the given Indeed jobs, one at a time and slowly, from the
+// site the page is on, as Indeed's own page does when a job is clicked. Stops
+// at the first answer that isn't a job (Indeed asking who is there).
+async function pageIndeedTexts(jks) {
+  const out = {};
+  const blockText = html => {
+    const marked = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|li|div|h[1-6]|ul|ol|tr)>/gi, m => m + '\n');
+    const d = new DOMParser().parseFromString(marked, 'text/html');
+    return (d.body.textContent || '').replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+  };
+  for (const jk of (Array.isArray(jks) ? jks : []).slice(0, 15)) {
+    if (!/^[0-9a-f]{12,20}$/i.test(jk)) continue;
+    try {
+      const r = await fetch('/viewjob?jk=' + jk, { credentials: 'same-origin' });
+      if (!r.ok) break;
+      const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+      const desc = doc.querySelector('#jobDescriptionText');
+      if (!desc) break;
+      const pay = doc.querySelector('#salaryInfoAndJobType');
+      out[jk] = { description: blockText(desc.innerHTML).slice(0, 60000), pay: pay ? (pay.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120) : '' };
+    } catch (e) { break; }
+    await new Promise(res => setTimeout(res, 1200 + Math.random() * 1200));
+  }
+  return out;
+}

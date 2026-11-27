@@ -2,6 +2,25 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.66
+
+- **Indeed through the side panel.** Indeed turns programs away, so Job Hunt can't search it itself.
+  Open an Indeed search in your browser with the side panel showing, and it reads the jobs on the
+  page by itself and hands the new ones that fit your titles and city to Job Hunt, which reads them
+  against your CV like any search's finds. The text of each new job is read slowly, one at a time,
+  from the page you're on. "Read this page again" does it over. Sorting Indeed by date finds roles
+  while they're fresh. The side panel needs reloading once to be allowed on Indeed (it does this
+  itself when it sees the new version).
+- **Sort and filter by pay on Roles.** Press Pay to put the highest first (roles that name none
+  come last either way); the new pay filter keeps "Pay named" or "$80k / $100k / $120k / $150k a
+  year and up". Hourly pay counts over a year.
+- **Pay Claude finds.** Once, about ten minutes after this update, Claude is asked for the pay of
+  open roles that still say "Not named" after Job Hunt's own reading. Only postings with a line
+  that could hold pay are asked about, at most 60, and only those lines are sent.
+- **LinkedIn is asked more gently.** At most 12 searches an hour, 15 to 30 seconds apart, instead of
+  one after another. What doesn't fit waits for the next search, which picks up where this one
+  stopped, so every title is still searched through the day.
+
 ## 26.11.65
 
 - **Roles in Ottawa (and other cities) for a search in Toronto.** A job site searched for your city

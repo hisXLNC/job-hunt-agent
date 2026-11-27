@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"jobhunt/internal/trace"
+	"math/rand/v2"
 	"regexp"
 	"sort"
 	"strings"
@@ -215,6 +216,25 @@ type SearchState struct {
 	// LinkedInTurn: which title in which place LinkedIn is asked about next,
 	// when they do not all fit in one search.
 	LinkedInTurn int `json:"linkedin_turn,omitempty"`
+	// LinkedInHourAt and LinkedInHourN count the LinkedIn searches asked in
+	// the hour that began then, so that they spread over the day.
+	LinkedInHourAt int64 `json:"linkedin_hour_at,omitempty"`
+	LinkedInHourN  int   `json:"linkedin_hour_n,omitempty"`
+}
+
+// linkedInPerHour is the most LinkedIn searches in an hour. What doesn't fit
+// waits for the next search, which starts where this one stopped.
+const linkedInPerHour = 12
+
+// linkedInLeft is how many LinkedIn searches are left in this hour.
+func (e *Engine) linkedInLeft(st *SearchState, now int64) int {
+	if now-st.LinkedInHourAt >= 3600 {
+		st.LinkedInHourAt, st.LinkedInHourN = now, 0
+	}
+	if e.Src.Base != nil && e.Src.Base["linkedin"] != "" {
+		return 1000 // tests
+	}
+	return max(linkedInPerHour-st.LinkedInHourN, 0)
 }
 
 // slowDown reports whether a source answered that it is asked too often.
@@ -415,7 +435,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 	// up to its share of one search.
 	places := searchedPlaces(p)
 	liAll := titlesAt(p.Titles.All(), places)
-	liAsk := turnOf(liAll, st.LinkedInTurn, linkedInShare(linkedInMost(kind, len(p.Titles.All()), len(places)), st.LinkedInStrikes))
+	liAsk := turnOf(liAll, st.LinkedInTurn, min(linkedInShare(linkedInMost(kind, len(p.Titles.All()), len(places)), st.LinkedInStrikes), e.linkedInLeft(&st, now.Unix())))
 
 	// 1. Employers' own boards: the earliest place a posting appears.
 	companies, _ := e.S.Companies("following")
@@ -567,6 +587,7 @@ func (e *Engine) Search(ctx context.Context, kind string) error {
 			case <-time.After(e.linkedInPause()):
 			}
 		}
+		st.LinkedInHourN += asked
 		if len(liAll) > 0 {
 			st.LinkedInTurn = (st.LinkedInTurn + asked) % len(liAll)
 		}
@@ -676,7 +697,9 @@ func (e *Engine) linkedInPause() time.Duration {
 	if e.Src.Base != nil && e.Src.Base["linkedin"] != "" {
 		return 0 // tests
 	}
-	return 4 * time.Second
+	// Asked one after another, the searches looked like a program; spaced
+	// out, like a person moving between searches.
+	return 15*time.Second + time.Duration(rand.Int64N(int64(15*time.Second)))
 }
 
 func plainErr(err error) string {
@@ -741,6 +764,7 @@ func (e *Engine) listBoard(ctx context.Context, c store.Company, p store.Profile
 var generic = map[string]bool{}
 
 func init() {
+	store.PayYear = PayPerYear // the database sorts and filters roles by pay with it
 	for _, w := range strings.Fields(`senior sr junior jr lead principal staff head chief vice president vp director manager associate assistant specialist analyst advisor adviser consultant officer coordinator administrator executive supervisor expert professional partner intern of the and for in at to a an i ii iii iv global regional national canada team group services service`) {
 		generic[w] = true
 	}

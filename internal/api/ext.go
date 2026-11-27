@@ -189,6 +189,22 @@ func (s *Server) extRoutes(h func(string, handler)) {
 		id, err := e.AddRole(in.Company, in.Title, in.Location, safeLink(in.URL), in.Description, "extension")
 		return map[string]int64{"id": id}, err
 	})
+	// The jobs on an Indeed search page the person has open. With ask, only
+	// which of them Job Hunt wants the text of; without, they are kept.
+	h("POST /api/ext/indeed", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			Jobs []engine.PageJob `json:"jobs"`
+			Ask  bool             `json:"ask"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if in.Ask {
+			return map[string]any{"want": e.IndeedPageWants(in.Jobs)}, nil
+		}
+		seen, added := e.TakeIndeedPage(in.Jobs)
+		return map[string]int{"seen": seen, "added": added}, nil
+	})
 	h("POST /api/ext/role/{id}/prepare", func(w http.ResponseWriter, r *http.Request) (any, error) {
 		id := idOf(r)
 		if _, err := st.Role(id); err != nil {

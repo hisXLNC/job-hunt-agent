@@ -161,7 +161,7 @@ func floorPerYear(p store.Profile) int {
 	return p.PayFloor
 }
 
-var sourceNames = map[string]string{"linkedin": "LinkedIn", "greenhouse": "Employers' own boards", "lever": "Employers' own boards", "ashby": "Employers' own boards", "smartrecruiters": "Employers' own boards", "workday": "Employers' own boards", "manual": "Added by you", "extension": "Sent from your browser", "jobbank": "Job Bank", "freehire": "FreeHire", "mail": "Job alert mail", "alerts": "Job alert mail", "lead": "From a lead", "old": "The old Job Hunt"}
+var sourceNames = map[string]string{"linkedin": "LinkedIn", "greenhouse": "Employers' own boards", "lever": "Employers' own boards", "ashby": "Employers' own boards", "smartrecruiters": "Employers' own boards", "workday": "Employers' own boards", "manual": "Added by you", "extension": "Sent from your browser", "indeed": "Indeed", "jobbank": "Job Bank", "freehire": "FreeHire", "mail": "Job alert mail", "alerts": "Job alert mail", "lead": "From a lead", "old": "The old Job Hunt"}
 
 func sourceName(s string) string {
 	if n, ok := sourceNames[s]; ok {

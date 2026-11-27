@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"jobhunt/internal/brain"
@@ -53,5 +54,38 @@ func TestPayCompletedAndFromReading(t *testing.T) {
 	e.payFromReading(r, brain.Reading{Pay: "$85,000 - $105,000 a year"})
 	if r, _ := e.S.Role(none); r.Pay != "$85,000 - $105,000 a year" {
 		t.Errorf("reading's pay: %q", r.Pay)
+	}
+}
+
+// Roles sort by pay, highest first with none named last either way, and
+// filter by a yearly floor; hourly pay counts over a year.
+func TestRolesByPay(t *testing.T) {
+	e, _ := newEngine(t)
+	co := setUp(t, e)
+	for i, pay := range []string{"", "$90,000 - $110,000 a year", "$70/hour", "$80K"} {
+		e.S.AddRole(store.Role{CompanyID: co.ID, Key: "pay:" + string(rune('a'+i)), Title: "Analyst " + pay, Pay: pay, Applicants: -1, Stage: "found"})
+	}
+	pays := func(f store.RoleFilter) []string {
+		rs, _, err := e.S.Roles(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, r := range rs {
+			out = append(out, r.Pay)
+		}
+		return out
+	}
+	if got := strings.Join(pays(store.RoleFilter{Sort: "pay", CompanyID: co.ID}), "|"); got != "$70/hour|$90,000 - $110,000 a year|$80K|" {
+		t.Errorf("highest first: %s", got)
+	}
+	if got := strings.Join(pays(store.RoleFilter{Sort: "-pay", CompanyID: co.ID}), "|"); got != "$80K|$90,000 - $110,000 a year|$70/hour|" {
+		t.Errorf("lowest first: %s", got)
+	}
+	if got := pays(store.RoleFilter{MinPay: 100000, CompanyID: co.ID}); len(got) != 2 {
+		t.Errorf("100k and up: %v", got)
+	}
+	if got := pays(store.RoleFilter{MinPay: 1, CompanyID: co.ID}); len(got) != 3 {
+		t.Errorf("pay named: %v", got)
 	}
 }

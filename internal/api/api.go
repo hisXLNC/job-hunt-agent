@@ -576,7 +576,7 @@ func (s *Server) Handler() http.Handler {
 		q := r.URL.Query()
 		size := min(max(qInt(r, "size", 12), 1), 1000)
 		page := max(qInt(r, "page", 1), 1)
-		f := store.RoleFilter{Search: q.Get("q"), Band: q.Get("band"), MinFit: qInt(r, "minfit", 0), Sort: q.Get("sort"), Limit: size, Offset: (page - 1) * size,
+		f := store.RoleFilter{Search: q.Get("q"), Band: q.Get("band"), MinFit: qInt(r, "minfit", 0), MinPay: qInt(r, "minpay", 0), Sort: q.Get("sort"), Limit: size, Offset: (page - 1) * size,
 			CompanyID: int64(qInt(r, "company", 0)), Saved: q.Get("saved") == "1"}
 		now := e.Now().Unix()
 		if q.Get("later") == "1" {

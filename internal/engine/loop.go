@@ -231,6 +231,12 @@ func (e *Engine) chores(now time.Time) {
 		e.S.Set("paytext2", now.Unix())
 		go e.fillPay()
 	}
+	// Once, a while after the text has been read again: what it still missed
+	// is asked of Claude.
+	if at := e.S.GetInt("paytext2"); at > 0 && now.Unix()-int64(at) > 600 && e.S.GetInt("payclaude") == 0 && e.LLM().Engine != "" && !e.Paused() {
+		e.S.Set("payclaude", now.Unix())
+		e.Go("payclaude", "Asking Claude for the pay that postings name", e.payWithClaude)
+	}
 	if every("remind", 5*time.Minute) {
 		e.remind(now)
 	}

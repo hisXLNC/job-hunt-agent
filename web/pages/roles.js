@@ -34,7 +34,7 @@ const STAGES = ['found', 'ready', 'applied', 'reply', 'interview', 'offer'];
 
 function query(route) {
   const q = route.q, u = new URLSearchParams({ size: listSize('roles'), page: 1, sort: q.sort || 'age' });
-  for (const k of ['stage', 'closed', 'band', 'minfit', 'q', 'company', 'saved', 'later']) if (q[k]) u.set(k, q[k]);
+  for (const k of ['stage', 'closed', 'band', 'minfit', 'minpay', 'q', 'company', 'saved', 'later']) if (q[k]) u.set(k, q[k]);
   return u.toString();
 }
 
@@ -60,8 +60,9 @@ function filters(d, route) {
       <input type="text" name="q" value="${q.q || ''}" placeholder="Filter by title, employer or place" aria-label="Filter by title, employer or place" style="max-width:300px">
       <select name="band" aria-label="Level" style="width:150px" data-on="change" data-act="filterchange"><option value="">Any level</option>${Object.entries(BAND).map(([k, v]) => html`<option value="${k}" ${q.band === k ? 'selected' : ''}>${v}</option>`)}</select>
       <select name="minfit" aria-label="Fit" style="width:130px" data-on="change" data-act="filterchange"><option value="">Any fit</option>${[60, 70, 80, 90].map(n => html`<option value="${n}" ${q.minfit == n ? 'selected' : ''}>Fit ${n} and up</option>`)}</select>
+      <select name="minpay" aria-label="Pay" style="width:160px" data-on="change" data-act="filterchange"><option value="">Any pay</option><option value="1" ${q.minpay == 1 ? 'selected' : ''}>Pay named</option>${[80, 100, 120, 150].map(n => html`<option value="${n * 1000}" ${q.minpay == n * 1000 ? 'selected' : ''}>${'$' + n}k a year and up</option>`)}</select>
       <button class="btn sm">Filter</button>
-      ${q.q || q.band || q.minfit || q.company || closedOn || q.stage || q.later ? html`<a class="btn sm ghost" href="#/roles">Clear</a>` : ''}
+      ${q.q || q.band || q.minfit || q.minpay || q.company || closedOn || q.stage || q.later ? html`<a class="btn sm ghost" href="#/roles">Clear</a>` : ''}
       <span class="grow"></span>
       <a class="btn sm" href="/api/roles.csv" download title="Every role Job Hunt knows, as a file a spreadsheet opens.">Save as a spreadsheet</a><a class="btn sm" href="/api/recruiters.csv" download title="Recruiters and hiring managers with their e-mail, phone and LinkedIn, as a file a spreadsheet opens.">Recruiters as a spreadsheet</a><button type="button" class="btn sm" data-act="showadd">Add a role yourself</button>
     </form></div>${bulk(d)}</div>
@@ -100,10 +101,10 @@ function bulk(d) {
 }
 
 function table(d, route) {
-  if (!d.roles.length) return html`<div class="card empty"><h3>No roles here</h3><p>${route.q.later ? 'Nothing is saved for later.' : route.q.q || route.q.band || route.q.minfit ? 'Nothing matches these filters.' : 'Roles appear as Job Hunt finds them. The freshest come first.'}</p></div>`;
+  if (!d.roles.length) return html`<div class="card empty"><h3>No roles here</h3><p>${route.q.later ? 'Nothing is saved for later.' : route.q.q || route.q.band || route.q.minfit || route.q.minpay ? 'Nothing matches these filters.' : 'Roles appear as Job Hunt finds them. The freshest come first.'}</p></div>`;
   const open = d.roles.filter(r => !r.closed);
   return html`    <div class="card" style="padding:0"><table class="tbl long">
-    <thead><tr><th class="pick" style="width:34px"><input type="checkbox" data-on="change" data-act="pickall" ${open.length && open.every(r => picked.has(String(r.id))) ? 'checked' : ''} ${open.length ? '' : 'disabled'} aria-label="Tick every open role in this list" title="Tick every open role in this list"></th><th>${sortHead('Role', 'title', route, 'age')} · ${sortHead('Employer', 'company', route, 'age')}</th><th>${sortHead('Fit now', 'fit', route, 'age')} · Tailored</th><th>Pay</th><th>${sortHead('Posted', 'age', route, 'age')}</th><th>${sortHead('Applicants', 'applicants', route, 'age')}</th><th>${sortHead('Stage', 'stage', route, 'age')}</th><th></th></tr></thead>
+    <thead><tr><th class="pick" style="width:34px"><input type="checkbox" data-on="change" data-act="pickall" ${open.length && open.every(r => picked.has(String(r.id))) ? 'checked' : ''} ${open.length ? '' : 'disabled'} aria-label="Tick every open role in this list" title="Tick every open role in this list"></th><th>${sortHead('Role', 'title', route, 'age')} · ${sortHead('Employer', 'company', route, 'age')}</th><th>${sortHead('Fit now', 'fit', route, 'age')} · Tailored</th><th title="Highest first; roles that name no pay come last. Hourly pay is counted over a year.">${sortHead('Pay', 'pay', route, 'age')}</th><th>${sortHead('Posted', 'age', route, 'age')}</th><th>${sortHead('Applicants', 'applicants', route, 'age')}</th><th>${sortHead('Stage', 'stage', route, 'age')}</th><th></th></tr></thead>
     <tbody>${d.roles.map(r => html`<tr class="${picked.has(String(r.id)) || String(r.id) === String(d.seeing?.role?.id) ? 'sel' : ''}"><td class="pick">${r.closed ? '' : html`<input type="checkbox" data-on="change" data-act="pick" data-id="${r.id}" ${picked.has(String(r.id)) ? 'checked' : ''} aria-label="Tick ${r.title}">`}</td>
       <td><div class="row">${tile(r.company, true, r.company_id)}<div class="grow"><a class="t" href="#/roles/${r.id}" data-see="${r.id}">${r.title}</a><span class="s m">${employer(r.company, r.company_id)}${r.rating ? html` <span class="xs" title="What employees rate ${r.company}, out of 5">★ ${r.rating.toFixed(1)}</span>` : ''}${r.location ? html` · ${r.location}` : ''}${r.workplace ? html` · ${r.workplace}` : ''}${BAND[r.band] && r.band !== 'level' ? html` · <b>${BAND[r.band]}</b>` : ''}${r.path ? html` <span class="chip ${r.path === 'on' ? 'good' : ''}" style="padding:0 7px" title="${r.path === 'on' ? 'Moves you along the career path you want' : 'Leads away from the career path you want'}">${r.path === 'on' ? 'On path' : 'Off path'}</span>` : ''}</span></div></div></td>
       <td>${rings(r.fit, r.fit_tailored, true, r.fit_reach)}</td>
@@ -190,8 +191,8 @@ export default {
     },
     later: ({ d }) => post(`roles/${d.id}/later`, { days: +d.days }).then(() => toast({ 0: 'Back on Today', 1: 'Saved for later. Back tomorrow.', 3: 'Saved for later. Back in 3 days.', 7: 'Saved for later. Back next week.' }[d.days], false, +d.days ? () => post(`roles/${d.id}/later`, { days: 0 }) : undefined)),
     async tidy() { const r = await post('roles/tidy'); toast(r.closed ? `${r.closed} closed. They are kept here, under Ended.` : 'Nothing to clear'); },
-    filter({ f, route }) { location.hash = with_(route, { q: f.q.trim(), band: f.band, minfit: f.minfit}); return false; },
-    filterchange({ el, route }) { const f = Object.fromEntries(new FormData(el.form)); location.hash = with_(route, { q: f.q.trim(), band: f.band, minfit: f.minfit}); return false; },
+    filter({ f, route }) { location.hash = with_(route, { q: f.q.trim(), band: f.band, minfit: f.minfit, minpay: f.minpay }); return false; },
+    filterchange({ el, route }) { const f = Object.fromEntries(new FormData(el.form)); location.hash = with_(route, { q: f.q.trim(), band: f.band, minfit: f.minfit, minpay: f.minpay }); return false; },
     showadd() { const f = document.getElementById('addrole'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input').focus(); return false; },
     async add({ f }) { const r = await post('roles', f); toast('Added. Job Hunt is reading it.'); location.hash = `#/roles/${r.id}`; return false; },
     reopen: ({ d }) => post(`roles/${d.id}/reopen`).then(() => toast('Brought back')),

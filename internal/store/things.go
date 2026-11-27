@@ -732,7 +732,8 @@ type RoleFilter struct {
 	Later     int64  // not 0: only roles saved for later beyond this moment
 	NotLater  int64  // not 0: leave out roles saved for later beyond this moment
 	Unread    bool   // include stage "new"
-	Sort      string // fit, age, company, title, stage, applicants (prefix "-" reverses)
+	MinPay    int    // not 0: only roles whose pay reaches this a year (1: any pay named)
+	Sort      string // fit, age, company, title, stage, applicants, pay (prefix "-" reverses)
 	Limit     int
 	Offset    int
 }
@@ -778,6 +779,10 @@ func (f RoleFilter) where() (string, []any) {
 	if f.Saved {
 		w = append(w, `r.saved = 1`)
 	}
+	if f.MinPay > 0 {
+		w = append(w, `pay_year(r.pay) >= ?`)
+		args = append(args, f.MinPay)
+	}
 	if f.Later != 0 {
 		w = append(w, `r.later_until > ?`)
 		args = append(args, f.Later)
@@ -796,6 +801,8 @@ var roleSorts = map[string]string{
 	"title":      "r.title COLLATE NOCASE ASC, r.id DESC",
 	"stage":      "r.stage_at DESC, r.id DESC",
 	"applicants": "(CASE WHEN r.applicants < 0 THEN 100000 ELSE r.applicants END) ASC, r.id DESC",
+	// Highest pay first; roles that name none come last either way.
+	"pay": "NULLIF(pay_year(r.pay), 0) DESC NULLS LAST, r.id DESC",
 }
 
 func (s *Store) Roles(f RoleFilter) ([]Role, int, error) {

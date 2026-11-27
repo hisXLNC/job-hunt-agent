@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"jobhunt/internal/sources"
 	"testing"
 	"time"
 )
@@ -15,5 +16,22 @@ func TestLinkedInBacksOffMoreEachTime(t *testing.T) {
 		if got := linkedInRestFor(strikes); got != want {
 			t.Errorf("rest after %d = %v, want %v", strikes, got, want)
 		}
+	}
+}
+
+// LinkedIn is asked at most linkedInPerHour times an hour; a new hour starts
+// the count again.
+func TestLinkedInSpreadOverTheHour(t *testing.T) {
+	e := &Engine{Src: &sources.Client{}}
+	st := SearchState{}
+	if n := e.linkedInLeft(&st, 1000); n != linkedInPerHour {
+		t.Fatalf("fresh hour: %d", n)
+	}
+	st.LinkedInHourN = linkedInPerHour - 2
+	if n := e.linkedInLeft(&st, 2000); n != 2 {
+		t.Errorf("same hour: %d", n)
+	}
+	if n := e.linkedInLeft(&st, 1000+3600); n != linkedInPerHour || st.LinkedInHourN != 0 {
+		t.Errorf("next hour: %d, %d", n, st.LinkedInHourN)
 	}
 }

@@ -222,6 +222,8 @@ async function readApplicants(role) {
 // LinkedIn pages that show posts: the feed, a post search, one post.
 const POSTS = /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/(feed\/?$|feed\/update\/|search\/results\/(content|all)\/|posts\/)/;
 const ONE_POST = /linkedin\.com\/(feed\/update\/|posts\/)/;
+// An Indeed search page: its jobs are read and handed to Job Hunt by themselves.
+const INDEED_LIST = /^https:\/\/([a-z0-9-]+\.)?indeed\.com\/(jobs\b|q-[^/]*jobs|m\/jobs)/;
 
 async function hello() {
   const hi = await call('hello', { method: 'POST', body: {} });
@@ -257,6 +259,7 @@ async function refresh(force) {
     else if (!/^https?:/.test(url) || url.startsWith(APP)) p = { kind: 'other' };
     else if (/^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/in\/[^/]+/.test(url)) p = { kind: 'profile', url };
     else if (POSTS.test(url)) p = { kind: 'posts', url };
+    else if (INDEED_LIST.test(url)) p = { kind: 'indeed', url };
     else {
       const r = await call('role?url=' + encodeURIComponent(url));
       p = r.known ? { kind: 'role', role: r.role, url } : PROFILE.test(url) && ATS.test(hostOf(url)) ? { kind: 'siteprofile', url } : { kind: 'unknown', url };
@@ -279,6 +282,7 @@ async function refresh(force) {
     if (p.kind === 'role' && /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/jobs\//.test(url)) { readApplicants(p.role); readTeam(p.role); }
     keepReady(t, p);
     if (p.kind === 'profile' && !person) grabProfile();
+    if (p.kind === 'indeed') readIndeed(url);
     if (p.carried && KNOWN_DONE.test(url)) sentFrom(t.id);
   } catch (e) {
     if (!(e instanceof Away) && mine === seq) flash = { tone: 'bad', title: e.message, url: tab && tab.url };
@@ -288,6 +292,43 @@ async function refresh(force) {
   const typing = ['TEXTAREA', 'INPUT', 'SELECT'].includes(document.activeElement && document.activeElement.tagName);
   if (force || !typing) render();
   if (state === 'ok') selfUpdate();
+}
+
+// The jobs on an Indeed search page the person has open: read once a page
+// (again after ten minutes), the new ones' text read slowly in the page, and
+// handed to Job Hunt, which reads them against the CV like any search's finds.
+const indeedRead = {};
+let indeedNote = null;
+async function readIndeed(url, again) {
+  if (!again && Date.now() - (indeedRead[url] || 0) < 10 * 60 * 1000) return;
+  indeedRead[url] = Date.now();
+  indeedNote = { url, busy: true, text: 'Reading the jobs on this page…' };
+  render();
+  try {
+    const [got] = await inPage(pageGrabIndeed);
+    const jobs = (got && Array.isArray(got.result) ? got.result : []).filter(j => j && typeof j.job_id === 'string' && typeof j.title === 'string');
+    if (!jobs.length) { indeedNote = { url, tone: 'warn', text: 'No jobs on this page yet. Once they show, press Read this page again.' }; return; }
+    const want = ((await call('indeed', { method: 'POST', body: { jobs, ask: true } })).want || []).filter(jk => typeof jk === 'string');
+    let texts = {};
+    if (want.length) {
+      indeedNote = { url, busy: true, text: `Reading ${plural(want.length, 'new job', 'new jobs')} on this page…` };
+      render();
+      const [t] = await inPage(pageIndeedTexts, [want]);
+      texts = (t && t.result && typeof t.result === 'object') ? t.result : {};
+    }
+    for (const j of jobs) {
+      const x = texts[j.job_id];
+      if (x && typeof x.description === 'string' && x.description.length > j.description.length) j.description = x.description;
+      if (!j.pay && x && typeof x.pay === 'string') j.pay = x.pay;
+    }
+    const r = await call('indeed', { method: 'POST', body: { jobs } });
+    log(`indeed page: ${jobs.length} read, ${r.added} new`);
+    indeedNote = { url, tone: 'good', text: r.added ? `${plural(r.added, 'new job', 'new jobs')} of ${jobs.length} on this page went to Job Hunt. Each is read against your CV; the good ones come up on Today.` : `Read ${plural(jobs.length, 'job', 'jobs')} on this page. Job Hunt has them all already, or they don't fit your titles and city.` };
+  } catch (e) {
+    indeedNote = { url, tone: 'bad', text: "This page couldn't be read: " + e.message };
+  } finally {
+    if (page.url === url) render();
+  }
 }
 
 // The people LinkedIn names under "Meet the hiring team", read at most every ten minutes a role.
@@ -505,6 +546,7 @@ const actions = {
     const r = await call('person', { method: 'POST', body: { name: f.name.trim(), title: f.title.trim(), company: f.company.trim(), kind: f.kind, url: person.url, draft: true } });
     person = { ...person, name: f.name, title: f.title, company: f.company, kind: f.kind, id: r.id, note: r.note };
   },
+  async readIndeedAgain() { await readIndeed(page.url, true); },
   async sendPosts() {
     const got = await inPage(pageGrabPosts);
     const posts = (got[0] && got[0].result) || [];
@@ -742,6 +784,13 @@ function pageCard() {
   switch (page.kind) {
     case 'role': return roleCard(page.role);
     case 'profile': return personCard();
+    case 'indeed': {
+      const n = indeedNote && indeedNote.url === page.url ? indeedNote : null;
+      return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'This page'), h('h2', {}, 'Indeed jobs'),
+        h('p', { class: 's ' + (n && n.tone === 'bad' ? '' : 'm') }, n ? n.text : 'Job Hunt reads the jobs on this search page by itself and keeps the new ones that fit your titles and city.'),
+        n && n.busy ? null : btn('Read this page again', 'readIndeedAgain', null, 'wide'),
+        h('p', { class: 's m' }, 'Indeed turns programs away, so Job Hunt can only see the Indeed searches you open here. The newest first (sort by date) finds roles while they are fresh.'));
+    }
     case 'posts': return h('section', { class: 'card' }, h('div', { class: 'eb' }, 'This page'), h('h2', {}, 'Hiring posts'),
       h('p', { class: 's m' }, 'Job Hunt reads the posts on this page and keeps the ones where someone says they are hiring. Each one is sized up, with who to write to. Ask in Job Hunt for a note; you send it yourself.'),
       btn('Send hiring posts to Leads', 'sendPosts', null, 'p wide'),
