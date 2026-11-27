@@ -163,7 +163,8 @@ export const employer = (name, id, cls) => (id && name ? html`<a class="emp ${cl
 // "$110,000–$150,000 a year" said short, so it fits a column: "$110k–$150k".
 export function shortPay(p) {
   if (!p) return '';
-  return String(p).replace(/(\d{2,3}),000(\.00)?/g, '$1k').replace(/(\d),(\d)00(?!\d)/g, '$1.$2k').replace(/\.0k/g, 'k').replace(/\s*(a|per|\/)\s*(year|yr|annum)\b\.?/gi, '').replace(/\s*(a|per|\/)\s*(hour|hr)\b\.?/gi, '/h').replace(/\s+(to|-|–|—)\s+/g, '–').trim();
+  // Whole-dollar cents say nothing: "$85,500.00" is "$85.5k", "$85.00/hr" is "$85/h".
+  return String(p).replace(/(\d)\.00(?!\d)/g, '$1').replace(/(\d{2,3}),000(\.00)?/g, '$1k').replace(/(\d),(\d)00(?!\d)/g, '$1.$2k').replace(/\.0k/g, 'k').replace(/\s*(a|per|\/)\s*(year|yr|annum)\b\.?/gi, '').replace(/\s*(a|per|\/)\s*(hour|hr)\b\.?/gi, '/h').replace(/\s+(to|-|–|—)\s+/g, '–').trim();
 }
 // Rows ticked in a list, kept while the page redraws.
 export const picked = new Set();

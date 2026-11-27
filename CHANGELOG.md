@@ -2,6 +2,19 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.65
+
+- **Roles in Ottawa (and other cities) for a search in Toronto.** A job site searched for your city
+  sometimes sends back roles from farther away, and Job Hunt took the site's word for where they
+  were. A role that names another city's job market (Ottawa, Montreal, St. Catharines, London and
+  so on) is now set aside as "Based somewhere else". Roles that are remote, that name a town Job
+  Hunt doesn't know (it may be next door), or that you added under You, Places, are kept. The ones
+  already in your lists are set aside once after this update, if you haven't touched them: nothing
+  prepared, saved or applied to.
+- **Pay on Roles** now has a column of its own, next to Fit.
+- **Pay reads cleanly:** "$85,500.00 - $185,000.00" shows as "$85.5k–$185k", not "$85.5k.00–$185k",
+  and "CA$85.00/hr" as "CA$85/h".
+
 ## 26.11.64
 
 - **Pay "Not named" when the posting names it.** Job Hunt reads the pay out of a posting's text when

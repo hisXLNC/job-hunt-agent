@@ -228,6 +228,10 @@ func slowDown(err error) bool {
 // and the rests of Adzuna and Indeed, whose reasons were misjudged.
 func (e *Engine) AfterUpdate() {
 	var done bool
+	if e.S.Get("fixed_65", &done); !done {
+		e.asideElsewhere()
+		e.S.Set("fixed_65", true)
+	}
 	if e.S.Get("fixed_61", &done); done {
 		return
 	}
@@ -239,6 +243,28 @@ func (e *Engine) AfterUpdate() {
 		e.setSourceState(id, func(s *SourceState) { s.Error, s.ErrorAt, s.RestUntil = "", 0, 0 })
 	}
 	e.S.Set("fixed_61", true)
+}
+
+// asideElsewhere sets aside the roles a search brought back from another
+// city before Job Hunt checked for that. Only roles the person hasn't touched:
+// nothing prepared, saved, applied to or added by them.
+func (e *Engine) asideElsewhere() {
+	p := e.S.Profile()
+	rows, _ := e.S.Pairs(`SELECT '', id FROM roles WHERE closed = '' AND stage IN ('new', 'found') AND saved = 0 AND fit_tailored < 0
+		AND source NOT IN ('manual', 'extension', 'lead', 'mail')`)
+	n := 0
+	for _, row := range rows {
+		r, err := e.S.Role(int64(row.N))
+		if err != nil || placeOK(p, r.Location, r.Workplace) || !otherMarket(p, r.Location, r.Workplace) {
+			continue
+		}
+		if e.S.CloseRole(r.ID, "screened", "Based somewhere else") == nil {
+			n++
+		}
+	}
+	if n > 0 {
+		trace.Log("did", "set aside %d roles based in another city", n)
+	}
 }
 
 func (e *Engine) searchState() SearchState {
@@ -777,6 +803,10 @@ var metros = map[string]metro{
 	"melbourne":     {Miles: 30, Region: []string{"victoria", "vic"}, Towns: []string{"melbourne", "southbank", "docklands", "richmond", "st kilda"}},
 	"singapore":     {Miles: 20, Towns: []string{"singapore"}},
 	"dublin":        {Miles: 20, Region: []string{"ireland", "county dublin"}, Towns: []string{"dublin", "dún laoghaire", "dun laoghaire", "sandyford", "swords", "blanchardstown"}},
+	"st catharines": {Miles: 20, Region: []string{"ontario", "on"}, Towns: []string{"st catharines", "niagara falls", "welland", "thorold", "grimsby", "niagara on the lake", "niagara region"}},
+	"windsor":       {Miles: 20, Region: []string{"ontario", "on"}, Towns: []string{"windsor", "lasalle", "tecumseh"}},
+	"kingston":      {Miles: 20, Region: []string{"ontario", "on"}, Towns: []string{"kingston"}},
+	"barrie":        {Miles: 20, Region: []string{"ontario", "on"}, Towns: []string{"barrie", "innisfil", "orillia"}},
 	"manchester":    {Miles: 20, Region: []string{"greater manchester"}, Towns: []string{"manchester", "salford", "stockport", "trafford", "oldham"}},
 }
 
@@ -859,6 +889,39 @@ func placeOK(p store.Profile, location, workplace string) bool {
 	return bare && inRegion
 }
 
+// otherMarket reports whether a location names a city that is another job
+// market than the person's (Ottawa, for someone in Toronto). A town Job Hunt
+// doesn't know is not counted: it may be next door. A remote role is never
+// elsewhere: where its employer sits doesn't matter.
+func otherMarket(p store.Profile, location, workplace string) bool {
+	city := cityOf(p)
+	if city == "" || strings.TrimSpace(location) == "" || workplace == "remote" {
+		return false
+	}
+	padded := placeWords(location)
+	if strings.Contains(padded, " remote ") {
+		return false
+	}
+	mine := map[string]bool{city: true}
+	for _, t := range metros[city].Towns {
+		mine[strings.TrimPrefix(t, "~")] = true
+	}
+	for key, m := range metros {
+		if key == city {
+			continue
+		}
+		for _, t := range append([]string{key}, m.Towns...) {
+			if strings.HasPrefix(t, "~") || len(t) <= 3 || mine[t] || strings.Contains(t, "region") || strings.Contains(t, "greater") {
+				continue
+			}
+			if strings.Contains(padded, placeWords(t)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // titleOK reports whether a title could be a job this person wants, and the
 // band of the wanted title it matched.
 func titleOK(p store.Profile, title string) (bool, string) {
@@ -926,7 +989,10 @@ func screen(p store.Profile, post sources.Posting, searched bool) (reason, band 
 	if !ok {
 		return titleAside, ""
 	}
-	if !searched && !placeOK(p, post.Location, post.Workplace) {
+	// A search for the person's city can still bring back roles elsewhere
+	// (a site's wide radius, or its guess at what was meant): those that name
+	// another city are set aside too.
+	if !placeOK(p, post.Location, post.Workplace) && (!searched || otherMarket(p, post.Location, post.Workplace)) {
 		return "Based somewhere else", band
 	}
 	if len(p.Workplaces) > 0 && post.Workplace != "" {
