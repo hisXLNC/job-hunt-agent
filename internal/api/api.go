@@ -1625,6 +1625,29 @@ func (s *Server) Handler() http.Handler {
 		qs, _ := st.OpenQuestions()
 		return map[string]any{"profile": st.Profile(), "cvs": cvs, "facts": facts, "answers": answers, "questions": qs, "area": engine.Area(st.Profile()), "signature_picture": e.SignaturePicture() != nil}, nil
 	})
+	// Answers the person gave that could go on a CV: shown, then put on only on their press.
+	h("GET /api/cvideas", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.CVIdeas(), nil })
+	h("POST /api/cvideas/{id}/use", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		var in struct {
+			After string `json:"after"`
+		}
+		if err := read(r, &in); err != nil {
+			return nil, err
+		}
+		if err := e.UseCVIdea(idOf(r), in.After); err != nil {
+			return nil, bad(capitalise(err.Error()) + ".")
+		}
+		return nil, nil
+	})
+	h("POST /api/cvideas/{id}/undo", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if err := e.UndoCVIdea(idOf(r)); err != nil {
+			return nil, bad(capitalise(err.Error()) + ".")
+		}
+		return nil, nil
+	})
+	h("POST /api/cvideas/{id}/no", func(w http.ResponseWriter, r *http.Request) (any, error) {
+		return nil, e.NoCVIdea(idOf(r))
+	})
 	// What holds the person's fit back, and Claude's look at it.
 	h("GET /api/fitgaps", func(w http.ResponseWriter, r *http.Request) (any, error) { return e.FitGaps(), nil })
 	h("POST /api/fitgaps/look", func(w http.ResponseWriter, r *http.Request) (any, error) {

@@ -568,6 +568,7 @@ func (e *Engine) Answer(id int64, answer string) error {
 		// A question tailoring asked: the answer is a fact worth keeping.
 		if answer != "" {
 			e.S.AddFact(strings.TrimSuffix(q.Text, "?")+": "+answer, "your answer")
+			e.lookForCVIdeas(q.Text, answer)
 		}
 	}
 	return e.S.AnswerQuestion(id, answer)

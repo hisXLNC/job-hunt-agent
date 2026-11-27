@@ -85,6 +85,7 @@ type Brief struct {
 	Numbers  []Number         `json:"numbers"`
 	Question *store.Question  `json:"question,omitempty"`
 	Waiting  int              `json:"waiting"` // more questions behind this one
+	CVIdeas  []CVIdea         `json:"cv_ideas"` // answers that could go on a CV, waiting for the person
 	Cards    []Card           `json:"cards"`
 	More     int              `json:"more"` // cards not shown
 	Done     []store.Activity `json:"done"` // done while you were away
@@ -107,6 +108,7 @@ func (e *Engine) Today() Brief {
 		q := qs[0]
 		b.Question, b.Waiting = &q, len(qs)-1
 	}
+	b.CVIdeas = e.CVIdeas()
 
 	var cards []Card
 	// 1. Conversations in the next two days.

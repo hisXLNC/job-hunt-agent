@@ -139,6 +139,8 @@ type CVLook struct {
 	Waiting  int        `json:"waiting"`  // roles waiting that use it
 	Redoing  bool       `json:"redoing"`  // those are being scored and tailored again now
 	Readable bool       `json:"readable"` // what Claude read could be shown
+	// FromAnswers are the changes the person put on this CV from their answers.
+	FromAnswers []CVIdea `json:"from_answers"`
 }
 
 // LookAtCV gathers a CV's controls for the page: what Claude read from it,
@@ -149,7 +151,12 @@ func (e *Engine) LookAtCV(id int64) (CVLook, error) {
 		return CVLook{}, err
 	}
 	c.Text, c.Model = "", nil
-	out := CVLook{CV: c, Set: e.CVSet(id), Waiting: len(e.waitingOn(id)), Redoing: e.Busy("cvredo")}
+	out := CVLook{CV: c, Set: e.CVSet(id), Waiting: len(e.waitingOn(id)), Redoing: e.Busy("cvredo"), FromAnswers: []CVIdea{}}
+	for _, x := range e.cvIdeaBook().List {
+		if x.CVID == id && x.State == "used" {
+			out.FromAnswers = append(out.FromAnswers, x)
+		}
+	}
 	if m, err := e.CVModel(id); err == nil {
 		out.Model, out.ATS, out.Readable = m, Readable(m), true
 	}

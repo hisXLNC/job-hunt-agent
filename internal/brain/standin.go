@@ -46,6 +46,8 @@ func StandIn() llm.Engine {
 			out = standIndeed(req.Input.(IndeedQuery))
 		case "tailor":
 			out = standTailor(req.Input.(tailorInput))
+		case "cv_idea":
+			out = standCVIdea(req.Input.(cvIdeaInput))
 		case "letter":
 			in := req.Input.(letterInput)
 			out = map[string]string{"letter": standLetter(in)}
@@ -1174,4 +1176,21 @@ func standResults(in ResultsInput) ResultsReading {
 		out.Guidance = "For step-up roles, lead with the systems you put live and the team you ran, with numbers, before any strategy; keep the first three bullets on hands-on delivery."
 	}
 	return out
+}
+
+// standCVIdea puts an answer that names a tool or a result on the first job's
+// bullets; a short or plain answer is not worth a change.
+func standCVIdea(in cvIdeaInput) CVIdea {
+	a := strings.TrimSpace(in.Answer)
+	low := strings.ToLower(a)
+	if len(strings.Fields(a)) < 3 || strings.HasPrefix(low, "no") {
+		return CVIdea{}
+	}
+	for _, u := range in.Units {
+		if strings.HasSuffix(u.ID, ".b0") {
+			return CVIdea{Worth: true, ID: u.ID, After: strings.TrimSuffix(u.Text, ".") + "; " + strings.TrimSuffix(a, ".") + ".",
+				Why: "Postings for the roles you want ask for this, and your CV doesn't say it yet."}
+		}
+	}
+	return CVIdea{}
 }

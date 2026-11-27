@@ -2,6 +2,18 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.71
+
+- **Answers that would make your CV stronger.** When you answer a question Job Hunt asked (while
+  tailoring, or from an application form), Claude checks whether it is something your CV should
+  say for every application, not only for that role: a tool, a certification, a responsibility, a
+  result. If it is, the bell tells you and Today shows the change, the line as it is and as it
+  would be, with why. "Put it on my CV" changes your CV for every role prepared from then on; "Edit
+  the wording first" lets you change it before; "No thanks" sets it aside. Nothing changes until you
+  press. Changes you put on are listed under the CV on You, each with "Take back". Plain answers
+  (yes or no, notice period, pay, right to work) never are. One short request per CV, after each
+  answer.
+
 ## 26.11.70
 
 - **Your answers to form questions are reused, as promised.** When an application form asked

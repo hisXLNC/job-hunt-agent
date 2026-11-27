@@ -155,6 +155,8 @@ var tools = []tool{
 	{Method: "POST", Pattern: "/api/talks", Class: canDo, Label: "Add an interview or conversation", Help: `Body: {"kind": "interview|chat|screen", "title", "at": unix seconds, "minutes", "link", "role_id", "person_id"}. Work the time out from "Now" above; ask if the day or hour is unclear.`, Show: []string{"title"}},
 	{Method: "PUT", Pattern: "/api/talks/{id}", Class: canDo, Kind: "talk", Label: "Update an interview", Help: `Body: any of {"title", "kind", "link", "notes", "at", "minutes"}.`},
 	{Method: "POST", Pattern: "/api/talks/{id}/prep", Class: canDo, Kind: "talk", Label: "Prepare for an interview", Help: "Writes the preparation: likely questions, answers from the CV, what to ask them. Background."},
+	{Method: "GET", Pattern: "/api/cvideas", Help: "Answers the person gave that could go on one of their CVs, each with the change (before, after, why) waiting for their press. The ones already put on are under GET /api/cvs/{id}/look as from_answers."},
+	{Method: "POST", Pattern: "/api/cvideas/{id}/no", Class: canDo, Label: "Set aside a suggested CV change"},
 	{Method: "GET", Pattern: "/api/fitgaps", Help: "What holds the person's fit back across the roles read in the last 60 days: themes, how many roles ask for each, whether the CV shows it under other words (with a true sentence to keep as a fact) or it is a real gap (with what closes it)."},
 	{Method: "POST", Pattern: "/api/fitgaps/look", Class: canDo, Label: "Find what holds your fit back", Help: "Claude groups what the readings found missing. One request, about a minute."},
 	{Method: "POST", Pattern: "/api/facts", Class: canDo, Label: "Keep a fact", Help: `Body: {"text": "one full sentence about the person"}. Used in every later application.`, Show: []string{"text"}},
@@ -269,6 +271,8 @@ var tools = []tool{
 	{Method: "DELETE", Pattern: "/api/mail/{id}", Class: mustAsk, Kind: "mail", Label: "Remove a reply"},
 	{Method: "DELETE", Pattern: "/api/talks/{id}", Class: mustAsk, Kind: "talk", Label: "Remove an interview"},
 	{Method: "DELETE", Pattern: "/api/facts/{id}", Class: mustAsk, Kind: "fact", Label: "Forget a fact"},
+	{Method: "POST", Pattern: "/api/cvideas/{id}/use", Class: mustAsk, Label: "Put an answer on your CV", Help: `Body: {"after": ""} for the suggested wording, or the person's own words.`, Show: []string{"after"}},
+	{Method: "POST", Pattern: "/api/cvideas/{id}/undo", Class: mustAsk, Label: "Take a change from your answers back off your CV"},
 	{Method: "DELETE", Pattern: "/api/answers/{id}", Class: mustAsk, Kind: "answer", Label: "Forget a saved answer"},
 }
 

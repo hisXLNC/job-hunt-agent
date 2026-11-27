@@ -116,6 +116,7 @@ function cvControls(k, count) {
       <div class="row wrap" style="gap:8px"><button class="btn sm p">Save</button><button type="button" class="btn sm" data-act="moretitles" data-id="${k.cv.id}" data-busy="Looking…" title="Claude reads this CV and suggests job titles it suits that you don't look for yet. Nothing is added until you tick them.">Find more titles</button>
         <label class="btn sm" title="Reads a new file in place of this one. Its name and settings stay.">Replace file<input type="file" accept=".docx,.pdf,.txt,.md" hidden data-on="change" data-act="replacecv" data-id="${k.cv.id}"></label>
         <span class="grow"></span>${count > 1 ? html`<button type="button" class="btn sm ghost danger" data-act="delcv" data-id="${k.cv.id}" data-confirm="Remove this CV? Roles waiting to be sent that use it are scored and written again from your other CV, with your own edits kept.">Remove</button>` : ''}</div></form>
+    ${k.from_answers?.length ? html`<div><h4>Put on from your answers</h4><div class="col s" style="gap:6px;margin-top:6px">${k.from_answers.map(x => html`<div class="row top-al" style="gap:10px"><span class="grow"><span class="ins">${x.change.after}</span><span class="xs m" style="display:block">From your answer to “${x.question}”</span></span><button class="btn sm ghost" data-act="undoidea" data-id="${x.id}" title="Puts this part of your CV back as it was.">Take back</button></div>`)}</div></div>` : ''}
     ${k.readable ? html`<div><div class="row" style="gap:8px"><h4 class="grow">Will a screening system read it?</h4>${(k.ats || []).some(x => x.bad) ? html`<span class="chip warn">${k.ats.filter(x => x.bad).length} to fix</span>` : html`<span class="chip good">Reads cleanly</span>`}</div>
       <ul class="s ink2" style="margin:6px 0 0 18px">${(k.ats || []).map(x => html`<li style="${x.bad ? 'color:var(--warn)' : ''}">${x.text}</li>`)}</ul>
       <p class="xs m" style="margin-top:4px">About the file Job Hunt writes from this CV. A tailored CV is checked again on each role.</p></div>
@@ -755,6 +756,7 @@ export default {
       location.hash = with_(route, { open: '' });
     },
     async addsig({ el }) { const file = el.files[0]; if (!file) return false; await api('profile/signature-picture', { method: 'POST', raw: file }); toast('Your signature goes into every letter from now on'); },
+    undoidea: ({ d }) => post(`cvideas/${d.id}/undo`).then(() => toast('Taken back off your CV. It is offered again on Today.')),
     dropsig: () => del('profile/signature-picture').then(() => toast('Letters are signed with your name only')),
     async addcv({ el }) { const file = el.files[0]; if (!file) return false; toast('Reading your CV. About a minute.'); await api('cvs?name=' + encodeURIComponent(file.name), { method: 'POST', raw: file }); toast('CV added'); },
     async delcv({ d, route }) {

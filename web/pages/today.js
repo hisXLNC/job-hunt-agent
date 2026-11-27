@@ -142,6 +142,15 @@ function question(q, waiting) {
     <form data-act="answer" data-id="${q.id}" class="row grow" style="gap:6px;min-width:260px"><input type="text" name="answer" placeholder="${q.options?.length ? 'Or type your own answer' : 'Type your answer'}" aria-label="Your answer" style="height:30px"><button class="btn sm p">Save</button><button type="button" class="btn sm ghost" data-act="answer" data-id="${q.id}" data-answer="skip">Skip</button></form></div></div>`;
 }
 
+// An answer the person gave that could go on their CV: the change, shown before anything is changed.
+function cvIdea(x) {
+  const c = x.change;
+  return html`<div class="card" style="border-color:var(--good);padding:10px 14px"><div class="row wrap" style="gap:8px"><b class="grow">Your answer could make your ${x.cv_name} stronger</b><span class="xs m" title="${x.question}">From your answer: “${x.answer}”</span></div>
+    <div class="s" style="margin-top:6px">${c.before ? html`<div><span class="del">${c.before}</span></div>` : html`<div class="xs m">A new line under that job:</div>`}<div><span class="ins">${c.after}</span></div><div class="xs m" style="margin-top:2px">${c.why}</div></div>
+    <div class="row wrap" style="gap:6px;margin-top:8px"><button class="btn sm p" data-act="useidea" data-id="${x.id}" title="Changes your ${x.cv_name}; every role prepared from now on uses it. You can take it back.">Put it on my CV</button><button class="btn sm ghost" data-act="noidea" data-id="${x.id}">No thanks</button>
+      <details class="xs grow"><summary class="link">Edit the wording first</summary><form data-act="useidea" data-id="${x.id}" class="col" style="gap:6px;margin-top:6px"><textarea name="after" rows="2" aria-label="Your wording">${c.after}</textarea><div class="row"><span class="m grow">Your words go on the CV as they are.</span><button class="btn sm">Put this on my CV</button></div></form></details></div></div>`;
+}
+
 function landing(l) {
   return html`<div class="card"><div class="row"><h4>Before you land in ${l.city}</h4><span class="chip blue" style="margin-left:auto">${l.days} days</span></div>
     <div class="bar" style="margin-top:10px"><i style="width:${Math.round(l.done * 100 / l.steps.length)}%"></i></div>
@@ -159,6 +168,7 @@ export default {
     return html`<div class="body col" style="gap:10px">
       ${d.problems?.length ? html`<div class="card" style="border-color:var(--crit);background:var(--crit-card);padding:9px 14px">${d.problems.map(p => html`<p class="s"><b style="color:var(--crit)">Needs attention.</b> ${p.text} <span class="m">· ${rel(p.at)}</span></p>`)}</div>` : ''}
       ${d.question ? question(d.question, d.waiting) : ''}
+      ${(d.cv_ideas || []).map(cvIdea)}
       ${list(d, route)}
       <div class="${d.landing ? 'grid2' : ''}" style="align-items:start">
         ${d.landing ? landing(d.landing) : ''}
@@ -198,6 +208,8 @@ export default {
     chasedrop: ({ d }) => post(`roles/${d.id}/chasedrop`),
     silent: ({ d }) => post(`roles/${d.id}/close`, { stage: 'expired', why: 'No reply after four weeks' }).then(() => toast('Closed as no reply', false, () => post(`roles/${d.id}/reopen`))),
     prepare: ({ d }) => post(`roles/${d.id}/prepare`),
+    useidea: ({ d, f }) => post(`cvideas/${d.id}/use`, { after: f?.after || '' }).then(() => toast('On your CV. Every role prepared from now on uses it.', false, () => post(`cvideas/${d.id}/undo`))),
+    noidea: ({ d }) => post(`cvideas/${d.id}/no`),
     async answer({ d, f }) {
       const answer = (d.answer || f?.answer || '').trim();
       if (!answer) throw new Error('Type an answer, or press Skip.');
