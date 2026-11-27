@@ -265,3 +265,34 @@ func TestSilenceAndPause(t *testing.T) {
 		t.Error("a pause for a set time did not end by itself")
 	}
 }
+
+// A question a form asked, once answered, is answered the same way on the next
+// form, without Claude.
+func TestFormQuestionAnswerIsReused(t *testing.T) {
+	e, _ := newEngine(t)
+	q := "How many years of Vertex O Series experience do you have?"
+	e.S.Ask(store.Question{Key: "form:" + store.QuestionKey(q), Text: q, Weight: 30})
+	qs, _ := e.S.OpenQuestions()
+	var id int64
+	for _, x := range qs {
+		if x.Text == q {
+			id = x.ID
+		}
+	}
+	if id == 0 {
+		t.Fatal("question not queued")
+	}
+	if err := e.Answer(id, "Six years"); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ := e.S.Answers()
+	found := false
+	for _, a := range saved {
+		if a.Key == store.QuestionKey(q) && a.Answer == "Six years" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("not kept for forms: %+v", saved)
+	}
+}

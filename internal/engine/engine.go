@@ -560,6 +560,11 @@ func (e *Engine) Answer(id int64, answer string) error {
 		p.StartEarly = strings.HasPrefix(low, "y")
 		e.S.SaveProfile(p)
 	default:
+		// A question a form asked is answered the same way on every form that
+		// asks it, without asking Claude again.
+		if strings.HasPrefix(q.Key, "form:") && answer != "" {
+			e.S.SaveAnswer(q.Text, answer)
+		}
 		// A question tailoring asked: the answer is a fact worth keeping.
 		if answer != "" {
 			e.S.AddFact(strings.TrimSuffix(q.Text, "?")+": "+answer, "your answer")

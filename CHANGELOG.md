@@ -2,6 +2,13 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.70
+
+- **Your answers to form questions are reused, as promised.** When an application form asked
+  something Job Hunt wasn't sure of and you answered it, the answer was kept only as a
+  fact, so the next form with the same question went back to Claude. It is now also saved with your
+  form answers (You, Answers saved for forms) and filled in as it is on every form that asks it.
+
 ## 26.11.69
 
 - **Your letter layout is back.** New letters follow the template the old Job Hunt used: the date,
