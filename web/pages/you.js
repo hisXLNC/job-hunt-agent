@@ -381,7 +381,7 @@ function connections(d, route) {
     ['vpn', 'VPN for blocked sources', d.vpn?.server ? ['good', 'On'] : ['', 'Off'],
       d.vpn?.server ? `${d.vpn.server} · ${d.vpn.through.length ? vpnSum(d.vpn) : 'no source goes through it yet'}` : 'For job sources that turn away the country you are in, such as Adzuna', vpnCard(d)],
     ['schedule', 'Search times', ['good', 'On'], `Full searches at ${sc.full.length ? sc.full.map(hhmm).join(', ') : 'no set times'} · quick checks every ${sc.fast_minutes || 20} minutes`, schedule(d)],
-    ['tidy', 'Ratings, old roles and budget', ss.min_rating || ss.clear_days || ss.budget ? ['blue', 'On'] : ['', 'Off'], tidySum(d), tidyCard(d)],
+    ['tidy', 'Ratings, old roles and budget', !ss.ratings_off || ss.min_rating || ss.clear_days || ss.budget ? ['blue', 'On'] : ['', 'Off'], tidySum(d), tidyCard(d)],
     ['desk', 'On this computer', ['good', 'On'], [d.startup?.on ? 'Starts when you sign in' : 'Does not start by itself', k.notify ? 'Windows notifications on' : 'no Windows notifications', k.morning >= 0 ? `morning summary at ${k.morning}:00` : 'no morning summary'].join(' · '), thisComputer(d)],
   ];
   return html`<div class="card" style="padding:0">${rows.map(([key, name, [tone, word], sum, body], i) => {
