@@ -420,10 +420,20 @@ export function applyTheme(t) {
 // The version these pages were loaded from. When the program comes back as another one, the pages load again.
 let loadedVersion = '';
 // What changed, shown once after an update. Only the plain marks the change list uses are understood.
+// A change list's items: one starts at a line beginning "- "; the lines after it, wrapped, belong to it.
+export function changeItems(text) {
+  const items = [];
+  for (const raw of String(text || '').split('\n')) {
+    const l = raw.trim();
+    if (!l || /^#/.test(l)) continue;
+    if (/^[-*]\s+/.test(l) || !items.length) items.push(l.replace(/^[-*]\s+/, ''));
+    else items[items.length - 1] += ' ' + l;
+  }
+  return items;
+}
 function mark(text) {
   const line = t => new Safe(esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '$1'));
-  const items = text.split('\n').map(l => l.trim()).filter(Boolean);
-  return html`<ul>${items.map(l => html`<li>${line(l.replace(/^[-*]\s+/, ''))}</li>`)}</ul>`;
+  return html`<ul>${changeItems(text).map(l => html`<li>${line(l)}</li>`)}</ul>`;
 }
 function whatsNew() {
   const w = app.state?.whats_new;

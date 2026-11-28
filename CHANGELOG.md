@@ -2,6 +2,12 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.72
+
+- **What's new reads properly.** Each change in the list after an update is one bullet again;
+  the lines of a longer one were shown as bullets of their own. The same in the update notice on
+  Settings.
+
 ## 26.11.71
 
 - **Answers that would make your CV stronger.** When you answer a question Job Hunt asked (while

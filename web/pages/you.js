@@ -1,4 +1,4 @@
-import { html, api, post, put, del, when, toast, copy, app, rel, exact, ago, with_, applyTheme, listSize, endless, carryOn } from '../app.js';
+import { html, api, post, put, del, when, toast, copy, app, rel, exact, ago, with_, applyTheme, listSize, endless, carryOn, changeItems } from '../app.js';
 import { oldCard, oldActions } from '../old.js';
 
 const TABS = [['', 'About you'], ['arriving', 'Arriving']];
@@ -622,7 +622,7 @@ function theApp(d, route) {
     <div class="card col" style="gap:8px" data-set="version"><div class="row"><h3 class="grow">Job Hunt ${d.version}</h3><button class="btn sm" data-act="checkupdate" data-busy="Looking…" title="Asks now whether a newer version has been published.">Check for a newer version</button></div>
       ${d.update ? html`<div class="s" style="background:var(--accent-soft);padding:9px 11px;border-radius:8px"><div class="row"><b class="grow">Version ${d.update.version} is ready.</b>${st.can_install ? html`<button class="btn sm p" data-update title="Downloads it, checks it is the file that was published, installs it and starts Job Hunt again. About a minute. Your data stays.">Install now</button>` : html`<a class="btn sm p" href="${d.update.url}">Download the installer</a>`}</div>
         ${st.can_install ? '' : html`<p class="xs m" style="margin-top:4px">This copy wasn't put here by the installer, so it can't replace itself. Run the installer; your data stays.</p>`}
-        ${d.update.notes ? html`<details style="margin-top:6px"><summary class="xs">What changes</summary><div class="news xs" style="margin-top:4px">${d.update.notes.split('\n').filter(l => l.trim()).slice(0, 14).map(l => html`<div>${l.replace(/\*\*/g, '')}</div>`)}</div></details>` : ''}</div>`
+        ${d.update.notes ? html`<details style="margin-top:6px"><summary class="xs">What changes</summary><div class="news xs" style="margin-top:4px"><ul style="margin:0 0 0 18px;display:grid;gap:5px">${changeItems(d.update.notes).slice(0, 10).map(l => html`<li>${l.replace(/\*\*/g, '')}</li>`)}</ul></div></details>` : ''}</div>`
         : html`<p class="s m">This is the newest version${st.update_checked ? html` · looked ${rel(st.update_checked)}` : ''}.</p>`}
       <label class="row s" style="gap:8px;cursor:pointer"><input type="checkbox" data-on="change" data-act="autoupdate" ${st.auto_update ? 'checked' : ''} style="width:15px;height:15px"><span><b>Install new versions by themselves</b> <span class="m">Job Hunt looks every few hours, installs when it isn't in the middle of something, and tells you what changed.</span></span></label>
       <p class="s m">Everything is kept in one folder on this computer:</p><code class="s" style="background:var(--s2);padding:6px 9px;border-radius:7px;word-break:break-all">${d.dir}</code>
