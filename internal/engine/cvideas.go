@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"jobhunt/internal/cv"
 	"jobhunt/internal/store"
@@ -40,6 +41,9 @@ type cvIdeaBook struct {
 
 var cvIdeaMu sync.Mutex
 
+// cvIdeaLooks names each look, so two answers in a row are both looked at.
+var cvIdeaLooks atomic.Int64
+
 func (e *Engine) cvIdeaBook() cvIdeaBook {
 	var b cvIdeaBook
 	e.S.Get(cvIdeasKey, &b)
@@ -67,7 +71,7 @@ func (e *Engine) lookForCVIdeas(question, answer string) {
 	if len(cvs) == 0 {
 		return
 	}
-	e.Go(fmt.Sprintf("cvidea:%d", e.Now().UnixNano()), "Seeing whether your answer belongs on your CV", func(ctx context.Context) error {
+	e.Go(fmt.Sprintf("cvidea:%d", cvIdeaLooks.Add(1)), "Seeing whether your answer belongs on your CV", func(ctx context.Context) error {
 		p := e.Person()
 		for i, c := range cvs {
 			if i >= 3 || ctx.Err() != nil {
