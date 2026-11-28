@@ -2,6 +2,15 @@
 
 The newest version is first. The release build publishes the top section as the release's notes.
 
+## 26.11.73
+
+- **BMO and Bank of Montreal are one employer.** Postings name some employers in more than one
+  way, and each name became an employer of its own. Job Hunt now knows the usual other names of
+  the big Canadian banks and insurers and of the large firms (BMO, RBC, TD, CIBC, Scotiabank,
+  National Bank, Desjardins, Sun Life, Manulife, Intact, PwC, EY, Deloitte and others), and puts
+  together, once, the ones you already have: the roles, people and notes of both under one name,
+  followed if either was. A role you said no to under one name stays said no to under the other.
+
 ## 26.11.72
 
 - **What's new reads properly.** Each change in the list after an update is one bullet again;

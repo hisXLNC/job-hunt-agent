@@ -248,6 +248,12 @@ func slowDown(err error) bool {
 // and the rests of Adzuna and Indeed, whose reasons were misjudged.
 func (e *Engine) AfterUpdate() {
 	var done bool
+	if e.S.Get("fixed_72", &done); !done {
+		if n := e.S.MergeSameEmployers(); n > 0 {
+			e.S.Log(store.Activity{Kind: "company", Text: fmt.Sprintf("Put together %s saved under two names, like BMO and Bank of Montreal", countWord(n, "employer"))})
+		}
+		e.S.Set("fixed_72", true)
+	}
 	if e.S.Get("fixed_65", &done); !done {
 		e.asideElsewhere()
 		e.S.Set("fixed_65", true)

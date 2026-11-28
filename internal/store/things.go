@@ -60,15 +60,132 @@ func NormName(name string) string {
 		if corpWords[w] && !(i == 0 && len(words) > 1 && w != "the") {
 			continue
 		}
-		if w == "canada" && i == len(words)-1 && len(words) > 1 {
-			continue
-		}
 		keep = append(keep, w)
+	}
+	if len(keep) > 1 && keep[len(keep)-1] == "canada" {
+		keep = keep[:len(keep)-1]
 	}
 	if len(keep) == 0 {
 		keep = words
 	}
-	return strings.Join(keep, " ")
+	n := strings.Join(keep, " ")
+	if a, ok := sameEmployer[n]; ok {
+		return a
+	}
+	return n
+}
+
+// sameEmployer maps the other names postings use for a well-known employer
+// (in NormName's form) to one, so "Bank of Montreal" and "BMO" are one
+// employer with one list of roles.
+var sameEmployer = map[string]string{
+	"bank of montreal": "bmo", "bmo financial group": "bmo", "bmo financial": "bmo", "bmo bank of montreal": "bmo",
+	"bmo capital markets": "bmo", "bmo group": "bmo", "bmo harris bank": "bmo",
+	"royal bank of": "rbc", "royal bank": "rbc", "rbc royal bank": "rbc", "rbc financial group": "rbc",
+	"rbc capital markets": "rbc", "rbc group": "rbc", "rbc royal bank of": "rbc",
+	"td bank": "td", "td bank group": "td", "toronto dominion bank": "td", "td group": "td", "td securities": "td",
+	"canadian imperial bank of commerce": "cibc", "cibc bank": "cibc", "cibc capital markets": "cibc", "cibc group": "cibc",
+	"bank of nova scotia": "scotiabank", "scotia bank": "scotiabank", "scotiabank group": "scotiabank",
+	"national bank of": "national bank", "banque nationale": "national bank", "national bank financial": "national bank",
+	"desjardins group": "desjardins", "mouvement desjardins": "desjardins", "groupe desjardins": "desjardins",
+	"sun life financial": "sun life", "sun life assurance": "sun life", "sun life of": "sun life",
+	"manulife financial": "manulife", "manulife financial corporation": "manulife",
+	"intact financial": "intact", "intact insurance": "intact",
+	"pricewaterhousecoopers": "pwc",
+	"ernst and young": "ey", "ernst young": "ey",
+	"deloitte and touche": "deloitte", "deloitte touche tohmatsu": "deloitte",
+	"rogers communications": "rogers", "bce": "bell",
+	"telus communications": "telus", "loblaw companies": "loblaw", "canadian tire corporation": "canadian tire",
+}
+
+// MergeSameEmployers puts together, once, employers saved under two names
+// that NormName now knows are one: the roles, people and everything else of
+// the one with fewer roles move to the other, which keeps its name. Being
+// followed, a job board and notes carry over. It reports how many merged.
+func (s *Store) MergeSameEmployers() int {
+	rows, err := s.db.Query(`SELECT id, name, norm, (SELECT COUNT(*) FROM roles r WHERE r.company_id = companies.id) FROM companies ORDER BY id`)
+	if err != nil {
+		return 0
+	}
+	type co struct {
+		id         int64
+		name, norm string
+		roles      int
+	}
+	var all []co
+	for rows.Next() {
+		var c co
+		if rows.Scan(&c.id, &c.name, &c.norm, &c.roles) == nil {
+			all = append(all, c)
+		}
+	}
+	rows.Close()
+	by := map[string][]co{}
+	for _, c := range all {
+		n := NormName(c.name)
+		by[n] = append(by[n], c)
+	}
+	// The tables that point at an employer.
+	var tables []string
+	if tr, err := s.db.Query(`SELECT m.name FROM sqlite_master m, pragma_table_info(m.name) p WHERE m.type = 'table' AND p.name = 'company_id' AND m.name != 'companies'`); err == nil {
+		for tr.Next() {
+			var t string
+			if tr.Scan(&t) == nil {
+				tables = append(tables, t)
+			}
+		}
+		tr.Close()
+	}
+	merged := 0
+	for n, list := range by {
+		keep := list[0]
+		for _, c := range list[1:] {
+			if c.roles > keep.roles {
+				keep = c
+			}
+		}
+		for _, c := range list {
+			if c.id == keep.id {
+				continue
+			}
+			from, err1 := s.Company(c.id)
+			to, err2 := s.Company(keep.id)
+			if err1 != nil || err2 != nil {
+				continue
+			}
+			for _, t := range tables {
+				s.db.Exec(`UPDATE `+t+` SET company_id = ? WHERE company_id = ?`, keep.id, c.id)
+			}
+			if to.State != "following" && from.State == "following" {
+				to.State = "following"
+			}
+			if to.BoardKind == "" && from.BoardKind != "" {
+				to.BoardKind, to.BoardToken = from.BoardKind, from.BoardToken
+			}
+			if to.Site == "" {
+				to.Site = from.Site
+			}
+			if to.Sector == "" {
+				to.Sector = from.Sector
+			}
+			if to.About == "" {
+				to.About, to.AboutFrom = from.About, from.AboutFrom
+			}
+			if to.Why == "" {
+				to.Why = from.Why
+			}
+			s.SaveCompany(to)
+			s.db.Exec(`DELETE FROM companies WHERE id = ?`, c.id)
+			merged++
+		}
+		if keep.norm != n {
+			s.db.Exec(`UPDATE companies SET norm = ? WHERE id = ?`, n, keep.id)
+		}
+	}
+	if merged > 0 {
+		s.Changed("companies", "roles", "today")
+	}
+	return merged
 }
 
 const companyCols = `c.id, c.name, c.site, c.board_kind, c.board_token, c.board_checked_at, c.board_note, c.why, c.sector, c.about, c.about_from, c.state, c.source, c.plan, c.created_at`
